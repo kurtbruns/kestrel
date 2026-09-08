@@ -3,6 +3,11 @@
  * dev environment, so dev can never reach a real inbox. It records each message
  * with the unsubscribe sentinel already substituted — exactly what a real
  * provider would send — so tests can assert the delivered bytes.
+ *
+ * `idempotentRetry` is true, so it dedupes on the per-recipient idempotency key
+ * (send id : email): re-sending after a crash records each recipient once (I4).
+ * `failFakeSendBatch(n)` makes the next n sendBatch calls throw at the start
+ * (a transient-outage stand-in) so the resume path is testable.
  */
 import type { AppEnv } from "../env";
 import { substituteUnsubscribe } from "../render/render";
@@ -24,9 +29,9 @@ export interface FakeMessage {
   sentAt: number;
 }
 
-// Module-level outbox: shared within the Worker isolate, inspected via the
-// guarded /api/dev/outbox route. Not durable — that's the point.
 const outbox: FakeMessage[] = [];
+const sentKeys = new Map<string, string>(); // idempotency key -> providerId
+let failCount = 0;
 
 export function fakeOutbox(): readonly FakeMessage[] {
   return outbox;
@@ -34,6 +39,13 @@ export function fakeOutbox(): readonly FakeMessage[] {
 
 export function clearFakeOutbox(): void {
   outbox.length = 0;
+  sentKeys.clear();
+  failCount = 0;
+}
+
+/** Make the next `n` sendBatch calls throw (simulates a transient outage). */
+export function failFakeSendBatch(n: number): void {
+  failCount = n;
 }
 
 export class FakeProvider implements EmailProvider {
@@ -46,9 +58,20 @@ export class FakeProvider implements EmailProvider {
     recipients: Recipient[],
     opts: SendBatchOptions,
   ): Promise<PerRecipientResult[]> {
+    if (failCount > 0) {
+      failCount -= 1;
+      throw new Error("fake transient failure");
+    }
     return recipients.map((r) => {
+      const key = `${opts.idempotencyKeyPrefix}:${r.email}`;
+      const existing = sentKeys.get(key);
+      if (existing) {
+        // Deduped: a real idempotent provider would not re-deliver.
+        return { email: r.email, accepted: true, providerId: existing };
+      }
+      const providerId = `fake-${key}`;
       const final = substituteUnsubscribe(rendered, r.unsubscribeUrl);
-      const providerId = `fake-${opts.idempotencyKeyPrefix}-${r.email}`;
+      sentKeys.set(key, providerId);
       outbox.push({
         to: r.email,
         subject: final.subject,
