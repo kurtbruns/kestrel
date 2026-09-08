@@ -9,7 +9,7 @@
  */
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
-import { json, toErrorResponse } from "./lib/errors";
+import { badRequest, json, toErrorResponse } from "./lib/errors";
 
 export interface Principal {
   /** `human` = interactive login (Access, has email); `service` = token (Claude / bearer). */
@@ -32,6 +32,13 @@ export type Middleware = (
   c: RequestContext,
 ) => Response | undefined | Promise<Response | undefined>;
 export type Handler = (c: RequestContext) => Response | Promise<Response>;
+
+/** Read a required path parameter (guaranteed present on a matched route). */
+export function param(c: RequestContext, name: string): string {
+  const v = c.params[name];
+  if (v === undefined) throw badRequest(`missing path parameter: ${name}`);
+  return v;
+}
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
