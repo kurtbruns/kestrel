@@ -11,6 +11,9 @@ import { requireAuth } from "./auth/middleware";
 import * as postRoutes from "./routes/posts";
 import * as imageRoutes from "./routes/images";
 import * as renderRoutes from "./routes/render_actions";
+import * as publicRoutes from "./routes/public";
+import * as subscriberRoutes from "./routes/subscribers";
+import * as suppressionRoutes from "./routes/suppressions";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -39,6 +42,23 @@ export function createRouter(): Router {
   r.get("/posts/:id/preview", renderRoutes.previewPage, authed);
   r.post("/posts/:id/test", renderRoutes.test, authed);
   r.get("/api/dev/outbox", renderRoutes.devOutbox, authed);
+
+  // --- subscribers (authed admin) ---
+  r.post("/subscribers", subscriberRoutes.create, authed);
+  r.get("/subscribers", subscriberRoutes.list, authed);
+  r.get("/subscribers/:id", subscriberRoutes.get, authed);
+
+  // --- suppressions (authed admin) ---
+  r.get("/suppressions", suppressionRoutes.list, authed);
+  r.post("/suppressions", suppressionRoutes.add, authed);
+  r.delete("/suppressions/:email", suppressionRoutes.clear, authed);
+
+  // --- public reader routes (token-scoped; no login) ---
+  r.get("/subscribe", publicRoutes.subscribeForm);
+  r.post("/subscribe", publicRoutes.subscribe);
+  r.get("/confirm", publicRoutes.confirm);
+  r.get("/unsubscribe", publicRoutes.unsubscribeLanding);
+  r.post("/unsubscribe", publicRoutes.unsubscribe);
 
   // --- media bytes (public; readers + archive load these unauthenticated) ---
   r.get("/media/:key(.*)", imageRoutes.serveMedia);
