@@ -35,6 +35,14 @@ export function getActiveSendForPost(db: D1Database, postId: string): Promise<Se
     .first<SendRow>();
 }
 
+/** The most recent successfully-sent Send for a post (backs the archive page). */
+export function latestSentSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
+  return db
+    .prepare("SELECT * FROM sends WHERE post_id = ? AND status = 'sent' ORDER BY completed_at DESC LIMIT 1")
+    .bind(postId)
+    .first<SendRow>();
+}
+
 export async function listSends(
   db: D1Database,
   opts: { status?: SendStatus; limit?: number } = {},

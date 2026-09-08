@@ -37,6 +37,10 @@ export function getPost(db: D1Database, id: string): Promise<PostRow | null> {
   return db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first<PostRow>();
 }
 
+export function getBySlug(db: D1Database, slug: string): Promise<PostRow | null> {
+  return db.prepare("SELECT * FROM posts WHERE slug = ?").bind(slug).first<PostRow>();
+}
+
 export async function listPosts(db: D1Database): Promise<PostRow[]> {
   const { results } = await db
     .prepare("SELECT * FROM posts ORDER BY created_at DESC, rowid DESC")

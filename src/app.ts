@@ -16,6 +16,7 @@ import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
+import * as archiveRoutes from "./routes/archive";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -68,6 +69,11 @@ export function createRouter(): Router {
   r.get("/confirm", publicRoutes.confirm);
   r.get("/unsubscribe", publicRoutes.unsubscribeLanding);
   r.post("/unsubscribe", publicRoutes.unsubscribe);
+
+  // --- archive / view-in-browser (public; serves the frozen record, I3) ---
+  // Path matches ARCHIVE_BASE_PATH (/newsletter); in prod the apex routes
+  // example.com/newsletter/* to this Worker.
+  r.get("/newsletter/:slug", archiveRoutes.archivePage);
 
   // --- media bytes (public; readers + archive load these unauthenticated) ---
   r.get("/media/:key(.*)", imageRoutes.serveMedia);
