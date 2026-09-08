@@ -10,6 +10,7 @@ import { json } from "./lib/errors";
 import { requireAuth } from "./auth/middleware";
 import * as postRoutes from "./routes/posts";
 import * as imageRoutes from "./routes/images";
+import * as renderRoutes from "./routes/render_actions";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -32,6 +33,12 @@ export function createRouter(): Router {
   r.post("/posts/:id/images", imageRoutes.uploadImage, authed);
   r.get("/posts/:id/images", imageRoutes.listImages, authed);
   r.delete("/posts/:id/images/:filename", imageRoutes.deleteImage, authed);
+
+  // --- render: preview + test (authed); all go through the one render path ---
+  r.post("/posts/:id/preview", renderRoutes.preview, authed);
+  r.get("/posts/:id/preview", renderRoutes.previewPage, authed);
+  r.post("/posts/:id/test", renderRoutes.test, authed);
+  r.get("/api/dev/outbox", renderRoutes.devOutbox, authed);
 
   // --- media bytes (public; readers + archive load these unauthenticated) ---
   r.get("/media/:key(.*)", imageRoutes.serveMedia);

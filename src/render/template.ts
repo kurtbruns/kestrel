@@ -1,0 +1,44 @@
+/** The single email layout. Content is wrapped once; the footer carries the
+ *  per-recipient unsubscribe sentinel and the view-in-browser link. */
+import { escapeHtml, escapeHtmlAttr } from "../lib/html";
+
+/** Literal placeholder for the per-recipient unsubscribe URL, substituted at
+ *  delivery (real send / test) or with a generic link (preview / archive).
+ *  A plain sentinel (not `{{ }}`) so it survives SES template semantics. */
+export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
+
+export interface LayoutInput {
+  subject: string;
+  preheader: string;
+  contentHtml: string;
+  viewInBrowserUrl: string;
+}
+
+const FONT =
+  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+
+export function emailLayout(i: LayoutInput): string {
+  const preheader = i.preheader
+    ? `<span style="display:none!important;opacity:0;color:transparent;height:0;width:0;overflow:hidden;">${escapeHtml(
+        i.preheader,
+      )}</span>`
+    : "";
+  const viewUrl = escapeHtmlAttr(i.viewInBrowserUrl);
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(
+    i.subject,
+  )}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;">
+${preheader}
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;overflow:hidden;">
+<tr><td style="padding:32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
+${i.contentHtml}
+</td></tr>
+<tr><td style="padding:16px 32px 28px;font-family:${FONT};font-size:12px;line-height:1.5;color:#71717a;border-top:1px solid #e4e4e7;">
+<a href="${viewUrl}" style="color:#71717a;text-decoration:underline;">View in browser</a> &middot; <a href="${UNSUB_SENTINEL}" style="color:#71717a;text-decoration:underline;">Unsubscribe</a>
+</td></tr>
+</table>
+</td></tr></table>
+</body></html>`;
+}
