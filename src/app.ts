@@ -14,6 +14,8 @@ import * as renderRoutes from "./routes/render_actions";
 import * as publicRoutes from "./routes/public";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
+import * as scheduleRoutes from "./routes/schedule";
+import * as sendRoutes from "./routes/sends";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -42,6 +44,13 @@ export function createRouter(): Router {
   r.get("/posts/:id/preview", renderRoutes.previewPage, authed);
   r.post("/posts/:id/test", renderRoutes.test, authed);
   r.get("/api/dev/outbox", renderRoutes.devOutbox, authed);
+
+  // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
+  r.post("/posts/:id/schedule", scheduleRoutes.schedule, authed);
+  r.post("/posts/:id/send", scheduleRoutes.sendNow, authed);
+  r.get("/sends", sendRoutes.list, authed);
+  r.get("/sends/:id", sendRoutes.get, authed);
+  r.post("/sends/:id/cancel", sendRoutes.cancel, authed);
 
   // --- subscribers (authed admin) ---
   r.post("/subscribers", subscriberRoutes.create, authed);
