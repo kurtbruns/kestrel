@@ -1,0 +1,22 @@
+# Copy to `.dev.vars` (gitignored) for local development.
+# For deployed environments, set these with `wrangler secret put <NAME> --env <env>`.
+
+# --- Admin API auth ---
+# Local/CI fallback bearer token for the authoring API. In staging/production the
+# real gate is Cloudflare Access (Service Auth policy for Claude + Allow policy for
+# the human); this bearer path keeps local dev and tests working without Zero Trust.
+BEARER_TOKEN="dev-local-token-change-me"
+
+# --- Cloudflare Access (JWT validation; optional locally) ---
+ACCESS_TEAM_DOMAIN=""   # e.g. your-team.cloudflareaccess.com
+ACCESS_AUD=""           # the Access application's AUD tag
+
+# --- Amazon SES (SigV4 over HTTPS via aws4fetch) ---
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY=""
+SES_CONFIGURATION_SET=""   # config set that publishes bounce/complaint to SNS
+SNS_TOPIC_ARN=""           # expected topic ARN, checked on webhook verification
+
+# --- Resend (alternate transport) ---
+RESEND_API_KEY=""
+RESEND_WEBHOOK_SECRET=""   # Svix signing secret for webhook verification
