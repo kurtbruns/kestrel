@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+
+# local secrets (never commit)
+.dev.vars
+.dev.vars.*
+!.dev.vars.example
+
+# wrangler / miniflare local state
+.wrangler/
+worker-configuration.d.ts
+
+# build output
+dist/
+
+# test coverage
+coverage/
+
+# logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json

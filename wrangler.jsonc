@@ -1,0 +1,94 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kestrel",
+  "main": "src/index.ts",
+  // Capped at the newest date the Vitest pool's bundled workerd supports; bump
+  // when @cloudflare/vitest-pool-workers ships a newer runtime.
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+
+  // ---------------------------------------------------------------------------
+  // Top-level config == the DEVELOPMENT environment (used by `wrangler dev` and
+  // the Vitest pool). Its mail transport is the in-memory `fake` adapter, so dev
+  // can never reach a real inbox. Named environments below (staging/production)
+  // must REDECLARE bindings and vars — wrangler does not inherit them.
+  // Placeholder ids/domains are filled per-deployment; this is a generic template.
+  // ---------------------------------------------------------------------------
+
+  "triggers": { "crons": ["* * * * *"] },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kestrel-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-dev" }],
+
+  "vars": {
+    "PROVIDER": "fake",
+    "APP_ORIGIN": "http://localhost:8787",
+    "ARCHIVE_ORIGIN": "http://localhost:8787",
+    "ARCHIVE_BASE_PATH": "/newsletter",
+    "MEDIA_PUBLIC_BASE": "http://localhost:8787/media",
+    "SENDING_DOMAIN": "news.example.com",
+    "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+    "AWS_REGION": "us-east-1"
+  },
+
+  "env": {
+    "staging": {
+      "name": "kestrel-staging",
+      "triggers": { "crons": ["* * * * *"] },
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "kestrel-staging",
+          "database_id": "REPLACE_WITH_STAGING_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-staging" }],
+      "vars": {
+        "PROVIDER": "ses",
+        "APP_ORIGIN": "https://newsletter-staging.example.com",
+        "ARCHIVE_ORIGIN": "https://newsletter-staging.example.com",
+        "ARCHIVE_BASE_PATH": "/newsletter",
+        "MEDIA_PUBLIC_BASE": "https://media-staging.example.com",
+        "SENDING_DOMAIN": "news.example.com",
+        "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+        "AWS_REGION": "us-east-1"
+      }
+    },
+
+    "production": {
+      "name": "kestrel-production",
+      "triggers": { "crons": ["* * * * *"] },
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "kestrel-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
+      "vars": {
+        "PROVIDER": "ses",
+        "APP_ORIGIN": "https://newsletter.example.com",
+        "ARCHIVE_ORIGIN": "https://example.com",
+        "ARCHIVE_BASE_PATH": "/newsletter",
+        "MEDIA_PUBLIC_BASE": "https://media.example.com",
+        "SENDING_DOMAIN": "news.example.com",
+        "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}
