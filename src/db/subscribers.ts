@@ -118,21 +118,48 @@ export async function unsubscribeByToken(
   return getById(db, row.id);
 }
 
+/**
+ * Unsubscribe by id — the authed admin action, for a request that arrives out
+ * of band. Same immediate, idempotent effect as `unsubscribeByToken` (I2);
+ * returns null for an unknown id.
+ */
+export async function unsubscribeById(
+  db: D1Database,
+  id: string,
+): Promise<SubscriberRow | null> {
+  const row = await getById(db, id);
+  if (!row) return null;
+  if (row.status === "unsubscribed") return row;
+  await db
+    .prepare("UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?")
+    .bind(Date.now(), row.id)
+    .run();
+  return getById(db, row.id);
+}
+
 export async function listSubscribers(
   db: D1Database,
-  opts: { status?: SubscriberStatus; limit?: number } = {},
+  opts: { status?: SubscriberStatus; search?: string; limit?: number } = {},
 ): Promise<SubscriberRow[]> {
   const limit = Math.min(opts.limit ?? 100, 1000);
+  const where: string[] = [];
+  const binds: unknown[] = [];
   if (opts.status) {
-    const { results } = await db
-      .prepare("SELECT * FROM subscribers WHERE status = ? ORDER BY created_at DESC LIMIT ?")
-      .bind(opts.status, limit)
-      .all<SubscriberRow>();
-    return results;
+    where.push("status = ?");
+    binds.push(opts.status);
   }
+  // Contains-search on email. Emails are stored normalized (trimmed, lowercased),
+  // so match the term the same way; escape LIKE's own wildcards so `_`/`%` in an
+  // address are literal.
+  const term = opts.search?.trim().toLowerCase();
+  if (term) {
+    where.push("email LIKE ? ESCAPE '\\'");
+    binds.push(`%${term.replace(/[\\%_]/g, (ch) => "\\" + ch)}%`);
+  }
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const { results } = await db
-    .prepare("SELECT * FROM subscribers ORDER BY created_at DESC LIMIT ?")
-    .bind(limit)
+    .prepare(`SELECT * FROM subscribers ${clause} ORDER BY created_at DESC LIMIT ?`)
+    .bind(...binds, limit)
     .all<SubscriberRow>();
   return results;
 }

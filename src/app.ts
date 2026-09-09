@@ -58,6 +58,7 @@ export function createRouter(): Router {
   r.post("/subscribers", subscriberRoutes.create, authed);
   r.get("/subscribers", subscriberRoutes.list, authed);
   r.get("/subscribers/:id", subscriberRoutes.get, authed);
+  r.post("/subscribers/:id/unsubscribe", subscriberRoutes.unsubscribe, authed);
 
   // --- suppressions (authed admin) ---
   r.get("/suppressions", suppressionRoutes.list, authed);

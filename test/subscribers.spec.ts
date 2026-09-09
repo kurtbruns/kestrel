@@ -123,3 +123,68 @@ describe("subscribers: admin + suppressions", () => {
     expect(await subs.audienceEmails(env.DB)).toContain(email);
   });
 });
+
+describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
+  it("unsubscribeById flips a confirmed subscriber and is idempotent (I2)", async () => {
+    const email = uniqueEmail();
+    const { subscriber } = await subs.subscribe(env.DB, email);
+    await subs.confirm(env.DB, subscriber.token);
+
+    const first = await subs.unsubscribeById(env.DB, subscriber.id);
+    expect(first?.status).toBe("unsubscribed");
+    expect(first?.unsubscribed_at).toBeTruthy();
+
+    // Re-running is a no-op: status and the original timestamp are unchanged.
+    const second = await subs.unsubscribeById(env.DB, subscriber.id);
+    expect(second?.status).toBe("unsubscribed");
+    expect(second?.unsubscribed_at).toBe(first?.unsubscribed_at);
+  });
+
+  it("unsubscribeById returns null for an unknown id", async () => {
+    expect(await subs.unsubscribeById(env.DB, "no-such-id")).toBeNull();
+  });
+
+  it("listSubscribers filters by status and searches email by substring", async () => {
+    const marker = `flt-${Date.now()}-${seq++}`;
+    const a = `${marker}-a@example.com`;
+    const b = `${marker}-b@example.com`;
+    await subs.subscribe(env.DB, a);
+    const { subscriber: sb } = await subs.subscribe(env.DB, b);
+    await subs.confirm(env.DB, sb.token);
+
+    const confirmed = await subs.listSubscribers(env.DB, { status: "confirmed", search: marker });
+    expect(confirmed.map((r) => r.email)).toEqual([b]);
+
+    const both = await subs.listSubscribers(env.DB, { search: marker });
+    expect(both.map((r) => r.email).sort()).toEqual([a, b].sort());
+  });
+
+  it("POST /subscribers/:id/unsubscribe requires auth (401)", async () => {
+    const res = await SELF.fetch(`${base}/subscribers/anything/unsubscribe`, { method: "POST" });
+    expect(res.status).toBe(401);
+  });
+
+  it("POST /subscribers/:id/unsubscribe is 404 for an unknown id", async () => {
+    const res = await SELF.fetch(`${base}/subscribers/no-such-id/unsubscribe`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it("POST /subscribers/:id/unsubscribe flips status and drops them from the audience", async () => {
+    const email = uniqueEmail();
+    await publicSubscribe(email);
+    await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
+    expect(await subs.audienceEmails(env.DB)).toContain(email);
+
+    const id = (await subs.getByEmail(env.DB, email))!.id;
+    const res = await SELF.fetch(`${base}/subscribers/${id}/unsubscribe`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(200);
+    expect(await readJson(res)).toMatchObject({ subscriber: { status: "unsubscribed" } });
+    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+  });
+});

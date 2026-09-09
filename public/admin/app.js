@@ -128,13 +128,14 @@ function route() {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
   const hash = location.hash || "#/posts";
   const [, view, arg] = hash.split("/");
-  const current = view === "status" ? "#/status" : "#/posts";
+  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
   if (view === "edit" && arg) return renderEditor(arg);
-  if (view === "status") return renderStatus();
+  if (view === "sends") return renderSends();
+  if (view === "subscribers") return renderSubscribers();
   return renderPosts();
 }
 window.addEventListener("hashchange", route);
@@ -423,7 +424,7 @@ async function renderEditor(id) {
       const v = m.el.querySelector("#schWhen").value;
       const t = v ? new Date(v).getTime() : NaN;
       if (Number.isNaN(t)) { toast("Pick a valid date & time"); return; }
-      try { await saveDraft(true); await api("/posts/" + id + "/schedule", { method: "POST", json: { fire_at: new Date(t).toISOString() } }); m.close(); toast("Scheduled"); location.hash = "#/status"; }
+      try { await saveDraft(true); await api("/posts/" + id + "/schedule", { method: "POST", json: { fire_at: new Date(t).toISOString() } }); m.close(); toast("Scheduled"); location.hash = "#/sends"; }
       catch (e) { toast(e.message); }
     });
   };
@@ -436,26 +437,21 @@ async function renderEditor(id) {
     const m = modal(`<h3>Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong>${esc(who)}</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`);
     m.el.querySelector("#snCancel").onclick = m.close;
     m.el.querySelector("#snGo").onclick = () => busy(m.el.querySelector("#snGo"), "Queuing…", async () => {
-      try { await saveDraft(true); await api("/posts/" + id + "/send", { method: "POST" }); m.close(); toast("Queued — cancelable for 5 minutes"); location.hash = "#/status"; }
+      try { await saveDraft(true); await api("/posts/" + id + "/send", { method: "POST" }); m.close(); toast("Queued — cancelable for 5 minutes"); location.hash = "#/sends"; }
       catch (e) { toast(e.message); }
     });
   };
 }
 
-// ---- status ----
+// ---- sends ----
 function startCountdowns() {
   const tick = () => document.querySelectorAll("[data-fire]").forEach((el) => (el.textContent = untilStr(Number(el.dataset.fire))));
   tick();
   statusTimer = setInterval(tick, 1000);
 }
 
-async function renderStatus() {
-  app.innerHTML = `<h1>Status</h1><div id="counts" class="muted">Loading…</div><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
-  try {
-    const c = (await api("/subscribers")).counts;
-    document.getElementById("counts").innerHTML = `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span></div>`;
-  } catch (e) { renderError(document.getElementById("counts"), e.message, renderStatus); }
-
+async function renderSends() {
+  app.innerHTML = `<h1>Sends</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
   try {
     const { sends } = await api("/sends");
     const scheduled = sends.filter((s) => s.status === "scheduled");
@@ -465,7 +461,7 @@ async function renderStatus() {
       ? scheduled.map((s) => `<div class="card spread"><div><strong>${esc(s.subject)}</strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger" data-cancel="${s.id}">Cancel</button></div>`).join("")
       : `<p class="muted">Nothing scheduled.</p>`;
     document.querySelectorAll("[data-cancel]").forEach((b) => (b.onclick = () => busy(b, "Canceling…", async () => {
-      try { await api("/sends/" + b.dataset.cancel + "/cancel", { method: "POST" }); toast("Canceled"); renderStatus(); } catch (e) { toast(e.message); }
+      try { await api("/sends/" + b.dataset.cancel + "/cancel", { method: "POST" }); toast("Canceled"); renderSends(); } catch (e) { toast(e.message); }
     })));
     startCountdowns();
 
@@ -474,7 +470,88 @@ async function renderStatus() {
           .map((s) => `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${(s.progress && s.progress.accepted) || 0}</td></tr>`)
           .join("")}</tbody></table></div>`
       : `<p class="muted">No sends yet.</p>`;
-  } catch (e) { renderError(document.getElementById("scheduled"), e.message, renderStatus); }
+  } catch (e) { renderError(document.getElementById("scheduled"), e.message, renderSends); }
+}
+
+// ---- subscribers ----
+// The story of the list as a whole: its composition (by-status counts) and the
+// roster, filterable and searchable. Sends/scheduling live on Status instead.
+async function renderSubscribers() {
+  app.innerHTML = `
+    <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
+    <div id="subCounts" class="muted">Loading…</div>
+    <div class="row sub-controls">
+      <select id="subFilter" aria-label="Filter by status">
+        <option value="">All statuses</option>
+        <option value="confirmed">Confirmed</option>
+        <option value="pending">Pending</option>
+        <option value="unsubscribed">Unsubscribed</option>
+      </select>
+      <input id="subSearch" type="search" placeholder="Search email…" aria-label="Search email" autocomplete="off">
+    </div>
+    <div id="subList" class="muted">Loading…</div>`;
+
+  const filterEl = document.getElementById("subFilter");
+  const searchEl = document.getElementById("subSearch");
+  let searchTimer = null;
+
+  async function load() {
+    const params = new URLSearchParams();
+    if (filterEl.value) params.set("status", filterEl.value);
+    const term = searchEl.value.trim();
+    if (term) params.set("search", term);
+    const qs = params.toString();
+    const listEl = document.getElementById("subList");
+    try {
+      const data = await api("/subscribers" + (qs ? "?" + qs : ""));
+      const c = data.counts;
+      document.getElementById("subCounts").innerHTML = `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span><span class="info" role="img" aria-label="What these states mean" data-tip="Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.">${icon("info")}</span></div>`;
+      renderSubTable(listEl, data.subscribers, load);
+    } catch (e) { renderError(listEl, e.message, load); }
+  }
+
+  document.getElementById("addSub").onclick = () => addSubscriberModal(load);
+  filterEl.onchange = load;
+  searchEl.oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(load, 250); };
+  load();
+}
+
+function renderSubTable(listEl, rows, reload) {
+  if (!rows.length) { listEl.innerHTML = `<p class="muted">No subscribers match.</p>`; return; }
+  listEl.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Confirmed / created</th><th></th></tr></thead><tbody>${rows
+    .map((s) => `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? " " + badge("suppressed") : ""}</td><td class="muted">${fmt(s.confirmed_at || s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`)
+    .join("")}</tbody></table></div>`;
+  listEl.querySelectorAll(".menu-btn").forEach((b) => (b.onclick = (e) => {
+    e.stopPropagation();
+    const row = rows.find((r) => r.id === b.dataset.menu);
+    openMenu(b, [{ label: "Unsubscribe", danger: true, onClick: () => confirmUnsubscribe(row, reload) }]);
+  }));
+}
+
+// Add subscriber → the normal double opt-in (never an auto-confirm).
+function addSubscriberModal(onDone) {
+  const m = modal(`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive issues until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`);
+  const input = m.el.querySelector("#addEmail"); input.focus();
+  m.el.querySelector("#aCancel").onclick = m.close;
+  m.el.querySelector("#aGo").onclick = () => busy(m.el.querySelector("#aGo"), "Adding…", async () => {
+    const addr = input.value.trim();
+    if (!addr || !addr.includes("@")) { toast("Enter a valid email"); return; }
+    try {
+      const r = await api("/subscribers", { method: "POST", json: { email: addr } });
+      m.close();
+      toast(r.action === "already_confirmed" ? addr + " is already confirmed" : "Confirmation sent to " + addr);
+      onDone && onDone();
+    } catch (e) { toast(e.message); }
+  });
+}
+
+function confirmUnsubscribe(sub, onDone) {
+  const m = modal(`<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${esc(sub.email)}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`);
+  m.el.querySelector("#uCancel").onclick = m.close;
+  m.el.querySelector("#uGo").onclick = () => busy(m.el.querySelector("#uGo"), "Unsubscribing…", async () => {
+    try { await api("/subscribers/" + sub.id + "/unsubscribe", { method: "POST" }); m.close(); toast("Unsubscribed " + sub.email); onDone && onDone(); }
+    catch (e) { toast(e.message); }
+  });
 }
 
 route();
