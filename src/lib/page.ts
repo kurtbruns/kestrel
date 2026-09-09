@@ -24,7 +24,12 @@ input { font:inherit; font-size:16px; padding:10px; width:100%; border:1px solid
         border-radius:6px; background:var(--card); color:var(--fg); }
 .btn { font:inherit; font-size:16px; margin-top:12px; padding:10px 18px; border-radius:6px;
        border:1px solid var(--accent); background:var(--accent); color:var(--accent-fg); cursor:pointer; }
+.btn:hover { filter: brightness(1.08); }
+.btn:active { transform: translateY(1px); }
 .btn-danger { border-color:var(--danger); background:var(--danger); color:var(--danger-fg); }
+.btn:focus-visible, input:focus-visible, a:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+.wrap p a { text-decoration: underline; }
+@media (prefers-color-scheme: dark) { .btn:focus-visible, input:focus-visible, a:focus-visible { outline-color:#60a5fa; } }
 `;
 
 export function htmlPage(title: string, bodyHtml: string, status = 200): Response {
