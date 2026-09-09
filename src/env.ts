@@ -15,6 +15,8 @@ export interface Secrets {
   ACCESS_TEAM_DOMAIN?: string;
   /** Cloudflare Access application AUD tag. */
   ACCESS_AUD?: string;
+  /** Optional comma-separated allowlist of human admin emails (Access logins). */
+  ACCESS_ALLOWED_EMAILS?: string;
   /** SES / SigV4. */
   AWS_ACCESS_KEY_ID?: string;
   AWS_SECRET_ACCESS_KEY?: string;
@@ -48,6 +50,8 @@ export interface Config {
   /** Cloudflare Access (optional; enables JWT validation when both are set). */
   accessTeamDomain?: string;
   accessAud?: string;
+  /** Optional allowlist of human admin emails; empty/unset allows any valid Access login. */
+  accessAllowedEmails?: string[];
 }
 
 const orUndefined = (v: string | undefined): string | undefined =>
@@ -66,5 +70,15 @@ export function getConfig(env: AppEnv): Config {
     awsRegion: env.AWS_REGION,
     accessTeamDomain: orUndefined(env.ACCESS_TEAM_DOMAIN),
     accessAud: orUndefined(env.ACCESS_AUD),
+    accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
   };
+}
+
+function parseEmailList(v: string | undefined): string[] | undefined {
+  if (!v) return undefined;
+  const list = v
+    .split(",")
+    .map((e) => e.trim().toLowerCase())
+    .filter(Boolean);
+  return list.length ? list : undefined;
 }

@@ -7,9 +7,10 @@
 # the human); this bearer path keeps local dev and tests working without Zero Trust.
 BEARER_TOKEN="dev-local-token-change-me"
 
-# --- Cloudflare Access (JWT validation; optional locally) ---
-ACCESS_TEAM_DOMAIN=""   # e.g. your-team.cloudflareaccess.com
-ACCESS_AUD=""           # the Access application's AUD tag
+# --- Cloudflare Access (JWT validation; the deployed gate — optional locally) ---
+ACCESS_TEAM_DOMAIN=""       # e.g. your-team.cloudflareaccess.com
+ACCESS_AUD=""               # the Access application's AUD tag
+ACCESS_ALLOWED_EMAILS=""    # optional CSV allowlist of human admin emails, e.g. you@example.com
 
 # --- Amazon SES (SigV4 over HTTPS via aws4fetch) ---
 AWS_ACCESS_KEY_ID=""

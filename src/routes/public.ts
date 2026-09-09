@@ -54,10 +54,10 @@ async function readToken(c: RequestContext): Promise<string> {
 export async function subscribeForm(_c: RequestContext): Promise<Response> {
   return htmlPage(
     "Subscribe",
-    `<h1 style="margin-top:0;">Subscribe</h1>
+    `<h1>Subscribe</h1>
 <form method="post" action="/subscribe">
-<input type="email" name="email" required placeholder="you@example.com" style="width:100%;padding:10px;font-size:16px;box-sizing:border-box;border:1px solid #d4d4d8;border-radius:6px;">
-<button type="submit" style="margin-top:12px;padding:10px 18px;font-size:16px;background:#18181b;color:#fff;border:0;border-radius:6px;cursor:pointer;">Subscribe</button>
+<input type="email" name="email" required placeholder="you@example.com">
+<button type="submit" class="btn">Subscribe</button>
 </form>`,
   );
 }
@@ -105,11 +105,11 @@ export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   }
   return htmlPage(
     "Unsubscribe",
-    `<h1 style="margin-top:0;">Unsubscribe?</h1><p>Stop sending the newsletter to <strong>${escapeHtml(
+    `<h1>Unsubscribe?</h1><p>Stop sending the newsletter to <strong>${escapeHtml(
       row.email,
     )}</strong>?</p>
 <form method="post" action="/unsubscribe?token=${encodeURIComponent(token)}">
-<button type="submit" style="padding:10px 18px;font-size:16px;background:#b91c1c;color:#fff;border:0;border-radius:6px;cursor:pointer;">Unsubscribe</button>
+<button type="submit" class="btn btn-danger">Unsubscribe</button>
 </form>`,
   );
 }

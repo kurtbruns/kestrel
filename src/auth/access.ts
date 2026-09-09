@@ -24,6 +24,16 @@ function jwksFor(issuer: string): JWTVerifyGetKey {
   return jwks;
 }
 
+/**
+ * Is this human admin allowed? An empty/unset allowlist admits any valid Access
+ * login. The allowlist gates HUMANS only — service tokens carry no email and are
+ * already gated by the Access Service Auth policy.
+ */
+export function isHumanAllowed(email: string, allowed: string[] | undefined): boolean {
+  if (!allowed || allowed.length === 0) return true;
+  return allowed.includes(email.toLowerCase());
+}
+
 export async function verifyAccessJwt(token: string, config: Config): Promise<Principal | null> {
   if (!config.accessTeamDomain || !config.accessAud) return null;
   const issuer = `https://${config.accessTeamDomain}`;
@@ -33,7 +43,13 @@ export async function verifyAccessJwt(token: string, config: Config): Promise<Pr
       audience: config.accessAud,
     });
     const email = typeof payload.email === "string" ? payload.email : undefined;
-    return { kind: email ? "human" : "service", email };
+    if (email) {
+      if (!isHumanAllowed(email, config.accessAllowedEmails)) return null;
+      return { kind: "human", email };
+    }
+    // No email → an Access service token (Claude/automation), already authorized
+    // by the app's Service Auth policy.
+    return { kind: "service" };
   } catch {
     return null;
   }
