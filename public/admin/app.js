@@ -264,6 +264,11 @@ const TOOLBAR = [
 
 async function renderEditor(id) {
   clearAutosaveTimers();
+  // Reload (and cancel-schedule / error-retry) re-enter renderEditor directly, without
+  // going through route(), so clear the previous mount's freshness poll here too — an
+  // orphaned interval would keep firing on a stale baseRevision closure and wrongly
+  // flip editorConflict, silently blocking saves in the fresh editor.
+  if (editorPollTimer) { clearInterval(editorPollTimer); editorPollTimer = null; }
   isEditorDirty = false; editorSaveFailed = false; editorConflict = false; editorHash = null; // fresh mount starts clean; the tracking block below re-establishes the hash
   editorLeaveFlush = null; editorManualSave = null;
   app.innerHTML = `<p class="muted">Loading…</p>`;
@@ -566,8 +571,12 @@ async function renderEditor(id) {
     // re-warns on a revision we haven't surfaced yet.
     const pollFreshness = async () => {
       if (saving || editorConflict || document.hidden) return;
+      const baseAtRequest = baseRevision; // guard against our own save landing mid-poll
       try {
         const data = await api("/posts/" + id);
+        // If our own save advanced the base while this GET was in flight, the response
+        // may predate it — don't mistake our write for someone else's.
+        if (saving || baseRevision !== baseAtRequest) return;
         if (data.post.status !== "draft") { showConflict({ schedLocked: true }); return; }
         const rev = data.post.current_revision;
         if (rev && rev !== baseRevision && rev !== warnedRevision) showConflict({ current_revision: rev, author: data.author });
