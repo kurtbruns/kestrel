@@ -18,6 +18,7 @@ import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
 import * as archiveRoutes from "./routes/archive";
 import * as webhookRoutes from "./routes/webhooks";
+import * as devRoutes from "./routes/dev";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -46,6 +47,8 @@ export function createRouter(): Router {
   r.get("/posts/:id/preview", renderRoutes.previewPage, authed);
   r.post("/posts/:id/test", renderRoutes.test, authed);
   r.get("/api/dev/outbox", renderRoutes.devOutbox, authed);
+  // Load the local demo dataset (fake transport only; 404s on a real provider).
+  r.post("/api/dev/seed", devRoutes.seed, authed);
 
   // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
   r.post("/posts/:id/schedule", scheduleRoutes.schedule, authed);

@@ -26,7 +26,7 @@ This is a content-management application, and that's the right shape for the job
 
 Six nouns. The first three are content, the last three are the audience and the record.
 
-**Post** — one newsletter issue: a Markdown body plus its metadata. It's editable while a draft, frozen once scheduled, and closed once sent. The metadata is **subject** (the email's subject line, and what names the post in the list and seeds its slug), **preheader** (inbox preview text), **slug** (the archive path), and an optional internal **title** (a private name; not rendered in the email). Subject is the one field you must set to send.
+**Post** — one newsletter issue: a Markdown body plus its metadata. It's editable while a draft, frozen once scheduled, and closed once sent. The metadata is **subject** (the email's subject line, and what names the post in the list and seeds its slug) and **slug** (the archive path). The inbox **preheader** (preview text) is derived from the start of the body at render time, not a field you set. Subject is the one field you must set to send.
 
 **Revision** — a saved version of a post's Markdown and metadata. Every save writes one. This is the versioning that files would have given you for free, handed back deliberately.
 
@@ -79,9 +79,9 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 ## 4. Authoring
 
-You write in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post needs only a **subject** and a body to start; **preheader**, **slug**, and an optional internal **title** round out the metadata. A post is editable only while it's a draft; scheduling locks it (§6).
+You write in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post needs only a **subject** and a body to start; the **slug** (auto-derived from the subject) rounds out the metadata, and the inbox **preheader** is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
 
-Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug — one field carrying the weight rather than a separate "title" you'd have to keep in sync with it. The internal title stays available for a private working name when you want one, but it is never required and never appears in the sent email.
+Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug — one field carrying the weight rather than a separate "title" you'd have to keep in sync with it.
 
 ### Revisions
 
@@ -289,7 +289,7 @@ Nothing here retries in a way that could re-mail a person, because every retry i
 - **The app owns content, in a database.** Chosen over Markdown files in a repo. It buys a build-free live preview, images uploaded rather than committed, and a single door so the editor and Claude can't drift. It costs casual `git`-versioning, which the revision table hands back deliberately.
 - **One interface, two clients.** No file-editing path beside the API. This removes the whole class of "did the file and the record disagree" bugs, and it's what makes Claude-in-production safe: the same door you use, with the same review window in front of every send.
 - **Self-contained by default, apex-optional.** The app serves its own reader surface on its own origin, so a working newsletter never depends on where the website is hosted. Surfacing the archive on the website's apex is an opt-in enhancement for sites already on Cloudflare, chosen over making it the required shape — which would have welded the finished product to the website's infra and turned "hook it up to your site" into a wall for anyone not on Cloudflare.
-- **Subject is the primary post field.** For an email the subject is what the reader sees, so it is also the list name and the slug source; a separate required "title" would only be a second field to keep in sync. Title survives as an optional internal name, never rendered in the email.
+- **Subject is the primary post field.** For an email the subject is what the reader sees, so it is also the list name and the slug source; a separate "title" would only be a second field to keep in sync, so there isn't one. The inbox preheader is derived from the body rather than authored, for the same reason.
 - **Scheduling is core, not deferred.** The review window between scheduling and firing is the safety model — it protects against any bad send, a person's as much as an agent's — so it's v1, not a later feature. Send-now is the narrow exception, and it still carries a short cancelable buffer.
 - **Soft-lock over the rigid alternatives.** Scheduling freezes the render and locks the post; editing means unschedule, edit, re-test, re-schedule. This keeps "what fires equals what was reviewed" true without making edits painful, and is chosen over both "fire the current version" (which could send something untested) and "fire the scheduled version but allow edits" (which breaks the guarantee).
 - **A reconciling sweep drives the timer, not per-post alarms.** The sweep both fires due sends and detects ones that should have fired and didn't, so the loud-failure requirement is inherent rather than bolted on. Per-object alarms would add precision a newsletter doesn't need and still require a sweep as a backstop.

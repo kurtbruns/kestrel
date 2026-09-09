@@ -195,8 +195,8 @@ async function renderPosts() {
     const { posts } = await api("/posts");
     const list = document.getElementById("list");
     if (!posts.length) { list.innerHTML = `<p class="muted">No posts yet — create your first draft.</p>`; return; }
-    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
-      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td class="muted">${esc(p.slug)}</td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`)
+    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
+      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`)
       .join("")}</tbody></table></div>`;
     list.querySelectorAll("tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) location.hash = "#/edit/" + tr.dataset.id; }));
     list.querySelectorAll(".menu-btn").forEach((b) => (b.onclick = (e) => {

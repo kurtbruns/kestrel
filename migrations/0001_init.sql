@@ -7,9 +7,7 @@
 CREATE TABLE posts (
   id               TEXT PRIMARY KEY,
   slug             TEXT NOT NULL UNIQUE,
-  title            TEXT NOT NULL DEFAULT '',
   subject          TEXT NOT NULL DEFAULT '',
-  preheader        TEXT NOT NULL DEFAULT '',
   status           TEXT NOT NULL DEFAULT 'draft'
                      CHECK (status IN ('draft', 'scheduled', 'sent')),
   current_revision TEXT,                       -- -> post_revisions.id (nullable until first save)
@@ -22,7 +20,7 @@ CREATE TABLE post_revisions (
   id         TEXT PRIMARY KEY,
   post_id    TEXT NOT NULL REFERENCES posts (id),
   markdown   TEXT NOT NULL DEFAULT '',
-  metadata   TEXT NOT NULL DEFAULT '{}',       -- JSON: {title, subject, preheader, slug}
+  metadata   TEXT NOT NULL DEFAULT '{}',       -- JSON: {subject, slug}
   author     TEXT,                             -- principal that saved this revision
   created_at INTEGER NOT NULL
 );
@@ -82,16 +80,27 @@ CREATE INDEX idx_sends_post ON sends (post_id);
 
 -- One row per recipient per send. UNIQUE(send_id, email) is the backbone of
 -- idempotent resume (I4). status: pending -> dispatched -> accepted | failed | skipped.
+--
+-- The event columns hold out-of-band provider notifications (delivered / bounced /
+-- complained), which arrive later via the delivery webhook. They are recorded
+-- SEPARATELY from the send-loop `status` (whose CHECK stays fixed), so the send
+-- state machine and its idempotent-resume backbone are untouched. A hard bounce or
+-- a complaint also adds a suppression — see src/services/webhook_events.ts. Matching
+-- is by the provider message id stored as `provider_id`, so it is indexed.
 CREATE TABLE deliveries (
-  id          TEXT PRIMARY KEY,
-  send_id     TEXT NOT NULL REFERENCES sends (id),
-  email       TEXT NOT NULL,
-  status      TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending', 'dispatched', 'accepted', 'failed', 'skipped')),
-  provider_id TEXT,
-  error       TEXT,
-  attempts    INTEGER NOT NULL DEFAULT 0,
-  updated_at  INTEGER NOT NULL,
+  id           TEXT PRIMARY KEY,
+  send_id      TEXT NOT NULL REFERENCES sends (id),
+  email        TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending'
+                 CHECK (status IN ('pending', 'dispatched', 'accepted', 'failed', 'skipped')),
+  provider_id  TEXT,
+  error        TEXT,
+  attempts     INTEGER NOT NULL DEFAULT 0,
+  updated_at   INTEGER NOT NULL,
+  event        TEXT,                           -- delivered | bounced | complained
+  event_detail TEXT,                           -- bounce subtype / complaint feedback / diagnostic
+  event_at     INTEGER,                        -- when the event was applied (epoch ms)
   UNIQUE (send_id, email)
 );
 CREATE INDEX idx_deliveries_send_status ON deliveries (send_id, status);
+CREATE INDEX idx_deliveries_provider ON deliveries (provider_id);

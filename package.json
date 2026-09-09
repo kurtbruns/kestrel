@@ -6,6 +6,7 @@
   "description": "Newsletter app: write in Markdown, preview, schedule with a review window, and send to a double opt-in list. Cloudflare Worker + D1 + R2 + SES/Resend.",
   "scripts": {
     "dev": "node scripts/dev.mjs",
+    "seed": "node scripts/seed.mjs",
     "deploy": "wrangler deploy",
     "types": "wrangler types",
     "typecheck": "wrangler types && tsc --noEmit",

@@ -18,7 +18,7 @@ export interface RevisionRow {
   id: string;
   post_id: string;
   markdown: string;
-  metadata: string; // JSON: { title, subject, preheader, slug }
+  metadata: string; // JSON: { subject, slug }
   author: string | null;
   created_at: number;
 }
