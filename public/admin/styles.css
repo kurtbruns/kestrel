@@ -49,12 +49,15 @@ h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: upp
 .brand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; cursor: pointer; text-decoration: none; }
 .brand-icon { width: 22px; height: 22px; fill: currentColor; display: block; }
 .topbar nav { display: flex; gap: 16px; }
+/* Content nav sits by the brand; utility (Docs, Settings) + identity are pushed
+   to the right — the auto margin on nav-utility absorbs the free space. */
+.topbar .nav-utility { margin-left: auto; }
 .topbar nav a { text-decoration: none; color: var(--muted); font-size: 14px; display: inline-flex; flex-direction: column; align-items: center; }
 /* Reserve the width of the active (600) label so toggling weight never reflows the link. */
 .topbar nav a::after { content: attr(data-text); height: 0; font-weight: 600; overflow: hidden; visibility: hidden; pointer-events: none; user-select: none; }
 .topbar nav a:hover { color: var(--fg); }
 .topbar nav a[aria-current="page"] { color: var(--fg); font-weight: 600; }
-.topbar .identity { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; font-size: 13px; }
+.topbar .identity { display: inline-flex; align-items: center; gap: 12px; font-size: 13px; }
 .identity .who { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .identity .who.dev { color: var(--muted); font-style: italic; }
 .identity a.ghost { font-size: 13px; color: var(--muted); text-decoration: none; }

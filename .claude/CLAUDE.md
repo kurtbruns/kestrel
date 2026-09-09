@@ -65,6 +65,7 @@ Any change to sending, consent, the record, or the reader surface updates `docs/
 
 Write for a cold reader — a human and a Claude agent want the same thing. A comment earns its place when it spares the next reader from reconstructing intent, and fails when it restates the code: document the **why**, not the *what*.
 
+- **Markdown prose is unwrapped** — one physical line per paragraph, no hard wrapping at a fixed column (let the editor soft-wrap). Applies to authored/edited prose across `docs/`, `README.md`, `docs/SPEC.md`, and this file. Tables, code fences, and list-item structure keep their own line breaks.
 - Every module opens with a short header comment naming its responsibility.
 - Non-obvious exported functions/types get JSDoc (`/** … */`) so the summary shows on hover; no `@param`/`@returns` (the `strict` signature already renders it). Trivial one-liners take `//` or nothing.
 - No ephemeral references (issue/PR/milestone numbers); point to `docs/SPEC.md`.
