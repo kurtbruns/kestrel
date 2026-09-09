@@ -35,6 +35,31 @@ Open the editor at **http://localhost:8787/admin/**, click the 🔑, and paste y
 local admin token (see below). Everything the editor does is also available on the
 HTTP API — the editor is just a client of it.
 
+### Load demo data
+
+A fresh database is empty. With the dev server running (and `BEARER_TOKEN` set in
+`.dev.vars`), load the local **"Field Notes"** sample newsletter:
+
+```bash
+npm run seed
+```
+
+This resets the local database and loads a realistic dataset — a back-catalog of
+sent issues, one scheduled issue with a live countdown, a couple of drafts, and an
+audience covering every subscriber state — so the editor and archive look populated.
+It's a thin wrapper around a dev-only `POST /api/dev/seed` route that is available
+**only under the fake transport**, so it can never touch a deployed database. Re-run
+it any time to reset to a known state.
+
+The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
+the seed still runs (that one image just 404s until you drop the file in and re-seed).
+View the result at `/admin/` and at the archived issues, e.g.
+**http://localhost:8787/newsletter/the-hovering-hunter**.
+
+> **Note:** the local D1 tracks which migrations it has applied by filename. If the
+> migrations ever change, reset the local database — delete this checkout's
+> `.wrangler/state` (or run `npm run dev` in a fresh clone) and re-migrate.
+
 ## Auth — the admin token, and how deployed auth differs
 
 The admin/authoring surface (the editor, `/posts`, `/sends`, `/subscribers`,
@@ -86,6 +111,7 @@ editor's same-origin API calls carry the Access JWT.
 | Command | Does |
 | --- | --- |
 | `npm run dev` | launcher around `wrangler dev` (local Worker on :8787; auto-migrates a fresh local DB, honors preview `PORT`) |
+| `npm run seed` | load the local "Field Notes" demo dataset (needs `npm run dev` running; fake transport only) |
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
 | `npm run migrate:local` / `migrate:remote` | apply D1 migrations |
