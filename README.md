@@ -20,9 +20,16 @@ Resend; a fake in-memory transport for local dev and tests).
 ```bash
 npm install
 cp .dev.vars.example .dev.vars      # then edit (see "Auth" below)
-npm run migrate:local               # apply the schema to the local D1
+npm run migrate:local               # apply the schema to the local D1 (optional; see below)
 npm run dev                         # wrangler dev on http://localhost:8787
 ```
+
+`npm run dev` goes through `scripts/dev.mjs`, a thin launcher around `wrangler dev`.
+It applies the D1 migrations automatically the first time a local shadow is empty, so
+the `migrate:local` step above is optional. It also honors a `PORT` handed to it by
+Claude Code's preview (`.claude/launch.json` has `autoPort`), so parallel worktrees
+each get a free port instead of colliding on 8787; a plain terminal `npm run dev`
+still binds 8787. Pass wrangler flags through with `--`, e.g. `npm run dev -- --remote`.
 
 Open the editor at **http://localhost:8787/admin/**, click the 🔑, and paste your
 local admin token (see below). Everything the editor does is also available on the
@@ -78,7 +85,7 @@ editor's same-origin API calls carry the Access JWT.
 
 | Command | Does |
 | --- | --- |
-| `npm run dev` | `wrangler dev` (local Worker on :8787) |
+| `npm run dev` | launcher around `wrangler dev` (local Worker on :8787; auto-migrates a fresh local DB, honors preview `PORT`) |
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
 | `npm run migrate:local` / `migrate:remote` | apply D1 migrations |

@@ -5,7 +5,8 @@
       "name": "kestrel-dev",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
-      "port": 8787
+      "port": 8787,
+      "autoPort": true
     }
   ]
 }
