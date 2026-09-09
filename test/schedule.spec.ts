@@ -1,8 +1,9 @@
 import { SELF, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
+import { adminAuth } from "./support/auth";
 
-const AUTH = { Authorization: "Bearer test-bearer-token" };
+const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();

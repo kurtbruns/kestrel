@@ -54,10 +54,15 @@ h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: upp
 .topbar nav a::after { content: attr(data-text); height: 0; font-weight: 600; overflow: hidden; visibility: hidden; pointer-events: none; user-select: none; }
 .topbar nav a:hover { color: var(--fg); }
 .topbar nav a[aria-current="page"] { color: var(--fg); font-weight: 600; }
-.topbar #tokenBtn { margin-left: auto; }
+.topbar .identity { margin-left: auto; display: inline-flex; align-items: center; gap: 12px; font-size: 13px; }
+.identity .who { color: var(--muted); max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.identity .who.dev { color: var(--muted); font-style: italic; }
+.identity a.ghost { font-size: 13px; color: var(--muted); text-decoration: none; }
+.identity a.ghost:hover { color: var(--fg); text-decoration: underline; }
 
-.banner { display: flex; gap: 10px; align-items: center; padding: 10px 20px; background: var(--banner-bg); border-bottom: 1px solid var(--banner-line); font-size: 14px; }
-.banner input { flex: 0 1 320px; }
+.auth-wall { max-width: 420px; margin: 64px auto; text-align: center; }
+.auth-wall h2 { margin: 0 0 8px; }
+.auth-wall button { margin-top: 12px; }
 
 .container { max-width: 880px; margin: 24px auto; padding: 0 16px 64px; }
 
