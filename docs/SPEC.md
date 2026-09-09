@@ -169,13 +169,13 @@ Someone subscribes through a public form, which creates a **pending** subscriber
 
 ### Leaving
 
-Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2).
+Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The operator can also unsubscribe someone from the admin subscriber list — the same immediate, idempotent effect (I2) — for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
 
 Consent withdrawn (unsubscribe) and undeliverable (suppression) are different states with different owners:
 
 | State | Meaning | Who sets it | Who clears it |
 | --- | --- | --- | --- |
-| Unsubscribed | The reader chose to leave | The reader | The reader, by re-subscribing |
+| Unsubscribed | Consent was withdrawn | The reader, or the operator on their behalf | The reader, by re-subscribing |
 | Suppressed | Bounced hard or complained | The app, from provider signals | You, deliberately, rarely |
 
 ### Later, not now
@@ -194,7 +194,7 @@ A small status surface, readable in the editor and through the API, answers the 
 
 **Is anything wrong right now?** A send still retrying, a scheduled send that missed its fire time, a bounce spike, a provider problem. This is the only thing that ever needs your attention, so it's the only thing that surfaces loudly.
 
-**Who's on the list?** Counts by state — pending, confirmed, unsubscribed, suppressed — and the ability to look up one address.
+**Who's on the list?** The subscriber list is its own view, distinct from send health: it tells the story of the list as a whole rather than of a particular send. It shows the roster — each address, its consent state, and whether it's suppressed — filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From here you can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2). The send-status surface above keeps only scheduling and delivery, so each view answers one question cleanly.
 
 The record is the source of truth for "did it go," because the app is the only thing that knows what actually happened at delivery time.
 

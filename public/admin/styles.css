@@ -97,6 +97,16 @@ td a:hover { text-decoration: underline; }
 .badge.sent { background: var(--b-sent-bg); color: var(--b-sent-fg); border-color: var(--b-sent-line); }
 .badge.sending { background: var(--b-sending-bg); color: var(--b-sending-fg); border-color: var(--b-sending-line); }
 .badge.canceled, .badge.failed { background: var(--b-bad-bg); color: var(--b-bad-fg); border-color: var(--b-bad-line); }
+/* subscriber consent states (reuse the send-status colors) */
+.badge.confirmed { background: var(--b-sent-bg); color: var(--b-sent-fg); border-color: var(--b-sent-line); }
+.badge.pending { background: var(--b-sending-bg); color: var(--b-sending-fg); border-color: var(--b-sending-line); }
+.badge.unsubscribed { background: var(--b-draft-bg); color: var(--b-draft-fg); }
+.badge.suppressed { background: var(--b-bad-bg); color: var(--b-bad-fg); border-color: var(--b-bad-line); }
+
+/* subscribers view: status filter + email search */
+.sub-controls { margin: 12px 0 16px; }
+.sub-controls select { width: auto; }
+.sub-controls input[type="search"] { flex: 1 1 220px; max-width: 320px; }
 
 /* editor header */
 .editor-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }

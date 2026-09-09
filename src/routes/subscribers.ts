@@ -31,15 +31,28 @@ export async function list(c: RequestContext): Promise<Response> {
     statusParam === "pending" || statusParam === "confirmed" || statusParam === "unsubscribed"
       ? statusParam
       : undefined;
-  const [counts, rows] = await Promise.all([
+  const search = c.url.searchParams.get("search") ?? undefined;
+  const [counts, rows, suppressions] = await Promise.all([
     subscribers.counts(c.env.DB),
-    subscribers.listSubscribers(c.env.DB, { status }),
+    subscribers.listSubscribers(c.env.DB, { status, search }),
+    subscribers.listSuppressions(c.env.DB),
   ]);
-  return json({ counts, subscribers: rows });
+  // Annotate each row with whether its address is suppressed, so the list view
+  // can badge it without a per-row lookup.
+  const suppressed = new Set(suppressions.map((s) => s.email));
+  const annotated = rows.map((r) => ({ ...r, suppressed: suppressed.has(r.email) }));
+  return json({ counts, subscribers: annotated });
 }
 
 export async function get(c: RequestContext): Promise<Response> {
   const subscriber = await subscribers.getById(c.env.DB, param(c, "id"));
+  if (!subscriber) throw notFound("subscriber");
+  return json({ subscriber, suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email) });
+}
+
+/** Authed admin unsubscribe by id — immediate and idempotent (I2). */
+export async function unsubscribe(c: RequestContext): Promise<Response> {
+  const subscriber = await subscribers.unsubscribeById(c.env.DB, param(c, "id"));
   if (!subscriber) throw notFound("subscriber");
   return json({ subscriber, suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email) });
 }
