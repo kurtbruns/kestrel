@@ -107,6 +107,20 @@ const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"]/g, (c) => ({ "&":
 const badge = (status) => `<span class="badge ${status}">${status}</span>`;
 const fmt = (ms) => (ms ? new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 
+// Split a free-text recipient list (newlines or commas) into unique addresses.
+// Server-side validation is authoritative; this just tidies the Send-test input.
+function parseAddresses(text) {
+  const seen = new Set(), out = [];
+  for (const part of String(text || "").split(/[\n,]+/)) {
+    const a = part.trim();
+    if (!a || !a.includes("@")) continue;
+    const key = a.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key); out.push(a);
+  }
+  return out;
+}
+
 // Client-side slug (mirrors src/lib/slug.ts) for the linked Subject → Slug field.
 function clientSlugify(s) {
   return s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80).replace(/-+$/g, "");
@@ -175,7 +189,7 @@ function route() {
   editorLeaveFlush = null; editorManualSave = null;
   const hash = location.hash || "#/posts";
   const [, view, arg] = hash.split("/");
-  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : view === "docs" ? "#/docs" : "#/posts";
+  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : view === "settings" ? "#/settings" : view === "docs" ? "#/docs" : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
@@ -183,6 +197,7 @@ function route() {
   if (view === "edit" && arg) return renderEditor(arg);
   if (view === "sends") return renderSends();
   if (view === "subscribers") return renderSubscribers();
+  if (view === "settings") return renderSettings();
   if (view === "docs") return renderDocs(arg);
   return renderPosts();
 }
@@ -550,15 +565,38 @@ async function renderEditor(id) {
   }
 
   // --- send test (modal) ---
+  // Pre-fills from the default test recipients (Settings, issue #26) and accepts
+  // several — one per line. Each address is a separate test send through the same
+  // per-recipient path as a real send (I5).
   document.getElementById("testBtn").onclick = () => {
-    const m = modal(`<h3>Send a test</h3><p class="hint">Delivers the rendered email to one address so you can check it in a real inbox.</p><label for="testTo">Email address</label><input type="email" id="testTo" placeholder="you@example.com"><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`);
+    const m = modal(`<h3>Send a test</h3><p class="hint">Delivers the rendered email to real inboxes so you can check it in a client. One address per line.</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`);
     const to = m.el.querySelector("#testTo"); to.focus();
+    // Pre-fill with saved defaults (don't clobber anything already typed).
+    api("/api/settings").then((s) => {
+      const defaults = (s && s.settings && s.settings.testRecipients) || [];
+      if (defaults.length && !to.value.trim()) {
+        to.value = defaults.join("\n");
+        const hint = m.el.querySelector("#testDefaultsHint");
+        hint.textContent = "Pre-filled from your default test recipients (Settings).";
+        hint.hidden = false;
+      }
+    }).catch(() => {});
     m.el.querySelector("#tCancel").onclick = m.close;
     m.el.querySelector("#tGo").onclick = () => busy(m.el.querySelector("#tGo"), "Sending…", async () => {
-      const addr = to.value.trim();
-      if (!addr || !addr.includes("@")) { toast("Enter a valid email"); return; }
-      try { if (!locked) await saveDraft(true); const r = await api("/posts/" + id + "/test", { method: "POST", json: { to: addr } }); showWarnings(r.warnings); m.close(); toast(r.sent ? "Test sent to " + addr : "Send failed"); }
-      catch (e) { toast(e.message); }
+      const addrs = parseAddresses(to.value);
+      if (!addrs.length) { toast("Enter at least one email address"); return; }
+      try {
+        if (!locked) await saveDraft(true);
+        let sent = 0, lastWarnings = null;
+        for (const addr of addrs) {
+          const r = await api("/posts/" + id + "/test", { method: "POST", json: { to: addr } });
+          if (r.sent) sent++;
+          lastWarnings = r.warnings;
+        }
+        showWarnings(lastWarnings);
+        m.close();
+        toast(sent === addrs.length ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}` : `Sent ${sent}/${addrs.length} — some failed`);
+      } catch (e) { toast(e.message); }
     });
   };
 
@@ -699,6 +737,49 @@ function addSubscriberModal(onDone) {
       toast(r.action === "already_confirmed" ? addr + " is already confirmed" : "Confirmation sent to " + addr);
       onDone && onDone();
     } catch (e) { toast(e.message); }
+  });
+}
+
+// ---- settings ----
+// Runtime preferences (editable) + a read-only reflection of the deploy-time
+// config. Secrets never come down this wire (see routes/settings.ts).
+const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resend: "Resend" };
+async function renderSettings() {
+  app.innerHTML = `<h1>Settings</h1><div id="settingsBody" class="muted">Loading…</div>`;
+  const body = document.getElementById("settingsBody");
+  let data;
+  try { data = await api("/api/settings"); }
+  catch (e) { renderError(body, e.message, renderSettings); return; }
+  const s = data.settings, d = data.deployment;
+  const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
+  body.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">Default test recipients</h2>
+      <p class="hint">Pre-filled into <strong>Send test email</strong>. One address per line. These are your own inboxes — they don't go through the subscribe/consent flow.</p>
+      <textarea id="setTestRecipients" rows="4" placeholder="you@example.com">${esc(s.testRecipients.join("\n"))}</textarea>
+      <div class="row" style="margin-top:12px"><button class="primary" id="setSave">Save</button></div>
+    </div>
+    <div class="card">
+      <h2 style="margin-top:0">Deployment</h2>
+      <p class="hint">Set at deploy time (env vars + secrets), shown here read-only. To change any of these, see <a href="#/docs">Docs</a> — the operator setup guide. Credentials are never shown.</p>
+      <div class="table-wrap"><table><tbody>
+        ${kv("Email sender", PROVIDER_LABELS[d.provider] || d.provider)}
+        ${kv("From address", d.fromAddress)}
+        ${kv("Sending domain", d.sendingDomain)}
+        ${kv("App origin", d.appOrigin)}
+        ${kv("Archive URL base", d.archiveOrigin + d.archiveBasePath)}
+        ${kv("Media base", d.mediaPublicBase)}
+        ${kv("Auth mode", d.authMode === "access" ? "Cloudflare Access" : "Local dev token")}
+        ${kv("Access configured", d.accessConfigured ? "Yes" : "No")}
+      </tbody></table></div>
+    </div>`;
+  document.getElementById("setSave").onclick = (e) => busy(e.currentTarget, "Saving…", async () => {
+    const list = parseAddresses(document.getElementById("setTestRecipients").value);
+    try {
+      const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
+      document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
+      toast("Settings saved");
+    } catch (err) { toast(err.message); }
   });
 }
 

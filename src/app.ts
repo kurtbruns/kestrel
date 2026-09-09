@@ -20,6 +20,7 @@ import * as archiveRoutes from "./routes/archive";
 import * as webhookRoutes from "./routes/webhooks";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
+import * as settingsRoutes from "./routes/settings";
 
 /**
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
@@ -48,6 +49,10 @@ export function createRouter(archiveBasePath: string): Router {
   // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
   r.get("/api/docs", docsRoutes.list, authed);
   r.get("/api/docs/:slug", docsRoutes.get, authed);
+
+  // --- app settings (authed; runtime preferences, never secrets) ---
+  r.get("/api/settings", settingsRoutes.get, authed);
+  r.put("/api/settings", settingsRoutes.update, authed);
 
   // --- posts + revisions (authed) ---
   r.post("/posts", postRoutes.createPost, authed);
