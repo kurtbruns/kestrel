@@ -148,6 +148,21 @@ td a:hover { text-decoration: underline; }
 
 .countdown { font-variant-numeric: tabular-nums; }
 
+/* posts page + row-action menu */
+.page-head { margin-bottom: 16px; }
+td.act { text-align: right; width: 1%; white-space: nowrap; }
+.menu-btn { border: 0; background: transparent; color: var(--muted); font-size: 18px; line-height: 1; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+.menu-btn:hover { background: var(--hover); color: var(--fg); }
+.menu-overlay { position: fixed; inset: 0; z-index: 39; }
+.menu { position: absolute; z-index: 40; background: var(--card); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.2); padding: 4px; min-width: 150px; }
+.menu-item { display: block; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 12px; border-radius: 6px; font-size: 14px; color: var(--fg); cursor: pointer; }
+.menu-item:hover { background: var(--hover); }
+.menu-item.danger-item { color: var(--danger); }
+
+/* editor field hints + scheduled banner */
+.field-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+.sched-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--b-scheduled-bg); color: var(--b-scheduled-fg); border: 1px solid var(--b-scheduled-line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } .tb { width: 34px; height: 34px; } }
 

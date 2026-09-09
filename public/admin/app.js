@@ -15,7 +15,7 @@ const toasts = document.getElementById("toasts");
 
 // ---- Material Symbols icon paths (viewBox 0 -960 960 960) ----
 const ICONS = {
-  heading: "M420-160v-520H200v-120h560v120H540v520H420Z",
+  heading: "M360-280v-400h80v160h160v-160h80v400h-80v-160H440v160h-80Z",
   bold: "M272-200v-560h221q65 0 120 40t55 111q0 51-23 78.5T602-491q25 11 55.5 41t30.5 90q0 89-65 124.5T501-200H272Zm121-112h104q48 0 58.5-24.5T566-372q0-11-10.5-35.5T494-432H393v120Zm0-228h93q33 0 48-17t15-38q0-24-17-39t-44-15h-95v109Z",
   italic: "M200-200v-100h160l120-360H320v-100h400v100H580L460-300h140v100H200Z",
   quote: "m228-240 92-160q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 23-5.5 42.5T458-480L320-240h-92Zm360 0 92-160q-66 0-113-47t-47-113q0-66 47-113t113-47q66 0 113 47t47 113q0 23-5.5 42.5T818-480L680-240h-92ZM362.5-517.5Q380-535 380-560t-17.5-42.5Q345-620 320-620t-42.5 17.5Q260-585 260-560t17.5 42.5Q295-500 320-500t42.5-17.5Zm360 0Q740-535 740-560t-17.5-42.5Q705-620 680-620t-42.5 17.5Q620-585 620-560t17.5 42.5Q655-500 680-500t42.5-17.5ZM680-560Zm-360 0Z",
@@ -92,6 +92,31 @@ function renderError(container, msg, retryFn) {
   const b = container.querySelector("[data-retry]"); if (b) b.onclick = retryFn;
 }
 
+// popover menu for row actions (⋯). A transparent full-screen overlay (behind
+// the menu) closes it on an outside click — no document-listener race.
+let menuEls = [];
+function closeMenu() { menuEls.forEach((e) => e.remove()); menuEls = []; }
+function openMenu(anchor, items) {
+  closeMenu();
+  const overlay = document.createElement("div");
+  overlay.className = "menu-overlay";
+  overlay.onclick = closeMenu;
+  const m = document.createElement("div");
+  m.className = "menu";
+  items.forEach((it) => {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "menu-item" + (it.danger ? " danger-item" : ""); b.textContent = it.label;
+    b.onclick = () => { closeMenu(); it.onClick(); };
+    m.appendChild(b);
+  });
+  document.body.appendChild(overlay);
+  document.body.appendChild(m);
+  menuEls = [overlay, m];
+  const r = anchor.getBoundingClientRect();
+  m.style.top = r.bottom + window.scrollY + 4 + "px";
+  m.style.left = r.right + window.scrollX - m.offsetWidth + "px";
+}
+
 // ---- router ----
 function route() {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
@@ -110,7 +135,7 @@ window.addEventListener("hashchange", route);
 
 // ---- posts list ----
 async function renderPosts() {
-  app.innerHTML = `<div class="spread"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
+  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
   document.getElementById("newPost").onclick = (e) => busy(e.currentTarget, "Creating…", async () => {
     try { const { post } = await api("/posts", { method: "POST", json: { title: "Untitled" } }); location.hash = "#/edit/" + post.id; }
     catch (err) { toast(err.message); }
@@ -119,11 +144,27 @@ async function renderPosts() {
     const { posts } = await api("/posts");
     const list = document.getElementById("list");
     if (!posts.length) { list.innerHTML = `<p class="muted">No posts yet — create your first draft.</p>`; return; }
-    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Updated</th></tr></thead><tbody>${posts
-      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.title) || "<em>untitled</em>"}</a></td><td class="muted">${esc(p.slug)}</td><td>${badge(p.status)}</td><td class="muted">${fmt(p.updated_at)}</td></tr>`)
+    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
+      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.title) || "<em>untitled</em>"}</a></td><td class="muted">${esc(p.slug)}</td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`)
       .join("")}</tbody></table></div>`;
-    list.querySelectorAll("tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (e.target.tagName !== "A") location.hash = "#/edit/" + tr.dataset.id; }));
+    list.querySelectorAll("tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) location.hash = "#/edit/" + tr.dataset.id; }));
+    list.querySelectorAll(".menu-btn").forEach((b) => (b.onclick = (e) => {
+      e.stopPropagation();
+      const pid = b.dataset.menu;
+      const items = [{ label: "Open", onClick: () => (location.hash = "#/edit/" + pid) }];
+      if (b.dataset.status === "draft") items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
+      openMenu(b, items);
+    }));
   } catch (e) { renderError(document.getElementById("list"), e.message, renderPosts); }
+}
+
+function confirmDelete(pid) {
+  const m = modal(`<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`);
+  m.el.querySelector("#dCancel").onclick = m.close;
+  m.el.querySelector("#dGo").onclick = () => busy(m.el.querySelector("#dGo"), "Deleting…", async () => {
+    try { await api("/posts/" + pid, { method: "DELETE" }); m.close(); toast("Draft deleted"); renderPosts(); }
+    catch (e) { toast(e.message); }
+  });
 }
 
 // ---- editor ----
@@ -135,8 +176,8 @@ const TOOLBAR = [
 
 async function renderEditor(id) {
   app.innerHTML = `<p class="muted">Loading…</p>`;
-  let post, markdown;
-  try { const data = await api("/posts/" + id); post = data.post; markdown = data.markdown; }
+  let post, markdown, scheduled;
+  try { const data = await api("/posts/" + id); post = data.post; markdown = data.markdown; scheduled = data.scheduled; }
   catch (e) { renderError(app, e.message, () => renderEditor(id)); return; }
 
   const locked = post.status !== "draft";
@@ -153,13 +194,14 @@ async function renderEditor(id) {
         ${badge(post.status)}
       </div>
     </div>
+    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel schedule</button></div>` : ""}
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
-        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}><div class="field-hint">The inbox subject line.</div></div>
+        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">URL for the archive page.</div></div>
       </div>
-      <label for="f-title">Title</label><input id="f-title" value="${esc(post.title)}" ${dis}>
-      <label for="f-preheader">Preheader</label><input id="f-preheader" value="${esc(post.preheader)}" ${dis}>
+      <label for="f-preheader">Preheader</label><input id="f-preheader" value="${esc(post.preheader)}" ${dis}><div class="field-hint">Preview text shown after the subject in most inboxes.</div>
+      <label for="f-title">Title</label><input id="f-title" value="${esc(post.title)}" ${dis}><div class="field-hint">Internal name (used to derive the slug); the email itself uses the subject.</div>
 
       <label for="f-markdown">Body</label>
       <div class="composer">
@@ -182,11 +224,11 @@ async function renderEditor(id) {
       <div class="actions-bar">
         <div class="row">
           <button id="saveBtn" ${dis}>Save draft</button>
-          <button id="testBtn">Send test…</button>
+          <button id="testBtn">Send test email</button>
         </div>
         ${locked
-          ? `<span class="muted">Scheduled — cancel from Status to edit.</span>`
-          : `<div class="row"><button id="scheduleBtn">Schedule…</button><button class="primary" id="sendBtn">Send now</button></div>`}
+          ? ``
+          : `<div class="row"><button id="scheduleBtn">Schedule</button><button class="primary" id="sendBtn">Send now</button></div>`}
       </div>
     </div>`;
 
@@ -267,6 +309,13 @@ async function renderEditor(id) {
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 10000);
     } catch (e) { toast(e.message); }
+  });
+
+  // --- cancel schedule (from the scheduled banner) ---
+  const cancelScheduleBtn = document.getElementById("cancelSchedule");
+  if (cancelScheduleBtn && scheduled) cancelScheduleBtn.onclick = () => busy(cancelScheduleBtn, "Canceling…", async () => {
+    try { await api("/sends/" + scheduled.id + "/cancel", { method: "POST" }); toast("Schedule canceled"); renderEditor(id); }
+    catch (e) { toast(e.message); }
   });
 
   // --- image upload: drag/drop, paste, click ---

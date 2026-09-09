@@ -41,10 +41,21 @@ export function getBySlug(db: D1Database, slug: string): Promise<PostRow | null>
   return db.prepare("SELECT * FROM posts WHERE slug = ?").bind(slug).first<PostRow>();
 }
 
-export async function listPosts(db: D1Database): Promise<PostRow[]> {
+/** A post plus the fire time of its active scheduled send (null otherwise). */
+export interface PostListRow extends PostRow {
+  fire_at: number | null;
+}
+
+export async function listPosts(db: D1Database): Promise<PostListRow[]> {
+  // Scheduled posts first (soonest fire time), then the rest by most-recently edited.
   const { results } = await db
-    .prepare("SELECT * FROM posts ORDER BY created_at DESC, rowid DESC")
-    .all<PostRow>();
+    .prepare(
+      `SELECT p.*, s.fire_at AS fire_at
+         FROM posts p
+         LEFT JOIN sends s ON s.post_id = p.id AND s.status = 'scheduled'
+        ORDER BY (s.fire_at IS NULL) ASC, s.fire_at ASC, p.updated_at DESC`,
+    )
+    .all<PostListRow>();
   return results;
 }
 
