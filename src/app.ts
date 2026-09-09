@@ -74,6 +74,9 @@ export function createRouter(): Router {
   r.get("/unsubscribe", publicRoutes.unsubscribeLanding);
   r.post("/unsubscribe", publicRoutes.unsubscribe);
 
+  // --- delivery webhooks (public; provider-signature-verified, not requireAuth) ---
+  r.post("/webhooks/resend", webhookRoutes.resend);
+
   // --- archive / view-in-browser (public; serves the frozen record, I3) ---
   // Path matches ARCHIVE_BASE_PATH (/newsletter); in prod the apex routes
   // example.com/newsletter/* to this Worker.
