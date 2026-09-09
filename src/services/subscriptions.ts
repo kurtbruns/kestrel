@@ -1,10 +1,11 @@
 /** Shared subscribe orchestration: create/re-arm a subscriber and send the
  *  double opt-in confirmation through the provider seam. Used by both the public
  *  form and the authed API. */
-import type { RequestContext } from "../router";
+
 import * as subscribers from "../db/subscribers";
-import { getProvider } from "../providers";
 import { confirmationEmail } from "../emails/system";
+import { getProvider } from "../providers";
+import type { RequestContext } from "../router";
 
 export async function requestSubscription(
   c: RequestContext,
@@ -14,9 +15,13 @@ export async function requestSubscription(
   if (action !== "already_confirmed") {
     const provider = getProvider(c.config, c.env);
     const confirmUrl = `${c.config.appOrigin}/confirm?token=${subscriber.token}`;
-    await provider.sendBatch(confirmationEmail(confirmUrl), [{ email: subscriber.email, unsubscribeUrl: "" }], {
-      idempotencyKeyPrefix: `confirm-${subscriber.id}`,
-    });
+    await provider.sendBatch(
+      confirmationEmail(confirmUrl),
+      [{ email: subscriber.email, unsubscribeUrl: "" }],
+      {
+        idempotencyKeyPrefix: `confirm-${subscriber.id}`,
+      },
+    );
   }
   return { subscriber, action };
 }

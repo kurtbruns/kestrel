@@ -1,13 +1,13 @@
 import { env } from "cloudflare:test";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { getConfig } from "../src/env";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { freeze } from "../src/send/schedule";
-import { runSend } from "../src/send/loop";
-import { sweep } from "../src/send/sweep";
-import { clearFakeOutbox, fakeOutbox, failFakeSendBatch } from "../src/providers/fake";
+import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
+import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
+import { runSend } from "../src/send/loop";
+import { freeze } from "../src/send/schedule";
+import { sweep } from "../src/send/sweep";
 
 const config = () => getConfig(env);
 
@@ -115,7 +115,9 @@ describe("send loop + sweep", () => {
     )
       .bind("d-gone", send.id, Date.now())
       .run();
-    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'gone@example.com'").run();
+    await env.DB.prepare(
+      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'gone@example.com'",
+    ).run();
 
     await sweep(env);
 

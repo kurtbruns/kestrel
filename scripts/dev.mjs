@@ -63,7 +63,14 @@ if (!isRemote) {
 const origin = `http://localhost:${port}`;
 const originArgs = isRemote
   ? []
-  : ["--var", `APP_ORIGIN:${origin}`, "--var", `ARCHIVE_ORIGIN:${origin}`, "--var", `MEDIA_PUBLIC_BASE:${origin}/media`];
+  : [
+      "--var",
+      `APP_ORIGIN:${origin}`,
+      "--var",
+      `ARCHIVE_ORIGIN:${origin}`,
+      "--var",
+      `MEDIA_PUBLIC_BASE:${origin}/media`,
+    ];
 
 const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",

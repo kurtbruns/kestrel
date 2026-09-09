@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { existsSync } from "node:fs";
 /*
  * Load the local "Field Notes" demo dataset into the running dev server.
  *
@@ -13,15 +14,16 @@
  * read. Override the target with `PORT` or a URL argument: `npm run seed -- 8788`.
  */
 import { readFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 function baseUrl() {
   const arg = process.argv[2];
-  if (arg) return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
+  if (arg) {
+    return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
+  }
   const port = process.env.PORT || "8787";
   return `http://localhost:${port}`;
 }
@@ -29,13 +31,17 @@ function baseUrl() {
 async function bearerToken() {
   const path = join(root, ".dev.vars");
   if (!existsSync(path)) {
-    console.error("[seed] .dev.vars not found. Copy .dev.vars.example to .dev.vars and set BEARER_TOKEN.");
+    console.error(
+      "[seed] .dev.vars not found. Copy .dev.vars.example to .dev.vars and set BEARER_TOKEN.",
+    );
     process.exit(1);
   }
   const text = await readFile(path, "utf8");
   for (const line of text.split("\n")) {
     const m = line.match(/^\s*BEARER_TOKEN\s*=\s*(.*)\s*$/);
-    if (m) return m[1].trim().replace(/^["']|["']$/g, "");
+    if (m) {
+      return m[1].trim().replace(/^["']|["']$/g, "");
+    }
   }
   console.error("[seed] BEARER_TOKEN is not set in .dev.vars.");
   process.exit(1);
@@ -46,14 +52,21 @@ async function main() {
   const token = await bearerToken();
 
   const form = new FormData();
-  const CONTENT_TYPE = { ".webp": "image/webp", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".gif": "image/gif" };
+  const CONTENT_TYPE = {
+    ".webp": "image/webp",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+  };
   const coverDir = join(root, "scripts", "seed-assets");
   const coverName = [".webp", ".jpg", ".jpeg", ".png", ".gif"]
     .map((ext) => `kestrel${ext}`)
     .find((name) => existsSync(join(coverDir, name)));
   if (coverName) {
     const bytes = await readFile(join(coverDir, coverName));
-    const type = CONTENT_TYPE[coverName.slice(coverName.lastIndexOf("."))] || "application/octet-stream";
+    const type =
+      CONTENT_TYPE[coverName.slice(coverName.lastIndexOf("."))] || "application/octet-stream";
     form.set("kestrel", new Blob([bytes], { type }), coverName);
   } else {
     console.warn(
@@ -64,7 +77,11 @@ async function main() {
 
   let res;
   try {
-    res = await fetch(url, { method: "POST", headers: { authorization: `Bearer ${token}` }, body: form });
+    res = await fetch(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+      body: form,
+    });
   } catch (err) {
     console.error(`[seed] could not reach ${url}. Is the dev server running? (npm run dev)`);
     console.error(`       ${err instanceof Error ? err.message : String(err)}`);
@@ -79,14 +96,22 @@ async function main() {
 
   const summary = await res.json();
   console.log("[seed] done:");
-  console.log(`  subscribers: ${summary.subscribers.confirmed} confirmed, ${summary.subscribers.pending} pending, ${summary.subscribers.unsubscribed} unsubscribed`);
+  console.log(
+    `  subscribers: ${summary.subscribers.confirmed} confirmed, ${summary.subscribers.pending} pending, ${summary.subscribers.unsubscribed} unsubscribed`,
+  );
   console.log(`  suppressions: ${summary.suppressions}  •  audience: ${summary.audience}`);
-  console.log(`  posts: ${summary.posts.sent} sent, ${summary.posts.scheduled} scheduled, ${summary.posts.draft} draft`);
-  console.log(`  deliveries: ${summary.deliveries}  •  cover image written: ${summary.coverImageBytesWritten}`);
+  console.log(
+    `  posts: ${summary.posts.sent} sent, ${summary.posts.scheduled} scheduled, ${summary.posts.draft} draft`,
+  );
+  console.log(
+    `  deliveries: ${summary.deliveries}  •  cover image written: ${summary.coverImageBytesWritten}`,
+  );
   console.log("");
   console.log("  view it:");
   console.log(`    admin editor: ${summary.urls.admin}`);
-  for (const a of summary.urls.archive) console.log(`    archived issue: ${a}`);
+  for (const a of summary.urls.archive) {
+    console.log(`    archived issue: ${a}`);
+  }
 }
 
 main();

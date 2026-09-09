@@ -7,20 +7,25 @@
  *
  * Every path runs the one render() (I5).
  */
-import type { RequestContext } from "../router";
-import { param } from "../router";
-import { badRequest, json, notFound } from "../lib/errors";
-import * as posts from "../db/posts";
+
 import * as images from "../db/images";
-import { render, substituteUnsubscribe, type RenderInput } from "../render/render";
+import * as posts from "../db/posts";
+import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
+import { type RenderInput, render, substituteUnsubscribe } from "../render/render";
+import type { RequestContext } from "../router";
+import { param } from "../router";
 
 async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
-  if (!revision) throw badRequest("post has no content yet");
+  if (!revision) {
+    throw badRequest("post has no content yet");
+  }
   const imgs = await images.listImages(c.env.DB, post.id);
   return { post, revision, images: imgs };
 }
@@ -57,8 +62,11 @@ export async function test(c: RequestContext): Promise<Response> {
   } catch {
     throw badRequest("JSON body with a 'to' address is required");
   }
-  const to = typeof (body as { to?: unknown })?.to === "string" ? (body as { to: string }).to.trim() : "";
-  if (!to || !to.includes("@")) throw badRequest("'to' must be an email address");
+  const to =
+    typeof (body as { to?: unknown })?.to === "string" ? (body as { to: string }).to.trim() : "";
+  if (!to || !to.includes("@")) {
+    throw badRequest("'to' must be an email address");
+  }
 
   const result = render(input, c.config);
   const provider = getProvider(c.config, c.env);
@@ -78,6 +86,8 @@ export async function test(c: RequestContext): Promise<Response> {
 }
 
 export async function devOutbox(c: RequestContext): Promise<Response> {
-  if (c.config.provider !== "fake") throw notFound("not available for this transport");
+  if (c.config.provider !== "fake") {
+    throw notFound("not available for this transport");
+  }
   return json({ messages: fakeOutbox() });
 }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { Config } from "../src/env";
-import type { PostRow, RevisionRow } from "../src/db/posts";
 import type { ImageRow } from "../src/db/images";
+import type { PostRow, RevisionRow } from "../src/db/posts";
+import type { Config } from "../src/env";
 import { render, substituteUnsubscribe, UNSUB_SENTINEL } from "../src/render/render";
 
 const config: Config = {
@@ -60,7 +60,11 @@ function image(over: Partial<ImageRow> = {}): ImageRow {
 describe("render (the single render path)", () => {
   it("resolves images to absolute URLs, caps size, keeps the sentinel, sets subject", () => {
     const result = render(
-      { post: post(), revision: revision("# Hello\n\n![A cat](cat.png)\n\n[link](https://x.com)"), images: [image()] },
+      {
+        post: post(),
+        revision: revision("# Hello\n\n![A cat](cat.png)\n\n[link](https://x.com)"),
+        images: [image()],
+      },
       config,
     );
     expect(result.subject).toBe("This week in cats");
@@ -71,12 +75,18 @@ describe("render (the single render path)", () => {
   });
 
   it("flags missing alt text", () => {
-    const result = render({ post: post(), revision: revision("![](cat.png)"), images: [image()] }, config);
+    const result = render(
+      { post: post(), revision: revision("![](cat.png)"), images: [image()] },
+      config,
+    );
     expect(result.warnings.join(" ")).toMatch(/missing alt/i);
   });
 
   it("flags an unresolved image reference", () => {
-    const result = render({ post: post(), revision: revision("![x](ghost.png)"), images: [] }, config);
+    const result = render(
+      { post: post(), revision: revision("![x](ghost.png)"), images: [] },
+      config,
+    );
     expect(result.warnings.join(" ")).toMatch(/not found/i);
   });
 
@@ -87,7 +97,11 @@ describe("render (the single render path)", () => {
 
   it("runs the hygiene pass over author HTML", () => {
     const result = render(
-      { post: post(), revision: revision("Hi\n\n<script>alert(1)</script>\n\n<a href=\"javascript:evil()\">x</a>"), images: [] },
+      {
+        post: post(),
+        revision: revision('Hi\n\n<script>alert(1)</script>\n\n<a href="javascript:evil()">x</a>'),
+        images: [],
+      },
       config,
     );
     expect(result.html).not.toContain("<script");
@@ -95,7 +109,10 @@ describe("render (the single render path)", () => {
   });
 
   it("produces a text part with links and the unsubscribe sentinel", () => {
-    const result = render({ post: post(), revision: revision("Read [here](https://x.com) now"), images: [] }, config);
+    const result = render(
+      { post: post(), revision: revision("Read [here](https://x.com) now"), images: [] },
+      config,
+    );
     expect(result.text).toContain("here (https://x.com)");
     expect(result.text).toContain(`Unsubscribe: ${UNSUB_SENTINEL}`);
     expect(result.text).toContain("View in browser: https://arc.example/newsletter/weekly-news");

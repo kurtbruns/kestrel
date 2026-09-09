@@ -6,8 +6,9 @@
  *                   dispatched by the URLPattern router (see app.ts / router.ts)
  *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts)
  */
-import type { AppEnv } from "./env";
+
 import { createRouter } from "./app";
+import type { AppEnv } from "./env";
 import { sweep } from "./send/sweep";
 
 const router = createRouter();

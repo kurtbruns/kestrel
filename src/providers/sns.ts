@@ -39,7 +39,14 @@ export function isSnsHost(hostname: string): boolean {
 }
 
 // The fields that make up the string-to-sign, in the exact order SNS uses.
-const NOTIFICATION_KEYS = ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"] as const;
+const NOTIFICATION_KEYS = [
+  "Message",
+  "MessageId",
+  "Subject",
+  "Timestamp",
+  "TopicArn",
+  "Type",
+] as const;
 const SUBSCRIPTION_KEYS = [
   "Message",
   "MessageId",
@@ -57,7 +64,9 @@ export function canonicalString(msg: SnsEnvelope): string {
   let out = "";
   for (const k of keys) {
     const v = fields[k];
-    if (v === undefined || v === null) continue;
+    if (v === undefined || v === null) {
+      continue;
+    }
     out += `${k}\n${String(v)}\n`;
   }
   return out;
@@ -77,7 +86,9 @@ export function _clearKeyCache(): void {
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64.replace(/\s+/g, ""));
   const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  for (let i = 0; i < bin.length; i++) {
+    out[i] = bin.charCodeAt(i);
+  }
   return out;
 }
 
@@ -103,7 +114,9 @@ function readTlv(buf: Uint8Array, offset: number): Tlv {
   if (len & 0x80) {
     const n = len & 0x7f;
     len = 0;
-    for (let k = 0; k < n; k++) len = (len << 8) | buf[i++]!;
+    for (let k = 0; k < n; k++) {
+      len = (len << 8) | buf[i++]!;
+    }
   }
   return { tag, start: offset, contentStart: i, end: i + len };
 }
@@ -126,16 +139,24 @@ const RSA_OID = [0x2a, 0x86, 0x48, 0x86, 0xf7, 0x0d, 0x01, 0x01, 0x01];
 function extractSpkiFromCert(der: Uint8Array): Uint8Array {
   const cert = readTlv(der, 0); // Certificate ::= SEQUENCE { tbs, sigAlg, sig }
   const tbs = children(der, cert)[0]; // TBSCertificate ::= SEQUENCE { ... }
-  if (!tbs) throw new Error("malformed certificate");
+  if (!tbs) {
+    throw new Error("malformed certificate");
+  }
   // The SPKI is the child SEQUENCE whose first element is an AlgorithmIdentifier
   // holding the rsaEncryption OID. issuer/subject (SET-first) and validity
   // (time-first) never match, so this is unambiguous.
   for (const child of children(der, tbs)) {
-    if (child.tag !== 0x30) continue;
+    if (child.tag !== 0x30) {
+      continue;
+    }
     const alg = children(der, child)[0];
-    if (!alg || alg.tag !== 0x30) continue;
+    if (!alg || alg.tag !== 0x30) {
+      continue;
+    }
     const oid = children(der, alg)[0];
-    if (!oid || oid.tag !== 0x06) continue;
+    if (!oid || oid.tag !== 0x06) {
+      continue;
+    }
     const bytes = der.subarray(oid.contentStart, oid.end);
     if (bytes.length === RSA_OID.length && RSA_OID.every((b, i) => b === bytes[i])) {
       return der.slice(child.start, child.end);
@@ -147,16 +168,22 @@ function extractSpkiFromCert(der: Uint8Array): Uint8Array {
 /** Accept a PEM PUBLIC KEY (SPKI) directly, or an X.509 CERTIFICATE to unwrap. */
 function spkiFromPem(pem: string): Uint8Array {
   const pub = pemBlock(pem, "PUBLIC KEY");
-  if (pub) return pub;
+  if (pub) {
+    return pub;
+  }
   const cert = pemBlock(pem, "CERTIFICATE");
-  if (cert) return extractSpkiFromCert(cert);
+  if (cert) {
+    return extractSpkiFromCert(cert);
+  }
   throw new Error("PEM has neither a PUBLIC KEY nor a CERTIFICATE");
 }
 
 async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promise<CryptoKey> {
   const cacheKey = `${hash}:${certUrl}`;
   const cached = keyCache.get(cacheKey);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
 
   let u: URL;
   try {
@@ -169,7 +196,9 @@ async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promi
   }
 
   const res = await fetch(certUrl);
-  if (!res.ok) throw new Error(`signing cert fetch failed: ${res.status}`);
+  if (!res.ok) {
+    throw new Error(`signing cert fetch failed: ${res.status}`);
+  }
   const pem = await res.text();
   const key = await crypto.subtle.importKey(
     "spki",
@@ -188,9 +217,14 @@ async function fetchVerifyKey(certUrl: string, hash: "SHA-1" | "SHA-256"): Promi
  * so the caller can reject uniformly.
  */
 export async function verifySnsSignature(msg: SnsEnvelope): Promise<boolean> {
-  if (!msg.Signature || !msg.SigningCertURL) return false;
-  const hash = msg.SignatureVersion === "2" ? "SHA-256" : msg.SignatureVersion === "1" ? "SHA-1" : null;
-  if (!hash) return false;
+  if (!msg.Signature || !msg.SigningCertURL) {
+    return false;
+  }
+  const hash =
+    msg.SignatureVersion === "2" ? "SHA-256" : msg.SignatureVersion === "1" ? "SHA-1" : null;
+  if (!hash) {
+    return false;
+  }
 
   let key: CryptoKey;
   try {
@@ -251,7 +285,9 @@ export function mapSesNotification(messageJson: string): DeliveryEvent[] {
     const hard = payload.bounce.bounceType === "Permanent";
     const fallback = `${payload.bounce.bounceType ?? "Bounce"}/${payload.bounce.bounceSubType ?? ""}`;
     for (const r of payload.bounce.bouncedRecipients ?? []) {
-      if (!r.emailAddress) continue;
+      if (!r.emailAddress) {
+        continue;
+      }
       events.push({
         type: "bounced",
         providerId,
@@ -263,7 +299,9 @@ export function mapSesNotification(messageJson: string): DeliveryEvent[] {
   } else if (kind === "Complaint" && payload.complaint) {
     const detail = payload.complaint.complaintFeedbackType ?? "complaint";
     for (const r of payload.complaint.complainedRecipients ?? []) {
-      if (!r.emailAddress) continue;
+      if (!r.emailAddress) {
+        continue;
+      }
       events.push({ type: "complained", providerId, email: r.emailAddress, detail });
     }
   } else if (kind === "Delivery" && payload.delivery) {

@@ -17,6 +17,8 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const va = new Uint8Array(ha);
   const vb = new Uint8Array(hb);
   let diff = 0;
-  for (let i = 0; i < va.length; i++) diff |= va[i]! ^ vb[i]!;
+  for (let i = 0; i < va.length; i++) {
+    diff |= va[i]! ^ vb[i]!;
+  }
   return diff === 0;
 }

@@ -21,11 +21,16 @@ npm run dev                         # wrangler dev on http://localhost:8787 (edi
 npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
 npm run test:watch                  # watch mode
 npm run typecheck                   # wrangler types && tsc --noEmit
+npm run check                       # biome check --write . (format + organize imports + lint, applies safe fixes)
+npm run lint                        # biome lint .          (report only, no writes)
+npm run format                      # biome format --write .
 npm run deploy                      # wrangler deploy   (add --env staging | --env production for those)
 npm run migrate:remote              # apply D1 migrations to the remote database
 ```
 
-Quality gate before finishing: `npm test` and `npm run typecheck`. There is no linter/formatter and no CI in the repo — deploy with `wrangler deploy` by hand, per environment. `wrangler types` regenerates `worker-configuration.d.ts` (gitignored), so run `typecheck` after touching `wrangler.jsonc`.
+Quality gate before finishing: `npm test`, `npm run typecheck`, and `npm run check`. Biome (`biome.json`) is the formatter + linter — the same config as the sibling Worker projects. There is no CI in the repo — the gate is run by hand, and `wrangler deploy` deploys by hand, per environment. `wrangler types` regenerates `worker-configuration.d.ts` (gitignored), so run `typecheck` after touching `wrangler.jsonc`.
+
+A batch of Biome's `recommended` rules is set to `warn` rather than `error` in `biome.json` (`noExplicitAny`, `noNonNullAssertion`, `useOptionalChain`, `useIterableCallbackReturn`, a couple of CSS rules): they flag pre-existing code that predates Biome and each needs a judgment call (a real type, a justified `!`, a behavior-safe rewrite) rather than a mechanical fix. Warnings don't fail the gate; clearing them is a deliberate follow-up, and new code should avoid re-introducing them.
 
 The top-level `wrangler.jsonc` is the **development** environment (fake transport, so dev can never reach a real inbox); `staging` and `production` are named `env`s that **must redeclare** their bindings and vars — wrangler does not inherit them.
 

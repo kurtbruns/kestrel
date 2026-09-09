@@ -14,8 +14,7 @@ export interface LayoutInput {
   viewInBrowserUrl: string;
 }
 
-const FONT =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function emailLayout(i: LayoutInput): string {
   const preheader = i.preheader

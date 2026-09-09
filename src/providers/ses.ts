@@ -21,6 +21,8 @@
 import { AwsClient } from "aws4fetch";
 import type { AppEnv, Config } from "../env";
 import { substituteUnsubscribe } from "../render/render";
+import { base64Utf8, buildRawMessage } from "./ses_mime";
+import { isSnsHost, mapSesNotification, type SnsEnvelope, verifySnsSignature } from "./sns";
 import type {
   EmailProvider,
   PerRecipientResult,
@@ -29,8 +31,6 @@ import type {
   SendBatchOptions,
   WebhookResult,
 } from "./types";
-import { base64Utf8, buildRawMessage } from "./ses_mime";
-import { isSnsHost, mapSesNotification, verifySnsSignature, type SnsEnvelope } from "./sns";
 
 function textResponse(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
@@ -97,7 +97,9 @@ export class SesProvider implements EmailProvider {
       Destination: { ToAddresses: [r.email] },
       Content: { Raw: { Data: base64Utf8(raw) } },
     };
-    if (this.configurationSet) payload.ConfigurationSetName = this.configurationSet;
+    if (this.configurationSet) {
+      payload.ConfigurationSetName = this.configurationSet;
+    }
 
     // A transport error (no HTTP response) is AMBIGUOUS: SES may or may not have
     // accepted the message. Because this provider is not idempotent, we must not
@@ -175,14 +177,18 @@ export class SesProvider implements EmailProvider {
 
 /** GET the SubscribeURL to complete the SNS handshake (host pinned first). */
 async function confirmSubscription(subscribeUrl: string | undefined): Promise<boolean> {
-  if (!subscribeUrl) return false;
+  if (!subscribeUrl) {
+    return false;
+  }
   let u: URL;
   try {
     u = new URL(subscribeUrl);
   } catch {
     return false;
   }
-  if (u.protocol !== "https:" || !isSnsHost(u.hostname)) return false;
+  if (u.protocol !== "https:" || !isSnsHost(u.hostname)) {
+    return false;
+  }
   try {
     const res = await fetch(subscribeUrl);
     return res.ok;

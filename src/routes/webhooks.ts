@@ -13,8 +13,9 @@
  * endpoint to register with; the request is handed to whichever transport is
  * configured.
  */
-import type { RequestContext } from "../router";
+
 import { getProvider } from "../providers";
+import type { RequestContext } from "../router";
 import { applyDeliveryEvents } from "../services/webhook_events";
 
 async function handle(c: RequestContext): Promise<Response> {

@@ -1,15 +1,15 @@
 import { env } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as subscribers from "../src/db/subscribers";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { SesProvider } from "../src/providers/ses";
 import { base64Bytes } from "../src/providers/ses_mime";
-import { canonicalString, _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
+import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
 import type { RenderedEmail } from "../src/providers/types";
-import { applyDeliveryEvents } from "../src/services/webhook_events";
-import * as subscribers from "../src/db/subscribers";
 import { UNSUB_SENTINEL } from "../src/render/render";
+import { applyDeliveryEvents } from "../src/services/webhook_events";
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -43,7 +43,9 @@ const reqUrl = (input: Parameters<typeof fetch>[0]): string =>
 /** Decode one base64 MIME part (by media type) back to its original string. */
 function decodeMimePart(mime: string, mediaType: string): string {
   const at = mime.indexOf(`Content-Type: ${mediaType}`);
-  if (at < 0) throw new Error(`part not found: ${mediaType}`);
+  if (at < 0) {
+    throw new Error(`part not found: ${mediaType}`);
+  }
   const bodyStart = mime.indexOf("\r\n\r\n", at) + 4;
   const bodyEnd = mime.indexOf("\r\n--", bodyStart); // next boundary delimiter
   const b64 = mime.slice(bodyStart, bodyEnd).replace(/\r\n/g, "");
@@ -54,7 +56,9 @@ function decodeMimePart(mime: string, mediaType: string): string {
 // --- SNS signing helpers (local RSA keypair; no real AWS) --------------------
 
 function derLen(n: number): number[] {
-  if (n < 0x80) return [n];
+  if (n < 0x80) {
+    return [n];
+  }
   const bytes: number[] = [];
   let x = n;
   while (x > 0) {
@@ -105,7 +109,9 @@ async function makeSigner(): Promise<Signer> {
     true,
     ["sign", "verify"],
   )) as CryptoKeyPair;
-  const spki = new Uint8Array((await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer);
+  const spki = new Uint8Array(
+    (await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer,
+  );
   const certDer = derSeq(derSeq(spki)); // Certificate ::= SEQ { TBS ::= SEQ { SPKI } }
   const certPem = `-----BEGIN CERTIFICATE-----\n${wrap64(base64Bytes(certDer))}\n-----END CERTIFICATE-----\n`;
   const certUrl = `https://sns.us-east-1.amazonaws.com/SimpleNotificationService-${crypto.randomUUID()}.pem`;
@@ -163,12 +169,18 @@ describe("SesProvider.sendBatch", () => {
     });
 
     const provider = newProvider();
-    const results = await provider.sendBatch(renderedFixture(), [{ email: "reader@example.com", unsubscribeUrl: UNSUB }], {
-      idempotencyKeyPrefix: "send-1",
-    });
+    const results = await provider.sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      {
+        idempotencyKeyPrefix: "send-1",
+      },
+    );
 
     // Response mapping: 200 → accepted with the SES MessageId as providerId.
-    expect(results).toEqual([{ email: "reader@example.com", accepted: true, providerId: "0100-msgid-abc" }]);
+    expect(results).toEqual([
+      { email: "reader@example.com", accepted: true, providerId: "0100-msgid-abc" },
+    ]);
 
     // Request shape.
     expect(captured).toBeDefined();
@@ -182,7 +194,9 @@ describe("SesProvider.sendBatch", () => {
     expect(body.FromEmailAddress).toContain("newsletter@news.example.com");
 
     // Content.Raw.Data is base64 of the raw MIME message.
-    const mime = new TextDecoder().decode(Uint8Array.from(atob(body.Content.Raw.Data), (c) => c.charCodeAt(0)));
+    const mime = new TextDecoder().decode(
+      Uint8Array.from(atob(body.Content.Raw.Data), (c) => c.charCodeAt(0)),
+    );
     expect(mime).toContain('Content-Type: multipart/alternative; boundary="');
     expect(mime).toContain(`List-Unsubscribe: <${UNSUB}>`);
     expect(mime).toContain("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
@@ -199,33 +213,57 @@ describe("SesProvider.sendBatch", () => {
 
   it("maps a 429 throttle to a retryable failure", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ __type: "TooManyRequestsException", message: "Maximum sending rate exceeded." }), {
-        status: 429,
-      }),
+      new Response(
+        JSON.stringify({
+          __type: "TooManyRequestsException",
+          message: "Maximum sending rate exceeded.",
+        }),
+        {
+          status: 429,
+        },
+      ),
     );
-    const [r] = await newProvider().sendBatch(renderedFixture(), [{ email: "reader@example.com", unsubscribeUrl: UNSUB }], {
-      idempotencyKeyPrefix: "send-1",
-    });
+    const [r] = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      {
+        idempotencyKeyPrefix: "send-1",
+      },
+    );
     expect(r).toMatchObject({ email: "reader@example.com", accepted: false, retryable: true });
   });
 
   it("maps a permanent 400 (bad address) to a non-retryable failure", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ __type: "BadRequestException", message: "Local address contains control or whitespace" }), {
-        status: 400,
-      }),
+      new Response(
+        JSON.stringify({
+          __type: "BadRequestException",
+          message: "Local address contains control or whitespace",
+        }),
+        {
+          status: 400,
+        },
+      ),
     );
-    const [r] = await newProvider().sendBatch(renderedFixture(), [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }], {
-      idempotencyKeyPrefix: "send-1",
-    });
+    const [r] = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }],
+      {
+        idempotencyKeyPrefix: "send-1",
+      },
+    );
     expect(r).toMatchObject({ accepted: false, retryable: false });
   });
 
   it("maps a 5xx to a retryable failure", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<internal>", { status: 500 }));
-    const [r] = await newProvider().sendBatch(renderedFixture(), [{ email: "reader@example.com", unsubscribeUrl: UNSUB }], {
-      idempotencyKeyPrefix: "send-1",
-    });
+    const [r] = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      {
+        idempotencyKeyPrefix: "send-1",
+      },
+    );
     expect(r).toMatchObject({ accepted: false, retryable: true });
   });
 
@@ -235,9 +273,13 @@ describe("SesProvider.sendBatch", () => {
     // send loop leaves the row dispatched for a human instead of re-sending.
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("connection reset"));
     await expect(
-      newProvider().sendBatch(renderedFixture(), [{ email: "reader@example.com", unsubscribeUrl: UNSUB }], {
-        idempotencyKeyPrefix: "send-1",
-      }),
+      newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        {
+          idempotencyKeyPrefix: "send-1",
+        },
+      ),
     ).rejects.toThrow(/connection reset/);
   });
 });
@@ -280,7 +322,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
       bounce: {
         bounceType,
         bounceSubType: "General",
-        bouncedRecipients: [{ emailAddress: email, diagnosticCode: "smtp; 550 5.1.1 user unknown" }],
+        bouncedRecipients: [
+          { emailAddress: email, diagnosticCode: "smtp; 550 5.1.1 user unknown" },
+        ],
       },
     });
   }
@@ -289,7 +333,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     return JSON.stringify({
       notificationType: "Complaint",
       mail: { messageId: providerId, destination: [email] },
-      complaint: { complaintFeedbackType: "abuse", complainedRecipients: [{ emailAddress: email }] },
+      complaint: {
+        complaintFeedbackType: "abuse",
+        complainedRecipients: [{ emailAddress: email }],
+      },
     });
   }
 
@@ -309,9 +356,13 @@ describe("SesProvider.parseWebhook (SNS)", () => {
   function mockCert(signer: Signer, extra?: (url: string) => Response | undefined) {
     return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = reqUrl(input);
-      if (url === signer.certUrl) return new Response(signer.certPem, { status: 200 });
+      if (url === signer.certUrl) {
+        return new Response(signer.certPem, { status: 200 });
+      }
       const e = extra?.(url);
-      if (e) return e;
+      if (e) {
+        return e;
+      }
       return new Response("not found", { status: 404 });
     });
   }
@@ -321,7 +372,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     mockCert(signer);
     await seedDelivery("hardbounce@example.com", "msg-hard-1");
 
-    const envelope = await signEnvelope(notification(signer, bounceMessage("hardbounce@example.com", "msg-hard-1", "Permanent")), signer);
+    const envelope = await signEnvelope(
+      notification(signer, bounceMessage("hardbounce@example.com", "msg-hard-1", "Permanent")),
+      signer,
+    );
     const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
 
     expect(result.response.status).toBe(200);
@@ -337,7 +391,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(applied.suppressed).toBe(1);
     expect(await subscribers.isSuppressed(env.DB, "hardbounce@example.com")).toBe(true);
 
-    const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = 'msg-hard-1'").first<{ event: string }>();
+    const row = await env.DB.prepare(
+      "SELECT event FROM deliveries WHERE provider_id = 'msg-hard-1'",
+    ).first<{ event: string }>();
     expect(row?.event).toBe("bounced");
   });
 
@@ -346,7 +402,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     mockCert(signer);
     await seedDelivery("complainer@example.com", "msg-cmp-1");
 
-    const envelope = await signEnvelope(notification(signer, complaintMessage("complainer@example.com", "msg-cmp-1")), signer);
+    const envelope = await signEnvelope(
+      notification(signer, complaintMessage("complainer@example.com", "msg-cmp-1")),
+      signer,
+    );
     const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
 
     expect(result.events[0]).toMatchObject({ type: "complained", email: "complainer@example.com" });
@@ -360,7 +419,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     mockCert(signer);
     await seedDelivery("softbounce@example.com", "msg-soft-1");
 
-    const envelope = await signEnvelope(notification(signer, bounceMessage("softbounce@example.com", "msg-soft-1", "Transient")), signer);
+    const envelope = await signEnvelope(
+      notification(signer, bounceMessage("softbounce@example.com", "msg-soft-1", "Transient")),
+      signer,
+    );
     const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
 
     expect(result.events[0]).toMatchObject({ type: "bounced", hard: false });
@@ -407,7 +469,10 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     mockCert(signer);
     await seedDelivery("victim@example.com", "msg-forged-1");
 
-    const good = await signEnvelope(notification(signer, bounceMessage("victim@example.com", "msg-forged-1", "Permanent")), signer);
+    const good = await signEnvelope(
+      notification(signer, bounceMessage("victim@example.com", "msg-forged-1", "Permanent")),
+      signer,
+    );
     // Tamper: keep everything, corrupt the signature.
     const forged: SnsEnvelope = { ...good, Signature: base64Bytes(new Uint8Array(256)) };
 
@@ -422,15 +487,22 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     const signer = await makeSigner();
     // The message points its SigningCertURL at a non-SNS host.
     signer.certUrl = "https://evil.example.com/cert.pem";
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(signer.certPem, { status: 200 }));
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(signer.certPem, { status: 200 }));
 
-    const envelope = await signEnvelope(notification(signer, bounceMessage("x@example.com", "msg-x", "Permanent")), signer);
+    const envelope = await signEnvelope(
+      notification(signer, bounceMessage("x@example.com", "msg-x", "Permanent")),
+      signer,
+    );
     const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
 
     expect(result.response.status).toBe(403);
     expect(result.events).toHaveLength(0);
     // Host is rejected before any fetch of the cert.
-    expect(spy.mock.calls.some((c) => reqUrl(c[0]) === "https://evil.example.com/cert.pem")).toBe(false);
+    expect(spy.mock.calls.some((c) => reqUrl(c[0]) === "https://evil.example.com/cert.pem")).toBe(
+      false,
+    );
   });
 
   it("rejects an unparseable body with 400", async () => {

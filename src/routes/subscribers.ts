@@ -1,9 +1,10 @@
 /** Authed subscriber admin routes. */
-import type { RequestContext } from "../router";
-import { param } from "../router";
-import { badRequest, json, notFound } from "../lib/errors";
+
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
+import { badRequest, json, notFound } from "../lib/errors";
+import type { RequestContext } from "../router";
+import { param } from "../router";
 import { requestSubscription } from "../services/subscriptions";
 
 export async function create(c: RequestContext): Promise<Response> {
@@ -14,7 +15,9 @@ export async function create(c: RequestContext): Promise<Response> {
     throw badRequest("JSON body with an 'email' is required");
   }
   const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
-  if (!email || !isValidEmail(email)) throw badRequest("a valid email is required");
+  if (!email || !isValidEmail(email)) {
+    throw badRequest("a valid email is required");
+  }
   const { subscriber, action } = await requestSubscription(c, email);
   return json({ subscriber, action }, action === "created" ? 201 : 200);
 }
@@ -23,8 +26,13 @@ export async function list(c: RequestContext): Promise<Response> {
   const emailQuery = c.url.searchParams.get("email");
   if (emailQuery) {
     const subscriber = await subscribers.getByEmail(c.env.DB, normalizeEmail(emailQuery));
-    if (!subscriber) throw notFound("subscriber");
-    return json({ subscriber, suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email) });
+    if (!subscriber) {
+      throw notFound("subscriber");
+    }
+    return json({
+      subscriber,
+      suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
+    });
   }
   const statusParam = c.url.searchParams.get("status") ?? undefined;
   const status =
@@ -46,13 +54,23 @@ export async function list(c: RequestContext): Promise<Response> {
 
 export async function get(c: RequestContext): Promise<Response> {
   const subscriber = await subscribers.getById(c.env.DB, param(c, "id"));
-  if (!subscriber) throw notFound("subscriber");
-  return json({ subscriber, suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email) });
+  if (!subscriber) {
+    throw notFound("subscriber");
+  }
+  return json({
+    subscriber,
+    suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
+  });
 }
 
 /** Authed admin unsubscribe by id — immediate and idempotent (I2). */
 export async function unsubscribe(c: RequestContext): Promise<Response> {
   const subscriber = await subscribers.unsubscribeById(c.env.DB, param(c, "id"));
-  if (!subscriber) throw notFound("subscriber");
-  return json({ subscriber, suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email) });
+  if (!subscriber) {
+    throw notFound("subscriber");
+  }
+  return json({
+    subscriber,
+    suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
+  });
 }

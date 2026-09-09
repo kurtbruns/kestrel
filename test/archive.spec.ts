@@ -1,12 +1,12 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { getConfig } from "../src/env";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
-import { freeze } from "../src/send/schedule";
-import { sweep } from "../src/send/sweep";
+import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { UNSUB_SENTINEL } from "../src/render/render";
+import { freeze } from "../src/send/schedule";
+import { sweep } from "../src/send/sweep";
 
 const base = "https://kestrel.test";
 
@@ -46,7 +46,9 @@ describe("archive / view-in-browser", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
 
     const body = await res.text();
-    const expected = send.rendered_html.split(UNSUB_SENTINEL).join("http://localhost:8787/unsubscribe");
+    const expected = send.rendered_html
+      .split(UNSUB_SENTINEL)
+      .join("http://localhost:8787/unsubscribe");
     expect(body).toBe(expected); // byte-identical to the frozen record
     expect(body).not.toContain(UNSUB_SENTINEL);
     expect(body).toContain("the permanent record");
@@ -59,7 +61,11 @@ describe("archive / view-in-browser", () => {
   });
 
   it("404s for a post that hasn't been sent yet", async () => {
-    const { post } = await posts.createPost(env.DB, { subject: "Draft Only", markdown: "wip" }, "test");
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Draft Only", markdown: "wip" },
+      "test",
+    );
     const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
     expect(res.status).toBe(404);
   });

@@ -6,10 +6,9 @@
  * On success it sets `c.principal`; otherwise it returns 401 and the route
  * handler never runs.
  */
-import type { AppEnv } from "../env";
-import type { Config } from "../env";
-import type { Middleware, Principal } from "../router";
+import type { AppEnv, Config } from "../env";
 import { json } from "../lib/errors";
+import type { Middleware, Principal } from "../router";
 import { ACCESS_JWT_HEADER, verifyAccessJwt } from "./access";
 import { checkBearer } from "./bearer";
 
@@ -21,7 +20,9 @@ export async function authenticate(
   const jwt = req.headers.get(ACCESS_JWT_HEADER);
   if (jwt) {
     const p = await verifyAccessJwt(jwt, config);
-    if (p) return p;
+    if (p) {
+      return p;
+    }
   }
   return checkBearer(req, env);
 }

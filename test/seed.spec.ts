@@ -1,9 +1,9 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { getConfig } from "../src/env";
-import { seedDatabase } from "../src/dev/seed";
-import { counts, audienceEmails } from "../src/db/subscribers";
 import { listSends } from "../src/db/sends";
+import { audienceEmails, counts } from "../src/db/subscribers";
+import { seedDatabase } from "../src/dev/seed";
+import { getConfig } from "../src/env";
 
 const base = "https://kestrel.test";
 const config = () => getConfig(env);

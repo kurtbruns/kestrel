@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 const AUTH = { Authorization: "Bearer test-bearer-token" };
