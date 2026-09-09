@@ -19,14 +19,8 @@
     <a href="#/sends" data-text="Sends">Sends</a>
     <a href="#/docs" data-text="Docs">Docs</a>
   </nav>
-  <button id="tokenBtn" class="ghost" title="Set access token" aria-label="Set access token">🔑</button>
+  <div id="identity" class="identity" aria-label="Signed-in identity"></div>
 </header>
-
-<div id="tokenBanner" class="banner" hidden>
-  <span>Paste your admin token to connect.</span>
-  <input id="tokenInput" type="password" placeholder="Bearer token" autocomplete="off" aria-label="Admin bearer token">
-  <button id="tokenSave">Connect</button>
-</div>
 
 <main id="app" class="container"></main>
 <div id="toasts" role="status" aria-live="polite"></div>

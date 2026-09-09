@@ -1,9 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { listDocs, renderDocPage } from "../src/docs";
-
-const BEARER = "test-bearer-token"; // matches vitest.config.ts binding
-const auth = { Authorization: `Bearer ${BEARER}` };
+import { adminAuth } from "./support/auth";
 
 describe("docs registry (bundled from docs/setup/*.md)", () => {
   it("lists the guide in reading order with titles from each doc's H1", () => {
@@ -52,7 +50,7 @@ describe("docs API is gated like the rest of the authoring API", () => {
 
 describe("docs API serves the setup content when authed", () => {
   it("lists the docs as JSON", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs", { headers: auth });
+    const res = await SELF.fetch("https://kestrel.test/api/docs", { headers: await adminAuth() });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { docs: { slug: string; title: string }[] };
     expect(body.docs.map((d) => d.slug)).toContain("email-sender");
@@ -60,7 +58,9 @@ describe("docs API serves the setup content when authed", () => {
   });
 
   it("renders one doc as a themed HTML page carrying the real setup content", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs/email-sender", { headers: auth });
+    const res = await SELF.fetch("https://kestrel.test/api/docs/email-sender", {
+      headers: await adminAuth(),
+    });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
@@ -74,7 +74,7 @@ describe("docs API serves the setup content when authed", () => {
   });
 
   it("404s an unknown doc slug when authed", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs/nope", { headers: auth });
+    const res = await SELF.fetch("https://kestrel.test/api/docs/nope", { headers: await adminAuth() });
     expect(res.status).toBe(404);
   });
 });

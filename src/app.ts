@@ -32,7 +32,16 @@ export function createRouter(archiveBasePath: string): Router {
 
   // --- system ---
   r.get("/health", () => json({ status: "ok", service: "kestrel" }));
-  r.get("/api/whoami", (c) => json({ principal: c.principal }), authed);
+  // Reports the authenticated principal and the auth mode, so the editor can show
+  // identity (and offer Access sign-out) instead of prompting for a token.
+  r.get(
+    "/api/whoami",
+    (c) => json({ principal: c.principal, auth: { mode: c.config.accessTeamDomain ? "access" : "dev" } }),
+    authed,
+  );
+  // Dev-only bootstrap that hands out the local admin token, so it must be public
+  // (there is no credential yet). 404s once deployed — see routes/dev.ts.
+  r.get("/api/dev/token", devRoutes.token);
 
   // --- operator setup guide (authed; read-only, bundled from docs/) ---
   // Under /api so the same Access application that gates the authoring API
