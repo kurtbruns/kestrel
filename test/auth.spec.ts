@@ -1,7 +1,20 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { isHumanAllowed } from "../src/auth/access";
 
 const BEARER = "test-bearer-token"; // matches vitest.config.ts binding
+
+describe("Access admin allowlist", () => {
+  it("admits anyone when no allowlist is configured", () => {
+    expect(isHumanAllowed("anyone@example.com", undefined)).toBe(true);
+    expect(isHumanAllowed("anyone@example.com", [])).toBe(true);
+  });
+  it("admits only allowlisted emails (case-insensitive) when configured", () => {
+    const allow = ["you@example.com", "team@example.com"];
+    expect(isHumanAllowed("YOU@example.com", allow)).toBe(true);
+    expect(isHumanAllowed("intruder@example.com", allow)).toBe(false);
+  });
+});
 
 describe("auth on the admin surface", () => {
   it("rejects /api/whoami with no token (401)", async () => {
