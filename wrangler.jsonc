@@ -8,6 +8,12 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
+  // Bundle the operator setup guide (docs/setup/*.md) into the Worker as Text
+  // modules, so the in-app Docs surface serves the repo markdown verbatim
+  // (source of truth) without a separate build step. Applies to bundling under
+  // wrangler dev/deploy AND the Vitest pool.
+  "rules": [{ "type": "Text", "globs": ["**/*.md"], "fallthrough": true }],
+
   // ---------------------------------------------------------------------------
   // Top-level config == the DEVELOPMENT environment (used by `wrangler dev` and
   // the Vitest pool). Its mail transport is the in-memory `fake` adapter, so dev
@@ -33,12 +39,15 @@
 
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-dev" }],
 
+  // Self-contained by default: ARCHIVE_ORIGIN defaults to APP_ORIGIN and
+  // MEDIA_PUBLIC_BASE to `${APP_ORIGIN}/media`, both resolved in getConfig, so
+  // they're omitted here. Set them only to opt into an apex archive or a media
+  // custom domain (see production below). ARCHIVE_BASE_PATH drives both the
+  // archive URL and the route that serves it.
   "vars": {
     "PROVIDER": "fake",
     "APP_ORIGIN": "http://localhost:8787",
-    "ARCHIVE_ORIGIN": "http://localhost:8787",
     "ARCHIVE_BASE_PATH": "/newsletter",
-    "MEDIA_PUBLIC_BASE": "http://localhost:8787/media",
     "SENDING_DOMAIN": "news.example.com",
     "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
     "AWS_REGION": "us-east-1"
@@ -58,12 +67,12 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-staging" }],
+      // Fully self-contained: archives and media serve on the app's own origin
+      // (ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE default to it), no extra domains.
       "vars": {
         "PROVIDER": "ses",
         "APP_ORIGIN": "https://newsletter-staging.example.com",
-        "ARCHIVE_ORIGIN": "https://newsletter-staging.example.com",
         "ARCHIVE_BASE_PATH": "/newsletter",
-        "MEDIA_PUBLIC_BASE": "https://media-staging.example.com",
         "SENDING_DOMAIN": "news.example.com",
         "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
         "AWS_REGION": "us-east-1"
@@ -83,6 +92,12 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
+      // Shows both optional enhancements (SPEC §10). Drop ARCHIVE_ORIGIN and
+      // MEDIA_PUBLIC_BASE to stay self-contained like staging.
+      //   ARCHIVE_ORIGIN: surface the archive on the website apex — only if that
+      //     apex is a Cloudflare zone routing <APP_ORIGIN base path>/* to this Worker.
+      //   MEDIA_PUBLIC_BASE: serve images from a media. custom domain instead of
+      //     the Worker's own /media route.
       "vars": {
         "PROVIDER": "ses",
         "APP_ORIGIN": "https://newsletter.example.com",

@@ -9,13 +9,27 @@
 
 import { createRouter } from "./app";
 import type { AppEnv } from "./env";
+import { getConfig } from "./env";
+import type { Router } from "./router";
 import { sweep } from "./send/sweep";
 
-const router = createRouter();
+// The archive route is config-driven (ARCHIVE_BASE_PATH), and bindings are only
+// available per-request — so build the router lazily and cache it per base path.
+const routers = new Map<string, Router>();
+function routerFor(env: AppEnv): Router {
+  const basePath = getConfig(env).archiveBasePath;
+  let router = routers.get(basePath);
+  if (!router) {
+    router = createRouter(basePath);
+    routers.set(basePath, router);
+  }
+  return router;
+}
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    return router.handle(request, env as AppEnv, ctx);
+    const appEnv = env as AppEnv;
+    return routerFor(appEnv).handle(request, appEnv, ctx);
   },
 
   async scheduled(_controller, env, ctx): Promise<void> {

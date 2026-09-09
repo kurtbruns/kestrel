@@ -160,21 +160,44 @@ h2 {
   color: var(--fg);
   font-weight: 600;
 }
-.topbar #tokenBtn {
+.topbar .identity {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.identity .who {
+  color: var(--muted);
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.identity .who.dev {
+  color: var(--muted);
+  font-style: italic;
+}
+.identity a.ghost {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.identity a.ghost:hover {
+  color: var(--fg);
+  text-decoration: underline;
 }
 
-.banner {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 20px;
-  background: var(--banner-bg);
-  border-bottom: 1px solid var(--banner-line);
-  font-size: 14px;
+.auth-wall {
+  max-width: 420px;
+  margin: 64px auto;
+  text-align: center;
 }
-.banner input {
-  flex: 0 1 320px;
+.auth-wall h2 {
+  margin: 0 0 8px;
+}
+.auth-wall button {
+  margin-top: 12px;
 }
 
 .container {
@@ -901,6 +924,55 @@ td.act {
   .tb {
     width: 34px;
     height: 34px;
+  }
+}
+
+/* Docs: a sticky table-of-contents rail beside the rendered guide. The guide
+   itself is a themed HTML page in a sandboxed iframe (see lib/page.ts docPage),
+   so the prose styling lives there; this only lays out the two columns. */
+.docs-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.docs-nav {
+  position: sticky;
+  top: 76px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.docs-nav a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.docs-nav a:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.docs-nav a.active {
+  color: var(--fg);
+  font-weight: 600;
+  background: var(--hover);
+}
+.docs-frame {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  min-height: 400px;
+}
+@media (max-width: 620px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+  }
+  .docs-nav {
+    position: static;
+    flex-flow: row wrap;
   }
 }
 

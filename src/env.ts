@@ -9,8 +9,14 @@
  */
 
 export interface Secrets {
-  /** Admin API bearer token (local/CI + fallback; prod gate is Cloudflare Access). */
-  BEARER_TOKEN?: string;
+  /**
+   * Symmetric secret for signing/verifying the local-dev admin token. Ships in
+   * `.dev.vars.example` (so `cp .dev.vars.example .dev.vars` gives a working dev
+   * secret) but is NOT committed to `wrangler.jsonc` — a deployed env has no value,
+   * which keeps the dev auth path fail-closed. Only honored in a dev-shaped env
+   * anyway (see `getConfig`); Cloudflare Access is the gate when deployed.
+   */
+  DEV_AUTH_SECRET?: string;
   /** Cloudflare Access team domain, e.g. `your-team.cloudflareaccess.com`. */
   ACCESS_TEAM_DOMAIN?: string;
   /** Cloudflare Access application AUD tag. */
@@ -35,11 +41,14 @@ export interface Config {
   provider: ProviderName;
   /** Origin the app is served from (API + reader routes). */
   appOrigin: string;
-  /** Origin the public archive lives on (may be the apex). */
+  /** Origin the public archive lives on. Defaults to `appOrigin` (self-contained);
+   *  set to the apex only as the opt-in Cloudflare enhancement (SPEC §10). */
   archiveOrigin: string;
-  /** Base path for archive pages, e.g. `/newsletter`. */
+  /** Base path for archive pages, e.g. `/newsletter`. Drives both the emitted
+   *  archive URL and the route that serves it (SPEC §10); defaults to `/newsletter`. */
   archiveBasePath: string;
-  /** Public base URL for R2-served images. */
+  /** Public base URL for R2-served images. Defaults to the Worker's own `/media`
+   *  route; a `media.` custom domain is the optional upgrade (SPEC §10). */
   mediaPublicBase: string;
   /** Sending identity domain, e.g. `news.example.com`. */
   sendingDomain: string;
@@ -52,25 +61,52 @@ export interface Config {
   accessAud?: string;
   /** Optional allowlist of human admin emails; empty/unset allows any valid Access login. */
   accessAllowedEmails?: string[];
+  /**
+   * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (fake transport,
+   * no Access configured). Undefined in any deployed env, which disables the dev
+   * credential path entirely — Access is then the only door.
+   */
+  devAuthSecret?: string;
 }
 
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
 
-/** Resolve the typed `Config` from raw bindings. Pure; no I/O. */
+/** Leading-slash, no-trailing-slash form; defaults to `/newsletter`. Drives both
+ *  the archive URL and the route registered to serve it, so the two can't drift. */
+function normalizeBasePath(v: string | undefined): string {
+  const raw = (orUndefined(v) ?? "/newsletter").trim();
+  const withLead = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLead.length > 1 && withLead.endsWith("/") ? withLead.slice(0, -1) : withLead;
+}
+
+/** Resolve the typed `Config` from raw bindings. Pure; no I/O.
+ *  Self-contained by default (SPEC §10): the archive origin and media base fall
+ *  back to the app's own origin, so a deployment that sets only `APP_ORIGIN`
+ *  serves archives and images on its own hostname with no further assumptions. */
 export function getConfig(env: AppEnv): Config {
+  const appOrigin = env.APP_ORIGIN;
+  const provider = (env.PROVIDER as ProviderName) ?? "fake";
+  const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
   return {
-    provider: (env.PROVIDER as ProviderName) ?? "fake",
-    appOrigin: env.APP_ORIGIN,
-    archiveOrigin: env.ARCHIVE_ORIGIN,
-    archiveBasePath: env.ARCHIVE_BASE_PATH,
-    mediaPublicBase: env.MEDIA_PUBLIC_BASE,
+    provider,
+    appOrigin,
+    archiveOrigin: orUndefined(env.ARCHIVE_ORIGIN) ?? appOrigin,
+    archiveBasePath: normalizeBasePath(env.ARCHIVE_BASE_PATH),
+    mediaPublicBase: orUndefined(env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`,
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,
-    accessTeamDomain: orUndefined(env.ACCESS_TEAM_DOMAIN),
+    accessTeamDomain,
     accessAud: orUndefined(env.ACCESS_AUD),
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
+    // Belt-and-suspenders: only honor the dev credential when the env is
+    // unambiguously dev-shaped — fake transport AND no Access configured. Combined
+    // with the secret never being committed (it lives in the gitignored `.dev.vars`,
+    // not in `wrangler.jsonc` vars), a deployed Worker has no secret and this stays
+    // undefined — the dev auth path is off, Access is the only door.
+    devAuthSecret:
+      provider === "fake" && !accessTeamDomain ? orUndefined(env.DEV_AUTH_SECRET) : undefined,
   };
 }
 

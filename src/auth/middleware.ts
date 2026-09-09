@@ -1,20 +1,21 @@
 /**
  * Auth middleware for the admin/authoring surface.
  *
- * Tries the Cloudflare Access JWT first (the production gate), then falls back
- * to a bearer token (local dev / CI, and a documented portable fallback).
- * On success it sets `c.principal`; otherwise it returns 401 and the route
- * handler never runs.
+ * One contract: verify a signed token → `Principal`. In deployed environments the
+ * Cloudflare Access JWT (forwarded by the edge) is the credential; in local dev,
+ * where there is no Access edge, a dev-signed token stands in via the same shape
+ * (`dev_token.ts`), enabled only when `config.devAuthSecret` is set. On success it
+ * sets `c.principal`; otherwise it returns 401 and the route handler never runs.
  */
 import type { AppEnv, Config } from "../env";
 import { json } from "../lib/errors";
 import type { Middleware, Principal } from "../router";
 import { ACCESS_JWT_HEADER, verifyAccessJwt } from "./access";
-import { checkBearer } from "./bearer";
+import { verifyDevToken } from "./dev_token";
 
 export async function authenticate(
   req: Request,
-  env: AppEnv,
+  _env: AppEnv,
   config: Config,
 ): Promise<Principal | null> {
   const jwt = req.headers.get(ACCESS_JWT_HEADER);
@@ -24,7 +25,17 @@ export async function authenticate(
       return p;
     }
   }
-  return checkBearer(req, env);
+  // Local dev only: a dev-signed token carried as a bearer. `devAuthSecret` is
+  // resolved only in a dev-shaped env AND is never committed (it lives in the
+  // gitignored `.dev.vars`), so a deployed Worker has no secret and this path is
+  // inert — Access is then the only door.
+  if (config.devAuthSecret) {
+    const auth = req.headers.get("Authorization");
+    if (auth?.startsWith("Bearer ")) {
+      return verifyDevToken(auth.slice("Bearer ".length), config.devAuthSecret);
+    }
+  }
+  return null;
 }
 
 /** Route middleware: require a valid principal or 401. */

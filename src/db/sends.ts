@@ -45,6 +45,32 @@ export function latestSentSendForPost(db: D1Database, postId: string): Promise<S
     .first<SendRow>();
 }
 
+/** One published issue for the public archive index (§5): the frozen subject and
+ *  the slug that addresses its archive page. */
+export interface PublishedIssue {
+  slug: string;
+  subject: string;
+  sent_at: number;
+}
+
+/** Sent issues for the public archive index, newest first — one row per post
+ *  (a re-send collapses to its latest). SQLite carries the bare `subject`/`slug`
+ *  from the MAX(completed_at) row of each group. */
+export async function listPublishedIssues(db: D1Database, limit = 200): Promise<PublishedIssue[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT p.slug AS slug, s.subject AS subject, MAX(s.completed_at) AS sent_at
+         FROM sends s JOIN posts p ON p.id = s.post_id
+         WHERE s.status = 'sent'
+         GROUP BY s.post_id
+         ORDER BY sent_at DESC
+         LIMIT ?`,
+    )
+    .bind(Math.min(limit, 1000))
+    .all<PublishedIssue>();
+  return results;
+}
+
 export async function listSends(
   db: D1Database,
   opts: { status?: SendStatus; limit?: number } = {},

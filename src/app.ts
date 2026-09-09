@@ -11,6 +11,7 @@ import { json } from "./lib/errors";
 import { Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
+import * as docsRoutes from "./routes/docs";
 import * as imageRoutes from "./routes/images";
 import * as postRoutes from "./routes/posts";
 import * as publicRoutes from "./routes/public";
@@ -21,13 +22,37 @@ import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
 
-export function createRouter(): Router {
+/**
+ * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
+ * `getConfig`) drives the archive route so it can't drift from the emitted
+ * archive URL — see the archive route below and SPEC §10.
+ */
+export function createRouter(archiveBasePath: string): Router {
   const r = new Router();
   const authed = [requireAuth];
 
   // --- system ---
   r.get("/health", () => json({ status: "ok", service: "kestrel" }));
-  r.get("/api/whoami", (c) => json({ principal: c.principal }), authed);
+  // Reports the authenticated principal and the auth mode, so the editor can show
+  // identity (and offer Access sign-out) instead of prompting for a token.
+  r.get(
+    "/api/whoami",
+    (c) =>
+      json({
+        principal: c.principal,
+        auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
+      }),
+    authed,
+  );
+  // Dev-only bootstrap that hands out the local admin token, so it must be public
+  // (there is no credential yet). 404s once deployed — see routes/dev.ts.
+  r.get("/api/dev/token", devRoutes.token);
+
+  // --- operator setup guide (authed; read-only, bundled from docs/) ---
+  // Under /api so the same Access application that gates the authoring API
+  // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
+  r.get("/api/docs", docsRoutes.list, authed);
+  r.get("/api/docs/:slug", docsRoutes.get, authed);
 
   // --- posts + revisions (authed) ---
   r.post("/posts", postRoutes.createPost, authed);
@@ -73,6 +98,9 @@ export function createRouter(): Router {
   r.post("/webhooks/ses", webhookRoutes.ses);
 
   // --- public reader routes (token-scoped; no login) ---
+  // The front door: a self-contained archive index, never a bounce to /admin
+  // (SPEC §10). Kept public here — the one explicit non-admin surface.
+  r.get("/", archiveRoutes.archiveIndex);
   r.get("/subscribe", publicRoutes.subscribeForm);
   r.post("/subscribe", publicRoutes.subscribe);
   r.get("/confirm", publicRoutes.confirm);
@@ -83,9 +111,10 @@ export function createRouter(): Router {
   r.post("/webhooks/resend", webhookRoutes.resend);
 
   // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-  // Path matches ARCHIVE_BASE_PATH (/newsletter); in prod the apex routes
-  // example.com/newsletter/* to this Worker.
-  r.get("/newsletter/:slug", archiveRoutes.archivePage);
+  // Registered at ARCHIVE_BASE_PATH (default /newsletter) so the route and the
+  // emitted archive URL always share one source. Self-contained by default;
+  // an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+  r.get(`${archiveBasePath}/:slug`, archiveRoutes.archivePage);
 
   // --- media bytes (public; readers + archive load these unauthenticated) ---
   r.get("/media/:key(.*)", imageRoutes.serveMedia);

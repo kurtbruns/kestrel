@@ -14,8 +14,9 @@ export default defineConfig(async () => {
         miniflare: {
           bindings: {
             TEST_MIGRATIONS: migrations,
-            // Deterministic bearer token for auth tests (overrides .dev.vars).
-            BEARER_TOKEN: "test-bearer-token",
+            // Deterministic dev-token signing secret for auth tests. The env is
+            // dev-shaped (fake transport, no Access), so getConfig honors it.
+            DEV_AUTH_SECRET: "test-dev-secret",
           },
         },
       }),

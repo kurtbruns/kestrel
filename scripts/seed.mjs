@@ -4,7 +4,7 @@ import { existsSync } from "node:fs";
  * Load the local "Field Notes" demo dataset into the running dev server.
  *
  * This is a thin wrapper around the dev-only `POST /api/dev/seed` route (fake
- * transport only): it reads the admin BEARER_TOKEN from `.dev.vars`, attaches the
+ * transport only): it mints a local admin token from `/api/dev/token`, attaches the
  * cover photo from `scripts/seed-assets/kestrel.jpg` if present, and POSTs. The
  * worker itself does the reset, the render, and the R2 write — so this needs the
  * dev server up (`npm run dev`), and it never talks to D1/R2 directly.
@@ -28,28 +28,34 @@ function baseUrl() {
   return `http://localhost:${port}`;
 }
 
-async function bearerToken() {
-  const path = join(root, ".dev.vars");
-  if (!existsSync(path)) {
+// Mint a local admin token from the dev-only bootstrap endpoint — the same one the
+// editor uses. Needs no `.dev.vars`; it 404s on any non-dev transport.
+async function devToken(base) {
+  let res;
+  try {
+    res = await fetch(`${base}/api/dev/token?kind=service`);
+  } catch (err) {
+    console.error(`[seed] could not reach ${base}. Is the dev server running? (npm run dev)`);
+    console.error(`       ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
+  if (res.status === 404) {
     console.error(
-      "[seed] .dev.vars not found. Copy .dev.vars.example to .dev.vars and set BEARER_TOKEN.",
+      "[seed] /api/dev/token is unavailable — seeding only works under the fake transport.",
     );
     process.exit(1);
   }
-  const text = await readFile(path, "utf8");
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\s*BEARER_TOKEN\s*=\s*(.*)\s*$/);
-    if (m) {
-      return m[1].trim().replace(/^["']|["']$/g, "");
-    }
+  if (!res.ok) {
+    console.error(`[seed] could not mint a dev token: ${res.status} ${res.statusText}`);
+    process.exit(1);
   }
-  console.error("[seed] BEARER_TOKEN is not set in .dev.vars.");
-  process.exit(1);
+  return (await res.json()).token;
 }
 
 async function main() {
-  const url = `${baseUrl()}/api/dev/seed`;
-  const token = await bearerToken();
+  const base = baseUrl();
+  const url = `${base}/api/dev/seed`;
+  const token = await devToken(base);
 
   const form = new FormData();
   const CONTENT_TYPE = {
