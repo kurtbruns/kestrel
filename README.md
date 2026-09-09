@@ -119,6 +119,12 @@ routes. Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` (and optionally
 must cover **both** the editor (`/admin/*`) and the authoring API paths, so the
 editor's same-origin API calls carry the Access JWT.
 
+## Deploying and operating
+
+Local dev is above; standing up a real instance — provisioning Cloudflare, the one Access application, connecting SES/Resend and its webhook, sending-domain DNS, wiring the archive to a website, and a verify checklist — is the **operator setup guide** under [`docs/setup/`](docs/setup/). Those are out-of-band, run-once steps against your own account, DNS, and provider.
+
+The same guide is available **in the editor** under the **Docs** tab: it renders the `docs/setup/` Markdown read-only (the repo is the source of truth), served by the authed `GET /api/docs` routes and gated with the rest of admin.
+
 ## Scripts
 
 | Command | Does |
@@ -157,8 +163,10 @@ src/
   render/         the single render path (markdown → email HTML + text)
   send/           freeze/schedule/cancel, the idempotent send loop, the sweep
   providers/      the email provider seam + fake / SES / Resend adapters
+  docs/           the in-app operator guide (bundled from docs/setup/*.md)
   db/             D1 query modules
 public/admin/     the editor SPA (static assets)
+docs/setup/       the operator setup guide (source of truth; also served in-app)
 migrations/       D1 schema
 ```
 
