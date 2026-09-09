@@ -17,9 +17,7 @@ async function readBody(c: RequestContext): Promise<posts.PostInput> {
     const raw = (await c.req.json()) as Record<string, unknown>;
     const pick = (k: string) => (typeof raw[k] === "string" ? (raw[k] as string) : undefined);
     return {
-      title: pick("title"),
       subject: pick("subject"),
-      preheader: pick("preheader"),
       slug: pick("slug"),
       markdown: pick("markdown"),
     };

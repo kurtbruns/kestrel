@@ -19,9 +19,7 @@ function post(over: Partial<PostRow> = {}): PostRow {
   return {
     id: "p1",
     slug: "weekly-news",
-    title: "Weekly News",
     subject: "This week in cats",
-    preheader: "Your Monday digest",
     status: "draft",
     current_revision: "r1",
     created_at: 0,
@@ -36,9 +34,7 @@ function revision(markdown: string, metaOver: Record<string, string> = {}): Revi
     post_id: "p1",
     markdown,
     metadata: JSON.stringify({
-      title: "Weekly News",
       subject: "This week in cats",
-      preheader: "Your Monday digest",
       slug: "weekly-news",
       ...metaOver,
     }),

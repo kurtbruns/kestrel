@@ -18,7 +18,7 @@ async function newDraft(title: string): Promise<string> {
     await SELF.fetch(`${base}/posts`, {
       method: "POST",
       headers: { ...AUTH, "content-type": "application/json" },
-      body: JSON.stringify({ title }),
+      body: JSON.stringify({ subject: title }),
     }),
   );
   return created.post.id;

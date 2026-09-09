@@ -35,24 +35,22 @@ export interface RenderResult extends RenderedEmail {
 }
 
 interface RevisionMeta {
-  title: string;
   subject: string;
-  preheader: string;
   slug: string;
 }
 
 function readMeta(revision: RevisionRow, post: PostRow): RevisionMeta {
   try {
     const m = JSON.parse(revision.metadata) as Partial<RevisionMeta>;
-    return {
-      title: m.title ?? post.title,
-      subject: m.subject ?? post.subject,
-      preheader: m.preheader ?? post.preheader,
-      slug: m.slug ?? post.slug,
-    };
+    return { subject: m.subject ?? post.subject, slug: m.slug ?? post.slug };
   } catch {
-    return { title: post.title, subject: post.subject, preheader: post.preheader, slug: post.slug };
+    return { subject: post.subject, slug: post.slug };
   }
+}
+
+/** Inbox preview text, derived from the start of the body (no manual field). */
+function derivePreheader(bodyText: string): string {
+  return bodyText.replace(/\s+/g, " ").trim().slice(0, 140);
 }
 
 export function archiveUrl(config: Config, slug: string): string {
@@ -70,18 +68,19 @@ export function render(input: RenderInput, config: Config): RenderResult {
     warnings,
   });
   const cleanHtml = sanitizeEmailHtml(contentHtml);
-  const subject = meta.subject || meta.title || "(no subject)";
+  const contentText = htmlToText(cleanHtml);
+  const subject = meta.subject || "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
 
   const html = emailLayout({
     subject,
-    preheader: meta.preheader,
+    preheader: derivePreheader(contentText),
     contentHtml: cleanHtml,
     viewInBrowserUrl,
   });
 
   const text = [
-    htmlToText(cleanHtml),
+    contentText,
     "",
     "—",
     `View in browser: ${viewInBrowserUrl}`,
