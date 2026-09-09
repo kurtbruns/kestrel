@@ -40,12 +40,11 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 - **`auth/` gates the admin surface.** Cloudflare Access at the edge, re-verified in-app (`access.ts`); the `bearer.ts` fallback is for local/CI — leave `BEARER_TOKEN` unset when deployed so Access is the only door.
 - **`db/` holds all SQL, and nowhere else does.** `migrations/` is append-only — never edit a shipped migration, add a new one.
 
-## The public / admin split, and two current gaps
+## The public / admin split, and one current gap
 
-`app.ts` draws the boundary (above). SPEC §5 (reader surface) and §10 (domains) are the target: self-contained by default, a public archive index at `/`, the apex `example.com/newsletter/*` route an optional Cloudflare enhancement. The code isn't fully there yet:
+`app.ts` draws the boundary (above). SPEC §5 (reader surface) and §10 (domains) are the target: self-contained by default, a public archive index at `/`, the apex `example.com/newsletter/*` route an optional Cloudflare enhancement. Most of §10 is now in code — the archive origin and media base default to `APP_ORIGIN` (`src/env.ts`), and `ARCHIVE_BASE_PATH` drives both the emitted URL and the route that serves it (`createRouter(basePath)` in `app.ts`, wired in `src/index.ts`). One gap remains:
 
 - `public/index.html` still redirects `/` → `/admin/`; self-contained needs `/` to be the public archive index, never a bounce into the Access wall.
-- The archive route is the literal `/newsletter/:slug` in `app.ts`, but the URL is built from `ARCHIVE_BASE_PATH` in `render/render.ts` — unify them so the base path drives both, or changing it 404s every archive link.
 
 ## Keep docs/SPEC.md in sync
 
