@@ -203,7 +203,7 @@ async function renderEditor(id) {
     <div class="card">
       <div class="grid2">
         <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
-        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">The archive page URL for this issue.</div></div>
+        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">The web address of this issue's archive page. Auto-generated from the subject until you set a custom slug.</div></div>
       </div>
 
       <label for="f-markdown">Body</label>
@@ -251,8 +251,11 @@ async function renderEditor(id) {
     const base = clientSlugify(subjectEl.value);
     const v = slugEl.value.trim();
     let slugLinked = v === "" || v === base || (base !== "" && new RegExp(`^${base}-\\d+$`).test(v));
+    // While the slug tracks the subject, show it muted so it reads as auto-derived.
+    const reflectLink = () => slugEl.classList.toggle("slug-auto", slugLinked);
+    reflectLink();
     subjectEl.addEventListener("input", () => { if (slugLinked) slugEl.value = clientSlugify(subjectEl.value); });
-    slugEl.addEventListener("input", () => { slugLinked = slugEl.value.trim() === ""; });
+    slugEl.addEventListener("input", () => { slugLinked = slugEl.value.trim() === ""; reflectLink(); });
   }
 
   // --- tabs ---
