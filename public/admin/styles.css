@@ -75,11 +75,28 @@ tr.clickable { cursor: pointer; } tr.clickable:hover { background: var(--hover);
 .badge.sending { background: var(--b-sending-bg); color: var(--b-sending-fg); border-color: var(--b-sending-line); }
 .badge.canceled, .badge.failed { background: var(--b-bad-bg); color: var(--b-bad-fg); border-color: var(--b-bad-line); }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-.tabs button { border-radius: 6px 6px 0 0; }
-.tabs button.active { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
-textarea.editor { min-height: 340px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.5; resize: vertical; }
-iframe.preview { width: 100%; min-height: 420px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+/* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
+.composer { border: 1px solid var(--line); border-radius: 8px; background: var(--card); overflow: hidden; margin-bottom: 4px; }
+.composer-head { display: flex; align-items: flex-end; gap: 8px; padding: 6px 8px 0; background: var(--bg); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.ctabs { display: flex; gap: 4px; }
+.ctab { border: 1px solid transparent; border-bottom: none; background: transparent; color: var(--muted); padding: 8px 16px; border-radius: 6px 6px 0 0; cursor: pointer; font-size: 14px; margin-bottom: -1px; }
+.ctab:hover { color: var(--fg); }
+.ctab.active { background: var(--card); color: var(--fg); border-color: var(--line); font-weight: 600; }
+.toolbar { margin-left: auto; display: flex; align-items: center; gap: 1px; padding-bottom: 6px; flex-wrap: wrap; }
+.toolbar .sep { width: 1px; height: 20px; background: var(--line); margin: 0 6px; }
+.tb { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; padding: 0; border: 0; background: transparent; color: var(--muted); border-radius: 6px; cursor: pointer; }
+.tb:hover { background: var(--hover); color: var(--fg); }
+.tb:disabled { opacity: .4; cursor: not-allowed; }
+.tb svg { width: 18px; height: 18px; fill: currentColor; display: block; }
+.composer:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.composer-body { position: relative; }
+.composer-body textarea.editor:focus { outline: none; }
+.composer-body textarea.editor { border: 0; border-radius: 0; width: 100%; min-height: 320px; margin: 0; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.6; resize: vertical; display: block; }
+.composer-body iframe.preview { width: 100%; min-height: 360px; border: 0; background: #fff; display: block; }
+.composer-body.dragover::after { content: "Drop images to upload"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--accent) 12%, var(--card)); border: 2px dashed var(--accent); color: var(--fg); font-weight: 600; pointer-events: none; }
+.composer-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 13px; cursor: pointer; }
+.composer-foot:hover { color: var(--fg); }
+.composer-foot svg { width: 16px; height: 16px; fill: currentColor; }
 
 .warnings { background: var(--b-sending-bg); border: 1px solid var(--b-sending-line); color: var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
 .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 10px 16px; border-radius: 8px; font-size: 14px; opacity: 0; transition: opacity .2s; pointer-events: none; }
