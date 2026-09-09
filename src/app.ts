@@ -77,6 +77,9 @@ export function createRouter(archiveBasePath: string): Router {
   r.post("/webhooks/ses", webhookRoutes.ses);
 
   // --- public reader routes (token-scoped; no login) ---
+  // The front door: a self-contained archive index, never a bounce to /admin
+  // (SPEC §10). Kept public here — the one explicit non-admin surface.
+  r.get("/", archiveRoutes.archiveIndex);
   r.get("/subscribe", publicRoutes.subscribeForm);
   r.post("/subscribe", publicRoutes.subscribe);
   r.get("/confirm", publicRoutes.confirm);

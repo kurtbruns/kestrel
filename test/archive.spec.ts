@@ -64,3 +64,56 @@ describe("archive / view-in-browser", () => {
     expect(res.status).toBe(404);
   });
 });
+
+describe("archive index (the public front door, §10)", () => {
+  async function ensureSubscriber(): Promise<void> {
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','tok-a',?,?)",
+    )
+      .bind(now, now)
+      .run();
+  }
+
+  async function publish(subject: string, completedAt: number): Promise<posts.PostRow> {
+    await ensureSubscriber();
+    const { post } = await posts.createPost(env.DB, { subject, markdown: `# ${subject}` }, "test");
+    await freeze(env, getConfig(env), post, Date.now() - 1000);
+    await sweep(env);
+    // Pin completed_at so ordering is deterministic (sweep uses wall-clock ms).
+    await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?").bind(completedAt, post.id).run();
+    return post;
+  }
+
+  it("lists sent issues newest-first, linking to their canonical archive URLs", async () => {
+    const older = await publish("The Older One", 1_000);
+    const newer = await publish("The Newer One", 2_000);
+
+    const res = await SELF.fetch(`${base}/`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const body = await res.text();
+
+    expect(body).toContain("The Older One");
+    expect(body).toContain("The Newer One");
+    expect(body).toContain(`http://localhost:8787/newsletter/${newer.slug}`);
+    expect(body).toContain(`http://localhost:8787/newsletter/${older.slug}`);
+    // Newest first.
+    expect(body.indexOf("The Newer One")).toBeLessThan(body.indexOf("The Older One"));
+  });
+
+  it("never links into the Access-gated admin surface", async () => {
+    await publish("An Issue", 1_000);
+    const body = await (await SELF.fetch(`${base}/`)).text();
+    expect(body).not.toContain("/admin");
+  });
+
+  it("shows an empty state and excludes drafts / scheduled posts", async () => {
+    await posts.createPost(env.DB, { subject: "Just A Draft", markdown: "wip" }, "test");
+    const res = await SELF.fetch(`${base}/`);
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).toContain("No issues yet.");
+    expect(body).not.toContain("Just A Draft");
+  });
+});
