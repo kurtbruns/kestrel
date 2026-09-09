@@ -163,6 +163,16 @@ The one thing the app will not do quietly is send to someone it shouldn't, or se
 
 ## 7. Subscribers and consent
 
+A subscriber is an email address with a **consent state**, plus an orthogonal **suppression** flag for deliverability. The consent state is the whole story of whether someone has asked to be on the list; suppression is a separate "this address can't or shouldn't be delivered to" mark.
+
+| State | Meaning | In the send audience? |
+| --- | --- | --- |
+| **Pending** | Subscribed but hasn't clicked the confirmation link yet | No |
+| **Confirmed** | Completed double opt-in; consent is recorded and timestamped | Yes — unless suppressed |
+| **Unsubscribed** | Left the list (their own unsubscribe, or the operator on their behalf) | No |
+
+**Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state (I1). So a subscriber can be *confirmed and suppressed* at once — consented, but still never mailed. The audience for any send is exactly *confirmed minus suppressed*.
+
 ### Joining
 
 Someone subscribes through a public form, which creates a **pending** subscriber and sends a confirmation email. Clicking the link **confirms** them (double opt-in). Only confirmed subscribers are ever mailed (I1). Double opt-in is a deliberate cost: it's the record that consent was given, it keeps the list clean, and it protects sending reputation.

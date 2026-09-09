@@ -128,13 +128,13 @@ function route() {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
   const hash = location.hash || "#/posts";
   const [, view, arg] = hash.split("/");
-  const current = view === "status" ? "#/status" : view === "subscribers" ? "#/subscribers" : "#/posts";
+  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
   });
   if (view === "edit" && arg) return renderEditor(arg);
-  if (view === "status") return renderStatus();
+  if (view === "sends") return renderSends();
   if (view === "subscribers") return renderSubscribers();
   return renderPosts();
 }
@@ -424,7 +424,7 @@ async function renderEditor(id) {
       const v = m.el.querySelector("#schWhen").value;
       const t = v ? new Date(v).getTime() : NaN;
       if (Number.isNaN(t)) { toast("Pick a valid date & time"); return; }
-      try { await saveDraft(true); await api("/posts/" + id + "/schedule", { method: "POST", json: { fire_at: new Date(t).toISOString() } }); m.close(); toast("Scheduled"); location.hash = "#/status"; }
+      try { await saveDraft(true); await api("/posts/" + id + "/schedule", { method: "POST", json: { fire_at: new Date(t).toISOString() } }); m.close(); toast("Scheduled"); location.hash = "#/sends"; }
       catch (e) { toast(e.message); }
     });
   };
@@ -437,21 +437,21 @@ async function renderEditor(id) {
     const m = modal(`<h3>Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong>${esc(who)}</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`);
     m.el.querySelector("#snCancel").onclick = m.close;
     m.el.querySelector("#snGo").onclick = () => busy(m.el.querySelector("#snGo"), "Queuing…", async () => {
-      try { await saveDraft(true); await api("/posts/" + id + "/send", { method: "POST" }); m.close(); toast("Queued — cancelable for 5 minutes"); location.hash = "#/status"; }
+      try { await saveDraft(true); await api("/posts/" + id + "/send", { method: "POST" }); m.close(); toast("Queued — cancelable for 5 minutes"); location.hash = "#/sends"; }
       catch (e) { toast(e.message); }
     });
   };
 }
 
-// ---- status ----
+// ---- sends ----
 function startCountdowns() {
   const tick = () => document.querySelectorAll("[data-fire]").forEach((el) => (el.textContent = untilStr(Number(el.dataset.fire))));
   tick();
   statusTimer = setInterval(tick, 1000);
 }
 
-async function renderStatus() {
-  app.innerHTML = `<h1>Status</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
+async function renderSends() {
+  app.innerHTML = `<h1>Sends</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
   try {
     const { sends } = await api("/sends");
     const scheduled = sends.filter((s) => s.status === "scheduled");
@@ -461,7 +461,7 @@ async function renderStatus() {
       ? scheduled.map((s) => `<div class="card spread"><div><strong>${esc(s.subject)}</strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger" data-cancel="${s.id}">Cancel</button></div>`).join("")
       : `<p class="muted">Nothing scheduled.</p>`;
     document.querySelectorAll("[data-cancel]").forEach((b) => (b.onclick = () => busy(b, "Canceling…", async () => {
-      try { await api("/sends/" + b.dataset.cancel + "/cancel", { method: "POST" }); toast("Canceled"); renderStatus(); } catch (e) { toast(e.message); }
+      try { await api("/sends/" + b.dataset.cancel + "/cancel", { method: "POST" }); toast("Canceled"); renderSends(); } catch (e) { toast(e.message); }
     })));
     startCountdowns();
 
@@ -470,7 +470,7 @@ async function renderStatus() {
           .map((s) => `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${(s.progress && s.progress.accepted) || 0}</td></tr>`)
           .join("")}</tbody></table></div>`
       : `<p class="muted">No sends yet.</p>`;
-  } catch (e) { renderError(document.getElementById("scheduled"), e.message, renderStatus); }
+  } catch (e) { renderError(document.getElementById("scheduled"), e.message, renderSends); }
 }
 
 // ---- subscribers ----
@@ -505,7 +505,7 @@ async function renderSubscribers() {
     try {
       const data = await api("/subscribers" + (qs ? "?" + qs : ""));
       const c = data.counts;
-      document.getElementById("subCounts").innerHTML = `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span></div>`;
+      document.getElementById("subCounts").innerHTML = `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span><span class="info" role="img" aria-label="What these states mean" data-tip="Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.">${icon("info")}</span></div>`;
       renderSubTable(listEl, data.subscribers, load);
     } catch (e) { renderError(listEl, e.message, load); }
   }
