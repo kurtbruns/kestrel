@@ -25,6 +25,7 @@ import { spawn, spawnSync } from "node:child_process";
 const port = process.env.PORT || "8787";
 // Extra args after `npm run dev --` (e.g. `--remote`), forwarded to wrangler dev.
 const passthrough = process.argv.slice(2);
+const isRemote = passthrough.includes("--remote");
 
 // Bootstrap the local D1 shadow when its `posts` table is genuinely missing. We match
 // wrangler's "no such table" error text rather than treating any non-zero exit as
@@ -32,7 +33,7 @@ const passthrough = process.argv.slice(2);
 // just-stopped dev server) doesn't trigger a needless migrate. The bootstrap is
 // best-effort: if it fails we warn and start the server anyway, leaving things no
 // worse than an unmigrated shadow would be on its own.
-if (!passthrough.includes("--remote")) {
+if (!isRemote) {
   const probe = spawnSync(
     "wrangler",
     ["d1", "execute", "DB", "--local", "--command", "SELECT 1 FROM posts LIMIT 1"],
@@ -51,7 +52,20 @@ if (!passthrough.includes("--remote")) {
   }
 }
 
-const child = spawn("wrangler", ["dev", "--port", port, ...passthrough], {
+// Local dev can bind a port other than 8787 (autoPort picks a free one when 8787
+// is busy — e.g. a second worktree already running `wrangler dev`). Kestrel renders
+// ABSOLUTE reader URLs — an email needs absolute links — from APP_ORIGIN /
+// ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE, which wrangler.jsonc pins to :8787. On any
+// other port those point at the wrong server, so cover images and the
+// view-in-browser / unsubscribe links 404 in the browser. Reconcile them by
+// overriding the origins to the port we actually bind (a no-op at 8787). Skipped for
+// --remote, which runs against deployed resources under their real origins.
+const origin = `http://localhost:${port}`;
+const originArgs = isRemote
+  ? []
+  : ["--var", `APP_ORIGIN:${origin}`, "--var", `ARCHIVE_ORIGIN:${origin}`, "--var", `MEDIA_PUBLIC_BASE:${origin}/media`];
+
+const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",
 });
 
