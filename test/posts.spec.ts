@@ -121,4 +121,43 @@ describe("posts + revisions", () => {
       .first();
     expect(revCount.n).toBe(0);
   });
+
+  // A draft that was scheduled then canceled still has the canceled send (and any
+  // deliveries) referencing it; deleting the post must cascade to them, not fault
+  // on the FK. Scheduling only leaves a draft behind by way of cancel, so the
+  // send here is always a canceled one — a sent issue's record can't reach delete.
+  it("deletes a draft that had a canceled send, cascading its sends + deliveries", async () => {
+    const created = await readJson(await createPost({ subject: "Was Scheduled", markdown: "body" }));
+    const id = created.post.id;
+
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: { ...AUTH, "content-type": "application/json" },
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
+      }),
+    );
+    const sendId = scheduled.send.id;
+    await SELF.fetch(`${base}/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
+    // A delivery row would exist if the send had begun; insert one so the cascade
+    // is exercised even though a cancel-before-fire normally leaves none.
+    await env.DB.prepare(
+      "INSERT INTO deliveries (id, send_id, email, status, updated_at) VALUES (?, ?, ?, 'pending', ?)",
+    )
+      .bind("del-cascade", sendId, "x@example.com", Date.now())
+      .run();
+
+    const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });
+    expect(del.status).toBe(200);
+
+    const counts: any = await env.DB.prepare(
+      `SELECT
+         (SELECT COUNT(*) FROM posts WHERE id = ?1) AS posts,
+         (SELECT COUNT(*) FROM sends WHERE post_id = ?1) AS sends,
+         (SELECT COUNT(*) FROM deliveries WHERE send_id = ?2) AS deliveries`,
+    )
+      .bind(id, sendId)
+      .first();
+    expect(counts).toMatchObject({ posts: 0, sends: 0, deliveries: 0 });
+  });
 });
