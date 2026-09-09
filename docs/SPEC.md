@@ -60,7 +60,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further send reaches that person. It is honored on the next send with no window in which they still get one, and it is never silently reversed.
 
-**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome around an archived issue wraps that frozen copy; it never rewrites the bytes.
+**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived issue carries fills reserved placeholders in that frozen copy — the same mechanism as the per-recipient unsubscribe link — and never rewrites the reviewed content.
 
 **I4 — A post is sent at most once per send, to each person at most once.** Triggering a send is idempotent. A retry, a double-click, or a resumed send never mails anyone twice.
 
@@ -115,7 +115,7 @@ Because the app is self-contained (§10), it serves its own reader-facing pages,
 
 The **archive index** is the public home at `/` — the newsletter's front door. It lists the sent issues, newest first, each linking to its issue page, and carries the newsletter's identity and a subscribe call to action. It is the one page a reader can arrive at by typing the bare domain, so it must be public and must never bounce a visitor toward an admin path (§10).
 
-An **issue page** serves that issue's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may wrap the frozen email in light public chrome — a masthead with the newsletter name, a link back to the index, a subscribe prompt — so a shared issue reads as part of a publication and not a raw forwarded email. The chrome wraps; the frozen bytes inside are served verbatim (I3). The archive URL an email carries — its "view in browser" and every shared link — is built from the configured archive origin and base path (§10), so the same render is reachable at a stable, public address forever.
+An **issue page** serves that issue's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may add light public chrome — a masthead with the newsletter name and the publish date, a link back to the index, a subscribe prompt — so a shared issue reads as part of a publication and not a raw forwarded email. That chrome fills a reserved anchor the render leaves in the frozen copy — the same idea as the unsubscribe placeholder — so it appears only in the browser, never in a sent email, and the reviewed content is served unchanged (I3). The archive URL an email carries — its "view in browser" and every shared link — is built from the configured archive origin and base path (§10), so the same render is reachable at a stable, public address forever.
 
 ---
 
@@ -309,7 +309,7 @@ Nothing here retries in a way that could re-mail a person, because every retry i
 ## Open
 
 - **How much of the reader-facing unsubscribe/preferences flow to host yourself versus lean on the provider.** Consent and preferences are yours to own; deliverability suppression can lean on the provider. The split is a judgment call to make when the provider is chosen. (With SES as the default, the app hosts the unsubscribe token flow itself; SES's account-level suppression list stays a redundant safety net under the app's own suppressions.)
-- **How much public chrome an archive issue page carries.** A self-contained archive can wrap the frozen email in a masthead and subscribe prompt (§5); how far that goes toward a full publication home versus a thin frame is a design call, bounded only by I3 — the chrome wraps, it never rewrites the frozen bytes.
+- **How much public chrome an archive issue page carries.** A self-contained archive can add a masthead (newsletter name, publish date, a link back to the index) and a subscribe prompt (§5); how far that goes toward a full publication home versus a thin frame is a design call, bounded only by I3 — the chrome fills reserved anchors and never rewrites the reviewed content.
 
 ---
 
