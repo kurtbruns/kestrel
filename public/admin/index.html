@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=14">
+<link rel="stylesheet" href="./styles.css?v=16">
 </head>
 <body>
 <header class="topbar">
@@ -14,8 +14,8 @@
     <span>Kestrel</span>
   </a>
   <nav>
-    <a href="#/posts">Posts</a>
-    <a href="#/status">Status</a>
+    <a href="#/posts" data-text="Posts">Posts</a>
+    <a href="#/status" data-text="Status">Status</a>
   </nav>
   <button id="tokenBtn" class="ghost" title="Set access token" aria-label="Set access token">🔑</button>
 </header>
@@ -29,6 +29,6 @@
 <main id="app" class="container"></main>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=14"></script>
+<script src="./app.js?v=16"></script>
 </body>
 </html>
