@@ -4,6 +4,7 @@ import { param } from "../router";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import * as posts from "../db/posts";
 import * as images from "../db/images";
+import { getActiveSendForPost } from "../db/sends";
 
 function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
@@ -50,7 +51,12 @@ export async function getPost(c: RequestContext): Promise<Response> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
   if (!post) throw notFound("post");
   const revision = await posts.getCurrentRevision(c.env.DB, post);
-  return json({ post, markdown: revision?.markdown ?? "" });
+  const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
+  return json({
+    post,
+    markdown: revision?.markdown ?? "",
+    scheduled: active ? { id: active.id, fire_at: active.fire_at } : null,
+  });
 }
 
 export async function updatePost(c: RequestContext): Promise<Response> {
