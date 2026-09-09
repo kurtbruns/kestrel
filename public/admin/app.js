@@ -79,8 +79,8 @@ function renderIdentity() {
   if (!identity) {
     return;
   }
-  const mode = session && session.auth && session.auth.mode;
-  const p = (session && session.principal) || {};
+  const mode = session?.auth?.mode;
+  const p = session?.principal || {};
   if (mode === "access") {
     const who = p.email || (p.kind === "service" ? "Service token" : "Signed in");
     identity.innerHTML =
@@ -228,7 +228,9 @@ function renderError(container, msg, retryFn) {
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls = [];
 function closeMenu() {
-  menuEls.forEach((e) => e.remove());
+  menuEls.forEach((e) => {
+    e.remove();
+  });
   menuEls = [];
 }
 function openMenu(anchor, items) {
@@ -366,26 +368,24 @@ async function renderPosts() {
           `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
       )
       .join("")}</tbody></table></div>`;
-    list.querySelectorAll("tr[data-id]").forEach(
-      (tr) =>
-        (tr.onclick = (e) => {
-          if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
-            location.hash = `#/edit/${tr.dataset.id}`;
-          }
-        }),
-    );
-    list.querySelectorAll(".menu-btn").forEach(
-      (b) =>
-        (b.onclick = (e) => {
-          e.stopPropagation();
-          const pid = b.dataset.menu;
-          const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
-          if (b.dataset.status === "draft") {
-            items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
-          }
-          openMenu(b, items);
-        }),
-    );
+    list.querySelectorAll("tr[data-id]").forEach((tr) => {
+      tr.onclick = (e) => {
+        if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
+          location.hash = `#/edit/${tr.dataset.id}`;
+        }
+      };
+    });
+    list.querySelectorAll(".menu-btn").forEach((b) => {
+      b.onclick = (e) => {
+        e.stopPropagation();
+        const pid = b.dataset.menu;
+        const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
+        if (b.dataset.status === "draft") {
+          items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
+        }
+        openMenu(b, items);
+      };
+    });
   } catch (e) {
     renderError(document.getElementById("list"), e.message, renderPosts);
   }
@@ -604,9 +604,9 @@ async function renderEditor(id) {
       toast(e.message);
     }
   }
-  tabs.forEach(
-    (t) => (t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("write"))),
-  );
+  tabs.forEach((t) => {
+    t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("write"));
+  });
 
   // --- formatting toolbar ---
   function wrapSel(before, after, placeholder) {
@@ -663,9 +663,9 @@ async function renderEditor(id) {
     }
     markEdited();
   }
-  app
-    .querySelectorAll(".tb[data-fmt]")
-    .forEach((b) => (b.onclick = () => applyFormat(b.dataset.fmt)));
+  app.querySelectorAll(".tb[data-fmt]").forEach((b) => {
+    b.onclick = () => applyFormat(b.dataset.fmt);
+  });
   ta.addEventListener("keydown", (e) => {
     if (!(e.metaKey || e.ctrlKey)) {
       return;
@@ -745,7 +745,7 @@ async function renderEditor(id) {
       const slugEl = document.getElementById("f-slug");
       // Reflect server-side dedupe, but don't yank the slug from under the cursor
       // if an autosave lands while the field is focused.
-      if (u && u.slug && slugEl && document.activeElement !== slugEl) {
+      if (u?.slug && slugEl && document.activeElement !== slugEl) {
         slugEl.value = u.slug;
       }
       savedSnapshot = snapshot();
@@ -795,16 +795,16 @@ async function renderEditor(id) {
   // left to the idle/cap timers so a toolbar click (which blurs it) doesn't save
   // on every interaction.
   if (!locked) {
-    ["f-subject", "f-slug", "f-markdown"].forEach((k) =>
-      document.getElementById(k).addEventListener("input", markEdited),
-    );
-    ["f-subject", "f-slug"].forEach((k) =>
+    ["f-subject", "f-slug", "f-markdown"].forEach((k) => {
+      document.getElementById(k).addEventListener("input", markEdited);
+    });
+    ["f-subject", "f-slug"].forEach((k) => {
       document
         .getElementById(k)
         .addEventListener("blur", () =>
           saveDraft(true).catch((e) => toast(`Couldn't save — ${e.message}`)),
-        ),
-    );
+        );
+    });
   }
 
   // --- open in browser ---
@@ -841,7 +841,7 @@ async function renderEditor(id) {
 
   // --- image upload: drag/drop, paste, click ---
   async function uploadAndInsert(file) {
-    if (!file || !file.type.startsWith("image/")) {
+    if (!file?.type.startsWith("image/")) {
       return;
     }
     try {
@@ -880,7 +880,7 @@ async function renderEditor(id) {
       }
     });
     ta.addEventListener("paste", (e) => {
-      for (const it of (e.clipboardData && e.clipboardData.items) || []) {
+      for (const it of e.clipboardData?.items || []) {
         if (it.type.startsWith("image/")) {
           const f = it.getAsFile();
           if (f) {
@@ -900,10 +900,9 @@ async function renderEditor(id) {
   }
 
   function showWarnings(ws) {
-    document.getElementById("warnings").innerHTML =
-      ws && ws.length
-        ? `<div class="warnings"><strong>Warnings:</strong> ${ws.map(esc).join("; ")}</div>`
-        : "";
+    document.getElementById("warnings").innerHTML = ws?.length
+      ? `<div class="warnings"><strong>Warnings:</strong> ${ws.map(esc).join("; ")}</div>`
+      : "";
   }
 
   // --- send test (modal) ---
@@ -917,7 +916,7 @@ async function renderEditor(id) {
     m.el.querySelector("#tGo").onclick = () =>
       busy(m.el.querySelector("#tGo"), "Sending…", async () => {
         const addr = to.value.trim();
-        if (!addr || !addr.includes("@")) {
+        if (!addr?.includes("@")) {
           toast("Enter a valid email");
           return;
         }
@@ -1002,9 +1001,9 @@ async function renderEditor(id) {
 // ---- sends ----
 function startCountdowns() {
   const tick = () =>
-    document
-      .querySelectorAll("[data-fire]")
-      .forEach((el) => (el.textContent = untilStr(Number(el.dataset.fire))));
+    document.querySelectorAll("[data-fire]").forEach((el) => {
+      el.textContent = untilStr(Number(el.dataset.fire));
+    });
   tick();
   statusTimer = setInterval(tick, 1000);
 }
@@ -1033,34 +1032,32 @@ async function renderSends() {
       : `<p class="muted">Nothing scheduled.</p>`;
     // The whole card opens the issue; the subject link handles keyboard/middle-click,
     // and Cancel opts out of navigation (like the posts table's row-click guard).
-    document.querySelectorAll("#scheduled .card.clickable").forEach(
-      (card) =>
-        (card.onclick = (e) => {
-          if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
-            location.hash = `#/edit/${card.dataset.post}`;
+    document.querySelectorAll("#scheduled .card.clickable").forEach((card) => {
+      card.onclick = (e) => {
+        if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+          location.hash = `#/edit/${card.dataset.post}`;
+        }
+      };
+    });
+    document.querySelectorAll("[data-cancel]").forEach((b) => {
+      b.onclick = () =>
+        busy(b, "Canceling…", async () => {
+          try {
+            await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+            toast("Canceled");
+            renderSends();
+          } catch (e) {
+            toast(e.message);
           }
-        }),
-    );
-    document.querySelectorAll("[data-cancel]").forEach(
-      (b) =>
-        (b.onclick = () =>
-          busy(b, "Canceling…", async () => {
-            try {
-              await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
-              toast("Canceled");
-              renderSends();
-            } catch (e) {
-              toast(e.message);
-            }
-          })),
-    );
+        });
+    });
     startCountdowns();
 
     document.getElementById("recent").innerHTML = recent.length
       ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th></tr></thead><tbody>${recent
           .map(
             (s) =>
-              `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${(s.progress && s.progress.accepted) || 0}</td></tr>`,
+              `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
           )
           .join("")}</tbody></table></div>`
       : `<p class="muted">No sends yet.</p>`;
@@ -1133,16 +1130,15 @@ function renderSubTable(listEl, rows, reload) {
         `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.confirmed_at || s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
-  listEl.querySelectorAll(".menu-btn").forEach(
-    (b) =>
-      (b.onclick = (e) => {
-        e.stopPropagation();
-        const row = rows.find((r) => r.id === b.dataset.menu);
-        openMenu(b, [
-          { label: "Unsubscribe", danger: true, onClick: () => confirmUnsubscribe(row, reload) },
-        ]);
-      }),
-  );
+  listEl.querySelectorAll(".menu-btn").forEach((b) => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const row = rows.find((r) => r.id === b.dataset.menu);
+      openMenu(b, [
+        { label: "Unsubscribe", danger: true, onClick: () => confirmUnsubscribe(row, reload) },
+      ]);
+    };
+  });
 }
 
 // Add subscriber → the normal double opt-in (never an auto-confirm).
@@ -1156,7 +1152,7 @@ function addSubscriberModal(onDone) {
   m.el.querySelector("#aGo").onclick = () =>
     busy(m.el.querySelector("#aGo"), "Adding…", async () => {
       const addr = input.value.trim();
-      if (!addr || !addr.includes("@")) {
+      if (!addr?.includes("@")) {
         toast("Enter a valid email");
         return;
       }
@@ -1168,7 +1164,7 @@ function addSubscriberModal(onDone) {
             ? `${addr} is already confirmed`
             : `Confirmation sent to ${addr}`,
         );
-        onDone && onDone();
+        onDone?.();
       } catch (e) {
         toast(e.message);
       }
@@ -1196,7 +1192,7 @@ async function renderDocs(slug) {
     renderError(navEl, e.message, () => renderDocs(slug));
     return;
   }
-  if (!docs || !docs.length) {
+  if (!docs?.length) {
     navEl.innerHTML = `<p class="muted">No docs.</p>`;
     return;
   }
@@ -1242,7 +1238,7 @@ function confirmUnsubscribe(sub, onDone) {
         await api(`/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
         m.close();
         toast(`Unsubscribed ${sub.email}`);
-        onDone && onDone();
+        onDone?.();
       } catch (e) {
         toast(e.message);
       }

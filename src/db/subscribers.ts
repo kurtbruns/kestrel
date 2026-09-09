@@ -1,5 +1,6 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { newId, newToken } from "../lib/ids";
+import { unwrap } from "../lib/unwrap";
 
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
 
@@ -72,7 +73,7 @@ export async function subscribe(
       )
       .bind(token, existing.id)
       .run();
-    const subscriber = (await getById(db, existing.id))!;
+    const subscriber = unwrap(await getById(db, existing.id), "subscriber");
     return {
       subscriber,
       action: existing.status === "unsubscribed" ? "resubscribed" : "pending_resent",
@@ -87,7 +88,7 @@ export async function subscribe(
     )
     .bind(id, email, token, now)
     .run();
-  return { subscriber: (await getById(db, id))!, action: "created" };
+  return { subscriber: unwrap(await getById(db, id), "subscriber"), action: "created" };
 }
 
 /** Confirm a pending subscriber by token (double opt-in). Idempotent for an

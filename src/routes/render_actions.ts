@@ -64,7 +64,7 @@ export async function test(c: RequestContext): Promise<Response> {
   }
   const to =
     typeof (body as { to?: unknown })?.to === "string" ? (body as { to: string }).to.trim() : "";
-  if (!to || !to.includes("@")) {
+  if (!to.includes("@")) {
     throw badRequest("'to' must be an email address");
   }
 

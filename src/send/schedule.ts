@@ -13,6 +13,7 @@ import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
+import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 
 /** Create a scheduled Send from the post's current content and lock the post. */
@@ -56,7 +57,7 @@ export async function freeze(
       "UPDATE posts SET status = 'scheduled', updated_at = ? WHERE id = ? AND status = 'draft'",
     ).bind(now, post.id),
   ]);
-  return (await getSend(env.DB, id))!;
+  return unwrap(await getSend(env.DB, id), "send");
 }
 
 /** Cancel a pending Send and unlock its post. Only works while `scheduled`. */
@@ -79,5 +80,5 @@ export async function cancel(env: AppEnv, sendId: string): Promise<SendRow> {
   )
     .bind(now, send.post_id)
     .run();
-  return (await getSend(env.DB, sendId))!;
+  return unwrap(await getSend(env.DB, sendId), "send");
 }

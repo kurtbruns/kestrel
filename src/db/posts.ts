@@ -1,6 +1,7 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 import { newId } from "../lib/ids";
 import { slugify } from "../lib/slug";
+import { unwrap } from "../lib/unwrap";
 
 export type PostStatus = "draft" | "scheduled" | "sent";
 
@@ -139,11 +140,11 @@ export async function createPost(
       .bind(revId, id, markdown, metadata, author, now),
   ]);
 
-  const post = (await getPost(db, id))!;
-  const revision = (await db
-    .prepare("SELECT * FROM post_revisions WHERE id = ?")
-    .bind(revId)
-    .first<RevisionRow>())!;
+  const post = unwrap(await getPost(db, id), "post");
+  const revision = unwrap(
+    await db.prepare("SELECT * FROM post_revisions WHERE id = ?").bind(revId).first<RevisionRow>(),
+    "revision",
+  );
   return { post, revision };
 }
 
@@ -182,11 +183,11 @@ export async function updatePost(
       .bind(slug, subject, revId, now, post.id),
   ]);
 
-  const updated = (await getPost(db, post.id))!;
-  const revision = (await db
-    .prepare("SELECT * FROM post_revisions WHERE id = ?")
-    .bind(revId)
-    .first<RevisionRow>())!;
+  const updated = unwrap(await getPost(db, post.id), "post");
+  const revision = unwrap(
+    await db.prepare("SELECT * FROM post_revisions WHERE id = ?").bind(revId).first<RevisionRow>(),
+    "revision",
+  );
   return { post: updated, revision };
 }
 

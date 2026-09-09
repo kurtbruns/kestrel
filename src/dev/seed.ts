@@ -31,6 +31,7 @@ import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
+import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -368,7 +369,10 @@ export async function seedDatabase(
 
   // One suppression shadows a confirmed subscriber (so the audience is confirmed
   // MINUS suppressed, I1); the other is an outside address that hard-bounced.
-  const suppressedConfirmed = subscribers.find((s) => s.status === "confirmed")!.email;
+  const suppressedConfirmed = unwrap(
+    subscribers.find((s) => s.status === "confirmed"),
+    "confirmed subscriber",
+  ).email;
   await insertSuppressions(db, [
     {
       email: suppressedConfirmed,

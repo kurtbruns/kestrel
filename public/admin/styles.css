@@ -72,6 +72,7 @@
   box-sizing: border-box;
 }
 [hidden] {
+  /* biome-ignore lint/complexity/noImportantStyles: the hidden attribute must win over any component's display rule */
   display: none !important;
 }
 body {
@@ -206,6 +207,7 @@ h2 {
   padding: 0 16px 64px;
 }
 
+/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; base rule grouped here intentionally */
 button {
   font-family: inherit;
   font-size: 14px;
@@ -389,6 +391,7 @@ td a {
   text-decoration: none;
   font-weight: 500;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; hover rule grouped with its base */
 td a:hover {
   text-decoration: underline;
 }
@@ -950,6 +953,7 @@ td.act {
   padding: 6px 10px;
   border-radius: 6px;
 }
+/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; hover rule grouped with its base */
 .docs-nav a:hover {
   color: var(--fg);
   background: var(--hover);
@@ -978,6 +982,7 @@ td.act {
 
 @media (prefers-reduced-motion: reduce) {
   * {
+    /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component's own transition */
     transition: none !important;
   }
 }

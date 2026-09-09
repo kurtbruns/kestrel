@@ -18,7 +18,10 @@ export async function timingSafeEqual(a: string, b: string): Promise<boolean> {
   const vb = new Uint8Array(hb);
   let diff = 0;
   for (let i = 0; i < va.length; i++) {
-    diff |= va[i]! ^ vb[i]!;
+    // `?? 0` only ever branches on the loop index (public), never on a byte
+    // value, so the comparison stays constant-time; va and vb are equal-length
+    // HMAC digests, so the fallback never actually fires.
+    diff |= (va[i] ?? 0) ^ (vb[i] ?? 0);
   }
   return diff === 0;
 }

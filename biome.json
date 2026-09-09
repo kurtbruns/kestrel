@@ -16,18 +16,7 @@
     "rules": {
       "preset": "recommended",
       "style": {
-        "useBlockStatements": "error",
-        "noNonNullAssertion": "warn",
-        "noDescendingSpecificity": "warn"
-      },
-      "suspicious": {
-        "noExplicitAny": "warn",
-        "noImplicitAnyLet": "warn",
-        "useIterableCallbackReturn": "warn"
-      },
-      "complexity": {
-        "noImportantStyles": "warn",
-        "useOptionalChain": "warn"
+        "useBlockStatements": "error"
       }
     }
   },
@@ -37,5 +26,16 @@
   },
   "javascript": {
     "formatter": { "quoteStyle": "double", "semicolons": "always" }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "style": { "noNonNullAssertion": "off" },
+          "suspicious": { "noExplicitAny": "off" }
+        }
+      }
+    }
+  ]
 }

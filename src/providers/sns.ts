@@ -95,7 +95,7 @@ function base64ToBytes(b64: string): Uint8Array {
 function pemBlock(pem: string, label: string): Uint8Array | null {
   const re = new RegExp(`-----BEGIN ${label}-----([\\s\\S]*?)-----END ${label}-----`);
   const m = pem.match(re);
-  return m && m[1] ? base64ToBytes(m[1]) : null;
+  return m?.[1] ? base64ToBytes(m[1]) : null;
 }
 
 // Minimal ASN.1 DER reader — just enough to pull the SubjectPublicKeyInfo out of
@@ -107,15 +107,27 @@ interface Tlv {
   end: number;
 }
 
+// Read one byte, treating an out-of-bounds index as a truncated (malformed)
+// DER. Callers run inside verifySnsSignature's fail-closed try/catch, so a
+// throw here just means the signature is rejected — safer than reading past
+// the buffer and limping on with `undefined`.
+function byteAt(buf: Uint8Array, i: number): number {
+  const b = buf[i];
+  if (b === undefined) {
+    throw new Error("truncated DER");
+  }
+  return b;
+}
+
 function readTlv(buf: Uint8Array, offset: number): Tlv {
-  const tag = buf[offset]!;
+  const tag = byteAt(buf, offset);
   let i = offset + 1;
-  let len = buf[i++]!;
+  let len = byteAt(buf, i++);
   if (len & 0x80) {
     const n = len & 0x7f;
     len = 0;
     for (let k = 0; k < n; k++) {
-      len = (len << 8) | buf[i++]!;
+      len = (len << 8) | byteAt(buf, i++);
     }
   }
   return { tag, start: offset, contentStart: i, end: i + len };
@@ -150,11 +162,11 @@ function extractSpkiFromCert(der: Uint8Array): Uint8Array {
       continue;
     }
     const alg = children(der, child)[0];
-    if (!alg || alg.tag !== 0x30) {
+    if (alg?.tag !== 0x30) {
       continue;
     }
     const oid = children(der, alg)[0];
-    if (!oid || oid.tag !== 0x06) {
+    if (oid?.tag !== 0x06) {
       continue;
     }
     const bytes = der.subarray(oid.contentStart, oid.end);

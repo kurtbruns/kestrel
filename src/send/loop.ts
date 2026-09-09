@@ -13,7 +13,7 @@ import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
-import type { Recipient } from "../providers/types";
+import type { PerRecipientResult, Recipient } from "../providers/types";
 
 export interface SendLoopResult {
   sendId: string;
@@ -107,7 +107,7 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     }));
     const byEmail = new Map(live.map((l) => [l.email, l.id]));
 
-    let results;
+    let results: PerRecipientResult[];
     try {
       results = await provider.sendBatch(
         { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
