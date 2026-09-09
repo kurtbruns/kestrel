@@ -25,6 +25,7 @@ const ICONS = {
   ol: "M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z",
   indent: "M120-120v-80h720v80H120Zm320-160v-80h400v80H440Zm0-160v-80h400v80H440Zm0-160v-80h400v80H440ZM120-760v-80h720v80H120Zm0 440v-320l160 160-160 160Z",
   paperclip: "M720-330q0 104-73 177T470-80q-104 0-177-73t-73-177v-370q0-75 52.5-127.5T400-880q75 0 127.5 52.5T580-700v350q0 46-32 78t-78 32q-46 0-78-32t-32-78v-370h80v370q0 13 8.5 21.5T470-320q13 0 21.5-8.5T500-350v-350q-1-42-29.5-71T400-800q-42 0-71 29t-29 71v370q-1 71 49 120.5T470-160q70 0 119-49.5T640-330v-390h80v390Z",
+  info: "M440-280h80v-240h-80v240Zm68.5-331.5Q520-623 520-640t-11.5-28.5Q497-680 480-680t-28.5 11.5Q440-657 440-640t11.5 28.5Q463-600 480-600t28.5-11.5ZM480-80q-83 0-156-31.5T197-197q-54-54-85.5-127T80-480q0-83 31.5-156T197-763q54-54 127-85.5T480-880q83 0 156 31.5T763-763q54 54 85.5 127T880-480q0 83-31.5 156T763-197q-54 54-127 85.5T480-80Zm0-80q134 0 227-93t93-227q0-134-93-227t-227-93q-134 0-227 93t-93 227q0 134 93 227t227 93Zm0-320Z",
 };
 const icon = (name) => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
@@ -203,7 +204,14 @@ async function renderEditor(id) {
     <div class="card">
       <div class="grid2">
         <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
-        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">The web address of this issue's archive page. Auto-generated from the subject until you set a custom slug.</div></div>
+        <div>
+          <div class="label-row">
+            <label for="f-slug">Slug</label>
+            <span class="info" role="img" aria-label="The web address of this issue's archive page." data-tip="The web address of this issue's archive page.">${icon("info")}</span>
+          </div>
+          <input id="f-slug" value="${esc(post.slug)}" ${dis}>
+          ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
+        </div>
       </div>
 
       <label for="f-markdown">Body</label>
@@ -241,21 +249,42 @@ async function renderEditor(id) {
   const get = (k) => document.getElementById("f-" + k).value;
   const collect = () => ({ subject: get("subject"), slug: get("slug"), markdown: get("markdown") });
 
-  // Linked Subject → Slug: auto-derive the slug from the subject until the author
-  // sets a custom slug (clearing the slug field re-links it).
+  // Auto-generate slug from subject. The slug stays editable throughout; the
+  // checkbox reflects whether it's currently tracking the subject. Typing your
+  // own slug takes manual control (unchecks); emptying the field, or ticking the
+  // box, re-links and re-derives. The initial mode is inferred from the stored
+  // slug, and an empty slug is never left behind.
   if (!locked) {
     const subjectEl = document.getElementById("f-subject");
     const slugEl = document.getElementById("f-slug");
-    // Linked if the slug is empty, equals the derived slug, or is a deduped
-    // variant of it (base-2, base-3, …). A hand-written slug breaks the link.
-    const base = clientSlugify(subjectEl.value);
+    const autoEl = document.getElementById("f-slug-auto");
+    const derive = () => clientSlugify(subjectEl.value);
+
+    // Infer the starting mode: auto when the slug is empty, equals the derived
+    // slug, or is a deduped variant of it (base-2, base-3, …). A hand-written
+    // slug that has diverged starts as a custom (unchecked) slug.
+    const base = derive();
     const v = slugEl.value.trim();
-    let slugLinked = v === "" || v === base || (base !== "" && new RegExp(`^${base}-\\d+$`).test(v));
-    // While the slug tracks the subject, show it muted so it reads as auto-derived.
-    const reflectLink = () => slugEl.classList.toggle("slug-auto", slugLinked);
-    reflectLink();
-    subjectEl.addEventListener("input", () => { if (slugLinked) slugEl.value = clientSlugify(subjectEl.value); });
-    slugEl.addEventListener("input", () => { slugLinked = slugEl.value.trim() === ""; reflectLink(); });
+    autoEl.checked = v === "" || v === base || (base !== "" && new RegExp(`^${base}-\\d+$`).test(v));
+
+    // Muted while it tracks the subject; normal color once it's a hand-set slug.
+    const reflect = () => slugEl.classList.toggle("slug-auto", autoEl.checked);
+    reflect();
+    if (autoEl.checked && v === "") slugEl.value = derive();
+
+    subjectEl.addEventListener("input", () => { if (autoEl.checked) slugEl.value = derive(); });
+    // Typing a slug takes manual control; clearing it re-links to the subject.
+    slugEl.addEventListener("input", () => { autoEl.checked = slugEl.value.trim() === ""; reflect(); });
+    // Ticking the box re-derives; unticking hands over the field ready to edit.
+    autoEl.addEventListener("change", () => {
+      reflect();
+      if (autoEl.checked) slugEl.value = derive();
+      else { slugEl.focus(); slugEl.select(); }
+    });
+    // Never leave an empty slug: on blur, fall back to the subject-derived one.
+    slugEl.addEventListener("blur", () => {
+      if (slugEl.value.trim() === "") { autoEl.checked = true; reflect(); slugEl.value = derive(); }
+    });
   }
 
   // --- tabs ---

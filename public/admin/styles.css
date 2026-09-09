@@ -71,7 +71,7 @@ button.ghost { border: 0; background: transparent; font-size: 18px; }
 button:disabled { opacity: .5; cursor: not-allowed; transform: none; filter: none; }
 
 input, textarea, select { font-family: inherit; font-size: 14px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; width: 100%; background: var(--card); color: var(--fg); }
-label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+label { display: block; font-size: 14px; color: var(--muted); margin: 14px 0 8px; }
 
 .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 .spread { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
@@ -161,7 +161,30 @@ td.act { text-align: right; width: 1%; white-space: nowrap; }
 
 /* editor field hints + scheduled banner */
 .field-hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
-/* Slug is muted while it auto-tracks the subject; turns normal once hand-edited. */
+/* Label + info icon grouped at the top of the slug field. */
+.label-row { display: flex; align-items: center; gap: 6px; margin: 14px 0 8px; }
+.label-row label { margin: 0; }
+/* Info icon: the field explanation lives in its hover/focus tooltip. The padding
+   + equal negative margin enlarge the hover/click target to ~28px without moving
+   the glyph or growing the label row. */
+.info { position: relative; display: inline-flex; align-items: center; justify-content: center; padding: 6px; margin: -6px; border-radius: 6px; color: var(--muted); cursor: help; }
+.info svg { width: 16px; height: 16px; fill: currentColor; display: block; }
+.info:hover { color: var(--fg); background: var(--hover); }
+.info::after {
+  content: attr(data-tip);
+  position: absolute; left: 0; bottom: calc(100% + 8px); z-index: 30;
+  width: max-content; max-width: 230px;
+  background: var(--fg); color: var(--bg);
+  font-size: 12px; line-height: 1.4; padding: 6px 9px; border-radius: 6px;
+  box-shadow: 0 6px 20px rgba(0,0,0,.25);
+  opacity: 0; visibility: hidden; transform: translateY(2px);
+  transition: opacity .12s, transform .12s, visibility .12s;
+}
+.info:hover::after { opacity: 1; visibility: visible; transform: translateY(0); }
+/* "Auto-generate from subject" toggle, grouped just under the slug field. */
+.slug-auto-toggle { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 14px; color: var(--muted); cursor: pointer; user-select: none; }
+.slug-auto-toggle input { width: 14px; height: 14px; margin: 0; accent-color: var(--ring); cursor: pointer; }
+/* Slug is muted while it auto-tracks the subject; normal once hand-set. */
 #f-slug.slug-auto { color: var(--muted); }
 .sched-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--b-scheduled-bg); color: var(--b-scheduled-fg); border: 1px solid var(--b-scheduled-line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
 
