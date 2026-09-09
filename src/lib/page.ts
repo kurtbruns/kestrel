@@ -55,7 +55,11 @@ export function htmlPage(title: string, bodyHtml: string, status = 200): Respons
 }
 
 const INDEX_STYLE = `${TOKENS}
-.wrap { max-width:640px; margin:0 auto; padding:56px 24px 80px; line-height:1.6; }
+/* The front door matches the newsletter surface: plain white (dark #18181b),
+   no card — not the muted ground the small form/card pages use. */
+body { background:#ffffff; }
+@media (prefers-color-scheme: dark) { body { background:#18181b; } }
+.wrap { max-width:640px; margin:0 auto; padding:40px 24px 80px; line-height:1.6; }
 .masthead { border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:8px; }
 .masthead h1 { margin:0 0 4px; font-size:28px; letter-spacing:-0.02em; }
 .masthead p { margin:0; }

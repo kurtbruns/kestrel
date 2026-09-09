@@ -14,8 +14,9 @@ import { emailLayout, UNSUB_SENTINEL } from "./template";
 import { htmlToText } from "./text";
 
 export { UNSUB_SENTINEL };
+export { ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "./template";
 
-/** Widest image column an email client will show for our 600px layout. */
+/** Widest image column an email client will show for our 600px content column. */
 const EMAIL_MAX_WIDTH = 600;
 
 export interface RenderInput {

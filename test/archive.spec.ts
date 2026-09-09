@@ -6,7 +6,7 @@ import { latestSentSendForPost } from "../src/db/sends";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { clearFakeOutbox } from "../src/providers/fake";
-import { UNSUB_SENTINEL } from "../src/render/render";
+import { UNSUB_SENTINEL, ARCHIVE_MASTHEAD_ANCHOR } from "../src/render/render";
 
 const base = "https://kestrel.test";
 
@@ -37,20 +37,28 @@ async function sendPost(title: string, markdown: string): Promise<posts.PostRow>
 }
 
 describe("archive / view-in-browser", () => {
-  it("serves the frozen render verbatim, sentinel substituted (I3)", async () => {
+  it("serves the frozen content unchanged, with the sentinel and masthead anchor substituted (I3)", async () => {
     const post = await sendPost("Archive Me", "# Hello\n\nthe permanent record");
     const send = (await latestSentSendForPost(env.DB, post.id))!;
+    // The sent/frozen record is masthead-free: the anchor is inert, no chrome baked in.
+    expect(send.rendered_html).toContain(ARCHIVE_MASTHEAD_ANCHOR);
+    expect(send.rendered_html).not.toContain('class="k-mast"');
 
     const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
 
     const body = await res.text();
-    const expected = send.rendered_html.split(UNSUB_SENTINEL).join("http://localhost:8787/unsubscribe");
-    expect(body).toBe(expected); // byte-identical to the frozen record
-    expect(body).not.toContain(UNSUB_SENTINEL);
+    // Reviewed content is served unchanged.
+    expect(body).toContain("<h1>Hello</h1>");
     expect(body).toContain("the permanent record");
+    // The unsubscribe sentinel is substituted for a generic link.
+    expect(body).not.toContain(UNSUB_SENTINEL);
     expect(body).toContain("/unsubscribe");
+    // The browser-only masthead replaces its inert anchor and links back to the index.
+    expect(body).not.toContain(ARCHIVE_MASTHEAD_ANCHOR);
+    expect(body).toContain('class="k-mast"');
+    expect(body).toContain('href="http://localhost:8787/"');
   });
 
   it("404s for an unknown slug", async () => {
