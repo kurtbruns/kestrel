@@ -21,7 +21,7 @@ async function seedConfirmed(email: string): Promise<void> {
 }
 
 async function scheduledSend(fireAt: number, markdown = "# Hi\n\nbody") {
-  const { post } = await posts.createPost(env.DB, { title: "T", subject: "Subj", markdown }, "test");
+  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown }, "test");
   return freeze(env, config(), post, fireAt);
 }
 

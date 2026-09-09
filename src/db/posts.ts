@@ -7,9 +7,7 @@ export type PostStatus = "draft" | "scheduled" | "sent";
 export interface PostRow {
   id: string;
   slug: string;
-  title: string;
   subject: string;
-  preheader: string;
   status: PostStatus;
   current_revision: string | null;
   created_at: number;
@@ -26,9 +24,7 @@ export interface RevisionRow {
 }
 
 export interface PostInput {
-  title?: string;
   subject?: string;
-  preheader?: string;
   slug?: string;
   markdown?: string;
 }
@@ -125,20 +121,17 @@ export async function createPost(
   const now = Date.now();
   const id = newId();
   const revId = newId();
-  const title = input.title ?? "";
   const subject = input.subject ?? "";
-  const preheader = input.preheader ?? "";
   const markdown = input.markdown ?? "";
-  const base = slugify(input.slug ?? title);
-  const slug = await uniqueSlug(db, base);
-  const metadata = JSON.stringify({ title, subject, preheader, slug });
+  const slug = await uniqueSlug(db, slugify(input.slug ?? subject));
+  const metadata = JSON.stringify({ subject, slug });
 
   await db.batch([
     db
       .prepare(
-        "INSERT INTO posts (id, slug, title, subject, preheader, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'draft', ?, ?, ?)",
+        "INSERT INTO posts (id, slug, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, 'draft', ?, ?, ?)",
       )
-      .bind(id, slug, title, subject, preheader, revId, now, now),
+      .bind(id, slug, subject, revId, now, now),
     db
       .prepare(
         "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -157,7 +150,7 @@ export async function createPost(
 /**
  * Write a new revision and advance `current_revision`. Draft-only (the caller
  * checks status first; the WHERE guard is a backstop). The slug stays stable
- * unless explicitly overridden, so archive links don't break on a title edit.
+ * unless explicitly overridden, so archive links don't break on a subject edit.
  */
 export async function updatePost(
   db: D1Database,
@@ -168,13 +161,11 @@ export async function updatePost(
   const current = await getCurrentRevision(db, post);
   const now = Date.now();
   const revId = newId();
-  const title = input.title ?? post.title;
   const subject = input.subject ?? post.subject;
-  const preheader = input.preheader ?? post.preheader;
   const markdown = input.markdown ?? current?.markdown ?? "";
   let slug = post.slug;
   if (input.slug !== undefined) slug = await uniqueSlug(db, slugify(input.slug), post.id);
-  const metadata = JSON.stringify({ title, subject, preheader, slug });
+  const metadata = JSON.stringify({ subject, slug });
 
   await db.batch([
     db
@@ -184,9 +175,9 @@ export async function updatePost(
       .bind(revId, post.id, markdown, metadata, author, now),
     db
       .prepare(
-        "UPDATE posts SET slug = ?, title = ?, subject = ?, preheader = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
+        "UPDATE posts SET slug = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
       )
-      .bind(slug, title, subject, preheader, revId, now, post.id),
+      .bind(slug, subject, revId, now, post.id),
   ]);
 
   const updated = (await getPost(db, post.id))!;

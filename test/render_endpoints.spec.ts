@@ -18,7 +18,7 @@ async function draftWithImage(title: string): Promise<string> {
     await SELF.fetch(`${base}/posts`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({ title, subject: `Subject: ${title}`, markdown: "# Hi\n\n![A cat](cat.png)" }),
+      body: JSON.stringify({ subject: `Subject: ${title}`, markdown: "# Hi\n\n![A cat](cat.png)" }),
     }),
   );
   const id = created.post.id;

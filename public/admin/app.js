@@ -137,7 +137,7 @@ window.addEventListener("hashchange", route);
 async function renderPosts() {
   app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
   document.getElementById("newPost").onclick = (e) => busy(e.currentTarget, "Creating…", async () => {
-    try { const { post } = await api("/posts", { method: "POST", json: { title: "Untitled" } }); location.hash = "#/edit/" + post.id; }
+    try { const { post } = await api("/posts", { method: "POST", json: { subject: "Untitled" } }); location.hash = "#/edit/" + post.id; }
     catch (err) { toast(err.message); }
   });
   try {
@@ -145,7 +145,7 @@ async function renderPosts() {
     const list = document.getElementById("list");
     if (!posts.length) { list.innerHTML = `<p class="muted">No posts yet — create your first draft.</p>`; return; }
     list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Slug</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
-      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.title) || "<em>untitled</em>"}</a></td><td class="muted">${esc(p.slug)}</td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`)
+      .map((p) => `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td class="muted">${esc(p.slug)}</td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`)
       .join("")}</tbody></table></div>`;
     list.querySelectorAll("tr[data-id]").forEach((tr) => (tr.onclick = (e) => { if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) location.hash = "#/edit/" + tr.dataset.id; }));
     list.querySelectorAll(".menu-btn").forEach((b) => (b.onclick = (e) => {
@@ -197,11 +197,9 @@ async function renderEditor(id) {
     ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel schedule</button></div>` : ""}
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}><div class="field-hint">The inbox subject line.</div></div>
-        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">URL for the archive page.</div></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
+        <div><label for="f-slug">Slug</label><input id="f-slug" value="${esc(post.slug)}" ${dis}><div class="field-hint">The archive page URL for this issue.</div></div>
       </div>
-      <label for="f-preheader">Preheader</label><input id="f-preheader" value="${esc(post.preheader)}" ${dis}><div class="field-hint">Preview text shown after the subject in most inboxes.</div>
-      <label for="f-title">Title</label><input id="f-title" value="${esc(post.title)}" ${dis}><div class="field-hint">Internal name (used to derive the slug); the email itself uses the subject.</div>
 
       <label for="f-markdown">Body</label>
       <div class="composer">
@@ -236,7 +234,7 @@ async function renderEditor(id) {
   const toolbarEl = app.querySelector(".toolbar");
   const previewFrame = document.getElementById("previewFrame");
   const get = (k) => document.getElementById("f-" + k).value;
-  const collect = () => ({ title: get("title"), subject: get("subject"), preheader: get("preheader"), slug: get("slug"), markdown: get("markdown") });
+  const collect = () => ({ subject: get("subject"), slug: get("slug"), markdown: get("markdown") });
 
   // --- tabs ---
   const tabs = app.querySelectorAll(".ctab");
@@ -404,7 +402,7 @@ async function renderStatus() {
   try {
     const { sends } = await api("/sends");
     const scheduled = sends.filter((s) => s.status === "scheduled");
-    const recent = sends.filter((s) => s.status !== "scheduled").slice(0, 20);
+    const recent = sends.filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed").slice(0, 20);
 
     document.getElementById("scheduled").innerHTML = scheduled.length
       ? scheduled.map((s) => `<div class="card spread"><div><strong>${esc(s.subject)}</strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger" data-cancel="${s.id}">Cancel</button></div>`).join("")

@@ -17,7 +17,7 @@ async function makeDraft(markdown = "# Hi\n\nbody"): Promise<string> {
     await SELF.fetch(`${base}/posts`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({ title: "Issue", subject: "The Subject", markdown }),
+      body: JSON.stringify({ subject: "The Subject", markdown }),
     }),
   );
   return created.post.id;

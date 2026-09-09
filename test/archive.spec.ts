@@ -30,7 +30,7 @@ async function sendPost(title: string, markdown: string): Promise<posts.PostRow>
   )
     .bind(now, now)
     .run();
-  const { post } = await posts.createPost(env.DB, { title, subject: title, markdown }, "test");
+  const { post } = await posts.createPost(env.DB, { subject: title, markdown }, "test");
   await freeze(env, getConfig(env), post, Date.now() - 1000);
   await sweep(env);
   return post;
@@ -59,7 +59,7 @@ describe("archive / view-in-browser", () => {
   });
 
   it("404s for a post that hasn't been sent yet", async () => {
-    const { post } = await posts.createPost(env.DB, { title: "Draft Only", markdown: "wip" }, "test");
+    const { post } = await posts.createPost(env.DB, { subject: "Draft Only", markdown: "wip" }, "test");
     const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
     expect(res.status).toBe(404);
   });

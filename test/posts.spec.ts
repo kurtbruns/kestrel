@@ -20,7 +20,7 @@ describe("posts + revisions", () => {
   });
 
   it("creates a draft with a derived slug and a first revision", async () => {
-    const res = await createPost({ title: "Hello World", markdown: "# hi" });
+    const res = await createPost({ subject: "Hello World", markdown: "# hi" });
     expect(res.status).toBe(201);
     const { post, revision_id } = await readJson(res);
     expect(post.status).toBe("draft");
@@ -34,7 +34,7 @@ describe("posts + revisions", () => {
   });
 
   it("writes a new revision per save and advances current_revision", async () => {
-    const created = await readJson(await createPost({ title: "Versioned", markdown: "v1" }));
+    const created = await readJson(await createPost({ subject: "Versioned", markdown: "v1" }));
     const id = created.post.id;
 
     const upd = await SELF.fetch(`${base}/posts/${id}`, {
@@ -62,21 +62,21 @@ describe("posts + revisions", () => {
   });
 
   it("deduplicates slugs", async () => {
-    const a = await readJson(await createPost({ title: "Dup Title" }));
-    const b = await readJson(await createPost({ title: "Dup Title" }));
+    const a = await readJson(await createPost({ subject: "Dup Title" }));
+    const b = await readJson(await createPost({ subject: "Dup Title" }));
     expect(a.post.slug).toBe("dup-title");
     expect(b.post.slug).toBe("dup-title-2");
   });
 
-  it("keeps the slug stable across a title edit unless overridden", async () => {
-    const created = await readJson(await createPost({ title: "Stable", markdown: "x" }));
+  it("keeps the slug stable across a subject edit unless overridden", async () => {
+    const created = await readJson(await createPost({ subject: "Stable", markdown: "x" }));
     const id = created.post.id;
 
     const renamed = await readJson(
       await SELF.fetch(`${base}/posts/${id}`, {
         method: "PUT",
         headers: { ...AUTH, "content-type": "application/json" },
-        body: JSON.stringify({ title: "Renamed Completely" }),
+        body: JSON.stringify({ subject: "Renamed Completely" }),
       }),
     );
     expect(renamed.post.slug).toBe("stable");
@@ -92,7 +92,7 @@ describe("posts + revisions", () => {
   });
 
   it("blocks edits and deletes on a non-draft post (409)", async () => {
-    const created = await readJson(await createPost({ title: "Locked" }));
+    const created = await readJson(await createPost({ subject: "Locked" }));
     const id = created.post.id;
     await env.DB.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").bind(id).run();
 
@@ -108,7 +108,7 @@ describe("posts + revisions", () => {
   });
 
   it("deletes a draft and its revisions", async () => {
-    const created = await readJson(await createPost({ title: "Trash", markdown: "x" }));
+    const created = await readJson(await createPost({ subject: "Trash", markdown: "x" }));
     const id = created.post.id;
     const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(200);
