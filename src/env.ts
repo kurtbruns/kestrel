@@ -35,11 +35,14 @@ export interface Config {
   provider: ProviderName;
   /** Origin the app is served from (API + reader routes). */
   appOrigin: string;
-  /** Origin the public archive lives on (may be the apex). */
+  /** Origin the public archive lives on. Defaults to `appOrigin` (self-contained);
+   *  set to the apex only as the opt-in Cloudflare enhancement (SPEC §10). */
   archiveOrigin: string;
-  /** Base path for archive pages, e.g. `/newsletter`. */
+  /** Base path for archive pages, e.g. `/newsletter`. Drives both the emitted
+   *  archive URL and the route that serves it (SPEC §10); defaults to `/newsletter`. */
   archiveBasePath: string;
-  /** Public base URL for R2-served images. */
+  /** Public base URL for R2-served images. Defaults to the Worker's own `/media`
+   *  route; a `media.` custom domain is the optional upgrade (SPEC §10). */
   mediaPublicBase: string;
   /** Sending identity domain, e.g. `news.example.com`. */
   sendingDomain: string;
@@ -57,14 +60,26 @@ export interface Config {
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
 
-/** Resolve the typed `Config` from raw bindings. Pure; no I/O. */
+/** Leading-slash, no-trailing-slash form; defaults to `/newsletter`. Drives both
+ *  the archive URL and the route registered to serve it, so the two can't drift. */
+function normalizeBasePath(v: string | undefined): string {
+  const raw = (orUndefined(v) ?? "/newsletter").trim();
+  const withLead = raw.startsWith("/") ? raw : `/${raw}`;
+  return withLead.length > 1 && withLead.endsWith("/") ? withLead.slice(0, -1) : withLead;
+}
+
+/** Resolve the typed `Config` from raw bindings. Pure; no I/O.
+ *  Self-contained by default (SPEC §10): the archive origin and media base fall
+ *  back to the app's own origin, so a deployment that sets only `APP_ORIGIN`
+ *  serves archives and images on its own hostname with no further assumptions. */
 export function getConfig(env: AppEnv): Config {
+  const appOrigin = env.APP_ORIGIN;
   return {
     provider: (env.PROVIDER as ProviderName) ?? "fake",
-    appOrigin: env.APP_ORIGIN,
-    archiveOrigin: env.ARCHIVE_ORIGIN,
-    archiveBasePath: env.ARCHIVE_BASE_PATH,
-    mediaPublicBase: env.MEDIA_PUBLIC_BASE,
+    appOrigin,
+    archiveOrigin: orUndefined(env.ARCHIVE_ORIGIN) ?? appOrigin,
+    archiveBasePath: normalizeBasePath(env.ARCHIVE_BASE_PATH),
+    mediaPublicBase: orUndefined(env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`,
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,

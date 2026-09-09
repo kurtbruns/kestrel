@@ -20,7 +20,12 @@ import * as archiveRoutes from "./routes/archive";
 import * as webhookRoutes from "./routes/webhooks";
 import * as devRoutes from "./routes/dev";
 
-export function createRouter(): Router {
+/**
+ * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
+ * `getConfig`) drives the archive route so it can't drift from the emitted
+ * archive URL — see the archive route below and SPEC §10.
+ */
+export function createRouter(archiveBasePath: string): Router {
   const r = new Router();
   const authed = [requireAuth];
 
@@ -72,6 +77,9 @@ export function createRouter(): Router {
   r.post("/webhooks/ses", webhookRoutes.ses);
 
   // --- public reader routes (token-scoped; no login) ---
+  // The front door: a self-contained archive index, never a bounce to /admin
+  // (SPEC §10). Kept public here — the one explicit non-admin surface.
+  r.get("/", archiveRoutes.archiveIndex);
   r.get("/subscribe", publicRoutes.subscribeForm);
   r.post("/subscribe", publicRoutes.subscribe);
   r.get("/confirm", publicRoutes.confirm);
@@ -82,9 +90,10 @@ export function createRouter(): Router {
   r.post("/webhooks/resend", webhookRoutes.resend);
 
   // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-  // Path matches ARCHIVE_BASE_PATH (/newsletter); in prod the apex routes
-  // example.com/newsletter/* to this Worker.
-  r.get("/newsletter/:slug", archiveRoutes.archivePage);
+  // Registered at ARCHIVE_BASE_PATH (default /newsletter) so the route and the
+  // emitted archive URL always share one source. Self-contained by default;
+  // an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+  r.get(`${archiveBasePath}/:slug`, archiveRoutes.archivePage);
 
   // --- media bytes (public; readers + archive load these unauthenticated) ---
   r.get("/media/:key(.*)", imageRoutes.serveMedia);

@@ -63,9 +63,9 @@ View the result at `/admin/` and at the archived issues, e.g.
 ## Auth — the admin token, and how deployed auth differs
 
 The admin/authoring surface (the editor, `/posts`, `/sends`, `/subscribers`,
-`/suppressions`, schedule/send) is protected. The reader routes (`/subscribe`,
-`/confirm`, `/unsubscribe`, `/newsletter/*`, `/media/*`) are public and gated only
-by unguessable per-subscriber tokens.
+`/suppressions`, schedule/send) is protected. The reader routes (`/` archive
+index, `/subscribe`, `/confirm`, `/unsubscribe`, `/newsletter/*`, `/media/*`) are
+public and gated only by unguessable per-subscriber tokens.
 
 ### Local: a bearer token you generate
 
