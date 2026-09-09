@@ -188,9 +188,19 @@ export async function updatePost(
   return { post: updated, revision };
 }
 
-/** Delete a post and its revisions + image rows (R2 objects handled by the caller). */
+/**
+ * Delete a post and everything that references it — revisions, image rows, and
+ * any sends (with their deliveries) left from prior scheduling. Children are
+ * deleted first so the schema's FKs hold. Callers guard this to drafts (see
+ * `requireDraft`), and a post is only a draft with no sent issue behind it: a
+ * scheduled or sent post can't reach here, so the only sends present are the
+ * `canceled` ones a cancel leaves behind — a sent issue's record is never
+ * deleted. R2 image objects are deleted by the caller.
+ */
 export async function deletePost(db: D1Database, id: string): Promise<void> {
   await db.batch([
+    db.prepare("DELETE FROM deliveries WHERE send_id IN (SELECT id FROM sends WHERE post_id = ?)").bind(id),
+    db.prepare("DELETE FROM sends WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM images WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM post_revisions WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM posts WHERE id = ?").bind(id),

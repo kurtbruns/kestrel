@@ -69,6 +69,12 @@ button.primary:hover { filter: brightness(1.12); }
 button.primary:active { filter: brightness(0.94); }
 button.danger { background: var(--danger); color: var(--danger-fg); border-color: var(--danger); }
 button.danger:hover { filter: brightness(1.08); }
+/* Subtle danger: a quiet grey outline at rest that reveals the destructive color
+   — red text and border — only on hover. Used beside a clickable row (Sends →
+   Scheduled) so Cancel doesn't shout over the row it sits on. */
+button.danger-subtle { background: transparent; color: var(--muted); border-color: var(--line); transition: color .12s, border-color .12s, background .12s; }
+button.danger-subtle:hover { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 8%, transparent); }
+button.danger-subtle:active { background: color-mix(in srgb, var(--danger) 14%, transparent); }
 button.ghost { border: 0; background: transparent; font-size: 18px; }
 button:disabled { opacity: .5; cursor: not-allowed; transform: none; filter: none; }
 
@@ -80,6 +86,12 @@ label { display: block; font-size: 14px; color: var(--muted); margin: 14px 0 8px
 .muted { color: var(--muted); font-size: 13px; }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+/* A card that opens on click (Sends → Scheduled → the issue). Mirrors
+   tr.clickable; the subject link and the Cancel button opt out via the guard. */
+.card.clickable { cursor: pointer; transition: border-color .12s; }
+.card.clickable:hover { border-color: var(--muted); }
+.card-link { text-decoration: none; }
+.card-link:hover { text-decoration: underline; }
 
 .error { color: var(--b-bad-fg); background: var(--b-bad-bg); border: 1px solid var(--b-bad-line); border-radius: 8px; padding: 12px 14px; font-size: 14px; display: flex; align-items: center; gap: 12px; justify-content: space-between; }
 

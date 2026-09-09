@@ -575,12 +575,20 @@ async function renderSends() {
   app.innerHTML = `<h1>Sends</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
   try {
     const { sends } = await api("/sends");
-    const scheduled = sends.filter((s) => s.status === "scheduled");
+    // The API returns fire_at DESC (newest-first, which the Recent list below wants).
+    // Scheduled is the upcoming queue, so flip it to soonest-first — the next send to
+    // fire, and the one you'd reach for the cancel window on, sits at the top.
+    const scheduled = sends.filter((s) => s.status === "scheduled").sort((a, b) => a.fire_at - b.fire_at);
     const recent = sends.filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed").slice(0, 20);
 
     document.getElementById("scheduled").innerHTML = scheduled.length
-      ? scheduled.map((s) => `<div class="card spread"><div><strong>${esc(s.subject)}</strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger" data-cancel="${s.id}">Cancel</button></div>`).join("")
+      ? scheduled.map((s) => `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`).join("")
       : `<p class="muted">Nothing scheduled.</p>`;
+    // The whole card opens the issue; the subject link handles keyboard/middle-click,
+    // and Cancel opts out of navigation (like the posts table's row-click guard).
+    document.querySelectorAll("#scheduled .card.clickable").forEach((card) => (card.onclick = (e) => {
+      if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) location.hash = "#/edit/" + card.dataset.post;
+    }));
     document.querySelectorAll("[data-cancel]").forEach((b) => (b.onclick = () => busy(b, "Canceling…", async () => {
       try { await api("/sends/" + b.dataset.cancel + "/cancel", { method: "POST" }); toast("Canceled"); renderSends(); } catch (e) { toast(e.message); }
     })));
