@@ -145,6 +145,8 @@ td a:hover { text-decoration: underline; }
 .composer-foot svg { width: 16px; height: 16px; fill: currentColor; }
 
 .actions-bar { display: flex; justify-content: space-between; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+/* Save button draws the eye while there are unsaved edits (paired with the "•"). */
+#saveBtn.unsaved { border-color: var(--ring); background: color-mix(in srgb, var(--ring) 8%, var(--card)); }
 
 .warnings { background: var(--b-sending-bg); border: 1px solid var(--b-sending-line); color: var(--warn); border-radius: 6px; padding: 8px 12px; font-size: 13px; margin-top: 10px; }
 
