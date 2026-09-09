@@ -218,8 +218,8 @@ async function renderEditor(id) {
       <div class="composer">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
-            <button type="button" class="ctab active" data-tab="write" role="tab" aria-selected="true">Write</button>
-            <button type="button" class="ctab" data-tab="preview" role="tab" aria-selected="false">Preview</button>
+            <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true">Write</button>
+            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false">Preview</button>
           </div>
           <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
