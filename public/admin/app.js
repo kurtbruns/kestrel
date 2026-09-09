@@ -7,10 +7,22 @@
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let statusTimer = null; // countdown interval, cleared on navigation
-let autosaveTimer = null; // debounced editor autosave, cleared on navigation
-let isEditorDirty = false; // the mounted editor has unsaved edits — drives the nav guards
+// Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
+// but never let an edit sit unsaved longer than the hard cap even while typing.
+let autosaveIdleTimer = null;
+let autosaveCapTimer = null;
+const IDLE_MS = 5000; // quiet pause before a background save
+const MAX_MS = 30000; // hard cap: no edit stays unsaved longer than this
+function clearAutosaveTimers() {
+  if (autosaveIdleTimer) { clearTimeout(autosaveIdleTimer); autosaveIdleTimer = null; }
+  if (autosaveCapTimer) { clearTimeout(autosaveCapTimer); autosaveCapTimer = null; }
+}
+// Current-editor state, reset on navigation; the mounted editor re-establishes it.
+let isEditorDirty = false; // has unsaved edits — drives the nav guards
+let editorSaveFailed = false; // the last save errored — the leave guard then prompts instead of silently flushing
 let editorHash = null; // hash the editor is mounted at, so the leave guard knows where to return
-const AUTOSAVE_MS = 1500; // idle delay before a background save
+let editorLeaveFlush = null; // save-and-go on SPA navigation away from a dirty editor
+let editorManualSave = null; // ⌘S / Ctrl-S handler for the mounted editor
 const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
 
 const app = document.getElementById("app");
@@ -131,8 +143,9 @@ function openMenu(anchor, items) {
 // ---- router ----
 function route() {
   if (statusTimer) { clearInterval(statusTimer); statusTimer = null; }
-  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
-  isEditorDirty = false; editorHash = null; // renderEditor re-establishes these when it mounts
+  clearAutosaveTimers();
+  isEditorDirty = false; editorSaveFailed = false; editorHash = null; // renderEditor re-establishes these when it mounts
+  editorLeaveFlush = null; editorManualSave = null;
   const hash = location.hash || "#/posts";
   const [, view, arg] = hash.split("/");
   const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : "#/posts";
@@ -145,22 +158,31 @@ function route() {
   if (view === "subscribers") return renderSubscribers();
   return renderPosts();
 }
-// Guard hash navigation that would drop unsaved editor edits. hashchange fires
-// after the hash has already moved, so on cancel we restore the editor's hash
-// and swallow the echo. confirm() (not the async modal) because this — like
-// beforeunload — has to decide synchronously.
+// Navigating away from a dirty editor saves in the background rather than
+// prompting — hashchange fires after the hash has already moved, so the flush
+// captures the payload before route() tears down the DOM. The exception is when
+// the last save FAILED: silently flushing could lose work, so we fall back to a
+// confirm() (synchronous, unlike the modal helper) and, on cancel, restore the
+// editor's hash and swallow the echo.
 let revertingHash = false;
 window.addEventListener("hashchange", () => {
   if (revertingHash) { revertingHash = false; return; }
-  if (isEditorDirty && editorHash && location.hash !== editorHash && !confirm(LEAVE_MSG)) {
-    revertingHash = true;
-    location.hash = editorHash;
-    return;
+  if (isEditorDirty && editorHash && location.hash !== editorHash) {
+    if (editorSaveFailed) {
+      if (!confirm(LEAVE_MSG)) { revertingHash = true; location.hash = editorHash; return; }
+    } else if (editorLeaveFlush) {
+      editorLeaveFlush();
+    }
   }
   route();
 });
-// Tab close / reload / external navigation: the browser's own generic prompt.
+// Tab close / reload / external navigation: can't reliably finish an async save,
+// so fall back to the browser's own generic unsaved-changes prompt.
 window.addEventListener("beforeunload", (e) => { if (isEditorDirty) { e.preventDefault(); e.returnValue = ""; } });
+// ⌘S / Ctrl-S saves the mounted editor (registered once; no-op elsewhere).
+window.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && editorManualSave) { e.preventDefault(); editorManualSave(); }
+});
 
 // ---- posts list ----
 async function renderPosts() {
@@ -204,8 +226,9 @@ const TOOLBAR = [
 ];
 
 async function renderEditor(id) {
-  if (autosaveTimer) { clearTimeout(autosaveTimer); autosaveTimer = null; }
-  isEditorDirty = false; editorHash = null; // fresh mount starts clean; the tracking block below re-establishes the hash
+  clearAutosaveTimers();
+  isEditorDirty = false; editorSaveFailed = false; editorHash = null; // fresh mount starts clean; the tracking block below re-establishes the hash
+  editorLeaveFlush = null; editorManualSave = null;
   app.innerHTML = `<p class="muted">Loading…</p>`;
   let post, markdown, scheduled;
   try { const data = await api("/posts/" + id); post = data.post; markdown = data.markdown; scheduled = data.scheduled; }
@@ -372,8 +395,8 @@ async function renderEditor(id) {
 
   // --- unsaved-changes tracking + save ---
   // A snapshot of the last-saved field values; the editor is "dirty" whenever the
-  // current values differ. We reflect that on the Save button (a • suffix), guard
-  // navigation (at the router, via isEditorDirty), and debounce a background save.
+  // current values differ. We reflect that on the Save button (tint + • suffix),
+  // guard navigation (at the router, via isEditorDirty), and autosave.
   editorHash = location.hash;
   const saveBtn = document.getElementById("saveBtn");
   const snapshot = () => JSON.stringify(collect());
@@ -381,17 +404,27 @@ async function renderEditor(id) {
   let saving = false;
   function refreshDirty() {
     isEditorDirty = snapshot() !== savedSnapshot;
+    if (saveBtn) saveBtn.classList.toggle("unsaved", isEditorDirty);
     if (saveBtn && !saving) saveBtn.textContent = isEditorDirty ? "Save draft •" : "Save draft";
   }
+  // Autosave: save after IDLE_MS of quiet, but never let an edit sit unsaved
+  // longer than MAX_MS even during continuous typing (the idle timer keeps
+  // resetting; the cap timer, started on the first edit after a save, does not).
+  // Manual Save + ⌘S stays the primary path; this is the safety net.
   function scheduleAutosave() {
-    if (autosaveTimer) clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => { autosaveTimer = null; saveDraft(true).catch(() => {}); }, AUTOSAVE_MS);
+    if (autosaveIdleTimer) clearTimeout(autosaveIdleTimer);
+    autosaveIdleTimer = setTimeout(runAutosave, IDLE_MS);
+    if (!autosaveCapTimer) autosaveCapTimer = setTimeout(runAutosave, MAX_MS);
+  }
+  function runAutosave() {
+    clearAutosaveTimers();
+    saveDraft(true).catch((e) => toast("Couldn't autosave — " + e.message)); // surface failures, never lose silently
   }
   // Called after any edit — typed, formatted, or an inserted image.
   function markEdited() { if (locked) return; refreshDirty(); scheduleAutosave(); }
 
-  // Saves are chained so a debounced autosave and an explicit save can never
-  // overlap; a silent save with nothing pending is skipped.
+  // Saves are chained so an autosave and an explicit save can never overlap; a
+  // silent save with nothing pending is skipped.
   let saveChain = Promise.resolve();
   function saveDraft(silent) {
     saveChain = saveChain.catch(() => {}).then(() => doSaveDraft(silent));
@@ -399,6 +432,7 @@ async function renderEditor(id) {
   }
   async function doSaveDraft(silent) {
     if (silent && snapshot() === savedSnapshot) return null; // nothing changed since the last save
+    clearAutosaveTimers(); // a save is starting — cancel any pending autosave trigger
     saving = true;
     try {
       const { post: u } = await api("/posts/" + id, { method: "PUT", json: collect() });
@@ -407,8 +441,12 @@ async function renderEditor(id) {
       // if an autosave lands while the field is focused.
       if (u && u.slug && slugEl && document.activeElement !== slugEl) slugEl.value = u.slug;
       savedSnapshot = snapshot();
+      editorSaveFailed = false;
       if (!silent) toast("Saved");
       return u;
+    } catch (e) {
+      editorSaveFailed = true; // the leave guard now prompts rather than silently flushing
+      throw e;
     } finally {
       saving = false;
       refreshDirty();
@@ -416,8 +454,26 @@ async function renderEditor(id) {
   }
   if (saveBtn) saveBtn.onclick = () => busy(saveBtn, "Saving…", () => saveDraft(false).catch((e) => toast(e.message))).finally(refreshDirty);
 
-  // Typed edits to the three fields (formatting and image inserts call markEdited directly).
-  if (!locked) ["f-subject", "f-slug", "f-markdown"].forEach((k) => document.getElementById(k).addEventListener("input", markEdited));
+  // Leaving the editor saves in the background instead of prompting. Capture the
+  // payload NOW (the router tears down the DOM right after) and send it through
+  // the chain so it can't overlap an in-flight save.
+  editorLeaveFlush = () => {
+    clearAutosaveTimers();
+    if (locked || snapshot() === savedSnapshot) return;
+    const body = collect();
+    savedSnapshot = JSON.stringify(body); isEditorDirty = false;
+    saveChain = saveChain.catch(() => {}).then(() => api("/posts/" + id, { method: "PUT", json: body }))
+      .catch((e) => toast("Couldn't save your changes — " + e.message));
+  };
+  editorManualSave = () => { if (saveBtn && !saveBtn.disabled) saveBtn.click(); };
+
+  // Typed edits mark dirty; blurring subject/slug flushes promptly. The body is
+  // left to the idle/cap timers so a toolbar click (which blurs it) doesn't save
+  // on every interaction.
+  if (!locked) {
+    ["f-subject", "f-slug", "f-markdown"].forEach((k) => document.getElementById(k).addEventListener("input", markEdited));
+    ["f-subject", "f-slug"].forEach((k) => document.getElementById(k).addEventListener("blur", () => saveDraft(true).catch((e) => toast("Couldn't save — " + e.message))));
+  }
 
   // --- open in browser ---
   const openBtn = document.getElementById("openBtn");
