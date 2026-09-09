@@ -9,8 +9,14 @@
  */
 
 export interface Secrets {
-  /** Admin API bearer token (local/CI + fallback; prod gate is Cloudflare Access). */
-  BEARER_TOKEN?: string;
+  /**
+   * Symmetric secret for signing/verifying the local-dev admin token. Ships in
+   * `.dev.vars.example` (so `cp .dev.vars.example .dev.vars` gives a working dev
+   * secret) but is NOT committed to `wrangler.jsonc` — a deployed env has no value,
+   * which keeps the dev auth path fail-closed. Only honored in a dev-shaped env
+   * anyway (see `getConfig`); Cloudflare Access is the gate when deployed.
+   */
+  DEV_AUTH_SECRET?: string;
   /** Cloudflare Access team domain, e.g. `your-team.cloudflareaccess.com`. */
   ACCESS_TEAM_DOMAIN?: string;
   /** Cloudflare Access application AUD tag. */
@@ -55,6 +61,12 @@ export interface Config {
   accessAud?: string;
   /** Optional allowlist of human admin emails; empty/unset allows any valid Access login. */
   accessAllowedEmails?: string[];
+  /**
+   * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (fake transport,
+   * no Access configured). Undefined in any deployed env, which disables the dev
+   * credential path entirely — Access is then the only door.
+   */
+  devAuthSecret?: string;
 }
 
 const orUndefined = (v: string | undefined): string | undefined =>
@@ -74,8 +86,10 @@ function normalizeBasePath(v: string | undefined): string {
  *  serves archives and images on its own hostname with no further assumptions. */
 export function getConfig(env: AppEnv): Config {
   const appOrigin = env.APP_ORIGIN;
+  const provider = (env.PROVIDER as ProviderName) ?? "fake";
+  const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
   return {
-    provider: (env.PROVIDER as ProviderName) ?? "fake",
+    provider,
     appOrigin,
     archiveOrigin: orUndefined(env.ARCHIVE_ORIGIN) ?? appOrigin,
     archiveBasePath: normalizeBasePath(env.ARCHIVE_BASE_PATH),
@@ -83,9 +97,16 @@ export function getConfig(env: AppEnv): Config {
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,
-    accessTeamDomain: orUndefined(env.ACCESS_TEAM_DOMAIN),
+    accessTeamDomain,
     accessAud: orUndefined(env.ACCESS_AUD),
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
+    // Belt-and-suspenders: only honor the dev credential when the env is
+    // unambiguously dev-shaped — fake transport AND no Access configured. Combined
+    // with the secret never being committed (it lives in the gitignored `.dev.vars`,
+    // not in `wrangler.jsonc` vars), a deployed Worker has no secret and this stays
+    // undefined — the dev auth path is off, Access is the only door.
+    devAuthSecret:
+      provider === "fake" && !accessTeamDomain ? orUndefined(env.DEV_AUTH_SECRET) : undefined,
   };
 }
 

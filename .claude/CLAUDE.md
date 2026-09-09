@@ -14,7 +14,7 @@ It runs on a **Cloudflare Worker** over **D1** (database) and **R2** (images), w
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars      # then set BEARER_TOKEN (openssl rand -hex 32)
+cp .dev.vars.example .dev.vars      # ships a dev-insecure DEV_AUTH_SECRET; the editor mints its own admin token
 npm run migrate:local               # apply D1 migrations to the local database
 npm run dev                         # wrangler dev on http://localhost:8787 (editor at /admin/)
 
@@ -34,10 +34,11 @@ The top-level `wrangler.jsonc` is the **development** environment (fake transpor
 One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern router (`src/router.ts` + `src/app.ts`); `scheduled()` runs the send sweep once a minute. Read `src/` for the layout — these are the rules that aren't obvious from it:
 
 - **`src/app.ts` is the one place routes are registered and the public-vs-gated line is drawn.** The admin surface (editor + authoring API) is wrapped in `requireAuth`; reader routes are public. No public entry point may redirect or link into an Access-gated path.
-- **`render/render.ts` is the single render path (I5).** Preview, test, schedule, and send all call it. Never add a second Markdown→email route — a test is only a real test because it's the same code as the send.
+- **`render/render.ts` is the single render path (I5).** Preview, test, schedule, and send all call it. Never add a second Markdown→email route — a test is only a real test because it's the same code as the send. (The in-app docs viewer is Markdown→*web-page*, a deliberately separate path — see `src/docs/` — so it doesn't count.)
+- **`src/docs/` serves the operator setup guide in-app, read-only.** The Markdown under `docs/setup/` is the source of truth; it's bundled into the Worker as text modules (the `rules` entry in `wrangler.jsonc`, which works under both `wrangler dev` and the Vitest pool) and rendered through the low-level `markdownToHtml` util + the hygiene pass, themed by `lib/page.ts`. The pages are not editable in the app; edit the repo Markdown. Served by the authed `/api/docs` routes and fetched by the SPA (so the dev token / Access session credential is attached, via `authHeaders()`) — never a top-level navigation.
 - **`send/` owns the send state machine.** `schedule.ts` freezes the render onto a `sends` row and soft-locks the post (I3, I6); `loop.ts` delivers in batches and marks each recipient in `deliveries` as accepted, so a retry or restart never re-mails anyone (I4); `sweep.ts` fires due sends and raises missed ones loudly.
 - **`providers/` is the transport seam** (`sendBatch` + `parseWebhook`; `fake` is the default in dev/tests). The app owns the list, consent, deliveries, and suppressions, so swapping providers is a swap, not a migration.
-- **`auth/` gates the admin surface.** Cloudflare Access at the edge, re-verified in-app (`access.ts`); the `bearer.ts` fallback is for local/CI — leave `BEARER_TOKEN` unset when deployed so Access is the only door.
+- **`auth/` gates the admin surface** with one contract: verify a signed token → `Principal` (`middleware.ts`). Cloudflare Access at the edge, re-verified in-app (`access.ts`), issues it when deployed — human SSO + a service token for Claude; locally a dev-signed token (`dev_token.ts`) stands in, honored only in a dev-shaped env and never committed (`DEV_AUTH_SECRET` lives in `.dev.vars`), so deployed envs are Access-only.
 - **`db/` holds all SQL, and nowhere else does.** `migrations/` is append-only — never edit a shipped migration, add a new one.
 
 ## The public / admin split

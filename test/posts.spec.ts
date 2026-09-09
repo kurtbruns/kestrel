@@ -1,7 +1,8 @@
 import { SELF, env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { adminAuth } from "./support/auth";
 
-const AUTH = { Authorization: "Bearer test-bearer-token" };
+const AUTH = await adminAuth();
 const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
 
@@ -137,8 +138,9 @@ describe("posts + revisions", () => {
     const id = created.post.id;
     const rev1 = created.post.current_revision;
 
-    // A concurrent writer advances the draft to v2.
-    const v2 = await readJson(await put(id, { markdown: "v2" }));
+    // A concurrent writer — Claude, a service principal (no email) — advances to v2.
+    const claudeAuth = await adminAuth({});
+    const v2 = await readJson(await put(id, { markdown: "v2" }, claudeAuth));
     const rev2 = v2.post.current_revision;
     expect(rev2).not.toBe(rev1);
 
@@ -148,7 +150,7 @@ describe("posts + revisions", () => {
     const body = await readJson(stale);
     expect(body.error).toBe("stale_revision");
     expect(body.current_revision).toBe(rev2);
-    expect(body.author).toBe("service"); // the bearer principal; the editor maps this to "Claude"
+    expect(body.author).toBe("service"); // the service principal; the editor maps this to "Claude"
 
     // The draft is untouched — no clobber.
     const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
@@ -190,7 +192,7 @@ describe("posts + revisions", () => {
     const res = await SELF.fetch(`${base}/posts/${created.post.id}`, { headers: AUTH });
     expect(res.headers.get("ETag")).toBe(`"${created.post.current_revision}"`);
     const data = await readJson(res);
-    expect(data.author).toBe("service");
+    expect(data.author).toBe("tester@example.com"); // the human principal (default AUTH) that created it
   });
 
   // A draft that was scheduled then canceled still has the canceled send (and any

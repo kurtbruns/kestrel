@@ -1,17 +1,18 @@
 /**
  * Public archive / "view in browser" pages. The index at `/` lists past issues
  * (§10 — the self-contained front door, never a bounce to admin); each issue
- * page serves a sent Send's frozen rendered_html VERBATIM — the page a reader
- * opens is the exact copy that was reviewed and delivered (I3). The only edit is
- * substituting the per-recipient unsubscribe sentinel with a generic
- * manage-subscription link (a public page has no single recipient).
+ * page serves a sent Send's frozen rendered_html — the reviewed, delivered copy
+ * (I3) — with two edits that leave the content untouched: the per-recipient
+ * unsubscribe sentinel becomes a generic manage-subscription link (a public page
+ * has no single recipient), and the inert masthead anchor becomes a browser-only
+ * masthead (publication name + publish date), chrome that never ships in an email.
  */
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { htmlPage, archiveIndexPage } from "../lib/page";
 import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedIssues } from "../db/sends";
-import { UNSUB_SENTINEL, archiveUrl } from "../render/render";
+import { UNSUB_SENTINEL, archiveUrl, ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "../render/render";
 
 /** Display name for the publication, from the `From:` header (no separate var). */
 function publicationName(fromAddress: string): string {
@@ -51,7 +52,19 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   if (!post || !send) {
     return htmlPage("Not found", `<h1 style="margin-top:0;">Not found</h1><p>This issue isn't available.</p>`, 404);
   }
-  const html = send.rendered_html.split(UNSUB_SENTINEL).join(`${c.config.appOrigin}/unsubscribe`);
+  // Two edits to the frozen record on the way to the browser (I3): the generic
+  // unsubscribe link (no single recipient here) and the browser-only masthead
+  // swapped in for its inert anchor. Neither touches the reviewed content.
+  const masthead = archiveMasthead({
+    name: publicationName(c.config.fromAddress),
+    dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
+    indexUrl: `${c.config.appOrigin}/`,
+  });
+  const html = send.rendered_html
+    .split(UNSUB_SENTINEL)
+    .join(`${c.config.appOrigin}/unsubscribe`)
+    .split(ARCHIVE_MASTHEAD_ANCHOR)
+    .join(masthead);
   return new Response(html, {
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" },
   });

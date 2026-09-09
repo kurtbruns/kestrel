@@ -60,7 +60,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further send reaches that person. It is honored on the next send with no window in which they still get one, and it is never silently reversed.
 
-**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome around an archived issue wraps that frozen copy; it never rewrites the bytes.
+**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived issue carries fills reserved placeholders in that frozen copy — the same mechanism as the per-recipient unsubscribe link — and never rewrites the reviewed content.
 
 **I4 — A post is sent at most once per send, to each person at most once.** Triggering a send is idempotent. A retry, a double-click, or a resumed send never mails anyone twice.
 
@@ -123,7 +123,7 @@ Because the app is self-contained (§10), it serves its own reader-facing pages,
 
 The **archive index** is the public home at `/` — the newsletter's front door. It lists the sent issues, newest first, each linking to its issue page, and carries the newsletter's identity and a subscribe call to action. It is the one page a reader can arrive at by typing the bare domain, so it must be public and must never bounce a visitor toward an admin path (§10).
 
-An **issue page** serves that issue's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may wrap the frozen email in light public chrome — a masthead with the newsletter name, a link back to the index, a subscribe prompt — so a shared issue reads as part of a publication and not a raw forwarded email. The chrome wraps; the frozen bytes inside are served verbatim (I3). The archive URL an email carries — its "view in browser" and every shared link — is built from the configured archive origin and base path (§10), so the same render is reachable at a stable, public address forever.
+An **issue page** serves that issue's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may add light public chrome — a masthead with the newsletter name and the publish date, a link back to the index, a subscribe prompt — so a shared issue reads as part of a publication and not a raw forwarded email. That chrome fills a reserved anchor the render leaves in the frozen copy — the same idea as the unsubscribe placeholder — so it appears only in the browser, never in a sent email, and the reviewed content is served unchanged (I3). The archive URL an email carries — its "view in browser" and every shared link — is built from the configured archive origin and base path (§10), so the same render is reachable at a stable, public address forever.
 
 ---
 
@@ -258,9 +258,13 @@ If your site is **not** on Cloudflare, you can't attach a Worker route to a zone
 
 Self-containment puts two audiences on one name, so the access boundary is the product's spine. **Admin** — the editor and the authoring API — sits behind real authentication (an edge access layer, so you write no auth code). **Public** — the archive index, issue pages, subscribe / confirm / unsubscribe, and media — is deliberately open, protected where it must be by unguessable per-subscriber tokens, because a reader clicking unsubscribe from their inbox has no account to log in with.
 
+The admin surface also carries the **operator setup guide** — the deploy-and-operate documentation, rendered read-only inside the editor from its Markdown source in the repository (which stays the single source of truth; the pages are not editable in the app). It is a Markdown→web-page view, distinct from the single Markdown→email render path (I5), and it is fetched by the editor and gated with the rest of admin — never a top-level navigation, which would carry no credential.
+
 One rule falls out and is easy to get wrong: **no public entry point may redirect or link into an Access-gated path.** The public front door — `/` — is the archive index, served to everyone; it must never bounce a visitor to the admin editor, which is an Access login wall. Express the public surface as one explicit allowlist of path prefixes; everything else is admin.
 
 The access layer must also admit a non-interactive principal — a service credential for Claude, distinct from the interactive human login — without weakening the human gate. That such a credential exists is the requirement; how it's issued is the implementor's call. As defense in depth the app also re-verifies the access assertion itself, so a misconfigured edge policy can't silently expose admin routes.
+
+There is **one identity contract**: the app verifies a signed token and resolves a `Principal` — a `human` (carries an email) or a `service` (Claude / automation, no email). Everything upstream normalizes to this. In deployed environments Cloudflare Access issues the token for both principals: a human SSO login, and a **service token** for Claude — the latter is Claude's API credential (e.g. carried by a Claude Desktop connector), no separate token system needed. In local development there is no edge, so the app verifies a token signed with a dev secret instead — the same contract, a different key — enabled only in a dev-shaped environment (fake transport, no Access configured) and structurally inert once deployed. The interactive client (the editor) reflects the resolved identity and offers a sign-out; it never prompts for a credential in the Access-gated deployment. (An agent-native alternative — Cloudflare Managed OAuth for Access, where Claude authenticates *as the operator* rather than via a service token — is a deferred enhancement that slots into this same contract; it would replace the "distinct service principal" above and is tracked separately, not yet adopted.)
 
 ### Environments
 
@@ -315,7 +319,7 @@ Nothing here retries in a way that could re-mail a person, because every retry i
 ## Open
 
 - **How much of the reader-facing unsubscribe/preferences flow to host yourself versus lean on the provider.** Consent and preferences are yours to own; deliverability suppression can lean on the provider. The split is a judgment call to make when the provider is chosen. (With SES as the default, the app hosts the unsubscribe token flow itself; SES's account-level suppression list stays a redundant safety net under the app's own suppressions.)
-- **How much public chrome an archive issue page carries.** A self-contained archive can wrap the frozen email in a masthead and subscribe prompt (§5); how far that goes toward a full publication home versus a thin frame is a design call, bounded only by I3 — the chrome wraps, it never rewrites the frozen bytes.
+- **How much public chrome an archive issue page carries.** A self-contained archive can add a masthead (newsletter name, publish date, a link back to the index) and a subscribe prompt (§5); how far that goes toward a full publication home versus a thin frame is a design call, bounded only by I3 — the chrome fills reserved anchors and never rewrites the reviewed content.
 
 ---
 
@@ -329,3 +333,4 @@ The portable §10 above, instantiated for this project. This is the one project-
 - **Archive self-contained by default.** The archive origin defaults to the app's own origin, so `newsletter.example.com/newsletter/{slug}` is the archive URL out of the box, and the public archive index at `/` is served by the same Worker. The editor is static assets under `/admin/`.
 - **Optional apex archive.** If the apex is on Cloudflare, add `example.com/newsletter/*` as a route to the newsletter Worker on the apex zone (the most-specific route wins) and point the archive origin at the apex, while the static site keeps everything else. This is the enhancement, not the default.
 - **Access.** Admin/authoring sits behind the platform access layer (with a service token for Claude, per §10's access rule); the reader routes — the archive index, issue pages, subscribe, confirm, unsubscribe, media — are public, guarded by unguessable per-subscriber tokens. The public archive index is the front door at `/`; it is served to everyone and never redirects into the Access-gated admin surface.
+- **The concrete deploy-and-operate steps** — provisioning, the one Access application, connecting SES/Resend and its webhook, sending-domain DNS, wiring the archive to a website, and the verify checklist — are the operator setup guide under `docs/setup/`, which is also the in-app admin docs surface (§10). This spec holds the *why*; that guide holds the *how*.

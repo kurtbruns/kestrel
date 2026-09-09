@@ -2,10 +2,13 @@
 # For deployed environments, set these with `wrangler secret put <NAME> --env <env>`.
 
 # --- Admin API auth ---
-# Local/CI fallback bearer token for the authoring API. In staging/production the
-# real gate is Cloudflare Access (Service Auth policy for Claude + Allow policy for
-# the human); this bearer path keeps local dev and tests working without Zero Trust.
-BEARER_TOKEN="dev-local-token-change-me"
+# Local dev authenticates with a JWT signed by DEV_AUTH_SECRET (the app verifies it
+# via the same "verify token -> principal" contract Cloudflare Access uses in prod).
+# The editor mints its own token from this on load — no other setup. It ships here
+# rather than in wrangler.jsonc on purpose: a deployed env never gets this value, so
+# the dev auth path stays fail-closed. In staging/production leave it unset; Access
+# is the only gate.
+DEV_AUTH_SECRET="dev-insecure-do-not-deploy"
 
 # --- Cloudflare Access (JWT validation; the deployed gate — optional locally) ---
 ACCESS_TEAM_DOMAIN=""       # e.g. your-team.cloudflareaccess.com
