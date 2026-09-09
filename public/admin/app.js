@@ -62,6 +62,11 @@ const esc = (s) => (s == null ? "" : String(s).replace(/[&<>"]/g, (c) => ({ "&":
 const badge = (status) => `<span class="badge ${status}">${status}</span>`;
 const fmt = (ms) => (ms ? new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—");
 
+// Client-side slug (mirrors src/lib/slug.ts) for the linked Subject → Slug field.
+function clientSlugify(s) {
+  return s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80).replace(/-+$/g, "");
+}
+
 function toLocalInput(d) {
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
@@ -194,7 +199,7 @@ async function renderEditor(id) {
         ${badge(post.status)}
       </div>
     </div>
-    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel schedule</button></div>` : ""}
+    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel</button></div>` : ""}
     <div class="card">
       <div class="grid2">
         <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
@@ -235,6 +240,20 @@ async function renderEditor(id) {
   const previewFrame = document.getElementById("previewFrame");
   const get = (k) => document.getElementById("f-" + k).value;
   const collect = () => ({ subject: get("subject"), slug: get("slug"), markdown: get("markdown") });
+
+  // Linked Subject → Slug: auto-derive the slug from the subject until the author
+  // sets a custom slug (clearing the slug field re-links it).
+  if (!locked) {
+    const subjectEl = document.getElementById("f-subject");
+    const slugEl = document.getElementById("f-slug");
+    // Linked if the slug is empty, equals the derived slug, or is a deduped
+    // variant of it (base-2, base-3, …). A hand-written slug breaks the link.
+    const base = clientSlugify(subjectEl.value);
+    const v = slugEl.value.trim();
+    let slugLinked = v === "" || v === base || (base !== "" && new RegExp(`^${base}-\\d+$`).test(v));
+    subjectEl.addEventListener("input", () => { if (slugLinked) slugEl.value = clientSlugify(subjectEl.value); });
+    slugEl.addEventListener("input", () => { slugLinked = slugEl.value.trim() === ""; });
+  }
 
   // --- tabs ---
   const tabs = app.querySelectorAll(".ctab");
@@ -293,7 +312,13 @@ async function renderEditor(id) {
   });
 
   // --- save ---
-  async function saveDraft(silent) { const { post: u } = await api("/posts/" + id, { method: "PUT", json: collect() }); if (!silent) toast("Saved"); return u; }
+  async function saveDraft(silent) {
+    const { post: u } = await api("/posts/" + id, { method: "PUT", json: collect() });
+    const slugEl = document.getElementById("f-slug");
+    if (u && u.slug && slugEl) slugEl.value = u.slug; // reflect any server-side dedupe
+    if (!silent) toast("Saved");
+    return u;
+  }
   const saveBtn = document.getElementById("saveBtn");
   if (saveBtn) saveBtn.onclick = () => busy(saveBtn, "Saving…", () => saveDraft(false).catch((e) => toast(e.message)));
 
