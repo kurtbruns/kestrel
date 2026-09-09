@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 
 // Tests run inside the Workers runtime (workerd) via Miniflare, with the real
@@ -22,6 +22,8 @@ export default defineConfig(async () => {
     ],
     test: {
       setupFiles: ["./test/apply-migrations.ts"],
+      // Don't discover specs inside git worktrees under .claude/ (task copies).
+      exclude: [...configDefaults.exclude, "**/.claude/**"],
     },
   };
 });
