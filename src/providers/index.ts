@@ -2,13 +2,14 @@
 import type { AppEnv, Config } from "../env";
 import type { EmailProvider } from "./types";
 import { FakeProvider } from "./fake";
+import { SesProvider } from "./ses";
 
-export function getProvider(config: Config, _env: AppEnv): EmailProvider {
+export function getProvider(config: Config, env: AppEnv): EmailProvider {
   switch (config.provider) {
     case "fake":
       return new FakeProvider();
     case "ses":
-      throw new Error("SES adapter is not implemented yet (M9)");
+      return new SesProvider(config, env);
     case "resend":
       throw new Error("Resend adapter is not implemented yet (M10)");
     default:

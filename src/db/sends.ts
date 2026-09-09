@@ -253,6 +253,49 @@ export async function countDeliveries(db: D1Database, sendId: string, status: st
   return row?.n ?? 0;
 }
 
+// --- provider delivery events (M9: SES via SNS) -----------------------------
+
+export interface DeliveryEventUpdate {
+  /** SES MessageId stored on the delivery row (preferred match key). */
+  providerId?: string;
+  /** Recipient address (fallback match, and useful when providerId is absent). */
+  email?: string;
+  /** delivered | bounced | complained. */
+  event: string;
+  detail?: string | null;
+  at: number;
+}
+
+/**
+ * Record an out-of-band provider event (delivered/bounced/complained) on the
+ * matching delivery row. Matches by `provider_id` when present (unique per
+ * delivery), else by the most recent delivery for the email. Never touches the
+ * send-loop `status` — this is a separate, later signal. Returns rows updated.
+ */
+export async function markDeliveryEvent(db: D1Database, u: DeliveryEventUpdate): Promise<number> {
+  const detail = u.detail ?? null;
+  if (u.providerId) {
+    const res = await db
+      .prepare(
+        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE provider_id = ?",
+      )
+      .bind(u.event, detail, u.at, u.providerId)
+      .run();
+    const n = res.meta.changes ?? 0;
+    if (n > 0 || !u.email) return n;
+    // Fall through to email match if the providerId wasn't found on any row.
+  }
+  if (!u.email) return 0;
+  const res = await db
+    .prepare(
+      `UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?
+        WHERE id = (SELECT id FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1)`,
+    )
+    .bind(u.event, detail, u.at, u.email)
+    .run();
+  return res.meta.changes ?? 0;
+}
+
 /** Dispatched rows older than a threshold — ambiguous on non-idempotent providers. */
 export async function staleDispatched(db: D1Database, olderThan: number): Promise<number> {
   const row = await db

@@ -17,6 +17,7 @@ import * as suppressionRoutes from "./routes/suppressions";
 import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
 import * as archiveRoutes from "./routes/archive";
+import * as webhookRoutes from "./routes/webhooks";
 
 export function createRouter(): Router {
   const r = new Router();
@@ -62,6 +63,9 @@ export function createRouter(): Router {
   r.get("/suppressions", suppressionRoutes.list, authed);
   r.post("/suppressions", suppressionRoutes.add, authed);
   r.delete("/suppressions/:email", suppressionRoutes.clear, authed);
+
+  // --- provider webhooks (public; signature-verified inside the adapter) ---
+  r.post("/webhooks/ses", webhookRoutes.ses);
 
   // --- public reader routes (token-scoped; no login) ---
   r.get("/subscribe", publicRoutes.subscribeForm);
