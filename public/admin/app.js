@@ -1,11 +1,15 @@
 "use strict";
 // Kestrel editor — a small vanilla SPA over the same HTTP API Claude uses.
-// Auth: an admin bearer token in localStorage, sent on every call. (In
-// production Cloudflare Access also gates this surface; the token still
-// satisfies the Worker's requireAuth.)
+// Auth is edge-centric: in production Cloudflare Access gates this surface, so the
+// browser's Access session cookie authenticates every same-origin call and there is
+// nothing to paste. In local dev there is no edge, so the editor mints a dev token
+// on boot (/api/dev/token) and sends it as a bearer. Either way the boot probe
+// (/api/whoami) tells us who we are and which mode we're in; the identity chip and
+// the failure handling follow from that.
 
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
+let session = null; // { principal: { kind, email? }, auth: { mode } } once booted
 let statusTimer = null; // countdown interval, cleared on navigation
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.
@@ -26,8 +30,7 @@ let editorManualSave = null; // ⌘S / Ctrl-S handler for the mounted editor
 const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
 
 const app = document.getElementById("app");
-const banner = document.getElementById("tokenBanner");
-const tokenInput = document.getElementById("tokenInput");
+const identity = document.getElementById("identity");
 const toasts = document.getElementById("toasts");
 
 // ---- Material Symbols icon paths (viewBox 0 -960 960 960) ----
@@ -46,22 +49,46 @@ const ICONS = {
 };
 const icon = (name) => `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
 
-// ---- token handling ----
+// ---- auth ----
 function setToken(t) {
-  token = t.trim();
-  localStorage.setItem(TOKEN_KEY, token);
-  banner.hidden = !!token;
+  token = (t || "").trim();
+  try { localStorage.setItem(TOKEN_KEY, token); } catch { /* private mode */ }
 }
-document.getElementById("tokenBtn").onclick = () => { banner.hidden = false; tokenInput.value = token; tokenInput.focus(); };
-document.getElementById("tokenSave").onclick = () => { setToken(tokenInput.value); route(); };
-if (!token) banner.hidden = false;
+// The dev token goes in Authorization; in Access mode there is no token and the
+// session cookie authenticates instead, so we send no header.
+function authHeaders() { return token ? { Authorization: "Bearer " + token } : {}; }
+
+// Renders the topbar identity chip from `session`, and handles an auth failure by
+// steering to the right recovery: re-login (Access) vs. re-mint (dev).
+function renderIdentity() {
+  if (!identity) return;
+  const mode = session && session.auth && session.auth.mode;
+  const p = (session && session.principal) || {};
+  if (mode === "access") {
+    const who = p.email || (p.kind === "service" ? "Service token" : "Signed in");
+    identity.innerHTML = `<span class="who" title="${esc(who)}">${esc(who)}</span>` +
+      `<a class="ghost" href="/cdn-cgi/access/logout">Sign out</a>`;
+  } else {
+    identity.innerHTML = `<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`;
+  }
+}
+// Access sessions expire at the edge (the request never reaches the app), so the
+// only recovery is a fresh document load that re-triggers the Access login. In dev
+// this shouldn't happen, but a reload re-mints, so the same affordance is safe.
+function showReauth() {
+  app.innerHTML = `<div class="card auth-wall"><h2>Session expired</h2>` +
+    `<p class="hint">Your access session ended. Sign in again to continue.</p>` +
+    `<button id="reauth">Sign in</button></div>`;
+  const b = document.getElementById("reauth");
+  if (b) b.onclick = () => location.reload();
+}
 
 // ---- api ----
 async function api(path, opts = {}) {
-  const headers = Object.assign({ Authorization: "Bearer " + token }, opts.headers || {});
+  const headers = Object.assign(authHeaders(), opts.headers || {});
   if (opts.json !== undefined) { headers["content-type"] = "application/json"; opts.body = JSON.stringify(opts.json); }
   const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
-  if (res.status === 401) { banner.hidden = false; throw new Error("Not authorized — set your token."); }
+  if (res.status === 401) { showReauth(); throw new Error("Not authorized — please sign in again."); }
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) throw new Error((data && (data.message || data.error)) || res.statusText);
@@ -347,7 +374,7 @@ async function renderEditor(id) {
     showTab("preview");
     try {
       if (!locked) await saveDraft(true);
-      const res = await fetch("/posts/" + id + "/preview", { headers: { Authorization: "Bearer " + token } });
+      const res = await fetch("/posts/" + id + "/preview", { headers: authHeaders() });
       previewFrame.srcdoc = await res.text();
       previewFrame.onload = () => { try { previewFrame.style.height = previewFrame.contentDocument.body.scrollHeight + 24 + "px"; } catch (_) {} };
     } catch (e) { toast(e.message); }
@@ -480,7 +507,7 @@ async function renderEditor(id) {
   openBtn.onclick = () => busy(openBtn, "Opening…", async () => {
     try {
       if (!locked) await saveDraft(true);
-      const res = await fetch("/posts/" + id + "/preview", { headers: { Authorization: "Bearer " + token } });
+      const res = await fetch("/posts/" + id + "/preview", { headers: authHeaders() });
       const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
       window.open(url, "_blank");
       setTimeout(() => URL.revokeObjectURL(url), 10000);
@@ -683,4 +710,29 @@ function confirmUnsubscribe(sub, onDone) {
   });
 }
 
-route();
+// Boot: establish who we are before routing.
+// - dev: no token yet → mint one from the dev-only endpoint (404 in prod).
+// - probe /api/whoami with redirect:"manual" so an Access edge bounce surfaces as
+//   an opaque redirect (→ re-login) distinct from the app's own clean 401.
+async function boot() {
+  if (!token) {
+    try {
+      const r = await fetch("/api/dev/token?kind=human");
+      if (r.ok) setToken((await r.json()).token);
+    } catch { /* prod: endpoint is absent; the Access cookie authenticates instead */ }
+  }
+  let res;
+  try {
+    res = await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
+  } catch {
+    return showReauth();
+  }
+  if (res.ok) {
+    session = await res.json();
+    renderIdentity();
+    return route();
+  }
+  // opaqueredirect (edge login bounce) or a clean 401 with no way to recover here.
+  return showReauth();
+}
+boot();

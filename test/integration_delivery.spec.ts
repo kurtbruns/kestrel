@@ -176,7 +176,7 @@ async function signedResendWebhook(payload: unknown): Promise<Request> {
 /** Dispatch a request through the real router with a given env. */
 async function route(req: Request, e: AppEnv): Promise<Response> {
   const ctx = createExecutionContext();
-  const res = await createRouter().handle(req, e, ctx);
+  const res = await createRouter(getConfig(e).archiveBasePath).handle(req, e, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
