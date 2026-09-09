@@ -148,7 +148,7 @@ function route() {
   editorLeaveFlush = null; editorManualSave = null;
   const hash = location.hash || "#/posts";
   const [, view, arg] = hash.split("/");
-  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : "#/posts";
+  const current = view === "sends" ? "#/sends" : view === "subscribers" ? "#/subscribers" : view === "docs" ? "#/docs" : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) a.setAttribute("aria-current", "page");
     else a.removeAttribute("aria-current");
@@ -156,6 +156,7 @@ function route() {
   if (view === "edit" && arg) return renderEditor(arg);
   if (view === "sends") return renderSends();
   if (view === "subscribers") return renderSubscribers();
+  if (view === "docs") return renderDocs(arg);
   return renderPosts();
 }
 // Navigating away from a dirty editor saves in the background rather than
@@ -672,6 +673,39 @@ function addSubscriberModal(onDone) {
       onDone && onDone();
     } catch (e) { toast(e.message); }
   });
+}
+
+// ---- docs ----
+// The operator setup guide, authored in docs/setup/*.md and served read-only by
+// the authed /api/docs routes. We fetch each doc through the SPA (so the bearer /
+// Access JWT is attached) and drop the returned themed HTML into a sandboxed
+// iframe — never a top-level navigation to the gated route, which would carry no
+// bearer and 401 in local dev.
+async function renderDocs(slug) {
+  app.innerHTML = `
+    <div class="docs-layout">
+      <nav class="docs-nav" id="docsNav" aria-label="Documentation"><p class="muted">Loading…</p></nav>
+      <div class="docs-main"><iframe id="docsFrame" class="docs-frame" sandbox="allow-same-origin allow-popups" title="Documentation"></iframe></div>
+    </div>`;
+  const navEl = document.getElementById("docsNav");
+  const frame = document.getElementById("docsFrame");
+  let docs;
+  try { ({ docs } = await api("/api/docs")); }
+  catch (e) { renderError(navEl, e.message, () => renderDocs(slug)); return; }
+  if (!docs || !docs.length) { navEl.innerHTML = `<p class="muted">No docs.</p>`; return; }
+
+  const active = docs.some((d) => d.slug === slug) ? slug : docs[0].slug;
+  navEl.innerHTML = docs
+    .map((d) => `<a href="#/docs/${encodeURIComponent(d.slug)}"${d.slug === active ? ` class="active" aria-current="page"` : ""}>${esc(d.title)}</a>`)
+    .join("");
+
+  try {
+    const res = await fetch("/api/docs/" + encodeURIComponent(active), { headers: { Authorization: "Bearer " + token } });
+    if (res.status === 401) { banner.hidden = false; throw new Error("Not authorized — set your token."); }
+    if (!res.ok) throw new Error("Couldn't load this doc.");
+    frame.srcdoc = await res.text();
+    frame.onload = () => { try { frame.style.height = frame.contentDocument.body.scrollHeight + 24 + "px"; } catch (_) {} };
+  } catch (e) { toast(e.message); }
 }
 
 function confirmUnsubscribe(sub, onDone) {

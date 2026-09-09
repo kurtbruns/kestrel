@@ -219,4 +219,18 @@ td.act { text-align: right; width: 1%; white-space: nowrap; }
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } .tb { width: 34px; height: 34px; } }
 
+/* Docs: a sticky table-of-contents rail beside the rendered guide. The guide
+   itself is a themed HTML page in a sandboxed iframe (see lib/page.ts docPage),
+   so the prose styling lives there; this only lays out the two columns. */
+.docs-layout { display: grid; grid-template-columns: 200px 1fr; gap: 24px; align-items: start; }
+.docs-nav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; }
+.docs-nav a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 6px 10px; border-radius: 6px; }
+.docs-nav a:hover { color: var(--fg); background: var(--hover); }
+.docs-nav a.active { color: var(--fg); font-weight: 600; background: var(--hover); }
+.docs-frame { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--card); min-height: 400px; }
+@media (max-width: 620px) {
+  .docs-layout { grid-template-columns: 1fr; }
+  .docs-nav { position: static; flex-flow: row wrap; }
+}
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

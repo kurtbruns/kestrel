@@ -7,7 +7,7 @@
  *
  *   - the send loop (`runSend`) selecting the configured provider via `getConfig`
  *     + `getProvider`, chunking to `maxBatch`, and recording `provider_id`;
- *   - the actual router (`createRouter().handle`) dispatching `POST /webhooks/*`
+ *   - the actual router (`createRouter(basePath).handle`) dispatching `POST /webhooks/*`
  *     to that same provider and applying the normalized events;
  *   - the full loop: send -> provider id recorded -> signed webhook bounce ->
  *     suppression -> the address is dropped from the NEXT send's audience (I2).
@@ -176,7 +176,7 @@ async function signedResendWebhook(payload: unknown): Promise<Request> {
 /** Dispatch a request through the real router with a given env. */
 async function route(req: Request, e: AppEnv): Promise<Response> {
   const ctx = createExecutionContext();
-  const res = await createRouter().handle(req, e, ctx);
+  const res = await createRouter("/newsletter").handle(req, e, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
