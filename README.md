@@ -36,6 +36,14 @@ in with — the editor mints its own dev token on load and shows a **Local dev**
 Everything the editor does is also available on the HTTP API — the editor is just a
 client of it.
 
+Because a draft can be open in another tab or edited by Claude at the same time, the
+editor warns you when a draft changed underneath you rather than silently overwriting
+the other version: you can reload to take that version, or keep editing to save over
+it. On the API, `PUT /posts/:id` is optimistically concurrent — send the revision you
+loaded (an `If-Match` header, matching the `ETag` returned on `GET`, or a
+`base_revision` body field) and a stale save is rejected with `409` instead of
+clobbering the newer one. See `docs/SPEC.md` §4.
+
 ### Load demo data
 
 A fresh database is empty. With the dev server running, load the local

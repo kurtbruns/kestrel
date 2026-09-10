@@ -223,6 +223,11 @@ td.act { text-align: right; width: 1%; white-space: nowrap; }
 /* Slug is muted while it auto-tracks the subject; normal once hand-set. */
 #f-slug.slug-auto { color: var(--muted); }
 .sched-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: var(--b-scheduled-bg); color: var(--b-scheduled-fg); border: 1px solid var(--b-scheduled-line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+/* Out-of-date notice: the draft changed elsewhere (another tab, or Claude). Warm
+   tone (like warnings) since it asks the writer to choose, not an error. */
+.fresh-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: var(--b-sending-bg); color: var(--warn); border: 1px solid var(--b-sending-line); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
+.fresh-banner .row { flex: 0 0 auto; }
+.fresh-banner strong { color: inherit; }
 
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 @media (max-width: 620px) { .grid2 { grid-template-columns: 1fr; } .tb { width: 34px; height: 34px; } }
