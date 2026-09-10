@@ -21,6 +21,20 @@
  * the preview or production DB. (Kestrel has no dev seed, so there's nothing to seed.)
  */
 import { spawn, spawnSync } from "node:child_process";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// Fingerprint the admin static assets so index.html points at content-hashed URLs
+// (public/_headers then caches them immutably). Runs on every startup; a no-op when
+// the stamps are already current. Best-effort — a failure only leaves a stale `?v=`.
+const stamp = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-admin-assets.mjs")], {
+  stdio: "inherit",
+});
+if (stamp.status !== 0) {
+  console.warn("[dev] admin asset fingerprinting failed (continuing)");
+}
 
 const port = process.env.PORT || "8787";
 // Extra args after `npm run dev --` (e.g. `--remote`), forwarded to wrangler dev.
