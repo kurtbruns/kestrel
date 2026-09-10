@@ -316,9 +316,11 @@ function route() {
         ? "#/subscribers"
         : view === "settings"
           ? "#/settings"
-          : view === "docs"
-            ? "#/docs"
-            : "#/posts";
+          : view === "reference"
+            ? "#/reference"
+            : view === "docs"
+              ? "#/docs"
+              : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) {
       a.setAttribute("aria-current", "page");
@@ -337,6 +339,9 @@ function route() {
   }
   if (view === "settings") {
     return renderSettings();
+  }
+  if (view === "reference") {
+    return renderReference();
   }
   if (view === "docs") {
     return renderDocs(arg);
@@ -1463,6 +1468,101 @@ async function renderDocs(slug) {
     };
   } catch (e) {
     toast(e.message);
+  }
+}
+
+// ---- API reference ----
+// Every route the app and Claude can call, generated from the route manifest
+// (src/app.ts) and served as JSON by the authed /api/reference route. The SPA
+// renders it natively as a sticky rail of tiers beside the route list, so it
+// matches the app's own chrome (no iframe, unlike the earlier build).
+function apiExample(label, value) {
+  return value === undefined
+    ? ""
+    : `<div class="api-ex"><span class="api-ex-label">${esc(label)}</span><pre><code>${esc(
+        JSON.stringify(value, null, 2),
+      )}</code></pre></div>`;
+}
+function apiRouteHtml(r) {
+  return `<div class="api-route">
+      <div class="api-route-head">
+        <span class="api-method m-${esc(r.method)}">${esc(r.method)}</span>
+        <code class="api-path">${esc(r.path)}</code>
+        <span class="api-tier">${esc(r.access)}</span>
+      </div>
+      <p class="api-summary">${esc(r.summary)}</p>
+      ${r.description ? `<p class="api-desc muted">${esc(r.description)}</p>` : ""}
+      ${apiExample("Request", r.example?.request)}
+      ${apiExample("Response", r.example?.response)}
+    </div>`;
+}
+function apiSectionHtml(g) {
+  return `<section class="api-section" id="api-${esc(g.access)}">
+      <h2>${esc(g.title)}</h2>
+      <p class="api-blurb muted">${esc(g.blurb)}</p>
+      ${g.routes.map(apiRouteHtml).join("")}
+    </section>`;
+}
+async function renderReference() {
+  app.innerHTML = `
+    <div class="api-layout">
+      <nav class="api-nav" id="apiNav" aria-label="API sections"></nav>
+      <div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>
+    </div>`;
+  const navEl = document.getElementById("apiNav");
+  const contentEl = document.getElementById("apiContent");
+  // Delegate clicks synchronously with one listener on the stable nav, so it survives
+  // the async fill below: a sidebar click smooth-scrolls to that section.
+  navEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-sec]");
+    if (!a) {
+      return;
+    }
+    ev.preventDefault();
+    document.getElementById(`api-${a.dataset.sec}`)?.scrollIntoView({ block: "start" });
+  });
+  let groups;
+  try {
+    ({ groups } = await api("/api/reference"));
+  } catch (e) {
+    renderError(contentEl, e.message, renderReference);
+    return;
+  }
+
+  navEl.innerHTML = groups
+    .map(
+      (g, i) =>
+        `<a href="#/reference" data-sec="${esc(g.access)}"${i === 0 ? ' class="active"' : ""}>` +
+        `${esc(g.title)}<span class="api-nav-count">${g.routes.length}</span></a>`,
+    )
+    .join("");
+  contentEl.innerHTML =
+    `<header class="api-head"><h1>API reference</h1>` +
+    `<p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. ` +
+    `Base URL <code>${esc(location.origin)}</code>.</p></header>` +
+    groups.map(apiSectionHtml).join("");
+
+  // Highlight whichever section is in view. Query the live nav each time so it
+  // never holds a stale link reference; park the observer on the nav so it lives
+  // as long as the view (GC'd on unmount).
+  navEl._obs = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          const sec = e.target.id.replace(/^api-/, "");
+          for (const a of navEl.querySelectorAll("a[data-sec]")) {
+            a.classList.toggle("active", a.dataset.sec === sec);
+          }
+        }
+      }
+    },
+    { rootMargin: "-15% 0px -75% 0px", threshold: 0 },
+  );
+  for (const g of groups) {
+    const el = document.getElementById(`api-${g.access}`);
+    if (el) {
+      navEl._obs.observe(el);
+    }
   }
 }
 

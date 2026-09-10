@@ -1,14 +1,22 @@
 /**
- * Composition root: build the Router and register all routes.
+ * Composition root: the route manifest, and the Router built from it.
  *
- * Auth: the admin/authoring surface is wrapped in `requireAuth`; reader/media
- * routes are public. Content / render / subscribers / sends / archive / webhook
- * routes are mounted here as they land in later milestones.
+ * Every route is declared as data — a `RouteDef` — in one ordered array. Its
+ * `access` field is where the public-vs-admin line is drawn: `admin` is gated by
+ * `requireAuth`, `public`/`webhook` are open (a webhook is signature-verified in
+ * its adapter). `createRouter` registers each def AND the same manifest drives the
+ * generated `/api/reference` (see src/reference/), so the documented tier and the
+ * enforced gate come from one field and cannot drift. No public entry point may
+ * redirect or link into an admin path (SPEC §10).
+ *
+ * Order is significant: the router returns the first matching pattern, so the
+ * archive `${archiveBasePath}/:slug`, `/media/:key(.*)`, and `/` routes keep their
+ * relative positions. Keep new routes grouped with their tier.
  */
 
-import { requireAuth } from "./auth/middleware";
 import { json } from "./lib/errors";
-import { Router } from "./router";
+import { buildReference } from "./reference";
+import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
@@ -30,99 +38,409 @@ import * as webhookRoutes from "./routes/webhooks";
  */
 export function createRouter(archiveBasePath: string): Router {
   const r = new Router();
-  const authed = [requireAuth];
 
-  // --- system ---
-  r.get("/health", () => json({ status: "ok", service: "kestrel" }));
-  // Reports the authenticated principal and the auth mode, so the editor can show
-  // identity (and offer Access sign-out) instead of prompting for a token.
-  r.get(
-    "/api/whoami",
-    (c) =>
-      json({
-        principal: c.principal,
-        auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
-      }),
-    authed,
-  );
-  // Dev-only bootstrap that hands out the local admin token, so it must be public
-  // (there is no credential yet). 404s once deployed — see routes/dev.ts.
-  r.get("/api/dev/token", devRoutes.token);
+  const manifest: RouteDef[] = [
+    // --- system ---
+    {
+      method: "GET",
+      path: "/health",
+      access: "public",
+      summary: "Liveness probe.",
+      handler: () => json({ status: "ok", service: "kestrel" }),
+    },
+    {
+      // Reports the authenticated principal and the auth mode, so the editor can show
+      // identity (and offer Access sign-out) instead of prompting for a token.
+      method: "GET",
+      path: "/api/whoami",
+      access: "admin",
+      summary: "The authenticated principal and the auth mode (access or dev).",
+      handler: (c) =>
+        json({
+          principal: c.principal,
+          auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
+        }),
+    },
+    {
+      // Dev-only bootstrap that hands out the local admin token, so it must be public
+      // (there is no credential yet). 404s once deployed — see routes/dev.ts.
+      method: "GET",
+      path: "/api/dev/token",
+      access: "public",
+      summary: "Mint a local dev admin token. 404s once deployed (Access-only).",
+      handler: devRoutes.token,
+    },
 
-  // --- operator setup guide (authed; read-only, bundled from docs/) ---
-  // Under /api so the same Access application that gates the authoring API
-  // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
-  r.get("/api/docs", docsRoutes.list, authed);
-  r.get("/api/docs/:slug", docsRoutes.get, authed);
+    // --- operator setup guide (authed; read-only, bundled from docs/) ---
+    // Under /api so the same Access application that gates the authoring API
+    // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
+    {
+      method: "GET",
+      path: "/api/docs",
+      access: "admin",
+      summary: "Table of contents for the operator setup guide (JSON).",
+      handler: docsRoutes.list,
+    },
+    {
+      method: "GET",
+      path: "/api/docs/:slug",
+      access: "admin",
+      summary: "One setup-guide page, rendered as a themed HTML page.",
+      handler: docsRoutes.get,
+    },
 
-  // --- app settings (authed; runtime preferences, never secrets) ---
-  r.get("/api/settings", settingsRoutes.get, authed);
-  r.put("/api/settings", settingsRoutes.update, authed);
+    // --- API reference (authed; generated from THIS manifest) ---
+    {
+      method: "GET",
+      path: "/api/reference",
+      access: "admin",
+      summary: "Every route, generated from the registration so it can't drift.",
+      // Returned as data (the SPA renders it natively as a sidebar plus sections, no iframe);
+      // it's also a machine-readable listing of the surface for Claude and tooling.
+      handler: () => json({ groups: buildReference(r.routes.map((route) => route.def)) }),
+    },
 
-  // --- posts + revisions (authed) ---
-  r.post("/posts", postRoutes.createPost, authed);
-  r.get("/posts", postRoutes.listPosts, authed);
-  r.get("/posts/:id", postRoutes.getPost, authed);
-  r.put("/posts/:id", postRoutes.updatePost, authed);
-  r.delete("/posts/:id", postRoutes.deletePost, authed);
-  r.get("/posts/:id/revisions", postRoutes.listRevisions, authed);
-  r.get("/posts/:id/revisions/:n", postRoutes.getRevision, authed);
+    // --- app settings (authed; runtime preferences, never secrets) ---
+    {
+      method: "GET",
+      path: "/api/settings",
+      access: "admin",
+      summary: "Runtime preferences + a read-only reflection of deploy config (no secrets).",
+      handler: settingsRoutes.get,
+    },
+    {
+      method: "PUT",
+      path: "/api/settings",
+      access: "admin",
+      summary: "Update runtime preferences (e.g. default test recipients).",
+      handler: settingsRoutes.update,
+    },
 
-  // --- images (authed upload/list/delete) ---
-  r.post("/posts/:id/images", imageRoutes.uploadImage, authed);
-  r.get("/posts/:id/images", imageRoutes.listImages, authed);
-  r.delete("/posts/:id/images/:filename", imageRoutes.deleteImage, authed);
+    // --- posts + revisions (authed) ---
+    {
+      method: "POST",
+      path: "/posts",
+      access: "admin",
+      summary: "Create a draft post.",
+      example: {
+        request: { subject: "Issue #1: Hello", markdown: "# Hello\n\nWelcome." },
+        response: {
+          post: { id: "p_abc123", status: "draft", slug: "issue-1-hello" },
+          revision_id: "r_1",
+        },
+      },
+      handler: postRoutes.createPost,
+    },
+    {
+      method: "GET",
+      path: "/posts",
+      access: "admin",
+      summary: "List posts, newest first.",
+      handler: postRoutes.listPosts,
+    },
+    {
+      method: "GET",
+      path: "/posts/:id",
+      access: "admin",
+      summary: "One post with its current markdown and any active schedule.",
+      handler: postRoutes.getPost,
+    },
+    {
+      method: "PUT",
+      path: "/posts/:id",
+      access: "admin",
+      summary:
+        "Update a draft. Send `base_revision` (or If-Match) for optimistic concurrency (409 on conflict).",
+      description:
+        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
+      example: {
+        request: {
+          subject: "Issue #1: Hello",
+          slug: "issue-1-hello",
+          markdown: "# Hello\n\nEdited.",
+          base_revision: "r_1",
+        },
+        response: { post: { id: "p_abc123", current_revision: "r_2", status: "draft" } },
+      },
+      handler: postRoutes.updatePost,
+    },
+    {
+      method: "DELETE",
+      path: "/posts/:id",
+      access: "admin",
+      summary: "Delete a draft and its revisions (drafts only).",
+      handler: postRoutes.deletePost,
+    },
+    {
+      method: "GET",
+      path: "/posts/:id/revisions",
+      access: "admin",
+      summary: "The post's revision history.",
+      handler: postRoutes.listRevisions,
+    },
+    {
+      method: "GET",
+      path: "/posts/:id/revisions/:n",
+      access: "admin",
+      summary: "One revision by its number.",
+      handler: postRoutes.getRevision,
+    },
 
-  // --- render: preview + test (authed); all go through the one render path ---
-  r.post("/posts/:id/preview", renderRoutes.preview, authed);
-  r.get("/posts/:id/preview", renderRoutes.previewPage, authed);
-  r.post("/posts/:id/test", renderRoutes.test, authed);
-  r.get("/api/dev/outbox", renderRoutes.devOutbox, authed);
-  // Load the local demo dataset (fake transport only; 404s on a real provider).
-  r.post("/api/dev/seed", devRoutes.seed, authed);
+    // --- images (authed upload/list/delete) ---
+    {
+      method: "POST",
+      path: "/posts/:id/images",
+      access: "admin",
+      summary: "Upload an image to a post (multipart form field `file`).",
+      handler: imageRoutes.uploadImage,
+    },
+    {
+      method: "GET",
+      path: "/posts/:id/images",
+      access: "admin",
+      summary: "List a post's images.",
+      handler: imageRoutes.listImages,
+    },
+    {
+      method: "DELETE",
+      path: "/posts/:id/images/:filename",
+      access: "admin",
+      summary: "Delete one image from a post.",
+      handler: imageRoutes.deleteImage,
+    },
 
-  // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
-  r.post("/posts/:id/schedule", scheduleRoutes.schedule, authed);
-  r.post("/posts/:id/send", scheduleRoutes.sendNow, authed);
-  r.get("/sends", sendRoutes.list, authed);
-  r.get("/sends/:id", sendRoutes.get, authed);
-  r.post("/sends/:id/cancel", sendRoutes.cancel, authed);
+    // --- render: preview + test (authed); all go through the one render path ---
+    {
+      method: "POST",
+      path: "/posts/:id/preview",
+      access: "admin",
+      summary: "Render current markdown to the email HTML (returns HTML + warnings).",
+      handler: renderRoutes.preview,
+    },
+    {
+      method: "GET",
+      path: "/posts/:id/preview",
+      access: "admin",
+      summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      handler: renderRoutes.previewPage,
+    },
+    {
+      method: "POST",
+      path: "/posts/:id/test",
+      access: "admin",
+      summary:
+        "Send a test to one address through the same per-recipient path as a real send (I5).",
+      handler: renderRoutes.test,
+    },
+    {
+      method: "GET",
+      path: "/api/dev/outbox",
+      access: "admin",
+      summary: "Inspect the fake transport's outbox (dev only).",
+      handler: renderRoutes.devOutbox,
+    },
+    {
+      // Load the local demo dataset (fake transport only; 404s on a real provider).
+      method: "POST",
+      path: "/api/dev/seed",
+      access: "admin",
+      summary: "Load the local demo dataset (fake transport only).",
+      handler: devRoutes.seed,
+    },
 
-  // --- subscribers (authed admin) ---
-  r.post("/subscribers", subscriberRoutes.create, authed);
-  r.get("/subscribers", subscriberRoutes.list, authed);
-  r.get("/subscribers/:id", subscriberRoutes.get, authed);
-  r.post("/subscribers/:id/unsubscribe", subscriberRoutes.unsubscribe, authed);
+    // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
+    {
+      method: "POST",
+      path: "/posts/:id/schedule",
+      access: "admin",
+      summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
+      description:
+        "Freezes the current draft onto a send row and soft-locks the post; cancelable until it fires.",
+      example: {
+        request: { fire_at: "2026-01-15T09:00:00Z" },
+        response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
+      },
+      handler: scheduleRoutes.schedule,
+    },
+    {
+      method: "POST",
+      path: "/posts/:id/send",
+      access: "admin",
+      summary:
+        "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post.",
+      example: {
+        response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
+      },
+      handler: scheduleRoutes.sendNow,
+    },
+    {
+      method: "GET",
+      path: "/sends",
+      access: "admin",
+      summary: "List sends (scheduled, sending, sent, failed), newest first.",
+      handler: sendRoutes.list,
+    },
+    {
+      method: "GET",
+      path: "/sends/:id",
+      access: "admin",
+      summary: "One send with its delivery progress.",
+      handler: sendRoutes.get,
+    },
+    {
+      method: "POST",
+      path: "/sends/:id/cancel",
+      access: "admin",
+      summary: "Cancel a scheduled send during its review window; unlocks the post.",
+      handler: sendRoutes.cancel,
+    },
 
-  // --- suppressions (authed admin) ---
-  r.get("/suppressions", suppressionRoutes.list, authed);
-  r.post("/suppressions", suppressionRoutes.add, authed);
-  r.delete("/suppressions/:email", suppressionRoutes.clear, authed);
+    // --- subscribers (authed admin) ---
+    {
+      method: "POST",
+      path: "/subscribers",
+      access: "admin",
+      summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
+      handler: subscriberRoutes.create,
+    },
+    {
+      method: "GET",
+      path: "/subscribers",
+      access: "admin",
+      summary: "List subscribers with by-status counts; filter by `status`/`search`.",
+      handler: subscriberRoutes.list,
+    },
+    {
+      method: "GET",
+      path: "/subscribers/:id",
+      access: "admin",
+      summary: "One subscriber.",
+      handler: subscriberRoutes.get,
+    },
+    {
+      method: "POST",
+      path: "/subscribers/:id/unsubscribe",
+      access: "admin",
+      summary: "Unsubscribe a subscriber (admin-initiated).",
+      handler: subscriberRoutes.unsubscribe,
+    },
 
-  // --- provider webhooks (public; signature-verified inside the adapter) ---
-  r.post("/webhooks/ses", webhookRoutes.ses);
+    // --- suppressions (authed admin) ---
+    {
+      method: "GET",
+      path: "/suppressions",
+      access: "admin",
+      summary: "List suppressed addresses (bounced or complained, never mailed).",
+      handler: suppressionRoutes.list,
+    },
+    {
+      method: "POST",
+      path: "/suppressions",
+      access: "admin",
+      summary: "Suppress an address manually.",
+      handler: suppressionRoutes.add,
+    },
+    {
+      method: "DELETE",
+      path: "/suppressions/:email",
+      access: "admin",
+      summary: "Clear a suppression for an address.",
+      handler: suppressionRoutes.clear,
+    },
 
-  // --- public reader routes (token-scoped; no login) ---
-  // The front door: a self-contained archive index, never a bounce to /admin
-  // (SPEC §10). Kept public here — the one explicit non-admin surface.
-  r.get("/", archiveRoutes.archiveIndex);
-  r.get("/subscribe", publicRoutes.subscribeForm);
-  r.post("/subscribe", publicRoutes.subscribe);
-  r.get("/confirm", publicRoutes.confirm);
-  r.get("/unsubscribe", publicRoutes.unsubscribeLanding);
-  r.post("/unsubscribe", publicRoutes.unsubscribe);
+    // --- provider webhooks (public; signature-verified inside the adapter) ---
+    {
+      method: "POST",
+      path: "/webhooks/ses",
+      access: "webhook",
+      summary: "SES/SNS bounce + complaint notifications (SNS-signature-verified in the adapter).",
+      handler: webhookRoutes.ses,
+    },
 
-  // --- delivery webhooks (public; provider-signature-verified, not requireAuth) ---
-  r.post("/webhooks/resend", webhookRoutes.resend);
+    // --- public reader routes (token-scoped; no login) ---
+    // The front door: a self-contained archive index, never a bounce to /admin
+    // (SPEC §10). Kept public here — the one explicit non-admin surface.
+    {
+      method: "GET",
+      path: "/",
+      access: "public",
+      summary: "The public archive index: the newsletter's front door.",
+      handler: archiveRoutes.archiveIndex,
+    },
+    {
+      method: "GET",
+      path: "/subscribe",
+      access: "public",
+      summary: "The public subscribe form (HTML).",
+      handler: publicRoutes.subscribeForm,
+    },
+    {
+      method: "POST",
+      path: "/subscribe",
+      access: "public",
+      summary: "Request a subscription; starts the double opt-in (confirmation email).",
+      example: {
+        request: { email: "you@example.com" },
+        response: { status: "pending", action: "created" },
+      },
+      handler: publicRoutes.subscribe,
+    },
+    {
+      method: "GET",
+      path: "/confirm",
+      access: "public",
+      summary: "Confirm a subscription from the emailed link (`?token=`).",
+      handler: publicRoutes.confirm,
+    },
+    {
+      method: "GET",
+      path: "/unsubscribe",
+      access: "public",
+      summary: "Unsubscribe landing page (`?token=`).",
+      handler: publicRoutes.unsubscribeLanding,
+    },
+    {
+      method: "POST",
+      path: "/unsubscribe",
+      access: "public",
+      summary: "Process a one-click / form unsubscribe (`?token=`).",
+      handler: publicRoutes.unsubscribe,
+    },
 
-  // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-  // Registered at ARCHIVE_BASE_PATH (default /newsletter) so the route and the
-  // emitted archive URL always share one source. Self-contained by default;
-  // an apex zone can additionally route <base>/* to this Worker (SPEC §10).
-  r.get(`${archiveBasePath}/:slug`, archiveRoutes.archivePage);
+    // --- delivery webhooks (public; provider-signature-verified, not requireAuth) ---
+    {
+      method: "POST",
+      path: "/webhooks/resend",
+      access: "webhook",
+      summary: "Resend delivery + bounce + complaint events (signature-verified in the adapter).",
+      handler: webhookRoutes.resend,
+    },
 
-  // --- media bytes (public; readers + archive load these unauthenticated) ---
-  r.get("/media/:key(.*)", imageRoutes.serveMedia);
+    // --- archive / view-in-browser (public; serves the frozen record, I3) ---
+    // Registered at ARCHIVE_BASE_PATH (default /newsletter) so the route and the
+    // emitted archive URL always share one source. Self-contained by default;
+    // an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+    {
+      method: "GET",
+      path: `${archiveBasePath}/:slug`,
+      access: "public",
+      summary: "A frozen issue's archive page / view-in-browser (I3).",
+      handler: archiveRoutes.archivePage,
+    },
+
+    // --- media bytes (public; readers + archive load these unauthenticated) ---
+    {
+      method: "GET",
+      path: "/media/:key(.*)",
+      access: "public",
+      summary: "Serve image bytes from storage (public; readers + archive load these).",
+      handler: imageRoutes.serveMedia,
+    },
+  ];
+
+  for (const def of manifest) {
+    r.register(def);
+  }
 
   return r;
 }

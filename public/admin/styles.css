@@ -79,7 +79,7 @@ body {
   margin: 0;
   font-family: var(--font);
   color: var(--fg);
-  background: var(--bg);
+  background: var(--card);
 }
 a {
   color: inherit;
@@ -991,8 +991,7 @@ td.act {
 }
 .docs-frame {
   width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
+  border: 0;
   background: var(--card);
   min-height: 400px;
 }
@@ -1001,6 +1000,163 @@ td.act {
     grid-template-columns: 1fr;
   }
   .docs-nav {
+    position: static;
+    flex-flow: row wrap;
+  }
+}
+
+/* API reference: a native two-column render of the /api/reference JSON manifest.
+   A sticky tier rail sits beside the route list; no iframe, so no frame chrome. */
+.api-layout {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+.api-nav {
+  position: sticky;
+  /* Pin just under the sticky topbar and rest exactly where it pins, so the rail
+     does not travel on scroll. margin-top cancels most of #app's 24px top inset
+     for this column; top then equals the rail's resting position. */
+  top: 85px;
+  margin-top: -12px;
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.api-nav a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides; hover grouped with its base */
+.api-nav a:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.api-nav a.active {
+  color: var(--fg);
+  font-weight: 600;
+  background: var(--hover);
+}
+.api-nav-count {
+  font: 600 11px var(--mono);
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 7px;
+}
+.api-content {
+  min-width: 0;
+}
+.api-head {
+  margin: 0 0 12px;
+}
+.api-head h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+.api-section {
+  scroll-margin-top: 72px;
+  margin: 0 0 28px;
+}
+.api-section h2 {
+  font-size: 16px;
+  margin: 0 0 4px;
+}
+.api-blurb {
+  margin: 0 0 14px;
+  font-size: 14px;
+  max-width: 62ch;
+}
+.api-route {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin: 10px 0;
+  background: var(--card);
+}
+.api-route-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.api-method {
+  font: 700 12px var(--mono);
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: 5px;
+  color: #fff;
+}
+.api-method.m-GET {
+  background: #15803d;
+}
+.api-method.m-POST {
+  background: #1d4ed8;
+}
+.api-method.m-PUT {
+  background: #b45309;
+}
+.api-method.m-DELETE {
+  background: #b91c1c;
+}
+.api-path {
+  font: 14px var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 8px;
+  word-break: break-all;
+}
+.api-tier {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 9px;
+}
+.api-summary {
+  margin: 10px 0 0;
+  font-size: 15px;
+}
+.api-desc {
+  margin: 6px 0 0;
+  font-size: 14px;
+}
+.api-ex {
+  margin-top: 10px;
+}
+.api-ex-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin: 8px 0 4px;
+}
+.api-ex pre {
+  margin: 0;
+  overflow-x: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: 12.5px / 1.5 var(--mono);
+}
+@media (max-width: 620px) {
+  .api-layout {
+    grid-template-columns: 1fr;
+  }
+  .api-nav {
     position: static;
     flex-flow: row wrap;
   }
