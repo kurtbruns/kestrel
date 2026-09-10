@@ -147,6 +147,7 @@ The editor's **Settings** tab holds the app's runtime preferences (via the authe
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
 | `npm run check` | Biome: format + organize imports + lint, applying safe fixes (`npm run lint` / `npm run format` for report-only / format-only) |
+| `npm run assets:build` | fingerprint the admin assets — stamp a content hash onto the `styles.css` / `app.js` refs in `public/admin/index.html` (`assets:check` verifies, and runs before `npm test`) |
 | `npm run migrate:local` / `migrate:remote` | apply D1 migrations |
 | `npm run deploy` | `wrangler deploy` |
 
@@ -189,6 +190,10 @@ migrations/       D1 schema
 
 The editor and reader pages adapt automatically to the viewer's light/dark
 preference (`prefers-color-scheme`); no toggle, nothing to configure.
+
+## Admin asset caching
+
+The editor's two static assets (`public/admin/styles.css`, `app.js`) are fingerprinted: `scripts/stamp-admin-assets.mjs` stamps a content hash onto their `?v=` in `index.html`, and `public/_headers` caches those hashed URLs immutably. A changed asset gets a new hash — hence a new URL — so it's fetched fresh with no manual version bump. The stamp runs on `npm run dev` startup; `npm test` runs `assets:check` first, so an unstamped commit fails the gate. After editing an asset outside a running dev server, run `npm run assets:build`.
 
 ## Status
 
