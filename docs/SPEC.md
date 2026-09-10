@@ -89,6 +89,14 @@ Every save writes a new revision holding that version's Markdown and metadata. T
 
 This gives you a full edit history, the ability to see what changed between two versions, and — because a scheduled post's content is frozen into its Send anyway (I3) — a clear separation between "the post as it is now" and "the post as it was sent."
 
+### Concurrent edits
+
+One post has two clients that can write it at once — two browser tabs, and Claude editing through the same API — so the authoring API is **optimistically concurrent**, and the rule is *notify, don't clobber.*
+
+Because each save advances `current_revision`, that id is the post's version token. A save may carry the revision it was based on — as an `If-Match` header (the app also emits the current revision as an `ETag`) or a `base_revision` body field. If that base no longer matches the post's current revision, another writer got there first, and the save is rejected with **409** carrying the newer `{ current_revision, updated_at, author }` — the stale write never lands. A save that omits a base is unchecked (last-write-wins), so a client that doesn't participate still works.
+
+The editor participates on both ends. It sends the base on every save, so a stale save surfaces an **out-of-date notice** instead of overwriting: *Reload* discards the local edits and loads the other version, *Keep editing* keeps the local copy so the next save writes on top of the other. It also lightly polls the current revision while open — covering another browser and Claude alike, which a same-browser signal would miss — so the writer is warned *before* investing more effort, not only when they save. The notice names who changed it (the revision's author; Claude's saves show as "Claude") and re-arms only when a genuinely newer revision appears.
+
 ### Images
 
 Adding an image is uploading it *to a post* and referencing it by name — you upload the file `cover.jpg` to the post, then write `![A stack of paperbacks on a windowsill](cover.jpg)` in the Markdown. That's the whole workflow. No endpoint hands you a URL to paste back in; the reference is just the filename, the same way you'd write it if the image sat in a folder next to the post. At render time the app resolves `cover.jpg` to the stored file's absolute URL and the right size for email. The alt text lives inside the reference, so it's never a separate step and is easy to require.

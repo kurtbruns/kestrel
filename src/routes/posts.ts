@@ -11,22 +11,46 @@ function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
 }
 
-async function readBody(c: RequestContext): Promise<posts.PostInput> {
+/** The parsed edit payload, plus the optional base revision for the concurrency check. */
+interface EditBody {
+  input: posts.PostInput;
+  base_revision: string | null;
+}
+
+async function readBody(c: RequestContext): Promise<EditBody> {
   const ct = c.req.headers.get("content-type") ?? "";
   if (!ct.includes("application/json")) {
-    return {};
+    return { input: {}, base_revision: null };
   }
   try {
     const raw = (await c.req.json()) as Record<string, unknown>;
     const pick = (k: string) => (typeof raw[k] === "string" ? (raw[k] as string) : undefined);
     return {
-      subject: pick("subject"),
-      slug: pick("slug"),
-      markdown: pick("markdown"),
+      input: { subject: pick("subject"), slug: pick("slug"), markdown: pick("markdown") },
+      base_revision: pick("base_revision") ?? null,
     };
   } catch {
     throw badRequest("invalid JSON body");
   }
+}
+
+/**
+ * The revision the client believes it is editing, for optimistic concurrency
+ * (see `updatePost`). Accepted as an `If-Match` header (idiomatic, matches the
+ * `ETag` we emit) or a `base_revision` body field; the header wins. `*` and a
+ * missing value both mean "no base" — the save then proceeds unchecked.
+ */
+function baseRevision(c: RequestContext, body: EditBody): string | null {
+  const header = c.req.headers.get("If-Match");
+  if (header && header !== "*") {
+    return header.replace(/^"(.*)"$/, "$1");
+  }
+  return body.base_revision;
+}
+
+/** Expose a post's current revision as an ETag so a client can send it back as `If-Match`. */
+function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
+  return post.current_revision ? { ETag: `"${post.current_revision}"` } : undefined;
 }
 
 async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
@@ -41,9 +65,9 @@ async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
 }
 
 export async function createPost(c: RequestContext): Promise<Response> {
-  const input = await readBody(c);
+  const { input } = await readBody(c);
   const { post, revision } = await posts.createPost(c.env.DB, input, author(c));
-  return json({ post, revision_id: revision.id }, 201);
+  return json({ post, revision_id: revision.id }, 201, revisionHeaders(post));
 }
 
 export async function listPosts(c: RequestContext): Promise<Response> {
@@ -57,18 +81,46 @@ export async function getPost(c: RequestContext): Promise<Response> {
   }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
   const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
-  return json({
-    post,
-    markdown: revision?.markdown ?? "",
-    scheduled: active ? { id: active.id, fire_at: active.fire_at } : null,
-  });
+  return json(
+    {
+      post,
+      markdown: revision?.markdown ?? "",
+      author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
+      scheduled: active ? { id: active.id, fire_at: active.fire_at } : null,
+    },
+    200,
+    revisionHeaders(post),
+  );
 }
 
+/**
+ * Optimistic concurrency (SPEC §4): if the client sends the revision it loaded
+ * (via `If-Match`/`base_revision`) and another save has advanced the post since,
+ * reject with 409 and name the newer revision instead of clobbering it — so a
+ * stale tab, or a stale Claude edit, learns its view is out of date rather than
+ * silently overwriting the other writer. A save with no base is unchecked
+ * (last-write-wins), which keeps older API clients working.
+ */
 export async function updatePost(c: RequestContext): Promise<Response> {
   const post = await requireDraft(c);
-  const input = await readBody(c);
-  const { post: updated, revision } = await posts.updatePost(c.env.DB, post, input, author(c));
-  return json({ post: updated, revision_id: revision.id });
+  const body = await readBody(c);
+  const base = baseRevision(c, body);
+  if (base && post.current_revision && base !== post.current_revision) {
+    const current = await posts.getCurrentRevision(c.env.DB, post);
+    return json(
+      {
+        error: "stale_revision",
+        message: "this draft changed since you loaded it",
+        current_revision: post.current_revision,
+        updated_at: post.updated_at,
+        author: current?.author ?? null,
+      },
+      409,
+      revisionHeaders(post),
+    );
+  }
+  const { post: updated, revision } = await posts.updatePost(c.env.DB, post, body.input, author(c));
+  return json({ post: updated, revision_id: revision.id }, 200, revisionHeaders(updated));
 }
 
 export async function deletePost(c: RequestContext): Promise<Response> {

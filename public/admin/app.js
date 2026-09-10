@@ -10,6 +10,7 @@ const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let session = null; // { principal: { kind, email? }, auth: { mode } } once booted
 let statusTimer = null; // countdown interval, cleared on navigation
+let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.
 let autosaveIdleTimer = null;
@@ -29,6 +30,7 @@ function clearAutosaveTimers() {
 // Current-editor state, reset on navigation; the mounted editor re-establishes it.
 let isEditorDirty = false; // has unsaved edits — drives the nav guards
 let editorSaveFailed = false; // the last save errored — the leave guard then prompts instead of silently flushing
+let editorConflict = false; // the draft changed elsewhere (out-of-date banner up) — like a save failure, the leave guard prompts
 let editorHash = null; // hash the editor is mounted at, so the leave guard knows where to return
 let editorLeaveFlush = null; // save-and-go on SPA navigation away from a dirty editor
 let editorManualSave = null; // ⌘S / Ctrl-S handler for the mounted editor
@@ -119,7 +121,10 @@ async function api(path, opts = {}) {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    throw new Error((data && (data.message || data.error)) || res.statusText);
+    const err = new Error((data && (data.message || data.error)) || res.statusText);
+    err.status = res.status; // callers (e.g. the editor's conflict handling) branch on this
+    err.data = data;
+    throw err;
   }
   return data;
 }
@@ -265,9 +270,14 @@ function route() {
     clearInterval(statusTimer);
     statusTimer = null;
   }
+  if (editorPollTimer) {
+    clearInterval(editorPollTimer);
+    editorPollTimer = null;
+  }
   clearAutosaveTimers();
   isEditorDirty = false;
   editorSaveFailed = false;
+  editorConflict = false;
   editorHash = null; // renderEditor re-establishes these when it mounts
   editorLeaveFlush = null;
   editorManualSave = null;
@@ -315,7 +325,8 @@ window.addEventListener("hashchange", () => {
     return;
   }
   if (isEditorDirty && editorHash && location.hash !== editorHash) {
-    if (editorSaveFailed) {
+    if (editorSaveFailed || editorConflict) {
+      // A silent flush would fail (or clobber) — prompt so the user decides.
       if (!confirm(LEAVE_MSG)) {
         revertingHash = true;
         location.hash = editorHash;
@@ -430,8 +441,17 @@ const TOOLBAR = [
 
 async function renderEditor(id) {
   clearAutosaveTimers();
+  // Reload (and cancel-schedule / error-retry) re-enter renderEditor directly, without
+  // going through route(), so clear the previous mount's freshness poll here too — an
+  // orphaned interval would keep firing on a stale baseRevision closure and wrongly
+  // flip editorConflict, silently blocking saves in the fresh editor.
+  if (editorPollTimer) {
+    clearInterval(editorPollTimer);
+    editorPollTimer = null;
+  }
   isEditorDirty = false;
   editorSaveFailed = false;
+  editorConflict = false;
   editorHash = null; // fresh mount starts clean; the tracking block below re-establishes the hash
   editorLeaveFlush = null;
   editorManualSave = null;
@@ -448,6 +468,11 @@ async function renderEditor(id) {
   }
 
   const locked = post.status !== "draft";
+  // The revision this editor is based on, for optimistic concurrency (SPEC §4).
+  // Advanced on each successful save; carried on every save so the server rejects
+  // (409) rather than clobbers a newer save from another tab or from Claude.
+  let baseRevision = post.current_revision;
+  let warnedRevision = null; // newest revision we've surfaced, so we re-arm only on a genuinely newer one
   const toolbarHtml = TOOLBAR.map((group) =>
     group
       .map(
@@ -467,6 +492,7 @@ async function renderEditor(id) {
       </div>
     </div>
     ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel</button></div>` : ""}
+    <div id="freshnessBanner" class="fresh-banner" hidden></div>
     <div class="card">
       <div class="grid2">
         <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
@@ -724,7 +750,9 @@ async function renderEditor(id) {
       return;
     }
     refreshDirty();
-    scheduleAutosave();
+    if (!editorConflict) {
+      scheduleAutosave();
+    }
   }
 
   // Saves are chained so an autosave and an explicit save can never overlap; a
@@ -738,16 +766,23 @@ async function renderEditor(id) {
     if (silent && snapshot() === savedSnapshot) {
       return null; // nothing changed since the last save
     }
+    if (editorConflict) {
+      return null; // paused until the out-of-date banner is resolved
+    }
     clearAutosaveTimers(); // a save is starting — cancel any pending autosave trigger
     saving = true;
     try {
-      const { post: u } = await api(`/posts/${id}`, { method: "PUT", json: collect() });
+      const { post: u } = await api(`/posts/${id}`, {
+        method: "PUT",
+        json: { ...collect(), base_revision: baseRevision },
+      });
       const slugEl = document.getElementById("f-slug");
       // Reflect server-side dedupe, but don't yank the slug from under the cursor
       // if an autosave lands while the field is focused.
       if (u?.slug && slugEl && document.activeElement !== slugEl) {
         slugEl.value = u.slug;
       }
+      baseRevision = u.current_revision; // our save is now the newest; poll against it
       savedSnapshot = snapshot();
       editorSaveFailed = false;
       if (!silent) {
@@ -755,6 +790,16 @@ async function renderEditor(id) {
       }
       return u;
     } catch (e) {
+      // A stale-revision 409 isn't a plain failure: another writer got there first.
+      // Surface the out-of-date banner (notify, don't clobber) instead of an error toast.
+      if (e && e.status === 409) {
+        showConflict(
+          e.data && e.data.error === "stale_revision"
+            ? { current_revision: e.data.current_revision, author: e.data.author }
+            : { schedLocked: true },
+        );
+        return null;
+      }
       editorSaveFailed = true; // the leave guard now prompts rather than silently flushing
       throw e;
     } finally {
@@ -777,13 +822,19 @@ async function renderEditor(id) {
     if (locked || snapshot() === savedSnapshot) {
       return;
     }
-    const body = collect();
-    savedSnapshot = JSON.stringify(body);
+    const body = { ...collect(), base_revision: baseRevision };
+    savedSnapshot = JSON.stringify(collect());
     isEditorDirty = false;
     saveChain = saveChain
       .catch(() => {})
       .then(() => api(`/posts/${id}`, { method: "PUT", json: body }))
-      .catch((e) => toast(`Couldn't save your changes — ${e.message}`));
+      .catch((e) =>
+        toast(
+          e.status === 409
+            ? "Changed elsewhere — your edits weren't saved"
+            : `Couldn't save your changes — ${e.message}`,
+        ),
+      );
   };
   editorManualSave = () => {
     if (saveBtn && !saveBtn.disabled) {
@@ -805,6 +856,85 @@ async function renderEditor(id) {
           saveDraft(true).catch((e) => toast(`Couldn't save — ${e.message}`)),
         );
     });
+  }
+
+  // --- concurrent-edit detection (SPEC §4) ---
+  // Another tab, or Claude through the API, can save this draft while it's open
+  // here. A save carries base_revision so the server rejects a stale write (409);
+  // a light poll warns before the writer invests more effort. We notify, never
+  // adopt: Reload takes the other version, Keep editing keeps yours (your next
+  // save overwrites it). Re-arm only on a genuinely newer revision.
+  const freshnessEl = document.getElementById("freshnessBanner");
+  const friendlyAuthor = (a) => (a === "service" ? "Claude" : a || null);
+
+  function clearConflict() {
+    editorConflict = false;
+    warnedRevision = null;
+    if (freshnessEl) {
+      freshnessEl.hidden = true;
+      freshnessEl.innerHTML = "";
+    }
+  }
+  function showConflict(info) {
+    if (!freshnessEl || locked) {
+      return;
+    }
+    editorConflict = true; // pauses autosave; makes the leave guard prompt
+    if (info.schedLocked) {
+      freshnessEl.innerHTML = `<span>⚠️ This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost-btn" id="freshReload">Reload</button></span>`;
+    } else {
+      warnedRevision = info.current_revision;
+      const who = friendlyAuthor(info.author);
+      freshnessEl.innerHTML =
+        `<span>⚠️ This draft was changed elsewhere${who ? ` — last edited by <strong>${esc(who)}</strong>` : ""}. Reload to load that version (discards your unsaved edits), or keep editing to overwrite it on your next save.</span>` +
+        `<span class="row"><button type="button" class="ghost-btn" id="freshReload">Reload</button><button type="button" class="ghost-btn" id="freshKeep">Keep editing</button></span>`;
+    }
+    freshnessEl.hidden = false;
+    freshnessEl.querySelector("#freshReload").onclick = () => {
+      clearConflict();
+      renderEditor(id);
+    };
+    const keep = freshnessEl.querySelector("#freshKeep");
+    if (keep) {
+      keep.onclick = () => {
+        baseRevision = warnedRevision; // adopt the newer revision as our base — our next save wins
+        clearConflict();
+        refreshDirty();
+        if (isEditorDirty) {
+          scheduleAutosave();
+        }
+      };
+    }
+  }
+
+  if (!locked) {
+    // Skipped while hidden, saving, or already warned — poll GET is cheap and only
+    // re-warns on a revision we haven't surfaced yet.
+    const pollFreshness = async () => {
+      if (saving || editorConflict || document.hidden) {
+        return;
+      }
+      const baseAtRequest = baseRevision; // guard against our own save landing mid-poll
+      try {
+        const data = await api(`/posts/${id}`);
+        // If our own save advanced the base while this GET was in flight, the response
+        // may predate it — don't mistake our write for someone else's.
+        if (saving || baseRevision !== baseAtRequest) {
+          return;
+        }
+        if (data.post.status !== "draft") {
+          showConflict({ schedLocked: true });
+          return;
+        }
+        const rev = data.post.current_revision;
+        if (rev && rev !== baseRevision && rev !== warnedRevision) {
+          showConflict({ current_revision: rev, author: data.author });
+        }
+      } catch (_) {
+        /* transient — try again next tick */
+      }
+    };
+    editorPollTimer = setInterval(pollFreshness, 10000);
   }
 
   // --- open in browser ---

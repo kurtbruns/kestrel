@@ -914,6 +914,28 @@ td.act {
   margin-bottom: 14px;
   font-size: 14px;
 }
+/* Out-of-date notice: the draft changed elsewhere (another tab, or Claude). Warm
+   tone (like warnings) since it asks the writer to choose, not an error. */
+.fresh-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--b-sending-bg);
+  color: var(--warn);
+  border: 1px solid var(--b-sending-line);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+.fresh-banner .row {
+  flex: 0 0 auto;
+}
+.fresh-banner strong {
+  color: inherit;
+}
 
 .grid2 {
   display: grid;
