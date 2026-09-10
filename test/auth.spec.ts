@@ -86,8 +86,8 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     ARCHIVE_ORIGIN: "https://example.com",
     ARCHIVE_BASE_PATH: "/newsletter",
     MEDIA_PUBLIC_BASE: "https://media.example.com",
-    SENDING_DOMAIN: "news.example.com",
-    FROM_ADDRESS: "News <news@news.example.com>",
+    SENDING_DOMAIN: "send.example.com",
+    FROM_ADDRESS: "News <news@send.example.com>",
     AWS_REGION: "us-east-1",
   } as unknown as AppEnv;
 

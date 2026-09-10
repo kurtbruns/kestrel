@@ -48,8 +48,8 @@
     "PROVIDER": "fake",
     "APP_ORIGIN": "http://localhost:8787",
     "ARCHIVE_BASE_PATH": "/newsletter",
-    "SENDING_DOMAIN": "news.example.com",
-    "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+    "SENDING_DOMAIN": "send.example.com",
+    "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
     "AWS_REGION": "us-east-1"
   },
 
@@ -73,8 +73,8 @@
         "PROVIDER": "ses",
         "APP_ORIGIN": "https://newsletter-staging.example.com",
         "ARCHIVE_BASE_PATH": "/newsletter",
-        "SENDING_DOMAIN": "news.example.com",
-        "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+        "SENDING_DOMAIN": "send.example.com",
+        "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
         "AWS_REGION": "us-east-1"
       }
     },
@@ -104,8 +104,8 @@
         "ARCHIVE_ORIGIN": "https://example.com",
         "ARCHIVE_BASE_PATH": "/newsletter",
         "MEDIA_PUBLIC_BASE": "https://media.example.com",
-        "SENDING_DOMAIN": "news.example.com",
-        "FROM_ADDRESS": "Newsletter <newsletter@news.example.com>",
+        "SENDING_DOMAIN": "send.example.com",
+        "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
         "AWS_REGION": "us-east-1"
       }
     }

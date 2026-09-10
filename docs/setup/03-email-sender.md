@@ -16,7 +16,7 @@ SESv2 `SendEmail` over HTTPS, SigV4-signed (`src/providers/ses.ts`). Events arri
 
 ### 1. Verify the sending identity
 
-In the SES console (in your `AWS_REGION`), verify the **domain** `news.example.com` as a sending identity — a domain identity, not just a single address, so any `…@news.example.com` From works and DKIM can be domain-signed. Verifying a domain requires publishing DNS records; do that in **Sending-domain DNS** next.
+In the SES console (in your `AWS_REGION`), verify the **domain** `send.example.com` as a sending identity — a domain identity, not just a single address, so any `…@send.example.com` From works and DKIM can be domain-signed. Verifying a domain requires publishing DNS records; do that in **Sending-domain DNS** next.
 
 ### 2. Leave the sandbox
 
@@ -58,7 +58,7 @@ Resend's REST API with Svix-signed webhooks (`src/providers/resend.ts`).
 
 ### 1. Verify the domain
 
-In the Resend dashboard, add and verify **`news.example.com`** as a sending domain. Verification publishes SPF/DKIM (and a return-path) records — see **Sending-domain DNS**.
+In the Resend dashboard, add and verify **`send.example.com`** as a sending domain. Verification publishes SPF/DKIM (and a return-path) records — see **Sending-domain DNS**.
 
 ### 2. API key
 

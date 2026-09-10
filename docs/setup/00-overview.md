@@ -11,12 +11,12 @@ Everything here is **operator-run and out-of-band**: you run it once, by hand, a
 
 One deployed Worker answers on one hostname and does everything — the admin editor, the authoring API, the public reader surface (archive index, issue pages, subscribe / confirm / unsubscribe), previews, and image bytes. It is **self-contained by default**: it needs no separate website to be complete (`docs/SPEC.md` §10).
 
-Two names earn their own DNS because they have genuinely different jobs:
+Two names earn their own DNS because they have genuinely different jobs — and the names are deliberately not near-synonyms, so the two can't get swapped:
 
 | Name | Job |
 | --- | --- |
 | `newsletter.example.com` | the app + reader surface (its own uptime) |
-| `news.example.com` | the sending identity — the `From:` address and its SPF/DKIM/DMARC |
+| `send.example.com` | the sending identity — the `From:` address and its SPF/DKIM/DMARC |
 
 There are three environments, each with its own database, storage, and — the load-bearing rule — its own mail transport, so development can never reach a real inbox:
 
@@ -31,10 +31,10 @@ There are three environments, each with its own database, storage, and — the l
 1. **Provision the instance** — the Cloudflare account, D1, R2, the Worker, the Cron Trigger, and a first deploy to staging then production.
 2. **Access** — the admin gate: one Access application over `/admin/*` **and** the authoring API, an Allow policy for you and a Service Auth policy for Claude.
 3. **Connect an email sender** — SES or Resend, and their bounce/complaint webhook.
-4. **Sending-domain DNS** — SPF/DKIM/DMARC on `news.example.com`.
+4. **Sending-domain DNS** — SPF/DKIM/DMARC on `send.example.com`.
 5. **Wire the archive to a website** — optional; the self-contained default needs nothing.
 6. **Verify it works** — a real test send, one-click unsubscribe, the bounce round-trip, DKIM alignment.
 
 Work through them in that order: staging first, prove it end to end, then repeat the provider and DNS steps for production.
 
-> Throughout, `example.com` / `newsletter.example.com` / `news.example.com` and every `REPLACE_WITH_*` id are placeholders — substitute your own. Secrets are never committed: local ones live in `.dev.vars` (gitignored), deployed ones in `wrangler secret put`.
+> Throughout, `example.com` / `newsletter.example.com` / `send.example.com` and every `REPLACE_WITH_*` id are placeholders — substitute your own. Secrets are never committed: local ones live in `.dev.vars` (gitignored), deployed ones in `wrangler secret put`.

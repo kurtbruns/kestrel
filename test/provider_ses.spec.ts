@@ -191,7 +191,7 @@ describe("SesProvider.sendBatch", () => {
     const body = JSON.parse(await captured!.text());
     expect(body.Destination.ToAddresses).toEqual(["reader@example.com"]);
     expect(body.ConfigurationSetName).toBe("kestrel-events"); // events flow to SNS
-    expect(body.FromEmailAddress).toContain("newsletter@news.example.com");
+    expect(body.FromEmailAddress).toContain("newsletter@send.example.com");
 
     // Content.Raw.Data is base64 of the raw MIME message.
     const mime = new TextDecoder().decode(

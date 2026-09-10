@@ -50,7 +50,7 @@ export interface Config {
   /** Public base URL for R2-served images. Defaults to the Worker's own `/media`
    *  route; a `media.` custom domain is the optional upgrade (SPEC §10). */
   mediaPublicBase: string;
-  /** Sending identity domain, e.g. `news.example.com`. */
+  /** Sending identity domain, e.g. `send.example.com`. */
   sendingDomain: string;
   /** `From:` header value. */
   fromAddress: string;

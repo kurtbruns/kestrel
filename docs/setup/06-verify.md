@@ -14,7 +14,7 @@ In the editor (`/admin/`), open a draft and use **Send test email** to deliver t
 
 Open the received test's raw source (Gmail: **Show original**) and read the `Authentication-Results` header.
 
-- [ ] `spf=pass`, `dkim=pass`, and `dmarc=pass`, all aligned to `news.example.com`.
+- [ ] `spf=pass`, `dkim=pass`, and `dmarc=pass`, all aligned to `send.example.com`.
 
 If any fail, revisit **Sending-domain DNS** — alignment is the single best predictor of landing in the inbox.
 
