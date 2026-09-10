@@ -64,7 +64,13 @@ const icon = (name) =>
 function setToken(t) {
   token = (t || "").trim();
   try {
-    localStorage.setItem(TOKEN_KEY, token);
+    // Clearing (empty token) removes the key rather than storing "", so the next
+    // boot takes the "no token → mint" path instead of probing with a dead value.
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+    }
   } catch {
     /* private mode */
   }
@@ -1479,32 +1485,57 @@ function confirmUnsubscribe(sub, onDone) {
 }
 
 // Boot: establish who we are before routing.
-// - dev: no token yet → mint one from the dev-only endpoint (404 in prod).
+// - dev: no valid token yet → mint one from the dev-only endpoint (404 in prod).
+// - a stored token can be stale (signed with an old dev secret, or expired). In dev
+//   we recover silently — drop it, re-mint, probe once more — so a leftover token
+//   never dead-ends the editor on "Session expired". In Access mode the dev endpoint
+//   is absent, so re-minting is a no-op and we fall through to the re-login screen.
 // - probe /api/whoami with redirect:"manual" so an Access edge bounce surfaces as
 //   an opaque redirect (→ re-login) distinct from the app's own clean 401.
 async function boot() {
-  if (!token) {
+  // Mint a dev token into localStorage. Returns false in prod, where the endpoint
+  // 404s (or is unreachable) and the Access cookie authenticates instead.
+  async function mintDevToken() {
     try {
       const r = await fetch("/api/dev/token?kind=human");
       if (r.ok) {
         setToken((await r.json()).token);
+        return true;
       }
     } catch {
       /* prod: endpoint is absent; the Access cookie authenticates instead */
     }
+    return false;
   }
-  let res;
-  try {
-    res = await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
-  } catch {
-    return showReauth();
+  // Probe identity. A network error or an opaque Access redirect can't be recovered
+  // here, so surface it as a null result (→ re-login screen).
+  async function whoami() {
+    try {
+      return await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
+    } catch {
+      return null;
+    }
   }
-  if (res.ok) {
+
+  if (!token) {
+    await mintDevToken();
+  }
+  let res = await whoami();
+  // Stale stored token in dev: clear it, mint a fresh one, and probe again so a
+  // leftover credential self-heals. In Access mode the re-mint fails, `res` stays
+  // unauthorized, and we drop through to showReauth() below.
+  if (!res?.ok && token) {
+    setToken("");
+    if (await mintDevToken()) {
+      res = await whoami();
+    }
+  }
+  if (res?.ok) {
     session = await res.json();
     renderIdentity();
     return route();
   }
-  // opaqueredirect (edge login bounce) or a clean 401 with no way to recover here.
+  // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.
   return showReauth();
 }
 boot();
