@@ -45,6 +45,7 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 - **`providers/` is the transport seam** (`sendBatch` + `parseWebhook`; `fake` is the default in dev/tests). The app owns the list, consent, deliveries, and suppressions, so swapping providers is a swap, not a migration.
 - **`auth/` gates the admin surface** with one contract: verify a signed token → `Principal` (`middleware.ts`). Cloudflare Access at the edge, re-verified in-app (`access.ts`), issues it when deployed — human SSO + a service token for Claude; locally a dev-signed token (`dev_token.ts`) stands in, honored only in a dev-shaped env and never committed (`DEV_AUTH_SECRET` lives in `.dev.vars`), so deployed envs are Access-only.
 - **`db/` holds all SQL, and nowhere else does.** `migrations/` is append-only — never edit a shipped migration, add a new one.
+- **Config splits along one hard line (SPEC §8).** Deploy-time infrastructure — the provider, its credentials, Access, the origins — lives in env/secrets (`getConfig`, documented in `docs/setup/`) and is NEVER readable or writable through the API. Runtime *preferences* (e.g. default test recipients) live in a singleton settings row (`db/settings.ts`, a JSON blob so a new preference is a code change, not a migration) behind the authed `/api/settings`. The settings surface may *reflect* deploy config read-only, but must never accept or expose a secret.
 
 ## The public / admin split
 
@@ -69,6 +70,7 @@ Any change to sending, consent, the record, or the reader surface updates `docs/
 
 Write for a cold reader — a human and a Claude agent want the same thing. A comment earns its place when it spares the next reader from reconstructing intent, and fails when it restates the code: document the **why**, not the *what*.
 
+- **Markdown prose is unwrapped** — one physical line per paragraph, no hard wrapping at a fixed column (let the editor soft-wrap). Applies to authored/edited prose across `docs/`, `README.md`, `docs/SPEC.md`, and this file. Tables, code fences, and list-item structure keep their own line breaks.
 - Every module opens with a short header comment naming its responsibility.
 - Non-obvious exported functions/types get JSDoc (`/** … */`) so the summary shows on hover; no `@param`/`@returns` (the `strict` signature already renders it). Trivial one-liners take `//` or nothing.
 - No ephemeral references (issue/PR/milestone numbers); point to `docs/SPEC.md`.

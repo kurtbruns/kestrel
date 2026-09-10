@@ -72,9 +72,10 @@ View the result at `/admin/` and at the archived issues, e.g.
 ## Auth — one contract, different credentials per environment
 
 The admin/authoring surface (the editor, `/posts`, `/sends`, `/subscribers`,
-`/suppressions`, schedule/send) is protected. The reader routes (`/` archive
-index, `/subscribe`, `/confirm`, `/unsubscribe`, `/newsletter/*`, `/media/*`) are
-public and gated only by unguessable per-subscriber tokens.
+`/suppressions`, `/api/settings`, `/api/docs`, schedule/send) is protected. The
+reader routes (`/` archive index, `/subscribe`, `/confirm`, `/unsubscribe`,
+`/newsletter/*`, `/media/*`) are public and gated only by unguessable
+per-subscriber tokens.
 
 There's **one identity contract** — the Worker verifies a signed token and resolves a
 `Principal` (`human` with an email, or `service`). What issues that token differs by
@@ -133,6 +134,10 @@ Local dev is above; standing up a real instance — provisioning Cloudflare, the
 
 The same guide is available **in the editor** under the **Docs** tab: it renders the `docs/setup/` Markdown read-only (the repo is the source of truth), served by the authed `GET /api/docs` routes and gated with the rest of admin.
 
+## Settings
+
+The editor's **Settings** tab holds the app's runtime preferences (via the authed `GET`/`PUT /api/settings`) — currently the default **test recipients** the *Send test email* flow pre-fills. It also shows a **read-only** reflection of the deploy-time configuration (active provider, From address, origins, auth mode) with a link to the Docs. Settings hold preferences only — the provider choice, credentials, Access config, and origins stay in env/secrets and are never readable or writable through the API.
+
 ## Scripts
 
 | Command | Does |
@@ -168,7 +173,8 @@ src/
   router.ts       minimal URLPattern router + middleware
   auth/           Cloudflare Access JWT + dev-signed token (local) → one Principal
   routes/         posts, images, render actions, subscribers, suppressions,
-                  public (subscribe/confirm/unsubscribe), sends, archive
+                  public (subscribe/confirm/unsubscribe), sends, archive,
+                  settings, docs
   render/         the single render path (markdown → email HTML + text)
   send/           freeze/schedule/cancel, the idempotent send loop, the sweep
   providers/      the email provider seam + fake / SES / Resend adapters
