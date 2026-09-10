@@ -1871,14 +1871,15 @@ async function renderDashboard() {
     return;
   }
 
+  // No news is good news: the health line appears only when something needs
+  // attention (SPEC §8 / §11 — the only thing that ever surfaces loudly).
   const health = computeHealth(sends);
-  const level = health.some((i) => i.level === "red") ? "red" : health.length ? "amber" : "ok";
-  const healthHtml =
-    level === "ok"
-      ? `<div class="health ok"><span class="health-dot">✓</span><span>All clear — nothing needs your attention.</span></div>`
-      : `<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health
-          .map((i) => `<div>${esc(i.text)}</div>`)
-          .join("")}</div></div>`;
+  const level = health.some((i) => i.level === "red") ? "red" : "amber";
+  const healthHtml = health.length
+    ? `<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health
+        .map((i) => `<div>${esc(i.text)}</div>`)
+        .join("")}</div></div>`
+    : "";
 
   const tiles = [
     { label: "Confirmed", sub: "your audience", emph: true, v: counts.confirmed },
@@ -2056,11 +2057,12 @@ async function renderStart() {
   }
   const pub = derivePublication(appConfig);
   const deployment = appConfig?.deployment || {};
+  // No "Learn more" section: the tool bar already carries Docs + API, so a second
+  // set of links to them would be redundant (and would sit under the floating exit).
   app.innerHTML = `<div class="dash" id="start">
     <div class="dash-head"><div><h1>Getting started</h1><p class="muted">Write an issue, review it behind a cancelable window, send it, and keep it in a permanent archive.</p></div></div>
     ${howItWorksHtml()}
     ${setupChecklistHtml(pub, deployment)}
-    <section class="dash-section"><h2>Learn more</h2><div class="row"><button data-nav="#/docs">Operator setup guide</button><button data-nav="#/reference">API reference</button></div></section>
   </div>`;
   wireDashActions(document.getElementById("start"), renderStart);
 }

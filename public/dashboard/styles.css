@@ -172,6 +172,9 @@ body.tool-mode .tool-bar {
   gap: 4px;
 }
 .tool-tabs a {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
   text-decoration: none;
   color: var(--muted);
   font-size: 14px;
@@ -187,23 +190,57 @@ body.tool-mode .tool-bar {
   font-weight: 600;
   background: var(--hover);
 }
-.tool-back {
-  margin-left: auto;
-  text-decoration: none;
+
+/* Exit the tool area — a floating control at the bottom-left, shown only in tool
+   mode, so the Kestrel mark stays the tool area's home rather than the way out. */
+.tool-exit {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--line);
   color: var(--muted);
-  font-size: 13px;
+  text-decoration: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 20;
 }
-.tool-back:hover {
+body.tool-mode .tool-exit {
+  display: flex;
+}
+.tool-exit:hover {
   color: var(--fg);
+  border-color: var(--muted);
+}
+.tool-exit svg {
+  width: 18px;
+  height: 18px;
+  fill: currentColor;
+  display: block;
 }
 @media (max-width: 560px) {
   .tool-bar {
     flex-wrap: wrap;
     gap: 10px 16px;
   }
-  .tool-back {
-    margin-left: 0;
-  }
+}
+
+/* Reserve the width of the active (600-weight) label so toggling weight never
+   reflows a horizontal nav (the same trick the old top bar used). */
+.tool-tabs a::after,
+.nav-tools a::after {
+  content: attr(data-text);
+  height: 0;
+  font-weight: 600;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
 }
 .sidebar-top {
   display: flex;
@@ -345,14 +382,16 @@ body.tool-mode .tool-bar {
   text-decoration: underline;
 }
 
-/* Tool footer: the Kestrel mark + "Powered by Kestrel" (→ Getting started), then
-   Docs / API. All stay authed in-app views (SPEC §10). */
+/* Tool footer: the Kestrel mark, Docs, and API — all on one line (→ authed in-app
+   views, SPEC §10). */
 .tool-foot {
   border-top: 1px solid var(--line);
   padding-top: 12px;
+  padding-left: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
 }
 .powered {
   display: inline-flex;
@@ -360,14 +399,11 @@ body.tool-mode .tool-bar {
   gap: 7px;
   text-decoration: none;
   color: var(--muted);
-  font-size: 12.5px;
-  padding: 2px 8px;
+  font-size: 13px;
+  padding: 2px 0;
 }
 .powered:hover {
   color: var(--fg);
-}
-.powered strong {
-  font-weight: 600;
 }
 .kestrel-mark {
   width: 15px;
@@ -379,9 +415,12 @@ body.tool-mode .tool-bar {
 .nav-tools {
   display: flex;
   gap: 14px;
-  padding: 0 8px;
+  padding: 0;
 }
 .nav-tools a {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
   text-decoration: none;
   color: var(--muted);
   font-size: 13px;
@@ -1437,11 +1476,6 @@ td.act {
 }
 .health-dot {
   line-height: 1.45;
-}
-.health.ok {
-  color: var(--ok);
-  border-color: var(--b-sent-line);
-  background: var(--b-sent-bg);
 }
 .health.amber {
   color: var(--warn);

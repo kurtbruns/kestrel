@@ -261,6 +261,14 @@ export function createRouter(archiveBasePath: string): Router {
       summary: "Load the local demo dataset (fake transport only).",
       handler: devRoutes.seed,
     },
+    {
+      // Wipe the local database back to a fresh install (fake transport only).
+      method: "POST",
+      path: "/api/dev/reset",
+      access: "admin",
+      summary: "Reset the local database to a fresh install (fake transport only).",
+      handler: devRoutes.reset,
+    },
 
     // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
     {

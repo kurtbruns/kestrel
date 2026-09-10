@@ -70,7 +70,12 @@ describe("settings surface", () => {
     expect(res.status).toBe(200);
     expect(body.settings.testRecipients).toEqual([]);
     // Publication identity starts empty (the reader falls back to the From name).
-    expect(body.settings.publication).toMatchObject({ name: "", tagline: "", brandColor: "", logoUrl: "" });
+    expect(body.settings.publication).toMatchObject({
+      name: "",
+      tagline: "",
+      brandColor: "",
+      logoUrl: "",
+    });
     // Reflects the env-resolved config (fake transport in tests)…
     expect(body.deployment.provider).toBe("fake");
     expect(typeof body.deployment.fromAddress).toBe("string");
@@ -135,7 +140,9 @@ describe("publication identity (issue #81)", () => {
   });
 
   it("themes the public archive index with the name + tagline (a blank name falls back)", async () => {
-    await putSettings({ publication: { name: "The Hovering Hunter", tagline: "Notes from the field" } });
+    await putSettings({
+      publication: { name: "The Hovering Hunter", tagline: "Notes from the field" },
+    });
     const html = await (await SELF.fetch(`${BASE}/`)).text();
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");

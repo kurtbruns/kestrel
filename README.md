@@ -66,6 +66,10 @@ the seed still runs (that one image just 404s until you drop the file in and re-
 View the result at `/dashboard/` and at the archived issues, e.g.
 **http://localhost:8787/newsletter/the-hovering-hunter**.
 
+To go the other way — wipe the local database back to a fresh install (no posts,
+subscribers, or settings) and see the first-run dashboard + setup checklist — run
+`npm run reset` (also dev-server-up, fake-transport-only).
+
 > **Note:** the local D1 tracks which migrations it has applied by filename. If the
 > migrations ever change, reset the local database — delete this checkout's
 > `.wrangler/state` (or run `npm run dev` in a fresh clone) and re-migrate.
@@ -145,6 +149,7 @@ The editor's **Settings** tab holds the app's runtime preferences (via the authe
 | --- | --- |
 | `npm run dev` | launcher around `wrangler dev` (local Worker on :8787; auto-migrates a fresh local DB, honors preview `PORT`) |
 | `npm run seed` | load the local "Field Notes" demo dataset (needs `npm run dev` running; fake transport only) |
+| `npm run reset` | wipe the local database back to a fresh install — the reverse of `seed` (needs `npm run dev`; fake transport only) |
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
 | `npm run check` | Biome: format + organize imports + lint, applying safe fixes (`npm run lint` / `npm run format` for report-only / format-only) |

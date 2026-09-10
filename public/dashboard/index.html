@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=28050ea2">
+<link rel="stylesheet" href="./styles.css?v=2b2f8868">
 </head>
 <body>
 <!-- Tool area chrome: the pages about Kestrel itself — Getting started, Docs, API —
@@ -13,17 +13,21 @@
      "learning the tool" reads as a separate context from "running your publication."
      Still authed in-app views, never top-level navigations (SPEC §10). -->
 <header class="tool-bar">
-  <a class="tool-brand" href="#/dashboard" aria-label="Back to dashboard">
+  <a class="tool-brand" href="#/start">
     <svg viewBox="0 0 360 360" aria-hidden="true"><path d="M290.028 216.064C285.698 218.264 280.838 219.394 275.978 219.344C281.268 225.044 284.128 232.924 283.708 240.694C283.278 248.844 279.388 256.514 274.268 262.874C269.148 269.244 262.808 274.494 256.608 279.814C237.148 296.474 218.248 314.404 195.328 325.854C178.568 334.224 160.148 338.864 143.458 347.374C140.148 349.064 136.898 350.904 133.418 352.224C129.938 353.544 126.178 354.324 122.498 353.794C121.718 353.684 120.938 353.504 120.228 353.184C119.508 352.864 118.848 352.374 118.408 351.734C117.918 351.024 117.708 350.154 117.718 349.304C117.728 348.454 117.948 347.614 118.268 346.824C118.567 346.054 118.967 345.339 119.371 344.618L119.418 344.534C128.788 327.894 140.118 312.454 150.358 296.344C160.598 280.224 169.848 263.174 174.428 244.634C176.258 237.264 177.328 229.644 176.738 222.074C176.138 214.504 173.808 206.964 169.308 200.854C164.588 194.434 157.728 189.874 150.538 186.434C139.628 181.204 127.768 178.284 115.858 176.154C93.9183 172.224 71.6083 170.884 49.4083 168.944C45.8483 168.634 42.2483 168.294 38.8783 167.124C34.7683 165.704 31.0683 163.004 28.7383 159.334C26.4183 155.664 25.5583 151.024 26.7483 146.844C27.6583 143.624 29.7283 140.784 32.3583 138.724C34.9883 136.654 38.1683 135.324 41.4383 134.634C44.7183 133.944 48.0983 133.874 51.4383 134.154C53.2683 134.304 55.0883 134.554 56.8983 134.824C72.2383 137.094 87.3783 140.484 102.548 143.644C115.468 146.334 128.498 148.864 141.688 149.224C154.878 149.574 168.338 147.654 180.178 141.824C196.548 133.764 208.758 118.514 215.298 101.474C224.258 78.094 223.028 52.174 220.398 27.284C219.788 21.484 219.108 15.614 220.058 9.854C220.178 9.124 220.328 8.38398 220.658 7.71398C220.988 7.05398 221.528 6.45399 222.228 6.19399C222.858 5.95399 223.568 6.01399 224.218 6.22399C224.858 6.43399 225.448 6.77399 226.028 7.12399C262.588 29.154 290.508 63.614 310.198 101.484C312.188 105.314 314.108 109.204 315.408 113.314C316.708 117.434 317.358 121.814 316.768 126.084C316.348 129.114 315.268 132.104 313.318 134.454C310.668 137.634 306.688 139.354 302.778 140.744C298.878 142.124 294.808 143.324 291.488 145.804C286.998 149.174 284.328 154.834 284.598 160.444C292.098 161.904 299.448 164.114 306.508 167.014C312.788 169.594 318.998 172.854 323.418 178.014C327.088 182.294 329.288 187.614 331.438 192.844C332.158 194.584 332.878 196.344 333.328 198.184C333.778 200.014 333.958 201.944 333.578 203.794C333.138 205.934 331.948 207.914 330.248 209.294C329.898 208.024 329.258 206.834 328.408 205.834C326.958 204.154 324.928 203.054 322.798 202.454C318.258 201.174 313.328 202.114 309.018 204.044C304.708 205.974 300.898 208.834 297.068 211.584C294.808 213.204 292.508 214.804 290.028 216.064Z"/></svg>
     <span>Kestrel</span>
   </a>
   <nav class="tool-tabs" aria-label="Help">
-    <a href="#/start" data-tool="start">Getting started</a>
-    <a href="#/docs" data-tool="docs">Docs</a>
-    <a href="#/reference" data-tool="reference">API</a>
+    <a href="#/start" data-tool="start" data-text="Getting started">Getting started</a>
+    <a href="#/docs" data-tool="docs" data-text="Docs">Docs</a>
+    <a href="#/reference" data-tool="reference" data-text="API">API</a>
   </nav>
-  <a class="tool-back" href="#/dashboard">← Back to dashboard</a>
 </header>
+<!-- Exit the tool area back to the publication dashboard — a floating control, so
+     the Kestrel mark stays the tool area's own home rather than an exit. -->
+<a class="tool-exit" href="#/dashboard" title="Back to dashboard" aria-label="Back to dashboard">
+  <svg viewBox="0 -960 960 960" aria-hidden="true"><path d="m256-200-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"/></svg>
+</a>
 <!-- Publication workspace: a left sidebar (brand → Dashboard, primary nav, account,
      tool footer) beside the routed view. The editor route hides the sidebar for a
      full-width writing canvas (body.editor-mode). Admin→public links are fine
@@ -55,8 +59,8 @@
           <span>Kestrel</span>
         </a>
         <nav class="nav-tools" aria-label="Tools">
-          <a href="#/docs" data-view="docs">Docs</a>
-          <a href="#/reference" data-view="reference">API</a>
+          <a href="#/docs" data-view="docs" data-text="Docs">Docs</a>
+          <a href="#/reference" data-view="reference" data-text="API">API</a>
         </nav>
       </div>
     </div>
@@ -65,6 +69,6 @@
 </div>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=fc37b2b7"></script>
+<script src="./app.js?v=a87c8926"></script>
 </body>
 </html>
