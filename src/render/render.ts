@@ -4,17 +4,18 @@
  * The output carries the %%UNSUBSCRIBE_URL%% sentinel verbatim; consumers
  * substitute it per-recipient (send/test) or with a generic link (preview/archive).
  */
-import type { Config } from "../env";
-import type { PostRow, RevisionRow } from "../db/posts";
+
 import type { ImageRow } from "../db/images";
+import type { PostRow, RevisionRow } from "../db/posts";
+import type { Config } from "../env";
+import { buildImageMap } from "./image_urls";
 import { markdownToHtml } from "./markdown";
 import { sanitizeEmailHtml } from "./sanitize";
-import { buildImageMap } from "./image_urls";
 import { emailLayout, UNSUB_SENTINEL } from "./template";
 import { htmlToText } from "./text";
 
-export { UNSUB_SENTINEL };
 export { ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "./template";
+export { UNSUB_SENTINEL };
 
 /** Widest image column an email client will show for our 600px content column. */
 const EMAIL_MAX_WIDTH = 600;

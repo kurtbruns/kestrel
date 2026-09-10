@@ -7,9 +7,10 @@
  * A missed fire is still delivered — the render is frozen, so lateness is a
  * timeliness problem, not a correctness one — but it is never silent (§14).
  */
+
+import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
-import * as sends from "../db/sends";
 import { runSend } from "./loop";
 
 export async function sweep(env: AppEnv): Promise<void> {
@@ -31,7 +32,9 @@ export async function sweep(env: AppEnv): Promise<void> {
 
   // 2) Resume interrupted sends whose lease has expired.
   for (const s of await sends.resumableSends(env.DB, now)) {
-    if (handled.has(s.id)) continue;
+    if (handled.has(s.id)) {
+      continue;
+    }
     handled.add(s.id);
     await safeRun(env, s.id);
   }

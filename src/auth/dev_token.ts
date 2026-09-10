@@ -12,7 +12,7 @@
  * A token with an `email` claim is an interactive human (the editor); one without
  * is a service principal (Claude / automation), mirroring the Access split.
  */
-import { SignJWT, jwtVerify } from "jose";
+import { jwtVerify, SignJWT } from "jose";
 import type { Principal } from "../router";
 
 const DEV_ISSUER = "kestrel-dev";

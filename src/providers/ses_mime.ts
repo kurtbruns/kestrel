@@ -36,7 +36,9 @@ export function base64Bytes(bytes: Uint8Array): string {
 /** Wrap a base64 blob into 76-char lines (RFC 2045). */
 function wrap76(s: string): string {
   const lines: string[] = [];
-  for (let i = 0; i < s.length; i += 76) lines.push(s.slice(i, i + 76));
+  for (let i = 0; i < s.length; i += 76) {
+    lines.push(s.slice(i, i + 76));
+  }
   return lines.join(CRLF);
 }
 
@@ -44,7 +46,9 @@ const ASCII_ONLY = /^[\x20-\x7e]*$/;
 
 /** RFC 2047 encoded-word for a header value that contains non-ASCII (e.g. a subject). */
 function encodeHeaderValue(value: string): string {
-  if (ASCII_ONLY.test(value)) return value;
+  if (ASCII_ONLY.test(value)) {
+    return value;
+  }
   return `=?utf-8?B?${base64Utf8(value)}?=`;
 }
 

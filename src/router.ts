@@ -36,7 +36,9 @@ export type Handler = (c: RequestContext) => Response | Promise<Response>;
 /** Read a required path parameter (guaranteed present on a matched route). */
 export function param(c: RequestContext, name: string): string {
   const v = c.params[name];
-  if (v === undefined) throw badRequest(`missing path parameter: ${name}`);
+  if (v === undefined) {
+    throw badRequest(`missing path parameter: ${name}`);
+  }
   return v;
 }
 
@@ -67,20 +69,28 @@ export class Router {
     const config = getConfig(env);
 
     for (const route of this.routes) {
-      if (route.method !== req.method) continue;
+      if (route.method !== req.method) {
+        continue;
+      }
       const match = route.pattern.exec(url);
-      if (!match) continue;
+      if (!match) {
+        continue;
+      }
 
       const params: Record<string, string> = {};
       for (const [k, v] of Object.entries(match.pathname.groups)) {
-        if (v !== undefined) params[k] = decodeURIComponent(v);
+        if (v !== undefined) {
+          params[k] = decodeURIComponent(v);
+        }
       }
 
       const c: RequestContext = { req, env, ctx, url, params, config };
       try {
         for (const mw of route.middleware) {
           const short = await mw(c);
-          if (short) return short;
+          if (short) {
+            return short;
+          }
         }
         return await route.handler(c);
       } catch (err) {

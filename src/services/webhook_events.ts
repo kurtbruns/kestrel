@@ -9,9 +9,10 @@
  *     the address is dropped from every future audience (I1/I2).
  * Soft (transient) bounces are recorded but never suppress.
  */
-import type { DeliveryEvent } from "../providers/types";
+
 import { markDeliveryEvent } from "../db/sends";
 import { addSuppression } from "../db/subscribers";
+import type { DeliveryEvent } from "../providers/types";
 
 export interface ApplyResult {
   applied: number;
@@ -47,7 +48,11 @@ export async function applyDeliveryEvents(
 }
 
 function eventDetail(e: DeliveryEvent): string | null {
-  if (e.type === "bounced") return e.detail ?? (e.hard ? "hard bounce" : "soft bounce");
-  if (e.type === "complained") return e.detail ?? "complaint";
+  if (e.type === "bounced") {
+    return e.detail ?? (e.hard ? "hard bounce" : "soft bounce");
+  }
+  if (e.type === "complained") {
+    return e.detail ?? "complaint";
+  }
   return null;
 }

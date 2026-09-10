@@ -38,7 +38,9 @@ export function getActiveSendForPost(db: D1Database, postId: string): Promise<Se
 /** The most recent successfully-sent Send for a post (backs the archive page). */
 export function latestSentSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
   return db
-    .prepare("SELECT * FROM sends WHERE post_id = ? AND status = 'sent' ORDER BY completed_at DESC LIMIT 1")
+    .prepare(
+      "SELECT * FROM sends WHERE post_id = ? AND status = 'sent' ORDER BY completed_at DESC LIMIT 1",
+    )
     .bind(postId)
     .first<SendRow>();
 }
@@ -100,7 +102,9 @@ export async function deliveryRollup(
     .bind(sendId)
     .all<{ status: string; n: number }>();
   const rollup: Record<string, number> = {};
-  for (const r of results) rollup[r.status] = r.n;
+  for (const r of results) {
+    rollup[r.status] = r.n;
+  }
   return rollup;
 }
 
@@ -129,7 +133,9 @@ export async function resumableSends(db: D1Database, now: number): Promise<SendR
 /** Sends stuck in `sending` too long (for loud alerting). */
 export async function stuckSends(db: D1Database, olderThan: number): Promise<SendRow[]> {
   const { results } = await db
-    .prepare("SELECT * FROM sends WHERE status = 'sending' AND started_at IS NOT NULL AND started_at < ?")
+    .prepare(
+      "SELECT * FROM sends WHERE status = 'sending' AND started_at IS NOT NULL AND started_at < ?",
+    )
     .bind(olderThan)
     .all<SendRow>();
   return results;
@@ -170,10 +176,23 @@ export async function releaseLease(db: D1Database, sendId: string): Promise<void
 }
 
 /** Mark a send complete and its post sent (atomic). */
-export async function completeSend(db: D1Database, sendId: string, postId: string, now: number): Promise<void> {
+export async function completeSend(
+  db: D1Database,
+  sendId: string,
+  postId: string,
+  now: number,
+): Promise<void> {
   await db.batch([
-    db.prepare("UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL WHERE id = ? AND status = 'sending'").bind(now, sendId),
-    db.prepare("UPDATE posts SET status = 'sent', updated_at = ? WHERE id = ? AND status = 'scheduled'").bind(now, postId),
+    db
+      .prepare(
+        "UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL WHERE id = ? AND status = 'sending'",
+      )
+      .bind(now, sendId),
+    db
+      .prepare(
+        "UPDATE posts SET status = 'sent', updated_at = ? WHERE id = ? AND status = 'scheduled'",
+      )
+      .bind(now, postId),
   ]);
 }
 
@@ -181,7 +200,11 @@ export async function completeSend(db: D1Database, sendId: string, postId: strin
  * Materialize the audience into `deliveries`, idempotently. INSERT OR IGNORE on
  * UNIQUE(send_id, email) makes re-entry a no-op, which is what lets a send resume.
  */
-export async function materializeAudience(db: D1Database, sendId: string, now: number): Promise<void> {
+export async function materializeAudience(
+  db: D1Database,
+  sendId: string,
+  now: number,
+): Promise<void> {
   await db
     .prepare(
       `INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at)
@@ -205,14 +228,18 @@ export interface DeliveryWork {
 
 export async function pendingDeliveryIds(db: D1Database, sendId: string): Promise<string[]> {
   const { results } = await db
-    .prepare("SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' ORDER BY rowid ASC")
+    .prepare(
+      "SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' ORDER BY rowid ASC",
+    )
     .bind(sendId)
     .all<{ id: string }>();
   return results.map((r) => r.id);
 }
 
 export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<DeliveryWork[]> {
-  if (ids.length === 0) return [];
+  if (ids.length === 0) {
+    return [];
+  }
   const placeholders = ids.map(() => "?").join(",");
   const { results } = await db
     .prepare(
@@ -228,23 +255,43 @@ export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<
   return results;
 }
 
-export async function setDeliveriesDispatched(db: D1Database, ids: string[], now: number): Promise<void> {
-  if (ids.length === 0) return;
+export async function setDeliveriesDispatched(
+  db: D1Database,
+  ids: string[],
+  now: number,
+): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
   const placeholders = ids.map(() => "?").join(",");
   await db
-    .prepare(`UPDATE deliveries SET status = 'dispatched', updated_at = ? WHERE id IN (${placeholders})`)
+    .prepare(
+      `UPDATE deliveries SET status = 'dispatched', updated_at = ? WHERE id IN (${placeholders})`,
+    )
     .bind(now, ...ids)
     .run();
 }
 
-export async function setDeliveryAccepted(db: D1Database, id: string, providerId: string, now: number): Promise<void> {
+export async function setDeliveryAccepted(
+  db: D1Database,
+  id: string,
+  providerId: string,
+  now: number,
+): Promise<void> {
   await db
-    .prepare("UPDATE deliveries SET status = 'accepted', provider_id = ?, error = NULL, updated_at = ? WHERE id = ?")
+    .prepare(
+      "UPDATE deliveries SET status = 'accepted', provider_id = ?, error = NULL, updated_at = ? WHERE id = ?",
+    )
     .bind(providerId, now, id)
     .run();
 }
 
-export async function setDeliveryFailed(db: D1Database, id: string, error: string, now: number): Promise<void> {
+export async function setDeliveryFailed(
+  db: D1Database,
+  id: string,
+  error: string,
+  now: number,
+): Promise<void> {
   await db
     .prepare("UPDATE deliveries SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
     .bind(error, now, id)
@@ -252,26 +299,46 @@ export async function setDeliveryFailed(db: D1Database, id: string, error: strin
 }
 
 export async function setDeliverySkipped(db: D1Database, id: string, now: number): Promise<void> {
-  await db.prepare("UPDATE deliveries SET status = 'skipped', updated_at = ? WHERE id = ?").bind(now, id).run();
+  await db
+    .prepare("UPDATE deliveries SET status = 'skipped', updated_at = ? WHERE id = ?")
+    .bind(now, id)
+    .run();
 }
 
-export async function requeueDelivery(db: D1Database, id: string, error: string, now: number): Promise<void> {
+export async function requeueDelivery(
+  db: D1Database,
+  id: string,
+  error: string,
+  now: number,
+): Promise<void> {
   await db
-    .prepare("UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?")
+    .prepare(
+      "UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?",
+    )
     .bind(error, now, id)
     .run();
 }
 
 /** Reset a prior invocation's in-flight rows back to pending (idempotent providers only). */
-export async function resetDispatchedToPending(db: D1Database, sendId: string, now: number): Promise<number> {
+export async function resetDispatchedToPending(
+  db: D1Database,
+  sendId: string,
+  now: number,
+): Promise<number> {
   const res = await db
-    .prepare("UPDATE deliveries SET status = 'pending', updated_at = ? WHERE send_id = ? AND status = 'dispatched'")
+    .prepare(
+      "UPDATE deliveries SET status = 'pending', updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
+    )
     .bind(now, sendId)
     .run();
   return res.meta.changes ?? 0;
 }
 
-export async function countDeliveries(db: D1Database, sendId: string, status: string): Promise<number> {
+export async function countDeliveries(
+  db: D1Database,
+  sendId: string,
+  status: string,
+): Promise<number> {
   const row = await db
     .prepare("SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND status = ?")
     .bind(sendId, status)
@@ -308,10 +375,14 @@ export async function markDeliveryEvent(db: D1Database, u: DeliveryEventUpdate):
       .bind(u.event, detail, u.at, u.providerId)
       .run();
     const n = res.meta.changes ?? 0;
-    if (n > 0 || !u.email) return n;
+    if (n > 0 || !u.email) {
+      return n;
+    }
     // Fall through to email match if the providerId wasn't found on any row.
   }
-  if (!u.email) return 0;
+  if (!u.email) {
+    return 0;
+  }
   const res = await db
     .prepare(
       `UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?

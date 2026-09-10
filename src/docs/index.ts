@@ -16,10 +16,9 @@ import emailSender from "../../docs/setup/03-email-sender.md";
 import sendingDomain from "../../docs/setup/04-sending-domain-dns.md";
 import archiveWebsite from "../../docs/setup/05-archive-website.md";
 import verify from "../../docs/setup/06-verify.md";
-
+import { docPage } from "../lib/page";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
-import { docPage } from "../lib/page";
 
 interface DocSource {
   slug: string;
@@ -62,7 +61,9 @@ export function listDocs(): DocMeta[] {
  */
 export function renderDocPage(slug: string): Response | undefined {
   const doc = DOCS.find((d) => d.slug === slug);
-  if (!doc) return undefined;
+  if (!doc) {
+    return undefined;
+  }
   const warnings: string[] = [];
   const contentHtml = markdownToHtml(doc.markdown, {
     images: new Map(),

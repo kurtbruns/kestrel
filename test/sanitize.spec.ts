@@ -14,14 +14,17 @@ describe("sanitizeEmailHtml (hygiene pass)", () => {
   });
 
   it("neutralizes javascript: / vbscript: URLs", () => {
-    const out = sanitizeEmailHtml('<a href="javascript:evil()">x</a><a href="vbscript:bad()">y</a>');
+    const out = sanitizeEmailHtml(
+      '<a href="javascript:evil()">x</a><a href="vbscript:bad()">y</a>',
+    );
     expect(out).not.toMatch(/javascript:/i);
     expect(out).not.toMatch(/vbscript:/i);
     expect(out).toContain("unsafe:");
   });
 
   it("leaves ordinary content untouched", () => {
-    const html = '<h1>Title</h1><p>Body with <a href="https://ok.com">a link</a> and <strong>bold</strong>.</p>';
+    const html =
+      '<h1>Title</h1><p>Body with <a href="https://ok.com">a link</a> and <strong>bold</strong>.</p>';
     expect(sanitizeEmailHtml(html)).toBe(html);
   });
 });

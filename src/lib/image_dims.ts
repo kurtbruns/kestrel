@@ -10,7 +10,9 @@ export interface Dimensions {
 }
 
 export function probeImageDimensions(b: Uint8Array): Dimensions | null {
-  if (b.length < 24) return null;
+  if (b.length < 24) {
+    return null;
+  }
   const dv = new DataView(b.buffer as ArrayBuffer, b.byteOffset, b.byteLength);
 
   // PNG: 89 50 4E 47 0D 0A 1A 0A, IHDR width@16 height@20 (big-endian)
@@ -24,7 +26,9 @@ export function probeImageDimensions(b: Uint8Array): Dimensions | null {
   }
 
   // JPEG: FF D8, then walk segments to the Start-Of-Frame marker
-  if (b[0] === 0xff && b[1] === 0xd8) return probeJpeg(b, dv);
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    return probeJpeg(b, dv);
+  }
 
   return null;
 }
@@ -50,7 +54,9 @@ function probeJpeg(b: Uint8Array, dv: DataView): Dimensions | null {
     }
     // Otherwise skip this segment using its length field.
     const len = dv.getUint16(off + 2);
-    if (len < 2) return null;
+    if (len < 2) {
+      return null;
+    }
     off += 2 + len;
   }
   return null;

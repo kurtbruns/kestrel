@@ -6,7 +6,7 @@
  * claim is an interactive human; a service token (Claude) has no email.
  * Returns `null` when Access isn't configured or the token is invalid.
  */
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import { createRemoteJWKSet, type JWTVerifyGetKey, jwtVerify } from "jose";
 import type { Config } from "../env";
 import type { Principal } from "../router";
 
@@ -30,12 +30,16 @@ function jwksFor(issuer: string): JWTVerifyGetKey {
  * already gated by the Access Service Auth policy.
  */
 export function isHumanAllowed(email: string, allowed: string[] | undefined): boolean {
-  if (!allowed || allowed.length === 0) return true;
+  if (!allowed || allowed.length === 0) {
+    return true;
+  }
   return allowed.includes(email.toLowerCase());
 }
 
 export async function verifyAccessJwt(token: string, config: Config): Promise<Principal | null> {
-  if (!config.accessTeamDomain || !config.accessAud) return null;
+  if (!config.accessTeamDomain || !config.accessAud) {
+    return null;
+  }
   const issuer = `https://${config.accessTeamDomain}`;
   try {
     const { payload } = await jwtVerify(token, jwksFor(issuer), {
@@ -44,7 +48,9 @@ export async function verifyAccessJwt(token: string, config: Config): Promise<Pr
     });
     const email = typeof payload.email === "string" ? payload.email : undefined;
     if (email) {
-      if (!isHumanAllowed(email, config.accessAllowedEmails)) return null;
+      if (!isHumanAllowed(email, config.accessAllowedEmails)) {
+        return null;
+      }
       return { kind: "human", email };
     }
     // No email → an Access service token (Claude/automation), already authorized

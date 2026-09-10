@@ -111,7 +111,9 @@ export function getConfig(env: AppEnv): Config {
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {
-  if (!v) return undefined;
+  if (!v) {
+    return undefined;
+  }
   const list = v
     .split(",")
     .map((e) => e.trim().toLowerCase())

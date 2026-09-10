@@ -4,13 +4,14 @@
  * In production images are served from a custom-domain public R2 bucket; the
  * `/media` route is the local-dev equivalent (and any Worker-proxied serving).
  */
-import type { RequestContext } from "../router";
-import { param } from "../router";
+
+import type { ImageRow } from "../db/images";
+import * as images from "../db/images";
+import * as posts from "../db/posts";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
-import * as posts from "../db/posts";
-import * as images from "../db/images";
-import type { ImageRow } from "../db/images";
+import type { RequestContext } from "../router";
+import { param } from "../router";
 
 function storageKey(postId: string, filename: string): string {
   return `posts/${postId}/${filename}`;
@@ -34,7 +35,9 @@ function publicImage(c: RequestContext, row: ImageRow) {
 
 async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   if (post.status !== "draft") {
     throw conflict("post is not a draft — cancel the schedule to edit");
   }
@@ -52,20 +55,28 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   if (ct.includes("multipart/form-data")) {
     const form = await c.req.formData();
     const file = form.get("file");
-    if (!(file instanceof File)) throw badRequest("missing 'file' field");
+    if (!(file instanceof File)) {
+      throw badRequest("missing 'file' field");
+    }
     const override = form.get("filename");
-    filename = baseName(typeof override === "string" && override ? override : file.name || "upload");
+    filename = baseName(
+      typeof override === "string" && override ? override : file.name || "upload",
+    );
     contentType = file.type || "application/octet-stream";
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
     filename = baseName(c.url.searchParams.get("filename") ?? "");
-    if (!filename) throw badRequest("filename query param required for a raw upload");
+    if (!filename) {
+      throw badRequest("filename query param required for a raw upload");
+    }
     contentType = ct || "application/octet-stream";
     bytes = await c.req.arrayBuffer();
   }
 
-  if (!filename) throw badRequest("a filename is required");
+  if (!filename) {
+    throw badRequest("a filename is required");
+  }
 
   const key = storageKey(post.id, filename);
   await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType } });
@@ -83,7 +94,9 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
 
 export async function listImages(c: RequestContext): Promise<Response> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   const rows = await images.listImages(c.env.DB, post.id);
   return json({ images: rows.map((r) => publicImage(c, r)) });
 }
@@ -92,7 +105,9 @@ export async function deleteImage(c: RequestContext): Promise<Response> {
   const post = await requireDraft(c);
   const filename = baseName(param(c, "filename"));
   const row = await images.getImage(c.env.DB, post.id, filename);
-  if (!row) throw notFound("image");
+  if (!row) {
+    throw notFound("image");
+  }
   await c.env.MEDIA.delete(row.storage_key);
   await images.deleteImageRow(c.env.DB, post.id, filename);
   return json({ deleted: true });
@@ -101,9 +116,13 @@ export async function deleteImage(c: RequestContext): Promise<Response> {
 /** Public: stream an R2 object's bytes. */
 export async function serveMedia(c: RequestContext): Promise<Response> {
   const key = param(c, "key");
-  if (!key) throw notFound("media");
+  if (!key) {
+    throw notFound("media");
+  }
   const obj = await c.env.MEDIA.get(key);
-  if (!obj) throw notFound("media");
+  if (!obj) {
+    throw notFound("media");
+  }
   const headers = new Headers();
   obj.writeHttpMetadata(headers);
   headers.set("etag", obj.httpEtag);

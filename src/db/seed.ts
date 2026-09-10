@@ -7,8 +7,8 @@
  * the normal `db/` write path. Only the fake-provider seed route calls them.
  */
 import type { PostStatus } from "./posts";
-import type { SubscriberStatus } from "./subscribers";
 import type { SendStatus } from "./sends";
+import type { SubscriberStatus } from "./subscribers";
 
 export interface SeedSubscriber {
   id: string;
@@ -88,7 +88,9 @@ export interface SeedDelivery {
 /** Split into chunks small enough to stay well under D1's per-batch bind limit. */
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
   return out;
 }
 
@@ -120,7 +122,9 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
 }
 
 export async function insertSuppressions(db: D1Database, rows: SeedSuppression[]): Promise<void> {
-  if (rows.length === 0) return;
+  if (rows.length === 0) {
+    return;
+  }
   await db.batch(
     rows.map((r) =>
       db
@@ -131,18 +135,37 @@ export async function insertSuppressions(db: D1Database, rows: SeedSuppression[]
 }
 
 /** Insert a post and its (single) revision atomically, mirroring createPost. */
-export async function insertPost(db: D1Database, post: SeedPost, revision: SeedRevision): Promise<void> {
+export async function insertPost(
+  db: D1Database,
+  post: SeedPost,
+  revision: SeedRevision,
+): Promise<void> {
   await db.batch([
     db
       .prepare(
         "INSERT INTO posts (id, slug, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
       )
-      .bind(post.id, post.slug, post.subject, post.status, post.current_revision, post.created_at, post.updated_at),
+      .bind(
+        post.id,
+        post.slug,
+        post.subject,
+        post.status,
+        post.current_revision,
+        post.created_at,
+        post.updated_at,
+      ),
     db
       .prepare(
         "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
       )
-      .bind(revision.id, revision.post_id, revision.markdown, revision.metadata, revision.author, revision.created_at),
+      .bind(
+        revision.id,
+        revision.post_id,
+        revision.markdown,
+        revision.metadata,
+        revision.author,
+        revision.created_at,
+      ),
   ]);
 }
 
@@ -151,7 +174,16 @@ export async function insertImage(db: D1Database, row: SeedImage): Promise<void>
     .prepare(
       "INSERT INTO images (id, post_id, filename, storage_key, content_type, width, height, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .bind(row.id, row.post_id, row.filename, row.storage_key, row.content_type, row.width, row.height, row.created_at)
+    .bind(
+      row.id,
+      row.post_id,
+      row.filename,
+      row.storage_key,
+      row.content_type,
+      row.width,
+      row.height,
+      row.created_at,
+    )
     .run();
 }
 

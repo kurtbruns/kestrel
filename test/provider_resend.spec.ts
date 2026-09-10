@@ -1,13 +1,13 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppEnv, Config } from "../src/env";
-import type { Recipient, RenderedEmail } from "../src/providers/types";
-import { ResendProvider, signSvix } from "../src/providers/resend";
-import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { UNSUB_SENTINEL } from "../src/render/render";
 import * as subs from "../src/db/subscribers";
+import type { AppEnv, Config } from "../src/env";
+import { ResendProvider, signSvix } from "../src/providers/resend";
+import type { Recipient, RenderedEmail } from "../src/providers/types";
+import { UNSUB_SENTINEL } from "../src/render/render";
+import { applyDeliveryEvents } from "../src/services/webhook_events";
 
-const WHSEC = "whsec_" + btoa("kestrel-test-signing-key-0123456789");
+const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
 const config = { fromAddress: "Newsletter <newsletter@news.example.com>" } as unknown as Config;
 
 function makeProvider(overrides: Partial<AppEnv> = {}): ResendProvider {
@@ -124,12 +124,17 @@ describe("ResendProvider.sendBatch", () => {
 
 // --- webhook: signature verification + event normalization + reconciliation ---
 
-async function signedRequest(payload: unknown, opts: { tamper?: boolean; timestamp?: string } = {}) {
+async function signedRequest(
+  payload: unknown,
+  opts: { tamper?: boolean; timestamp?: string } = {},
+) {
   const id = "msg_test_1";
   const timestamp = opts.timestamp ?? String(Math.floor(Date.now() / 1000));
   const body = JSON.stringify(payload);
   let signature = await signSvix(WHSEC, id, timestamp, body);
-  if (opts.tamper) signature = signature.slice(0, -3) + "AAA";
+  if (opts.tamper) {
+    signature = `${signature.slice(0, -3)}AAA`;
+  }
   return new Request("https://kestrel.test/webhooks/resend", {
     method: "POST",
     headers: {
