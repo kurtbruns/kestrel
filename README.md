@@ -31,9 +31,9 @@ Claude Code's preview (`.claude/launch.json` has `autoPort`), so parallel worktr
 each get a free port instead of colliding on 8787; a plain terminal `npm run dev`
 still binds 8787. Pass wrangler flags through with `--`, e.g. `npm run dev -- --remote`.
 
-Open the editor at **http://localhost:8787/dashboard/** (the old `/admin/` path
-301-redirects there). Locally there's nothing to sign in with — the editor mints its
-own dev token on load and shows a **Local dev** chip.
+Open the editor at **http://localhost:8787/dashboard/**. Locally there's nothing to
+sign in with — the editor mints its own dev token on load and shows a **Local dev**
+chip.
 Everything the editor does is also available on the HTTP API — the editor is just a
 client of it.
 
@@ -127,8 +127,7 @@ as defense-in-depth, so a misconfigured Access policy can't silently expose admi
 routes. Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` (and optionally
 `ACCESS_ALLOWED_EMAILS`) as Worker vars/secrets. The Access application's path scope
 must cover **both** the editor SPA (`/dashboard/*`) and the authoring API paths, so
-the editor's same-origin API calls carry the Access JWT. (Keep the old `/admin`
-prefix in the path list too until every bookmark has followed the 301.)
+the editor's same-origin API calls carry the Access JWT.
 
 ## Deploying and operating
 
@@ -183,7 +182,7 @@ src/
   providers/      the email provider seam + fake / SES / Resend adapters
   docs/           the in-app operator guide (bundled from docs/setup/*.md)
   db/             D1 query modules
-public/dashboard/ the editor SPA (static assets; /admin/ 301-redirects here)
+public/dashboard/ the editor SPA (static assets)
 docs/setup/       the operator setup guide (source of truth; also served in-app)
 migrations/       D1 schema
 ```

@@ -13,7 +13,6 @@ Gate exactly these path prefixes (each match includes all subpaths):
 | Prefix | What it is |
 | --- | --- |
 | `/dashboard` | the editor SPA (static assets) |
-| `/admin` | the legacy SPA path — a 301 to `/dashboard`; keep it gated until every bookmark has followed the redirect |
 | `/posts` | posts, revisions, images, preview, test, schedule, send |
 | `/sends` | the send status surface |
 | `/subscribers` | the subscriber roster |
@@ -22,14 +21,14 @@ Gate exactly these path prefixes (each match includes all subpaths):
 
 Leave everything else public — the reader surface and webhooks: `/` (archive index), `/subscribe`, `/confirm`, `/unsubscribe`, `ARCHIVE_BASE_PATH` (e.g. `/newsletter/*`), `/media/*`, `/webhooks/*`, `/health`.
 
-> `/dashboard` is load-bearing: the editor SPA lives there, so if it isn't in this application the editor ships ungated. `/admin` is only the legacy-bookmark redirect; it can be dropped once no one uses the old path. Every authenticated route lives under one of these prefixes, so a new authoring endpoint added under `/api` (as the in-app docs are) is gated by the same application automatically. The one public `/api` route, `/api/dev/token`, exists only in a dev-shaped env and 404s once deployed, so gating `/api` wholesale is safe in production. Verify this against `src/app.ts` if the routes ever change.
+> `/dashboard` is load-bearing: the editor SPA lives there, so if it isn't in this application the editor ships ungated. Every authenticated route lives under one of the six prefixes above, so a new authoring endpoint added under `/api` (as the in-app docs are) is gated by the same application automatically. The one public `/api` route, `/api/dev/token`, exists only in a dev-shaped env and 404s once deployed, so gating `/api` wholesale is safe in production. Verify this against `src/app.ts` if the routes ever change.
 
 ## 1. Create one Access application
 
 In the Cloudflare **Zero Trust** dashboard → **Access → Applications → Add an application → Self-hosted**:
 
 - **Application domain:** `newsletter.example.com`.
-- **Paths:** add all the prefixes above (`dashboard`, `admin`, `posts`, `sends`, `subscribers`, `suppressions`, `api`) to this single application. Do not create one application per path — one application, many paths, so they share the AUD and policy set.
+- **Paths:** add all six prefixes above (`dashboard`, `posts`, `sends`, `subscribers`, `suppressions`, `api`) to this single application. Do not create one application per path — one application, many paths, so they share the AUD and policy set.
 
 Note the application's **Application Audience (AUD) tag** from its settings — you need it below.
 

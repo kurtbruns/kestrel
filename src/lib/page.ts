@@ -169,5 +169,5 @@ export function docPage(title: string, contentHtml: string): Response {
 }
 
 // The API reference is rendered natively by the admin SPA from the JSON the
-// `/api/reference` route returns (see src/reference/ + public/admin/app.js) —
+// `/api/reference` route returns (see src/reference/ + public/dashboard/app.js) —
 // there is no server-rendered reference page.

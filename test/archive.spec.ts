@@ -119,8 +119,7 @@ describe("archive index (the public front door, §10)", () => {
   it("never links into the Access-gated admin surface", async () => {
     await publish("An Issue", 1_000);
     const body = await (await SELF.fetch(`${base}/`)).text();
-    // Neither the legacy /admin path nor the renamed /dashboard SPA (SPEC §10).
-    expect(body).not.toContain("/admin");
+    // The admin SPA lives at /dashboard; the public archive must never link into it (SPEC §10).
     expect(body).not.toContain("/dashboard");
   });
 

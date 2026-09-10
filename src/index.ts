@@ -26,31 +26,9 @@ function routerFor(env: AppEnv): Router {
   return router;
 }
 
-/**
- * The admin SPA moved from `/admin/` to `/dashboard/`. Redirect old bookmarks with a
- * permanent, path- and query-preserving 301, so a saved `/admin/…?x=1` lands on the
- * matching `/dashboard/…?x=1`. This is an admin→admin path-compatibility shim — the
- * new path is gated exactly like the old one, so there's no §10 concern — and it is
- * deliberately not a manifest route: it's not part of the API surface the reference
- * documents, and it sits ahead of the router the same way static assets do.
- */
-function legacyAdminRedirect(request: Request): Response | null {
-  const url = new URL(request.url);
-  if (url.pathname !== "/admin" && !url.pathname.startsWith("/admin/")) {
-    return null;
-  }
-  const rest = url.pathname.slice("/admin".length); // "" (bare /admin) or "/<subpath>"
-  const location = new URL(`/dashboard${rest || "/"}${url.search}`, url);
-  return Response.redirect(location.toString(), 301);
-}
-
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const appEnv = env as AppEnv;
-    const redirect = legacyAdminRedirect(request);
-    if (redirect) {
-      return redirect;
-    }
     return routerFor(appEnv).handle(request, appEnv, ctx);
   },
 
