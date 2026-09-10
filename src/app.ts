@@ -94,8 +94,8 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/reference",
       access: "admin",
-      summary: "This reference — every route, generated from the registration so it can't drift.",
-      // Returned as data (the SPA renders it natively — sidebar + sections, no iframe);
+      summary: "Every route, generated from the registration so it can't drift.",
+      // Returned as data (the SPA renders it natively as a sidebar plus sections, no iframe);
       // it's also a machine-readable listing of the surface for Claude and tooling.
       handler: () => json({ groups: buildReference(r.routes.map((route) => route.def)) }),
     },
@@ -123,7 +123,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Create a draft post.",
       example: {
-        request: { subject: "Issue #1 — Hello", markdown: "# Hello\n\nWelcome." },
+        request: { subject: "Issue #1: Hello", markdown: "# Hello\n\nWelcome." },
         response: {
           post: { id: "p_abc123", status: "draft", slug: "issue-1-hello" },
           revision_id: "r_1",
@@ -155,7 +155,7 @@ export function createRouter(archiveBasePath: string): Router {
         "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
       example: {
         request: {
-          subject: "Issue #1 — Hello",
+          subject: "Issue #1: Hello",
           slug: "issue-1-hello",
           markdown: "# Hello\n\nEdited.",
           base_revision: "r_1",
@@ -330,7 +330,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/suppressions",
       access: "admin",
-      summary: "List suppressed addresses (bounced/complained — never mailed).",
+      summary: "List suppressed addresses (bounced or complained, never mailed).",
       handler: suppressionRoutes.list,
     },
     {
@@ -364,7 +364,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/",
       access: "public",
-      summary: "The public archive index — the newsletter's front door.",
+      summary: "The public archive index: the newsletter's front door.",
       handler: archiveRoutes.archiveIndex,
     },
     {

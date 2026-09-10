@@ -1473,9 +1473,9 @@ async function renderDocs(slug) {
 
 // ---- API reference ----
 // Every route the app and Claude can call, generated from the route manifest
-// (src/app.ts) and served as JSON by the authed /api/reference route. Rendered
-// natively — a sticky rail of tiers beside the route list — so it matches the
-// app's own chrome (no iframe, unlike the earlier build).
+// (src/app.ts) and served as JSON by the authed /api/reference route. The SPA
+// renders it natively as a sticky rail of tiers beside the route list, so it
+// matches the app's own chrome (no iframe, unlike the earlier build).
 function apiExample(label, value) {
   return value === undefined
     ? ""
@@ -1511,7 +1511,7 @@ async function renderReference() {
     </div>`;
   const navEl = document.getElementById("apiNav");
   const contentEl = document.getElementById("apiContent");
-  // Delegate clicks synchronously — one listener on the stable nav, so it survives
+  // Delegate clicks synchronously with one listener on the stable nav, so it survives
   // the async fill below: a sidebar click smooth-scrolls to that section.
   navEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-sec]");
@@ -1538,7 +1538,7 @@ async function renderReference() {
     .join("");
   contentEl.innerHTML =
     `<header class="api-head"><h1>API reference</h1>` +
-    `<p class="muted">Generated from the route registration — every endpoint the app and Claude can call. ` +
+    `<p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. ` +
     `Base URL <code>${esc(location.origin)}</code>.</p></header>` +
     groups.map(apiSectionHtml).join("");
 

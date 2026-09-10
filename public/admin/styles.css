@@ -79,7 +79,7 @@ body {
   margin: 0;
   font-family: var(--font);
   color: var(--fg);
-  background: var(--bg);
+  background: var(--card);
 }
 a {
   color: inherit;
@@ -1005,8 +1005,8 @@ td.act {
   }
 }
 
-/* API reference: a native two-column render of the /api/reference JSON manifest —
-   a sticky tier rail beside the route list. No iframe, so no frame chrome. */
+/* API reference: a native two-column render of the /api/reference JSON manifest.
+   A sticky tier rail sits beside the route list; no iframe, so no frame chrome. */
 .api-layout {
   display: grid;
   grid-template-columns: 200px 1fr;
@@ -1015,7 +1015,12 @@ td.act {
 }
 .api-nav {
   position: sticky;
-  top: 76px;
+  /* Pin just under the sticky topbar and rest exactly where it pins, so the rail
+     does not travel on scroll. margin-top cancels most of #app's 24px top inset
+     for this column; top then equals the rail's resting position. */
+  top: 85px;
+  margin-top: -12px;
+  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 2px;

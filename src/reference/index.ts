@@ -13,7 +13,7 @@
  */
 import type { Access, RouteDef } from "../router";
 
-/** One route as the reference shows it — the manifest metadata, no handler/middleware. */
+/** One route as the reference shows it: the manifest metadata, without handler or middleware. */
 export interface ReferenceEntry {
   method: string;
   path: string;
@@ -37,7 +37,7 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
     access: "admin",
     title: "Admin",
     blurb:
-      "The editor + authoring API. Gated by authentication — Cloudflare Access when deployed, a dev token locally. Claude calls these with its service token.",
+      "The editor and authoring API. Authentication gates it: Cloudflare Access when deployed, a dev token locally. Claude calls these with its service token.",
   },
   {
     access: "public",
@@ -49,7 +49,7 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
     access: "webhook",
     title: "Provider webhooks",
     blurb:
-      "Delivery callbacks from the email provider. No auth middleware — each request is signature-verified inside its adapter.",
+      "Delivery callbacks from the email provider. They carry no auth middleware; each request is signature-verified inside its adapter.",
   },
 ];
 
