@@ -1,6 +1,7 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 import { newId } from "../lib/ids";
 import { slugify } from "../lib/slug";
+import { unwrap } from "../lib/unwrap";
 
 export type PostStatus = "draft" | "scheduled" | "sent";
 
@@ -68,11 +69,7 @@ async function slugTaken(db: D1Database, slug: string, exceptId?: string): Promi
 }
 
 /** Return `base`, or `base-2`, `base-3`, … until one is free. */
-export async function uniqueSlug(
-  db: D1Database,
-  base: string,
-  exceptId?: string,
-): Promise<string> {
+export async function uniqueSlug(db: D1Database, base: string, exceptId?: string): Promise<string> {
   const root = base || "post";
   let candidate = root;
   let n = 1;
@@ -84,7 +81,9 @@ export async function uniqueSlug(
 }
 
 export function getCurrentRevision(db: D1Database, post: PostRow): Promise<RevisionRow | null> {
-  if (!post.current_revision) return Promise.resolve(null);
+  if (!post.current_revision) {
+    return Promise.resolve(null);
+  }
   return db
     .prepare("SELECT * FROM post_revisions WHERE id = ?")
     .bind(post.current_revision)
@@ -105,7 +104,9 @@ export function getRevisionByIndex(
   postId: string,
   n: number,
 ): Promise<RevisionRow | null> {
-  if (!Number.isInteger(n) || n < 1) return Promise.resolve(null);
+  if (!Number.isInteger(n) || n < 1) {
+    return Promise.resolve(null);
+  }
   return db
     .prepare("SELECT * FROM post_revisions WHERE post_id = ? ORDER BY rowid ASC LIMIT 1 OFFSET ?")
     .bind(postId, n - 1)
@@ -139,11 +140,11 @@ export async function createPost(
       .bind(revId, id, markdown, metadata, author, now),
   ]);
 
-  const post = (await getPost(db, id))!;
-  const revision = (await db
-    .prepare("SELECT * FROM post_revisions WHERE id = ?")
-    .bind(revId)
-    .first<RevisionRow>())!;
+  const post = unwrap(await getPost(db, id), "post");
+  const revision = unwrap(
+    await db.prepare("SELECT * FROM post_revisions WHERE id = ?").bind(revId).first<RevisionRow>(),
+    "revision",
+  );
   return { post, revision };
 }
 
@@ -164,7 +165,9 @@ export async function updatePost(
   const subject = input.subject ?? post.subject;
   const markdown = input.markdown ?? current?.markdown ?? "";
   let slug = post.slug;
-  if (input.slug !== undefined) slug = await uniqueSlug(db, slugify(input.slug), post.id);
+  if (input.slug !== undefined) {
+    slug = await uniqueSlug(db, slugify(input.slug), post.id);
+  }
   const metadata = JSON.stringify({ subject, slug });
 
   await db.batch([
@@ -180,11 +183,11 @@ export async function updatePost(
       .bind(slug, subject, revId, now, post.id),
   ]);
 
-  const updated = (await getPost(db, post.id))!;
-  const revision = (await db
-    .prepare("SELECT * FROM post_revisions WHERE id = ?")
-    .bind(revId)
-    .first<RevisionRow>())!;
+  const updated = unwrap(await getPost(db, post.id), "post");
+  const revision = unwrap(
+    await db.prepare("SELECT * FROM post_revisions WHERE id = ?").bind(revId).first<RevisionRow>(),
+    "revision",
+  );
   return { post: updated, revision };
 }
 
@@ -199,7 +202,9 @@ export async function updatePost(
  */
 export async function deletePost(db: D1Database, id: string): Promise<void> {
   await db.batch([
-    db.prepare("DELETE FROM deliveries WHERE send_id IN (SELECT id FROM sends WHERE post_id = ?)").bind(id),
+    db
+      .prepare("DELETE FROM deliveries WHERE send_id IN (SELECT id FROM sends WHERE post_id = ?)")
+      .bind(id),
     db.prepare("DELETE FROM sends WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM images WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM post_revisions WHERE post_id = ?").bind(id),

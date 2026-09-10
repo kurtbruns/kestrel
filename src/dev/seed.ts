@@ -13,24 +13,26 @@
  * fixture data the normal write path never produces, which is why the inserts go
  * through the seed-only helpers in `db/seed.ts`.
  */
-import type { AppEnv, Config } from "../env";
-import type { PostRow, RevisionRow } from "../db/posts";
+
 import type { ImageRow } from "../db/images";
-import { render } from "../render/render";
-import { newId } from "../lib/ids";
-import { probeImageDimensions } from "../lib/image_dims";
-import { audienceEmails } from "../db/subscribers";
+import type { PostRow, RevisionRow } from "../db/posts";
 import {
-  resetAll,
+  insertDeliveries,
+  insertImage,
+  insertPost,
+  insertSend,
   insertSubscribers,
   insertSuppressions,
-  insertPost,
-  insertImage,
-  insertSend,
-  insertDeliveries,
-  type SeedSubscriber,
+  resetAll,
   type SeedDelivery,
+  type SeedSubscriber,
 } from "../db/seed";
+import { audienceEmails } from "../db/subscribers";
+import type { AppEnv, Config } from "../env";
+import { newId } from "../lib/ids";
+import { probeImageDimensions } from "../lib/image_dims";
+import { unwrap } from "../lib/unwrap";
+import { render } from "../render/render";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
@@ -221,7 +223,10 @@ function buildSubscribers(now: number): SeedSubscriber[] {
   const confirmedCount = 50;
   for (let i = 0; i < confirmedCount; i++) {
     const created = now - 11 * WEEK + i * (DAY / 2);
-    const email = i < NAMED.length ? `${NAMED[i]}@example.com` : `birder.${String(i).padStart(2, "0")}@example.org`;
+    const email =
+      i < NAMED.length
+        ? `${NAMED[i]}@example.com`
+        : `birder.${String(i).padStart(2, "0")}@example.org`;
     push(email, "confirmed", created, created + DAY, null);
   }
 
@@ -234,7 +239,13 @@ function buildSubscribers(now: number): SeedSubscriber[] {
   // Unsubscribed: were confirmed, then left.
   for (let i = 0; i < 3; i++) {
     const created = now - 9 * WEEK - i * DAY;
-    push(`former.reader.${i}@example.com`, "unsubscribed", created, created + DAY, now - (i + 1) * WEEK);
+    push(
+      `former.reader.${i}@example.com`,
+      "unsubscribed",
+      created,
+      created + DAY,
+      now - (i + 1) * WEEK,
+    );
   }
 
   return rows;
@@ -258,16 +269,41 @@ function buildDeliveries(sendId: string, audience: string[], completedAt: number
     };
     const slot = i % 37;
     if (slot === 5 || slot === 30) {
-      return { ...base, status: "failed", provider_id: null, error: "SMTP 550 mailbox unavailable", attempts: 5, event: null, event_at: null };
+      return {
+        ...base,
+        status: "failed",
+        provider_id: null,
+        error: "SMTP 550 mailbox unavailable",
+        attempts: 5,
+        event: null,
+        event_at: null,
+      };
     }
     if (slot === 11) {
-      return { ...base, status: "skipped", provider_id: null, attempts: 0, event: null, event_at: null };
+      return {
+        ...base,
+        status: "skipped",
+        provider_id: null,
+        attempts: 0,
+        event: null,
+        event_at: null,
+      };
     }
     if (slot === 17) {
-      return { ...base, event: "bounced", event_detail: "Recipient address rejected (550 5.1.1)", event_at: completedAt + 2 * HOUR };
+      return {
+        ...base,
+        event: "bounced",
+        event_detail: "Recipient address rejected (550 5.1.1)",
+        event_at: completedAt + 2 * HOUR,
+      };
     }
     if (slot === 23) {
-      return { ...base, event: "complained", event_detail: "abuse", event_at: completedAt + 3 * HOUR };
+      return {
+        ...base,
+        event: "complained",
+        event_detail: "abuse",
+        event_at: completedAt + 3 * HOUR,
+      };
     }
     return base;
   });
@@ -275,7 +311,11 @@ function buildDeliveries(sendId: string, audience: string[], completedAt: number
 
 // --- render helpers ---------------------------------------------------------
 
-function renderInputFor(issue: Issue, at: number, markdown: string): { post: PostRow; revision: RevisionRow } {
+function renderInputFor(
+  issue: Issue,
+  at: number,
+  markdown: string,
+): { post: PostRow; revision: RevisionRow } {
   const post: PostRow = {
     id: issue.id,
     slug: issue.slug,
@@ -329,10 +369,23 @@ export async function seedDatabase(
 
   // One suppression shadows a confirmed subscriber (so the audience is confirmed
   // MINUS suppressed, I1); the other is an outside address that hard-bounced.
-  const suppressedConfirmed = subscribers.find((s) => s.status === "confirmed")!.email;
+  const suppressedConfirmed = unwrap(
+    subscribers.find((s) => s.status === "confirmed"),
+    "confirmed subscriber",
+  ).email;
   await insertSuppressions(db, [
-    { email: suppressedConfirmed, reason: "complaint", detail: "marked as spam", created_at: now - 2 * WEEK },
-    { email: "bounced.address@example.net", reason: "bounce", detail: "550 no such user", created_at: now - 4 * WEEK },
+    {
+      email: suppressedConfirmed,
+      reason: "complaint",
+      detail: "marked as spam",
+      created_at: now - 2 * WEEK,
+    },
+    {
+      email: "bounced.address@example.net",
+      reason: "bounce",
+      detail: "550 no such user",
+      created_at: now - 4 * WEEK,
+    },
   ]);
 
   const audience = await audienceEmails(db); // the authoritative confirmed-minus-suppressed list
@@ -374,7 +427,9 @@ export async function seedDatabase(
   for (const issue of ISSUES) {
     const images = issue.hasCover ? coverImages : [];
     // Point the cover reference at the actual cover filename (e.g. kestrel.webp).
-    const markdown = issue.hasCover ? issue.markdown.replace("kestrel.jpg", coverFilename) : issue.markdown;
+    const markdown = issue.hasCover
+      ? issue.markdown.replace("kestrel.jpg", coverFilename)
+      : issue.markdown;
 
     if (issue.kind === "draft") {
       const at = now - (issue.daysAgo ?? 2) * DAY;
@@ -415,7 +470,9 @@ export async function seedDatabase(
     const { post, revision } = renderInputFor(issue, completedAt, markdown);
     const result = render({ post, revision, images }, config);
     await insertPost(db, post, revision);
-    if (issue.hasCover) await insertImage(db, coverRow);
+    if (issue.hasCover) {
+      await insertImage(db, coverRow);
+    }
     const sendId = newId();
     await insertSend(db, {
       id: sendId,

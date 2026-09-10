@@ -19,7 +19,9 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
       image(token) {
         const href = token.href ?? "";
         const alt = token.text ?? "";
-        if (!alt.trim()) ctx.warnings.push(`image "${href}" is missing alt text`);
+        if (!alt.trim()) {
+          ctx.warnings.push(`image "${href}" is missing alt text`);
+        }
         const { url, image } = resolveImageSrc(href, ctx.images, ctx.mediaBase);
         if (!image && !/^https?:\/\//i.test(url)) {
           ctx.warnings.push(`image "${href}" was not found on this post`);
@@ -35,7 +37,9 @@ export function markdownToHtml(md: string, ctx: MarkdownContext): string {
 
 /** Constrain declared dimensions to the email column width (byte-resizing deferred). */
 function sizeAttrs(w: number | null, h: number | null, maxWidth: number): string {
-  if (!w || !h) return "";
+  if (!w || !h) {
+    return "";
+  }
   let width = w;
   let height = h;
   if (width > maxWidth) {

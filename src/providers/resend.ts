@@ -15,8 +15,8 @@
  * and webhook secret from env. Dev never selects this adapter (PROVIDER=fake).
  */
 import type { AppEnv, Config } from "../env";
-import { substituteUnsubscribe } from "../render/render";
 import { timingSafeEqual } from "../lib/constant_time";
+import { substituteUnsubscribe } from "../render/render";
 import type {
   DeliveryEvent,
   EmailProvider,
@@ -94,14 +94,21 @@ export class ResendProvider implements EmailProvider {
       // 429 / 5xx are transient (retry next tick); other 4xx are permanent.
       const retryable = res.status === 429 || res.status >= 500;
       const error = `resend batch ${res.status}: ${await safeText(res)}`;
-      return recipients.map((r) => ({ email: r.email, accepted: false as const, retryable, error }));
+      return recipients.map((r) => ({
+        email: r.email,
+        accepted: false as const,
+        retryable,
+        error,
+      }));
     }
 
     const body = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> };
     const data = Array.isArray(body.data) ? body.data : [];
     return recipients.map((r, i) => {
       const id = data[i]?.id;
-      if (id) return { email: r.email, accepted: true as const, providerId: id };
+      if (id) {
+        return { email: r.email, accepted: true as const, providerId: id };
+      }
       // A 2xx without a matching id is ambiguous — let the next tick retry.
       return {
         email: r.email,
@@ -126,7 +133,9 @@ export class ResendProvider implements EmailProvider {
       return reject(400, "stale timestamp");
     }
     const valid = await verifySvixSignature(this.webhookSecret, id, timestamp, body, signature);
-    if (!valid) return reject(401, "invalid signature");
+    if (!valid) {
+      return reject(401, "invalid signature");
+    }
 
     return { events: parseResendEvents(body), response: new Response("ok", { status: 200 }) };
   }
@@ -160,13 +169,17 @@ async function chunkIdempotencyKey(prefix: string, recipients: Recipient[]): Pro
 function base64ToBytes(b64: string): Uint8Array {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  for (let i = 0; i < bin.length; i++) {
+    out[i] = bin.charCodeAt(i);
+  }
   return out;
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
   let bin = "";
-  for (const b of bytes) bin += String.fromCharCode(b);
+  for (const b of bytes) {
+    bin += String.fromCharCode(b);
+  }
   return btoa(bin);
 }
 
@@ -203,7 +216,9 @@ export async function verifySvixSignature(
     .filter((p): p is { version: string; sig: string } => p !== null && p.version === "v1");
 
   for (const c of candidates) {
-    if (await timingSafeEqual(expected, c.sig)) return true;
+    if (await timingSafeEqual(expected, c.sig)) {
+      return true;
+    }
   }
   return false;
 }
@@ -223,7 +238,11 @@ export async function signSvix(
     false,
     ["sign"],
   );
-  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${id}.${timestamp}.${body}`));
+  const mac = await crypto.subtle.sign(
+    "HMAC",
+    key,
+    new TextEncoder().encode(`${id}.${timestamp}.${body}`),
+  );
   return `v1,${bytesToBase64(new Uint8Array(mac))}`;
 }
 
@@ -240,7 +259,9 @@ interface ResendEvent {
 }
 
 function firstRecipient(to: string[] | string | undefined): string | undefined {
-  if (Array.isArray(to)) return to[0];
+  if (Array.isArray(to)) {
+    return to[0];
+  }
   return typeof to === "string" ? to : undefined;
 }
 

@@ -6,7 +6,13 @@ const BASE = "https://kestrel.test";
 
 async function getSettings() {
   const res = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
-  return { res, body: (await res.json()) as { settings: { testRecipients: string[] }; deployment: Record<string, unknown> } };
+  return {
+    res,
+    body: (await res.json()) as {
+      settings: { testRecipients: string[] };
+      deployment: Record<string, unknown>;
+    },
+  };
 }
 
 async function putSettings(patch: unknown) {
@@ -43,13 +49,21 @@ describe("settings surface", () => {
     expect(body.deployment.accessConfigured).toBe(false);
     // …but never leaks a secret or credential.
     const keys = Object.keys(body.deployment);
-    for (const leaked of ["awsAccessKeyId", "awsSecretAccessKey", "resendApiKey", "devAuthSecret", "accessAud"]) {
+    for (const leaked of [
+      "awsAccessKeyId",
+      "awsSecretAccessKey",
+      "resendApiKey",
+      "devAuthSecret",
+      "accessAud",
+    ]) {
       expect(keys).not.toContain(leaked);
     }
   });
 
   it("persists test recipients (normalized + deduped) and reflects them back", async () => {
-    const put = await putSettings({ testRecipients: ["You@Example.com", "you@example.com", "team@example.com"] });
+    const put = await putSettings({
+      testRecipients: ["You@Example.com", "you@example.com", "team@example.com"],
+    });
     expect(put.status).toBe(200);
     const { body } = await getSettings();
     expect(body.settings.testRecipients).toEqual(["you@example.com", "team@example.com"]);

@@ -7,12 +7,18 @@
  * has no single recipient), and the inert masthead anchor becomes a browser-only
  * masthead (publication name + publish date), chrome that never ships in an email.
  */
-import type { RequestContext } from "../router";
-import { param } from "../router";
-import { htmlPage, archiveIndexPage } from "../lib/page";
+
 import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedIssues } from "../db/sends";
-import { UNSUB_SENTINEL, archiveUrl, ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "../render/render";
+import { archiveIndexPage, htmlPage } from "../lib/page";
+import {
+  ARCHIVE_MASTHEAD_ANCHOR,
+  archiveMasthead,
+  archiveUrl,
+  UNSUB_SENTINEL,
+} from "../render/render";
+import type { RequestContext } from "../router";
+import { param } from "../router";
 
 /** Display name for the publication, from the `From:` header (no separate var). */
 function publicationName(fromAddress: string): string {
@@ -50,7 +56,11 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const post = await getBySlug(c.env.DB, slug);
   const send = post ? await latestSentSendForPost(c.env.DB, post.id) : null;
   if (!post || !send) {
-    return htmlPage("Not found", `<h1 style="margin-top:0;">Not found</h1><p>This issue isn't available.</p>`, 404);
+    return htmlPage(
+      "Not found",
+      `<h1 style="margin-top:0;">Not found</h1><p>This issue isn't available.</p>`,
+      404,
+    );
   }
   // Two edits to the frozen record on the way to the browser (I3): the generic
   // unsubscribe link (no single recipient here) and the browser-only masthead
@@ -66,6 +76,9 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead);
   return new Response(html, {
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=3600" },
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=3600",
+    },
   });
 }

@@ -1,9 +1,9 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { isHumanAllowed } from "../src/auth/access";
-import { verifyDevToken, mintDevToken } from "../src/auth/dev_token";
-import { getConfig } from "../src/env";
+import { mintDevToken, verifyDevToken } from "../src/auth/dev_token";
 import type { AppEnv } from "../src/env";
+import { getConfig } from "../src/env";
 import { adminAuth, DEV_SECRET } from "./support/auth";
 
 describe("Access admin allowlist", () => {
@@ -98,12 +98,21 @@ describe("dev credential is inert in a deployed-shaped env", () => {
   // Pins the AND semantics: a real provider with Access not yet configured must
   // still drop the secret. This case would leak under an accidental `||`.
   it("does not resolve devAuthSecret for a real provider even if Access is unset", () => {
-    const halfDeployed = { ...deployed, ACCESS_TEAM_DOMAIN: undefined, ACCESS_AUD: undefined } as unknown as AppEnv;
+    const halfDeployed = {
+      ...deployed,
+      ACCESS_TEAM_DOMAIN: undefined,
+      ACCESS_AUD: undefined,
+    } as unknown as AppEnv;
     expect(getConfig(halfDeployed).devAuthSecret).toBeUndefined();
   });
 
   it("resolves devAuthSecret only in a dev-shaped env (fake + no Access)", () => {
-    const dev = { ...deployed, PROVIDER: "fake", ACCESS_TEAM_DOMAIN: undefined, ACCESS_AUD: undefined } as unknown as AppEnv;
+    const dev = {
+      ...deployed,
+      PROVIDER: "fake",
+      ACCESS_TEAM_DOMAIN: undefined,
+      ACCESS_AUD: undefined,
+    } as unknown as AppEnv;
     expect(getConfig(dev).devAuthSecret).toBe(DEV_SECRET);
   });
 

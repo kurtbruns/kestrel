@@ -1,12 +1,12 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { getConfig } from "../src/env";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
+import { getConfig } from "../src/env";
+import { clearFakeOutbox } from "../src/providers/fake";
+import { ARCHIVE_MASTHEAD_ANCHOR, UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { clearFakeOutbox } from "../src/providers/fake";
-import { UNSUB_SENTINEL, ARCHIVE_MASTHEAD_ANCHOR } from "../src/render/render";
 
 const base = "https://kestrel.test";
 
@@ -67,7 +67,11 @@ describe("archive / view-in-browser", () => {
   });
 
   it("404s for a post that hasn't been sent yet", async () => {
-    const { post } = await posts.createPost(env.DB, { subject: "Draft Only", markdown: "wip" }, "test");
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Draft Only", markdown: "wip" },
+      "test",
+    );
     const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
     expect(res.status).toBe(404);
   });
@@ -89,7 +93,9 @@ describe("archive index (the public front door, §10)", () => {
     await freeze(env, getConfig(env), post, Date.now() - 1000);
     await sweep(env);
     // Pin completed_at so ordering is deterministic (sweep uses wall-clock ms).
-    await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?").bind(completedAt, post.id).run();
+    await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?")
+      .bind(completedAt, post.id)
+      .run();
     return post;
   }
 

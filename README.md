@@ -146,6 +146,7 @@ The editor's **Settings** tab holds the app's runtime preferences (via the authe
 | `npm run seed` | load the local "Field Notes" demo dataset (needs `npm run dev` running; fake transport only) |
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
+| `npm run check` | Biome: format + organize imports + lint, applying safe fixes (`npm run lint` / `npm run format` for report-only / format-only) |
 | `npm run migrate:local` / `migrate:remote` | apply D1 migrations |
 | `npm run deploy` | `wrangler deploy` |
 

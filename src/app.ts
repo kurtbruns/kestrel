@@ -5,22 +5,23 @@
  * routes are public. Content / render / subscribers / sends / archive / webhook
  * routes are mounted here as they land in later milestones.
  */
-import { Router } from "./router";
-import { json } from "./lib/errors";
+
 import { requireAuth } from "./auth/middleware";
-import * as postRoutes from "./routes/posts";
-import * as imageRoutes from "./routes/images";
-import * as renderRoutes from "./routes/render_actions";
-import * as publicRoutes from "./routes/public";
-import * as subscriberRoutes from "./routes/subscribers";
-import * as suppressionRoutes from "./routes/suppressions";
-import * as scheduleRoutes from "./routes/schedule";
-import * as sendRoutes from "./routes/sends";
+import { json } from "./lib/errors";
+import { Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
-import * as webhookRoutes from "./routes/webhooks";
 import * as devRoutes from "./routes/dev";
 import * as docsRoutes from "./routes/docs";
+import * as imageRoutes from "./routes/images";
+import * as postRoutes from "./routes/posts";
+import * as publicRoutes from "./routes/public";
+import * as renderRoutes from "./routes/render_actions";
+import * as scheduleRoutes from "./routes/schedule";
+import * as sendRoutes from "./routes/sends";
 import * as settingsRoutes from "./routes/settings";
+import * as subscriberRoutes from "./routes/subscribers";
+import * as suppressionRoutes from "./routes/suppressions";
+import * as webhookRoutes from "./routes/webhooks";
 
 /**
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
@@ -37,7 +38,11 @@ export function createRouter(archiveBasePath: string): Router {
   // identity (and offer Access sign-out) instead of prompting for a token.
   r.get(
     "/api/whoami",
-    (c) => json({ principal: c.principal, auth: { mode: c.config.accessTeamDomain ? "access" : "dev" } }),
+    (c) =>
+      json({
+        principal: c.principal,
+        auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
+      }),
     authed,
   );
   // Dev-only bootstrap that hands out the local admin token, so it must be public

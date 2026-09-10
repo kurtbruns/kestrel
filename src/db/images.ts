@@ -1,5 +1,6 @@
 /** Image metadata queries. The bytes live in R2; this is the index over them. */
 import { newId } from "../lib/ids";
+import { unwrap } from "../lib/unwrap";
 
 export interface ImageRow {
   id: string;
@@ -68,7 +69,7 @@ export async function upsertImage(db: D1Database, input: ImageInput): Promise<Im
       )
       .run();
   }
-  return (await getImage(db, input.postId, input.filename))!;
+  return unwrap(await getImage(db, input.postId, input.filename), "image");
 }
 
 export async function deleteImageRow(

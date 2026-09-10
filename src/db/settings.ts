@@ -37,7 +37,9 @@ function coerce(raw: unknown): AppSettings {
 
 export async function getSettings(db: D1Database): Promise<AppSettings> {
   const row = await db.prepare("SELECT data FROM settings WHERE id = 1").first<{ data: string }>();
-  if (!row) return { ...DEFAULT_SETTINGS };
+  if (!row) {
+    return { ...DEFAULT_SETTINGS };
+  }
   try {
     return coerce(JSON.parse(row.data));
   } catch {
@@ -73,15 +75,25 @@ export async function updateSettings(
 
 /** Trim, lowercase, validate, dedupe (order-preserving), and cap the list. */
 function normalizeRecipients(input: unknown): string[] {
-  if (!Array.isArray(input)) throw new Error("testRecipients must be a list of email addresses");
+  if (!Array.isArray(input)) {
+    throw new Error("testRecipients must be a list of email addresses");
+  }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of input) {
-    if (typeof raw !== "string") throw new Error("each test recipient must be a string");
+    if (typeof raw !== "string") {
+      throw new Error("each test recipient must be a string");
+    }
     const email = normalizeEmail(raw);
-    if (!email) continue;
-    if (!isValidEmail(email)) throw new Error(`not a valid email address: ${raw}`);
-    if (seen.has(email)) continue;
+    if (!email) {
+      continue;
+    }
+    if (!isValidEmail(email)) {
+      throw new Error(`not a valid email address: ${raw}`);
+    }
+    if (seen.has(email)) {
+      continue;
+    }
     seen.add(email);
     out.push(email);
   }

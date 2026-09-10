@@ -1,14 +1,14 @@
 // Self-contained-by-default config (SPEC §10): the archive origin and media base
 // fall back to the app's own origin, and ARCHIVE_BASE_PATH drives both the emitted
 // archive URL and the route registered to serve it.
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
-import { getConfig, type AppEnv } from "../src/env";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";
+import { type AppEnv, getConfig } from "../src/env";
+import { clearFakeOutbox } from "../src/providers/fake";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { clearFakeOutbox } from "../src/providers/fake";
 
 /** Minimal binding bag for the pure getConfig tests (no D1/R2 needed). */
 function envWith(overrides: Record<string, string | undefined>): AppEnv {
@@ -79,8 +79,16 @@ describe("createRouter — archive route follows the base path", () => {
     const router = createRouter("/archive");
     const ctx = createExecutionContext();
 
-    const hit = await router.handle(new Request(`https://k.test/archive/${post.slug}`), env as AppEnv, ctx);
-    const miss = await router.handle(new Request(`https://k.test/newsletter/${post.slug}`), env as AppEnv, ctx);
+    const hit = await router.handle(
+      new Request(`https://k.test/archive/${post.slug}`),
+      env as AppEnv,
+      ctx,
+    );
+    const miss = await router.handle(
+      new Request(`https://k.test/newsletter/${post.slug}`),
+      env as AppEnv,
+      ctx,
+    );
     await waitOnExecutionContext(ctx);
 
     expect(hit.status).toBe(200);

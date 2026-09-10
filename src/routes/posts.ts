@@ -1,10 +1,11 @@
 /** Post CRUD + revision history. All routes are authed (admin surface). */
+
+import * as images from "../db/images";
+import * as posts from "../db/posts";
+import { getActiveSendForPost } from "../db/sends";
+import { badRequest, conflict, json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { badRequest, conflict, json, notFound } from "../lib/errors";
-import * as posts from "../db/posts";
-import * as images from "../db/images";
-import { getActiveSendForPost } from "../db/sends";
 
 function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
@@ -18,7 +19,9 @@ interface EditBody {
 
 async function readBody(c: RequestContext): Promise<EditBody> {
   const ct = c.req.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) return { input: {}, base_revision: null };
+  if (!ct.includes("application/json")) {
+    return { input: {}, base_revision: null };
+  }
   try {
     const raw = (await c.req.json()) as Record<string, unknown>;
     const pick = (k: string) => (typeof raw[k] === "string" ? (raw[k] as string) : undefined);
@@ -39,7 +42,9 @@ async function readBody(c: RequestContext): Promise<EditBody> {
  */
 function baseRevision(c: RequestContext, body: EditBody): string | null {
   const header = c.req.headers.get("If-Match");
-  if (header && header !== "*") return header.replace(/^"(.*)"$/, "$1");
+  if (header && header !== "*") {
+    return header.replace(/^"(.*)"$/, "$1");
+  }
   return body.base_revision;
 }
 
@@ -50,7 +55,9 @@ function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
 
 async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   if (post.status !== "draft") {
     throw conflict("post is not a draft — cancel the schedule to edit");
   }
@@ -69,7 +76,9 @@ export async function listPosts(c: RequestContext): Promise<Response> {
 
 export async function getPost(c: RequestContext): Promise<Response> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
   const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
   return json(
@@ -124,7 +133,9 @@ export async function deletePost(c: RequestContext): Promise<Response> {
 
 export async function listRevisions(c: RequestContext): Promise<Response> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   const revs = await posts.listRevisions(c.env.DB, post.id);
   return json({
     revisions: revs.map((r, i) => ({
@@ -140,11 +151,17 @@ export async function listRevisions(c: RequestContext): Promise<Response> {
 
 export async function getRevision(c: RequestContext): Promise<Response> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) throw notFound("post");
+  if (!post) {
+    throw notFound("post");
+  }
   const n = Number(param(c, "n"));
-  if (!Number.isInteger(n) || n < 1) throw badRequest("revision index must be a positive integer");
+  if (!Number.isInteger(n) || n < 1) {
+    throw badRequest("revision index must be a positive integer");
+  }
   const rev = await posts.getRevisionByIndex(c.env.DB, post.id, n);
-  if (!rev) throw notFound("revision");
+  if (!rev) {
+    throw notFound("revision");
+  }
   return json({
     n,
     id: rev.id,

@@ -1,5 +1,6 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { newId, newToken } from "../lib/ids";
+import { unwrap } from "../lib/unwrap";
 
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
 
@@ -72,8 +73,11 @@ export async function subscribe(
       )
       .bind(token, existing.id)
       .run();
-    const subscriber = (await getById(db, existing.id))!;
-    return { subscriber, action: existing.status === "unsubscribed" ? "resubscribed" : "pending_resent" };
+    const subscriber = unwrap(await getById(db, existing.id), "subscriber");
+    return {
+      subscriber,
+      action: existing.status === "unsubscribed" ? "resubscribed" : "pending_resent",
+    };
   }
 
   const id = newId();
@@ -84,16 +88,22 @@ export async function subscribe(
     )
     .bind(id, email, token, now)
     .run();
-  return { subscriber: (await getById(db, id))!, action: "created" };
+  return { subscriber: unwrap(await getById(db, id), "subscriber"), action: "created" };
 }
 
 /** Confirm a pending subscriber by token (double opt-in). Idempotent for an
  *  already-confirmed token; refuses to confirm an unsubscribed one. */
 export async function confirm(db: D1Database, token: string): Promise<SubscriberRow | null> {
   const row = await getByToken(db, token);
-  if (!row) return null;
-  if (row.status === "confirmed") return row;
-  if (row.status !== "pending") return null;
+  if (!row) {
+    return null;
+  }
+  if (row.status === "confirmed") {
+    return row;
+  }
+  if (row.status !== "pending") {
+    return null;
+  }
   await db
     .prepare(
       "UPDATE subscribers SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'pending'",
@@ -109,8 +119,12 @@ export async function unsubscribeByToken(
   token: string,
 ): Promise<SubscriberRow | null> {
   const row = await getByToken(db, token);
-  if (!row) return null;
-  if (row.status === "unsubscribed") return row;
+  if (!row) {
+    return null;
+  }
+  if (row.status === "unsubscribed") {
+    return row;
+  }
   await db
     .prepare("UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?")
     .bind(Date.now(), row.id)
@@ -123,13 +137,14 @@ export async function unsubscribeByToken(
  * of band. Same immediate, idempotent effect as `unsubscribeByToken` (I2);
  * returns null for an unknown id.
  */
-export async function unsubscribeById(
-  db: D1Database,
-  id: string,
-): Promise<SubscriberRow | null> {
+export async function unsubscribeById(db: D1Database, id: string): Promise<SubscriberRow | null> {
   const row = await getById(db, id);
-  if (!row) return null;
-  if (row.status === "unsubscribed") return row;
+  if (!row) {
+    return null;
+  }
+  if (row.status === "unsubscribed") {
+    return row;
+  }
   await db
     .prepare("UPDATE subscribers SET status = 'unsubscribed', unsubscribed_at = ? WHERE id = ?")
     .bind(Date.now(), row.id)
@@ -154,7 +169,7 @@ export async function listSubscribers(
   const term = opts.search?.trim().toLowerCase();
   if (term) {
     where.push("email LIKE ? ESCAPE '\\'");
-    binds.push(`%${term.replace(/[\\%_]/g, (ch) => "\\" + ch)}%`);
+    binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
   }
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
   const { results } = await db
@@ -170,9 +185,13 @@ export async function counts(db: D1Database): Promise<Counts> {
     .all<{ status: SubscriberStatus; n: number }>();
   const c: Counts = { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 };
   for (const r of results) {
-    if (r.status === "pending") c.pending = r.n;
-    else if (r.status === "confirmed") c.confirmed = r.n;
-    else if (r.status === "unsubscribed") c.unsubscribed = r.n;
+    if (r.status === "pending") {
+      c.pending = r.n;
+    } else if (r.status === "confirmed") {
+      c.confirmed = r.n;
+    } else if (r.status === "unsubscribed") {
+      c.unsubscribed = r.n;
+    }
   }
   const sup = await db.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{ n: number }>();
   c.suppressed = sup?.n ?? 0;

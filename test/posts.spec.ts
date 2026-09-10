@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { adminAuth } from "./support/auth";
 
@@ -200,7 +200,9 @@ describe("posts + revisions", () => {
   // on the FK. Scheduling only leaves a draft behind by way of cancel, so the
   // send here is always a canceled one — a sent issue's record can't reach delete.
   it("deletes a draft that had a canceled send, cascading its sends + deliveries", async () => {
-    const created = await readJson(await createPost({ subject: "Was Scheduled", markdown: "body" }));
+    const created = await readJson(
+      await createPost({ subject: "Was Scheduled", markdown: "body" }),
+    );
     const id = created.post.id;
 
     const scheduled = await readJson(

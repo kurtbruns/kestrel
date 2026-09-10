@@ -1,10 +1,11 @@
 /** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. */
-import type { RequestContext } from "../router";
-import { json } from "../lib/errors";
-import { htmlPage } from "../lib/page";
-import { escapeHtml } from "../lib/html";
+
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
+import { json } from "../lib/errors";
+import { escapeHtml } from "../lib/html";
+import { htmlPage } from "../lib/page";
+import type { RequestContext } from "../router";
 import { requestSubscription } from "../services/subscriptions";
 
 function wantsHtml(c: RequestContext): boolean {
@@ -37,13 +38,17 @@ async function readEmail(c: RequestContext): Promise<string | null> {
 
 async function readToken(c: RequestContext): Promise<string> {
   const q = c.url.searchParams.get("token");
-  if (q) return q;
+  if (q) {
+    return q;
+  }
   const ct = c.req.headers.get("content-type") ?? "";
   if (ct.includes("form")) {
     try {
       const f = await c.req.formData();
       const v = f.get("token");
-      if (typeof v === "string") return v;
+      if (typeof v === "string") {
+        return v;
+      }
     } catch {
       /* ignore */
     }
@@ -67,7 +72,11 @@ export async function subscribe(c: RequestContext): Promise<Response> {
   const email = raw ? normalizeEmail(raw) : "";
   if (!email || !isValidEmail(email)) {
     return wantsHtml(c)
-      ? htmlPage("Subscribe", `<h1>That doesn't look like an email</h1><p>Please check the address and try again.</p>`, 400)
+      ? htmlPage(
+          "Subscribe",
+          `<h1>That doesn't look like an email</h1><p>Please check the address and try again.</p>`,
+          400,
+        )
       : json({ error: "bad_request", message: "a valid email is required" }, 400);
   }
   const { subscriber, action } = await requestSubscription(c, email);
@@ -84,7 +93,11 @@ export async function confirm(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
   const row = await subscribers.confirm(c.env.DB, token);
   if (!row) {
-    return htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid or expired</h1><p>Try subscribing again.</p>`, 400);
+    return htmlPage(
+      "Invalid link",
+      `<h1 style="margin-top:0;">This link is invalid or expired</h1><p>Try subscribing again.</p>`,
+      400,
+    );
   }
   return htmlPage(
     "Subscribed",
@@ -101,7 +114,10 @@ export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
     return htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400);
   }
   if (row.status === "unsubscribed") {
-    return htmlPage("Unsubscribed", `<h1 style="margin-top:0;">You're unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`);
+    return htmlPage(
+      "Unsubscribed",
+      `<h1 style="margin-top:0;">You're unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
+    );
   }
   return htmlPage(
     "Unsubscribe",
@@ -124,6 +140,9 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
   }
   // Plain 200 for the RFC 8058 one-click POST; a friendly page for humans.
   return wantsHtml(c)
-    ? htmlPage("Unsubscribed", `<h1 style="margin-top:0;">You've been unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`)
+    ? htmlPage(
+        "Unsubscribed",
+        `<h1 style="margin-top:0;">You've been unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
+      )
     : new Response("unsubscribed", { status: 200 });
 }

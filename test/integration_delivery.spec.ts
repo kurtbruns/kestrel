@@ -18,19 +18,19 @@
  * No real credentials or network: SES send/cert fetches and Resend batch calls
  * are mocked; Svix/SNS payloads are signed locally.
  */
-import { env, createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AppEnv } from "../src/env";
-import { getConfig } from "../src/env";
 import { createRouter } from "../src/app";
-import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import * as subscribers from "../src/db/subscribers";
+import type { AppEnv } from "../src/env";
+import { getConfig } from "../src/env";
 import { signSvix } from "../src/providers/resend";
 import { base64Bytes } from "../src/providers/ses_mime";
-import { canonicalString, _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
+import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
+import { runSend } from "../src/send/loop";
+import { freeze } from "../src/send/schedule";
 
 // --- env overrides ----------------------------------------------------------
 
@@ -43,7 +43,7 @@ const sesEnv = () =>
     SES_CONFIGURATION_SET: "kestrel-events",
   }) as unknown as AppEnv;
 
-const WHSEC = "whsec_" + btoa("integration-svix-signing-key-0123456789");
+const WHSEC = `whsec_${btoa("integration-svix-signing-key-0123456789")}`;
 
 const resendEnv = () =>
   ({
@@ -66,7 +66,11 @@ async function seedConfirmed(email: string): Promise<void> {
 
 /** Freeze a scheduled send for the current audience (render is provider-agnostic). */
 async function scheduledSend(): Promise<sends.SendRow> {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "# Hi\n\nbody" }, "test");
+  const { post } = await posts.createPost(
+    env.DB,
+    { subject: "Subj", markdown: "# Hi\n\nbody" },
+    "test",
+  );
   return freeze(env, getConfig(env), post, Date.now() - 1000);
 }
 
@@ -80,7 +84,9 @@ async function providerIdFor(email: string): Promise<string | null> {
 // --- SNS signing (local RSA keypair; mirrors provider_ses.spec.ts) -----------
 
 function derLen(n: number): number[] {
-  if (n < 0x80) return [n];
+  if (n < 0x80) {
+    return [n];
+  }
   const bytes: number[] = [];
   let x = n;
   while (x > 0) {
@@ -115,18 +121,29 @@ interface Signer {
 
 async function makeSigner(): Promise<Signer> {
   const pair = (await crypto.subtle.generateKey(
-    { name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256" },
+    {
+      name: "RSASSA-PKCS1-v1_5",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256",
+    },
     true,
     ["sign", "verify"],
   )) as CryptoKeyPair;
-  const spki = new Uint8Array((await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer);
+  const spki = new Uint8Array(
+    (await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer,
+  );
   const certDer = derSeq(derSeq(spki));
   const certPem = `-----BEGIN CERTIFICATE-----\n${wrap64(base64Bytes(certDer))}\n-----END CERTIFICATE-----\n`;
   const certUrl = `https://sns.us-east-1.amazonaws.com/cert-${crypto.randomUUID()}.pem`;
   return { privateKey: pair.privateKey, certPem, certUrl };
 }
 
-async function signedSnsBounce(signer: Signer, email: string, providerId: string): Promise<SnsEnvelope> {
+async function signedSnsBounce(
+  signer: Signer,
+  email: string,
+  providerId: string,
+): Promise<SnsEnvelope> {
   const message = JSON.stringify({
     notificationType: "Bounce",
     mail: { messageId: providerId, destination: [email] },
@@ -279,7 +296,9 @@ describe("webhook routes are wired through the real router", () => {
     const signer = await makeSigner();
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const u = typeof input === "string" ? input : (input as Request).url;
-      if (u === signer.certUrl) return new Response(signer.certPem, { status: 200 });
+      if (u === signer.certUrl) {
+        return new Response(signer.certPem, { status: 200 });
+      }
       return new Response("not found", { status: 404 });
     });
     const envelope = await signedSnsBounce(signer, "bounce@integ.test", providerId);
@@ -312,7 +331,11 @@ describe("webhook routes are wired through the real router", () => {
     // Signed hard-bounce webhook through the real /webhooks/resend route.
     const req = await signedResendWebhook({
       type: "email.bounced",
-      data: { email_id: "re_victim", to: ["victim@integ.test"], bounce: { type: "Permanent", message: "no such user" } },
+      data: {
+        email_id: "re_victim",
+        to: ["victim@integ.test"],
+        bounce: { type: "Permanent", message: "no such user" },
+      },
     });
     const res = await route(req, resendEnv());
     expect(res.status).toBe(200);
@@ -320,9 +343,9 @@ describe("webhook routes are wired through the real router", () => {
 
     // Next send: the suppressed address must not be materialized or mailed.
     const send2 = await scheduledSend();
-    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ data: [] }), { status: 200 }),
-    );
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));
     const result2 = await runSend(resendEnv(), send2.id);
 
     expect(result2.accepted).toBe(0);

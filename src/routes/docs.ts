@@ -7,10 +7,11 @@
  *   GET /api/docs        → the table of contents (JSON)
  *   GET /api/docs/:slug  → one doc, rendered as a themed HTML page
  */
+
+import { listDocs, renderDocPage } from "../docs";
+import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { json, notFound } from "../lib/errors";
-import { listDocs, renderDocPage } from "../docs";
 
 export function list(_c: RequestContext): Response {
   return json({ docs: listDocs() });
@@ -18,6 +19,8 @@ export function list(_c: RequestContext): Response {
 
 export function get(c: RequestContext): Response {
   const res = renderDocPage(param(c, "slug"));
-  if (!res) throw notFound("doc");
+  if (!res) {
+    throw notFound("doc");
+  }
   return res;
 }

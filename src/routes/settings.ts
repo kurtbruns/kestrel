@@ -11,9 +11,10 @@
  * for how to change it. It deliberately exposes NO secrets (SPEC §8/§10): the
  * provider credentials, the Access AUD, and the dev secret never appear here.
  */
-import type { RequestContext } from "../router";
+
+import { type AppSettings, getSettings, updateSettings } from "../db/settings";
 import { badRequest, json } from "../lib/errors";
-import { getSettings, updateSettings, type AppSettings } from "../db/settings";
+import type { RequestContext } from "../router";
 
 /** The non-secret, deploy-time facts the editor shows read-only. */
 function deploymentView(c: RequestContext) {
@@ -60,7 +61,9 @@ function readPatch(body: unknown): Partial<AppSettings> {
   const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const patch: Partial<AppSettings> = {};
   if ("testRecipients" in o) {
-    if (!Array.isArray(o.testRecipients)) throw badRequest("testRecipients must be a list");
+    if (!Array.isArray(o.testRecipients)) {
+      throw badRequest("testRecipients must be a list");
+    }
     patch.testRecipients = o.testRecipients as string[];
   }
   return patch;

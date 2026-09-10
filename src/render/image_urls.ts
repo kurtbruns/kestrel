@@ -3,7 +3,9 @@ import type { ImageRow } from "../db/images";
 
 export function buildImageMap(images: ImageRow[]): Map<string, ImageRow> {
   const map = new Map<string, ImageRow>();
-  for (const img of images) map.set(img.filename, img);
+  for (const img of images) {
+    map.set(img.filename, img);
+  }
   return map;
 }
 
@@ -27,6 +29,8 @@ export function resolveImageSrc(
   }
   const name = href.split("/").pop() ?? href;
   const image = images.get(name) ?? images.get(href) ?? null;
-  if (image) return { url: `${mediaBase}/${image.storage_key}`, image };
+  if (image) {
+    return { url: `${mediaBase}/${image.storage_key}`, image };
+  }
   return { url: href, image: null };
 }

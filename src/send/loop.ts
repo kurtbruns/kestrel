@@ -7,12 +7,13 @@
  * accepted recipient. Each invocation attempts each recipient at most once;
  * retryables go back to `pending` and wait for the next sweep tick (the backoff).
  */
+
+import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
-import type { Recipient } from "../providers/types";
-import * as sends from "../db/sends";
+import type { PerRecipientResult, Recipient } from "../providers/types";
 
 export interface SendLoopResult {
   sendId: string;
@@ -26,7 +27,9 @@ export interface SendLoopResult {
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
   return out;
 }
 
@@ -42,7 +45,9 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
   };
 
   const send = await sends.getSend(env.DB, sendId);
-  if (!send) return empty;
+  if (!send) {
+    return empty;
+  }
 
   const config = getConfig(env);
   const provider = getProvider(config, env);
@@ -50,7 +55,9 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
 
   // Acquire the lease (also moves scheduled -> sending). If we don't win, no-op.
   const leased = await sends.acquireLease(env.DB, sendId, now, LEASE_TTL_MS);
-  if (!leased) return empty;
+  if (!leased) {
+    return empty;
+  }
 
   // A prior invocation may have left in-flight rows. For idempotent providers it
   // is safe to re-send them (deduped by key); otherwise leave them for a human.
@@ -83,10 +90,16 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
         live.push({ id: d.id, email: d.email, token: d.token });
       }
     }
-    if (live.length === 0) continue;
+    if (live.length === 0) {
+      continue;
+    }
 
     // Phase 1: record intent before the network call.
-    await sends.setDeliveriesDispatched(env.DB, live.map((l) => l.id), Date.now());
+    await sends.setDeliveriesDispatched(
+      env.DB,
+      live.map((l) => l.id),
+      Date.now(),
+    );
 
     const recipients: Recipient[] = live.map((l) => ({
       email: l.email,
@@ -94,7 +107,7 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     }));
     const byEmail = new Map(live.map((l) => [l.email, l.id]));
 
-    let results;
+    let results: PerRecipientResult[];
     try {
       results = await provider.sendBatch(
         { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
@@ -119,7 +132,9 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     const t3 = Date.now();
     for (const r of results) {
       const id = byEmail.get(r.email);
-      if (!id) continue;
+      if (!id) {
+        continue;
+      }
       if (r.accepted) {
         await sends.setDeliveryAccepted(env.DB, id, r.providerId, t3);
         result.accepted += 1;

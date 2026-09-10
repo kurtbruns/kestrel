@@ -22,8 +22,7 @@ export interface LayoutInput {
   viewInBrowserUrl: string;
 }
 
-const FONT =
-  "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
+const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
 export function emailLayout(i: LayoutInput): string {
   const preheader = i.preheader
@@ -73,7 +72,11 @@ ${ARCHIVE_MASTHEAD_ANCHOR}${i.contentHtml}
  *  frozen content. Never appears in an email — the archive route injects it in
  *  place of `ARCHIVE_MASTHEAD_ANCHOR`. Rendered only in a browser, so it can use
  *  ordinary CSS; `.k-mast` carries the dark-mode override. */
-export function archiveMasthead(opts: { name: string; dateLabel: string; indexUrl: string }): string {
+export function archiveMasthead(opts: {
+  name: string;
+  dateLabel: string;
+  indexUrl: string;
+}): string {
   const name = escapeHtml(opts.name);
   const date = escapeHtml(opts.dateLabel);
   const url = escapeHtmlAttr(opts.indexUrl);

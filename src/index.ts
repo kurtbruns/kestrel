@@ -6,10 +6,11 @@
  *                   dispatched by the URLPattern router (see app.ts / router.ts)
  *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts)
  */
+
+import { createRouter } from "./app";
 import type { AppEnv } from "./env";
 import { getConfig } from "./env";
 import type { Router } from "./router";
-import { createRouter } from "./app";
 import { sweep } from "./send/sweep";
 
 // The archive route is config-driven (ARCHIVE_BASE_PATH), and bindings are only

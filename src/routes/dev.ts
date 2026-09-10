@@ -7,10 +7,11 @@
  *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
  *                         Optional multipart `kestrel` file becomes the cover image.
  */
-import type { RequestContext } from "../router";
-import { json, notFound } from "../lib/errors";
+
 import { mintDevToken } from "../auth/dev_token";
 import { seedDatabase } from "../dev/seed";
+import { json, notFound } from "../lib/errors";
+import type { RequestContext } from "../router";
 
 /**
  * Bootstrap credential for local dev. Public by necessity — it is the thing that
@@ -20,14 +21,18 @@ import { seedDatabase } from "../dev/seed";
  * no `email` is a `service` principal, mirroring Claude in production.
  */
 export async function token(c: RequestContext): Promise<Response> {
-  if (!c.config.devAuthSecret) throw notFound("not available for this transport");
+  if (!c.config.devAuthSecret) {
+    throw notFound("not available for this transport");
+  }
   const service = c.url.searchParams.get("kind") === "service";
   const jwt = await mintDevToken(c.config.devAuthSecret, service ? {} : { email: "dev@localhost" });
   return json({ token: jwt, kind: service ? "service" : "human" });
 }
 
 export async function seed(c: RequestContext): Promise<Response> {
-  if (c.config.provider !== "fake") throw notFound("not available for this transport");
+  if (c.config.provider !== "fake") {
+    throw notFound("not available for this transport");
+  }
 
   let kestrelFile: { bytes: ArrayBuffer; contentType: string; filename: string } | undefined;
   const ct = c.req.headers.get("content-type") ?? "";
@@ -36,7 +41,11 @@ export async function seed(c: RequestContext): Promise<Response> {
     const file = form.get("kestrel");
     if (file instanceof File) {
       const filename = (file.name || "kestrel.jpg").split(/[\\/]/).pop() || "kestrel.jpg";
-      kestrelFile = { bytes: await file.arrayBuffer(), contentType: file.type || "image/jpeg", filename };
+      kestrelFile = {
+        bytes: await file.arrayBuffer(),
+        contentType: file.type || "image/jpeg",
+        filename,
+      };
     }
   }
 

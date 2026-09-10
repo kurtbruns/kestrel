@@ -1,5 +1,5 @@
-import { defineConfig, configDefaults } from "vitest/config";
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
+import { configDefaults, defineConfig } from "vitest/config";
 
 // Tests run inside the Workers runtime (workerd) via Miniflare, with the real
 // D1/R2 bindings from wrangler.jsonc. Migrations are read here (Node side) and

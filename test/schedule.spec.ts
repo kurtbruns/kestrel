@@ -1,4 +1,4 @@
-import { SELF, env } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
 import { adminAuth } from "./support/auth";
@@ -9,7 +9,9 @@ const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
 
 const PNG_1x1 = Uint8Array.from(
-  atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC"),
+  atob(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
+  ),
   (ch) => ch.charCodeAt(0),
 );
 
@@ -65,7 +67,11 @@ describe("schedule / send / cancel + soft-lock", () => {
 
     const fd = new FormData();
     fd.append("file", new File([PNG_1x1], "x.png", { type: "image/png" }));
-    const img = await SELF.fetch(`${base}/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+    const img = await SELF.fetch(`${base}/posts/${id}/images`, {
+      method: "POST",
+      headers: AUTH,
+      body: fd,
+    });
     expect(img.status).toBe(409);
 
     // second schedule while active → 409
@@ -101,7 +107,10 @@ describe("schedule / send / cancel + soft-lock", () => {
     const sendId = scheduled.send.id;
     const frozenHtml = scheduled.send.rendered_html;
 
-    const cancel = await SELF.fetch(`${base}/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
+    const cancel = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
     expect(cancel.status).toBe(200);
     expect(await postStatus(id)).toBe("draft");
 
@@ -119,7 +128,10 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(still.send.rendered_html).toContain("original body");
 
     // cancel again → 409
-    const twice = await SELF.fetch(`${base}/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
+    const twice = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
     expect(twice.status).toBe(409);
   });
 
@@ -145,11 +157,17 @@ describe("schedule / send / cancel + soft-lock", () => {
 
   it("send-now schedules at now + buffer and is idempotent", async () => {
     const id = await makeDraft();
-    const first = await readJson(await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }));
+    const first = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
+    );
     expect(first.send.status).toBe("scheduled");
-    expect(Math.abs(first.send.fire_at - first.send.scheduled_at - SEND_NOW_BUFFER_MS)).toBeLessThan(2000);
+    expect(
+      Math.abs(first.send.fire_at - first.send.scheduled_at - SEND_NOW_BUFFER_MS),
+    ).toBeLessThan(2000);
 
-    const second = await readJson(await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }));
+    const second = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
+    );
     expect(second.idempotent).toBe(true);
     expect(second.send.id).toBe(first.send.id);
   });

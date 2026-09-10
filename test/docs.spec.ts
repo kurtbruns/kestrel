@@ -74,7 +74,9 @@ describe("docs API serves the setup content when authed", () => {
   });
 
   it("404s an unknown doc slug when authed", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs/nope", { headers: await adminAuth() });
+    const res = await SELF.fetch("https://kestrel.test/api/docs/nope", {
+      headers: await adminAuth(),
+    });
     expect(res.status).toBe(404);
   });
 });
