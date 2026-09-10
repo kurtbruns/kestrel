@@ -123,7 +123,7 @@ export function archiveIndexPage(opts: {
 // Prose styling for the in-app docs page. Long-form reading rather than the card
 // chrome above: comfortable measure, scrollable code/tables, themed via TOKENS.
 const DOC_STYLE = `${TOKENS}
-body { line-height:1.65; }
+body { line-height:1.65; background:var(--card); }
 .doc { max-width:760px; margin:0 auto; padding:32px 24px 64px; }
 .doc > :first-child { margin-top:0; }
 .doc h1 { font-size:28px; letter-spacing:-0.02em; margin:0 0 8px; }
