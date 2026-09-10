@@ -316,9 +316,11 @@ function route() {
         ? "#/subscribers"
         : view === "settings"
           ? "#/settings"
-          : view === "docs"
-            ? "#/docs"
-            : "#/posts";
+          : view === "reference"
+            ? "#/reference"
+            : view === "docs"
+              ? "#/docs"
+              : "#/posts";
   document.querySelectorAll(".topbar nav a").forEach((a) => {
     if (a.getAttribute("href") === current) {
       a.setAttribute("aria-current", "page");
@@ -337,6 +339,9 @@ function route() {
   }
   if (view === "settings") {
     return renderSettings();
+  }
+  if (view === "reference") {
+    return renderReference();
   }
   if (view === "docs") {
     return renderDocs(arg);
@@ -1463,6 +1468,36 @@ async function renderDocs(slug) {
     };
   } catch (e) {
     toast(e.message);
+  }
+}
+
+// ---- API reference ----
+// Every route the app and Claude can call, generated server-side from the route
+// manifest (src/app.ts) and served read-only by the authed /api/reference route.
+// Like Docs, we fetch it through the SPA (so the dev token / Access session cookie
+// is attached, via authHeaders()) and drop the themed HTML into a sandboxed iframe
+// — never a top-level navigation to the gated route, which would carry no
+// credential and 401 in local dev.
+async function renderReference() {
+  app.innerHTML = `<div class="docs-main"><iframe id="refFrame" class="docs-frame" sandbox="allow-same-origin allow-popups" title="API reference"></iframe></div>`;
+  const frame = document.getElementById("refFrame");
+  try {
+    const res = await fetch("/api/reference", { headers: authHeaders() });
+    if (res.status === 401) {
+      showReauth();
+      return;
+    }
+    if (!res.ok) {
+      throw new Error("Couldn't load the API reference.");
+    }
+    frame.srcdoc = await res.text();
+    frame.onload = () => {
+      try {
+        frame.style.height = `${frame.contentDocument.body.scrollHeight + 24}px`;
+      } catch (_) {}
+    };
+  } catch (e) {
+    renderError(app, e.message, renderReference);
   }
 }
 

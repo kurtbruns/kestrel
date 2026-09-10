@@ -1,12 +1,19 @@
 /**
  * Minimal zero-dependency router built on the runtime's `URLPattern`.
  *
- * A route is a method + path pattern + an optional middleware chain + a handler.
+ * Every route is declared as data — a `RouteDef` — and `register` is the one door
+ * that turns a def into a live route. The declared `access` tier DRIVES the gate:
+ * `admin` attaches `requireAuth`, `public`/`webhook` attach nothing (a webhook is
+ * verified inside its adapter). Because the same field is what the generated API
+ * reference reads (see src/reference/), the documented tier and the enforced gate
+ * cannot disagree.
+ *
  * Middleware run in order; the first one to return a `Response` short-circuits
- * (this is how auth returns 401 before the handler runs). Handlers and
- * middleware share a `RequestContext`. All errors funnel through
- * `toErrorResponse`, so handlers can just `throw new HttpError(...)`.
+ * (this is how auth returns 401 before the handler runs). Handlers and middleware
+ * share a `RequestContext`. All errors funnel through `toErrorResponse`, so
+ * handlers can just `throw new HttpError(...)`.
  */
+import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
 import { badRequest, json, toErrorResponse } from "./lib/errors";
@@ -44,32 +51,74 @@ export function param(c: RequestContext, name: string): string {
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
-interface Route {
+/**
+ * The access tier a route is served at. `admin` is gated by `requireAuth`;
+ * `public` (reader/subscribe/archive/media) and `webhook` (provider callbacks,
+ * verified inside the adapter) carry no auth middleware.
+ */
+export type Access = "admin" | "public" | "webhook";
+
+/** A worked request/response pair for the API reference. Hand-authored, co-located with the route. */
+export interface RouteExample {
+  request?: unknown;
+  response?: unknown;
+}
+
+/**
+ * A route declared as data. `method` / `path` / `access` are accurate by
+ * construction — they are what registers the route — and the same record drives
+ * the generated API reference, so `summary` / `example` stay co-located with the
+ * route they document (JSDoc-style) rather than in a separate, drift-prone table.
+ */
+export interface RouteDef {
   method: Method;
+  path: string;
+  access: Access;
+  summary: string;
+  description?: string;
+  example?: RouteExample;
+  handler: Handler;
+  /** Extra middleware beyond the access-derived gate. Rare; composed after the gate. */
+  middleware?: Middleware[];
+}
+
+/** The one place the access tier maps to a gate — so the tier can't drift from it. */
+function gateFor(access: Access): Middleware[] {
+  return access === "admin" ? [requireAuth] : [];
+}
+
+interface CompiledRoute {
+  def: RouteDef;
   pattern: URLPattern;
   middleware: Middleware[];
-  handler: Handler;
 }
 
 export class Router {
-  private routes: Route[] = [];
+  private compiled: CompiledRoute[] = [];
 
-  add(method: Method, pathname: string, handler: Handler, middleware: Middleware[] = []): this {
-    this.routes.push({ method, pattern: new URLPattern({ pathname }), middleware, handler });
+  /** Register a route from its manifest entry; the `access` tier decides the gate. */
+  register(def: RouteDef): this {
+    const gate = gateFor(def.access);
+    const middleware = def.middleware ? [...gate, ...def.middleware] : gate;
+    this.compiled.push({ def, pattern: new URLPattern({ pathname: def.path }), middleware });
     return this;
   }
 
-  get = (p: string, h: Handler, m: Middleware[] = []) => this.add("GET", p, h, m);
-  post = (p: string, h: Handler, m: Middleware[] = []) => this.add("POST", p, h, m);
-  put = (p: string, h: Handler, m: Middleware[] = []) => this.add("PUT", p, h, m);
-  delete = (p: string, h: Handler, m: Middleware[] = []) => this.add("DELETE", p, h, m);
+  /**
+   * The registered routes, in registration order — the single source the API
+   * reference is generated from, and the surface tests use to assert the gate
+   * matches the declared tier.
+   */
+  get routes(): readonly CompiledRoute[] {
+    return this.compiled;
+  }
 
   async handle(req: Request, env: AppEnv, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
     const config = getConfig(env);
 
-    for (const route of this.routes) {
-      if (route.method !== req.method) {
+    for (const route of this.compiled) {
+      if (route.def.method !== req.method) {
         continue;
       }
       const match = route.pattern.exec(url);
@@ -92,7 +141,7 @@ export class Router {
             return short;
           }
         }
-        return await route.handler(c);
+        return await route.def.handler(c);
       } catch (err) {
         return toErrorResponse(err);
       }
