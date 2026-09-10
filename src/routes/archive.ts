@@ -10,6 +10,8 @@
 
 import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedIssues } from "../db/sends";
+import { BRANDING_LOGO_KEY, getSettings } from "../db/settings";
+import type { Config } from "../env";
 import { archiveIndexPage, htmlPage } from "../lib/page";
 import {
   ARCHIVE_MASTHEAD_ANCHOR,
@@ -20,11 +22,30 @@ import {
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
-/** Display name for the publication, from the `From:` header (no separate var). */
-function publicationName(fromAddress: string): string {
+/** Display name for the publication, from the `From:` header — the fallback when
+ *  the operator hasn't set a name in the publication identity (issue #81). */
+function fromDisplayName(fromAddress: string): string {
   const lt = fromAddress.indexOf("<");
   const display = (lt >= 0 ? fromAddress.slice(0, lt) : "").trim().replace(/^"|"$/g, "").trim();
   return display || "Newsletter";
+}
+
+/** The resolved publication identity for a reader page: the operator's settings
+ *  (issue #81), falling back to the `From:` display name for the name. */
+interface ReaderIdentity {
+  name: string;
+  tagline: string;
+  logoUrl: string;
+  brandColor: string;
+}
+async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
+  const { publication: p } = await getSettings(c.env.DB);
+  return {
+    name: p.name || fromDisplayName(config.fromAddress),
+    tagline: p.tagline,
+    logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
+    brandColor: p.brandColor,
+  };
 }
 
 function formatSentDate(ms: number): string {
@@ -39,9 +60,15 @@ function formatSentDate(ms: number): string {
 /** Public archive index: past issues, newest first, linking to their permanent
  *  (canonical) archive URLs — the same address emails carry. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
-  const issues = await listPublishedIssues(c.env.DB);
+  const [issues, identity] = await Promise.all([
+    listPublishedIssues(c.env.DB),
+    readerIdentity(c, c.config),
+  ]);
   return archiveIndexPage({
-    name: publicationName(c.config.fromAddress),
+    name: identity.name,
+    tagline: identity.tagline,
+    logoUrl: identity.logoUrl,
+    brandColor: identity.brandColor,
     subscribeUrl: `${c.config.appOrigin}/subscribe`,
     issues: issues.map((i) => ({
       title: i.subject,
@@ -65,8 +92,10 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   // Two edits to the frozen record on the way to the browser (I3): the generic
   // unsubscribe link (no single recipient here) and the browser-only masthead
   // swapped in for its inert anchor. Neither touches the reviewed content.
+  const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
-    name: publicationName(c.config.fromAddress),
+    name: identity.name,
+    brandColor: identity.brandColor,
     dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
     indexUrl: `${c.config.appOrigin}/`,
   });

@@ -131,8 +131,79 @@ h2 {
   overflow-y: auto;
 }
 body.editor-mode .sidebar,
-body.signed-out .sidebar {
+body.signed-out .sidebar,
+body.tool-mode .sidebar {
   display: none;
+}
+
+/* Tool/help area: a slim bar in place of the publication sidebar (Getting started,
+   Docs, API). Hidden until body.tool-mode. */
+.tool-bar {
+  display: none;
+  align-items: center;
+  gap: 20px;
+  padding: 11px 24px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+body.tool-mode .tool-bar {
+  display: flex;
+}
+.tool-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: var(--fg);
+  font-weight: 650;
+  font-size: 15px;
+}
+.tool-brand svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  display: block;
+}
+.tool-tabs {
+  display: flex;
+  gap: 4px;
+}
+.tool-tabs a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 14px;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.tool-tabs a:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.tool-tabs a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
+  background: var(--hover);
+}
+.tool-back {
+  margin-left: auto;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+.tool-back:hover {
+  color: var(--fg);
+}
+@media (max-width: 560px) {
+  .tool-bar {
+    flex-wrap: wrap;
+    gap: 10px 16px;
+  }
+  .tool-back {
+    margin-left: 0;
+  }
 }
 .sidebar-top {
   display: flex;
@@ -1128,7 +1199,8 @@ td.act {
 }
 .docs-nav {
   position: sticky;
-  top: 24px;
+  /* Clears the sticky tool bar (Docs is always in tool mode). */
+  top: 56px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1175,8 +1247,8 @@ td.act {
 }
 .api-nav {
   position: sticky;
-  /* Rests near the top of the viewport (no topbar to clear in the sidebar layout). */
-  top: 24px;
+  /* Clears the sticky tool bar (the reference is always in tool mode). */
+  top: 56px;
   align-self: start;
   display: flex;
   flex-direction: column;
@@ -1221,7 +1293,7 @@ td.act {
   font-size: 22px;
 }
 .api-section {
-  scroll-margin-top: 24px;
+  scroll-margin-top: 56px;
   margin: 0 0 28px;
 }
 .api-section h2 {
@@ -1595,6 +1667,64 @@ td.act {
 .how-steps .muted {
   font-size: 12.5px;
   line-height: 1.4;
+}
+
+/* --- settings: publication identity (logo + brand color) --- */
+.logo-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin: 8px 0 6px;
+}
+.logo-preview {
+  flex: 0 0 auto;
+  width: 64px;
+  height: 64px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.logo-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.logo-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--brand, var(--accent));
+  color: var(--accent-fg);
+  font-weight: 700;
+  font-size: 24px;
+}
+.logo-actions {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.brand-row {
+  align-items: center;
+}
+.brand-row input[type="color"] {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 38px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--card);
+  cursor: pointer;
+}
+.brand-hex {
+  flex: 1 1 auto;
+  max-width: 320px;
+  font-family: var(--mono);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -112,8 +112,22 @@ export function createRouter(archiveBasePath: string): Router {
       method: "PUT",
       path: "/api/settings",
       access: "admin",
-      summary: "Update runtime preferences (e.g. default test recipients).",
+      summary: "Update runtime preferences (test recipients; the publication identity).",
       handler: settingsRoutes.update,
+    },
+    {
+      method: "POST",
+      path: "/api/settings/logo",
+      access: "admin",
+      summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
+      handler: settingsRoutes.uploadLogo,
+    },
+    {
+      method: "DELETE",
+      path: "/api/settings/logo",
+      access: "admin",
+      summary: "Remove the publication logo.",
+      handler: settingsRoutes.deleteLogo,
     },
 
     // --- posts + revisions (authed) ---

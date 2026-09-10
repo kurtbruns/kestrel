@@ -403,10 +403,22 @@ function route() {
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §10: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
+  // The tool/help pages (Getting started, Docs, API) are about Kestrel itself, not
+  // the publication, so they drop the publication sidebar for a slim tool bar.
+  const toolMode = view === "start" || view === "docs" || view === "reference";
+  document.body.classList.toggle("tool-mode", toolMode);
   // Mark the active nav item across both sidebar navs (primary + tools) so the
   // reader can see where they are (aria-current also styles it).
   document.querySelectorAll(".sidebar a[data-view]").forEach((a) => {
     if (a.dataset.view === view) {
+      a.setAttribute("aria-current", "page");
+    } else {
+      a.removeAttribute("aria-current");
+    }
+  });
+  // Same for the tool-bar tabs.
+  document.querySelectorAll(".tool-bar a[data-tool]").forEach((a) => {
+    if (a.dataset.tool === view) {
       a.setAttribute("aria-current", "page");
     } else {
       a.removeAttribute("aria-current");
@@ -1462,8 +1474,47 @@ async function renderSettings() {
   }
   const s = data.settings,
     d = data.deployment;
+  const p = s.publication || { name: "", tagline: "", brandColor: "", logoUrl: "" };
+  const fromName = parseFromName(d.fromAddress) || "Your publication";
   const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
   body.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">Publication identity</h2>
+      <p class="hint">Your publication's name, tagline, logo, and brand color. These theme the reader surface and this dashboard — never the email itself (its identity is the From address) and never an already-sent issue.</p>
+      <div class="logo-row">
+        <div class="logo-preview" id="logoPreview">${
+          p.logoUrl
+            ? `<img src="${esc(p.logoUrl)}" alt="Current logo">`
+            : `<span class="logo-placeholder">${esc((p.name || fromName).trim()[0] || "K").toUpperCase()}</span>`
+        }</div>
+        <div class="logo-actions">
+          <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+          <div class="row">
+            <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
+            <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
+          </div>
+          <p class="hint" style="margin:8px 0 0">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB.</p>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:4px">
+        <div>
+          <label for="setName">Name</label>
+          <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
+          <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
+        </div>
+        <div>
+          <label for="setTagline">Tagline</label>
+          <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
+        </div>
+      </div>
+      <label for="setBrandHex">Brand color</label>
+      <div class="row brand-row">
+        <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
+        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb — blank uses the theme default">
+        <button class="ghost-btn" id="setBrandClear">Clear</button>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="primary" id="idSave">Save identity</button></div>
+    </div>
     <div class="card">
       <h2 style="margin-top:0">Default test recipients</h2>
       <p class="hint">Pre-filled into <strong>Send test email</strong>. One address per line. These are your own inboxes — they don't go through the subscribe/consent flow.</p>
@@ -1484,16 +1535,95 @@ async function renderSettings() {
         ${kv("Access configured", d.accessConfigured ? "Yes" : "No")}
       </tbody></table></div>
     </div>`;
+
+  // Keep the cached config + sidebar brand in step with a save (the brand reads the
+  // same publication identity), and re-render the Settings view so the logo preview
+  // reflects a new/removed logo.
+  const applySettings = (settings) => {
+    appConfig = { ...(appConfig || {}), settings };
+    renderSidebarBrand();
+  };
+
+  // --- brand color: the text field is the source of truth ("" = theme default);
+  // the picker is a convenience that writes into it.
+  const colorEl = document.getElementById("setBrandColor");
+  const hexEl = document.getElementById("setBrandHex");
+  colorEl.oninput = () => {
+    hexEl.value = colorEl.value;
+  };
+  hexEl.oninput = () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(hexEl.value.trim())) {
+      colorEl.value = hexEl.value.trim();
+    }
+  };
+  document.getElementById("setBrandClear").onclick = () => {
+    hexEl.value = "";
+    hexEl.focus();
+  };
+
+  document.getElementById("idSave").onclick = (e) =>
+    busy(e.currentTarget, "Saving…", async () => {
+      try {
+        const r = await api("/api/settings", {
+          method: "PUT",
+          json: {
+            publication: {
+              name: document.getElementById("setName").value.trim(),
+              tagline: document.getElementById("setTagline").value.trim(),
+              brandColor: hexEl.value.trim(),
+            },
+          },
+        });
+        applySettings(r.settings);
+        toast("Identity saved");
+        renderSettings();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+
+  // --- logo upload / remove (immediate; their own endpoints).
+  const logoInput = document.getElementById("logoInput");
+  document.getElementById("logoUpload").onclick = () => logoInput.click();
+  logoInput.onchange = async () => {
+    const file = logoInput.files[0];
+    logoInput.value = "";
+    if (!file) {
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api("/api/settings/logo", { method: "POST", body: fd });
+      applySettings(r.settings);
+      toast("Logo updated");
+      renderSettings();
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+  const removeBtn = document.getElementById("logoRemove");
+  if (removeBtn) {
+    removeBtn.onclick = () =>
+      busy(removeBtn, "Removing…", async () => {
+        try {
+          const r = await api("/api/settings/logo", { method: "DELETE" });
+          applySettings(r.settings);
+          toast("Logo removed");
+          renderSettings();
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+  }
+
   document.getElementById("setSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
       const list = parseAddresses(document.getElementById("setTestRecipients").value);
       try {
         const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
         document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
-        // Keep the cached config current so the sidebar brand reflects any identity
-        // change (issue #81 will edit the publication identity through this surface).
-        appConfig = { ...(appConfig || {}), settings: r.settings };
-        renderSidebarBrand();
+        applySettings(r.settings);
         toast("Settings saved");
       } catch (err) {
         toast(err.message);

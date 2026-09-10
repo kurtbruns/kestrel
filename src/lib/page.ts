@@ -61,14 +61,16 @@ body { background:#ffffff; }
 @media (prefers-color-scheme: dark) { body { background:#18181b; } }
 .wrap { max-width:640px; margin:0 auto; padding:40px 24px 80px; line-height:1.6; }
 .masthead { border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:8px; }
+.masthead .brand-logo { display:block; max-height:52px; max-width:220px; width:auto; height:auto; margin:0 0 14px; }
 .masthead h1 { margin:0 0 4px; font-size:28px; letter-spacing:-0.02em; }
+.masthead .tagline { margin:0 0 8px; font-size:16px; }
 .masthead p { margin:0; }
-.masthead a { text-decoration: underline; }
+.masthead a { text-decoration: underline; color: var(--brand, inherit); }
 ul.issues { list-style:none; margin:0; padding:0; }
 li.issue { display:flex; align-items:baseline; justify-content:space-between; gap:16px;
            padding:16px 0; border-bottom:1px solid var(--line); }
 li.issue a { font-size:17px; font-weight:600; text-decoration:none; }
-li.issue a:hover { text-decoration: underline; }
+li.issue a:hover { text-decoration: underline; color: var(--brand, inherit); }
 li.issue .date { flex:none; font-size:14px; color:var(--muted); white-space:nowrap; }
 li.empty { padding:24px 0; }
 a:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
@@ -86,6 +88,9 @@ export interface ArchiveIndexIssue {
  *  (no noindex) and links only to public pages — never into the admin surface. */
 export function archiveIndexPage(opts: {
   name: string;
+  tagline?: string;
+  logoUrl?: string;
+  brandColor?: string;
   subscribeUrl: string;
   issues: ArchiveIndexIssue[];
 }): Response {
@@ -98,18 +103,28 @@ export function archiveIndexPage(opts: {
         )
         .join("")
     : `<li class="empty muted">No issues yet.</li>`;
+  // Publication identity (issue #81): a logo above the name, an optional tagline,
+  // and a brand color exposed as `--brand` (a strict hex only, so it can't escape
+  // the stylesheet) that tints the masthead + subscribe links.
+  const logo = opts.logoUrl
+    ? `<img class="brand-logo" src="${escapeHtmlAttr(opts.logoUrl)}" alt="">`
+    : "";
+  const tagline = opts.tagline ? `<p class="tagline muted">${escapeHtml(opts.tagline)}</p>` : "";
+  const brandVar = /^#[0-9a-f]{6}$/.test(opts.brandColor ?? "")
+    ? `:root{--brand:${opts.brandColor};}`
+    : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.name)}</title>
-<style>${INDEX_STYLE}</style>
+<style>${INDEX_STYLE}${brandVar}</style>
 </head>
 <body><div class="wrap">
 <header class="masthead">
-<h1>${escapeHtml(opts.name)}</h1>
-<p class="muted">Past issues. <a href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe</a> to get the next one.</p>
+${logo}<h1>${escapeHtml(opts.name)}</h1>
+${tagline}<p class="muted">Past issues. <a href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe</a> to get the next one.</p>
 </header>
 <ul class="issues">${items}</ul>
 </div></body>
