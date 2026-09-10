@@ -109,7 +109,7 @@ export async function confirm(c: RequestContext): Promise<Response> {
 
 export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
-  const row = await subscribers.getByToken(c.env.DB, token);
+  const row = await subscribers.getByUnsubToken(c.env.DB, token);
   if (!row) {
     return htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400);
   }

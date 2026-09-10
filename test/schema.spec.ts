@@ -23,16 +23,16 @@ describe("schema (0001_init)", () => {
   it("enforces the subscribers.email unique constraint", async () => {
     const now = Date.now();
     await env.DB.prepare(
-      "INSERT INTO subscribers (id, email, status, token, created_at) VALUES (?, ?, 'pending', ?, ?)",
+      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?)",
     )
-      .bind("s1", "a@example.com", "tok1", now)
+      .bind("s1", "a@example.com", "cfm1", "uns1", now)
       .run();
 
     await expect(
       env.DB.prepare(
-        "INSERT INTO subscribers (id, email, status, token, created_at) VALUES (?, ?, 'pending', ?, ?)",
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?)",
       )
-        .bind("s2", "a@example.com", "tok2", now)
+        .bind("s2", "a@example.com", "cfm2", "uns2", now)
         .run(),
     ).rejects.toThrow();
   });

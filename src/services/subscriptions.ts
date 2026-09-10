@@ -14,7 +14,7 @@ export async function requestSubscription(
   const { subscriber, action } = await subscribers.subscribe(c.env.DB, email);
   if (action !== "already_confirmed") {
     const provider = getProvider(c.config, c.env);
-    const confirmUrl = `${c.config.appOrigin}/confirm?token=${subscriber.token}`;
+    const confirmUrl = `${c.config.appOrigin}/confirm?token=${subscriber.confirm_token}`;
     await provider.sendBatch(
       confirmationEmail(confirmUrl),
       [{ email: subscriber.email, unsubscribeUrl: "" }],

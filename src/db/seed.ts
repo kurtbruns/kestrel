@@ -14,7 +14,8 @@ export interface SeedSubscriber {
   id: string;
   email: string;
   status: SubscriberStatus;
-  token: string;
+  confirm_token: string;
+  unsub_token: string;
   created_at: number;
   confirmed_at: number | null;
   unsubscribed_at: number | null;
@@ -113,9 +114,18 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
       group.map((r) =>
         db
           .prepare(
-            "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           )
-          .bind(r.id, r.email, r.status, r.token, r.created_at, r.confirmed_at, r.unsubscribed_at),
+          .bind(
+            r.id,
+            r.email,
+            r.status,
+            r.confirm_token,
+            r.unsub_token,
+            r.created_at,
+            r.confirmed_at,
+            r.unsubscribed_at,
+          ),
       ),
     );
   }

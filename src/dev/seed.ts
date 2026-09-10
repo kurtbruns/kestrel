@@ -212,7 +212,9 @@ function buildSubscribers(now: number): SeedSubscriber[] {
       id: newId(),
       email,
       status,
-      token: newId() + newId(), // long, unguessable, unique
+      // Two independent long, unguessable tokens (confirm is one-shot; unsub is durable).
+      confirm_token: newId() + newId(),
+      unsub_token: newId() + newId(),
       created_at: createdAt,
       confirmed_at: confirmedAt,
       unsubscribed_at: unsubscribedAt,

@@ -64,7 +64,7 @@ describe("createRouter — archive route follows the base path", () => {
   async function sendPost(slug: string): Promise<void> {
     const now = Date.now();
     await env.DB.prepare(
-      "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','tok-a',?,?)",
+      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
     )
       .bind(now, now)
       .run();

@@ -139,9 +139,9 @@ describe("schedule / send / cancel + soft-lock", () => {
     const now = Date.now();
     for (let i = 0; i < 3; i++) {
       await env.DB.prepare(
-        "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?)",
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
       )
-        .bind(`sub-${i}`, `c${i}@example.com`, `tok-${i}`, now, now)
+        .bind(`sub-${i}`, `c${i}@example.com`, `cfm-${i}`, `uns-${i}`, now, now)
         .run();
     }
     const id = await makeDraft();

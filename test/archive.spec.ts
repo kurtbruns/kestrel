@@ -26,7 +26,7 @@ beforeEach(async () => {
 async function sendPost(title: string, markdown: string): Promise<posts.PostRow> {
   const now = Date.now();
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','tok-a',?,?)",
+    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
   )
     .bind(now, now)
     .run();
@@ -81,7 +81,7 @@ describe("archive index (the public front door, §10)", () => {
   async function ensureSubscriber(): Promise<void> {
     const now = Date.now();
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','tok-a',?,?)",
+      "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
     )
       .bind(now, now)
       .run();

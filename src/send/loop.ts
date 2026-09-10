@@ -77,17 +77,17 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     const work = await sends.fetchDeliveryWork(env.DB, ids);
 
     // Honor unsubscribe/suppression at the last moment (I2), and cap retries.
-    const live: { id: string; email: string; token: string }[] = [];
+    const live: { id: string; email: string; unsubToken: string }[] = [];
     const t = Date.now();
     for (const d of work) {
-      if (d.sub_status !== "confirmed" || d.suppressed || !d.token) {
+      if (d.sub_status !== "confirmed" || d.suppressed || !d.unsub_token) {
         await sends.setDeliverySkipped(env.DB, d.id, t);
         result.skipped += 1;
       } else if (d.attempts >= MAX_DELIVERY_ATTEMPTS) {
         await sends.setDeliveryFailed(env.DB, d.id, "max attempts exceeded", t);
         result.failed += 1;
       } else {
-        live.push({ id: d.id, email: d.email, token: d.token });
+        live.push({ id: d.id, email: d.email, unsubToken: d.unsub_token });
       }
     }
     if (live.length === 0) {
@@ -103,7 +103,7 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
 
     const recipients: Recipient[] = live.map((l) => ({
       email: l.email,
-      unsubscribeUrl: `${config.appOrigin}/unsubscribe?token=${l.token}`,
+      unsubscribeUrl: `${config.appOrigin}/unsubscribe?token=${l.unsubToken}`,
     }));
     const byEmail = new Map(live.map((l) => [l.email, l.id]));
 

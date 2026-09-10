@@ -58,9 +58,9 @@ const resendEnv = () =>
 async function seedConfirmed(email: string): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?)",
+    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
   )
-    .bind(`id-${email}`, email, `tok-${email}`, now, now)
+    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
     .run();
 }
 

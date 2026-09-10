@@ -221,7 +221,7 @@ export interface DeliveryWork {
   id: string;
   email: string;
   attempts: number;
-  token: string | null;
+  unsub_token: string | null;
   sub_status: string | null;
   suppressed: number; // 0/1
 }
@@ -243,7 +243,7 @@ export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<
   const placeholders = ids.map(() => "?").join(",");
   const { results } = await db
     .prepare(
-      `SELECT d.id AS id, d.email AS email, d.attempts AS attempts, s.token AS token,
+      `SELECT d.id AS id, d.email AS email, d.attempts AS attempts, s.unsub_token AS unsub_token,
               s.status AS sub_status, (sup.email IS NOT NULL) AS suppressed
          FROM deliveries d
          LEFT JOIN subscribers s ON s.email = d.email

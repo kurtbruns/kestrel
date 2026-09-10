@@ -14,9 +14,9 @@ const config = () => getConfig(env);
 async function seedConfirmed(email: string): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?)",
+    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
   )
-    .bind(`id-${email}`, email, `tok-${email}`, now, now)
+    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
     .run();
 }
 
@@ -55,8 +55,11 @@ describe("send loop + sweep", () => {
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 3 });
     expect(fakeOutbox().length).toBe(3);
-    // per-recipient unsubscribe token substituted
+    // per-recipient unsubscribe link carries the subscriber's DURABLE unsub token
+    // (not the one-shot confirm token), so it survives a later re-subscribe (I2).
     expect(fakeOutbox().every((m) => m.html.includes("/unsubscribe?token="))).toBe(true);
+    const toA = fakeOutbox().find((m) => m.to === "a@example.com");
+    expect(toA?.html).toContain("/unsubscribe?token=uns-a@example.com");
   });
 
   it("resumes after a mid-send crash and mails each recipient at most once (I4)", async () => {
