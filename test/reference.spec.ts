@@ -82,19 +82,21 @@ describe("/api/reference is served like the rest of the authed admin surface", (
     expect(res.status).toBe(401);
   });
 
-  it("renders a themed, noindexed HTML page when authed, listing real routes", async () => {
+  it("returns the manifest as JSON when authed, listing real routes (the SPA renders it)", async () => {
     const res = await SELF.fetch("https://kestrel.test/api/reference", {
       headers: await adminAuth(),
     });
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/html");
-    expect(res.headers.get("x-robots-tag")).toBe("noindex");
-    const html = await res.text();
-    // Real routes + methods survive to the page.
-    expect(html).toContain("/posts");
-    expect(html).toContain("/webhooks/ses");
-    expect(html).toContain("POST");
+    expect(res.headers.get("content-type")).toContain("application/json");
+    const body = (await res.json()) as {
+      groups: { access: string; routes: { method: string; path: string; access: string }[] }[];
+    };
+    const routes = body.groups.flatMap((g) => g.routes);
+    // Real routes + methods + tiers survive to the payload.
+    expect(routes.some((r) => r.path === "/posts")).toBe(true);
+    expect(routes.some((r) => r.path === "/webhooks/ses" && r.access === "webhook")).toBe(true);
+    expect(routes.some((r) => r.method === "POST")).toBe(true);
     // A hand-authored example made it through (the create-post request body).
-    expect(html).toContain("Issue #1 — Hello");
+    expect(JSON.stringify(body)).toContain("Issue #1 — Hello");
   });
 });

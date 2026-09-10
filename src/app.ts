@@ -15,7 +15,7 @@
  */
 
 import { json } from "./lib/errors";
-import { renderReferencePage } from "./reference";
+import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
 import * as devRoutes from "./routes/dev";
@@ -95,11 +95,9 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/api/reference",
       access: "admin",
       summary: "This reference — every route, generated from the registration so it can't drift.",
-      handler: (c) =>
-        renderReferencePage(
-          r.routes.map((route) => route.def),
-          { appOrigin: c.config.appOrigin },
-        ),
+      // Returned as data (the SPA renders it natively — sidebar + sections, no iframe);
+      // it's also a machine-readable listing of the surface for Claude and tooling.
+      handler: () => json({ groups: buildReference(r.routes.map((route) => route.def)) }),
     },
 
     // --- app settings (authed; runtime preferences, never secrets) ---

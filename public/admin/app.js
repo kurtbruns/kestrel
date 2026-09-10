@@ -1472,32 +1472,97 @@ async function renderDocs(slug) {
 }
 
 // ---- API reference ----
-// Every route the app and Claude can call, generated server-side from the route
-// manifest (src/app.ts) and served read-only by the authed /api/reference route.
-// Like Docs, we fetch it through the SPA (so the dev token / Access session cookie
-// is attached, via authHeaders()) and drop the themed HTML into a sandboxed iframe
-// — never a top-level navigation to the gated route, which would carry no
-// credential and 401 in local dev.
+// Every route the app and Claude can call, generated from the route manifest
+// (src/app.ts) and served as JSON by the authed /api/reference route. Rendered
+// natively — a sticky rail of tiers beside the route list — so it matches the
+// app's own chrome (no iframe, unlike the earlier build).
+function apiExample(label, value) {
+  return value === undefined
+    ? ""
+    : `<div class="api-ex"><span class="api-ex-label">${esc(label)}</span><pre><code>${esc(
+        JSON.stringify(value, null, 2),
+      )}</code></pre></div>`;
+}
+function apiRouteHtml(r) {
+  return `<div class="api-route">
+      <div class="api-route-head">
+        <span class="api-method m-${esc(r.method)}">${esc(r.method)}</span>
+        <code class="api-path">${esc(r.path)}</code>
+        <span class="api-tier">${esc(r.access)}</span>
+      </div>
+      <p class="api-summary">${esc(r.summary)}</p>
+      ${r.description ? `<p class="api-desc muted">${esc(r.description)}</p>` : ""}
+      ${apiExample("Request", r.example?.request)}
+      ${apiExample("Response", r.example?.response)}
+    </div>`;
+}
+function apiSectionHtml(g) {
+  return `<section class="api-section" id="api-${esc(g.access)}">
+      <h2>${esc(g.title)}</h2>
+      <p class="api-blurb muted">${esc(g.blurb)}</p>
+      ${g.routes.map(apiRouteHtml).join("")}
+    </section>`;
+}
 async function renderReference() {
-  app.innerHTML = `<div class="docs-main"><iframe id="refFrame" class="docs-frame" sandbox="allow-same-origin allow-popups" title="API reference"></iframe></div>`;
-  const frame = document.getElementById("refFrame");
-  try {
-    const res = await fetch("/api/reference", { headers: authHeaders() });
-    if (res.status === 401) {
-      showReauth();
+  app.innerHTML = `
+    <div class="api-layout">
+      <nav class="api-nav" id="apiNav" aria-label="API sections"></nav>
+      <div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>
+    </div>`;
+  const navEl = document.getElementById("apiNav");
+  const contentEl = document.getElementById("apiContent");
+  // Delegate clicks synchronously — one listener on the stable nav, so it survives
+  // the async fill below: a sidebar click smooth-scrolls to that section.
+  navEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-sec]");
+    if (!a) {
       return;
     }
-    if (!res.ok) {
-      throw new Error("Couldn't load the API reference.");
-    }
-    frame.srcdoc = await res.text();
-    frame.onload = () => {
-      try {
-        frame.style.height = `${frame.contentDocument.body.scrollHeight + 24}px`;
-      } catch (_) {}
-    };
+    ev.preventDefault();
+    document.getElementById(`api-${a.dataset.sec}`)?.scrollIntoView({ block: "start" });
+  });
+  let groups;
+  try {
+    ({ groups } = await api("/api/reference"));
   } catch (e) {
-    renderError(app, e.message, renderReference);
+    renderError(contentEl, e.message, renderReference);
+    return;
+  }
+
+  navEl.innerHTML = groups
+    .map(
+      (g, i) =>
+        `<a href="#/reference" data-sec="${esc(g.access)}"${i === 0 ? ' class="active"' : ""}>` +
+        `${esc(g.title)}<span class="api-nav-count">${g.routes.length}</span></a>`,
+    )
+    .join("");
+  contentEl.innerHTML =
+    `<header class="api-head"><h1>API reference</h1>` +
+    `<p class="muted">Generated from the route registration — every endpoint the app and Claude can call. ` +
+    `Base URL <code>${esc(location.origin)}</code>.</p></header>` +
+    groups.map(apiSectionHtml).join("");
+
+  // Highlight whichever section is in view. Query the live nav each time so it
+  // never holds a stale link reference; park the observer on the nav so it lives
+  // as long as the view (GC'd on unmount).
+  navEl._obs = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          const sec = e.target.id.replace(/^api-/, "");
+          for (const a of navEl.querySelectorAll("a[data-sec]")) {
+            a.classList.toggle("active", a.dataset.sec === sec);
+          }
+        }
+      }
+    },
+    { rootMargin: "-15% 0px -75% 0px", threshold: 0 },
+  );
+  for (const g of groups) {
+    const el = document.getElementById(`api-${g.access}`);
+    if (el) {
+      navEl._obs.observe(el);
+    }
   }
 }
 

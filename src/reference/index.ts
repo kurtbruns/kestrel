@@ -11,8 +11,25 @@
  * Served read-only through the authed `/api/reference` route (see routes/docs.ts
  * for the sibling docs surface it mirrors).
  */
-import { type ReferenceGroup, referencePage } from "../lib/page";
 import type { Access, RouteDef } from "../router";
+
+/** One route as the reference shows it — the manifest metadata, no handler/middleware. */
+export interface ReferenceEntry {
+  method: string;
+  path: string;
+  access: Access;
+  summary: string;
+  description?: string;
+  example?: { request?: unknown; response?: unknown };
+}
+
+/** The routes of one access tier, with a short heading for the tier. */
+export interface ReferenceGroup {
+  access: Access;
+  title: string;
+  blurb: string;
+  routes: ReferenceEntry[];
+}
 
 /** Tier order + copy for the reference. Mirrors the public/admin/webhook split app.ts draws. */
 const TIERS: { access: Access; title: string; blurb: string }[] = [
@@ -57,12 +74,4 @@ export function buildReference(routes: readonly RouteDef[]): ReferenceGroup[] {
         example: r.example,
       })),
   })).filter((g) => g.routes.length > 0);
-}
-
-/** Render the manifest to the themed, read-only API reference page. */
-export function renderReferencePage(
-  routes: readonly RouteDef[],
-  opts: { appOrigin: string },
-): Response {
-  return referencePage({ appOrigin: opts.appOrigin, groups: buildReference(routes) });
 }
