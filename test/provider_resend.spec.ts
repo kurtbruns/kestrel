@@ -8,7 +8,7 @@ import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
-const config = { fromAddress: "Newsletter <newsletter@news.example.com>" } as unknown as Config;
+const config = { fromAddress: "Newsletter <newsletter@send.example.com>" } as unknown as Config;
 
 function makeProvider(overrides: Partial<AppEnv> = {}): ResendProvider {
   const fakeEnv = {

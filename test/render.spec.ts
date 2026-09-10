@@ -10,8 +10,8 @@ const config: Config = {
   archiveOrigin: "https://arc.example",
   archiveBasePath: "/newsletter",
   mediaPublicBase: "https://media.example",
-  sendingDomain: "news.example",
-  fromAddress: "News <news@news.example>",
+  sendingDomain: "send.example",
+  fromAddress: "News <news@send.example>",
   awsRegion: "us-east-1",
 };
 

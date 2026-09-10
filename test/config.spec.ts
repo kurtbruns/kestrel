@@ -14,8 +14,8 @@ import { sweep } from "../src/send/sweep";
 function envWith(overrides: Record<string, string | undefined>): AppEnv {
   return {
     APP_ORIGIN: "https://app.example",
-    SENDING_DOMAIN: "news.example",
-    FROM_ADDRESS: "News <news@news.example>",
+    SENDING_DOMAIN: "send.example",
+    FROM_ADDRESS: "News <news@send.example>",
     AWS_REGION: "us-east-1",
     ...overrides,
   } as unknown as AppEnv;

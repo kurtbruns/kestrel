@@ -66,8 +66,8 @@ While you are here, set each environment's public `vars` (these are **not** secr
 | `PROVIDER` | active transport: `fake`, `ses`, or `resend` | `ses` |
 | `APP_ORIGIN` | the origin the app is served from | `https://newsletter.example.com` |
 | `ARCHIVE_BASE_PATH` | path prefix for issue pages (drives the URL *and* the route) | `/newsletter` |
-| `SENDING_DOMAIN` | the sending identity domain | `news.example.com` |
-| `FROM_ADDRESS` | the `From:` header; its display name also names the publication | `Newsletter <newsletter@news.example.com>` |
+| `SENDING_DOMAIN` | the sending identity domain | `send.example.com` |
+| `FROM_ADDRESS` | the `From:` header; its display name also names the publication | `Newsletter <newsletter@send.example.com>` |
 | `AWS_REGION` | SES region (ignored by Resend) | `us-east-1` |
 
 `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` are **optional** — leave them unset to stay self-contained (archives and images serve on `APP_ORIGIN`). They are the opt-in enhancements covered in "Wire the archive to a website."
