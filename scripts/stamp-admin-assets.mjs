@@ -2,7 +2,7 @@
 /*
  * Fingerprint the admin SPA's static assets.
  *
- * The editor ships two hand-authored static files — public/admin/styles.css and
+ * The editor ships two hand-authored static files — public/dashboard/styles.css and
  * app.js — referenced from index.html. This stamps each reference with a content
  * fingerprint (`?v=<hash>`, the first 8 hex of the file's SHA-256), so a changed
  * asset lands on a fresh URL and public/_headers can cache the old one immutably.
@@ -24,7 +24,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const ADMIN_DIR = join(ROOT, "public", "admin");
+const ADMIN_DIR = join(ROOT, "public", "dashboard");
 const INDEX = join(ADMIN_DIR, "index.html");
 
 /** Assets to fingerprint, by the basename referenced in index.html. */

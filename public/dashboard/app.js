@@ -9,6 +9,10 @@
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let session = null; // { principal: { kind, email? }, auth: { mode } } once booted
+// The last GET /api/settings payload ({ settings, deployment }), fetched at boot so
+// the sidebar brand and the dashboard's publication/setup cards can read the
+// origins and the From-address fallback without re-fetching on every render.
+let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
@@ -98,10 +102,97 @@ function renderIdentity() {
     identity.innerHTML = `<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`;
   }
 }
+
+// ---- publication identity (sidebar brand) ----
+// The publication's name / tagline / logo / brand color will come from the settings
+// surface (issue #81). Until that lands we derive a sensible fallback: the name from
+// the From: display name (the read-only deployment reflection), a neutral initial
+// tile for the logo, and the theme accent for the color. Reading settings.publication
+// first means #81 drops in here with no rework.
+function parseFromName(fromAddress) {
+  if (!fromAddress) {
+    return null;
+  }
+  // "Display Name <addr@domain>" → "Display Name"; a bare address has no display name.
+  const m = String(fromAddress).match(/^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/);
+  const name = m?.[1] ? m[1].trim() : "";
+  return name || null;
+}
+function derivePublication(data) {
+  const s = data?.settings || {};
+  const d = data?.deployment || {};
+  const p = s.publication || {}; // #81 will nest the publication identity under here
+  return {
+    name: p.name || parseFromName(d.fromAddress) || "Your publication",
+    tagline: p.tagline || "",
+    logoUrl: p.logoUrl || null,
+    color: p.brandColor || null,
+  };
+}
+function renderSidebarBrand() {
+  const pub = derivePublication(appConfig);
+  const nameEl = document.getElementById("brandName");
+  const tagEl = document.getElementById("brandTagline");
+  const logoEl = document.getElementById("brandLogo");
+  if (nameEl) {
+    nameEl.textContent = pub.name;
+  }
+  if (tagEl) {
+    tagEl.textContent = pub.tagline;
+    tagEl.hidden = !pub.tagline;
+  }
+  if (logoEl) {
+    if (pub.logoUrl) {
+      logoEl.innerHTML = `<img src="${esc(pub.logoUrl)}" alt="">`;
+      logoEl.classList.remove("brand-logo-placeholder");
+    } else {
+      // Neutral placeholder tile: the publication's initial on the accent.
+      logoEl.textContent = (pub.name.trim()[0] || "K").toUpperCase();
+      logoEl.classList.add("brand-logo-placeholder");
+    }
+  }
+  // A brand color (issue #81) tints the logo tile; otherwise it uses the theme accent.
+  if (pub.color) {
+    document.documentElement.style.setProperty("--brand", pub.color);
+  } else {
+    document.documentElement.style.removeProperty("--brand");
+  }
+}
+
+// Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
+// and the setup checklist so the "New post" affordance behaves identically everywhere.
+function createNewPost(btn) {
+  return busy(btn, "Creating…", async () => {
+    try {
+      const { post } = await api("/posts", { method: "POST", json: { subject: "Untitled" } });
+      location.hash = `#/edit/${post.id}`;
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+}
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied");
+  } catch {
+    toast("Couldn't copy to clipboard");
+  }
+}
+// The canonical archive URL for a slug, from the read-only deployment reflection
+// (mirrors src/render/render.ts archiveUrl; falls back to this origin if unset).
+function archiveUrlFor(deployment, slug) {
+  const origin = deployment?.archiveOrigin || location.origin;
+  const base = deployment?.archiveBasePath || "";
+  return `${origin}${base}/${slug}`;
+}
+
 // Access sessions expire at the edge (the request never reaches the app), so the
 // only recovery is a fresh document load that re-triggers the Access login. In dev
 // this shouldn't happen, but a reload re-mints, so the same affordance is safe.
 function showReauth() {
+  // No identity yet — hide the publication chrome so the wall stands alone.
+  document.body.classList.add("signed-out");
   app.innerHTML =
     `<div class="card auth-wall"><h2>Session expired</h2>` +
     `<p class="hint">Your access session ended. Sign in again to continue.</p>` +
@@ -307,22 +398,15 @@ function route() {
   editorHash = null; // renderEditor re-establishes these when it mounts
   editorLeaveFlush = null;
   editorManualSave = null;
-  const hash = location.hash || "#/posts";
+  const hash = location.hash || "#/dashboard";
   const [, view, arg] = hash.split("/");
-  const current =
-    view === "sends"
-      ? "#/sends"
-      : view === "subscribers"
-        ? "#/subscribers"
-        : view === "settings"
-          ? "#/settings"
-          : view === "reference"
-            ? "#/reference"
-            : view === "docs"
-              ? "#/docs"
-              : "#/posts";
-  document.querySelectorAll(".topbar nav a").forEach((a) => {
-    if (a.getAttribute("href") === current) {
+  // The editor wants the full width, and carries its own "← Posts" affordance, so
+  // it hides the sidebar rather than living beside it (SPEC §10: admin-only chrome).
+  document.body.classList.toggle("editor-mode", view === "edit");
+  // Mark the active nav item across both sidebar navs (primary + tools) so the
+  // reader can see where they are (aria-current also styles it).
+  document.querySelectorAll(".sidebar a[data-view]").forEach((a) => {
+    if (a.dataset.view === view) {
       a.setAttribute("aria-current", "page");
     } else {
       a.removeAttribute("aria-current");
@@ -331,11 +415,14 @@ function route() {
   if (view === "edit" && arg) {
     return renderEditor(arg);
   }
-  if (view === "sends") {
-    return renderSends();
+  if (view === "posts") {
+    return renderPosts();
   }
   if (view === "subscribers") {
     return renderSubscribers();
+  }
+  if (view === "sends") {
+    return renderSends();
   }
   if (view === "settings") {
     return renderSettings();
@@ -346,7 +433,10 @@ function route() {
   if (view === "docs") {
     return renderDocs(arg);
   }
-  return renderPosts();
+  if (view === "start") {
+    return renderStart();
+  }
+  return renderDashboard();
 }
 // Navigating away from a dirty editor saves in the background rather than
 // prompting — hashchange fires after the hash has already moved, so the flush
@@ -393,15 +483,7 @@ window.addEventListener("keydown", (e) => {
 // ---- posts list ----
 async function renderPosts() {
   app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
-  document.getElementById("newPost").onclick = (e) =>
-    busy(e.currentTarget, "Creating…", async () => {
-      try {
-        const { post } = await api("/posts", { method: "POST", json: { subject: "Untitled" } });
-        location.hash = `#/edit/${post.id}`;
-      } catch (err) {
-        toast(err.message);
-      }
-    });
+  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
   try {
     const { posts } = await api("/posts");
     const list = document.getElementById("list");
@@ -1408,6 +1490,10 @@ async function renderSettings() {
       try {
         const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
         document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
+        // Keep the cached config current so the sidebar brand reflects any identity
+        // change (issue #81 will edit the publication identity through this surface).
+        appConfig = { ...(appConfig || {}), settings: r.settings };
+        renderSidebarBrand();
         toast("Settings saved");
       } catch (err) {
         toast(err.message);
@@ -1566,6 +1652,289 @@ async function renderReference() {
   }
 }
 
+// ---- dashboard (home) ----
+// The post-login landing and the brand's target (the default route). Built entirely
+// from existing authed endpoints — GET /posts, /sends, /subscribers, and the cached
+// /api/settings — so it adds no surface and can't touch an invariant. It answers
+// SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
+// scheduled, what went out, and what's still in progress.
+
+// Health (SPEC §8 "is anything wrong", §11 loud failure): calm in the common case,
+// loud only when something needs attention. Derived from GET /sends.
+function computeHealth(sends) {
+  const now = Date.now();
+  const issues = [];
+  const failed = sends.filter((s) => s.status === "failed");
+  if (failed.length) {
+    issues.push({
+      level: "red",
+      text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
+    });
+  }
+  const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
+  if (missed.length) {
+    issues.push({
+      level: "red",
+      text: `${missed.length} scheduled send${missed.length === 1 ? "" : "s"} passed the fire time without going out.`,
+    });
+  }
+  const sending = sends.filter((s) => s.status === "sending");
+  const stuck = sending.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
+  if (stuck.length) {
+    issues.push({
+      level: "amber",
+      text: "A send has been in progress over 10 minutes — it may be retrying.",
+    });
+  } else if (sending.length) {
+    issues.push({
+      level: "amber",
+      text: `${sending.length} send${sending.length === 1 ? " is" : "s are"} in progress.`,
+    });
+  }
+  // Delivery trouble: a high share of send-time failures on a recent send. (The list
+  // rollup is by delivery *status* — accepted / failed / skipped — so asynchronous
+  // bounce webhook events aren't reflected here; a true bounce-rate view would need a
+  // dedicated endpoint, which this reuse-only change deliberately doesn't add.)
+  const spiky = sends
+    .filter((s) => s.status === "sent")
+    .slice(0, 5)
+    .find((s) => {
+      const f = s.progress?.failed || 0;
+      return s.recipient_count > 0 && f >= 3 && f / s.recipient_count >= 0.1;
+    });
+  if (spiky) {
+    issues.push({
+      level: "amber",
+      text: "Elevated delivery failures on a recent send — check Sends.",
+    });
+  }
+  return issues;
+}
+
+async function renderDashboard() {
+  app.innerHTML = `<div class="dash" id="dash"><p class="muted">Loading…</p></div>`;
+  const root = document.getElementById("dash");
+  let posts, sends, counts;
+  try {
+    const [p, s, subs] = await Promise.all([api("/posts"), api("/sends"), api("/subscribers")]);
+    posts = p.posts;
+    sends = s.sends;
+    counts = subs.counts;
+  } catch (e) {
+    renderError(root, e.message, renderDashboard);
+    return;
+  }
+  const pub = derivePublication(appConfig);
+  const deployment = appConfig?.deployment || {};
+  const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
+
+  // First run — nothing written and no one on the list: replace the body with the
+  // onboarding checklist (the shared Getting-started component) rather than a wall
+  // of empty tiles.
+  if (!posts.length && totalSubs === 0) {
+    root.innerHTML =
+      `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
+        pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
+      }<p class="muted">Let's get your first issue out the door.</p></div></div>` +
+      setupChecklistHtml(pub, deployment);
+    wireDashActions(root, renderDashboard);
+    return;
+  }
+
+  const health = computeHealth(sends);
+  const level = health.some((i) => i.level === "red") ? "red" : health.length ? "amber" : "ok";
+  const healthHtml =
+    level === "ok"
+      ? `<div class="health ok"><span class="health-dot">✓</span><span>All clear — nothing needs your attention.</span></div>`
+      : `<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health
+          .map((i) => `<div>${esc(i.text)}</div>`)
+          .join("")}</div></div>`;
+
+  const tiles = [
+    { label: "Confirmed", sub: "your audience", emph: true, v: counts.confirmed },
+    { label: "Pending", v: counts.pending },
+    { label: "Unsubscribed", v: counts.unsubscribed },
+    { label: "Suppressed", v: counts.suppressed },
+  ];
+  const tilesHtml = `<div class="tiles">${tiles
+    .map(
+      (t) =>
+        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
+          t.sub ? `<span class="tile-sub">${esc(t.sub)}</span>` : ""
+        }</span></a>`,
+    )
+    .join("")}</div>`;
+
+  const scheduled = sends
+    .filter((s) => s.status === "scheduled")
+    .sort((a, b) => a.fire_at - b.fire_at);
+  const nextUpHtml = scheduled.length
+    ? scheduled
+        .map(
+          (s) =>
+            `<div class="card spread clickable nextup" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Nothing scheduled.</p>`;
+
+  const slugById = new Map(posts.map((p) => [p.id, p.slug]));
+  const recent = sends
+    .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
+    .slice(0, 5);
+  const recentHtml = recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent
+        .map((s) => {
+          const slug = slugById.get(s.post_id);
+          const url = slug ? archiveUrlFor(deployment, slug) : null;
+          const delivered = s.progress?.accepted || 0;
+          const failedN = s.progress?.failed || 0;
+          return `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
+            failedN ? ` <span class="muted">(${failedN} failed)</span>` : ""
+          }</td><td class="act">${
+            url && s.status === "sent"
+              ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
+              : ""
+          }</td></tr>`;
+        })
+        .join("")}</tbody></table></div>`
+    : `<p class="muted">No sends yet.</p>`;
+
+  const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
+  const draftsHtml = drafts.length
+    ? `<div class="table-wrap"><table><tbody>${drafts
+        .map(
+          (p) =>
+            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td class="muted">edited ${fmt(p.updated_at)}</td></tr>`,
+        )
+        .join("")}</tbody></table></div>`
+    : `<p class="muted">No drafts in progress.</p>`;
+
+  const appOrigin = deployment.appOrigin || location.origin;
+  const archiveBase =
+    (deployment.archiveOrigin || location.origin) + (deployment.archiveBasePath || "");
+  const pubCardHtml = `<div class="card pub-card">
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${esc(archiveBase)}</code><button class="ghost-btn" data-copy="${esc(archiveBase)}">Copy</button></div>
+    <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
+  </div>`;
+
+  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit identity &amp; template</button></div>`;
+
+  root.innerHTML = `
+    <div class="dash-head">
+      <div><h1>${esc(pub.name)}</h1>${pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""}</div>
+      <button class="primary" data-act="new-post">New post</button>
+    </div>
+    ${healthHtml}
+    <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
+    <div class="dash-cols">
+      <section class="dash-section"><h2>Next up</h2>${nextUpHtml}</section>
+      <section class="dash-section"><h2>Continue writing</h2>${draftsHtml}</section>
+    </div>
+    <section class="dash-section"><h2>Recent sends</h2>${recentHtml}</section>
+    <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
+    <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>`;
+
+  wireDashActions(root, renderDashboard);
+  // Row / card clicks open the issue (subject links + Cancel opt out — the same guard
+  // the Posts table and the Sends cards use).
+  root.querySelectorAll("tr[data-id]").forEach((tr) => {
+    tr.onclick = (e) => {
+      if (e.target.tagName !== "A" && !e.target.closest("button")) {
+        location.hash = `#/edit/${tr.dataset.id}`;
+      }
+    };
+  });
+  root.querySelectorAll(".nextup").forEach((card) => {
+    card.onclick = (e) => {
+      if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+        location.hash = `#/edit/${card.dataset.post}`;
+      }
+    };
+  });
+  root.querySelectorAll("[data-cancel]").forEach((b) => {
+    b.onclick = () =>
+      busy(b, "Canceling…", async () => {
+        try {
+          await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+          toast("Canceled");
+          renderDashboard();
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+  });
+  startCountdowns();
+}
+
+// Controls shared by the Dashboard and the Getting-started view: hash navigation,
+// "New post", "Add subscriber", and copy buttons.
+function wireDashActions(root, reload) {
+  root.querySelectorAll("[data-nav]").forEach((b) => {
+    b.onclick = () => {
+      location.hash = b.dataset.nav;
+    };
+  });
+  root.querySelectorAll("[data-act='new-post']").forEach((b) => {
+    b.onclick = () => createNewPost(b);
+  });
+  root.querySelectorAll("[data-act='add-sub']").forEach((b) => {
+    b.onclick = () => addSubscriberModal(reload);
+  });
+  root.querySelectorAll("[data-copy]").forEach((b) => {
+    b.onclick = () => copyText(b.dataset.copy);
+  });
+}
+
+// The onboarding checklist, shared by the first-run dashboard and Getting-started.
+function setupChecklistHtml(pub, deployment) {
+  const subscribeUrl = `${deployment.appOrigin || location.origin}/subscribe`;
+  return `<div class="card setup">
+    <h2 class="setup-title">Set up your publication</h2>
+    <ol class="setup-steps">
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
+      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
+    </ol>
+  </div>`;
+}
+
+// ---- getting started ----
+// The permanent home for onboarding (footer "Powered by Kestrel" → here): the same
+// setup checklist the empty dashboard shows, a short "how Kestrel works", and links
+// into the docs and API. All authed in-app views, never top-level navigations (§10).
+function howItWorksHtml() {
+  const steps = [
+    ["Write", "Draft in Markdown and preview exactly what the email will look like."],
+    ["Schedule", "Schedule ahead — the send waits in a visible, cancelable review window."],
+    ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
+    ["Archive", "Every issue is preserved as a permanent page — the record of what went out."],
+  ];
+  return `<section class="dash-section"><h2>How Kestrel works</h2><ol class="how-steps">${steps
+    .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
+    .join("")}</ol></section>`;
+}
+async function renderStart() {
+  // The checklist needs the deployment origins; boot usually has them cached.
+  if (!appConfig) {
+    try {
+      appConfig = await api("/api/settings");
+    } catch {
+      /* fall back to location.origin in the checklist */
+    }
+  }
+  const pub = derivePublication(appConfig);
+  const deployment = appConfig?.deployment || {};
+  app.innerHTML = `<div class="dash" id="start">
+    <div class="dash-head"><div><h1>Getting started</h1><p class="muted">Write an issue, review it behind a cancelable window, send it, and keep it in a permanent archive.</p></div></div>
+    ${howItWorksHtml()}
+    ${setupChecklistHtml(pub, deployment)}
+    <section class="dash-section"><h2>Learn more</h2><div class="row"><button data-nav="#/docs">Operator setup guide</button><button data-nav="#/reference">API reference</button></div></section>
+  </div>`;
+  wireDashActions(document.getElementById("start"), renderStart);
+}
+
 function confirmUnsubscribe(sub, onDone) {
   const m = modal(
     `<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${esc(sub.email)}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
@@ -1632,7 +2001,16 @@ async function boot() {
   }
   if (res?.ok) {
     session = await res.json();
+    document.body.classList.remove("signed-out");
     renderIdentity();
+    // Load the publication identity for the sidebar brand. Non-fatal: on failure the
+    // brand keeps its "Kestrel" placeholder and routing still proceeds.
+    try {
+      appConfig = await api("/api/settings");
+    } catch {
+      /* keep the placeholder brand */
+    }
+    renderSidebarBrand();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

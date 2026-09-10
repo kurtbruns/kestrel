@@ -16,7 +16,7 @@ It runs on a **Cloudflare Worker** over **D1** (database) and **R2** (images), w
 npm install
 cp .dev.vars.example .dev.vars      # ships a dev-insecure DEV_AUTH_SECRET; the editor mints its own admin token
 npm run migrate:local               # apply D1 migrations to the local database
-npm run dev                         # wrangler dev on http://localhost:8787 (editor at /admin/)
+npm run dev                         # wrangler dev on http://localhost:8787 (editor at /dashboard/)
 
 npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
 npm run test:watch                  # watch mode
@@ -30,7 +30,7 @@ npm run migrate:remote              # apply D1 migrations to the remote database
 
 Quality gate before finishing: `npm test`, `npm run typecheck`, and `npm run check`. Biome (`biome.json`) is the formatter + linter — the same config as the sibling Worker projects. There is no CI in the repo — the gate is run by hand, and `wrangler deploy` deploys by hand, per environment. `wrangler types` regenerates `worker-configuration.d.ts` (gitignored), so run `typecheck` after touching `wrangler.jsonc`.
 
-The `recommended` preset is enforced at `error` everywhere; the tree is lint-clean. Two deliberate carve-outs: an `overrides` block turns off `noNonNullAssertion` + `noExplicitAny` for `test/**` only (tests legitimately assert known fixture shapes and type parsed JSON as `any` — both stay enforced in `src/`), and five intentional exceptions in `public/admin/styles.css` carry inline `biome-ignore` notes (the two deliberate `!important` rules and three descending-specificity selectors, where the cascade is decided by specificity, not source order). Reach for `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!` for a row read back right after writing it — it fails loud with a name.
+The `recommended` preset is enforced at `error` everywhere; the tree is lint-clean. Two deliberate carve-outs: an `overrides` block turns off `noNonNullAssertion` + `noExplicitAny` for `test/**` only (tests legitimately assert known fixture shapes and type parsed JSON as `any` — both stay enforced in `src/`), and four intentional exceptions in `public/dashboard/styles.css` carry inline `biome-ignore` notes (the two deliberate `!important` rules and two descending-specificity selectors, where the cascade is decided by specificity, not source order). Reach for `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!` for a row read back right after writing it — it fails loud with a name.
 
 The top-level `wrangler.jsonc` is the **development** environment (fake transport, so dev can never reach a real inbox); `staging` and `production` are named `env`s that **must redeclare** their bindings and vars — wrangler does not inherit them.
 
@@ -46,7 +46,7 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 - **`auth/` gates the admin surface** with one contract: verify a signed token → `Principal` (`middleware.ts`). Cloudflare Access at the edge, re-verified in-app (`access.ts`), issues it when deployed — human SSO + a service token for Claude; locally a dev-signed token (`dev_token.ts`) stands in, honored only in a dev-shaped env and never committed (`DEV_AUTH_SECRET` lives in `.dev.vars`), so deployed envs are Access-only.
 - **`db/` holds all SQL, and nowhere else does.** `migrations/` is append-only — never edit a shipped migration, add a new one.
 - **Config splits along one hard line (SPEC §8).** Deploy-time infrastructure — the provider, its credentials, Access, the origins — lives in env/secrets (`getConfig`, documented in `docs/setup/`) and is NEVER readable or writable through the API. Runtime *preferences* (e.g. default test recipients) live in a singleton settings row (`db/settings.ts`, a JSON blob so a new preference is a code change, not a migration) behind the authed `/api/settings`. The settings surface may *reflect* deploy config read-only, but must never accept or expose a secret.
-- **The admin static assets are fingerprinted, not hand-versioned.** `scripts/stamp-admin-assets.mjs` writes a content hash onto the `?v=` of `styles.css`/`app.js` in `public/admin/index.html`, and `public/_headers` caches those hashed URLs immutably. It runs on `npm run dev` startup and, as `assets:check`, in `pretest` (so the gate catches an unstamped commit). Never hand-edit the `?v=`; after editing an admin asset, `npm run assets:build` (or restart dev) re-stamps.
+- **The admin static assets are fingerprinted, not hand-versioned.** `scripts/stamp-admin-assets.mjs` writes a content hash onto the `?v=` of `styles.css`/`app.js` in `public/dashboard/index.html`, and `public/_headers` caches those hashed URLs immutably. It runs on `npm run dev` startup and, as `assets:check`, in `pretest` (so the gate catches an unstamped commit). Never hand-edit the `?v=`; after editing an admin asset, `npm run assets:build` (or restart dev) re-stamps.
 
 ## The public / admin split
 
@@ -54,7 +54,7 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 
 - The archive origin and media base default to `APP_ORIGIN` (`src/env.ts`), so a deployment that sets only `APP_ORIGIN` is fully self-contained; the apex archive and a `media.` domain are opt-in overrides.
 - `ARCHIVE_BASE_PATH` drives both the emitted URL and the route that serves it — `createRouter(basePath)` in `app.ts`, wired in `src/index.ts` — so the two can't drift.
-- `/` is the public archive index (`routes/archive.ts` → `lib/page.ts`), served to everyone and linking only to public pages — never a bounce into the Access-gated `/admin`.
+- `/` is the public archive index (`routes/archive.ts` → `lib/page.ts`), served to everyone and linking only to public pages — never a bounce into the Access-gated `/dashboard` (the legacy `/admin/` path just 301-redirects there).
 
 ## Keep docs/SPEC.md in sync
 

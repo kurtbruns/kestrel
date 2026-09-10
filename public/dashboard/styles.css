@@ -107,80 +107,161 @@ h2 {
   margin: 26px 0 10px;
 }
 
-.topbar {
+/* --- app shell: a left sidebar (publication workspace) beside the routed view.
+   Top→bottom: brand → View publication → primary nav; then, at the foot, the
+   account chip and the tool footer. The editor and the signed-out wall hide the
+   sidebar for the full width. Admin→public links are fine here; the reverse is
+   never emitted (SPEC §10). --- */
+.layout {
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.5rem;
-  background: var(--card);
-  border-bottom: 1px solid var(--line);
+  align-items: stretch;
+  min-height: 100vh;
+}
+.sidebar {
+  flex: 0 0 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 18px 14px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
   position: sticky;
   top: 0;
-  z-index: 5;
+  height: 100vh;
+  overflow-y: auto;
 }
+body.editor-mode .sidebar,
+body.signed-out .sidebar {
+  display: none;
+}
+.sidebar-top {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sidebar-foot {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+/* Brand → the dashboard home. Logo tile (publication logo, or a neutral initial
+   placeholder) + name over an optional one-line tagline. */
 .brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--fg);
+  padding: 6px 8px;
+  border-radius: 8px;
+}
+.brand:hover {
+  background: var(--hover);
+}
+.brand-logo {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  justify-content: center;
+  overflow: hidden;
   font-weight: 700;
-  cursor: pointer;
-  text-decoration: none;
+  font-size: 15px;
+  line-height: 1;
 }
-.brand-icon {
-  width: 24px;
-  height: 24px;
-  fill: currentColor;
+.brand-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
   display: block;
 }
-.topbar nav {
+.brand-logo-placeholder {
+  background: var(--brand, var(--accent));
+  color: var(--accent-fg);
+}
+.brand-meta {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  min-width: 0;
 }
-/* Content nav sits by the brand; utility (Docs, Settings) + identity are pushed
-   to the right — the auto margin on nav-utility absorbs the free space. */
-.topbar .nav-utility {
-  margin-left: auto;
+.brand-name {
+  font-weight: 650;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.topbar nav a {
+.brand-tagline {
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* View publication ↗ — sits directly under the brand; opens the public archive in
+   a new tab. Not a nav item (admin→public is one-directional, SPEC §10). */
+.view-pub {
+  display: inline-block;
+  align-self: flex-start;
+  margin: 0 8px 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.view-pub:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+/* Primary nav — one flat vertical list of peers. */
+.nav-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+.nav-primary a {
+  display: block;
   text-decoration: none;
   color: var(--muted);
   font-size: 14px;
-  display: inline-flex;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.nav-primary a:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.nav-primary a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
+  background: var(--hover);
+}
+
+/* Account chip at the foot (reuses renderIdentity). */
+.identity {
+  display: flex;
   flex-direction: column;
-  align-items: center;
-}
-/* Reserve the width of the active (600) label so toggling weight never reflows the link. */
-.topbar nav a::after {
-  content: attr(data-text);
-  height: 0;
-  font-weight: 600;
-  overflow: hidden;
-  visibility: hidden;
-  pointer-events: none;
-  user-select: none;
-}
-.topbar nav a:hover {
-  color: var(--fg);
-}
-.topbar nav a[aria-current="page"] {
-  color: var(--fg);
-  font-weight: 600;
-}
-.topbar .identity {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
+  align-items: flex-start;
+  gap: 4px;
   font-size: 13px;
+  padding: 0 8px;
 }
 .identity .who {
   color: var(--muted);
-  max-width: 220px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .identity .who.dev {
-  color: var(--muted);
   font-style: italic;
 }
 .identity a.ghost {
@@ -191,6 +272,55 @@ h2 {
 .identity a.ghost:hover {
   color: var(--fg);
   text-decoration: underline;
+}
+
+/* Tool footer: the Kestrel mark + "Powered by Kestrel" (→ Getting started), then
+   Docs / API. All stay authed in-app views (SPEC §10). */
+.tool-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.powered {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 2px 8px;
+}
+.powered:hover {
+  color: var(--fg);
+}
+.powered strong {
+  font-weight: 600;
+}
+.kestrel-mark {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
+  display: block;
+  flex: 0 0 auto;
+}
+.nav-tools {
+  display: flex;
+  gap: 14px;
+  padding: 0 8px;
+}
+.nav-tools a {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 13px;
+}
+.nav-tools a:hover {
+  color: var(--fg);
+}
+.nav-tools a[aria-current="page"] {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 .auth-wall {
@@ -205,10 +335,41 @@ h2 {
   margin-top: 12px;
 }
 
-.container {
-  max-width: 880px;
-  margin: 24px auto;
-  padding: 0 16px 64px;
+/* The routed view. Capped for readability and centered in the space beside the
+   sidebar; the editor gets a slightly narrower canvas to match its old width. */
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 28px 32px 72px;
+}
+body.editor-mode .content {
+  max-width: 900px;
+}
+
+/* Below the breakpoint the sidebar becomes a top strip and the nav wraps to a row. */
+@media (max-width: 860px) {
+  .layout {
+    flex-direction: column;
+  }
+  .sidebar {
+    flex-basis: auto;
+    height: auto;
+    position: static;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 12px;
+  }
+  .sidebar-foot {
+    margin-top: 12px;
+  }
+  .nav-primary {
+    flex-flow: row wrap;
+  }
+  .content {
+    padding: 20px 16px 56px;
+  }
 }
 
 /* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; base rule grouped here intentionally */
@@ -967,7 +1128,7 @@ td.act {
 }
 .docs-nav {
   position: sticky;
-  top: 76px;
+  top: 24px;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -979,7 +1140,6 @@ td.act {
   padding: 6px 10px;
   border-radius: 6px;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides the cascade; hover rule grouped with its base */
 .docs-nav a:hover {
   color: var(--fg);
   background: var(--hover);
@@ -1015,11 +1175,8 @@ td.act {
 }
 .api-nav {
   position: sticky;
-  /* Pin just under the sticky topbar and rest exactly where it pins, so the rail
-     does not travel on scroll. margin-top cancels most of #app's 24px top inset
-     for this column; top then equals the rail's resting position. */
-  top: 85px;
-  margin-top: -12px;
+  /* Rests near the top of the viewport (no topbar to clear in the sidebar layout). */
+  top: 24px;
   align-self: start;
   display: flex;
   flex-direction: column;
@@ -1036,7 +1193,6 @@ td.act {
   padding: 6px 10px;
   border-radius: 6px;
 }
-/* biome-ignore lint/style/noDescendingSpecificity: specificity (not source order) decides; hover grouped with its base */
 .api-nav a:hover {
   color: var(--fg);
   background: var(--hover);
@@ -1065,7 +1221,7 @@ td.act {
   font-size: 22px;
 }
 .api-section {
-  scroll-margin-top: 72px;
+  scroll-margin-top: 24px;
   margin: 0 0 28px;
 }
 .api-section h2 {
@@ -1160,6 +1316,285 @@ td.act {
     position: static;
     flex-flow: row wrap;
   }
+}
+
+/* --- dashboard home + getting started --- */
+.dash-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.dash-head h1 {
+  margin: 0;
+}
+.dash-tagline {
+  margin: 4px 0 0;
+}
+.dash-section {
+  margin: 0 0 22px;
+}
+.dash-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media (max-width: 720px) {
+  .dash-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Health line: one calm status in the common case, loud only when something needs
+   attention (SPEC §8 / §11). */
+.health {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+  margin-bottom: 20px;
+}
+.health > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.health-dot {
+  line-height: 1.45;
+}
+.health.ok {
+  color: var(--ok);
+  border-color: var(--b-sent-line);
+  background: var(--b-sent-bg);
+}
+.health.amber {
+  color: var(--warn);
+  border-color: var(--b-sending-line);
+  background: var(--b-sending-bg);
+}
+.health.red {
+  color: var(--danger);
+  border-color: var(--b-bad-line);
+  background: var(--b-bad-bg);
+}
+
+/* Subscriber snapshot tiles (Confirmed emphasized as "your audience"). */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 640px) {
+  .tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card);
+  text-decoration: none;
+  color: var(--fg);
+  transition: border-color 0.12s;
+}
+.tile:hover {
+  border-color: var(--muted);
+}
+.tile-n {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.tile-label {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  flex-direction: column;
+}
+.tile-sub {
+  font-size: 12px;
+}
+.tile-emph {
+  border-color: var(--b-sent-line);
+  background: var(--b-sent-bg);
+}
+.tile-emph .tile-n,
+.tile-emph .tile-sub {
+  color: var(--ok);
+}
+
+/* Recent-sends "Archive ↗" link + the drafts table live on the shared table styles. */
+.ghost-link {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.ghost-link:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+/* Publication card: the live-site + archive URLs with copy buttons. */
+.pub-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pub-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.pub-key {
+  flex: 0 0 84px;
+  font-size: 12px;
+}
+.pub-val {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+  font: 13px var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 9px;
+}
+.pub-row .ghost-btn {
+  flex: 0 0 auto;
+}
+.pub-foot {
+  margin-top: 2px;
+}
+.pub-foot a {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.pub-foot a:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
+.quick-actions {
+  gap: 10px;
+}
+
+/* Setup checklist — shared by the first-run dashboard and Getting started. */
+.setup-title {
+  margin-top: 0;
+}
+.setup-steps {
+  list-style: none;
+  counter-reset: step;
+  margin: 8px 0 0;
+  padding: 0;
+}
+.setup-steps li {
+  counter-increment: step;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 2px;
+  border-top: 1px solid var(--line);
+}
+.setup-steps li:first-child {
+  border-top: 0;
+}
+.setup-steps li::before {
+  content: counter(step);
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.setup-step-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.setup-step-main strong {
+  font-size: 14px;
+}
+.setup-step-main .muted {
+  font-size: 13px;
+}
+.setup-steps li button {
+  flex: 0 0 auto;
+}
+.setup-url {
+  font: 12.5px var(--mono);
+  color: var(--muted);
+  word-break: break-all;
+}
+
+/* "How Kestrel works" — Write → Schedule → Send → Archive. */
+.how-steps {
+  list-style: none;
+  counter-reset: how;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 720px) {
+  .how-steps {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 460px) {
+  .how-steps {
+    grid-template-columns: 1fr;
+  }
+}
+.how-steps li {
+  counter-increment: how;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--card);
+}
+.how-steps li::before {
+  content: counter(how);
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.how-steps strong {
+  font-size: 14px;
+}
+.how-steps .muted {
+  font-size: 12.5px;
+  line-height: 1.4;
 }
 
 @media (prefers-reduced-motion: reduce) {

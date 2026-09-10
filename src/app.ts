@@ -358,8 +358,9 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- public reader routes (token-scoped; no login) ---
-    // The front door: a self-contained archive index, never a bounce to /admin
-    // (SPEC §10). Kept public here — the one explicit non-admin surface.
+    // The front door: a self-contained archive index, never a bounce to the
+    // Access-gated admin SPA at /dashboard (SPEC §10). Kept public here — the one
+    // explicit non-admin surface.
     {
       method: "GET",
       path: "/",
