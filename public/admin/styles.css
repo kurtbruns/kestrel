@@ -110,8 +110,8 @@ h2 {
 .topbar {
   display: flex;
   align-items: center;
-  gap: 20px;
-  padding: 12px 20px;
+  gap: 1rem;
+  padding: 1.5rem;
   background: var(--card);
   border-bottom: 1px solid var(--line);
   position: sticky;
@@ -127,8 +127,8 @@ h2 {
   text-decoration: none;
 }
 .brand-icon {
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   fill: currentColor;
   display: block;
 }
