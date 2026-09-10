@@ -136,6 +136,11 @@ h2 {
   display: flex;
   gap: 16px;
 }
+/* Content nav sits by the brand; utility (Docs, Settings) + identity are pushed
+   to the right — the auto margin on nav-utility absorbs the free space. */
+.topbar .nav-utility {
+  margin-left: auto;
+}
 .topbar nav a {
   text-decoration: none;
   color: var(--muted);
@@ -162,7 +167,6 @@ h2 {
   font-weight: 600;
 }
 .topbar .identity {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 12px;

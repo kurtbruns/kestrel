@@ -18,6 +18,7 @@ import * as publicRoutes from "./routes/public";
 import * as renderRoutes from "./routes/render_actions";
 import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
+import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
@@ -53,6 +54,10 @@ export function createRouter(archiveBasePath: string): Router {
   // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
   r.get("/api/docs", docsRoutes.list, authed);
   r.get("/api/docs/:slug", docsRoutes.get, authed);
+
+  // --- app settings (authed; runtime preferences, never secrets) ---
+  r.get("/api/settings", settingsRoutes.get, authed);
+  r.put("/api/settings", settingsRoutes.update, authed);
 
   // --- posts + revisions (authed) ---
   r.post("/posts", postRoutes.createPost, authed);
