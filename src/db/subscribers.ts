@@ -8,7 +8,18 @@ export interface SubscriberRow {
   id: string;
   email: string;
   status: SubscriberStatus;
-  token: string;
+  /**
+   * One-shot double opt-in token. Rotated each time a pending/unsubscribed row
+   * re-arms (see `subscribe`), so an old confirmation link dies on re-subscribe.
+   * Nullable in the schema; always set by this module on insert and re-arm.
+   */
+  confirm_token: string | null;
+  /**
+   * Durable per-subscriber token embedded in delivered mail's unsubscribe link.
+   * Minted once and NEVER rotated — not even across an unsubscribe→resubscribe
+   * cycle — so one-click unsubscribe in already-sent issues never breaks (I2).
+   */
+  unsub_token: string;
   created_at: number;
   confirmed_at: number | null;
   unsubscribed_at: number | null;
@@ -46,14 +57,30 @@ export function getById(db: D1Database, id: string): Promise<SubscriberRow | nul
   return db.prepare("SELECT * FROM subscribers WHERE id = ?").bind(id).first<SubscriberRow>();
 }
 
-export function getByToken(db: D1Database, token: string): Promise<SubscriberRow | null> {
-  return db.prepare("SELECT * FROM subscribers WHERE token = ?").bind(token).first<SubscriberRow>();
+/** Resolve a subscriber by their one-shot confirm token (double opt-in only). */
+export function getByConfirmToken(db: D1Database, token: string): Promise<SubscriberRow | null> {
+  return db
+    .prepare("SELECT * FROM subscribers WHERE confirm_token = ?")
+    .bind(token)
+    .first<SubscriberRow>();
+}
+
+/** Resolve a subscriber by their durable unsubscribe token (the link in mail). */
+export function getByUnsubToken(db: D1Database, token: string): Promise<SubscriberRow | null> {
+  return db
+    .prepare("SELECT * FROM subscribers WHERE unsub_token = ?")
+    .bind(token)
+    .first<SubscriberRow>();
 }
 
 /**
  * Idempotent subscribe (double opt-in). Creates a pending subscriber, or re-arms
- * a pending/unsubscribed one with a fresh token. A confirmed subscriber is a
- * no-op. Never auto-confirms — that only happens via the emailed token (I1).
+ * a pending/unsubscribed one. A confirmed subscriber is a no-op. Never
+ * auto-confirms — that only happens via the emailed confirm token (I1).
+ *
+ * Re-arming rotates ONLY the one-shot `confirm_token` (so a stale confirmation
+ * link can't be replayed); `unsub_token` is deliberately left untouched so the
+ * unsubscribe link already delivered in past issues keeps working (I2).
  */
 export async function subscribe(
   db: D1Database,
@@ -66,12 +93,12 @@ export async function subscribe(
     if (existing.status === "confirmed") {
       return { subscriber: existing, action: "already_confirmed" };
     }
-    const token = newToken();
+    const confirmToken = newToken();
     await db
       .prepare(
-        "UPDATE subscribers SET status = 'pending', token = ?, confirmed_at = NULL, unsubscribed_at = NULL WHERE id = ?",
+        "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirmed_at = NULL, unsubscribed_at = NULL WHERE id = ?",
       )
-      .bind(token, existing.id)
+      .bind(confirmToken, existing.id)
       .run();
     const subscriber = unwrap(await getById(db, existing.id), "subscriber");
     return {
@@ -81,20 +108,24 @@ export async function subscribe(
   }
 
   const id = newId();
-  const token = newToken();
+  const confirmToken = newToken();
+  const unsubToken = newToken();
   await db
     .prepare(
-      "INSERT INTO subscribers (id, email, status, token, created_at) VALUES (?, ?, 'pending', ?, ?)",
+      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?)",
     )
-    .bind(id, email, token, now)
+    .bind(id, email, confirmToken, unsubToken, now)
     .run();
   return { subscriber: unwrap(await getById(db, id), "subscriber"), action: "created" };
 }
 
-/** Confirm a pending subscriber by token (double opt-in). Idempotent for an
- *  already-confirmed token; refuses to confirm an unsubscribed one. */
+/** Confirm a pending subscriber by their confirm token (double opt-in). Idempotent
+ *  for an already-confirmed token; refuses to confirm an unsubscribed one. The
+ *  one-shot property comes from the `status = 'pending'` guard below, so the token
+ *  is left in place (not cleared) and a double-click still lands on the confirmed
+ *  page rather than an "invalid link". */
 export async function confirm(db: D1Database, token: string): Promise<SubscriberRow | null> {
-  const row = await getByToken(db, token);
+  const row = await getByConfirmToken(db, token);
   if (!row) {
     return null;
   }
@@ -113,12 +144,13 @@ export async function confirm(db: D1Database, token: string): Promise<Subscriber
   return getById(db, row.id);
 }
 
-/** Unsubscribe by token — immediate and idempotent (I2). */
+/** Unsubscribe by the durable unsub token — immediate and idempotent (I2). A
+ *  confirm token will not resolve here, so it can never be used to unsubscribe. */
 export async function unsubscribeByToken(
   db: D1Database,
   token: string,
 ): Promise<SubscriberRow | null> {
-  const row = await getByToken(db, token);
+  const row = await getByUnsubToken(db, token);
   if (!row) {
     return null;
   }

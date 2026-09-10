@@ -19,9 +19,16 @@ async function publicSubscribe(email: string): Promise<Response> {
   });
 }
 
+// The one-shot confirm token (rotated on re-arm) drives the /confirm link.
 async function tokenFor(email: string): Promise<string> {
   const row = await subs.getByEmail(env.DB, email);
-  return row!.token;
+  return row!.confirm_token!;
+}
+
+// The durable unsubscribe token (never rotated) is what delivered mail embeds.
+async function unsubTokenFor(email: string): Promise<string> {
+  const row = await subs.getByEmail(env.DB, email);
+  return row!.unsub_token;
 }
 
 describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
@@ -54,12 +61,13 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
   it("unsubscribe is immediate and final (I2), and re-subscribe requires re-confirmation", async () => {
     const email = uniqueEmail();
     await publicSubscribe(email);
-    const token = await tokenFor(email);
-    await SELF.fetch(`${base}/confirm?token=${token}`);
+    await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
 
-    // one-click unsubscribe (empty body, token in query, no html accept)
-    const unsub = await SELF.fetch(`${base}/unsubscribe?token=${token}`, { method: "POST" });
+    // one-click unsubscribe via the durable unsub token (empty body, no html accept)
+    const unsub = await SELF.fetch(`${base}/unsubscribe?token=${await unsubTokenFor(email)}`, {
+      method: "POST",
+    });
     expect(unsub.status).toBe(200);
     expect(await subs.audienceEmails(env.DB)).not.toContain(email);
 
@@ -68,8 +76,46 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     expect(re).toMatchObject({ status: "pending", action: "resubscribed" });
     expect(await subs.audienceEmails(env.DB)).not.toContain(email);
 
-    // confirm with the fresh token → back in the audience
+    // confirm with the fresh confirm token → back in the audience
     await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
+    expect(await subs.audienceEmails(env.DB)).toContain(email);
+  });
+
+  it("the unsubscribe link in already-sent mail still works after unsubscribe→resubscribe (#69)", async () => {
+    const email = uniqueEmail();
+    await publicSubscribe(email);
+    await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
+
+    // The durable token that past issues embedded in their one-click unsubscribe link.
+    const deliveredUnsubToken = await unsubTokenFor(email);
+    expect(await subs.audienceEmails(env.DB)).toContain(email);
+
+    // Leave, then return (re-subscribe rotates the confirm token) and re-confirm.
+    await SELF.fetch(`${base}/unsubscribe?token=${deliveredUnsubToken}`, { method: "POST" });
+    await publicSubscribe(email);
+    // The durable unsub token is NOT rotated by a re-subscribe — that's the fix.
+    expect(await unsubTokenFor(email)).toBe(deliveredUnsubToken);
+    await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
+    expect(await subs.audienceEmails(env.DB)).toContain(email);
+
+    // The OLD issue's unsubscribe link (same durable token) still resolves and unsubscribes.
+    const late = await SELF.fetch(`${base}/unsubscribe?token=${deliveredUnsubToken}`, {
+      method: "POST",
+    });
+    expect(late.status).toBe(200);
+    expect(await subs.audienceEmails(env.DB)).not.toContain(email);
+  });
+
+  it("a confirm token cannot be used to unsubscribe", async () => {
+    const email = uniqueEmail();
+    await publicSubscribe(email);
+    const confirmToken = await tokenFor(email);
+    await SELF.fetch(`${base}/confirm?token=${confirmToken}`);
+    expect(await subs.audienceEmails(env.DB)).toContain(email);
+
+    // POSTing the confirm token to /unsubscribe must not resolve a subscriber → 400.
+    const res = await SELF.fetch(`${base}/unsubscribe?token=${confirmToken}`, { method: "POST" });
+    expect(res.status).toBe(400);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
   });
 
@@ -129,7 +175,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
   it("unsubscribeById flips a confirmed subscriber and is idempotent (I2)", async () => {
     const email = uniqueEmail();
     const { subscriber } = await subs.subscribe(env.DB, email);
-    await subs.confirm(env.DB, subscriber.token);
+    await subs.confirm(env.DB, subscriber.confirm_token!);
 
     const first = await subs.unsubscribeById(env.DB, subscriber.id);
     expect(first?.status).toBe("unsubscribed");
@@ -151,7 +197,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const b = `${marker}-b@example.com`;
     await subs.subscribe(env.DB, a);
     const { subscriber: sb } = await subs.subscribe(env.DB, b);
-    await subs.confirm(env.DB, sb.token);
+    await subs.confirm(env.DB, sb.confirm_token!);
 
     const confirmed = await subs.listSubscribers(env.DB, { status: "confirmed", search: marker });
     expect(confirmed.map((r) => r.email)).toEqual([b]);

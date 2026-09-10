@@ -189,6 +189,10 @@ Someone subscribes through a public form, which creates a **pending** subscriber
 
 Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The operator can also unsubscribe someone from the admin subscriber list — the same immediate, idempotent effect (I2) — for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
 
+### Two tokens, two jobs
+
+A subscriber carries two independent unguessable tokens, one per job. The **confirm token** drives double opt-in and is one-shot: it is rotated every time a pending or unsubscribed address re-subscribes, so a stale confirmation link can't be replayed (its single-use property comes from confirmation only acting on a *pending* row, not from consuming the token). The **unsubscribe token** is durable — minted once and never rotated, not even across an unsubscribe→resubscribe cycle — because it is the token embedded in the one-click unsubscribe link of every issue already delivered. Keeping them separate is what lets that link keep working forever (I2): a returning subscriber can still leave from mail that has been in their inbox since before they last left, which a single rotated-on-resubscribe token would silently break. Neither token can do the other's job — a confirm token can't unsubscribe, and an unsubscribe token can't confirm.
+
 Consent withdrawn (unsubscribe) and undeliverable (suppression) are different states with different owners:
 
 | State | Meaning | Who sets it | Who clears it |
