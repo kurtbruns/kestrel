@@ -103,6 +103,15 @@ describe("dev seed (Field Notes dataset)", () => {
     for (const r of shadowed) {
       expect(nowMailable.has(r.email)).toBe(false);
     }
+
+    // Unsubscribes trickle in after each issue rather than firing at a few shared
+    // instants: the churn timestamps are dispersed, not batched into three moments.
+    const { results: unsubbed } = await env.DB.prepare(
+      "SELECT unsubscribed_at FROM subscribers WHERE status = 'unsubscribed'",
+    ).all<{ unsubscribed_at: number }>();
+    expect(unsubbed).toHaveLength(UNSUBSCRIBED);
+    const distinctUnsubTimes = new Set(unsubbed.map((r) => r.unsubscribed_at));
+    expect(distinctUnsubTimes.size).toBeGreaterThanOrEqual(UNSUBSCRIBED - 1);
   });
 
   it("reset wipes the database back to a fresh install (the reverse of seed)", async () => {

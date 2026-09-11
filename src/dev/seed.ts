@@ -208,14 +208,12 @@ interface Timeline {
   now: number;
   importAt: number;
   growthAAt: number; // confirmations arriving between #1 and #2
-  leave1At: number; // unsubscribes between #1 and #2
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   growthBAt: number; // confirmations arriving between #2 and #3
-  leave2At: number; // unsubscribes between #2 and #3
-  leave3At: number; // unsubscribes after #3
   scheduledFireAt: number;
-  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`. */
+  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`.
+   *  Each also anchors the wave of unsubscribes it prompts (see `unsubAfter`). */
   sentAt: [number, number, number];
 }
 
@@ -225,15 +223,21 @@ function buildTimeline(now: number): Timeline {
     now,
     importAt: now - 14 * WEEK,
     growthAAt: now - 10 * WEEK,
-    leave1At: now - 9 * WEEK,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     growthBAt: now - 5 * WEEK,
-    leave2At: now - 4 * WEEK,
-    leave3At: now - WEEK,
     scheduledFireAt: now + 2 * DAY,
     sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
   };
+}
+
+/** When a reader in a churn wave unsubscribes: a spike just after the issue that
+ *  prompted them, tapering off over the following days. The quadratic step front-loads
+ *  the wave (member 0 leaves within hours, later members trickle out over ~1–2 weeks)
+ *  while keeping every offset inside the gap before the next send — so the wave stays
+ *  attributed to the issue it followed and the frozen per-send audiences don't shift. */
+function unsubscribedAfter(sentAt: number, indexInWave: number): number {
+  return sentAt + 6 * HOUR + indexInWave * indexInWave * 8 * HOUR;
 }
 
 // --- audience ---------------------------------------------------------------
@@ -349,10 +353,11 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
 
 /**
  * Build the whole audience as a lifecycle: an imported core plus two later growth
- * cohorts, three churn groups that leave at different times, a few still-pending
- * sign-ups, and two suppressions (a bounce and a complaint) drawn from the core so
- * they visibly shadow the current audience. The counts are chosen so the mailable
- * audience genuinely fluctuates from send to send (140 → 152 → 159, then 155 now).
+ * cohorts, three churn waves that each unsubscribe in the days after an issue lands,
+ * a few still-pending sign-ups, and two suppressions (a bounce and a complaint) drawn
+ * from the core so they visibly shadow the current audience. The counts are chosen so
+ * the mailable audience genuinely fluctuates from send to send (140 → 152 → 159, then
+ * 155 now).
  */
 function buildAudience(t: Timeline): BuiltAudience {
   let seq = 0;
@@ -379,15 +384,17 @@ function buildAudience(t: Timeline): BuiltAudience {
   };
 
   // Initial import: already-confirmed addresses migrated in before issue #1 (a real
-  // list starts as a bulk import, not one opt-in at a time). A slice of them will
-  // churn out at set points; the rest are the core that stays.
+  // list starts as a bulk import, not one opt-in at a time). Three waves of them later
+  // churn out — each wave leaving in the days after the last issue it received, so its
+  // members are still mailed by that issue but not the next; the rest are the core that
+  // stays. `unsubAfter` is the issue that prompts the wave (null = never leaves).
   const IMPORT = 140;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
-  const importPlan: { count: number; unsub: number | null }[] = [
-    { count: 125, unsub: null }, // core — never leave
-    { count: 6, unsub: t.leave1At }, // leave between #1 and #2
-    { count: 5, unsub: t.leave2At }, // leave between #2 and #3
-    { count: 4, unsub: t.leave3At }, // leave after #3
+  const importPlan: { count: number; unsubAfter: number | null }[] = [
+    { count: 125, unsubAfter: null }, // core — never leave
+    { count: 6, unsubAfter: t.sentAt[0] }, // wave after #1 — leaves before #2
+    { count: 5, unsubAfter: t.sentAt[1] }, // wave after #2 — leaves before #3
+    { count: 4, unsubAfter: t.sentAt[2] }, // wave after #3 — still gone today
   ];
   const coreEmails: string[] = [];
   let importIdx = 0;
@@ -395,12 +402,12 @@ function buildAudience(t: Timeline): BuiltAudience {
     for (let i = 0; i < group.count; i++) {
       const createdAt = Math.round(t.importAt + importIdx * importStep);
       const email = make(
-        group.unsub == null ? "confirmed" : "unsubscribed",
+        group.unsubAfter == null ? "confirmed" : "unsubscribed",
         createdAt,
         createdAt, // imported already confirmed
-        group.unsub,
+        group.unsubAfter == null ? null : unsubscribedAfter(group.unsubAfter, i),
       );
-      if (group.unsub == null) {
+      if (group.unsubAfter == null) {
         coreEmails.push(email);
       }
       importIdx++;
