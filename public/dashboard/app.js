@@ -1501,8 +1501,48 @@ function startCountdowns() {
   statusTimer = setInterval(tick, 1000);
 }
 
+// A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending,
+// but one or more `dispatched` recipients whose fate a transport error left unknown
+// (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
+// can't clear on its own without risking a double-mail (I4).
+function isWedged(s) {
+  return s.status === "sending" && !s.progress?.pending && (s.progress?.dispatched || 0) > 0;
+}
+
+// The one manual step for a wedged send: decide whether the ambiguous batch went out
+// or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
+// explains the trade-off (record accuracy) rather than warning of a double-send.
+function openResolveModal(send, reload) {
+  const n = send.progress?.dispatched || 0;
+  const noun = n === 1 ? "delivery" : "deliveries";
+  const m = modal(
+    `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
+      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this issue.</p>` +
+      `<p class="hint"><strong>Assume not sent</strong> — recorded as failed; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next issue.</p>` +
+      `<p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>` +
+      `<div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rFailed">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
+  );
+  m.el.querySelector("#rCancel").onclick = m.close;
+  const doResolve = (btn, resolution, verb) =>
+    busy(btn, "Resolving…", async () => {
+      try {
+        const res = await api(`/sends/${send.id}/resolve`, {
+          method: "POST",
+          json: { resolution },
+        });
+        m.close();
+        toast(res.completed ? "Send completed" : `Marked ${verb}`);
+        reload();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+  m.el.querySelector("#rFailed").onclick = (e) => doResolve(e.target, "failed", "not sent");
+  m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
+}
+
 async function renderSends() {
-  app.innerHTML = `<h1>Sends</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
+  app.innerHTML = `<h1>Sends</h1><div id="stuck"></div><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
   try {
     const { sends } = await api("/sends");
     // The API returns fire_at DESC (newest-first, which the Recent list below wants).
@@ -1511,9 +1551,28 @@ async function renderSends() {
     const scheduled = sends
       .filter((s) => s.status === "scheduled")
       .sort((a, b) => a.fire_at - b.fire_at);
+    // Wedged sends get their own attention block above the list; keep them out of the
+    // Recent table so the same send isn't shown twice in two roles.
+    const wedged = sends.filter(isWedged);
     const recent = sends
-      .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
+      .filter(
+        (s) =>
+          (s.status === "sent" || s.status === "sending" || s.status === "failed") && !isWedged(s),
+      )
       .slice(0, 20);
+
+    const stuckEl = document.getElementById("stuck");
+    stuckEl.innerHTML = wedged
+      .map((s) => {
+        const n = s.progress?.dispatched || 0;
+        const noun = n === 1 ? "delivery" : "deliveries";
+        return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+      })
+      .join("");
+    stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
+      const s = wedged.find((x) => x.id === b.dataset.resolve);
+      b.onclick = () => openResolveModal(s, renderSends);
+    });
 
     document.getElementById("scheduled").innerHTML = scheduled.length
       ? scheduled
@@ -2144,16 +2203,28 @@ function computeHealth(sends) {
     });
   }
   const sending = sends.filter((s) => s.status === "sending");
-  const stuck = sending.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
+  // A send wedged on ambiguous in-flight rows needs a decision, not just patience —
+  // flag it red and actionable, and keep it out of the generic in-progress lines
+  // below so it isn't reported twice (SPEC §11; resolve on the Sends page).
+  const wedged = sending.filter(isWedged);
+  if (wedged.length) {
+    const n = wedged.reduce((sum, s) => sum + (s.progress?.dispatched || 0), 0);
+    issues.push({
+      level: "red",
+      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
+    });
+  }
+  const active = sending.filter((s) => !isWedged(s));
+  const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
     issues.push({
       level: "amber",
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
-  } else if (sending.length) {
+  } else if (active.length) {
     issues.push({
       level: "amber",
-      text: `${sending.length} send${sending.length === 1 ? " is" : "s are"} in progress.`,
+      text: `${active.length} send${active.length === 1 ? " is" : "s are"} in progress.`,
     });
   }
   // Delivery trouble: a high share of send-time failures on a recent send. (The list

@@ -309,6 +309,20 @@ export function createRouter(archiveBasePath: string): Router {
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       handler: sendRoutes.cancel,
     },
+    {
+      method: "POST",
+      path: "/sends/:id/resolve",
+      access: "admin",
+      summary:
+        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'failed'|'accepted'}.",
+      description:
+        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'failed' (assume not sent; the address is picked up by the next issue) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
+      example: {
+        request: { resolution: "failed" },
+        response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },
+      },
+      handler: sendRoutes.resolve,
+    },
 
     // --- subscribers (authed admin) ---
     {
