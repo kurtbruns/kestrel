@@ -1748,13 +1748,15 @@ async function renderDocs(slug) {
   mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
 
   // The fragment carries no ids — assign them to the current part's H1 and its H2s,
-  // and collect the sections for the "On this page" rail.
+  // and collect the sections for the "On this page" rail. The H1 leads the list so
+  // there's a way back to the top / the intro that sits above the first H2.
   const sec = mainEl.querySelector("section.doc-part");
   const h1 = sec.querySelector("h1");
+  const sections = [];
   if (h1) {
     h1.id = `part-${cur.slug}`;
+    sections.push({ id: h1.id, title: h1.textContent || cur.title });
   }
-  const sections = [];
   sec.querySelectorAll("h2").forEach((h2, i) => {
     const id = `sec-${cur.slug}-${i + 1}`;
     h2.id = id;

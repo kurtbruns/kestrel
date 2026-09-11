@@ -1450,6 +1450,7 @@ td.act {
   font-weight: 650;
   letter-spacing: -0.02em;
   margin: 0 0 10px;
+  scroll-margin-top: 64px;
 }
 .doc h2 {
   font-size: 19px;
