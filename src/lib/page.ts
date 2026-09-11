@@ -93,11 +93,9 @@ img { max-width:100%; }
 .r-mast { background:var(--mast-bg); color:var(--mast-fg); }
 .r-mast-in { max-width:var(--r-measure); margin:0 auto; padding:24px; display:flex; align-items:center; gap:16px; }
 .r-brand { display:flex; align-items:center; gap:14px; text-decoration:none; color:inherit; min-width:0; }
-.r-logo { width:40px; height:40px; border-radius:9px; background:color-mix(in srgb, var(--mast-fg) 16%, transparent);
+.r-logo { width:64px; height:64px; border-radius:14px; background:color-mix(in srgb, var(--mast-fg) 16%, transparent);
           flex:none; display:grid; place-items:center; overflow:hidden; }
 .r-logo img { max-width:100%; max-height:100%; display:block; }
-/* Front-door hero: a larger brand tile on the landing page (radius scaled to match). */
-.r-mast-home .r-logo { width:64px; height:64px; border-radius:14px; }
 .r-name { font-family:var(--r-serif); font-size:23px; font-weight:600; letter-spacing:-.01em; line-height:1.15; }
 .r-tag { font-size:13px; opacity:.85; margin-top:2px; }
 .r-cta { margin-left:auto; flex:none; }
@@ -269,9 +267,6 @@ export function readerPage(opts: {
   /** When set, the masthead shows the subscribe CTA linking here. Omitted on the
    *  subscribe pages themselves, where the CTA would point at the current page. */
   subscribeUrl?: string;
-  /** The front door (§5): enlarges the brand logo, which reads as a landing-page
-   *  hero there but would crowd the compact nav-bar masthead on an issue page. */
-  home?: boolean;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
 }): Response {
@@ -300,7 +295,7 @@ ${FRAUNCES_FONT_LINKS}
 <style>${READER_STYLE}:root{--mast-bg:${bg};--mast-fg:${fg};${brandVar}}</style>
 </head>
 <body>
-<header class="r-mast${opts.home ? " r-mast-home" : ""}"><div class="r-mast-in">
+<header class="r-mast"><div class="r-mast-in">
 <a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}">${logo}<span><span class="r-name">${escapeHtml(name)}</span>${tag}</span></a>
 ${cta}
 </div></header>
@@ -355,7 +350,6 @@ export function landingPage(opts: {
     homeUrl: opts.homeUrl,
     title: opts.identity.name,
     mainHtml: main,
-    home: true,
   });
 }
 
