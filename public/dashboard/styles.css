@@ -1378,10 +1378,14 @@ td.act {
   color: var(--fg);
   background: var(--hover);
 }
+/* The open doc is a location, not a scroll position — mark it with a left accent bar
+   + fill (inset shadow, so no reflow), a different technique from the plain bold the
+   "On this page" section uses, so the two never read as the same state. */
 .toc-h.on {
   color: var(--fg);
   font-weight: 600;
   background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--fg);
 }
 /* "On this page": the current doc's sections, a separate block below the doc list. */
 .toc-onpage {
@@ -1801,6 +1805,11 @@ td.act {
 }
 .dash-section {
   margin: 0 0 22px;
+  /* A grid item defaults to min-width:auto, which refuses to shrink below its
+     content — that let the pub cards' URLs and the tables push the page wider than
+     a phone. min-width:0 lets the column shrink so the inner overflow-x / wrapping
+     takes over. */
+  min-width: 0;
 }
 .room-overview .dash-section {
   scroll-margin-top: 66px;
