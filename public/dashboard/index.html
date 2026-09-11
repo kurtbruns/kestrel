@@ -5,9 +5,51 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=98a4ebcb">
+<link rel="stylesheet" href="./styles.css?v=d6f3ca07">
+<script>
+// Sidebar mode guard — set data-nav on <html> before first paint so the sidebar
+// renders in its final width with no flash. Mirror of computeNavMode() in app.js
+// (keep the two in sync): phones force full labels (overlay); otherwise the persisted
+// collapse preference wins, falling back to a rail default across tablet/small desktop.
+(() => {
+  let pref = null;
+  try {
+    pref = localStorage.getItem("kestrel.nav");
+  } catch {
+    // storage unavailable (private mode): fall through to the width default.
+  }
+  const w = window.innerWidth;
+  let mode;
+  if (w < 540) {
+    mode = "full";
+  } else if (pref === "collapsed") {
+    mode = "rail";
+  } else if (pref === "expanded") {
+    mode = "full";
+  } else {
+    mode = w <= 1024 ? "rail" : "full";
+  }
+  document.documentElement.dataset.nav = mode;
+})();
+</script>
 </head>
 <body>
+<!-- Sidebar icon sprite. The primary nav shows icon + label at full width; in the
+     collapsed icon rail (the first step down from the full sidebar) the labels fold
+     to hover tooltips and only these marks remain. Kept out of flow and hidden from
+     assistive tech. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <symbol id="i-dash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></symbol>
+    <symbol id="i-posts" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 9h8M8 13h8M8 17h5"/></symbol>
+    <symbol id="i-subs" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M4 20c0-3 2.2-5 5-5s5 2 5 5"/><path d="M16 15c2 0 4 1.6 4 5"/></symbol>
+    <symbol id="i-sends" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-1.8-.3 1.6 1.6 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-1-1.5 1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0 .3-1.8 1.6 1.6 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.5-1 1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 1 1.5 1.6 1.6 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></symbol>
+    <symbol id="i-view" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></symbol>
+    <symbol id="i-signout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></symbol>
+  </defs>
+</svg>
 <!-- Mobile only: a hamburger that slides the publication sidebar in as a drawer
      (no bottom tabs). Hidden on desktop and inside the editor / reference room. -->
 <button type="button" class="nav-toggle" id="navToggle" aria-label="Open menu" aria-expanded="false">
@@ -21,6 +63,10 @@
      links are fine (View publication ↗); the reverse is never emitted (SPEC §10). -->
 <div class="layout">
   <aside class="sidebar" aria-label="Publication">
+    <!-- The column stretches to the full page height (its background + divider run all
+         the way down); this inner wrapper is the sticky, viewport-tall part that pins
+         the nav as you scroll, so the column never ends short of the viewport. -->
+    <div class="sidebar-inner">
     <div class="sidebar-top">
       <a class="brand" href="#/dashboard" id="brandLink" aria-label="Dashboard — publication home">
         <span class="brand-logo" id="brandLogo" aria-hidden="true"></span>
@@ -29,13 +75,16 @@
           <span class="brand-tagline" id="brandTagline" hidden></span>
         </span>
       </a>
-      <a class="view-pub" id="viewPub" href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a>
+      <a class="view-pub" id="viewPub" href="/" target="_blank" rel="noopener" title="View publication">
+        <svg class="view-pub-icon" aria-hidden="true"><use href="#i-view"/></svg>
+        <span class="view-pub-label">View publication&nbsp;↗</span>
+      </a>
       <nav class="nav-primary" aria-label="Primary">
-        <a href="#/dashboard" data-view="dashboard">Dashboard</a>
-        <a href="#/posts" data-view="posts">Posts</a>
-        <a href="#/subscribers" data-view="subscribers">Subscribers</a>
-        <a href="#/sends" data-view="sends">Sends</a>
-        <a href="#/settings" data-view="settings">Settings</a>
+        <a href="#/dashboard" data-view="dashboard"><svg class="nav-icon" aria-hidden="true"><use href="#i-dash"/></svg><span class="nav-label">Dashboard</span></a>
+        <a href="#/posts" data-view="posts"><svg class="nav-icon" aria-hidden="true"><use href="#i-posts"/></svg><span class="nav-label">Posts</span></a>
+        <a href="#/subscribers" data-view="subscribers"><svg class="nav-icon" aria-hidden="true"><use href="#i-subs"/></svg><span class="nav-label">Subscribers</span></a>
+        <a href="#/sends" data-view="sends"><svg class="nav-icon" aria-hidden="true"><use href="#i-sends"/></svg><span class="nav-label">Sends</span></a>
+        <a href="#/settings" data-view="settings"><svg class="nav-icon" aria-hidden="true"><use href="#i-settings"/></svg><span class="nav-label">Settings</span></a>
       </nav>
     </div>
     <div class="sidebar-foot">
@@ -49,13 +98,20 @@
           <a href="#/docs" data-view="docs" data-text="Docs">Docs</a>
           <a href="#/reference" data-view="reference" data-text="API">API</a>
         </nav>
+        <!-- Collapse ↔ expand, tucked into the end of the footer row (chevron
+             right-aligned). Flips <html data-nav> and persists the choice; hidden on
+             phones, where the sidebar is an off-canvas overlay. -->
+        <button type="button" class="nav-collapse" id="navCollapse" aria-label="Collapse sidebar" aria-expanded="true">
+          <svg class="nav-collapse-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
+        </button>
       </div>
+    </div>
     </div>
   </aside>
   <main id="app" class="content"></main>
 </div>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=d900fa8c"></script>
+<script src="./app.js?v=f0ad6231"></script>
 </body>
 </html>
