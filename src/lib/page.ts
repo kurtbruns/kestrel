@@ -61,14 +61,16 @@ body { background:#ffffff; }
 @media (prefers-color-scheme: dark) { body { background:#18181b; } }
 .wrap { max-width:640px; margin:0 auto; padding:40px 24px 80px; line-height:1.6; }
 .masthead { border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:8px; }
+.masthead .brand-logo { display:block; max-height:52px; max-width:220px; width:auto; height:auto; margin:0 0 14px; }
 .masthead h1 { margin:0 0 4px; font-size:28px; letter-spacing:-0.02em; }
+.masthead .tagline { margin:0 0 8px; font-size:16px; }
 .masthead p { margin:0; }
-.masthead a { text-decoration: underline; }
+.masthead a { text-decoration: underline; color: var(--brand, inherit); }
 ul.issues { list-style:none; margin:0; padding:0; }
 li.issue { display:flex; align-items:baseline; justify-content:space-between; gap:16px;
            padding:16px 0; border-bottom:1px solid var(--line); }
 li.issue a { font-size:17px; font-weight:600; text-decoration:none; }
-li.issue a:hover { text-decoration: underline; }
+li.issue a:hover { text-decoration: underline; color: var(--brand, inherit); }
 li.issue .date { flex:none; font-size:14px; color:var(--muted); white-space:nowrap; }
 li.empty { padding:24px 0; }
 a:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
@@ -86,6 +88,9 @@ export interface ArchiveIndexIssue {
  *  (no noindex) and links only to public pages — never into the admin surface. */
 export function archiveIndexPage(opts: {
   name: string;
+  tagline?: string;
+  logoUrl?: string;
+  brandColor?: string;
   subscribeUrl: string;
   issues: ArchiveIndexIssue[];
 }): Response {
@@ -98,18 +103,28 @@ export function archiveIndexPage(opts: {
         )
         .join("")
     : `<li class="empty muted">No issues yet.</li>`;
+  // Publication identity: a logo above the name, an optional tagline,
+  // and a brand color exposed as `--brand` (a strict hex only, so it can't escape
+  // the stylesheet) that tints the masthead + subscribe links.
+  const logo = opts.logoUrl
+    ? `<img class="brand-logo" src="${escapeHtmlAttr(opts.logoUrl)}" alt="">`
+    : "";
+  const tagline = opts.tagline ? `<p class="tagline muted">${escapeHtml(opts.tagline)}</p>` : "";
+  const brandVar = /^#[0-9a-f]{6}$/.test(opts.brandColor ?? "")
+    ? `:root{--brand:${opts.brandColor};}`
+    : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.name)}</title>
-<style>${INDEX_STYLE}</style>
+<style>${INDEX_STYLE}${brandVar}</style>
 </head>
 <body><div class="wrap">
 <header class="masthead">
-<h1>${escapeHtml(opts.name)}</h1>
-<p class="muted">Past issues. <a href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe</a> to get the next one.</p>
+${logo}<h1>${escapeHtml(opts.name)}</h1>
+${tagline}<p class="muted">Past issues. <a href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe</a> to get the next one.</p>
 </header>
 <ul class="issues">${items}</ul>
 </div></body>
@@ -120,54 +135,7 @@ export function archiveIndexPage(opts: {
   });
 }
 
-// Prose styling for the in-app docs page. Long-form reading rather than the card
-// chrome above: comfortable measure, scrollable code/tables, themed via TOKENS.
-const DOC_STYLE = `${TOKENS}
-body { line-height:1.65; background:var(--card); }
-.doc { max-width:760px; margin:0 auto; padding:32px 24px 64px; }
-.doc > :first-child { margin-top:0; }
-.doc h1 { font-size:28px; letter-spacing:-0.02em; margin:0 0 8px; }
-.doc h2 { font-size:20px; margin:32px 0 8px; padding-top:16px; border-top:1px solid var(--line); }
-.doc h3 { font-size:16px; margin:24px 0 8px; }
-.doc p, .doc li { font-size:15px; }
-.doc a { text-decoration:underline; }
-.doc ul, .doc ol { padding-left:22px; }
-.doc li { margin:4px 0; }
-.doc code { font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:13px;
-            background:var(--bg); border:1px solid var(--line); border-radius:4px; padding:1px 5px; }
-.doc pre { background:var(--bg); border:1px solid var(--line); border-radius:8px; padding:14px 16px;
-           overflow-x:auto; line-height:1.5; }
-.doc pre code { background:none; border:0; padding:0; font-size:13px; }
-.doc blockquote { margin:16px 0; padding:2px 16px; border-left:3px solid var(--line); color:var(--muted); }
-.doc hr { border:0; border-top:1px solid var(--line); margin:32px 0; }
-.doc table { border-collapse:collapse; width:100%; margin:16px 0; display:block; overflow-x:auto; }
-.doc th, .doc td { border:1px solid var(--line); padding:8px 12px; text-align:left; font-size:14px; vertical-align:top; }
-.doc th { background:var(--bg); font-weight:600; }
-.doc img { max-width:100%; height:auto; }
-`;
-
-/** One admin docs page: sanitized Markdown→HTML wrapped in themed prose chrome.
- *  A Markdown→web-page path, deliberately separate from the single email render
- *  path (I5). Served only through the authed docs API and shown in the editor's
- *  Docs view — never a top-level navigation (which would carry no bearer). */
-export function docPage(title: string, contentHtml: string): Response {
-  const doc = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<base target="_blank">
-<title>${escapeHtml(title)}</title>
-<style>${DOC_STYLE}</style>
-</head>
-<body><article class="doc">${contentHtml}</article></body>
-</html>`;
-  return new Response(doc, {
-    status: 200,
-    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
-  });
-}
-
-// The API reference is rendered natively by the admin SPA from the JSON the
-// `/api/reference` route returns (see src/reference/ + public/admin/app.js) —
-// there is no server-rendered reference page.
+// The operator setup guide and the API reference are both rendered natively by
+// the admin SPA from JSON the authed `/api/docs` and `/api/reference` routes return
+// (see src/docs/, src/reference/, and public/dashboard/app.js) — long-form prose is
+// styled by the SPA's own `.doc` block, so there is no server-rendered docs page.

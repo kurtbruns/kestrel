@@ -9,6 +9,8 @@
  */
 
 import { mintDevToken } from "../auth/dev_token";
+import { resetAll } from "../db/seed";
+import { BRANDING_LOGO_KEY } from "../db/settings";
 import { seedDatabase } from "../dev/seed";
 import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
@@ -51,4 +53,26 @@ export async function seed(c: RequestContext): Promise<Response> {
 
   const summary = await seedDatabase(c.env, c.config, kestrelFile);
   return json(summary);
+}
+
+/**
+ * The reverse of the seed: wipe the local database back to a fresh install — no
+ * posts, no subscribers, and default settings (so the publication identity resets
+ * too) — for viewing the first-run dashboard and setup checklist. Dev-only, like
+ * the seed: 404s on any real provider so it can never wipe a provisioned database.
+ */
+export async function reset(c: RequestContext): Promise<Response> {
+  if (c.config.provider !== "fake") {
+    throw notFound("not available for this transport");
+  }
+  await resetAll(c.env.DB);
+  // Also clear the settings singleton (identity + preferences) and the one global
+  // branding asset, so a fresh reset shows the From-name fallback and no logo.
+  await c.env.DB.prepare("DELETE FROM settings").run();
+  try {
+    await c.env.MEDIA.delete(BRANDING_LOGO_KEY);
+  } catch {
+    /* best effort — an absent logo is fine */
+  }
+  return json({ reset: true, url: `${c.config.appOrigin}/dashboard/` });
 }

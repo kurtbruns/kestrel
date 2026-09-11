@@ -76,15 +76,20 @@ export function archiveMasthead(opts: {
   name: string;
   dateLabel: string;
   indexUrl: string;
+  /** Optional publication brand color; tints the name link when set. */
+  brandColor?: string;
 }): string {
   const name = escapeHtml(opts.name);
   const date = escapeHtml(opts.dateLabel);
   const url = escapeHtmlAttr(opts.indexUrl);
+  // Only a strict `#rrggbb` is inlined, so an unexpected value can't break out of
+  // the style attribute; otherwise inherit the muted masthead color.
+  const nameColor = /^#[0-9a-f]{6}$/.test(opts.brandColor ?? "") ? opts.brandColor : "inherit";
   return (
     `<div class="k-mast" style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;` +
     `font-family:${FONT};font-size:13px;line-height:1.5;color:#71717a;` +
     `padding-bottom:14px;margin-bottom:28px;border-bottom:1px solid #e4e4e7;">` +
-    `<a href="${url}" style="color:inherit;text-decoration:none;font-weight:600;">${name}</a>` +
+    `<a href="${url}" style="color:${nameColor};text-decoration:none;font-weight:600;">${name}</a>` +
     `<span style="white-space:nowrap;">${date}</span>` +
     `</div>`
   );

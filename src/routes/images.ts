@@ -127,5 +127,12 @@ export async function serveMedia(c: RequestContext): Promise<Response> {
   obj.writeHttpMetadata(headers);
   headers.set("etag", obj.httpEtag);
   headers.set("cache-control", "public, max-age=3600");
+  // Harden against a crafted SVG executing script on direct navigation:
+  // never sniff a declared type away, and sandbox the response so scripts and
+  // same-origin access are disabled when the bytes are rendered as a document.
+  // Loaded via <img> (posts + the logo) this is inert; it only bites a hostile SVG
+  // opened directly. Covers per-post images and the branding logo alike.
+  headers.set("x-content-type-options", "nosniff");
+  headers.set("content-security-policy", "sandbox");
   return new Response(obj.body, { headers });
 }

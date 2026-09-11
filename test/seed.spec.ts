@@ -4,6 +4,7 @@ import { listSends } from "../src/db/sends";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
+import { adminAuth } from "./support/auth";
 
 const base = "https://kestrel.test";
 const config = () => getConfig(env);
@@ -30,6 +31,35 @@ describe("dev seed (Field Notes dataset)", () => {
     // The scheduled issue fires in the future — a visible, cancelable window (I6).
     const scheduled = sends.find((s) => s.status === "scheduled")!;
     expect(scheduled.fire_at).toBeGreaterThan(Date.now());
+  });
+
+  it("reset wipes the database back to a fresh install (the reverse of seed)", async () => {
+    await seedDatabase(env, config());
+    // Set an identity so we can prove the settings singleton resets too.
+    await SELF.fetch(`${base}/api/settings`, {
+      method: "PUT",
+      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      body: JSON.stringify({ publication: { name: "Field Notes" } }),
+    });
+
+    const res = await SELF.fetch(`${base}/api/dev/reset`, {
+      method: "POST",
+      headers: { ...(await adminAuth()) },
+    });
+    expect(res.status).toBe(200);
+
+    expect(await counts(env.DB)).toEqual({
+      confirmed: 0,
+      pending: 0,
+      unsubscribed: 0,
+      suppressed: 0,
+    });
+    expect(await listSends(env.DB)).toHaveLength(0);
+    // Settings are back to defaults, so the identity falls back to the From name.
+    const after = (await (
+      await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
+    ).json()) as { settings: { publication: { name: string } } };
+    expect(after.settings.publication.name).toBe("");
   });
 
   it("serves a seeded sent issue's frozen render at its archive URL, cover ref intact", async () => {

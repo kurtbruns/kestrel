@@ -5,9 +5,12 @@
  * source of truth — the pages are NOT editable in the app.
  *
  * Rendering reuses the low-level `markdownToHtml` util plus the HTML hygiene
- * pass; it is Markdown→web-page and stays a separate path from the single
- * Markdown→email render path (I5, see render/render.ts). See docs/SPEC.md §5 for
- * the reader surface and the deployment appendix for the admin surface.
+ * pass, and returns a sanitized HTML *fragment* per doc (no page wrapper): the
+ * SPA injects the guide directly into its own DOM as one native scrollable page
+ * with a scroll-spy contents rail (no iframe). The content is trusted (the repo's
+ * own markdown, hygiene-passed), so injecting the fragments is safe. This is a
+ * Markdown→web-page path, deliberately separate from the single Markdown→email
+ * render path (I5, see render/render.ts). See docs/SPEC.md §5 / §10.
  */
 import overview from "../../docs/setup/00-overview.md";
 import provision from "../../docs/setup/01-provision.md";
@@ -16,7 +19,6 @@ import emailSender from "../../docs/setup/03-email-sender.md";
 import sendingDomain from "../../docs/setup/04-sending-domain-dns.md";
 import archiveWebsite from "../../docs/setup/05-archive-website.md";
 import verify from "../../docs/setup/06-verify.md";
-import { docPage } from "../lib/page";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
 
@@ -25,7 +27,7 @@ interface DocSource {
   markdown: string;
 }
 
-// Array order is the reading order of the guide (the nav follows it).
+// Array order is the reading order of the guide (the contents rail follows it).
 const SOURCES: DocSource[] = [
   { slug: "overview", markdown: overview },
   { slug: "provision", markdown: provision },
@@ -44,32 +46,27 @@ function extractTitle(markdown: string, slug: string): string {
 
 const DOCS = SOURCES.map((s) => ({ ...s, title: extractTitle(s.markdown, s.slug) }));
 
-export interface DocMeta {
+/** One doc as the SPA consumes it: its slug, title, and a sanitized HTML fragment. */
+export interface DocFragment {
   slug: string;
   title: string;
+  html: string;
 }
 
-/** The guide's table of contents, in reading order. */
-export function listDocs(): DocMeta[] {
-  return DOCS.map(({ slug, title }) => ({ slug, title }));
-}
-
-/**
- * Render one doc to a themed, sanitized HTML page. Returns `undefined` for an
- * unknown slug so the route can answer 404. Docs carry no post images, so the
- * image map is empty and the media base is unused.
- */
-export function renderDocPage(slug: string): Response | undefined {
-  const doc = DOCS.find((d) => d.slug === slug);
-  if (!doc) {
-    return undefined;
-  }
+/** Render one doc's markdown to a sanitized HTML fragment (no page wrapper). Docs
+ *  carry no post images, so the image map is empty and the media base is unused. */
+function renderFragment(markdown: string): string {
   const warnings: string[] = [];
-  const contentHtml = markdownToHtml(doc.markdown, {
+  const html = markdownToHtml(markdown, {
     images: new Map(),
     mediaBase: "",
-    maxWidth: 760,
+    maxWidth: 720,
     warnings,
   });
-  return docPage(doc.title, sanitizeEmailHtml(contentHtml));
+  return sanitizeEmailHtml(html);
+}
+
+/** The whole guide, in reading order — slug, title, and rendered fragment. */
+export function renderDocs(): DocFragment[] {
+  return DOCS.map((d) => ({ slug: d.slug, title: d.title, html: renderFragment(d.markdown) }));
 }

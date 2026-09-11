@@ -31,8 +31,9 @@ Claude Code's preview (`.claude/launch.json` has `autoPort`), so parallel worktr
 each get a free port instead of colliding on 8787; a plain terminal `npm run dev`
 still binds 8787. Pass wrangler flags through with `--`, e.g. `npm run dev -- --remote`.
 
-Open the editor at **http://localhost:8787/admin/**. Locally there's nothing to sign
-in with — the editor mints its own dev token on load and shows a **Local dev** chip.
+Open the editor at **http://localhost:8787/dashboard/**. Locally there's nothing to
+sign in with — the editor mints its own dev token on load and shows a **Local dev**
+chip.
 Everything the editor does is also available on the HTTP API — the editor is just a
 client of it.
 
@@ -62,8 +63,12 @@ it any time to reset to a known state.
 
 The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
 the seed still runs (that one image just 404s until you drop the file in and re-seed).
-View the result at `/admin/` and at the archived issues, e.g.
+View the result at `/dashboard/` and at the archived issues, e.g.
 **http://localhost:8787/newsletter/the-hovering-hunter**.
+
+To go the other way — wipe the local database back to a fresh install (no posts,
+subscribers, or settings) and see the first-run dashboard + setup checklist — run
+`npm run reset` (also dev-server-up, fake-transport-only).
 
 > **Note:** the local D1 tracks which migrations it has applied by filename. If the
 > migrations ever change, reset the local database — delete this checkout's
@@ -107,7 +112,7 @@ In deployed environments the gate is **Cloudflare Access**, enforced at the edge
 before the Worker runs — the same pattern used across our other Cloudflare projects.
 Deployed envs don't declare `DEV_AUTH_SECRET`, so the dev path is off and Access is the
 only way in. The editor needs no token here: the browser's Access session cookie
-authenticates every same-origin call, and the topbar shows your identity plus a
+authenticates every same-origin call, and the sidebar shows your identity plus a
 **Sign out** link (`/cdn-cgi/access/logout`).
 
 - **You (human):** an Access **Allow** policy (Google / GitHub / one-time PIN).
@@ -125,8 +130,8 @@ via `jose` — checks issuer, the app's `ACCESS_AUD`, and the optional email all
 as defense-in-depth, so a misconfigured Access policy can't silently expose admin
 routes. Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` (and optionally
 `ACCESS_ALLOWED_EMAILS`) as Worker vars/secrets. The Access application's path scope
-must cover **both** the editor (`/admin/*`) and the authoring API paths, so the
-editor's same-origin API calls carry the Access JWT.
+must cover **both** the editor SPA (`/dashboard/*`) and the authoring API paths, so
+the editor's same-origin API calls carry the Access JWT.
 
 ## Deploying and operating
 
@@ -144,10 +149,11 @@ The editor's **Settings** tab holds the app's runtime preferences (via the authe
 | --- | --- |
 | `npm run dev` | launcher around `wrangler dev` (local Worker on :8787; auto-migrates a fresh local DB, honors preview `PORT`) |
 | `npm run seed` | load the local "Field Notes" demo dataset (needs `npm run dev` running; fake transport only) |
+| `npm run reset` | wipe the local database back to a fresh install — the reverse of `seed` (needs `npm run dev`; fake transport only) |
 | `npm test` | Vitest suite (runs inside `workerd`) |
 | `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
 | `npm run check` | Biome: format + organize imports + lint, applying safe fixes (`npm run lint` / `npm run format` for report-only / format-only) |
-| `npm run assets:build` | fingerprint the admin assets — stamp a content hash onto the `styles.css` / `app.js` refs in `public/admin/index.html` (`assets:check` verifies, and runs before `npm test`) |
+| `npm run assets:build` | fingerprint the admin assets — stamp a content hash onto the `styles.css` / `app.js` refs in `public/dashboard/index.html` (`assets:check` verifies, and runs before `npm test`) |
 | `npm run migrate:local` / `migrate:remote` | apply D1 migrations |
 | `npm run deploy` | `wrangler deploy` |
 
@@ -181,7 +187,7 @@ src/
   providers/      the email provider seam + fake / SES / Resend adapters
   docs/           the in-app operator guide (bundled from docs/setup/*.md)
   db/             D1 query modules
-public/admin/     the editor SPA (static assets)
+public/dashboard/ the editor SPA (static assets)
 docs/setup/       the operator setup guide (source of truth; also served in-app)
 migrations/       D1 schema
 ```
@@ -193,7 +199,7 @@ preference (`prefers-color-scheme`); no toggle, nothing to configure.
 
 ## Admin asset caching
 
-The editor's two static assets (`public/admin/styles.css`, `app.js`) are fingerprinted: `scripts/stamp-admin-assets.mjs` stamps a content hash onto their `?v=` in `index.html`, and `public/_headers` caches those hashed URLs immutably. A changed asset gets a new hash — hence a new URL — so it's fetched fresh with no manual version bump. The stamp runs on `npm run dev` startup; `npm test` runs `assets:check` first, so an unstamped commit fails the gate. After editing an asset outside a running dev server, run `npm run assets:build`.
+The editor's two static assets (`public/dashboard/styles.css`, `app.js`) are fingerprinted: `scripts/stamp-admin-assets.mjs` stamps a content hash onto their `?v=` in `index.html`, and `public/_headers` caches those hashed URLs immutably. A changed asset gets a new hash — hence a new URL — so it's fetched fresh with no manual version bump. The stamp runs on `npm run dev` startup; `npm test` runs `assets:check` first, so an unstamped commit fails the gate. After editing an asset outside a running dev server, run `npm run assets:build`.
 
 ## Status
 

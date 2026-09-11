@@ -29,7 +29,7 @@ There are three environments, each with its own database, storage, and — the l
 ## The order to do this in
 
 1. **Provision the instance** — the Cloudflare account, D1, R2, the Worker, the Cron Trigger, and a first deploy to staging then production.
-2. **Access** — the admin gate: one Access application over `/admin/*` **and** the authoring API, an Allow policy for you and a Service Auth policy for Claude.
+2. **Access** — the admin gate: one Access application over `/dashboard/*` (the editor SPA) **and** the authoring API, an Allow policy for you and a Service Auth policy for Claude.
 3. **Connect an email sender** — SES or Resend, and their bounce/complaint webhook.
 4. **Sending-domain DNS** — SPF/DKIM/DMARC on `send.example.com`.
 5. **Wire the archive to a website** — optional; the self-contained default needs nothing.

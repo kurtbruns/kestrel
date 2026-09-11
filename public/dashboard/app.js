@@ -9,6 +9,10 @@
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let session = null; // { principal: { kind, email? }, auth: { mode } } once booted
+// The last GET /api/settings payload ({ settings, deployment }), fetched at boot so
+// the sidebar brand and the dashboard's publication/setup cards can read the
+// origins and the From-address fallback without re-fetching on every render.
+let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
@@ -40,6 +44,27 @@ const app = document.getElementById("app");
 const identity = document.getElementById("identity");
 const toasts = document.getElementById("toasts");
 
+// Mobile nav drawer: the hamburger slides the sidebar in; the scrim or any nav
+// click closes it. On desktop the sidebar is always in view and these are inert.
+const navToggle = document.getElementById("navToggle");
+const navScrim = document.getElementById("navScrim");
+function setNavOpen(open) {
+  document.body.classList.toggle("nav-open", open);
+  navToggle?.setAttribute("aria-expanded", open ? "true" : "false");
+  if (navScrim) {
+    navScrim.hidden = !open;
+  }
+}
+navToggle?.addEventListener("click", () =>
+  setNavOpen(!document.body.classList.contains("nav-open")),
+);
+navScrim?.addEventListener("click", () => setNavOpen(false));
+document.querySelector(".sidebar")?.addEventListener("click", (e) => {
+  if (e.target.closest("a")) {
+    setNavOpen(false);
+  }
+});
+
 // ---- Material Symbols icon paths (viewBox 0 -960 960 960) ----
 const ICONS = {
   heading: "M360-280v-400h80v160h160v-160h80v400h-80v-160H440v160h-80Z",
@@ -59,6 +84,44 @@ const ICONS = {
 };
 const icon = (name) =>
   `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
+
+// The Kestrel falcon mark (the product's own mark), used to identify the reference
+// room — distinct from a publication's own logo, which lives in the sidebar brand.
+const KESTREL_PATH =
+  "M290.028 216.064C285.698 218.264 280.838 219.394 275.978 219.344C281.268 225.044 284.128 232.924 283.708 240.694C283.278 248.844 279.388 256.514 274.268 262.874C269.148 269.244 262.808 274.494 256.608 279.814C237.148 296.474 218.248 314.404 195.328 325.854C178.568 334.224 160.148 338.864 143.458 347.374C140.148 349.064 136.898 350.904 133.418 352.224C129.938 353.544 126.178 354.324 122.498 353.794C121.718 353.684 120.938 353.504 120.228 353.184C119.508 352.864 118.848 352.374 118.408 351.734C117.918 351.024 117.708 350.154 117.718 349.304C117.728 348.454 117.948 347.614 118.268 346.824C118.567 346.054 118.967 345.339 119.371 344.618L119.418 344.534C128.788 327.894 140.118 312.454 150.358 296.344C160.598 280.224 169.848 263.174 174.428 244.634C176.258 237.264 177.328 229.644 176.738 222.074C176.138 214.504 173.808 206.964 169.308 200.854C164.588 194.434 157.728 189.874 150.538 186.434C139.628 181.204 127.768 178.284 115.858 176.154C93.9183 172.224 71.6083 170.884 49.4083 168.944C45.8483 168.634 42.2483 168.294 38.8783 167.124C34.7683 165.704 31.0683 163.004 28.7383 159.334C26.4183 155.664 25.5583 151.024 26.7483 146.844C27.6583 143.624 29.7283 140.784 32.3583 138.724C34.9883 136.654 38.1683 135.324 41.4383 134.634C44.7183 133.944 48.0983 133.874 51.4383 134.154C53.2683 134.304 55.0883 134.554 56.8983 134.824C72.2383 137.094 87.3783 140.484 102.548 143.644C115.468 146.334 128.498 148.864 141.688 149.224C154.878 149.574 168.338 147.654 180.178 141.824C196.548 133.764 208.758 118.514 215.298 101.474C224.258 78.094 223.028 52.174 220.398 27.284C219.788 21.484 219.108 15.614 220.058 9.854C220.178 9.124 220.328 8.38398 220.658 7.71398C220.988 7.05398 221.528 6.45399 222.228 6.19399C222.858 5.95399 223.568 6.01399 224.218 6.22399C224.858 6.43399 225.448 6.77399 226.028 7.12399C262.588 29.154 290.508 63.614 310.198 101.484C312.188 105.314 314.108 109.204 315.408 113.314C316.708 117.434 317.358 121.814 316.768 126.084C316.348 129.114 315.268 132.104 313.318 134.454C310.668 137.634 306.688 139.354 302.778 140.744C298.878 142.124 294.808 143.324 291.488 145.804C286.998 149.174 284.328 154.834 284.598 160.444C292.098 161.904 299.448 164.114 306.508 167.014C312.788 169.594 318.998 172.854 323.418 178.014C327.088 182.294 329.288 187.614 331.438 192.844C332.158 194.584 332.878 196.344 333.328 198.184C333.778 200.014 333.958 201.944 333.578 203.794C333.138 205.934 331.948 207.914 330.248 209.294C329.898 208.024 329.258 206.834 328.408 205.834C326.958 204.154 324.928 203.054 322.798 202.454C318.258 201.174 313.328 202.114 309.018 204.044C304.708 205.974 300.898 208.834 297.068 211.584C294.808 213.204 292.508 214.804 290.028 216.064Z";
+const kestrelMark = () =>
+  `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
+
+// Every entry in the reference room's Docs list carries the same Material "article"
+// glyph — it inherits the row color, so it reads muted until a doc is the open one
+// (then it and its underlined title go to the active fg). The icon marks these as
+// docs, distinct from the icon-less "On this page" section links below them.
+const ARTICLE_ICON =
+  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>';
+
+// The reference room shell shared by Overview / Docs / API: a top bar (a rail-width
+// "← Dashboard", the Kestrel mark, and the surface switch) over a two-column grid
+// whose left column — the contents rail — lines up exactly under "← Dashboard".
+// Pass railHtml = null for a surface with no contents rail (Overview).
+function roomShell(active, railHtml, mainHtml) {
+  const tab = (view, label) =>
+    `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  const body =
+    railHtml == null
+      ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
+      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}</div></nav><div class="room-main">${mainHtml}</div></div>`;
+  return `<div class="room">
+    <header class="room-bar">
+      <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
+      <div class="room-nav">
+        <span class="room-brand">${kestrelMark()}<span>Kestrel</span></span>
+        <nav class="room-switch" aria-label="Reference">${tab("start", "Overview")}${tab("docs", "Docs")}${tab("reference", "API")}</nav>
+        <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
+      </div>
+    </header>
+    ${body}
+  </div>`;
+}
 
 // ---- auth ----
 function setToken(t) {
@@ -98,10 +161,96 @@ function renderIdentity() {
     identity.innerHTML = `<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`;
   }
 }
+
+// ---- publication identity (sidebar brand) ----
+// The publication's name / tagline / logo / brand color come from the settings
+// surface (settings.publication). Each field falls back sensibly when unset: the
+// name from the From: display name (the read-only deployment reflection), a neutral
+// initial tile for the logo, and the theme accent for the color.
+function parseFromName(fromAddress) {
+  if (!fromAddress) {
+    return null;
+  }
+  // "Display Name <addr@domain>" → "Display Name"; a bare address has no display name.
+  const m = String(fromAddress).match(/^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/);
+  const name = m?.[1] ? m[1].trim() : "";
+  return name || null;
+}
+function derivePublication(data) {
+  const s = data?.settings || {};
+  const d = data?.deployment || {};
+  const p = s.publication || {}; // the publication identity, edited in Settings
+  return {
+    name: p.name || parseFromName(d.fromAddress) || "Your publication",
+    tagline: p.tagline || "",
+    logoUrl: p.logoUrl || null,
+    color: p.brandColor || null,
+  };
+}
+function renderSidebarBrand() {
+  const pub = derivePublication(appConfig);
+  const nameEl = document.getElementById("brandName");
+  const tagEl = document.getElementById("brandTagline");
+  const logoEl = document.getElementById("brandLogo");
+  if (nameEl) {
+    nameEl.textContent = pub.name;
+  }
+  if (tagEl) {
+    tagEl.textContent = pub.tagline;
+    tagEl.hidden = !pub.tagline;
+  }
+  if (logoEl) {
+    if (pub.logoUrl) {
+      logoEl.innerHTML = `<img src="${esc(pub.logoUrl)}" alt="">`;
+      logoEl.classList.remove("brand-logo-placeholder");
+    } else {
+      // Neutral placeholder tile: the publication's initial on the accent.
+      logoEl.textContent = (pub.name.trim()[0] || "K").toUpperCase();
+      logoEl.classList.add("brand-logo-placeholder");
+    }
+  }
+  // A brand color tints the logo tile; otherwise it uses the theme accent.
+  if (pub.color) {
+    document.documentElement.style.setProperty("--brand", pub.color);
+  } else {
+    document.documentElement.style.removeProperty("--brand");
+  }
+}
+
+// Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
+// and the setup checklist so the "New post" affordance behaves identically everywhere.
+function createNewPost(btn) {
+  return busy(btn, "Creating…", async () => {
+    try {
+      const { post } = await api("/posts", { method: "POST", json: { subject: "Untitled" } });
+      location.hash = `#/edit/${post.id}`;
+    } catch (err) {
+      toast(err.message);
+    }
+  });
+}
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied");
+  } catch {
+    toast("Couldn't copy to clipboard");
+  }
+}
+// The canonical archive URL for a slug, from the read-only deployment reflection
+// (mirrors src/render/render.ts archiveUrl; falls back to this origin if unset).
+function archiveUrlFor(deployment, slug) {
+  const origin = deployment?.archiveOrigin || location.origin;
+  const base = deployment?.archiveBasePath || "";
+  return `${origin}${base}/${slug}`;
+}
+
 // Access sessions expire at the edge (the request never reaches the app), so the
 // only recovery is a fresh document load that re-triggers the Access login. In dev
 // this shouldn't happen, but a reload re-mints, so the same affordance is safe.
 function showReauth() {
+  // No identity yet — hide the publication chrome so the wall stands alone.
+  document.body.classList.add("signed-out");
   app.innerHTML =
     `<div class="card auth-wall"><h2>Session expired</h2>` +
     `<p class="hint">Your access session ended. Sign in again to continue.</p>` +
@@ -133,6 +282,24 @@ async function api(path, opts = {}) {
     throw err;
   }
   return data;
+}
+
+// Like api(), but returns the raw response text instead of parsing JSON — for the
+// endpoints that answer with HTML (the rendered preview). Keeps the same 401 →
+// re-auth guard, which a bare fetch(authHeaders()) would skip.
+async function apiText(path, opts = {}) {
+  const headers = Object.assign(authHeaders(), opts.headers || {});
+  const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
+  if (res.status === 401) {
+    showReauth();
+    throw new Error("Not authorized — please sign in again.");
+  }
+  if (!res.ok) {
+    const err = new Error(res.statusText);
+    err.status = res.status;
+    throw err;
+  }
+  return res.text();
 }
 
 // ---- helpers ----
@@ -307,35 +474,38 @@ function route() {
   editorHash = null; // renderEditor re-establishes these when it mounts
   editorLeaveFlush = null;
   editorManualSave = null;
-  const hash = location.hash || "#/posts";
+  const hash = location.hash || "#/dashboard";
   const [, view, arg] = hash.split("/");
-  const current =
-    view === "sends"
-      ? "#/sends"
-      : view === "subscribers"
-        ? "#/subscribers"
-        : view === "settings"
-          ? "#/settings"
-          : view === "reference"
-            ? "#/reference"
-            : view === "docs"
-              ? "#/docs"
-              : "#/posts";
-  document.querySelectorAll(".topbar nav a").forEach((a) => {
-    if (a.getAttribute("href") === current) {
+  // The editor wants the full width, and carries its own "← Posts" affordance, so
+  // it hides the sidebar rather than living beside it (SPEC §10: admin-only chrome).
+  document.body.classList.toggle("editor-mode", view === "edit");
+  // The tool/help pages (Getting started, Docs, API) are about Kestrel itself, not
+  // the publication, so they drop the publication sidebar for a slim tool bar.
+  const toolMode = view === "start" || view === "docs" || view === "reference";
+  document.body.classList.toggle("tool-mode", toolMode);
+  // Mark the active nav item across both sidebar navs (primary + tools) so the
+  // reader can see where they are (aria-current also styles it).
+  document.querySelectorAll(".sidebar a[data-view]").forEach((a) => {
+    if (a.dataset.view === view) {
       a.setAttribute("aria-current", "page");
     } else {
       a.removeAttribute("aria-current");
     }
   });
+  // The reference room's surface switch is marked at render time (roomShell). Close
+  // the mobile nav drawer on any navigation.
+  setNavOpen(false);
   if (view === "edit" && arg) {
     return renderEditor(arg);
   }
-  if (view === "sends") {
-    return renderSends();
+  if (view === "posts") {
+    return renderPosts();
   }
   if (view === "subscribers") {
     return renderSubscribers();
+  }
+  if (view === "sends") {
+    return renderSends();
   }
   if (view === "settings") {
     return renderSettings();
@@ -346,7 +516,10 @@ function route() {
   if (view === "docs") {
     return renderDocs(arg);
   }
-  return renderPosts();
+  if (view === "start") {
+    return renderStart();
+  }
+  return renderDashboard();
 }
 // Navigating away from a dirty editor saves in the background rather than
 // prompting — hashchange fires after the hash has already moved, so the flush
@@ -393,15 +566,7 @@ window.addEventListener("keydown", (e) => {
 // ---- posts list ----
 async function renderPosts() {
   app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
-  document.getElementById("newPost").onclick = (e) =>
-    busy(e.currentTarget, "Creating…", async () => {
-      try {
-        const { post } = await api("/posts", { method: "POST", json: { subject: "Untitled" } });
-        location.hash = `#/edit/${post.id}`;
-      } catch (err) {
-        toast(err.message);
-      }
-    });
+  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
   try {
     const { posts } = await api("/posts");
     const list = document.getElementById("list");
@@ -655,8 +820,7 @@ async function renderEditor(id) {
       if (!locked) {
         await saveDraft(true);
       }
-      const res = await fetch(`/posts/${id}/preview`, { headers: authHeaders() });
-      previewFrame.srcdoc = await res.text();
+      previewFrame.srcdoc = await apiText(`/posts/${id}/preview`);
       previewFrame.onload = () => {
         try {
           previewFrame.style.height = `${previewFrame.contentDocument.body.scrollHeight + 24}px`;
@@ -981,8 +1145,8 @@ async function renderEditor(id) {
         if (!locked) {
           await saveDraft(true);
         }
-        const res = await fetch(`/posts/${id}/preview`, { headers: authHeaders() });
-        const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
+        const html = await apiText(`/posts/${id}/preview`);
+        const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
         window.open(url, "_blank");
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {
@@ -1072,7 +1236,7 @@ async function renderEditor(id) {
   }
 
   // --- send test (modal) ---
-  // Pre-fills from the default test recipients (Settings, issue #26) and accepts
+  // Pre-fills from the default test recipients (Settings) and accepts
   // several — one per line. Each address is a separate test send through the same
   // per-recipient path as a real send (I5).
   document.getElementById("testBtn").onclick = () => {
@@ -1380,8 +1544,47 @@ async function renderSettings() {
   }
   const s = data.settings,
     d = data.deployment;
+  const p = s.publication || { name: "", tagline: "", brandColor: "", logoUrl: "" };
+  const fromName = parseFromName(d.fromAddress) || "Your publication";
   const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
   body.innerHTML = `
+    <div class="card">
+      <h2 style="margin-top:0">Publication identity</h2>
+      <p class="hint">Your publication's name, tagline, logo, and brand color. These theme the reader surface and this dashboard — never the email itself (its identity is the From address) and never an already-sent issue.</p>
+      <div class="logo-row">
+        <div class="logo-preview" id="logoPreview">${
+          p.logoUrl
+            ? `<img src="${esc(p.logoUrl)}" alt="Current logo">`
+            : `<span class="logo-placeholder">${esc((p.name || fromName).trim()[0] || "K").toUpperCase()}</span>`
+        }</div>
+        <div class="logo-actions">
+          <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+          <div class="row">
+            <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
+            <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
+          </div>
+          <p class="hint" style="margin:8px 0 0">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. An SVG can follow light/dark with an internal <code>@media (prefers-color-scheme: dark)</code> rule — <code>currentColor</code> won't inherit, since the logo loads as an image.</p>
+        </div>
+      </div>
+      <div class="grid2" style="margin-top:4px">
+        <div>
+          <label for="setName">Name</label>
+          <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
+          <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
+        </div>
+        <div>
+          <label for="setTagline">Tagline</label>
+          <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
+        </div>
+      </div>
+      <label for="setBrandHex">Brand color</label>
+      <div class="row brand-row">
+        <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
+        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb — blank uses the theme default">
+        <button class="ghost-btn" id="setBrandClear">Clear</button>
+      </div>
+      <div class="row" style="margin-top:14px"><button class="primary" id="idSave">Save identity</button></div>
+    </div>
     <div class="card">
       <h2 style="margin-top:0">Default test recipients</h2>
       <p class="hint">Pre-filled into <strong>Send test email</strong>. One address per line. These are your own inboxes — they don't go through the subscribe/consent flow.</p>
@@ -1402,12 +1605,95 @@ async function renderSettings() {
         ${kv("Access configured", d.accessConfigured ? "Yes" : "No")}
       </tbody></table></div>
     </div>`;
+
+  // Keep the cached config + sidebar brand in step with a save (the brand reads the
+  // same publication identity), and re-render the Settings view so the logo preview
+  // reflects a new/removed logo.
+  const applySettings = (settings) => {
+    appConfig = { ...(appConfig || {}), settings };
+    renderSidebarBrand();
+  };
+
+  // --- brand color: the text field is the source of truth ("" = theme default);
+  // the picker is a convenience that writes into it.
+  const colorEl = document.getElementById("setBrandColor");
+  const hexEl = document.getElementById("setBrandHex");
+  colorEl.oninput = () => {
+    hexEl.value = colorEl.value;
+  };
+  hexEl.oninput = () => {
+    if (/^#[0-9a-fA-F]{6}$/.test(hexEl.value.trim())) {
+      colorEl.value = hexEl.value.trim();
+    }
+  };
+  document.getElementById("setBrandClear").onclick = () => {
+    hexEl.value = "";
+    hexEl.focus();
+  };
+
+  document.getElementById("idSave").onclick = (e) =>
+    busy(e.currentTarget, "Saving…", async () => {
+      try {
+        const r = await api("/api/settings", {
+          method: "PUT",
+          json: {
+            publication: {
+              name: document.getElementById("setName").value.trim(),
+              tagline: document.getElementById("setTagline").value.trim(),
+              brandColor: hexEl.value.trim(),
+            },
+          },
+        });
+        applySettings(r.settings);
+        toast("Identity saved");
+        renderSettings();
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+
+  // --- logo upload / remove (immediate; their own endpoints).
+  const logoInput = document.getElementById("logoInput");
+  document.getElementById("logoUpload").onclick = () => logoInput.click();
+  logoInput.onchange = async () => {
+    const file = logoInput.files[0];
+    logoInput.value = "";
+    if (!file) {
+      return;
+    }
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const r = await api("/api/settings/logo", { method: "POST", body: fd });
+      applySettings(r.settings);
+      toast("Logo updated");
+      renderSettings();
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+  const removeBtn = document.getElementById("logoRemove");
+  if (removeBtn) {
+    removeBtn.onclick = () =>
+      busy(removeBtn, "Removing…", async () => {
+        try {
+          const r = await api("/api/settings/logo", { method: "DELETE" });
+          applySettings(r.settings);
+          toast("Logo removed");
+          renderSettings();
+        } catch (err) {
+          toast(err.message);
+        }
+      });
+  }
+
   document.getElementById("setSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
       const list = parseAddresses(document.getElementById("setTestRecipients").value);
       try {
         const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
         document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
+        applySettings(r.settings);
         toast("Settings saved");
       } catch (err) {
         toast(err.message);
@@ -1416,59 +1702,184 @@ async function renderSettings() {
 }
 
 // ---- docs ----
-// The operator setup guide, authored in docs/setup/*.md and served read-only by
-// the authed /api/docs routes. We fetch each doc through the SPA (so the dev
-// token / Access session cookie is attached, via authHeaders()) and drop the
-// returned themed HTML into a sandboxed iframe — never a top-level navigation to
-// the gated route, which would carry no credential and 401 in local dev.
+// The operator setup guide, authored in docs/setup/*.md and served read-only by the
+// authed GET /api/docs route as sanitized HTML fragments. The guide is
+// paginated — one part per page — with a "Contents" list of every part and an "On
+// this page" of the current part's sections in the rail, plus Previous/Next at the
+// foot; so scrolling reaches the end of the current doc and moving between docs is a
+// deliberate step. No iframe: the content is trusted (repo markdown, hygiene-passed),
+// so injecting the fragments into the DOM is safe. Fetched once and cached (the
+// bundle never changes at runtime), so paging between parts is instant.
+let docsCache = null;
 async function renderDocs(slug) {
-  app.innerHTML = `
-    <div class="docs-layout">
-      <nav class="docs-nav" id="docsNav" aria-label="Documentation"><p class="muted">Loading…</p></nav>
-      <div class="docs-main"><iframe id="docsFrame" class="docs-frame" sandbox="allow-same-origin allow-popups" title="Documentation"></iframe></div>
-    </div>`;
-  const navEl = document.getElementById("docsNav");
-  const frame = document.getElementById("docsFrame");
-  let docs;
-  try {
-    ({ docs } = await api("/api/docs"));
-  } catch (e) {
-    renderError(navEl, e.message, () => renderDocs(slug));
-    return;
+  app.innerHTML = roomShell(
+    "docs",
+    `<p class="muted">Loading…</p>`,
+    `<article class="doc" id="docsMain"><p class="muted">Loading…</p></article>`,
+  );
+  const navEl = app.querySelector(".rail-inner");
+  const mainEl = document.getElementById("docsMain");
+  if (!docsCache) {
+    try {
+      ({ docs: docsCache } = await api("/api/docs"));
+    } catch (e) {
+      renderError(mainEl, e.message, () => renderDocs(slug));
+      return;
+    }
   }
+  const docs = docsCache;
   if (!docs?.length) {
-    navEl.innerHTML = `<p class="muted">No docs.</p>`;
+    mainEl.innerHTML = `<p class="muted">No documentation.</p>`;
     return;
   }
 
-  const active = docs.some((d) => d.slug === slug) ? slug : docs[0].slug;
-  navEl.innerHTML = docs
-    .map(
-      (d) =>
-        `<a href="#/docs/${encodeURIComponent(d.slug)}"${d.slug === active ? ` class="active" aria-current="page"` : ""}>${esc(d.title)}</a>`,
-    )
-    .join("");
-
-  try {
-    // A raw fetch (not api(), which JSON-parses): this route returns HTML. Same
-    // auth + 401 handling as api() so an expired Access session steers to re-login.
-    const res = await fetch(`/api/docs/${encodeURIComponent(active)}`, { headers: authHeaders() });
-    if (res.status === 401) {
-      showReauth();
-      throw new Error("Not authorized — please sign in again.");
-    }
-    if (!res.ok) {
-      throw new Error("Couldn't load this doc.");
-    }
-    frame.srcdoc = await res.text();
-    frame.onload = () => {
-      try {
-        frame.style.height = `${frame.contentDocument.body.scrollHeight + 24}px`;
-      } catch (_) {}
-    };
-  } catch (e) {
-    toast(e.message);
+  // Show one part per page — the deep-linked slug, or the first. An unknown slug (a
+  // stale or renamed deep link) shouldn't silently masquerade as the first doc: say
+  // so and heal the URL back to the canonical guide (replaceState, so no reload).
+  const found = docs.findIndex((d) => d.slug === slug);
+  if (slug && found === -1) {
+    toast(`No doc named “${slug}” — showing the guide.`);
+    history.replaceState(history.state, "", "#/docs");
   }
+  const at = Math.max(0, found);
+  const cur = docs[at];
+  const prev = docs[at - 1];
+  const next = docs[at + 1];
+  mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
+
+  // The fragment carries no ids — assign them to the current part's H1 and its H2s,
+  // and collect the sections for the "On this page" rail. The H1 leads the list so
+  // there's a way back to the top / the intro that sits above the first H2.
+  const sec = mainEl.querySelector("section.doc-part");
+  const h1 = sec.querySelector("h1");
+  const sections = [];
+  if (h1) {
+    h1.id = `part-${cur.slug}`;
+    sections.push({ id: h1.id, title: h1.textContent || cur.title });
+  }
+  sec.querySelectorAll("h2").forEach((h2, i) => {
+    const id = `sec-${cur.slug}-${i + 1}`;
+    h2.id = id;
+    sections.push({ id, title: h2.textContent || "" });
+  });
+
+  // Previous / Next at the foot — the scroll ends with the current doc, so moving
+  // between docs is a deliberate step (router links, one doc per page).
+  const pager = document.createElement("nav");
+  pager.className = "doc-pager";
+  pager.innerHTML =
+    (prev
+      ? `<a class="doc-pager-btn prev" href="#/docs/${esc(prev.slug)}"><span class="doc-pager-dir">← Previous</span><span class="doc-pager-title">${esc(prev.title)}</span></a>`
+      : `<span></span>`) +
+    (next
+      ? `<a class="doc-pager-btn next" href="#/docs/${esc(next.slug)}"><span class="doc-pager-dir">Next →</span><span class="doc-pager-title">${esc(next.title)}</span></a>`
+      : `<span></span>`);
+  mainEl.appendChild(pager);
+
+  // The rail: a "Docs" list of every doc (router links, current one marked) and,
+  // below it, an "On this page" of the current doc's sections that scroll-spy tracks.
+  const onPage = sections.length
+    ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${sections
+        .map(
+          (s) =>
+            `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
+        )
+        .join("")}</div>`
+    : "";
+  navEl.innerHTML =
+    `<div class="toc-label">Docs</div>` +
+    `<nav class="doc-parts">${docs
+      .map(
+        (d) =>
+          `<a class="toc-h${d.slug === cur.slug ? " on" : ""}" href="#/docs/${esc(d.slug)}">${ARTICLE_ICON}<span>${esc(d.title)}</span></a>`,
+      )
+      .join("")}</nav>` +
+    onPage;
+
+  // "On this page" links smooth-scroll within the current doc (and highlight at once,
+  // so a short final section that can't scroll to the top still lights up); the Docs
+  // links carry no data-target and fall through to the SPA router (a new doc page).
+  const onPageEl = document.getElementById("tocOnPage");
+  const markActive = (id) => {
+    if (!onPageEl) {
+      return;
+    }
+    for (const a of onPageEl.querySelectorAll(".toc-sub")) {
+      a.classList.toggle("on", a.dataset.target === id);
+    }
+  };
+  navEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-target]");
+    if (!a) {
+      return;
+    }
+    ev.preventDefault();
+    markActive(a.dataset.target);
+    document
+      .getElementById(a.dataset.target)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
+
+  // Copy buttons on the guide's many shell / DNS code blocks.
+  for (const pre of mainEl.querySelectorAll("pre")) {
+    pre.classList.add("has-copy");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "code-copy";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", async () => {
+      const code = pre.querySelector("code");
+      try {
+        await navigator.clipboard.writeText((code || pre).innerText);
+        btn.textContent = "Copied";
+        setTimeout(() => {
+          btn.textContent = "Copy";
+        }, 1500);
+      } catch {
+        toast("Couldn't copy to clipboard");
+      }
+    });
+    pre.appendChild(btn);
+  }
+
+  // Scroll-spy: the active section is the last heading scrolled above a line just
+  // under the sticky room bar; at the very bottom the last heading wins even if the
+  // page can't scroll it that high, so a short final section still highlights (the
+  // .doc bottom runway makes most reach the line on their own). One document.onscroll
+  // slot, self-cleared once this doc leaves the DOM — no leak across SPA navigations.
+  // (Same position-based shape as ~/Git/svg-tutorial, not an IntersectionObserver,
+  // which pauses when the tab isn't being composited.)
+  if (onPageEl && sections.length) {
+    const ids = sections.map((s) => s.id);
+    const line = 80; // clears the 54px room bar
+    const spy = () => {
+      if (!document.getElementById(ids[0])) {
+        document.onscroll = null; // this doc is gone — unhook
+        return;
+      }
+      let active = ids[0];
+      if (Math.ceil(window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight) {
+        active = ids[ids.length - 1];
+      } else {
+        for (const id of ids) {
+          if (
+            (document.getElementById(id)?.getBoundingClientRect().top ??
+              Number.POSITIVE_INFINITY) <= line
+          ) {
+            active = id;
+          } else {
+            break;
+          }
+        }
+      }
+      markActive(active);
+    };
+    document.onscroll = spy;
+    spy();
+  }
+
+  // Each doc is its own page — start at the top.
+  window.scrollTo(0, 0);
 }
 
 // ---- API reference ----
@@ -1504,11 +1915,11 @@ function apiSectionHtml(g) {
     </section>`;
 }
 async function renderReference() {
-  app.innerHTML = `
-    <div class="api-layout">
-      <nav class="api-nav" id="apiNav" aria-label="API sections"></nav>
-      <div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>
-    </div>`;
+  app.innerHTML = roomShell(
+    "reference",
+    `<div class="toc-label">API</div><nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
+    `<div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>`,
+  );
   const navEl = document.getElementById("apiNav");
   const contentEl = document.getElementById("apiContent");
   // Delegate clicks synchronously with one listener on the stable nav, so it survives
@@ -1564,6 +1975,368 @@ async function renderReference() {
       navEl._obs.observe(el);
     }
   }
+}
+
+// ---- dashboard (home) ----
+// The post-login landing and the brand's target (the default route). Built entirely
+// from existing authed endpoints — GET /posts, /sends, /subscribers, and the cached
+// /api/settings — so it adds no surface and can't touch an invariant. It answers
+// SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
+// scheduled, what went out, and what's still in progress.
+
+// Health (SPEC §8 "is anything wrong", §11 loud failure): calm in the common case,
+// loud only when something needs attention. Derived from GET /sends.
+function computeHealth(sends) {
+  const now = Date.now();
+  const issues = [];
+  const failed = sends.filter((s) => s.status === "failed");
+  if (failed.length) {
+    issues.push({
+      level: "red",
+      text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
+    });
+  }
+  const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
+  if (missed.length) {
+    issues.push({
+      level: "red",
+      text: `${missed.length} scheduled send${missed.length === 1 ? "" : "s"} passed the fire time without going out.`,
+    });
+  }
+  const sending = sends.filter((s) => s.status === "sending");
+  const stuck = sending.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
+  if (stuck.length) {
+    issues.push({
+      level: "amber",
+      text: "A send has been in progress over 10 minutes — it may be retrying.",
+    });
+  } else if (sending.length) {
+    issues.push({
+      level: "amber",
+      text: `${sending.length} send${sending.length === 1 ? " is" : "s are"} in progress.`,
+    });
+  }
+  // Delivery trouble: a high share of send-time failures on a recent send. (The list
+  // rollup is by delivery *status* — accepted / failed / skipped — so asynchronous
+  // bounce webhook events aren't reflected here; a true bounce-rate view would need a
+  // dedicated endpoint, which this reuse-only change deliberately doesn't add.)
+  const spiky = sends
+    .filter((s) => s.status === "sent")
+    .slice(0, 5)
+    .find((s) => {
+      const f = s.progress?.failed || 0;
+      return s.recipient_count > 0 && f >= 3 && f / s.recipient_count >= 0.1;
+    });
+  if (spiky) {
+    issues.push({
+      level: "amber",
+      text: "Elevated delivery failures on a recent send — check Sends.",
+    });
+  }
+  return issues;
+}
+
+async function renderDashboard() {
+  app.innerHTML = `<div class="dash" id="dash"><p class="muted">Loading…</p></div>`;
+  const root = document.getElementById("dash");
+  let posts, sends, counts;
+  try {
+    const [p, s, subs] = await Promise.all([api("/posts"), api("/sends"), api("/subscribers")]);
+    posts = p.posts;
+    sends = s.sends;
+    counts = subs.counts;
+  } catch (e) {
+    renderError(root, e.message, renderDashboard);
+    return;
+  }
+  const pub = derivePublication(appConfig);
+  const deployment = appConfig?.deployment || {};
+  const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
+
+  // First run — nothing written and no one on the list: replace the body with the
+  // onboarding checklist (the shared Getting-started component) rather than a wall
+  // of empty tiles.
+  if (!posts.length && totalSubs === 0) {
+    root.innerHTML =
+      `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
+        pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
+      }<p class="muted">Let's get your first issue out the door.</p></div></div>` +
+      setupChecklistHtml(pub, deployment);
+    wireDashActions(root, renderDashboard);
+    return;
+  }
+
+  // No news is good news: the health line appears only when something needs
+  // attention (SPEC §8 / §11 — the only thing that ever surfaces loudly).
+  const health = computeHealth(sends);
+  const level = health.some((i) => i.level === "red") ? "red" : "amber";
+  const healthHtml = health.length
+    ? `<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health
+        .map((i) => `<div>${esc(i.text)}</div>`)
+        .join("")}</div></div>`
+    : "";
+
+  const tiles = [
+    { label: "Confirmed", sub: "your audience", emph: true, v: counts.confirmed },
+    { label: "Pending", v: counts.pending },
+    { label: "Unsubscribed", v: counts.unsubscribed },
+    { label: "Suppressed", v: counts.suppressed },
+  ];
+  const tilesHtml = `<div class="tiles">${tiles
+    .map(
+      (t) =>
+        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
+          t.sub ? `<span class="tile-sub">${esc(t.sub)}</span>` : ""
+        }</span></a>`,
+    )
+    .join("")}</div>`;
+
+  const scheduled = sends
+    .filter((s) => s.status === "scheduled")
+    .sort((a, b) => a.fire_at - b.fire_at);
+  const nextUpHtml = scheduled.length
+    ? scheduled
+        .map(
+          (s) =>
+            `<div class="card spread clickable nextup" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+        )
+        .join("")
+    : `<p class="muted">Nothing scheduled.</p>`;
+
+  const slugById = new Map(posts.map((p) => [p.id, p.slug]));
+  const recent = sends
+    .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
+    .slice(0, 5);
+  const recentHtml = recent.length
+    ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent
+        .map((s) => {
+          const slug = slugById.get(s.post_id);
+          const url = slug ? archiveUrlFor(deployment, slug) : null;
+          const delivered = s.progress?.accepted || 0;
+          const failedN = s.progress?.failed || 0;
+          return `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
+            failedN ? ` <span class="muted">(${failedN} failed)</span>` : ""
+          }</td><td class="act">${
+            url && s.status === "sent"
+              ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
+              : ""
+          }</td></tr>`;
+        })
+        .join("")}</tbody></table></div>`
+    : `<p class="muted">No sends yet.</p>`;
+
+  const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
+  const draftsHtml = drafts.length
+    ? `<div class="table-wrap"><table><tbody>${drafts
+        .map(
+          (p) =>
+            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td class="muted">edited ${fmt(p.updated_at)}</td></tr>`,
+        )
+        .join("")}</tbody></table></div>`
+    : `<p class="muted">No drafts in progress.</p>`;
+
+  const appOrigin = deployment.appOrigin || location.origin;
+  const archiveBase =
+    (deployment.archiveOrigin || location.origin) + (deployment.archiveBasePath || "");
+  const pubCardHtml = `<div class="card pub-card">
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${esc(archiveBase)}</code><button class="ghost-btn" data-copy="${esc(archiveBase)}">Copy</button></div>
+    <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
+  </div>`;
+
+  // Connect the API — the API's first client is an agent, so the base URL is
+  // copyable right here (no need to open the reference room to wire up Claude).
+  const apiCardHtml = `<div class="card pub-card">
+    <div class="pub-row"><span class="pub-key muted">Base&nbsp;URL</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
+  </div>`;
+
+  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit identity &amp; template</button></div>`;
+
+  root.innerHTML = `
+    <div class="dash-head">
+      <div><h1>${esc(pub.name)}</h1>${pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""}</div>
+      <button class="primary" data-act="new-post">New post</button>
+    </div>
+    ${healthHtml}
+    <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
+    <div class="dash-cols">
+      <section class="dash-section"><h2>Next up</h2>${nextUpHtml}</section>
+      <section class="dash-section"><h2>Continue writing</h2>${draftsHtml}</section>
+    </div>
+    <section class="dash-section"><h2>Recent sends</h2>${recentHtml}</section>
+    <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
+    <div class="dash-cols">
+      <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
+      <section class="dash-section"><h2>Connect the API</h2>${apiCardHtml}</section>
+    </div>`;
+
+  wireDashActions(root, renderDashboard);
+  // Row / card clicks open the issue (subject links + Cancel opt out — the same guard
+  // the Posts table and the Sends cards use).
+  root.querySelectorAll("tr[data-id]").forEach((tr) => {
+    tr.onclick = (e) => {
+      if (e.target.tagName !== "A" && !e.target.closest("button")) {
+        location.hash = `#/edit/${tr.dataset.id}`;
+      }
+    };
+  });
+  root.querySelectorAll(".nextup").forEach((card) => {
+    card.onclick = (e) => {
+      if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+        location.hash = `#/edit/${card.dataset.post}`;
+      }
+    };
+  });
+  root.querySelectorAll("[data-cancel]").forEach((b) => {
+    b.onclick = () =>
+      busy(b, "Canceling…", async () => {
+        try {
+          await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+          toast("Canceled");
+          renderDashboard();
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+  });
+  startCountdowns();
+}
+
+// Controls shared by the Dashboard and the Getting-started view: hash navigation,
+// "New post", "Add subscriber", and copy buttons.
+function wireDashActions(root, reload) {
+  root.querySelectorAll("[data-nav]").forEach((b) => {
+    b.onclick = () => {
+      location.hash = b.dataset.nav;
+    };
+  });
+  root.querySelectorAll("[data-act='new-post']").forEach((b) => {
+    b.onclick = () => createNewPost(b);
+  });
+  root.querySelectorAll("[data-act='add-sub']").forEach((b) => {
+    b.onclick = () => addSubscriberModal(reload);
+  });
+  root.querySelectorAll("[data-copy]").forEach((b) => {
+    b.onclick = () => copyText(b.dataset.copy);
+  });
+}
+
+// The onboarding checklist, shared by the first-run dashboard and Getting-started.
+function setupChecklistHtml(pub, deployment) {
+  const subscribeUrl = `${deployment.appOrigin || location.origin}/subscribe`;
+  return `<div class="card setup">
+    <h2 class="setup-title">Set up your publication</h2>
+    <ol class="setup-steps">
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
+      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
+    </ol>
+  </div>`;
+}
+
+// ---- Overview (the reference room's home) ----
+// The permanent home for onboarding (the footer Kestrel link → here): a short "how
+// Kestrel works", the "why" in plain language, and the setup checklist.
+// It reserves the room rail like Docs/API, with an "on this page" scroll-spy.
+function howItWorksHtml() {
+  const steps = [
+    ["Write", "Draft in Markdown and preview exactly what the email will look like."],
+    ["Schedule", "Schedule ahead — the send waits in a visible, cancelable review window."],
+    ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
+    ["Archive", "Every issue is preserved as a permanent page — the record of what went out."],
+  ];
+  return `<section class="dash-section" id="ov-how"><h2>How Kestrel works</h2><ol class="how-steps">${steps
+    .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
+    .join("")}</ol></section>`;
+}
+// The "why", in clear language — competitor-neutral, no funnel copy.
+const WHY_KESTREL = [
+  [
+    "One door, two clients",
+    "You drive Kestrel through a single API, and the web editor and Claude are equal clients of it. Nothing reaches past that door, so the two can't fall out of sync — and an agent is a first-class author, able to do anything you can, not a bolt-on integration.",
+  ],
+  [
+    "Safe to send unattended",
+    "Scheduling freezes the rendered email and locks the issue behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
+  ],
+  [
+    "A test you can trust",
+    "The preview, the test send, and the real send all run through one render path. A test to your own inbox is the same code producing the same result, so if the test looks right, the send is right.",
+  ],
+  [
+    "Yours to keep",
+    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every issue live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
+  ],
+  [
+    "Cheap by construction",
+    "Kestrel is one small serverless app over a database, object storage, and a wholesale email transport. There's no server to keep alive and no charge for the size of your list — you pay for what you send, and you can host it yourself.",
+  ],
+  [
+    "Does one thing completely",
+    "Email, done properly: consent, scheduling, the review window, delivery, suppression, and the archive. No drip funnels, no multi-channel sprawl — the focus is the point.",
+  ],
+];
+async function renderStart() {
+  // The checklist needs the deployment origins; boot usually has them cached.
+  if (!appConfig) {
+    try {
+      appConfig = await api("/api/settings");
+    } catch {
+      /* fall back to location.origin in the checklist */
+    }
+  }
+  const pub = derivePublication(appConfig);
+  const deployment = appConfig?.deployment || {};
+  // Overview's rail is only an "On this page" — use the section style (.toc-sub), not
+  // the doc-list style (.toc-h, which carries the open-book "which doc" marker).
+  const rail =
+    `<div class="toc-label">On this page</div>` +
+    `<a class="toc-sub" href="#ov-how" data-target="ov-how">How Kestrel works</a>` +
+    `<a class="toc-sub" href="#ov-why" data-target="ov-why">Why Kestrel</a>` +
+    `<a class="toc-sub" href="#ov-setup" data-target="ov-setup">Set up your publication</a>`;
+  const whyHtml = WHY_KESTREL.map(
+    ([t, d]) => `<div class="why-item"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`,
+  ).join("");
+  const main = `<div class="dash room-overview" id="start">
+    <div class="dash-head"><div><h1>Welcome to Kestrel</h1><p class="muted">A newsletter you own from end to end — write in Markdown, review behind a cancelable window, send it, and keep a permanent archive.</p></div></div>
+    ${howItWorksHtml()}
+    <section class="dash-section" id="ov-why"><h2>Why Kestrel</h2><div class="why-grid">${whyHtml}</div></section>
+    <section class="dash-section" id="ov-setup">${setupChecklistHtml(pub, deployment)}</section>
+  </div>`;
+  app.innerHTML = roomShell("start", rail, main);
+  const root = document.getElementById("start");
+  wireDashActions(root, renderStart);
+
+  // "On this page" scroll-spy over the three sections (same idea as Docs/API).
+  const railEl = app.querySelector(".rail-inner");
+  const sections = ["ov-how", "ov-why", "ov-setup"]
+    .map((id) => document.getElementById(id))
+    .filter(Boolean);
+  railEl._obs = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          for (const a of railEl.querySelectorAll("a[data-target]")) {
+            a.classList.toggle("on", a.dataset.target === e.target.id);
+          }
+        }
+      }
+    },
+    { rootMargin: "-66px 0px -72% 0px", threshold: 0 },
+  );
+  for (const s of sections) {
+    railEl._obs.observe(s);
+  }
+  railEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-target]");
+    if (!a) {
+      return;
+    }
+    ev.preventDefault();
+    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
+  });
 }
 
 function confirmUnsubscribe(sub, onDone) {
@@ -1632,7 +2405,16 @@ async function boot() {
   }
   if (res?.ok) {
     session = await res.json();
+    document.body.classList.remove("signed-out");
     renderIdentity();
+    // Load the publication identity for the sidebar brand. Non-fatal: on failure the
+    // brand keeps its "Kestrel" placeholder and routing still proceeds.
+    try {
+      appConfig = await api("/api/settings");
+    } catch {
+      /* keep the placeholder brand */
+    }
+    renderSidebarBrand();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

@@ -504,6 +504,6 @@ export async function seedDatabase(
     posts: { sent: counts.sent, scheduled: counts.scheduled, draft: counts.draft },
     deliveries: counts.deliveries,
     coverImageBytesWritten,
-    urls: { archive: archiveUrls, admin: `${config.appOrigin}/admin/` },
+    urls: { archive: archiveUrls, admin: `${config.appOrigin}/dashboard/` },
   };
 }

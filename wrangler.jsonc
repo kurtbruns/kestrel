@@ -24,7 +24,7 @@
 
   "triggers": { "crons": ["* * * * *"] },
 
-  // Editor SPA served from ./public (the admin app lives under /admin). Unmatched
+  // Editor SPA served from ./public (the admin app lives under /dashboard). Unmatched
   // requests fall through to the Worker so the API/reader routes still run.
   "assets": { "directory": "./public", "not_found_handling": "none" },
 

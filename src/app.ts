@@ -78,15 +78,8 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/docs",
       access: "admin",
-      summary: "Table of contents for the operator setup guide (JSON).",
+      summary: "The operator setup guide as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
-    },
-    {
-      method: "GET",
-      path: "/api/docs/:slug",
-      access: "admin",
-      summary: "One setup-guide page, rendered as a themed HTML page.",
-      handler: docsRoutes.get,
     },
 
     // --- API reference (authed; generated from THIS manifest) ---
@@ -112,8 +105,22 @@ export function createRouter(archiveBasePath: string): Router {
       method: "PUT",
       path: "/api/settings",
       access: "admin",
-      summary: "Update runtime preferences (e.g. default test recipients).",
+      summary: "Update runtime preferences (test recipients; the publication identity).",
       handler: settingsRoutes.update,
+    },
+    {
+      method: "POST",
+      path: "/api/settings/logo",
+      access: "admin",
+      summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
+      handler: settingsRoutes.uploadLogo,
+    },
+    {
+      method: "DELETE",
+      path: "/api/settings/logo",
+      access: "admin",
+      summary: "Remove the publication logo.",
+      handler: settingsRoutes.deleteLogo,
     },
 
     // --- posts + revisions (authed) ---
@@ -247,6 +254,14 @@ export function createRouter(archiveBasePath: string): Router {
       summary: "Load the local demo dataset (fake transport only).",
       handler: devRoutes.seed,
     },
+    {
+      // Wipe the local database back to a fresh install (fake transport only).
+      method: "POST",
+      path: "/api/dev/reset",
+      access: "admin",
+      summary: "Reset the local database to a fresh install (fake transport only).",
+      handler: devRoutes.reset,
+    },
 
     // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
     {
@@ -358,8 +373,9 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- public reader routes (token-scoped; no login) ---
-    // The front door: a self-contained archive index, never a bounce to /admin
-    // (SPEC §10). Kept public here — the one explicit non-admin surface.
+    // The front door: a self-contained archive index, never a bounce to the
+    // Access-gated admin SPA at /dashboard (SPEC §10). Kept public here — the one
+    // explicit non-admin surface.
     {
       method: "GET",
       path: "/",
