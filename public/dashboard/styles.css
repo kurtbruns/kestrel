@@ -558,6 +558,9 @@ body.tool-mode .content {
     z-index: 27;
     width: 40px;
     height: 40px;
+    /* Reset the base button's padding (8px 14px): with box-sizing:border-box it
+       would squeeze the 40px box down to a ~10px content area and shrink the icon. */
+    padding: 0;
     border-radius: 8px;
     background: var(--card);
     border: 1px solid var(--line);
@@ -566,8 +569,9 @@ body.tool-mode .content {
     cursor: pointer;
   }
   .nav-toggle svg {
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
+    flex: none;
     fill: currentColor;
   }
   /* No hamburger while the sidebar is already hidden (editor / reference room). */
