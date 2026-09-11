@@ -1460,7 +1460,7 @@ async function renderSubscribers() {
       const data = await api(`/subscribers${qs ? `?${qs}` : ""}`);
       const c = data.counts;
       document.getElementById("subCounts").innerHTML =
-        `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span><span class="info" role="img" aria-label="What these states mean" data-tip="Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.">${icon("info")}</span></div>`;
+        `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span><span class="info tip-below" role="img" aria-label="What these states mean" data-tip="Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.">${icon("info")}</span></div>`;
       renderSubTable(listEl, data.subscribers, load);
     } catch (e) {
       renderError(listEl, e.message, load);

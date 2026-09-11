@@ -1280,6 +1280,17 @@ td.act {
   visibility: visible;
   transform: translateY(0);
 }
+/* Drop the tip below the icon instead of above it. The default opens upward,
+   which clips against the top of the viewport when the icon sits at the top of a
+   page (e.g. the Subscribers counts card); this variant opens downward there. */
+.info.tip-below::after {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform: translateY(-2px);
+}
+.info.tip-below:hover::after {
+  transform: translateY(0);
+}
 /* "Auto-generate from subject" toggle, grouped just under the slug field. */
 .slug-auto-toggle {
   display: inline-flex;
