@@ -113,7 +113,7 @@ navCollapse?.addEventListener("click", () => {
   applyNavMode();
 });
 // Track the responsive default as the window resizes (rAF-coalesced). A stored
-// preference still wins above 640; below it, the phone overlay takes over. The
+// preference still wins at 540 and up; below it, the phone overlay takes over. The
 // nav-resizing class suppresses the sidebar's own transitions for the duration, so a
 // breakpoint cross (rail → phone drawer) snaps instead of animating a stray slide.
 let navResizeRaf = 0;
