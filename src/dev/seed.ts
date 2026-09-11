@@ -39,13 +39,14 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
-import { updateSettings } from "../db/settings";
+import { BRANDING_LOGO_KEY, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
+import { WINDBREAK_LOGO_SVG } from "./seed_logo";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
@@ -583,6 +584,14 @@ export async function seedDatabase(
       brandColor: "#227566",
     },
   });
+
+  // And a real logo, so the brand tile isn't just the initial. The bytes go to R2
+  // under the reserved branding key; the metadata (with a cache-busting version)
+  // goes to settings — the same two-step the upload route performs.
+  await env.MEDIA.put(BRANDING_LOGO_KEY, WINDBREAK_LOGO_SVG, {
+    httpMetadata: { contentType: "image/svg+xml" },
+  });
+  await setPublicationLogo(db, { version: now, contentType: "image/svg+xml" });
 
   // Audience first, so recipient counts and deliveries are grounded in real rows. The
   // suppressions go in before we read the current audience, so it's confirmed − suppressed.
