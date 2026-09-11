@@ -28,7 +28,7 @@ export async function applyDeliveryEvents(
   let suppressed = 0;
 
   for (const e of events) {
-    await markDeliveryEvent(db, {
+    const matched = await markDeliveryEvent(db, {
       providerId: e.providerId,
       email: e.email,
       event: e.type,
@@ -37,9 +37,14 @@ export async function applyDeliveryEvents(
     });
     applied += 1;
 
-    if (e.email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
+    // Prefer the event's own address; fall back to the matched delivery row's
+    // address when the event carried only a `provider_id`, so an id-keyed hard
+    // bounce or complaint still suppresses (I1) rather than silently slipping
+    // through and letting the address be mailed again next issue.
+    const email = e.email ?? matched.email ?? undefined;
+    if (email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
       const reason = e.type === "bounced" ? "bounce" : "complaint";
-      await addSuppression(db, e.email, reason, eventDetail(e) ?? undefined);
+      await addSuppression(db, email, reason, eventDetail(e) ?? undefined);
       suppressed += 1;
     }
   }
