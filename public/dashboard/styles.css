@@ -1377,9 +1377,9 @@ td.act {
   padding: 6px 10px;
   border-radius: 6px;
 }
-/* The open-book marks the open doc — a different cue from the plain bold the "On this
-   page" section uses. Space is reserved on every item (visibility, not display) so
-   showing it on the open doc never reflows the list. */
+/* Every doc carries a book glyph (open for the current doc, closed for the rest) — a
+   different cue from the plain bold the "On this page" section uses. It inherits the
+   item's color, so closed books read muted and the open book picks up the active fg. */
 .toc-h-mark {
   flex: none;
   display: block;
@@ -1387,10 +1387,6 @@ td.act {
   height: 15px;
   margin-top: 1px;
   fill: currentColor;
-  visibility: hidden;
-}
-.toc-h.on .toc-h-mark {
-  visibility: visible;
 }
 .toc-h:hover {
   color: var(--fg);

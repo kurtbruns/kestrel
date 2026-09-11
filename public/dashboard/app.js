@@ -92,11 +92,14 @@ const KESTREL_PATH =
 const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
-// Material Symbols "menu_book" — marks the currently-open doc in the reference room's
-// Docs list. Rendered on every item (space reserved) but only shown on the open one,
-// so the "which doc" cue reads differently from the plain-bold "On this page" section.
-const BOOK_ICON =
+// The reference room's Docs list marks each entry with a book: the open doc gets
+// Material "menu_book" (open, in the active fg color), the rest get "book_5" (closed,
+// muted). A different cue from the plain-bold "On this page" section, and every item
+// carries a same-width glyph so the titles line up.
+const BOOK_OPEN_ICON =
   '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M560-564v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-600q-38 0-73 9.5T560-564Zm0 220v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-380q-38 0-73 9t-67 27Zm0-110v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-490q-38 0-73 9.5T560-454ZM260-320q47 0 91.5 10.5T440-278v-394q-41-24-87-36t-93-12q-36 0-71.5 7T120-692v396q35-12 69.5-18t70.5-6Zm260 42q44-21 88.5-31.5T700-320q36 0 70.5 6t69.5 18v-396q-33-14-68.5-21t-71.5-7q-47 0-93 12t-87 36v394Zm-40 118q-48-38-104-59t-116-21q-42 0-82.5 11T100-198q-21 11-40.5-1T40-234v-482q0-11 5.5-21T62-752q46-24 96-36t102-12q58 0 113.5 15T480-740q51-30 106.5-45T700-800q52 0 102 12t96 36q11 5 16.5 15t5.5 21v482q0 23-19.5 35t-40.5 1q-37-20-77.5-31T700-240q-60 0-116 21t-104 59ZM280-494Z"/></svg>';
+const BOOK_CLOSED_ICON =
+  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M270-80q-45 0-77.5-30.5T160-186v-558q0-38 23.5-68t61.5-38l395-78v640l-379 76q-9 2-15 9.5t-6 16.5q0 11 9 18.5t21 7.5h450v-640h80v720H270Zm90-233 200-39v-478l-200 39v478Zm-80 16v-478l-15 3q-11 2-18 9.5t-7 18.5v457q5-2 10.5-3.5T261-293l19-4Zm-40-472v482-482Z"/></svg>';
 
 // The reference room shell shared by Overview / Docs / API: a top bar (a rail-width
 // "← Dashboard", the Kestrel mark, and the surface switch) over a two-column grid
@@ -1766,10 +1769,10 @@ async function renderDocs(slug) {
   navEl.innerHTML =
     `<div class="toc-label">Docs</div>` +
     `<nav class="doc-parts">${docs
-      .map(
-        (d) =>
-          `<a class="toc-h${d.slug === cur.slug ? " on" : ""}" href="#/docs/${esc(d.slug)}">${BOOK_ICON}<span>${esc(d.title)}</span></a>`,
-      )
+      .map((d) => {
+        const on = d.slug === cur.slug;
+        return `<a class="toc-h${on ? " on" : ""}" href="#/docs/${esc(d.slug)}">${on ? BOOK_OPEN_ICON : BOOK_CLOSED_ICON}<span>${esc(d.title)}</span></a>`;
+      })
       .join("")}</nav>` +
     onPage;
 
