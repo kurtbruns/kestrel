@@ -4,9 +4,10 @@ import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { json } from "../lib/errors";
 import { escapeHtml } from "../lib/html";
-import { htmlPage } from "../lib/page";
+import { htmlPage, readerPage } from "../lib/page";
 import type { RequestContext } from "../router";
 import { requestSubscription } from "../services/subscriptions";
+import { readerIdentity } from "./archive";
 
 function wantsHtml(c: RequestContext): boolean {
   const accept = c.req.headers.get("accept") ?? "";
@@ -56,37 +57,73 @@ async function readToken(c: RequestContext): Promise<string> {
   return "";
 }
 
-export async function subscribeForm(_c: RequestContext): Promise<Response> {
-  return htmlPage(
-    "Subscribe",
-    `<h1>Subscribe</h1>
-<form method="post" action="/subscribe">
-<input type="email" name="email" required placeholder="you@example.com">
-<button type="submit" class="btn">Subscribe</button>
-</form>`,
+/** The email field + submit + fine print, shared by the form and the retry-on-error
+ *  page. Posts same-origin to `/subscribe`; the double opt-in starts from there (I1). */
+function subscribeFormHtml(): string {
+  return (
+    `<form class="r-form" method="post" action="/subscribe">` +
+    `<input type="email" name="email" required placeholder="you@example.com" aria-label="Your email address">` +
+    `<button class="r-btn" type="submit">Subscribe</button></form>` +
+    `<p class="r-fine">Double opt-in — we’ll email a confirmation link to finish. Unsubscribe anytime.</p>`
   );
+}
+
+/** Wrap a subscribe-flow body in the branded reader shell (no masthead CTA — the
+ *  reader is already here). */
+function subscribePage(
+  c: RequestContext,
+  identity: Awaited<ReturnType<typeof readerIdentity>>,
+  mainHtml: string,
+  status = 200,
+): Response {
+  return readerPage({
+    identity,
+    homeUrl: `${c.config.appOrigin}/`,
+    title: `Subscribe · ${identity.name}`,
+    mainHtml,
+    status,
+  });
+}
+
+export async function subscribeForm(c: RequestContext): Promise<Response> {
+  const identity = await readerIdentity(c, c.config);
+  const lede = identity.tagline
+    ? escapeHtml(identity.tagline)
+    : "Get the next issue delivered to your inbox.";
+  const main =
+    `<p class="r-ey">Newsletter</p>` +
+    `<h1 class="r-h1">Subscribe to ${escapeHtml(identity.name)}</h1>` +
+    `<p class="r-lead">${lede}</p>` +
+    subscribeFormHtml();
+  return subscribePage(c, identity, main);
 }
 
 export async function subscribe(c: RequestContext): Promise<Response> {
   const raw = await readEmail(c);
   const email = raw ? normalizeEmail(raw) : "";
   if (!email || !isValidEmail(email)) {
-    return wantsHtml(c)
-      ? htmlPage(
-          "Subscribe",
-          `<h1>That doesn't look like an email</h1><p>Please check the address and try again.</p>`,
-          400,
-        )
-      : json({ error: "bad_request", message: "a valid email is required" }, 400);
+    if (!wantsHtml(c)) {
+      return json({ error: "bad_request", message: "a valid email is required" }, 400);
+    }
+    const identity = await readerIdentity(c, c.config);
+    const main =
+      `<p class="r-ey">Newsletter</p>` +
+      `<h1 class="r-h1">That doesn’t look like an email</h1>` +
+      `<p class="r-lead">Please check the address and try again.</p>` +
+      subscribeFormHtml();
+    return subscribePage(c, identity, main, 400);
   }
   const { subscriber, action } = await requestSubscription(c, email);
-  const msg =
+  if (!wantsHtml(c)) {
+    return json({ status: subscriber.status, action });
+  }
+  const identity = await readerIdentity(c, c.config);
+  const [heading, lead] =
     action === "already_confirmed"
-      ? "You're already subscribed."
-      : "Almost there — check your inbox for a confirmation link.";
-  return wantsHtml(c)
-    ? htmlPage("Subscribe", `<h1 style="margin-top:0;">Thanks!</h1><p>${msg}</p>`)
-    : json({ status: subscriber.status, action });
+      ? ["You’re already subscribed", `You’re on the list for ${escapeHtml(identity.name)}.`]
+      : ["Almost there", "Check your inbox for a confirmation link to finish subscribing."];
+  const main = `<p class="r-ey">Newsletter</p><h1 class="r-h1">${heading}</h1><p class="r-lead">${lead}</p>`;
+  return subscribePage(c, identity, main);
 }
 
 export async function confirm(c: RequestContext): Promise<Response> {

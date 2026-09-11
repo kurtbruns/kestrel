@@ -26,7 +26,7 @@ describe("getConfig — self-contained defaults", () => {
     const config = getConfig(envWith({}));
     expect(config.archiveOrigin).toBe("https://app.example");
     expect(config.mediaPublicBase).toBe("https://app.example/media");
-    expect(config.archiveBasePath).toBe("/newsletter");
+    expect(config.archiveBasePath).toBe("/archive");
   });
 
   it("uses explicit overrides when set (the apex / media-domain opt-in)", () => {
@@ -42,10 +42,10 @@ describe("getConfig — self-contained defaults", () => {
     expect(config.archiveBasePath).toBe("/archive");
   });
 
-  it("normalizes the base path (leading slash, no trailing slash)", () => {
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "archive" })).archiveBasePath).toBe("/archive");
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "/archive/" })).archiveBasePath).toBe("/archive");
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "" })).archiveBasePath).toBe("/newsletter");
+  it("normalizes the base path (leading slash, no trailing slash) and defaults when empty", () => {
+    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "issues" })).archiveBasePath).toBe("/issues");
+    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "/issues/" })).archiveBasePath).toBe("/issues");
+    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "" })).archiveBasePath).toBe("/archive");
   });
 });
 

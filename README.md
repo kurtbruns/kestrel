@@ -67,7 +67,7 @@ deployed database. Re-run it any time to reset to a known state.
 The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
 the seed still runs (that one image just 404s until you drop the file in and re-seed).
 View the result at `/dashboard/` and at the archived issues, e.g.
-**http://localhost:8787/newsletter/the-hovering-hunter**.
+**http://localhost:8787/archive/the-hovering-hunter**.
 
 To go the other way — wipe the local database back to a fresh install (no posts,
 subscribers, or settings) and see the first-run dashboard + setup checklist — run
@@ -81,9 +81,9 @@ subscribers, or settings) and see the first-run dashboard + setup checklist — 
 
 The admin/authoring surface (the editor, `/posts`, `/sends`, `/subscribers`,
 `/suppressions`, `/api/settings`, `/api/docs`, schedule/send) is protected. The
-reader routes (`/` archive index, `/subscribe`, `/confirm`, `/unsubscribe`,
-`/newsletter/*`, `/media/*`) are public and gated only by unguessable
-per-subscriber tokens.
+reader routes (`/` landing page, `/archive` + `/archive/*` archive index and
+issue pages, `/subscribe`, `/confirm`, `/unsubscribe`, `/media/*`) are public and
+gated only by unguessable per-subscriber tokens.
 
 There's **one identity contract** — the Worker verifies a signed token and resolves a
 `Principal` (`human` with an email, or `service`). What issues that token differs by
