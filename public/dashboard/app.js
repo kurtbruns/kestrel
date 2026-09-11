@@ -109,6 +109,7 @@ function roomShell(active, railHtml, mainHtml) {
       <div class="room-nav">
         <span class="room-brand">${kestrelMark()}<span>Kestrel</span></span>
         <nav class="room-switch" aria-label="Reference">${tab("start", "Overview")}${tab("docs", "Docs")}${tab("reference", "API")}</nav>
+        <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>
     ${body}
@@ -1746,7 +1747,7 @@ async function renderDocs(slug) {
       : `<span></span>`);
   mainEl.appendChild(pager);
 
-  // The rail: a "Contents" list of every doc (router links, current one marked) and,
+  // The rail: a "Docs" list of every doc (router links, current one marked) and,
   // below it, an "On this page" of the current doc's sections that scroll-spy tracks.
   const onPage = sections.length
     ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${sections
@@ -1757,7 +1758,7 @@ async function renderDocs(slug) {
         .join("")}</div>`
     : "";
   navEl.innerHTML =
-    `<div class="toc-label">Contents</div>` +
+    `<div class="toc-label">Docs</div>` +
     `<nav class="doc-parts">${docs
       .map(
         (d) =>
@@ -1766,15 +1767,28 @@ async function renderDocs(slug) {
       .join("")}</nav>` +
     onPage;
 
-  // "On this page" links smooth-scroll within the current doc; the Contents links
-  // carry no data-target and fall through to the SPA router (a new doc page).
+  // "On this page" links smooth-scroll within the current doc (and highlight at once,
+  // so a short final section that can't scroll to the top still lights up); the Docs
+  // links carry no data-target and fall through to the SPA router (a new doc page).
+  const onPageEl = document.getElementById("tocOnPage");
+  const markActive = (id) => {
+    if (!onPageEl) {
+      return;
+    }
+    for (const a of onPageEl.querySelectorAll(".toc-sub")) {
+      a.classList.toggle("on", a.dataset.target === id);
+    }
+  };
   navEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-target]");
     if (!a) {
       return;
     }
     ev.preventDefault();
-    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
+    markActive(a.dataset.target);
+    document
+      .getElementById(a.dataset.target)
+      ?.scrollIntoView({ block: "start", behavior: "smooth" });
   });
 
   // Copy buttons on the guide's many shell / DNS code blocks.
@@ -1799,34 +1813,40 @@ async function renderDocs(slug) {
     pre.appendChild(btn);
   }
 
-  // Scroll-spy within the current doc: highlight the section in view in "On this
-  // page". Observer parked on the nav so it's GC'd on unmount (same as the API ref).
-  const onPageEl = document.getElementById("tocOnPage");
+  // Scroll-spy: the active section is the last heading scrolled above a line just
+  // under the sticky room bar; at the very bottom the last heading wins even if the
+  // page can't scroll it that high, so a short final section still highlights (the
+  // .doc bottom runway makes most reach the line on their own). One document.onscroll
+  // slot, self-cleared once this doc leaves the DOM — no leak across SPA navigations.
+  // (Same position-based shape as ~/Git/svg-tutorial, not an IntersectionObserver,
+  // which pauses when the tab isn't being composited.)
   if (onPageEl && sections.length) {
-    const markActive = (id) => {
-      for (const a of onPageEl.querySelectorAll(".toc-sub")) {
-        a.classList.toggle("on", a.dataset.target === id);
+    const ids = sections.map((s) => s.id);
+    const line = 80; // clears the 54px room bar
+    const spy = () => {
+      if (!document.getElementById(ids[0])) {
+        document.onscroll = null; // this doc is gone — unhook
+        return;
       }
-    };
-    navEl._obs = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (e.isIntersecting) {
-            markActive(e.target.id);
+      let active = ids[0];
+      if (Math.ceil(window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight) {
+        active = ids[ids.length - 1];
+      } else {
+        for (const id of ids) {
+          if (
+            (document.getElementById(id)?.getBoundingClientRect().top ??
+              Number.POSITIVE_INFINITY) <= line
+          ) {
+            active = id;
+          } else {
+            break;
           }
         }
-      },
-      { rootMargin: "-64px 0px -72% 0px", threshold: 0 },
-    );
-    for (const s of sections) {
-      const el = document.getElementById(s.id);
-      if (el) {
-        navEl._obs.observe(el);
       }
-    }
-    if (sections[0]) {
-      markActive(sections[0].id);
-    }
+      markActive(active);
+    };
+    document.onscroll = spy;
+    spy();
   }
 
   // Each doc is its own page — start at the top.
@@ -1868,7 +1888,7 @@ function apiSectionHtml(g) {
 async function renderReference() {
   app.innerHTML = roomShell(
     "reference",
-    `<nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
+    `<div class="toc-label">API</div><nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
     `<div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>`,
   );
   const navEl = document.getElementById("apiNav");
