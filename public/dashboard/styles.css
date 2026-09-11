@@ -86,7 +86,7 @@ a {
 }
 
 /* one deliberate focus ring, everywhere */
-:where(button, a, input, textarea, select, .ctab, .tb, .brand):focus-visible {
+:where(button, a, input, textarea, select, .ctab, .tb, .brand, .info):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 6px;
@@ -122,6 +122,10 @@ h2 {
    is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
   flex: 0 0 260px;
+  /* Hold the 260px basis: without this a flex item's min-width:auto floor lets a
+     long brand name/tagline push the column wider than its basis (the ellipsis on
+     .brand-name/.brand-tagline can't engage until the column itself stops growing). */
+  min-width: 0;
   background: var(--bg);
   border-right: 1px solid var(--line);
 }
@@ -1454,18 +1458,29 @@ td.act {
   fill: currentColor;
   display: block;
 }
-.info:hover {
+/* :focus (not just :focus-visible) so the tip also opens for touch — a tap
+   focuses the span but doesn't count as "visible" focus. */
+.info:hover,
+.info:focus {
   color: var(--fg);
   background: var(--hover);
 }
 .info::after {
   content: attr(data-tip);
+  /* Decorative + non-interactive: the aria-label carries the text for AT, and the
+     tip must never swallow a tap/click meant for what sits beneath it. */
+  pointer-events: none;
   position: absolute;
-  left: 0;
+  /* Anchored to the icon's left edge; --tip-x lets JS nudge it left so it never
+     runs off the right edge on a narrow screen (see positionInfoTip in app.js).
+     max-width is also capped to the viewport so the box itself always fits. */
+  left: var(--tip-x, 0px);
   bottom: calc(100% + 8px);
   z-index: 30;
   width: max-content;
-  max-width: 230px;
+  /* Cap the content box so the border box never exceeds the viewport minus an 8px
+     gutter each side: 34px = 2×8 gutter + 2×9 horizontal padding (content-box). */
+  max-width: min(230px, calc(100vw - 34px));
   background: var(--fg);
   color: var(--bg);
   font-size: 12px;
@@ -1481,9 +1496,22 @@ td.act {
     transform 0.12s,
     visibility 0.12s;
 }
-.info:hover::after {
+.info:hover::after,
+.info:focus::after {
   opacity: 1;
   visibility: visible;
+  transform: translateY(0);
+}
+/* Drop the tip below the icon instead of above it. The default opens upward,
+   which clips against the top of the viewport when the icon sits at the top of a
+   page (e.g. the Subscribers counts card); this variant opens downward there. */
+.info.tip-below::after {
+  top: calc(100% + 8px);
+  bottom: auto;
+  transform: translateY(-2px);
+}
+.info.tip-below:hover::after,
+.info.tip-below:focus::after {
   transform: translateY(0);
 }
 /* "Auto-generate from subject" toggle, grouped just under the slug field. */
