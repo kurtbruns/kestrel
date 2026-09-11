@@ -359,29 +359,48 @@ export interface DeliveryEventUpdate {
   at: number;
 }
 
+export interface DeliveryEventResult {
+  /** Rows updated (0 or 1). */
+  changes: number;
+  /**
+   * The affected row's recipient address, or null if nothing matched. Lets a
+   * caller that received an event carrying only a `provider_id` (no `email`)
+   * still recover the address for a suppression decision — the suppression
+   * guarantee (I1) must not depend on the provider echoing the recipient back.
+   */
+  email: string | null;
+}
+
 /**
  * Record an out-of-band provider event (delivered/bounced/complained) on the
  * matching delivery row. Matches by `provider_id` when present (unique per
  * delivery), else by the most recent delivery for the email. Never touches the
- * send-loop `status` — this is a separate, later signal. Returns rows updated.
+ * send-loop `status` — this is a separate, later signal. Returns the rows
+ * updated and the affected row's address.
  */
-export async function markDeliveryEvent(db: D1Database, u: DeliveryEventUpdate): Promise<number> {
+export async function markDeliveryEvent(
+  db: D1Database,
+  u: DeliveryEventUpdate,
+): Promise<DeliveryEventResult> {
   const detail = u.detail ?? null;
   if (u.providerId) {
-    const res = await db
+    const { results } = await db
       .prepare(
-        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE provider_id = ?",
+        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE provider_id = ? RETURNING email",
       )
       .bind(u.event, detail, u.at, u.providerId)
-      .run();
-    const n = res.meta.changes ?? 0;
-    if (n > 0 || !u.email) {
-      return n;
+      .all<{ email: string }>();
+    const matched = results[0];
+    if (matched) {
+      return { changes: results.length, email: matched.email };
+    }
+    if (!u.email) {
+      return { changes: 0, email: null };
     }
     // Fall through to email match if the providerId wasn't found on any row.
   }
   if (!u.email) {
-    return 0;
+    return { changes: 0, email: null };
   }
   const res = await db
     .prepare(
@@ -390,7 +409,8 @@ export async function markDeliveryEvent(db: D1Database, u: DeliveryEventUpdate):
     )
     .bind(u.event, detail, u.at, u.email)
     .run();
-  return res.meta.changes ?? 0;
+  const changes = res.meta.changes ?? 0;
+  return { changes, email: changes > 0 ? u.email : null };
 }
 
 /** Dispatched rows older than a threshold — ambiguous on non-idempotent providers. */
