@@ -81,6 +81,16 @@ async function main() {
     );
   }
 
+  // The publication logo. Committed (unlike the cover photo), so it normally just
+  // rides along; the worker writes it to R2 and records the branding metadata.
+  const logoPath = join(coverDir, "windbreak-logo.svg");
+  if (existsSync(logoPath)) {
+    const bytes = await readFile(logoPath);
+    form.set("logo", new Blob([bytes], { type: "image/svg+xml" }), "windbreak-logo.svg");
+  } else {
+    console.warn("[seed] no scripts/seed-assets/windbreak-logo.svg — seeding without the logo.");
+  }
+
   let res;
   try {
     res = await fetch(url, {
@@ -110,7 +120,7 @@ async function main() {
     `  posts: ${summary.posts.sent} sent, ${summary.posts.scheduled} scheduled, ${summary.posts.draft} draft`,
   );
   console.log(
-    `  deliveries: ${summary.deliveries}  •  cover image written: ${summary.coverImageBytesWritten}`,
+    `  deliveries: ${summary.deliveries}  •  cover image written: ${summary.coverImageBytesWritten}  •  logo written: ${summary.logoWritten}`,
   );
   console.log("");
   console.log("  view it:");

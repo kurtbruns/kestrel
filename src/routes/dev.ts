@@ -5,7 +5,8 @@
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
  *   POST /api/dev/seed  → reset the DB and load the local "Windbreak" dataset.
- *                         Optional multipart `kestrel` file becomes the cover image.
+ *                         Optional multipart files: `kestrel` → the cover image,
+ *                         `logo` → the publication logo.
  */
 
 import { mintDevToken } from "../auth/dev_token";
@@ -37,6 +38,7 @@ export async function seed(c: RequestContext): Promise<Response> {
   }
 
   let kestrelFile: { bytes: ArrayBuffer; contentType: string; filename: string } | undefined;
+  let logoFile: { bytes: ArrayBuffer; contentType: string } | undefined;
   const ct = c.req.headers.get("content-type") ?? "";
   if (ct.includes("multipart/form-data")) {
     const form = await c.req.formData();
@@ -49,9 +51,16 @@ export async function seed(c: RequestContext): Promise<Response> {
         filename,
       };
     }
+    const logo = form.get("logo");
+    if (logo instanceof File) {
+      logoFile = {
+        bytes: await logo.arrayBuffer(),
+        contentType: logo.type || "image/svg+xml",
+      };
+    }
   }
 
-  const summary = await seedDatabase(c.env, c.config, kestrelFile);
+  const summary = await seedDatabase(c.env, c.config, kestrelFile, logoFile);
   return json(summary);
 }
 

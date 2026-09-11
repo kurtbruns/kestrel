@@ -39,7 +39,7 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
-import { updateSettings } from "../db/settings";
+import { BRANDING_LOGO_KEY, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
@@ -554,19 +554,23 @@ export interface SeedSummary {
   posts: { sent: number; scheduled: number; draft: number };
   deliveries: number;
   coverImageBytesWritten: boolean;
+  logoWritten: boolean;
   urls: { archive: string[]; admin: string };
 }
 
 /**
- * Reset the database and load the Windbreak demo dataset. `kestrelFile`, when
- * provided, is written to R2 as the cover image; when absent the issue still
- * references it (so dropping the file in and re-seeding just works) but the bytes
- * will 404 until then.
+ * Reset the database and load the Windbreak demo dataset. `kestrelFile` and
+ * `logoFile`, when provided, are written to R2 (the issue cover, and the publication
+ * logo) — both are supplied by `scripts/seed.mjs` from `scripts/seed-assets/`, so
+ * the seed carries no bundled bytes. The cover is referenced by the issue either
+ * way (dropping the file in and re-seeding fills it), so it 404s until present; the
+ * logo just falls back to the initial-letter tile when absent.
  */
 export async function seedDatabase(
   env: AppEnv,
   config: Config,
   kestrelFile?: { bytes: ArrayBuffer; contentType: string; filename: string },
+  logoFile?: { bytes: ArrayBuffer; contentType: string },
 ): Promise<SeedSummary> {
   const db = env.DB;
   const now = Date.now();
@@ -583,6 +587,18 @@ export async function seedDatabase(
       brandColor: "#227566",
     },
   });
+
+  // And a real logo when one was supplied, so the brand tile isn't just the initial.
+  // The bytes go to R2 under the reserved branding key; the metadata (with a
+  // cache-busting version) goes to settings — the same two-step the upload route does.
+  let logoWritten = false;
+  if (logoFile) {
+    await env.MEDIA.put(BRANDING_LOGO_KEY, logoFile.bytes, {
+      httpMetadata: { contentType: logoFile.contentType },
+    });
+    await setPublicationLogo(db, { version: now, contentType: logoFile.contentType });
+    logoWritten = true;
+  }
 
   // Audience first, so recipient counts and deliveries are grounded in real rows. The
   // suppressions go in before we read the current audience, so it's confirmed − suppressed.
@@ -731,6 +747,7 @@ export async function seedDatabase(
     posts: { sent: counts.sent, scheduled: counts.scheduled, draft: counts.draft },
     deliveries: counts.deliveries,
     coverImageBytesWritten,
+    logoWritten,
     urls: { archive: archiveUrls, admin: `${config.appOrigin}/dashboard/` },
   };
 }

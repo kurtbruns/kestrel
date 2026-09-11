@@ -485,6 +485,55 @@ function renderError(container, msg, retryFn) {
   }
 }
 
+// Keep an info tooltip within the viewport. The tip is a CSS pseudo-element
+// anchored to the icon's left edge; pure CSS can't see the viewport, so before it
+// shows we measure the icon and, if the (width-capped) tip would run off the right
+// edge on a narrow screen, slide it left via --tip-x. Delegated so it survives view
+// re-renders; with JS off the tip falls back to left:0. Vertical placement stays in
+// CSS (the .tip-below variant) — which icons sit near the top is static, not dynamic.
+const TIP_GUTTER = 8;
+function positionInfoTip(el) {
+  // Measure the rendered tip (laid out even while hidden) so this stays in step
+  // with the CSS max-width/padding rather than duplicating them here.
+  const tip = getComputedStyle(el, "::after");
+  const tipW = parseFloat(tip.width) + parseFloat(tip.paddingLeft) + parseFloat(tip.paddingRight);
+  if (!Number.isFinite(tipW)) {
+    return;
+  }
+  const iconLeft = el.getBoundingClientRect().left;
+  const vw = document.documentElement.clientWidth;
+  // Slide left enough to clear the right gutter, but never so far that the left
+  // edge crosses the gutter (very narrow screens) and never rightward (shift ≤ 0).
+  const shift = Math.min(0, Math.max(vw - TIP_GUTTER - tipW - iconLeft, TIP_GUTTER - iconLeft));
+  el.style.setProperty("--tip-x", `${Math.round(shift)}px`);
+}
+// Position before the tip shows on either trigger: pointer hover, or focus — the
+// latter is how keyboard (Tab) and touch (tap focuses the span) reach it.
+for (const type of ["pointerover", "focusin"]) {
+  document.addEventListener(type, (e) => {
+    const el = e.target.closest?.(".info");
+    if (el) {
+      positionInfoTip(el);
+    }
+  });
+}
+// Escape dismisses a focus-shown tip without tabbing away (the pointer tip just
+// needs the mouse to leave).
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && document.activeElement?.classList.contains("info")) {
+    document.activeElement.blur();
+  }
+});
+
+// The ⓘ affordance whose explanation shows as a tooltip. Focusable and
+// role/aria-labelled so it's reachable by keyboard and touch (the tip shows on
+// :focus, not only :hover) and read by screen readers — the aria-label mirrors the
+// visible tip. `below` drops the tip under the icon (for icons near the page top).
+function infoTip(tip, { below = false } = {}) {
+  const t = esc(tip);
+  return `<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${t}" data-tip="${t}">${icon("info")}</span>`;
+}
+
 // popover menu for row actions (⋯). A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls = [];
@@ -763,7 +812,7 @@ async function renderEditor(id) {
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
-            <span class="info" role="img" aria-label="The web address of this issue's archive page." data-tip="The web address of this issue's archive page.">${icon("info")}</span>
+            ${infoTip("The web address of this issue's archive page.")}
           </div>
           <input id="f-slug" value="${esc(post.slug)}" ${dis}>
           ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
@@ -863,6 +912,30 @@ async function renderEditor(id) {
         markEdited();
       }
     });
+
+    // An empty subject can't be sent — the server blocks it in freeze() (SPEC §6).
+    // Disable Schedule / Send now so the feedback comes before the request
+    // round-trips. Whitespace-only counts as empty. The reason goes on the
+    // enclosing row, not the buttons: a disabled button swallows pointer events,
+    // so its own title never shows on hover.
+    const sendGuardBtns = [
+      document.getElementById("scheduleBtn"),
+      document.getElementById("sendBtn"),
+    ];
+    const sendGuardRow = sendGuardBtns[0]?.closest(".row");
+    const reflectSendGuard = () => {
+      const empty = subjectEl.value.trim() === "";
+      for (const btn of sendGuardBtns) {
+        if (btn) {
+          btn.disabled = empty;
+        }
+      }
+      if (sendGuardRow) {
+        sendGuardRow.title = empty ? "Add a subject before sending" : "";
+      }
+    };
+    subjectEl.addEventListener("input", reflectSendGuard);
+    reflectSendGuard();
   }
 
   // --- tabs ---
@@ -1582,7 +1655,10 @@ async function renderSubscribers() {
       const data = await api(`/subscribers${qs ? `?${qs}` : ""}`);
       const c = data.counts;
       document.getElementById("subCounts").innerHTML =
-        `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span><span class="info" role="img" aria-label="What these states mean" data-tip="Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.">${icon("info")}</span></div>`;
+        `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
+          "Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.",
+          { below: true },
+        )}</div>`;
       renderSubTable(listEl, data.subscribers, load);
     } catch (e) {
       renderError(listEl, e.message, load);
@@ -1702,9 +1778,10 @@ async function renderSettings() {
       <label for="setBrandHex">Brand color</label>
       <div class="row brand-row">
         <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
-        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb — blank uses the theme default">
+        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb">
         <button class="ghost-btn" id="setBrandClear">Clear</button>
       </div>
+      <p class="field-hint">Blank uses the theme default.</p>
       <div class="row" style="margin-top:14px"><button class="primary" id="idSave">Save identity</button></div>
     </div>
     <div class="card">
