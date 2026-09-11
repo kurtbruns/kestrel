@@ -1255,11 +1255,16 @@ td.act {
 .info::after {
   content: attr(data-tip);
   position: absolute;
-  left: 0;
+  /* Anchored to the icon's left edge; --tip-x lets JS nudge it left so it never
+     runs off the right edge on a narrow screen (see positionInfoTip in app.js).
+     max-width is also capped to the viewport so the box itself always fits. */
+  left: var(--tip-x, 0px);
   bottom: calc(100% + 8px);
   z-index: 30;
   width: max-content;
-  max-width: 230px;
+  /* Cap the content box so the border box never exceeds the viewport minus an 8px
+     gutter each side: 34px = 2×8 gutter + 2×9 horizontal padding (content-box). */
+  max-width: min(230px, calc(100vw - 34px));
   background: var(--fg);
   color: var(--bg);
   font-size: 12px;

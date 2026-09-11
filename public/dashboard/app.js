@@ -422,6 +422,35 @@ function renderError(container, msg, retryFn) {
   }
 }
 
+// Keep an info tooltip within the viewport. The tip is a CSS pseudo-element
+// anchored to the icon's left edge; pure CSS can't see the viewport, so before it
+// shows we measure the icon and, if the (width-capped) tip would run off the right
+// edge on a narrow screen, slide it left via --tip-x. Delegated so it survives view
+// re-renders; with JS off the tip falls back to left:0. Vertical placement stays in
+// CSS (the .tip-below variant) — which icons sit near the top is static, not dynamic.
+const TIP_GUTTER = 8;
+function positionInfoTip(el) {
+  // Measure the rendered tip (laid out even while hidden) so this stays in step
+  // with the CSS max-width/padding rather than duplicating them here.
+  const tip = getComputedStyle(el, "::after");
+  const tipW = parseFloat(tip.width) + parseFloat(tip.paddingLeft) + parseFloat(tip.paddingRight);
+  if (!Number.isFinite(tipW)) {
+    return;
+  }
+  const iconLeft = el.getBoundingClientRect().left;
+  const vw = document.documentElement.clientWidth;
+  // Slide left enough to clear the right gutter, but never so far that the left
+  // edge crosses the gutter (very narrow screens) and never rightward (shift ≤ 0).
+  const shift = Math.min(0, Math.max(vw - TIP_GUTTER - tipW - iconLeft, TIP_GUTTER - iconLeft));
+  el.style.setProperty("--tip-x", `${Math.round(shift)}px`);
+}
+document.addEventListener("pointerover", (e) => {
+  const el = e.target.closest?.(".info");
+  if (el) {
+    positionInfoTip(el);
+  }
+});
+
 // popover menu for row actions (⋯). A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls = [];
@@ -1580,9 +1609,10 @@ async function renderSettings() {
       <label for="setBrandHex">Brand color</label>
       <div class="row brand-row">
         <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
-        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb — blank uses the theme default">
+        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb">
         <button class="ghost-btn" id="setBrandClear">Clear</button>
       </div>
+      <p class="field-hint">Blank uses the theme default.</p>
       <div class="row" style="margin-top:14px"><button class="primary" id="idSave">Save identity</button></div>
     </div>
     <div class="card">
