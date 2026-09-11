@@ -54,12 +54,15 @@ A fresh database is empty. With the dev server running, load the local
 npm run seed
 ```
 
-This resets the local database and loads a realistic dataset — a back-catalog of
-sent issues, one scheduled issue with a live countdown, a couple of drafts, and an
-audience covering every subscriber state — so the editor and archive look populated.
-It's a thin wrapper around a dev-only `POST /api/dev/seed` route that is available
-**only under the fake transport**, so it can never touch a deployed database. Re-run
-it any time to reset to a known state.
+This resets the local database and loads a realistic dataset modeled as a
+publication that's been running a while: a back-catalog of sent issues whose
+audience grew and churned between sends (so each issue's recipient count differs and
+reflects the list as it was at that moment), one scheduled issue with a live
+countdown, a couple of drafts, and a subscriber list covering every state — plus
+suppressions produced by a hard bounce and a spam complaint. So the editor and
+archive look populated. It's a thin wrapper around a dev-only `POST /api/dev/seed`
+route that is available **only under the fake transport**, so it can never touch a
+deployed database. Re-run it any time to reset to a known state.
 
 The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
 the seed still runs (that one image just 404s until you drop the file in and re-seed).

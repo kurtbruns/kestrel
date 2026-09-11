@@ -9,28 +9,109 @@ import { adminAuth } from "./support/auth";
 const base = "https://kestrel.test";
 const config = () => getConfig(env);
 
+// The seeded publication's shape. The list is imported, grows, and churns across three
+// completed sends, so the mailable audience fluctuates 140 → 152 → 159 and settles at
+// 155 today (157 confirmed − 2 suppressed). These are the numbers the lifecycle produces;
+// they lock the "frozen at send time" behavior, so a regression is obvious.
+const CONFIRMED = 157;
+const PENDING = 5;
+const UNSUBSCRIBED = 15;
+const SUPPRESSED = 2;
+const AUDIENCE_NOW = CONFIRMED - SUPPRESSED; // 155
+const SENT_RECIPIENTS = [140, 152, 159]; // oldest → newest
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 451
+
+/** Delivery rows for one send (email + any post-send event) — proves the record is real
+ *  rows, not a summary count. */
+async function deliveriesFor(sendId: string): Promise<{ email: string; event: string | null }[]> {
+  const { results } = await env.DB.prepare("SELECT email, event FROM deliveries WHERE send_id = ?")
+    .bind(sendId)
+    .all<{ email: string; event: string | null }>();
+  return results;
+}
+
 describe("dev seed (Field Notes dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
 
-    expect(summary.subscribers).toEqual({ confirmed: 50, pending: 4, unsubscribed: 3 });
-    expect(summary.suppressions).toBe(2);
-    expect(summary.audience).toBe(49); // 50 confirmed − 1 suppressed-confirmed (I1)
+    expect(summary.subscribers).toEqual({
+      confirmed: CONFIRMED,
+      pending: PENDING,
+      unsubscribed: UNSUBSCRIBED,
+    });
+    expect(summary.suppressions).toBe(SUPPRESSED);
+    expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (I1)
     expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
-    expect(summary.deliveries).toBe(49 * 3);
+    expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
 
     const c = await counts(env.DB);
-    expect(c).toEqual({ confirmed: 50, pending: 4, unsubscribed: 3, suppressed: 2 });
+    expect(c).toEqual({
+      confirmed: CONFIRMED,
+      pending: PENDING,
+      unsubscribed: UNSUBSCRIBED,
+      suppressed: SUPPRESSED,
+    });
 
     const audience = await audienceEmails(env.DB);
-    expect(audience).toHaveLength(49);
+    expect(audience).toHaveLength(AUDIENCE_NOW);
 
     const sends = await listSends(env.DB);
     expect(sends.filter((s) => s.status === "sent")).toHaveLength(3);
     expect(sends.filter((s) => s.status === "scheduled")).toHaveLength(1);
-    // The scheduled issue fires in the future — a visible, cancelable window (I6).
+    // The scheduled issue fires in the future — a visible, cancelable window (I6) — and
+    // targets today's list, distinct from the frozen historical audiences below.
     const scheduled = sends.find((s) => s.status === "scheduled")!;
     expect(scheduled.fire_at).toBeGreaterThan(Date.now());
+    expect(scheduled.recipient_count).toBe(AUDIENCE_NOW);
+  });
+
+  it("freezes each send's audience as it was AT THAT MOMENT, not the final list", async () => {
+    await seedDatabase(env, config());
+
+    const sent = (await listSends(env.DB))
+      .filter((s) => s.status === "sent")
+      .sort((a, b) => a.fire_at - b.fire_at); // chronological
+
+    // The audience grew and churned between sends, so the recipient counts differ from
+    // each other and from today's mailable list.
+    expect(sent.map((s) => s.recipient_count)).toEqual(SENT_RECIPIENTS);
+    for (const s of sent) {
+      expect(s.recipient_count).not.toBe(AUDIENCE_NOW);
+    }
+
+    // Each recipient count is backed by exactly that many real delivery rows — not just
+    // a summary number on the send.
+    for (let i = 0; i < sent.length; i++) {
+      const rows = await deliveriesFor(sent[i]!.id);
+      expect(rows).toHaveLength(SENT_RECIPIENTS[i]!);
+    }
+
+    const nowMailable = new Set(await audienceEmails(env.DB));
+
+    // Someone who unsubscribed after issue #1 was still mailed by it: the oldest send's
+    // record retains addresses that are no longer in the current audience (I2 is about
+    // future sends, not rewriting the past).
+    const firstEmails = (await deliveriesFor(sent[0]!.id)).map((r) => r.email);
+    expect(firstEmails.some((e) => !nowMailable.has(e))).toBe(true);
+
+    // The bounce and complaint on issue #2 shadow those two confirmed addresses out of
+    // the current audience — yet they remain in #2's delivery record, carrying the event
+    // that produced their suppression.
+    const secondRows = await deliveriesFor(sent[1]!.id);
+    const shadowed = secondRows.filter((r) => r.event === "bounced" || r.event === "complained");
+    expect(shadowed).toHaveLength(SUPPRESSED);
+    for (const r of shadowed) {
+      expect(nowMailable.has(r.email)).toBe(false);
+    }
+
+    // Unsubscribes trickle in after each issue rather than firing at a few shared
+    // instants: the churn timestamps are dispersed, not batched into three moments.
+    const { results: unsubbed } = await env.DB.prepare(
+      "SELECT unsubscribed_at FROM subscribers WHERE status = 'unsubscribed'",
+    ).all<{ unsubscribed_at: number }>();
+    expect(unsubbed).toHaveLength(UNSUBSCRIBED);
+    const distinctUnsubTimes = new Set(unsubbed.map((r) => r.unsubscribed_at));
+    expect(distinctUnsubTimes.size).toBeGreaterThanOrEqual(UNSUBSCRIBED - 1);
   });
 
   it("reset wipes the database back to a fresh install (the reverse of seed)", async () => {
@@ -85,7 +166,13 @@ describe("dev seed (Field Notes dataset)", () => {
     await seedDatabase(env, config());
     const summary = await seedDatabase(env, config());
     expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
+    expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
     const c = await counts(env.DB);
-    expect(c).toEqual({ confirmed: 50, pending: 4, unsubscribed: 3, suppressed: 2 });
+    expect(c).toEqual({
+      confirmed: CONFIRMED,
+      pending: PENDING,
+      unsubscribed: UNSUBSCRIBED,
+      suppressed: SUPPRESSED,
+    });
   });
 });

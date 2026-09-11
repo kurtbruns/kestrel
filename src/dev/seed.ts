@@ -1,17 +1,28 @@
 /**
- * The local demo dataset: a nature/birdwatching newsletter, "Field Notes".
+ * The local demo dataset: a nature/birdwatching newsletter, "Field Notes", seeded
+ * as a publication that has been running for a few months — not a thin static snapshot.
  *
- * This is dev-only tooling reached through the fake-provider seed route. It exists
- * so a fresh local database looks populated — a back-catalog of sent issues, one
- * scheduled issue with a live countdown, a couple of drafts, and an audience with
- * every subscriber state — without anyone having to hand-write it.
+ * It models a chronological lifecycle so the app's states are actually exercised:
+ * an initial import of already-confirmed subscribers backdated before the first issue,
+ * three completed sends spread over time, and — in between — new confirmations (the
+ * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
+ * complaint that become suppressions. The upshot is that every completed send freezes
+ * the audience AS IT WAS at that moment: someone who unsubscribes after issue #2 is
+ * still recorded as mailed by issues #1–#2, and a later suppression shadows the current
+ * audience (confirmed − suppressed = mailable, I1) without rewriting any past send.
  *
- * The one rule it must not break: a sent issue's archived HTML has to be exactly
- * what a real send would produce (I3/I5). So every issue's frozen bytes come from
- * the SAME `render()` the app uses — never hand-written HTML. Everything else
- * (backdated timestamps, `status='sent'` sends, synthetic delivery outcomes) is
- * fixture data the normal write path never produces, which is why the inserts go
- * through the seed-only helpers in `db/seed.ts`.
+ * Two rules it must not break:
+ *  - A sent issue's archived HTML is exactly what a real send would produce (I3/I5),
+ *    so every issue's frozen bytes come from the SAME `render()` the app uses — never
+ *    hand-written HTML.
+ *  - It is deterministic: names, emails, timestamps and per-recipient outcomes are all
+ *    derived from position on the timeline (no `Math.random()`), so a re-seed reproduces
+ *    the same shape. Only opaque ids/tokens use `crypto`; they never change what the data
+ *    means.
+ *
+ * Everything here (backdated timestamps, `status='sent'` sends, frozen per-send audiences,
+ * synthetic delivery outcomes) is fixture data the normal write path never produces, which
+ * is why the inserts go through the seed-only helpers in `db/seed.ts`.
  */
 
 import type { ImageRow } from "../db/images";
@@ -26,10 +37,11 @@ import {
   resetAll,
   type SeedDelivery,
   type SeedSubscriber,
+  type SeedSuppression,
 } from "../db/seed";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
-import { newId } from "../lib/ids";
+import { newId, newToken } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
@@ -53,9 +65,10 @@ interface Issue {
   subject: string;
   markdown: string;
   kind: IssueKind;
-  /** Backdating: how long ago the issue went out (sent) or was last touched
-   *  (draft). `daysAgo` wins over `weeksAgo` when both are set. */
-  weeksAgo?: number;
+  /** Sent issues only: which completed send on the timeline this is (0 = oldest).
+   *  The send time and the frozen audience both come from that timeline slot. */
+  sentIndex?: number;
+  /** Draft issues only: how long ago the draft was last touched. */
   daysAgo?: number;
   hasCover?: boolean;
 }
@@ -64,11 +77,31 @@ interface Issue {
 
 const ISSUES: Issue[] = [
   {
+    id: "5eed0004-0000-4000-8000-000000000004",
+    slug: "field-notes",
+    subject: "Field Notes",
+    kind: "sent",
+    sentIndex: 0, // the launch issue — the oldest in the archive
+    markdown: `# Welcome to the hedgerow
+
+Thanks for being here. **Field Notes** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
+
+Every issue is one idea you can use on your next walk:
+
+- something to **look** for,
+- something to **listen** for,
+- and one small fact that makes it stick.
+
+That's the whole plan. No apps to buy, no life list to keep — just a standing invitation to slow down for twenty minutes and notice what's already there.
+
+See you in the next one.`,
+  },
+  {
     id: KESTREL_POST_ID,
     slug: "the-hovering-hunter",
     subject: "The hovering hunter",
     kind: "sent",
-    weeksAgo: 10, // the flagship (with the cover photo) — the oldest issue in the archive
+    sentIndex: 1, // the flagship, with the cover photo
     hasCover: true,
     markdown: `# The hovering hunter
 
@@ -95,7 +128,7 @@ Next time you pass a motorway verge, look up. That still point over the long gra
     slug: "reading-the-autumn-sky",
     subject: "Reading the autumn sky",
     kind: "sent",
-    weeksAgo: 3,
+    sentIndex: 2, // the most recent send
     markdown: `# Reading the autumn sky
 
 The first real cold front of autumn does something to the air. Overnight the hedgerows fill with birds that simply weren't there the day before.
@@ -109,26 +142,6 @@ The first real cold front of autumn does something to the air. Overnight the hed
 Migration isn't a single event so much as a river — a few nights of hard passage, then a lull, then another push when the wind turns kind.
 
 Grab a flask, find a gap in the treeline, and give the sky twenty quiet minutes. This is the season that rewards standing still.`,
-  },
-  {
-    id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "field-notes",
-    subject: "Field Notes",
-    kind: "sent",
-    weeksAgo: 8,
-    markdown: `# Welcome to the hedgerow
-
-Thanks for being here. **Field Notes** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
-
-Every issue is one idea you can use on your next walk:
-
-- something to **look** for,
-- something to **listen** for,
-- and one small fact that makes it stick.
-
-That's the whole plan. No apps to buy, no life list to keep — just a standing invitation to slow down for twenty minutes and notice what's already there.
-
-See you in the next one.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
@@ -152,6 +165,7 @@ Keep an eye on the berry trees near the shops this month. Some of the best winte
     slug: "the-secret-life-of-robins",
     subject: "The secret life of robins",
     kind: "draft",
+    daysAgo: 2,
     markdown: `# The secret life of robins
 
 *(Draft — notes toward the next issue.)*
@@ -168,6 +182,7 @@ TODO:
     slug: "the-ethics-of-backyard-feeding",
     subject: "The ethics of backyard feeding",
     kind: "draft",
+    daysAgo: 6,
     markdown: `# The ethics of backyard feeding
 
 *(Draft — still thinking this one through.)*
@@ -181,80 +196,294 @@ TODO:
   },
 ];
 
+// --- the timeline -----------------------------------------------------------
+
+/** Absolute epoch-ms anchors for the seeded lifecycle, all relative to `now` so a
+ *  re-seed keeps the same shape and the scheduled issue always fires in the future.
+ *
+ *  Read as a story from the top: the list is imported, issue #1 goes out, the list
+ *  grows and sheds a few readers, issue #2 goes out (and draws a bounce and a
+ *  complaint just after), it grows again, then issue #3 goes out. */
+interface Timeline {
+  now: number;
+  importAt: number;
+  growthAAt: number; // confirmations arriving between #1 and #2
+  bounceAt: number; // hard bounce reported just after #2
+  complaintAt: number; // spam complaint reported just after #2
+  growthBAt: number; // confirmations arriving between #2 and #3
+  scheduledFireAt: number;
+  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`.
+   *  Each also anchors the wave of unsubscribes it prompts (see `unsubAfter`). */
+  sentAt: [number, number, number];
+}
+
+function buildTimeline(now: number): Timeline {
+  const send2At = now - 7 * WEEK;
+  return {
+    now,
+    importAt: now - 14 * WEEK,
+    growthAAt: now - 10 * WEEK,
+    bounceAt: send2At + DAY,
+    complaintAt: send2At + 2 * DAY,
+    growthBAt: now - 5 * WEEK,
+    scheduledFireAt: now + 2 * DAY,
+    sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
+  };
+}
+
+/** When a reader in a churn wave unsubscribes: a spike just after the issue that
+ *  prompted them, tapering off over the following days. The quadratic step front-loads
+ *  the wave (member 0 leaves within hours, later members trickle out over ~1–2 weeks)
+ *  while keeping every offset inside the gap before the next send — so the wave stays
+ *  attributed to the issue it followed and the frozen per-send audiences don't shift. */
+function unsubscribedAfter(sentAt: number, indexInWave: number): number {
+  return sentAt + 6 * HOUR + indexInWave * indexInWave * 8 * HOUR;
+}
+
 // --- audience ---------------------------------------------------------------
 
-const NAMED = [
-  "ada.finch",
-  "rowan.wren",
-  "marina.swift",
-  "theo.merlin",
-  "june.hawthorn",
-  "cy.plover",
-  "nadia.linnet",
-  "oscar.tern",
-  "priya.martin",
-  "wes.crake",
-  "ines.dunnock",
-  "gil.pipit",
+const FIRST_NAMES = [
+  "ada",
+  "rowan",
+  "marina",
+  "theo",
+  "june",
+  "cy",
+  "nadia",
+  "oscar",
+  "priya",
+  "wes",
+  "ines",
+  "gil",
+  "mabel",
+  "otis",
+  "lena",
+  "hugo",
+  "sasha",
+  "dov",
+  "clara",
+  "felix",
+  "noor",
+  "bram",
+  "elsie",
+  "kai",
+  "rosa",
+  "sam",
+  "tessa",
+  "viktor",
+  "mira",
+  "yusuf",
 ];
+const LAST_NAMES = [
+  "finch",
+  "swift",
+  "merlin",
+  "hawthorn",
+  "plover",
+  "linnet",
+  "tern",
+  "martin",
+  "crake",
+  "dunnock",
+  "pipit",
+  "sparrow",
+  "kestrel",
+  "heron",
+  "robin",
+  "teal",
+  "snipe",
+  "curlew",
+  "brambling",
+  "siskin",
+  "redwing",
+  "fieldfare",
+  "waxwing",
+  "thrush",
+  "warbler",
+  "starling",
+  "swallow",
+  "jay",
+  "rook",
+  "wren",
+];
+const DOMAINS = ["example.com", "example.org", "example.net", "example.co"];
 
-/** Build the full subscriber set: ~50 confirmed, a few pending, a few unsubscribed. */
-function buildSubscribers(now: number): SeedSubscriber[] {
-  const rows: SeedSubscriber[] = [];
-  const push = (
-    email: string,
+/** A deterministic, collision-free address from a global index. Both name parts advance
+ *  every row (so no cohort clusters on one surname), while the pair stays unique: the
+ *  first index is `n % F` and the last is diagonal, `(n + ⌊n / F⌋) % L`. That is a
+ *  bijection over the roster as long as `gcd(F + 1, L) = 1` — which holds for these
+ *  equal-length lists (F = L = 30, and 31 is coprime to 30). */
+function emailFor(n: number): string {
+  const first = FIRST_NAMES[n % FIRST_NAMES.length];
+  const last = LAST_NAMES[(n + Math.floor(n / FIRST_NAMES.length)) % LAST_NAMES.length];
+  const domain = DOMAINS[n % DOMAINS.length];
+  return `${first}.${last}@${domain}`;
+}
+
+interface BuiltAudience {
+  subscribers: SeedSubscriber[];
+  suppressions: SeedSuppression[];
+  /** The mailable audience frozen at each completed send (sorted emails), oldest first. */
+  sentAudiences: [string[], string[], string[]];
+  /** The two confirmed subscribers a later send shadows via a suppression. */
+  bounceEmail: string;
+  complaintEmail: string;
+}
+
+/** A subscriber's status AT A PAST MOMENT `t`, read from the consent timestamps rather
+ *  than the final status: confirmed by then, and not yet unsubscribed. */
+function isConfirmedAt(s: SeedSubscriber, t: number): boolean {
+  return (
+    s.confirmed_at != null &&
+    s.confirmed_at <= t &&
+    (s.unsubscribed_at == null || s.unsubscribed_at > t)
+  );
+}
+
+/** The mailable audience as it stood at `t`: confirmed then, minus anything already
+ *  suppressed then (I1). This is the JS mirror of `audienceEmails` run against a past
+ *  moment, which is what lets each completed send freeze the list as it really was. */
+function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number): string[] {
+  const suppressedByThen = new Set(sups.filter((x) => x.created_at <= t).map((x) => x.email));
+  return subs
+    .filter((s) => isConfirmedAt(s, t) && !suppressedByThen.has(s.email))
+    .map((s) => s.email)
+    .sort();
+}
+
+/**
+ * Build the whole audience as a lifecycle: an imported core plus two later growth
+ * cohorts, three churn waves that each unsubscribe in the days after an issue lands,
+ * a few still-pending sign-ups, and two suppressions (a bounce and a complaint) drawn
+ * from the core so they visibly shadow the current audience. The counts are chosen so
+ * the mailable audience genuinely fluctuates from send to send (140 → 152 → 159, then
+ * 155 now).
+ */
+function buildAudience(t: Timeline): BuiltAudience {
+  let seq = 0;
+  const subscribers: SeedSubscriber[] = [];
+  const make = (
     status: SeedSubscriber["status"],
     createdAt: number,
     confirmedAt: number | null,
     unsubscribedAt: number | null,
-  ) => {
-    rows.push({
+  ): string => {
+    const email = emailFor(seq++);
+    subscribers.push({
       id: newId(),
       email,
       status,
       // Two independent long, unguessable tokens (confirm is one-shot; unsub is durable).
-      confirm_token: newId() + newId(),
-      unsub_token: newId() + newId(),
+      confirm_token: newToken(),
+      unsub_token: newToken(),
       created_at: createdAt,
       confirmed_at: confirmedAt,
       unsubscribed_at: unsubscribedAt,
     });
+    return email;
   };
 
-  // Confirmed subscribers predate the oldest issue so the history makes sense.
-  const confirmedCount = 50;
-  for (let i = 0; i < confirmedCount; i++) {
-    const created = now - 11 * WEEK + i * (DAY / 2);
-    const email =
-      i < NAMED.length
-        ? `${NAMED[i]}@example.com`
-        : `birder.${String(i).padStart(2, "0")}@example.org`;
-    push(email, "confirmed", created, created + DAY, null);
+  // Initial import: already-confirmed addresses migrated in before issue #1 (a real
+  // list starts as a bulk import, not one opt-in at a time). Three waves of them later
+  // churn out — each wave leaving in the days after the last issue it received, so its
+  // members are still mailed by that issue but not the next; the rest are the core that
+  // stays. `unsubAfter` is the issue that prompts the wave (null = never leaves).
+  const IMPORT = 140;
+  const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
+  const importPlan: { count: number; unsubAfter: number | null }[] = [
+    { count: 125, unsubAfter: null }, // core — never leave
+    { count: 6, unsubAfter: t.sentAt[0] }, // wave after #1 — leaves before #2
+    { count: 5, unsubAfter: t.sentAt[1] }, // wave after #2 — leaves before #3
+    { count: 4, unsubAfter: t.sentAt[2] }, // wave after #3 — still gone today
+  ];
+  const coreEmails: string[] = [];
+  let importIdx = 0;
+  for (const group of importPlan) {
+    for (let i = 0; i < group.count; i++) {
+      const createdAt = Math.round(t.importAt + importIdx * importStep);
+      const email = make(
+        group.unsubAfter == null ? "confirmed" : "unsubscribed",
+        createdAt,
+        createdAt, // imported already confirmed
+        group.unsubAfter == null ? null : unsubscribedAfter(group.unsubAfter, i),
+      );
+      if (group.unsubAfter == null) {
+        coreEmails.push(email);
+      }
+      importIdx++;
+    }
   }
 
-  // Pending: subscribed recently, not yet confirmed.
-  for (let i = 0; i < 4; i++) {
-    const created = now - (i + 1) * DAY;
-    push(`pending.${i}@example.com`, "pending", created, null, null);
+  // Growth cohort A: confirmed between #1 and #2, so mailed by #2 and #3 but not #1.
+  const GROWTH_A = 18;
+  for (let i = 0; i < GROWTH_A; i++) {
+    const confirmedAt = Math.round(t.growthAAt + (i * (2 * DAY)) / GROWTH_A);
+    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  }
+  // Growth cohort B: confirmed between #2 and #3, so mailed by #3 only.
+  const GROWTH_B = 14;
+  for (let i = 0; i < GROWTH_B; i++) {
+    const confirmedAt = Math.round(t.growthBAt + (i * (2 * DAY)) / GROWTH_B);
+    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  }
+  // Still pending: subscribed in the last few days, not yet confirmed — in no audience.
+  const PENDING = 5;
+  for (let i = 0; i < PENDING; i++) {
+    make("pending", t.now - (i + 1) * DAY, null, null);
   }
 
-  // Unsubscribed: were confirmed, then left.
-  for (let i = 0; i < 3; i++) {
-    const created = now - 9 * WEEK - i * DAY;
-    push(
-      `former.reader.${i}@example.com`,
-      "unsubscribed",
-      created,
-      created + DAY,
-      now - (i + 1) * WEEK,
-    );
-  }
+  // Two core subscribers draw a hard bounce and a spam complaint just after issue #2.
+  // Both stay confirmed (suppression is orthogonal to consent, §7) but are suppressed
+  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3 and today.
+  const bounceEmail = unwrap(coreEmails[3], "core subscriber");
+  const complaintEmail = unwrap(coreEmails[9], "core subscriber");
+  const suppressions: SeedSuppression[] = [
+    {
+      email: bounceEmail,
+      reason: "bounce",
+      detail: "550 5.1.1 user unknown",
+      created_at: t.bounceAt,
+    },
+    {
+      email: complaintEmail,
+      reason: "complaint",
+      detail: "abuse report via feedback loop",
+      created_at: t.complaintAt,
+    },
+  ];
 
-  return rows;
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
+    string[],
+    string[],
+    string[],
+  ];
+  return { subscribers, suppressions, sentAudiences, bounceEmail, complaintEmail };
 }
 
-/** Synthesize a realistic spread of per-recipient outcomes for a completed send. */
-function buildDeliveries(sendId: string, audience: string[], completedAt: number): SeedDelivery[] {
+// --- deliveries -------------------------------------------------------------
+
+/** A post-send provider event applied to one recipient's delivery row. */
+interface DeliveryEvent {
+  event: string;
+  detail: string;
+  at: number;
+}
+
+/**
+ * Synthesize the per-recipient delivery record for one completed send. The audience is
+ * the list frozen at send time, so the row count and `recipient_count` are that moment's
+ * numbers, not today's. Most recipients are accepted and later marked delivered; a couple
+ * fail at the transport level (a send-loop failure, which does NOT itself suppress — only
+ * the webhook events below do); and the addresses in `events` carry the bounce/complaint
+ * that produced this send's suppressions.
+ */
+function buildDeliveries(
+  sendId: string,
+  audience: string[],
+  sentAt: number,
+  events: Map<string, DeliveryEvent>,
+): SeedDelivery[] {
+  const failedSlots = new Set([7, 53]); // two transport failures per send, deterministic
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
       id: newId(),
@@ -264,13 +493,17 @@ function buildDeliveries(sendId: string, audience: string[], completedAt: number
       provider_id: `fake-seed-${sendId}-${i}`,
       error: null,
       attempts: 1,
-      updated_at: completedAt + 60 * 1000,
+      updated_at: sentAt + 60 * 1000,
       event: "delivered",
       event_detail: null,
-      event_at: completedAt + HOUR,
+      event_at: sentAt + 2 * HOUR,
     };
-    const slot = i % 37;
-    if (slot === 5 || slot === 30) {
+    const ev = events.get(email);
+    if (ev) {
+      // Accepted by the provider, then bounced/complained via a later webhook.
+      return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at };
+    }
+    if (failedSlots.has(i)) {
       return {
         ...base,
         status: "failed",
@@ -279,32 +512,6 @@ function buildDeliveries(sendId: string, audience: string[], completedAt: number
         attempts: 5,
         event: null,
         event_at: null,
-      };
-    }
-    if (slot === 11) {
-      return {
-        ...base,
-        status: "skipped",
-        provider_id: null,
-        attempts: 0,
-        event: null,
-        event_at: null,
-      };
-    }
-    if (slot === 17) {
-      return {
-        ...base,
-        event: "bounced",
-        event_detail: "Recipient address rejected (550 5.1.1)",
-        event_at: completedAt + 2 * HOUR,
-      };
-    }
-    if (slot === 23) {
-      return {
-        ...base,
-        event: "complained",
-        event_detail: "abuse",
-        event_at: completedAt + 3 * HOUR,
       };
     }
     return base;
@@ -362,33 +569,15 @@ export async function seedDatabase(
 ): Promise<SeedSummary> {
   const db = env.DB;
   const now = Date.now();
+  const timeline = buildTimeline(now);
 
   await resetAll(db);
 
-  // Audience first, so recipient counts and deliveries are grounded in real rows.
-  const subscribers = buildSubscribers(now);
-  await insertSubscribers(db, subscribers);
-
-  // One suppression shadows a confirmed subscriber (so the audience is confirmed
-  // MINUS suppressed, I1); the other is an outside address that hard-bounced.
-  const suppressedConfirmed = unwrap(
-    subscribers.find((s) => s.status === "confirmed"),
-    "confirmed subscriber",
-  ).email;
-  await insertSuppressions(db, [
-    {
-      email: suppressedConfirmed,
-      reason: "complaint",
-      detail: "marked as spam",
-      created_at: now - 2 * WEEK,
-    },
-    {
-      email: "bounced.address@example.net",
-      reason: "bounce",
-      detail: "550 no such user",
-      created_at: now - 4 * WEEK,
-    },
-  ]);
+  // Audience first, so recipient counts and deliveries are grounded in real rows. The
+  // suppressions go in before we read the current audience, so it's confirmed − suppressed.
+  const built = buildAudience(timeline);
+  await insertSubscribers(db, built.subscribers);
+  await insertSuppressions(db, built.suppressions);
 
   const audience = await audienceEmails(db); // the authoritative confirmed-minus-suppressed list
 
@@ -443,7 +632,6 @@ export async function seedDatabase(
 
     if (issue.kind === "scheduled") {
       const at = now;
-      const fireAt = now + 2 * DAY;
       const { post, revision } = renderInputFor(issue, at, markdown);
       const result = render({ post, revision, images }, config);
       await insertPost(db, post, revision);
@@ -451,7 +639,7 @@ export async function seedDatabase(
         id: newId(),
         post_id: issue.id,
         status: "scheduled",
-        fire_at: fireAt,
+        fire_at: timeline.scheduledFireAt,
         rendered_html: result.html,
         rendered_text: result.text,
         subject: result.subject,
@@ -464,9 +652,11 @@ export async function seedDatabase(
       continue;
     }
 
-    // sent
-    const ago = issue.daysAgo != null ? issue.daysAgo * DAY : (issue.weeksAgo ?? 1) * WEEK;
-    const completedAt = now - ago;
+    // sent — its send time and frozen audience come from its timeline slot, so the
+    // recipient count and delivery rows reflect the list AS IT WAS then (not today).
+    const sentIndex = issue.sentIndex ?? 0;
+    const completedAt = unwrap(timeline.sentAt[sentIndex], "send timeline slot");
+    const sentAudience = unwrap(built.sentAudiences[sentIndex], "frozen send audience");
     const fireAt = completedAt - 30 * 1000; // fired, then completed half a minute later
     const scheduledAt = fireAt - DAY; // scheduled a day ahead of the send
     const { post, revision } = renderInputFor(issue, completedAt, markdown);
@@ -484,22 +674,48 @@ export async function seedDatabase(
       rendered_html: result.html,
       rendered_text: result.text,
       subject: result.subject,
-      recipient_count: audience.length,
+      recipient_count: sentAudience.length,
       scheduled_at: scheduledAt,
       started_at: fireAt,
       completed_at: completedAt,
     });
-    const deliveries = buildDeliveries(sendId, audience, completedAt);
+    // The bounce and the complaint were reported just after issue #2, so their events
+    // (and the suppressions they produced) belong to that send alone.
+    const events: Map<string, DeliveryEvent> =
+      sentIndex === 1
+        ? new Map([
+            [
+              built.bounceEmail,
+              {
+                event: "bounced",
+                detail: "Recipient address rejected (550 5.1.1)",
+                at: timeline.bounceAt,
+              },
+            ],
+            [
+              built.complaintEmail,
+              { event: "complained", detail: "abuse", at: timeline.complaintAt },
+            ],
+          ])
+        : new Map();
+    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events);
     await insertDeliveries(db, deliveries);
     counts.sent++;
     counts.deliveries += deliveries.length;
     archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${issue.slug}`);
   }
 
+  const bucket = (status: SeedSubscriber["status"]) =>
+    built.subscribers.filter((s) => s.status === status).length;
+
   return {
     reset: true,
-    subscribers: { confirmed: 50, pending: 4, unsubscribed: 3 },
-    suppressions: 2,
+    subscribers: {
+      confirmed: bucket("confirmed"),
+      pending: bucket("pending"),
+      unsubscribed: bucket("unsubscribed"),
+    },
+    suppressions: built.suppressions.length,
     audience: audience.length,
     posts: { sent: counts.sent, scheduled: counts.scheduled, draft: counts.draft },
     deliveries: counts.deliveries,
