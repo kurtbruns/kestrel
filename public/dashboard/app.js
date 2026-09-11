@@ -1710,7 +1710,7 @@ async function renderDocs(slug) {
     .join("");
 
   // The fragments carry no ids — assign them to each part's H1 and its H2s, and
-  // collect the structure for the two-level contents rail.
+  // collect the structure for the doc list + "On this page" rail.
   const parts = [];
   mainEl.querySelectorAll("section.doc-part").forEach((sec) => {
     const partSlug = sec.id.replace(/^doc-/, "");
@@ -1732,20 +1732,40 @@ async function renderDocs(slug) {
     });
   });
 
+  // The rail is two separate blocks: a flat list of the 7 docs, and — below it — an
+  // "On this page" for the doc you're currently in (its sections), swapped as you
+  // scroll. Separating them keeps the doc list stable and de-nests the contents.
   navEl.innerHTML =
-    `<div class="toc-label">Contents</div>` +
+    `<div class="toc-label">Setup guide</div>` +
+    `<nav class="doc-parts">` +
     parts
       .map(
         (p) =>
-          `<div class="toc-part" data-part="${esc(p.slug)}"><a class="toc-h" href="#${esc(p.partId)}" data-target="${esc(p.partId)}">${esc(p.title)}</a>` +
-          `<div class="toc-subs">${p.sections
-            .map(
-              (s) =>
-                `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
-            )
-            .join("")}</div></div>`,
+          `<a class="toc-h" data-part="${esc(p.slug)}" href="#${esc(p.partId)}" data-target="${esc(p.partId)}">${esc(p.title)}</a>`,
       )
-      .join("");
+      .join("") +
+    `</nav>` +
+    `<div class="toc-onpage" id="tocOnPage" hidden></div>`;
+  const onPageEl = document.getElementById("tocOnPage");
+  const bySlug = new Map(parts.map((p) => [p.slug, p]));
+  let shownPart = null;
+  const renderOnPage = (partSlug) => {
+    const p = bySlug.get(partSlug);
+    if (!p?.sections.length) {
+      onPageEl.hidden = true;
+      onPageEl.innerHTML = "";
+      return;
+    }
+    onPageEl.hidden = false;
+    onPageEl.innerHTML =
+      `<div class="toc-label">On this page</div>` +
+      p.sections
+        .map(
+          (s) =>
+            `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
+        )
+        .join("");
+  };
 
   // In-app hash links would hijack the SPA router, so intercept and smooth-scroll.
   navEl.addEventListener("click", (ev) => {
@@ -1757,14 +1777,36 @@ async function renderDocs(slug) {
     document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
   });
 
-  // Scroll-spy: highlight the heading in view and expand its parent part. Query the
-  // live nav each tick so it never holds stale nodes; park the observer on the nav
-  // so it's GC'd on unmount (same pattern as the API reference).
+  // Copy buttons on the guide's many shell / DNS code blocks.
+  for (const pre of mainEl.querySelectorAll("pre")) {
+    pre.classList.add("has-copy");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "code-copy";
+    btn.textContent = "Copy";
+    btn.addEventListener("click", async () => {
+      const code = pre.querySelector("code");
+      try {
+        await navigator.clipboard.writeText((code || pre).innerText);
+        btn.textContent = "Copied";
+        setTimeout(() => {
+          btn.textContent = "Copy";
+        }, 1500);
+      } catch {
+        toast("Couldn't copy to clipboard");
+      }
+    });
+    pre.appendChild(btn);
+  }
+
+  // Scroll-spy: highlight the current doc, swap the "On this page" to that doc, and
+  // highlight the section in view. Observer parked on the nav so it's GC'd on
+  // unmount (same pattern as the API reference).
   const spy = [];
   for (const p of parts) {
     const partEl = document.getElementById(p.partId);
     if (partEl) {
-      spy.push({ el: partEl, part: p.slug, sub: p.partId });
+      spy.push({ el: partEl, part: p.slug, sub: null });
     }
     for (const s of p.sections) {
       const el = document.getElementById(s.id);
@@ -1774,10 +1816,14 @@ async function renderDocs(slug) {
     }
   }
   const markActive = (part, sub) => {
-    for (const el of navEl.querySelectorAll(".toc-part")) {
-      el.classList.toggle("open", el.dataset.part === part);
+    for (const a of navEl.querySelectorAll(".doc-parts .toc-h")) {
+      a.classList.toggle("on", a.dataset.part === part);
     }
-    for (const a of navEl.querySelectorAll("a[data-target]")) {
+    if (part !== shownPart) {
+      shownPart = part;
+      renderOnPage(part);
+    }
+    for (const a of onPageEl.querySelectorAll(".toc-sub")) {
       a.classList.toggle("on", a.dataset.target === sub);
     }
   };
@@ -1798,7 +1844,7 @@ async function renderDocs(slug) {
     navEl._obs.observe(t.el);
   }
   if (parts[0]) {
-    markActive(parts[0].slug, parts[0].partId);
+    markActive(parts[0].slug, null);
   }
 
   // A deep link (#/docs/<slug>) jumps to that part on load.

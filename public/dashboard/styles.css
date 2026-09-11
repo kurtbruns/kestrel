@@ -1342,9 +1342,10 @@ td.act {
   padding: 0 10px;
   margin-bottom: 8px;
 }
-.toc-part {
+.doc-parts {
   display: flex;
   flex-direction: column;
+  gap: 1px;
 }
 .toc-h {
   text-decoration: none;
@@ -1362,20 +1363,20 @@ td.act {
   font-weight: 600;
   background: var(--hover);
 }
-.toc-subs {
-  display: none;
+/* "On this page": the current doc's sections, a separate block below the doc list. */
+.toc-onpage {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
   flex-direction: column;
   gap: 1px;
-  margin: 1px 0 4px;
-}
-.toc-part.open .toc-subs {
-  display: flex;
 }
 .toc-sub {
   text-decoration: none;
   color: var(--muted);
   font-size: 12.5px;
-  padding: 5px 10px 5px 22px;
+  padding: 5px 10px;
   border-radius: 6px;
 }
 .toc-sub:hover {
@@ -1457,6 +1458,7 @@ td.act {
   padding: 1px 5px;
 }
 .doc pre {
+  position: relative;
   background: var(--bg);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1468,6 +1470,34 @@ td.act {
   background: none;
   border: 0;
   padding: 0;
+}
+/* Copy button on code blocks — revealed on hover (always shown on touch). */
+.code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font: 11px var(--mono);
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--card);
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.doc pre:hover .code-copy,
+.code-copy:focus-visible {
+  opacity: 1;
+}
+.code-copy:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+@media (hover: none) {
+  .code-copy {
+    opacity: 1;
+  }
 }
 .doc blockquote {
   margin: 16px 0;
