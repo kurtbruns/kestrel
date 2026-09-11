@@ -7,28 +7,13 @@
 <link rel="icon" href="/favicon.svg">
 <link rel="stylesheet" href="./styles.css?v=d6f3ca07">
 <script>
-// Sidebar mode guard — set data-nav on <html> before first paint so the sidebar
-// renders in its final width with no flash. Mirror of computeNavMode() in app.js
-// (keep the two in sync): phones force full labels (overlay); otherwise the persisted
-// collapse preference wins, falling back to a rail default across tablet/small desktop.
+// Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
+// sidebar renders in its final width with no flash. The collapse toggle's override is
+// session-only (in-memory in app.js), so a fresh load always starts from this default;
+// keep this width formula in sync with computeNavMode() in app.js.
 (() => {
-  let pref = null;
-  try {
-    pref = localStorage.getItem("kestrel.nav");
-  } catch {
-    // storage unavailable (private mode): fall through to the width default.
-  }
   const w = window.innerWidth;
-  let mode;
-  if (w < 540) {
-    mode = "full";
-  } else if (pref === "collapsed") {
-    mode = "rail";
-  } else if (pref === "expanded") {
-    mode = "full";
-  } else {
-    mode = w <= 1024 ? "rail" : "full";
-  }
+  const mode = w < 540 || w > 1024 ? "full" : "rail";
   document.documentElement.dataset.nav = mode;
 })();
 </script>
@@ -112,6 +97,6 @@
 </div>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=adde732e"></script>
+<script src="./app.js?v=eab9d761"></script>
 </body>
 </html>

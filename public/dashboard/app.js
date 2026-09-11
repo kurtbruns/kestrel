@@ -66,27 +66,24 @@ document.querySelector(".sidebar")?.addEventListener("click", (e) => {
 });
 
 // Collapsible sidebar. The effective width mode lives in data-nav on <html> ("full"
-// vs "rail"); CSS keys off it. The mode is computed from the viewport and a persisted
-// preference — the <head> guard in index.html sets it before first paint (mirror this
-// formula there when changing it), and this keeps it honest on resize and on toggle.
-// The footer chevron is the toggle; it's hidden below 540, where the sidebar is an
+// vs "rail"); CSS keys off it. By default the mode follows the viewport width (the
+// <head> guard in index.html sets it before first paint). The footer chevron toggles a
+// manual override, but that override is deliberately session-only — held in memory, not
+// stored — so a plain reload always drops back to the width-based default. That gives a
+// one-keystroke way back to "auto" and avoids a saved preference getting stuck fighting
+// the width across sizes. The chevron is hidden below 540, where the sidebar is an
 // off-canvas overlay driven by the hamburger instead.
 const navCollapse = document.getElementById("navCollapse");
-const NAV_PREF_KEY = "kestrel.nav";
+// null = follow the width; "collapsed" / "expanded" = manual override for this load.
+let navOverride = null;
 function computeNavMode() {
   if (window.innerWidth < 540) {
     return "full";
   }
-  let pref = null;
-  try {
-    pref = localStorage.getItem(NAV_PREF_KEY);
-  } catch {
-    // storage unavailable (private mode): fall through to the width default.
-  }
-  if (pref === "collapsed") {
+  if (navOverride === "collapsed") {
     return "rail";
   }
-  if (pref === "expanded") {
+  if (navOverride === "expanded") {
     return "full";
   }
   return window.innerWidth <= 1024 ? "rail" : "full";
@@ -104,16 +101,11 @@ function applyNavMode() {
   navCollapse.setAttribute("title", label);
 }
 navCollapse?.addEventListener("click", () => {
-  const collapsing = document.documentElement.dataset.nav !== "rail";
-  try {
-    localStorage.setItem(NAV_PREF_KEY, collapsing ? "collapsed" : "expanded");
-  } catch {
-    // Non-fatal: the choice just won't persist across loads.
-  }
+  navOverride = document.documentElement.dataset.nav !== "rail" ? "collapsed" : "expanded";
   applyNavMode();
 });
-// Track the responsive default as the window resizes (rAF-coalesced). A stored
-// preference still wins at 540 and up; below it, the phone overlay takes over. The
+// Track the responsive default as the window resizes (rAF-coalesced). A session
+// override still wins at 540 and up; below it, the phone overlay takes over. The
 // nav-resizing class suppresses the sidebar's own transitions for the duration, so a
 // breakpoint cross (rail → phone drawer) snaps instead of animating a stray slide.
 let navResizeRaf = 0;
