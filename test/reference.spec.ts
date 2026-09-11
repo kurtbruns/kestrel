@@ -11,7 +11,7 @@ import { adminAuth } from "./support/auth";
 // tier that actually gates it, and a newly registered route shows up for free.
 
 describe("API reference is generated from the route registration", () => {
-  const router = createRouter("/newsletter");
+  const router = createRouter("/archive");
   const defs = router.routes.map((r) => r.def);
 
   it("lists every registered route, each tagged with its own tier", () => {

@@ -65,7 +65,7 @@ While you are here, set each environment's public `vars` (these are **not** secr
 | --- | --- | --- |
 | `PROVIDER` | active transport: `fake`, `ses`, or `resend` | `ses` |
 | `APP_ORIGIN` | the origin the app is served from | `https://newsletter.example.com` |
-| `ARCHIVE_BASE_PATH` | path prefix for issue pages (drives the URL *and* the route) | `/newsletter` |
+| `ARCHIVE_BASE_PATH` | path prefix for the archive index + issue pages (drives the URL *and* the route) | `/archive` |
 | `SENDING_DOMAIN` | the sending identity domain | `send.example.com` |
 | `FROM_ADDRESS` | the `From:` header; its display name also names the publication | `Newsletter <newsletter@send.example.com>` |
 | `AWS_REGION` | SES region (ignored by Resend) | `us-east-1` |

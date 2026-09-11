@@ -12,8 +12,9 @@ import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedIssues } from "../db/sends";
 import { BRANDING_LOGO_KEY, getSettings } from "../db/settings";
 import type { Config } from "../env";
-import { archiveIndexPage, htmlPage } from "../lib/page";
+import { ARCHIVE_POST_HEAD, archiveIndexPage, htmlPage, landingPage } from "../lib/page";
 import {
+  ARCHIVE_HEAD_ANCHOR,
   ARCHIVE_MASTHEAD_ANCHOR,
   archiveMasthead,
   archiveUrl,
@@ -38,7 +39,7 @@ interface ReaderIdentity {
   logoUrl: string;
   brandColor: string;
 }
-async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
+export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
   const { publication: p } = await getSettings(c.env.DB);
   return {
     name: p.name || fromDisplayName(config.fromAddress),
@@ -57,19 +58,47 @@ function formatSentDate(ms: number): string {
   });
 }
 
-/** Public archive index: past issues, newest first, linking to their permanent
- *  (canonical) archive URLs — the same address emails carry. */
+/** The full archive URL (origin + base path) — the "Browse the full archive" target
+ *  and the home of the issue list. Built from the same config the route registers at. */
+function archiveHomeUrl(config: Config): string {
+  return `${config.archiveOrigin}${config.archiveBasePath}`;
+}
+
+/** The public front door (§5): a landing page featuring the latest issue over a few
+ *  recent ones, with the publication identity and a subscribe call to action. Never
+ *  bounces a visitor toward an admin path (§10). */
+export async function landing(c: RequestContext): Promise<Response> {
+  const [issues, identity] = await Promise.all([
+    listPublishedIssues(c.env.DB, 6),
+    readerIdentity(c, c.config),
+  ]);
+  const mapped = issues.map((i) => ({
+    title: i.subject,
+    url: archiveUrl(c.config, i.slug),
+    dateLabel: formatSentDate(i.sent_at),
+  }));
+  const [featured, ...recent] = mapped;
+  return landingPage({
+    identity,
+    subscribeUrl: `${c.config.appOrigin}/subscribe`,
+    homeUrl: `${c.config.appOrigin}/`,
+    archiveUrl: archiveHomeUrl(c.config),
+    featured,
+    recent,
+  });
+}
+
+/** The full public archive index: every sent issue, newest first, linking to their
+ *  permanent (canonical) archive URLs — the same address emails carry. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
   const [issues, identity] = await Promise.all([
     listPublishedIssues(c.env.DB),
     readerIdentity(c, c.config),
   ]);
   return archiveIndexPage({
-    name: identity.name,
-    tagline: identity.tagline,
-    logoUrl: identity.logoUrl,
-    brandColor: identity.brandColor,
+    identity,
     subscribeUrl: `${c.config.appOrigin}/subscribe`,
+    homeUrl: `${c.config.appOrigin}/`,
     issues: issues.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
@@ -89,9 +118,11 @@ export async function archivePage(c: RequestContext): Promise<Response> {
       404,
     );
   }
-  // Two edits to the frozen record on the way to the browser (I3): the generic
-  // unsubscribe link (no single recipient here) and the browser-only masthead
-  // swapped in for its inert anchor. Neither touches the reviewed content.
+  // Three edits to the frozen record on the way to the browser (I3), all filling
+  // reserved anchors — none touches the reviewed content: the generic unsubscribe
+  // link (no single recipient here), the browser-only masthead, and the hosted-page
+  // <head> chrome (display-serif links + the reader-ground background) — web-only,
+  // never in a sent email.
   const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
     name: identity.name,
@@ -103,7 +134,9 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     .split(UNSUB_SENTINEL)
     .join(`${c.config.appOrigin}/unsubscribe`)
     .split(ARCHIVE_MASTHEAD_ANCHOR)
-    .join(masthead);
+    .join(masthead)
+    .split(ARCHIVE_HEAD_ANCHOR)
+    .join(ARCHIVE_POST_HEAD);
   return new Response(html, {
     headers: {
       "content-type": "text/html; charset=utf-8",

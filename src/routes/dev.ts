@@ -4,7 +4,7 @@
  * a real inbox, or mint a credential once Access is the gate.
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
- *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
+ *   POST /api/dev/seed  → reset the DB and load the local "Windbreak" dataset.
  *                         Optional multipart `kestrel` file becomes the cover image.
  */
 

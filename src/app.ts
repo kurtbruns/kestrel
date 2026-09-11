@@ -373,15 +373,16 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- public reader routes (token-scoped; no login) ---
-    // The front door: a self-contained archive index, never a bounce to the
+    // The front door: a self-contained landing page, never a bounce to the
     // Access-gated admin SPA at /dashboard (SPEC §10). Kept public here — the one
     // explicit non-admin surface.
     {
       method: "GET",
       path: "/",
       access: "public",
-      summary: "The public archive index: the newsletter's front door.",
-      handler: archiveRoutes.archiveIndex,
+      summary:
+        "The newsletter's public landing page: identity, the latest issue, and a subscribe call to action.",
+      handler: archiveRoutes.landing,
     },
     {
       method: "GET",
@@ -433,9 +434,18 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-    // Registered at ARCHIVE_BASE_PATH (default /newsletter) so the route and the
-    // emitted archive URL always share one source. Self-contained by default;
-    // an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+    // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the issue
+    // pages, and the emitted archive URLs always share one source. Self-contained by
+    // default; an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+    // The index is registered before `:slug` so `/archive` resolves to the list, not
+    // a slug lookup.
+    {
+      method: "GET",
+      path: archiveBasePath,
+      access: "public",
+      summary: "The public archive index: every sent issue, newest first.",
+      handler: archiveRoutes.archiveIndex,
+    },
     {
       method: "GET",
       path: `${archiveBasePath}/:slug`,

@@ -44,7 +44,7 @@ describe("archive / view-in-browser", () => {
     expect(send.rendered_html).toContain(ARCHIVE_MASTHEAD_ANCHOR);
     expect(send.rendered_html).not.toContain('class="k-mast"');
 
-    const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
+    const res = await SELF.fetch(`${base}/archive/${post.slug}`);
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
 
@@ -62,7 +62,7 @@ describe("archive / view-in-browser", () => {
   });
 
   it("404s for an unknown slug", async () => {
-    const res = await SELF.fetch(`${base}/newsletter/does-not-exist`);
+    const res = await SELF.fetch(`${base}/archive/does-not-exist`);
     expect(res.status).toBe(404);
   });
 
@@ -72,34 +72,34 @@ describe("archive / view-in-browser", () => {
       { subject: "Draft Only", markdown: "wip" },
       "test",
     );
-    const res = await SELF.fetch(`${base}/newsletter/${post.slug}`);
+    const res = await SELF.fetch(`${base}/archive/${post.slug}`);
     expect(res.status).toBe(404);
   });
 });
 
-describe("archive index (the public front door, §10)", () => {
-  async function ensureSubscriber(): Promise<void> {
-    const now = Date.now();
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
-    )
-      .bind(now, now)
-      .run();
-  }
+async function ensureSubscriber(): Promise<void> {
+  const now = Date.now();
+  await env.DB.prepare(
+    "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
+  )
+    .bind(now, now)
+    .run();
+}
 
-  async function publish(subject: string, completedAt: number): Promise<posts.PostRow> {
-    await ensureSubscriber();
-    const { post } = await posts.createPost(env.DB, { subject, markdown: `# ${subject}` }, "test");
-    await freeze(env, getConfig(env), post, Date.now() - 1000);
-    await sweep(env);
-    // Pin completed_at so ordering is deterministic (sweep uses wall-clock ms).
-    await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?")
-      .bind(completedAt, post.id)
-      .run();
-    return post;
-  }
+async function publish(subject: string, completedAt: number): Promise<posts.PostRow> {
+  await ensureSubscriber();
+  const { post } = await posts.createPost(env.DB, { subject, markdown: `# ${subject}` }, "test");
+  await freeze(env, getConfig(env), post, Date.now() - 1000);
+  await sweep(env);
+  // Pin completed_at so ordering is deterministic (sweep uses wall-clock ms).
+  await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?")
+    .bind(completedAt, post.id)
+    .run();
+  return post;
+}
 
-  it("lists sent issues newest-first, linking to their canonical archive URLs", async () => {
+describe("landing page (the public front door, §5)", () => {
+  it("features the latest issue over the recent ones, linking to canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);
     const newer = await publish("The Newer One", 2_000);
 
@@ -108,24 +108,69 @@ describe("archive index (the public front door, §10)", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     const body = await res.text();
 
+    // The newest is the feature; the older sits in the recent list. Both link out.
+    expect(body).toContain("Latest issue");
+    expect(body).toContain("The Newer One");
+    expect(body).toContain("The Older One");
+    expect(body).toContain(`http://localhost:8787/archive/${newer.slug}`);
+    expect(body).toContain(`http://localhost:8787/archive/${older.slug}`);
+    // The feature (newest) precedes the recent list (older).
+    expect(body.indexOf("The Newer One")).toBeLessThan(body.indexOf("The Older One"));
+  });
+
+  it("offers a subscribe call to action and a link into the full archive", async () => {
+    await publish("An Issue", 1_000);
+    const body = await (await SELF.fetch(`${base}/`)).text();
+    expect(body).toContain("Subscribe here");
+    expect(body).toContain('href="http://localhost:8787/subscribe"');
+    expect(body).toContain("Browse the full archive");
+    expect(body).toContain('href="http://localhost:8787/archive"');
+  });
+
+  it("never links into the Access-gated admin surface", async () => {
+    await publish("An Issue", 1_000);
+    const body = await (await SELF.fetch(`${base}/`)).text();
+    // The admin SPA lives at /dashboard; the public front door must never link into it (SPEC §10).
+    expect(body).not.toContain("/dashboard");
+  });
+
+  it("shows an empty state when nothing has been sent", async () => {
+    await posts.createPost(env.DB, { subject: "Just A Draft", markdown: "wip" }, "test");
+    const res = await SELF.fetch(`${base}/`);
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).toContain("No issues yet");
+    expect(body).not.toContain("Just A Draft");
+  });
+});
+
+describe("archive index (the full list, §5)", () => {
+  it("lists every sent issue newest-first, linking to their canonical archive URLs", async () => {
+    const older = await publish("The Older One", 1_000);
+    const newer = await publish("The Newer One", 2_000);
+
+    const res = await SELF.fetch(`${base}/archive`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    const body = await res.text();
+
     expect(body).toContain("The Older One");
     expect(body).toContain("The Newer One");
-    expect(body).toContain(`http://localhost:8787/newsletter/${newer.slug}`);
-    expect(body).toContain(`http://localhost:8787/newsletter/${older.slug}`);
+    expect(body).toContain(`http://localhost:8787/archive/${newer.slug}`);
+    expect(body).toContain(`http://localhost:8787/archive/${older.slug}`);
     // Newest first.
     expect(body.indexOf("The Newer One")).toBeLessThan(body.indexOf("The Older One"));
   });
 
   it("never links into the Access-gated admin surface", async () => {
     await publish("An Issue", 1_000);
-    const body = await (await SELF.fetch(`${base}/`)).text();
-    // The admin SPA lives at /dashboard; the public archive must never link into it (SPEC §10).
+    const body = await (await SELF.fetch(`${base}/archive`)).text();
     expect(body).not.toContain("/dashboard");
   });
 
   it("shows an empty state and excludes drafts / scheduled posts", async () => {
     await posts.createPost(env.DB, { subject: "Just A Draft", markdown: "wip" }, "test");
-    const res = await SELF.fetch(`${base}/`);
+    const res = await SELF.fetch(`${base}/archive`);
     const body = await res.text();
     expect(res.status).toBe(200);
     expect(body).toContain("No issues yet.");

@@ -1,5 +1,5 @@
 /**
- * The local demo dataset: a nature/birdwatching newsletter, "Field Notes", seeded
+ * The local demo dataset: a nature/birdwatching newsletter, "Windbreak", seeded
  * as a publication that has been running for a few months — not a thin static snapshot.
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
@@ -39,6 +39,7 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
+import { updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
@@ -78,13 +79,13 @@ interface Issue {
 const ISSUES: Issue[] = [
   {
     id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "field-notes",
-    subject: "Field Notes",
+    slug: "welcome-to-windbreak",
+    subject: "Welcome to Windbreak",
     kind: "sent",
     sentIndex: 0, // the launch issue — the oldest in the archive
     markdown: `# Welcome to the hedgerow
 
-Thanks for being here. **Field Notes** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
+Thanks for being here. **Windbreak** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
 
 Every issue is one idea you can use on your next walk:
 
@@ -125,11 +126,11 @@ Next time you pass a motorway verge, look up. That still point over the long gra
   },
   {
     id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "reading-the-autumn-sky",
-    subject: "Reading the autumn sky",
+    slug: "autumn-skies",
+    subject: "Autumn skies",
     kind: "sent",
     sentIndex: 2, // the most recent send
-    markdown: `# Reading the autumn sky
+    markdown: `# Autumn skies
 
 The first real cold front of autumn does something to the air. Overnight the hedgerows fill with birds that simply weren't there the day before.
 
@@ -557,7 +558,7 @@ export interface SeedSummary {
 }
 
 /**
- * Reset the database and load the Field Notes demo dataset. `kestrelFile`, when
+ * Reset the database and load the Windbreak demo dataset. `kestrelFile`, when
  * provided, is written to R2 as the cover image; when absent the issue still
  * references it (so dropping the file in and re-seeding just works) but the bytes
  * will 404 until then.
@@ -572,6 +573,16 @@ export async function seedDatabase(
   const timeline = buildTimeline(now);
 
   await resetAll(db);
+
+  // Give the demo a real identity so the reader surface, subscribe form, and issue
+  // pages are branded out of the box as the mock publication, "Windbreak".
+  await updateSettings(db, {
+    publication: {
+      name: "Windbreak",
+      tagline: "Field notes on birds, weather, and paying attention.",
+      brandColor: "#227566",
+    },
+  });
 
   // Audience first, so recipient counts and deliveries are grounded in real rows. The
   // suppressions go in before we read the current audience, so it's confirmed − suppressed.
