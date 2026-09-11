@@ -86,7 +86,7 @@ a {
 }
 
 /* one deliberate focus ring, everywhere */
-:where(button, a, input, textarea, select, .ctab, .tb, .brand):focus-visible {
+:where(button, a, input, textarea, select, .ctab, .tb, .brand, .info):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
   border-radius: 6px;
@@ -1454,12 +1454,18 @@ td.act {
   fill: currentColor;
   display: block;
 }
-.info:hover {
+/* :focus (not just :focus-visible) so the tip also opens for touch — a tap
+   focuses the span but doesn't count as "visible" focus. */
+.info:hover,
+.info:focus {
   color: var(--fg);
   background: var(--hover);
 }
 .info::after {
   content: attr(data-tip);
+  /* Decorative + non-interactive: the aria-label carries the text for AT, and the
+     tip must never swallow a tap/click meant for what sits beneath it. */
+  pointer-events: none;
   position: absolute;
   /* Anchored to the icon's left edge; --tip-x lets JS nudge it left so it never
      runs off the right edge on a narrow screen (see positionInfoTip in app.js).
@@ -1486,7 +1492,8 @@ td.act {
     transform 0.12s,
     visibility 0.12s;
 }
-.info:hover::after {
+.info:hover::after,
+.info:focus::after {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -1499,7 +1506,8 @@ td.act {
   bottom: auto;
   transform: translateY(-2px);
 }
-.info.tip-below:hover::after {
+.info.tip-below:hover::after,
+.info.tip-below:focus::after {
   transform: translateY(0);
 }
 /* "Auto-generate from subject" toggle, grouped just under the slug field. */
