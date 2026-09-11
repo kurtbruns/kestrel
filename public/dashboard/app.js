@@ -102,7 +102,7 @@ function roomShell(active, railHtml, mainHtml) {
   const body =
     railHtml == null
       ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
-      : `<div class="room-body"><nav class="room-rail" aria-label="Contents">${railHtml}</nav><div class="room-main">${mainHtml}</div></div>`;
+      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}</div></nav><div class="room-main">${mainHtml}</div></div>`;
   return `<div class="room">
     <header class="room-bar">
       <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
@@ -1690,7 +1690,7 @@ async function renderDocs(slug) {
     `<p class="muted">Loading…</p>`,
     `<article class="doc" id="docsMain"><p class="muted">Loading…</p></article>`,
   );
-  const navEl = app.querySelector(".room-rail");
+  const navEl = app.querySelector(".rail-inner");
   const mainEl = document.getElementById("docsMain");
   let docs;
   try {
@@ -2161,10 +2161,10 @@ function setupChecklistHtml(pub, deployment) {
   </div>`;
 }
 
-// ---- getting started ----
-// The permanent home for onboarding (footer "Powered by Kestrel" → here): the same
-// setup checklist the empty dashboard shows, a short "how Kestrel works", and links
-// into the docs and API. All authed in-app views, never top-level navigations (§10).
+// ---- Overview (the reference room's home) ----
+// The permanent home for onboarding (the footer Kestrel link → here): a short "how
+// Kestrel works", the "why" in plain language (issue #88), and the setup checklist.
+// It reserves the room rail like Docs/API, with an "on this page" scroll-spy.
 function howItWorksHtml() {
   const steps = [
     ["Write", "Draft in Markdown and preview exactly what the email will look like."],
@@ -2172,10 +2172,37 @@ function howItWorksHtml() {
     ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
     ["Archive", "Every issue is preserved as a permanent page — the record of what went out."],
   ];
-  return `<section class="dash-section"><h2>How Kestrel works</h2><ol class="how-steps">${steps
+  return `<section class="dash-section" id="ov-how"><h2>How Kestrel works</h2><ol class="how-steps">${steps
     .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
     .join("")}</ol></section>`;
 }
+// The "why", in clear language (issue #88) — competitor-neutral, no funnel copy.
+const WHY_KESTREL = [
+  [
+    "One door, two clients",
+    "You drive Kestrel through a single API, and the web editor and Claude are equal clients of it. Nothing reaches past that door, so the two can't fall out of sync — and an agent is a first-class author, able to do anything you can, not a bolt-on integration.",
+  ],
+  [
+    "Safe to send unattended",
+    "Scheduling freezes the rendered email and locks the issue behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
+  ],
+  [
+    "A test you can trust",
+    "The preview, the test send, and the real send all run through one render path. A test to your own inbox is the same code producing the same result, so if the test looks right, the send is right.",
+  ],
+  [
+    "Yours to keep",
+    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every issue live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
+  ],
+  [
+    "Cheap by construction",
+    "Kestrel is one small serverless app over a database, object storage, and a wholesale email transport. There's no server to keep alive and no charge for the size of your list — you pay for what you send, and you can host it yourself.",
+  ],
+  [
+    "Does one thing completely",
+    "Email, done properly: consent, scheduling, the review window, delivery, suppression, and the archive. No drip funnels, no multi-channel sprawl — the focus is the point.",
+  ],
+];
 async function renderStart() {
   // The checklist needs the deployment origins; boot usually has them cached.
   if (!appConfig) {
@@ -2187,16 +2214,52 @@ async function renderStart() {
   }
   const pub = derivePublication(appConfig);
   const deployment = appConfig?.deployment || {};
-  // Overview is the reference room's home (no contents rail): a short "how Kestrel
-  // works" and the setup checklist. Docs + API are the other two surfaces of the
-  // room's switch, so there's no separate "Learn more" section.
+  const rail =
+    `<div class="toc-label">On this page</div>` +
+    `<a class="toc-h" href="#ov-how" data-target="ov-how">How Kestrel works</a>` +
+    `<a class="toc-h" href="#ov-why" data-target="ov-why">Why Kestrel</a>` +
+    `<a class="toc-h" href="#ov-setup" data-target="ov-setup">Set up your publication</a>`;
+  const whyHtml = WHY_KESTREL.map(
+    ([t, d]) => `<div class="why-item"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`,
+  ).join("");
   const main = `<div class="dash room-overview" id="start">
-    <div class="dash-head"><div><h1>Welcome to Kestrel</h1><p class="muted">Write an issue, review it behind a cancelable window, send it, and keep it in a permanent archive.</p></div></div>
+    <div class="dash-head"><div><h1>Welcome to Kestrel</h1><p class="muted">A newsletter you own from end to end — write in Markdown, review behind a cancelable window, send it, and keep a permanent archive.</p></div></div>
     ${howItWorksHtml()}
-    ${setupChecklistHtml(pub, deployment)}
+    <section class="dash-section" id="ov-why"><h2>Why Kestrel</h2><div class="why-grid">${whyHtml}</div></section>
+    <section class="dash-section" id="ov-setup">${setupChecklistHtml(pub, deployment)}</section>
   </div>`;
-  app.innerHTML = roomShell("start", null, main);
-  wireDashActions(document.getElementById("start"), renderStart);
+  app.innerHTML = roomShell("start", rail, main);
+  const root = document.getElementById("start");
+  wireDashActions(root, renderStart);
+
+  // "On this page" scroll-spy over the three sections (same idea as Docs/API).
+  const railEl = app.querySelector(".rail-inner");
+  const sections = ["ov-how", "ov-why", "ov-setup"]
+    .map((id) => document.getElementById(id))
+    .filter(Boolean);
+  railEl._obs = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          for (const a of railEl.querySelectorAll("a[data-target]")) {
+            a.classList.toggle("on", a.dataset.target === e.target.id);
+          }
+        }
+      }
+    },
+    { rootMargin: "-66px 0px -72% 0px", threshold: 0 },
+  );
+  for (const s of sections) {
+    railEl._obs.observe(s);
+  }
+  railEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-target]");
+    if (!a) {
+      return;
+    }
+    ev.preventDefault();
+    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
+  });
 }
 
 function confirmUnsubscribe(sub, onDone) {
