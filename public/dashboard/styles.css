@@ -122,6 +122,10 @@ h2 {
    is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
   flex: 0 0 260px;
+  /* Hold the 260px basis: without this a flex item's min-width:auto floor lets a
+     long brand name/tagline push the column wider than its basis (the ellipsis on
+     .brand-name/.brand-tagline can't engage until the column itself stops growing). */
+  min-width: 0;
   background: var(--bg);
   border-right: 1px solid var(--line);
 }
