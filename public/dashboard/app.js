@@ -287,6 +287,24 @@ async function api(path, opts = {}) {
   return data;
 }
 
+// Like api(), but returns the raw response text instead of parsing JSON — for the
+// endpoints that answer with HTML (the rendered preview). Keeps the same 401 →
+// re-auth guard, which a bare fetch(authHeaders()) would skip.
+async function apiText(path, opts = {}) {
+  const headers = Object.assign(authHeaders(), opts.headers || {});
+  const res = await fetch(path, { method: opts.method || "GET", headers, body: opts.body });
+  if (res.status === 401) {
+    showReauth();
+    throw new Error("Not authorized — please sign in again.");
+  }
+  if (!res.ok) {
+    const err = new Error(res.statusText);
+    err.status = res.status;
+    throw err;
+  }
+  return res.text();
+}
+
 // ---- helpers ----
 function toast(msg) {
   const t = document.createElement("div");
@@ -805,8 +823,7 @@ async function renderEditor(id) {
       if (!locked) {
         await saveDraft(true);
       }
-      const res = await fetch(`/posts/${id}/preview`, { headers: authHeaders() });
-      previewFrame.srcdoc = await res.text();
+      previewFrame.srcdoc = await apiText(`/posts/${id}/preview`);
       previewFrame.onload = () => {
         try {
           previewFrame.style.height = `${previewFrame.contentDocument.body.scrollHeight + 24}px`;
@@ -1131,8 +1148,8 @@ async function renderEditor(id) {
         if (!locked) {
           await saveDraft(true);
         }
-        const res = await fetch(`/posts/${id}/preview`, { headers: authHeaders() });
-        const url = URL.createObjectURL(new Blob([await res.text()], { type: "text/html" }));
+        const html = await apiText(`/posts/${id}/preview`);
+        const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
         window.open(url, "_blank");
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {
@@ -1719,11 +1736,15 @@ async function renderDocs(slug) {
     return;
   }
 
-  // Show one part per page — the deep-linked slug, or the first.
-  const at = Math.max(
-    0,
-    docs.findIndex((d) => d.slug === slug),
-  );
+  // Show one part per page — the deep-linked slug, or the first. An unknown slug (a
+  // stale or renamed deep link) shouldn't silently masquerade as the first doc: say
+  // so and heal the URL back to the canonical guide (replaceState, so no reload).
+  const found = docs.findIndex((d) => d.slug === slug);
+  if (slug && found === -1) {
+    toast(`No doc named “${slug}” — showing the guide.`);
+    history.replaceState(history.state, "", "#/docs");
+  }
+  const at = Math.max(0, found);
   const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
