@@ -26,6 +26,17 @@ async function makeDraft(markdown = "# Hi\n\nbody"): Promise<string> {
   return created.post.id;
 }
 
+async function makeDraftWithSubject(subject: string): Promise<string> {
+  const created = await readJson(
+    await SELF.fetch(`${base}/posts`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ subject, markdown: "# Hi\n\nbody" }),
+    }),
+  );
+  return created.post.id;
+}
+
 function future(msFromNow: number): string {
   return new Date(Date.now() + msFromNow).toISOString();
 }
@@ -92,6 +103,27 @@ describe("schedule / send / cancel + soft-lock", () => {
         body: JSON.stringify({ fire_at }),
       });
       expect(res.status).toBe(400);
+    }
+  });
+
+  it("blocks scheduling and send-now on an empty subject (400), leaving the post a draft", async () => {
+    // The subject is the one field the reader sees, and a send is irreversible (I4),
+    // so freeze() rejects it before anything is frozen — for both clients, both paths.
+    for (const subject of ["", "   "]) {
+      const id = await makeDraftWithSubject(subject);
+
+      const sched = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      });
+      expect(sched.status).toBe(400);
+
+      const now = await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH });
+      expect(now.status).toBe(400);
+
+      // neither attempt froze a send or locked the post
+      expect(await postStatus(id)).toBe("draft");
     }
   });
 
