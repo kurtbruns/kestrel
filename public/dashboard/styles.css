@@ -1394,14 +1394,6 @@ td.act {
   max-width: 720px;
   min-width: 0;
 }
-.doc-part {
-  scroll-margin-top: 64px;
-}
-.doc-part:not(:first-child) {
-  border-top: 1px solid var(--line);
-  margin-top: 40px;
-  padding-top: 24px;
-}
 .doc-part > :first-child {
   margin-top: 0;
 }
@@ -1498,6 +1490,44 @@ td.act {
   .code-copy {
     opacity: 1;
   }
+}
+/* Previous / Next pager at the foot of a doc — one doc per page, so this is how you
+   move between them. Two slots; a missing neighbour keeps its side empty so the lone
+   button stays put (prev left, next right). */
+.doc-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+.doc-pager-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 47%;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  text-decoration: none;
+}
+.doc-pager-btn.next {
+  text-align: right;
+  align-items: flex-end;
+}
+.doc-pager-btn:hover {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+.doc-pager-dir {
+  font-size: 12px;
+  color: var(--muted);
+}
+.doc-pager-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
 }
 .doc blockquote {
   margin: 16px 0;
@@ -1698,6 +1728,17 @@ td.act {
   }
   .api-nav {
     flex-flow: row wrap;
+  }
+  /* Pager buttons stack full-width and read left-to-right on a phone. */
+  .doc-pager {
+    flex-direction: column;
+  }
+  .doc-pager-btn {
+    max-width: none;
+  }
+  .doc-pager-btn.next {
+    text-align: left;
+    align-items: flex-start;
   }
 }
 

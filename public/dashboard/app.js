@@ -1678,12 +1678,15 @@ async function renderSettings() {
 }
 
 // ---- docs ----
-// The operator setup guide, authored in docs/setup/*.md and served read-only by
-// the authed GET /api/docs route as sanitized HTML fragments (#86). We render the
-// whole guide natively as one scrollable article beside a two-level scroll-spy
-// contents rail — the 7 parts, the active one expanded to its sections — reusing
-// the same interaction the API reference uses. No iframe: the content is trusted
-// (repo markdown, hygiene-passed) so injecting the fragments into the DOM is safe.
+// The operator setup guide, authored in docs/setup/*.md and served read-only by the
+// authed GET /api/docs route as sanitized HTML fragments (#86). The guide is
+// paginated — one part per page — with a "Contents" list of every part and an "On
+// this page" of the current part's sections in the rail, plus Previous/Next at the
+// foot; so scrolling reaches the end of the current doc and moving between docs is a
+// deliberate step. No iframe: the content is trusted (repo markdown, hygiene-passed),
+// so injecting the fragments into the DOM is safe. Fetched once and cached (the
+// bundle never changes at runtime), so paging between parts is instant.
+let docsCache = null;
 async function renderDocs(slug) {
   app.innerHTML = roomShell(
     "docs",
@@ -1692,82 +1695,79 @@ async function renderDocs(slug) {
   );
   const navEl = app.querySelector(".rail-inner");
   const mainEl = document.getElementById("docsMain");
-  let docs;
-  try {
-    ({ docs } = await api("/api/docs"));
-  } catch (e) {
-    renderError(mainEl, e.message, () => renderDocs(slug));
-    return;
+  if (!docsCache) {
+    try {
+      ({ docs: docsCache } = await api("/api/docs"));
+    } catch (e) {
+      renderError(mainEl, e.message, () => renderDocs(slug));
+      return;
+    }
   }
+  const docs = docsCache;
   if (!docs?.length) {
     mainEl.innerHTML = `<p class="muted">No documentation.</p>`;
     return;
   }
 
-  // One native section per doc; ids come next so the rail can link + scroll-spy.
-  mainEl.innerHTML = docs
-    .map((d) => `<section class="doc-part" id="doc-${esc(d.slug)}">${d.html}</section>`)
-    .join("");
+  // Show one part per page — the deep-linked slug, or the first.
+  const at = Math.max(
+    0,
+    docs.findIndex((d) => d.slug === slug),
+  );
+  const cur = docs[at];
+  const prev = docs[at - 1];
+  const next = docs[at + 1];
+  mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
 
-  // The fragments carry no ids — assign them to each part's H1 and its H2s, and
-  // collect the structure for the doc list + "On this page" rail.
-  const parts = [];
-  mainEl.querySelectorAll("section.doc-part").forEach((sec) => {
-    const partSlug = sec.id.replace(/^doc-/, "");
-    const h1 = sec.querySelector("h1");
-    if (h1) {
-      h1.id = `part-${partSlug}`;
-    }
-    const sections = [];
-    sec.querySelectorAll("h2").forEach((h2, i) => {
-      const id = `sec-${partSlug}-${i + 1}`;
-      h2.id = id;
-      sections.push({ id, title: h2.textContent || "" });
-    });
-    parts.push({
-      slug: partSlug,
-      partId: h1 ? h1.id : `doc-${partSlug}`,
-      title: h1?.textContent || partSlug,
-      sections,
-    });
+  // The fragment carries no ids — assign them to the current part's H1 and its H2s,
+  // and collect the sections for the "On this page" rail.
+  const sec = mainEl.querySelector("section.doc-part");
+  const h1 = sec.querySelector("h1");
+  if (h1) {
+    h1.id = `part-${cur.slug}`;
+  }
+  const sections = [];
+  sec.querySelectorAll("h2").forEach((h2, i) => {
+    const id = `sec-${cur.slug}-${i + 1}`;
+    h2.id = id;
+    sections.push({ id, title: h2.textContent || "" });
   });
 
-  // The rail is two separate blocks: a flat list of the 7 docs, and — below it — an
-  // "On this page" for the doc you're currently in (its sections), swapped as you
-  // scroll. Separating them keeps the doc list stable and de-nests the contents.
-  navEl.innerHTML =
-    `<div class="toc-label">Setup guide</div>` +
-    `<nav class="doc-parts">` +
-    parts
-      .map(
-        (p) =>
-          `<a class="toc-h" data-part="${esc(p.slug)}" href="#${esc(p.partId)}" data-target="${esc(p.partId)}">${esc(p.title)}</a>`,
-      )
-      .join("") +
-    `</nav>` +
-    `<div class="toc-onpage" id="tocOnPage" hidden></div>`;
-  const onPageEl = document.getElementById("tocOnPage");
-  const bySlug = new Map(parts.map((p) => [p.slug, p]));
-  let shownPart = null;
-  const renderOnPage = (partSlug) => {
-    const p = bySlug.get(partSlug);
-    if (!p?.sections.length) {
-      onPageEl.hidden = true;
-      onPageEl.innerHTML = "";
-      return;
-    }
-    onPageEl.hidden = false;
-    onPageEl.innerHTML =
-      `<div class="toc-label">On this page</div>` +
-      p.sections
+  // Previous / Next at the foot — the scroll ends with the current doc, so moving
+  // between docs is a deliberate step (router links, one doc per page).
+  const pager = document.createElement("nav");
+  pager.className = "doc-pager";
+  pager.innerHTML =
+    (prev
+      ? `<a class="doc-pager-btn prev" href="#/docs/${esc(prev.slug)}"><span class="doc-pager-dir">← Previous</span><span class="doc-pager-title">${esc(prev.title)}</span></a>`
+      : `<span></span>`) +
+    (next
+      ? `<a class="doc-pager-btn next" href="#/docs/${esc(next.slug)}"><span class="doc-pager-dir">Next →</span><span class="doc-pager-title">${esc(next.title)}</span></a>`
+      : `<span></span>`);
+  mainEl.appendChild(pager);
+
+  // The rail: a "Contents" list of every doc (router links, current one marked) and,
+  // below it, an "On this page" of the current doc's sections that scroll-spy tracks.
+  const onPage = sections.length
+    ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${sections
         .map(
           (s) =>
             `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
         )
-        .join("");
-  };
+        .join("")}</div>`
+    : "";
+  navEl.innerHTML =
+    `<div class="toc-label">Contents</div>` +
+    `<nav class="doc-parts">${docs
+      .map(
+        (d) =>
+          `<a class="toc-h${d.slug === cur.slug ? " on" : ""}" href="#/docs/${esc(d.slug)}">${esc(d.title)}</a>`,
+      )
+      .join("")}</nav>` +
+    onPage;
 
-  // In-app hash links would hijack the SPA router, so intercept and smooth-scroll.
+  // "On this page" links smooth-scroll within the current doc; the Contents links
+  // carry no data-target and fall through to the SPA router (a new doc page).
   navEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-target]");
     if (!a) {
@@ -1799,58 +1799,38 @@ async function renderDocs(slug) {
     pre.appendChild(btn);
   }
 
-  // Scroll-spy: highlight the current doc, swap the "On this page" to that doc, and
-  // highlight the section in view. Observer parked on the nav so it's GC'd on
-  // unmount (same pattern as the API reference).
-  const spy = [];
-  for (const p of parts) {
-    const partEl = document.getElementById(p.partId);
-    if (partEl) {
-      spy.push({ el: partEl, part: p.slug, sub: null });
-    }
-    for (const s of p.sections) {
-      const el = document.getElementById(s.id);
-      if (el) {
-        spy.push({ el, part: p.slug, sub: s.id });
+  // Scroll-spy within the current doc: highlight the section in view in "On this
+  // page". Observer parked on the nav so it's GC'd on unmount (same as the API ref).
+  const onPageEl = document.getElementById("tocOnPage");
+  if (onPageEl && sections.length) {
+    const markActive = (id) => {
+      for (const a of onPageEl.querySelectorAll(".toc-sub")) {
+        a.classList.toggle("on", a.dataset.target === id);
       }
-    }
-  }
-  const markActive = (part, sub) => {
-    for (const a of navEl.querySelectorAll(".doc-parts .toc-h")) {
-      a.classList.toggle("on", a.dataset.part === part);
-    }
-    if (part !== shownPart) {
-      shownPart = part;
-      renderOnPage(part);
-    }
-    for (const a of onPageEl.querySelectorAll(".toc-sub")) {
-      a.classList.toggle("on", a.dataset.target === sub);
-    }
-  };
-  navEl._obs = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) {
-          const t = spy.find((x) => x.el === e.target);
-          if (t) {
-            markActive(t.part, t.sub);
+    };
+    navEl._obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) {
+            markActive(e.target.id);
           }
         }
+      },
+      { rootMargin: "-64px 0px -72% 0px", threshold: 0 },
+    );
+    for (const s of sections) {
+      const el = document.getElementById(s.id);
+      if (el) {
+        navEl._obs.observe(el);
       }
-    },
-    { rootMargin: "-64px 0px -72% 0px", threshold: 0 },
-  );
-  for (const t of spy) {
-    navEl._obs.observe(t.el);
-  }
-  if (parts[0]) {
-    markActive(parts[0].slug, null);
+    }
+    if (sections[0]) {
+      markActive(sections[0].id);
+    }
   }
 
-  // A deep link (#/docs/<slug>) jumps to that part on load.
-  if (slug) {
-    document.getElementById(`doc-${slug}`)?.scrollIntoView({ block: "start" });
-  }
+  // Each doc is its own page — start at the top.
+  window.scrollTo(0, 0);
 }
 
 // ---- API reference ----
