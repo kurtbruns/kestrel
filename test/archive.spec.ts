@@ -4,7 +4,7 @@ import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
-import { ARCHIVE_MASTHEAD_ANCHOR, UNSUB_SENTINEL } from "../src/render/render";
+import { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -55,10 +55,27 @@ describe("archive / view-in-browser", () => {
     // The unsubscribe sentinel is substituted for a generic link.
     expect(body).not.toContain(UNSUB_SENTINEL);
     expect(body).toContain("/unsubscribe");
-    // The browser-only masthead replaces its inert anchor and links back to the index.
+    // The browser-only masthead replaces its inert anchor and links back to the archive
+    // index (same origin as the issue), not the app landing page.
     expect(body).not.toContain(ARCHIVE_MASTHEAD_ANCHOR);
     expect(body).toContain('class="k-mast"');
-    expect(body).toContain('href="http://localhost:8787/"');
+    expect(body).toContain('href="http://localhost:8787/archive"');
+  });
+
+  it("loads the display font + reader ground as browser-only chrome, never in the sent bytes (I3)", async () => {
+    const post = await sendPost("Fonts", "# Heading\n\nbody copy");
+    const send = (await latestSentSendForPost(env.DB, post.id))!;
+    // The frozen/sent bytes carry the serif heading rule but no web font — only the
+    // inert head anchor (so an inbox never fetches a third-party font).
+    expect(send.rendered_html).toContain(ARCHIVE_HEAD_ANCHOR);
+    expect(send.rendered_html).toContain(".k-body h1");
+    expect(send.rendered_html).not.toContain("fonts.googleapis.com");
+
+    const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
+    // The hosted page fills the anchor: it loads Fraunces and lands on the reader ground.
+    expect(body).not.toContain(ARCHIVE_HEAD_ANCHOR);
+    expect(body).toContain("fonts.googleapis.com/css2?family=Fraunces");
+    expect(body).toContain("background:#fbfbfa!important");
   });
 
   it("404s for an unknown slug", async () => {
@@ -175,5 +192,16 @@ describe("archive index (the full list, §5)", () => {
     expect(res.status).toBe(200);
     expect(body).toContain("No issues yet.");
     expect(body).not.toContain("Just A Draft");
+  });
+
+  it("serves the index at both `/archive` and `/archive/` (optional trailing slash)", async () => {
+    const post = await publish("An Issue", 1_000);
+    for (const path of ["/archive", "/archive/"]) {
+      const res = await SELF.fetch(`${base}${path}`);
+      expect(res.status).toBe(200);
+      const body = await res.text();
+      expect(body).toContain("An Issue");
+      expect(body).toContain(`http://localhost:8787/archive/${post.slug}`);
+    }
   });
 });

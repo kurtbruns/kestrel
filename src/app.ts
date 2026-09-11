@@ -438,10 +438,11 @@ export function createRouter(archiveBasePath: string): Router {
     // pages, and the emitted archive URLs always share one source. Self-contained by
     // default; an apex zone can additionally route <base>/* to this Worker (SPEC §10).
     // The index is registered before `:slug` so `/archive` resolves to the list, not
-    // a slug lookup.
+    // a slug lookup; the optional trailing slash (`{/}?`) means `/archive` and
+    // `/archive/` both land on the index while `/archive/:slug` still serves issues.
     {
       method: "GET",
-      path: archiveBasePath,
+      path: `${archiveBasePath}{/}?`,
       access: "public",
       summary: "The public archive index: every sent issue, newest first.",
       handler: archiveRoutes.archiveIndex,

@@ -72,6 +72,8 @@ While you are here, set each environment's public `vars` (these are **not** secr
 
 `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` are **optional** — leave them unset to stay self-contained (archives and images serve on `APP_ORIGIN`). They are the opt-in enhancements covered in "Wire the archive to a website."
 
+> **Pick `ARCHIVE_BASE_PATH` before your first send.** Archive URLs are permanent (I3): every issue you send carries its `<base>/<slug>` link forever. Changing the prefix later orphans the links already mailed under the old one. The default is `/archive`; if you are migrating an install that already sent `/newsletter/…` links, set `ARCHIVE_BASE_PATH=/newsletter` to keep them alive.
+
 After editing `wrangler.jsonc`, regenerate the binding types and typecheck:
 
 ```bash

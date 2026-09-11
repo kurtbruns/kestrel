@@ -251,7 +251,9 @@ function hslToHex(h: number, s: number, l: number): string {
  *  washes the color out, so this works in HSL instead. */
 function darkAccent(hex: string): string {
   const { h, s, l } = hexToHsl(hex);
-  return hslToHex(h, Math.min(0.9, Math.max(0.3, s * 0.8)), Math.min(0.62, l + 0.28));
+  // A grayscale brand (s≈0) stays neutral — flooring saturation would tint hue 0 red.
+  const s2 = s < 0.08 ? s : Math.min(0.9, Math.max(0.3, s * 0.8));
+  return hslToHex(h, s2, Math.min(0.62, l + 0.28));
 }
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
