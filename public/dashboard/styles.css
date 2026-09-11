@@ -136,118 +136,133 @@ body.tool-mode .sidebar {
   display: none;
 }
 
-/* Tool/help area: a slim bar in place of the publication sidebar (Getting started,
-   Docs, API). Hidden until body.tool-mode. */
-.tool-bar {
-  display: none;
-  align-items: center;
-  gap: 20px;
-  padding: 11px 24px;
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
+/* Reference room: the "learn / set up / integrate" area (Overview · Docs · API).
+   In tool mode the publication sidebar is hidden and #app goes full-width; the room
+   renders its own top bar + two-column grid, so the "← Dashboard" block is exactly
+   the sidebar's width and sits directly above the contents rail. */
+.room {
+  --rail: 260px;
+}
+.room-bar {
   position: sticky;
   top: 0;
   z-index: 6;
+  display: grid;
+  grid-template-columns: var(--rail) 1fr;
+  align-items: stretch;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
 }
-body.tool-mode .tool-bar {
+.room-back {
   display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 13px 22px;
+  border-right: 1px solid var(--line);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
 }
-.tool-brand {
+.room-back:hover {
+  color: var(--fg);
+}
+.room-nav {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 0 22px;
+  min-width: 0;
+}
+.room-brand {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  text-decoration: none;
+  gap: 8px;
   color: var(--fg);
   font-weight: 650;
   font-size: 15px;
+  flex: none;
 }
-.tool-brand svg {
-  width: 16px;
-  height: 16px;
+.room-brand svg {
+  width: 18px;
+  height: 18px;
   fill: currentColor;
   display: block;
 }
-.tool-tabs {
+.room-switch {
   display: flex;
   gap: 4px;
 }
-.tool-tabs a {
+.room-switch a {
   display: inline-flex;
   flex-direction: column;
   align-items: center;
   text-decoration: none;
   color: var(--muted);
   font-size: 14px;
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 6px;
 }
-.tool-tabs a:hover {
+.room-switch a:hover {
   color: var(--fg);
   background: var(--hover);
 }
-.tool-tabs a[aria-current="page"] {
+.room-switch a[aria-current="page"] {
   color: var(--fg);
   font-weight: 600;
   background: var(--hover);
 }
-
-/* Corner ✕ at the top-right of the tool bar — exits to the publication dashboard. */
-.tool-x {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
-  color: var(--muted);
-  text-decoration: none;
+.room-body {
+  display: grid;
+  grid-template-columns: var(--rail) 1fr;
+  align-items: start;
 }
-.tool-x:hover {
-  color: var(--fg);
-  background: var(--hover);
+.room-body.norail {
+  grid-template-columns: 1fr;
 }
-.tool-x svg {
-  width: 18px;
-  height: 18px;
-  fill: currentColor;
-  display: block;
+.room-rail {
+  position: sticky;
+  top: 46px;
+  align-self: start;
+  max-height: calc(100vh - 46px);
+  overflow-y: auto;
+  border-right: 1px solid var(--line);
+  padding: 20px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
 }
-/* A labeled back link floating at the bottom-left of the tool area (tool mode only);
-   the corner ✕ does the same, this one just spells it out. */
-.tool-back-float {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  align-items: center;
-  padding: 8px 14px;
-  border-radius: 999px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  color: var(--muted);
-  text-decoration: none;
+.room-main {
+  min-width: 0;
+  padding: 28px 32px 80px;
+}
+/* Overview (no rail): keep the intro to a comfortable reading measure. */
+.room-overview {
+  max-width: 760px;
+}
+.pub-note {
   font-size: 13px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 20;
+  color: var(--muted);
+  margin: 10px 2px 0;
+  line-height: 1.5;
 }
-body.tool-mode .tool-back-float {
-  display: inline-flex;
+.pub-note a {
+  color: var(--ring);
+  text-decoration: none;
 }
-.tool-back-float:hover {
-  color: var(--fg);
-  border-color: var(--muted);
+.pub-note a:hover {
+  text-decoration: underline;
 }
-@media (max-width: 560px) {
-  .tool-bar {
-    flex-wrap: wrap;
-    gap: 10px 16px;
-  }
+/* Mobile nav drawer trigger (hidden on desktop and in editor / room modes). */
+.nav-toggle {
+  display: none;
+}
+.nav-scrim {
+  display: none;
 }
 
 /* Reserve the width of the active (600-weight) label so toggling weight never
    reflows a horizontal nav (the same trick the old top bar used). */
-.tool-tabs a::after,
+.room-switch a::after,
 .nav-tools a::after {
   content: attr(data-text);
   height: 0;
@@ -472,28 +487,71 @@ body.tool-mode .tool-back-float {
 body.editor-mode .content {
   max-width: 900px;
 }
+/* The reference room provides its own full-width bar + grid, so #app spans the
+   whole area (no centering/padding) when a room is open. */
+body.tool-mode .content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
 
 /* Below the breakpoint the sidebar becomes a top strip and the nav wraps to a row. */
 @media (max-width: 860px) {
-  .layout {
-    flex-direction: column;
+  /* The publication sidebar becomes an off-canvas drawer opened by the hamburger
+     (no bottom tabs — the drawer carries every view). */
+  .nav-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 27;
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--fg);
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.12));
+    cursor: pointer;
+  }
+  .nav-toggle svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+  }
+  /* No hamburger while the sidebar is already hidden (editor / reference room). */
+  body.editor-mode .nav-toggle,
+  body.tool-mode .nav-toggle,
+  body.signed-out .nav-toggle {
+    display: none;
   }
   .sidebar {
-    flex-basis: auto;
-    height: auto;
-    position: static;
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 12px;
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: min(280px, 82vw);
+    z-index: 28;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
   }
-  .sidebar-foot {
-    margin-top: 12px;
+  body.nav-open .sidebar {
+    transform: none;
   }
-  .nav-primary {
-    flex-flow: row wrap;
+  body.nav-open .nav-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 27;
+    background: rgba(0, 0, 0, 0.45);
   }
   .content {
-    padding: 20px 16px 56px;
+    padding: 56px 16px 56px;
+  }
+  body.tool-mode .content {
+    padding: 0;
   }
 }
 
@@ -1243,22 +1301,9 @@ td.act {
 }
 
 /* Docs: the operator guide rendered natively (no iframe, #86) as one scrollable
-   article beside a two-level scroll-spy contents rail — the parts, with the active
-   part expanded to its sections. Same reading model as the API reference. */
-.docs-layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 28px;
-  align-items: start;
-}
-.docs-nav {
-  position: sticky;
-  /* Clears the sticky tool bar (Docs is always in tool mode). */
-  top: 56px;
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
+   article in the reference room's main column, beside a two-level scroll-spy
+   contents rail in the room rail — the parts, the active one expanded to its
+   sections. Same reading model as the API reference. */
 .toc-label {
   font-size: 11px;
   letter-spacing: 0.05em;
@@ -1429,28 +1474,10 @@ td.act {
   max-width: 100%;
   height: auto;
 }
-@media (max-width: 620px) {
-  .docs-layout {
-    grid-template-columns: 1fr;
-  }
-  .docs-nav {
-    position: static;
-  }
-}
 
-/* API reference: a native two-column render of the /api/reference JSON manifest.
-   A sticky tier rail sits beside the route list; no iframe, so no frame chrome. */
-.api-layout {
-  display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 24px;
-  align-items: start;
-}
+/* API reference: a native tier rail + route list, rendered in the reference room
+   (the rail lives in the room rail, the routes in the room main). */
 .api-nav {
-  position: sticky;
-  /* Clears the sticky tool bar (the reference is always in tool mode). */
-  top: 56px;
-  align-self: start;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -1581,12 +1608,35 @@ td.act {
   padding: 10px 12px;
   font: 12.5px / 1.5 var(--mono);
 }
-@media (max-width: 620px) {
-  .api-layout {
+/* Reference room on a phone: the bar and body stack; the contents rail becomes a
+   scrollable strip above the content. */
+@media (max-width: 720px) {
+  .room-bar {
     grid-template-columns: 1fr;
   }
-  .api-nav {
+  .room-back {
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 11px 16px;
+  }
+  .room-nav {
+    padding: 9px 16px;
+    flex-wrap: wrap;
+  }
+  .room-body {
+    grid-template-columns: 1fr;
+  }
+  .room-rail {
     position: static;
+    max-height: none;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .room-main {
+    padding: 20px 16px 64px;
+  }
+  .api-nav {
     flex-flow: row wrap;
   }
 }

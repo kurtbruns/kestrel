@@ -44,6 +44,27 @@ const app = document.getElementById("app");
 const identity = document.getElementById("identity");
 const toasts = document.getElementById("toasts");
 
+// Mobile nav drawer: the hamburger slides the sidebar in; the scrim or any nav
+// click closes it. On desktop the sidebar is always in view and these are inert.
+const navToggle = document.getElementById("navToggle");
+const navScrim = document.getElementById("navScrim");
+function setNavOpen(open) {
+  document.body.classList.toggle("nav-open", open);
+  navToggle?.setAttribute("aria-expanded", open ? "true" : "false");
+  if (navScrim) {
+    navScrim.hidden = !open;
+  }
+}
+navToggle?.addEventListener("click", () =>
+  setNavOpen(!document.body.classList.contains("nav-open")),
+);
+navScrim?.addEventListener("click", () => setNavOpen(false));
+document.querySelector(".sidebar")?.addEventListener("click", (e) => {
+  if (e.target.closest("a")) {
+    setNavOpen(false);
+  }
+});
+
 // ---- Material Symbols icon paths (viewBox 0 -960 960 960) ----
 const ICONS = {
   heading: "M360-280v-400h80v160h160v-160h80v400h-80v-160H440v160h-80Z",
@@ -63,6 +84,36 @@ const ICONS = {
 };
 const icon = (name) =>
   `<svg viewBox="0 -960 960 960" aria-hidden="true"><path d="${ICONS[name]}"/></svg>`;
+
+// The Kestrel falcon mark (the product's own mark), used to identify the reference
+// room — distinct from a publication's own logo, which lives in the sidebar brand.
+const KESTREL_PATH =
+  "M290.028 216.064C285.698 218.264 280.838 219.394 275.978 219.344C281.268 225.044 284.128 232.924 283.708 240.694C283.278 248.844 279.388 256.514 274.268 262.874C269.148 269.244 262.808 274.494 256.608 279.814C237.148 296.474 218.248 314.404 195.328 325.854C178.568 334.224 160.148 338.864 143.458 347.374C140.148 349.064 136.898 350.904 133.418 352.224C129.938 353.544 126.178 354.324 122.498 353.794C121.718 353.684 120.938 353.504 120.228 353.184C119.508 352.864 118.848 352.374 118.408 351.734C117.918 351.024 117.708 350.154 117.718 349.304C117.728 348.454 117.948 347.614 118.268 346.824C118.567 346.054 118.967 345.339 119.371 344.618L119.418 344.534C128.788 327.894 140.118 312.454 150.358 296.344C160.598 280.224 169.848 263.174 174.428 244.634C176.258 237.264 177.328 229.644 176.738 222.074C176.138 214.504 173.808 206.964 169.308 200.854C164.588 194.434 157.728 189.874 150.538 186.434C139.628 181.204 127.768 178.284 115.858 176.154C93.9183 172.224 71.6083 170.884 49.4083 168.944C45.8483 168.634 42.2483 168.294 38.8783 167.124C34.7683 165.704 31.0683 163.004 28.7383 159.334C26.4183 155.664 25.5583 151.024 26.7483 146.844C27.6583 143.624 29.7283 140.784 32.3583 138.724C34.9883 136.654 38.1683 135.324 41.4383 134.634C44.7183 133.944 48.0983 133.874 51.4383 134.154C53.2683 134.304 55.0883 134.554 56.8983 134.824C72.2383 137.094 87.3783 140.484 102.548 143.644C115.468 146.334 128.498 148.864 141.688 149.224C154.878 149.574 168.338 147.654 180.178 141.824C196.548 133.764 208.758 118.514 215.298 101.474C224.258 78.094 223.028 52.174 220.398 27.284C219.788 21.484 219.108 15.614 220.058 9.854C220.178 9.124 220.328 8.38398 220.658 7.71398C220.988 7.05398 221.528 6.45399 222.228 6.19399C222.858 5.95399 223.568 6.01399 224.218 6.22399C224.858 6.43399 225.448 6.77399 226.028 7.12399C262.588 29.154 290.508 63.614 310.198 101.484C312.188 105.314 314.108 109.204 315.408 113.314C316.708 117.434 317.358 121.814 316.768 126.084C316.348 129.114 315.268 132.104 313.318 134.454C310.668 137.634 306.688 139.354 302.778 140.744C298.878 142.124 294.808 143.324 291.488 145.804C286.998 149.174 284.328 154.834 284.598 160.444C292.098 161.904 299.448 164.114 306.508 167.014C312.788 169.594 318.998 172.854 323.418 178.014C327.088 182.294 329.288 187.614 331.438 192.844C332.158 194.584 332.878 196.344 333.328 198.184C333.778 200.014 333.958 201.944 333.578 203.794C333.138 205.934 331.948 207.914 330.248 209.294C329.898 208.024 329.258 206.834 328.408 205.834C326.958 204.154 324.928 203.054 322.798 202.454C318.258 201.174 313.328 202.114 309.018 204.044C304.708 205.974 300.898 208.834 297.068 211.584C294.808 213.204 292.508 214.804 290.028 216.064Z";
+const kestrelMark = () =>
+  `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
+
+// The reference room shell shared by Overview / Docs / API: a top bar (a rail-width
+// "← Dashboard", the Kestrel mark, and the surface switch) over a two-column grid
+// whose left column — the contents rail — lines up exactly under "← Dashboard".
+// Pass railHtml = null for a surface with no contents rail (Overview).
+function roomShell(active, railHtml, mainHtml) {
+  const tab = (view, label) =>
+    `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  const body =
+    railHtml == null
+      ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
+      : `<div class="room-body"><nav class="room-rail" aria-label="Contents">${railHtml}</nav><div class="room-main">${mainHtml}</div></div>`;
+  return `<div class="room">
+    <header class="room-bar">
+      <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
+      <div class="room-nav">
+        <span class="room-brand">${kestrelMark()}<span>Kestrel</span></span>
+        <nav class="room-switch" aria-label="Reference">${tab("start", "Overview")}${tab("docs", "Docs")}${tab("reference", "API")}</nav>
+      </div>
+    </header>
+    ${body}
+  </div>`;
+}
 
 // ---- auth ----
 function setToken(t) {
@@ -416,14 +467,9 @@ function route() {
       a.removeAttribute("aria-current");
     }
   });
-  // Same for the tool-bar tabs.
-  document.querySelectorAll(".tool-bar a[data-tool]").forEach((a) => {
-    if (a.dataset.tool === view) {
-      a.setAttribute("aria-current", "page");
-    } else {
-      a.removeAttribute("aria-current");
-    }
-  });
+  // The reference room's surface switch is marked at render time (roomShell). Close
+  // the mobile nav drawer on any navigation.
+  setNavOpen(false);
   if (view === "edit" && arg) {
     return renderEditor(arg);
   }
@@ -1639,12 +1685,12 @@ async function renderSettings() {
 // the same interaction the API reference uses. No iframe: the content is trusted
 // (repo markdown, hygiene-passed) so injecting the fragments into the DOM is safe.
 async function renderDocs(slug) {
-  app.innerHTML = `
-    <div class="docs-layout">
-      <nav class="docs-nav" id="docsNav" aria-label="Contents"><p class="muted">Loading…</p></nav>
-      <article class="doc" id="docsMain"><p class="muted">Loading…</p></article>
-    </div>`;
-  const navEl = document.getElementById("docsNav");
+  app.innerHTML = roomShell(
+    "docs",
+    `<p class="muted">Loading…</p>`,
+    `<article class="doc" id="docsMain"><p class="muted">Loading…</p></article>`,
+  );
+  const navEl = app.querySelector(".room-rail");
   const mainEl = document.getElementById("docsMain");
   let docs;
   try {
@@ -1794,11 +1840,11 @@ function apiSectionHtml(g) {
     </section>`;
 }
 async function renderReference() {
-  app.innerHTML = `
-    <div class="api-layout">
-      <nav class="api-nav" id="apiNav" aria-label="API sections"></nav>
-      <div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>
-    </div>`;
+  app.innerHTML = roomShell(
+    "reference",
+    `<nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
+    `<div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>`,
+  );
   const navEl = document.getElementById("apiNav");
   const contentEl = document.getElementById("apiContent");
   // Delegate clicks synchronously with one listener on the stable nav, so it survives
@@ -2023,6 +2069,13 @@ async function renderDashboard() {
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
+  // Connect the API — the API's first client is an agent, so the base URL is
+  // copyable right here (no need to open the reference room to wire up Claude).
+  const apiCardHtml = `<div class="card pub-card">
+    <div class="pub-row"><span class="pub-key muted">Base&nbsp;URL</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
+  </div>`;
+
   const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit identity &amp; template</button></div>`;
 
   root.innerHTML = `
@@ -2038,7 +2091,10 @@ async function renderDashboard() {
     </div>
     <section class="dash-section"><h2>Recent sends</h2>${recentHtml}</section>
     <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
-    <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>`;
+    <div class="dash-cols">
+      <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
+      <section class="dash-section"><h2>Connect the API</h2>${apiCardHtml}</section>
+    </div>`;
 
   wireDashActions(root, renderDashboard);
   // Row / card clicks open the issue (subject links + Cancel opt out — the same guard
@@ -2131,13 +2187,15 @@ async function renderStart() {
   }
   const pub = derivePublication(appConfig);
   const deployment = appConfig?.deployment || {};
-  // No "Learn more" section: the tool bar already carries Docs + API, so a second
-  // set of links to them would be redundant (and would sit under the floating exit).
-  app.innerHTML = `<div class="dash" id="start">
-    <div class="dash-head"><div><h1>Getting started</h1><p class="muted">Write an issue, review it behind a cancelable window, send it, and keep it in a permanent archive.</p></div></div>
+  // Overview is the reference room's home (no contents rail): a short "how Kestrel
+  // works" and the setup checklist. Docs + API are the other two surfaces of the
+  // room's switch, so there's no separate "Learn more" section.
+  const main = `<div class="dash room-overview" id="start">
+    <div class="dash-head"><div><h1>Welcome to Kestrel</h1><p class="muted">Write an issue, review it behind a cancelable window, send it, and keep it in a permanent archive.</p></div></div>
     ${howItWorksHtml()}
     ${setupChecklistHtml(pub, deployment)}
   </div>`;
+  app.innerHTML = roomShell("start", null, main);
   wireDashActions(document.getElementById("start"), renderStart);
 }
 
