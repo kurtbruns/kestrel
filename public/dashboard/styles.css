@@ -456,15 +456,15 @@ body.tool-mode .sidebar {
   gap: 7px;
   text-decoration: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
   padding: 2px 0;
 }
 .powered:hover {
   color: var(--fg);
 }
 .kestrel-mark {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   fill: currentColor;
   display: block;
   flex: 0 0 auto;
@@ -480,7 +480,7 @@ body.tool-mode .sidebar {
   align-items: center;
   text-decoration: none;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 .nav-tools a:hover {
   color: var(--fg);
