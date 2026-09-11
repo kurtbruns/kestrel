@@ -103,7 +103,7 @@ export function archiveIndexPage(opts: {
         )
         .join("")
     : `<li class="empty muted">No issues yet.</li>`;
-  // Publication identity (issue #81): a logo above the name, an optional tagline,
+  // Publication identity: a logo above the name, an optional tagline,
   // and a brand color exposed as `--brand` (a strict hex only, so it can't escape
   // the stylesheet) that tints the masthead + subscribe links.
   const logo = opts.logoUrl

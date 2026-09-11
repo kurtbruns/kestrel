@@ -76,7 +76,7 @@ export function archiveMasthead(opts: {
   name: string;
   dateLabel: string;
   indexUrl: string;
-  /** Optional publication brand color (issue #81); tints the name link when set. */
+  /** Optional publication brand color; tints the name link when set. */
   brandColor?: string;
 }): string {
   const name = escapeHtml(opts.name);

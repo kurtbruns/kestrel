@@ -23,15 +23,15 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 
 /** Display name for the publication, from the `From:` header — the fallback when
- *  the operator hasn't set a name in the publication identity (issue #81). */
+ *  the operator hasn't set a name in the publication identity. */
 function fromDisplayName(fromAddress: string): string {
   const lt = fromAddress.indexOf("<");
   const display = (lt >= 0 ? fromAddress.slice(0, lt) : "").trim().replace(/^"|"$/g, "").trim();
   return display || "Newsletter";
 }
 
-/** The resolved publication identity for a reader page: the operator's settings
- *  (issue #81), falling back to the `From:` display name for the name. */
+/** The resolved publication identity for a reader page: the operator's settings,
+ *  falling back to the `From:` display name for the name. */
 interface ReaderIdentity {
   name: string;
   tagline: string;

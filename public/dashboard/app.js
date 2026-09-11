@@ -92,14 +92,12 @@ const KESTREL_PATH =
 const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
-// The reference room's Docs list marks each entry with a book: the open doc gets
-// Material "menu_book" (open, in the active fg color), the rest get "book_5" (closed,
-// muted). A different cue from the plain-bold "On this page" section, and every item
-// carries a same-width glyph so the titles line up.
-const BOOK_OPEN_ICON =
-  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M560-564v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-600q-38 0-73 9.5T560-564Zm0 220v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-380q-38 0-73 9t-67 27Zm0-110v-68q33-14 67.5-21t72.5-7q26 0 51 4t49 10v64q-24-9-48.5-13.5T700-490q-38 0-73 9.5T560-454ZM260-320q47 0 91.5 10.5T440-278v-394q-41-24-87-36t-93-12q-36 0-71.5 7T120-692v396q35-12 69.5-18t70.5-6Zm260 42q44-21 88.5-31.5T700-320q36 0 70.5 6t69.5 18v-396q-33-14-68.5-21t-71.5-7q-47 0-93 12t-87 36v394Zm-40 118q-48-38-104-59t-116-21q-42 0-82.5 11T100-198q-21 11-40.5-1T40-234v-482q0-11 5.5-21T62-752q46-24 96-36t102-12q58 0 113.5 15T480-740q51-30 106.5-45T700-800q52 0 102 12t96 36q11 5 16.5 15t5.5 21v482q0 23-19.5 35t-40.5 1q-37-20-77.5-31T700-240q-60 0-116 21t-104 59ZM280-494Z"/></svg>';
-const BOOK_CLOSED_ICON =
-  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M270-80q-45 0-77.5-30.5T160-186v-558q0-38 23.5-68t61.5-38l395-78v640l-379 76q-9 2-15 9.5t-6 16.5q0 11 9 18.5t21 7.5h450v-640h80v720H270Zm90-233 200-39v-478l-200 39v478Zm-80 16v-478l-15 3q-11 2-18 9.5t-7 18.5v457q5-2 10.5-3.5T261-293l19-4Zm-40-472v482-482Z"/></svg>';
+// Every entry in the reference room's Docs list carries the same Material "article"
+// glyph — it inherits the row color, so it reads muted until a doc is the open one
+// (then it and its underlined title go to the active fg). The icon marks these as
+// docs, distinct from the icon-less "On this page" section links below them.
+const ARTICLE_ICON =
+  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>';
 
 // The reference room shell shared by Overview / Docs / API: a top bar (a rail-width
 // "← Dashboard", the Kestrel mark, and the surface switch) over a two-column grid
@@ -165,11 +163,10 @@ function renderIdentity() {
 }
 
 // ---- publication identity (sidebar brand) ----
-// The publication's name / tagline / logo / brand color will come from the settings
-// surface (issue #81). Until that lands we derive a sensible fallback: the name from
-// the From: display name (the read-only deployment reflection), a neutral initial
-// tile for the logo, and the theme accent for the color. Reading settings.publication
-// first means #81 drops in here with no rework.
+// The publication's name / tagline / logo / brand color come from the settings
+// surface (settings.publication). Each field falls back sensibly when unset: the
+// name from the From: display name (the read-only deployment reflection), a neutral
+// initial tile for the logo, and the theme accent for the color.
 function parseFromName(fromAddress) {
   if (!fromAddress) {
     return null;
@@ -182,7 +179,7 @@ function parseFromName(fromAddress) {
 function derivePublication(data) {
   const s = data?.settings || {};
   const d = data?.deployment || {};
-  const p = s.publication || {}; // #81 will nest the publication identity under here
+  const p = s.publication || {}; // the publication identity, edited in Settings
   return {
     name: p.name || parseFromName(d.fromAddress) || "Your publication",
     tagline: p.tagline || "",
@@ -212,7 +209,7 @@ function renderSidebarBrand() {
       logoEl.classList.add("brand-logo-placeholder");
     }
   }
-  // A brand color (issue #81) tints the logo tile; otherwise it uses the theme accent.
+  // A brand color tints the logo tile; otherwise it uses the theme accent.
   if (pub.color) {
     document.documentElement.style.setProperty("--brand", pub.color);
   } else {
@@ -1239,7 +1236,7 @@ async function renderEditor(id) {
   }
 
   // --- send test (modal) ---
-  // Pre-fills from the default test recipients (Settings, issue #26) and accepts
+  // Pre-fills from the default test recipients (Settings) and accepts
   // several — one per line. Each address is a separate test send through the same
   // per-recipient path as a real send (I5).
   document.getElementById("testBtn").onclick = () => {
@@ -1706,7 +1703,7 @@ async function renderSettings() {
 
 // ---- docs ----
 // The operator setup guide, authored in docs/setup/*.md and served read-only by the
-// authed GET /api/docs route as sanitized HTML fragments (#86). The guide is
+// authed GET /api/docs route as sanitized HTML fragments. The guide is
 // paginated — one part per page — with a "Contents" list of every part and an "On
 // this page" of the current part's sections in the rail, plus Previous/Next at the
 // foot; so scrolling reaches the end of the current doc and moving between docs is a
@@ -1790,10 +1787,10 @@ async function renderDocs(slug) {
   navEl.innerHTML =
     `<div class="toc-label">Docs</div>` +
     `<nav class="doc-parts">${docs
-      .map((d) => {
-        const on = d.slug === cur.slug;
-        return `<a class="toc-h${on ? " on" : ""}" href="#/docs/${esc(d.slug)}">${on ? BOOK_OPEN_ICON : BOOK_CLOSED_ICON}<span>${esc(d.title)}</span></a>`;
-      })
+      .map(
+        (d) =>
+          `<a class="toc-h${d.slug === cur.slug ? " on" : ""}" href="#/docs/${esc(d.slug)}">${ARTICLE_ICON}<span>${esc(d.title)}</span></a>`,
+      )
       .join("")}</nav>` +
     onPage;
 
@@ -2239,7 +2236,7 @@ function setupChecklistHtml(pub, deployment) {
 
 // ---- Overview (the reference room's home) ----
 // The permanent home for onboarding (the footer Kestrel link → here): a short "how
-// Kestrel works", the "why" in plain language (issue #88), and the setup checklist.
+// Kestrel works", the "why" in plain language, and the setup checklist.
 // It reserves the room rail like Docs/API, with an "on this page" scroll-spy.
 function howItWorksHtml() {
   const steps = [
@@ -2252,7 +2249,7 @@ function howItWorksHtml() {
     .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
     .join("")}</ol></section>`;
 }
-// The "why", in clear language (issue #88) — competitor-neutral, no funnel copy.
+// The "why", in clear language — competitor-neutral, no funnel copy.
 const WHY_KESTREL = [
   [
     "One door, two clients",

@@ -1377,9 +1377,7 @@ td.act {
   padding: 6px 10px;
   border-radius: 6px;
 }
-/* Every doc carries a book glyph (open for the current doc, closed for the rest) — a
-   different cue from the plain bold the "On this page" section uses. It inherits the
-   item's color, so closed books read muted and the open book picks up the active fg. */
+/* The article glyph inherits the row color, so it reads muted until its doc is open. */
 .toc-h-mark {
   flex: none;
   display: block;
@@ -1390,12 +1388,16 @@ td.act {
 }
 .toc-h:hover {
   color: var(--fg);
-  background: var(--hover);
 }
+/* The open doc: the row goes to fg (brightening its article icon) and the title is
+   underlined — a lighter, different cue from the plain bold the "On this page"
+   section links use, and no background block. */
 .toc-h.on {
   color: var(--fg);
-  font-weight: 600;
-  background: var(--hover);
+}
+.toc-h.on span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 /* "On this page": the current doc's sections, a separate block below the doc list. */
 .toc-onpage {

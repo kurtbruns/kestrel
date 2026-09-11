@@ -14,12 +14,12 @@
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
 /**
- * The publication's web-reader + dashboard identity (issue #81). It themes the
- * reader surface and the admin — never the email (whose identity is the `From:`
- * header) and never a frozen record (I3). The logo *bytes* live in R2 under
- * `BRANDING_LOGO_KEY`, served by the public media route; here we keep only its
- * version (a cache-buster, bumped on each upload) and content type. A blank `name`
- * falls back to the `From:` display name at render time.
+ * The publication's web-reader + dashboard identity. It themes the reader surface
+ * and the admin — never the email (whose identity is the `From:` header) and never
+ * a frozen record (I3). The logo *bytes* live in R2 under `BRANDING_LOGO_KEY`,
+ * served by the public media route; here we keep only its version (a cache-buster,
+ * a timestamp bumped on each upload) and content type. A blank `name` falls back to
+ * the `From:` display name at render time.
  */
 export interface PublicationLogo {
   version: number;
@@ -35,9 +35,9 @@ export interface PublicationSettings {
 
 /** Editable, non-secret preferences. Extend here (not the schema) to add one. */
 export interface AppSettings {
-  /** Default recipients pre-filled into the Send-test flow (issue #26). */
+  /** Default recipients pre-filled into the Send-test flow. */
   testRecipients: string[];
-  /** Publication identity for the reader surface + admin (issue #81). */
+  /** Publication identity for the reader surface + admin. */
   publication: PublicationSettings;
 }
 

@@ -7,7 +7,7 @@
  *   DELETE /api/settings/logo → remove the publication logo
  *
  * `settings` are the mutable, in-app preferences (src/db/settings.ts) — including
- * the publication identity (issue #81): name, tagline, brand color, and logo.
+ * the publication identity: name, tagline, brand color, and logo.
  * `deployment` is a READ-ONLY reflection of the env-resolved Config — which
  * provider is live, the From address, the origins, whether Access is configured —
  * so the editor can show what was set at deploy time and link to the setup docs
@@ -118,8 +118,10 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
     throw badRequest("logo must be 512 KB or smaller");
   }
   await c.env.MEDIA.put(BRANDING_LOGO_KEY, bytes, { httpMetadata: { contentType: type } });
-  const current = await getSettings(c.env.DB);
-  const version = (current.publication.logo?.version ?? 0) + 1;
+  // The `?v=` cache-buster is a timestamp, not a counter: it must strictly increase
+  // even across a delete → re-upload, so it never reuses an old value and serves a
+  // stale logo through a cache that ignores the ETag (self-hosted deployments vary).
+  const version = Date.now();
   const settings = await setPublicationLogo(c.env.DB, { version, contentType: type });
   return json({ settings: settingsView(settings, c.config) });
 }
