@@ -93,7 +93,7 @@ img { max-width:100%; }
 .r-mast { background:var(--mast-bg); color:var(--mast-fg); }
 .r-mast-in { max-width:var(--r-measure); margin:0 auto; padding:24px; display:flex; align-items:center; gap:16px; }
 .r-brand { display:flex; align-items:center; gap:14px; text-decoration:none; color:inherit; min-width:0; }
-.r-logo { width:40px; height:40px; border-radius:9px; background:color-mix(in srgb, var(--mast-fg) 16%, transparent);
+.r-logo { width:64px; height:64px; border-radius:14px; background:color-mix(in srgb, var(--mast-fg) 16%, transparent);
           flex:none; display:grid; place-items:center; overflow:hidden; }
 .r-logo img { max-width:100%; max-height:100%; display:block; }
 .r-name { font-family:var(--r-serif); font-size:23px; font-weight:600; letter-spacing:-.01em; line-height:1.15; }
