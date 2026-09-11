@@ -191,37 +191,52 @@ body.tool-mode .tool-bar {
   background: var(--hover);
 }
 
-/* Exit the tool area — a floating control at the bottom-left, shown only in tool
-   mode, so the Kestrel mark stays the tool area's home rather than the way out. */
-.tool-exit {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 20px;
-  width: 40px;
-  height: 40px;
-  border-radius: 999px;
+/* Corner ✕ at the top-right of the tool bar — exits to the publication dashboard. */
+.tool-x {
+  margin-left: auto;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--card);
-  border: 1px solid var(--line);
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
   color: var(--muted);
   text-decoration: none;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
-  z-index: 20;
 }
-body.tool-mode .tool-exit {
-  display: flex;
-}
-.tool-exit:hover {
+.tool-x:hover {
   color: var(--fg);
-  border-color: var(--muted);
+  background: var(--hover);
 }
-.tool-exit svg {
+.tool-x svg {
   width: 18px;
   height: 18px;
   fill: currentColor;
   display: block;
+}
+/* A labeled back link floating at the bottom-left of the tool area (tool mode only);
+   the corner ✕ does the same, this one just spells it out. */
+.tool-back-float {
+  display: none;
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 20;
+}
+body.tool-mode .tool-back-float {
+  display: inline-flex;
+}
+.tool-back-float:hover {
+  color: var(--fg);
+  border-color: var(--muted);
 }
 @media (max-width: 560px) {
   .tool-bar {
@@ -1759,6 +1774,13 @@ td.act {
   flex: 1 1 auto;
   max-width: 320px;
   font-family: var(--mono);
+}
+.hint code {
+  font: 12px var(--mono);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
 }
 
 @media (prefers-reduced-motion: reduce) {

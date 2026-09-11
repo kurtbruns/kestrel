@@ -1493,7 +1493,7 @@ async function renderSettings() {
             <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
             <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
           </div>
-          <p class="hint" style="margin:8px 0 0">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB.</p>
+          <p class="hint" style="margin:8px 0 0">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. An SVG can follow light/dark with an internal <code>@media (prefers-color-scheme: dark)</code> rule — <code>currentColor</code> won't inherit, since the logo loads as an image.</p>
         </div>
       </div>
       <div class="grid2" style="margin-top:4px">
