@@ -1242,13 +1242,13 @@ td.act {
   }
 }
 
-/* Docs: a sticky table-of-contents rail beside the rendered guide. The guide
-   itself is a themed HTML page in a sandboxed iframe (see lib/page.ts docPage),
-   so the prose styling lives there; this only lays out the two columns. */
+/* Docs: the operator guide rendered natively (no iframe, #86) as one scrollable
+   article beside a two-level scroll-spy contents rail — the parts, with the active
+   part expanded to its sections. Same reading model as the API reference. */
 .docs-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
-  gap: 24px;
+  grid-template-columns: 220px 1fr;
+  gap: 28px;
   align-items: start;
 }
 .docs-nav {
@@ -1257,29 +1257,177 @@ td.act {
   top: 56px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
-.docs-nav a {
+.toc-label {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  padding: 0 10px;
+  margin-bottom: 8px;
+}
+.toc-part {
+  display: flex;
+  flex-direction: column;
+}
+.toc-h {
   text-decoration: none;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13.5px;
   padding: 6px 10px;
   border-radius: 6px;
 }
-.docs-nav a:hover {
+.toc-h:hover {
   color: var(--fg);
   background: var(--hover);
 }
-.docs-nav a.active {
+.toc-h.on {
   color: var(--fg);
   font-weight: 600;
   background: var(--hover);
 }
-.docs-frame {
-  width: 100%;
+.toc-subs {
+  display: none;
+  flex-direction: column;
+  gap: 1px;
+  margin: 1px 0 4px;
+}
+.toc-part.open .toc-subs {
+  display: flex;
+}
+.toc-sub {
+  text-decoration: none;
+  color: var(--muted);
+  font-size: 12.5px;
+  padding: 5px 10px 5px 22px;
+  border-radius: 6px;
+}
+.toc-sub:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+.toc-sub.on {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+/* Long-form prose, styled with the app's own tokens (no re-declared design system,
+   no iframe). Reusable for any markdown rendered in-app. */
+.doc {
+  max-width: 720px;
+  min-width: 0;
+}
+.doc-part {
+  scroll-margin-top: 64px;
+}
+.doc-part:not(:first-child) {
+  border-top: 1px solid var(--line);
+  margin-top: 40px;
+  padding-top: 24px;
+}
+.doc-part > :first-child {
+  margin-top: 0;
+}
+/* Doc headings are long-form, not the app's uppercase UI labels — reset the base
+   h2's transform/color/spacing that would otherwise cascade in. */
+.doc h1,
+.doc h2,
+.doc h3 {
+  color: var(--fg);
+  text-transform: none;
+}
+.doc h1 {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin: 0 0 10px;
+}
+.doc h2 {
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  margin: 30px 0 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  scroll-margin-top: 64px;
+}
+.doc h3 {
+  font-size: 15px;
+  font-weight: 650;
+  margin: 22px 0 6px;
+}
+.doc p,
+.doc li {
+  font-size: 15px;
+  line-height: 1.65;
+}
+.doc a {
+  color: var(--ring);
+  text-decoration: underline;
+}
+.doc ul,
+.doc ol {
+  padding-left: 22px;
+}
+.doc li {
+  margin: 4px 0;
+}
+.doc code {
+  font-family: var(--mono);
+  font-size: 13px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.doc pre {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  line-height: 1.5;
+}
+.doc pre code {
+  background: none;
   border: 0;
-  background: var(--card);
-  min-height: 400px;
+  padding: 0;
+}
+.doc blockquote {
+  margin: 16px 0;
+  padding: 2px 16px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+.doc hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 32px 0;
+}
+.doc table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 16px 0;
+  display: block;
+  overflow-x: auto;
+}
+.doc th,
+.doc td {
+  border: 1px solid var(--line);
+  padding: 8px 12px;
+  text-align: left;
+  font-size: 14px;
+  vertical-align: top;
+}
+.doc th {
+  background: var(--bg);
+  font-weight: 600;
+}
+.doc img {
+  max-width: 100%;
+  height: auto;
 }
 @media (max-width: 620px) {
   .docs-layout {
@@ -1287,7 +1435,6 @@ td.act {
   }
   .docs-nav {
     position: static;
-    flex-flow: row wrap;
   }
 }
 

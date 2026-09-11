@@ -78,15 +78,8 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/docs",
       access: "admin",
-      summary: "Table of contents for the operator setup guide (JSON).",
+      summary: "The operator setup guide as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
-    },
-    {
-      method: "GET",
-      path: "/api/docs/:slug",
-      access: "admin",
-      summary: "One setup-guide page, rendered as a themed HTML page.",
-      handler: docsRoutes.get,
     },
 
     // --- API reference (authed; generated from THIS manifest) ---

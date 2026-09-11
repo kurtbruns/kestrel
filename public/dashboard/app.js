@@ -1633,57 +1633,131 @@ async function renderSettings() {
 
 // ---- docs ----
 // The operator setup guide, authored in docs/setup/*.md and served read-only by
-// the authed /api/docs routes. We fetch each doc through the SPA (so the dev
-// token / Access session cookie is attached, via authHeaders()) and drop the
-// returned themed HTML into a sandboxed iframe — never a top-level navigation to
-// the gated route, which would carry no credential and 401 in local dev.
+// the authed GET /api/docs route as sanitized HTML fragments (#86). We render the
+// whole guide natively as one scrollable article beside a two-level scroll-spy
+// contents rail — the 7 parts, the active one expanded to its sections — reusing
+// the same interaction the API reference uses. No iframe: the content is trusted
+// (repo markdown, hygiene-passed) so injecting the fragments into the DOM is safe.
 async function renderDocs(slug) {
   app.innerHTML = `
     <div class="docs-layout">
-      <nav class="docs-nav" id="docsNav" aria-label="Documentation"><p class="muted">Loading…</p></nav>
-      <div class="docs-main"><iframe id="docsFrame" class="docs-frame" sandbox="allow-same-origin allow-popups" title="Documentation"></iframe></div>
+      <nav class="docs-nav" id="docsNav" aria-label="Contents"><p class="muted">Loading…</p></nav>
+      <article class="doc" id="docsMain"><p class="muted">Loading…</p></article>
     </div>`;
   const navEl = document.getElementById("docsNav");
-  const frame = document.getElementById("docsFrame");
+  const mainEl = document.getElementById("docsMain");
   let docs;
   try {
     ({ docs } = await api("/api/docs"));
   } catch (e) {
-    renderError(navEl, e.message, () => renderDocs(slug));
+    renderError(mainEl, e.message, () => renderDocs(slug));
     return;
   }
   if (!docs?.length) {
-    navEl.innerHTML = `<p class="muted">No docs.</p>`;
+    mainEl.innerHTML = `<p class="muted">No documentation.</p>`;
     return;
   }
 
-  const active = docs.some((d) => d.slug === slug) ? slug : docs[0].slug;
-  navEl.innerHTML = docs
-    .map(
-      (d) =>
-        `<a href="#/docs/${encodeURIComponent(d.slug)}"${d.slug === active ? ` class="active" aria-current="page"` : ""}>${esc(d.title)}</a>`,
-    )
+  // One native section per doc; ids come next so the rail can link + scroll-spy.
+  mainEl.innerHTML = docs
+    .map((d) => `<section class="doc-part" id="doc-${esc(d.slug)}">${d.html}</section>`)
     .join("");
 
-  try {
-    // A raw fetch (not api(), which JSON-parses): this route returns HTML. Same
-    // auth + 401 handling as api() so an expired Access session steers to re-login.
-    const res = await fetch(`/api/docs/${encodeURIComponent(active)}`, { headers: authHeaders() });
-    if (res.status === 401) {
-      showReauth();
-      throw new Error("Not authorized — please sign in again.");
+  // The fragments carry no ids — assign them to each part's H1 and its H2s, and
+  // collect the structure for the two-level contents rail.
+  const parts = [];
+  mainEl.querySelectorAll("section.doc-part").forEach((sec) => {
+    const partSlug = sec.id.replace(/^doc-/, "");
+    const h1 = sec.querySelector("h1");
+    if (h1) {
+      h1.id = `part-${partSlug}`;
     }
-    if (!res.ok) {
-      throw new Error("Couldn't load this doc.");
+    const sections = [];
+    sec.querySelectorAll("h2").forEach((h2, i) => {
+      const id = `sec-${partSlug}-${i + 1}`;
+      h2.id = id;
+      sections.push({ id, title: h2.textContent || "" });
+    });
+    parts.push({
+      slug: partSlug,
+      partId: h1 ? h1.id : `doc-${partSlug}`,
+      title: h1?.textContent || partSlug,
+      sections,
+    });
+  });
+
+  navEl.innerHTML =
+    `<div class="toc-label">Contents</div>` +
+    parts
+      .map(
+        (p) =>
+          `<div class="toc-part" data-part="${esc(p.slug)}"><a class="toc-h" href="#${esc(p.partId)}" data-target="${esc(p.partId)}">${esc(p.title)}</a>` +
+          `<div class="toc-subs">${p.sections
+            .map(
+              (s) =>
+                `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
+            )
+            .join("")}</div></div>`,
+      )
+      .join("");
+
+  // In-app hash links would hijack the SPA router, so intercept and smooth-scroll.
+  navEl.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-target]");
+    if (!a) {
+      return;
     }
-    frame.srcdoc = await res.text();
-    frame.onload = () => {
-      try {
-        frame.style.height = `${frame.contentDocument.body.scrollHeight + 24}px`;
-      } catch (_) {}
-    };
-  } catch (e) {
-    toast(e.message);
+    ev.preventDefault();
+    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
+  });
+
+  // Scroll-spy: highlight the heading in view and expand its parent part. Query the
+  // live nav each tick so it never holds stale nodes; park the observer on the nav
+  // so it's GC'd on unmount (same pattern as the API reference).
+  const spy = [];
+  for (const p of parts) {
+    const partEl = document.getElementById(p.partId);
+    if (partEl) {
+      spy.push({ el: partEl, part: p.slug, sub: p.partId });
+    }
+    for (const s of p.sections) {
+      const el = document.getElementById(s.id);
+      if (el) {
+        spy.push({ el, part: p.slug, sub: s.id });
+      }
+    }
+  }
+  const markActive = (part, sub) => {
+    for (const el of navEl.querySelectorAll(".toc-part")) {
+      el.classList.toggle("open", el.dataset.part === part);
+    }
+    for (const a of navEl.querySelectorAll("a[data-target]")) {
+      a.classList.toggle("on", a.dataset.target === sub);
+    }
+  };
+  navEl._obs = new IntersectionObserver(
+    (entries) => {
+      for (const e of entries) {
+        if (e.isIntersecting) {
+          const t = spy.find((x) => x.el === e.target);
+          if (t) {
+            markActive(t.part, t.sub);
+          }
+        }
+      }
+    },
+    { rootMargin: "-64px 0px -72% 0px", threshold: 0 },
+  );
+  for (const t of spy) {
+    navEl._obs.observe(t.el);
+  }
+  if (parts[0]) {
+    markActive(parts[0].slug, parts[0].partId);
+  }
+
+  // A deep link (#/docs/<slug>) jumps to that part on load.
+  if (slug) {
+    document.getElementById(`doc-${slug}`)?.scrollIntoView({ block: "start" });
   }
 }
 
