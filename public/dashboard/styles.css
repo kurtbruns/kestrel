@@ -2079,6 +2079,27 @@ td.act {
   background: var(--b-bad-bg);
 }
 
+/* A wedged send on the Sends page: ambiguous in-flight deliveries that need an
+   operator decision (SPEC §11). The red health-banner palette, carrying the
+   resolve action on the right. */
+.stuck-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--b-bad-fg);
+  border-color: var(--b-bad-line);
+  background: var(--b-bad-bg);
+}
+.stuck-card .stuck-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.stuck-card strong {
+  color: var(--fg);
+}
+
 /* Subscriber snapshot tiles (Confirmed emphasized as "your audience"). */
 .tiles {
   display: grid;

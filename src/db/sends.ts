@@ -334,6 +334,30 @@ export async function resetDispatchedToPending(
   return res.meta.changes ?? 0;
 }
 
+/**
+ * Operator adjudication of a wedged send's ambiguous rows (SPEC §11). Moves every
+ * still-`dispatched` row of a send to a terminal state the operator chose —
+ * `failed` (assume the batch never left) or `accepted` (assume it did) — stamping
+ * the reason into `error` as an inspectable audit trail. It touches ONLY
+ * `dispatched` rows, so an already-`accepted` recipient is never disturbed, and it
+ * never re-mails anyone (nothing here calls the provider). Returns rows resolved.
+ */
+export async function resolveDispatched(
+  db: D1Database,
+  sendId: string,
+  outcome: "failed" | "accepted",
+  note: string,
+  now: number,
+): Promise<number> {
+  const res = await db
+    .prepare(
+      "UPDATE deliveries SET status = ?, error = ?, updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
+    )
+    .bind(outcome, note, now, sendId)
+    .run();
+  return res.meta.changes ?? 0;
+}
+
 export async function countDeliveries(
   db: D1Database,
   sendId: string,
