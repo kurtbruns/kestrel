@@ -65,6 +65,67 @@ document.querySelector(".sidebar")?.addEventListener("click", (e) => {
   }
 });
 
+// Collapsible sidebar. The effective width mode lives in data-nav on <html> ("full"
+// vs "rail"); CSS keys off it. By default the mode follows the viewport width (the
+// <head> guard in index.html sets it before first paint). The footer chevron toggles a
+// manual override, but that override is deliberately session-only — held in memory, not
+// stored — so a plain reload always drops back to the width-based default. That gives a
+// one-keystroke way back to "auto" and avoids a saved preference getting stuck fighting
+// the width across sizes. The chevron is hidden below 540, where the sidebar is an
+// off-canvas overlay driven by the hamburger instead.
+const navCollapse = document.getElementById("navCollapse");
+// null = follow the width; "collapsed" / "expanded" = manual override for this load.
+let navOverride = null;
+function computeNavMode() {
+  if (window.innerWidth < 540) {
+    return "full";
+  }
+  if (navOverride === "collapsed") {
+    return "rail";
+  }
+  if (navOverride === "expanded") {
+    return "full";
+  }
+  return window.innerWidth <= 1024 ? "rail" : "full";
+}
+function applyNavMode() {
+  const mode = computeNavMode();
+  document.documentElement.dataset.nav = mode;
+  if (!navCollapse) {
+    return;
+  }
+  const expanded = mode !== "rail";
+  const label = expanded ? "Collapse sidebar" : "Expand sidebar";
+  navCollapse.setAttribute("aria-expanded", expanded ? "true" : "false");
+  navCollapse.setAttribute("aria-label", label);
+  navCollapse.setAttribute("title", label);
+}
+navCollapse?.addEventListener("click", () => {
+  navOverride = document.documentElement.dataset.nav !== "rail" ? "collapsed" : "expanded";
+  applyNavMode();
+});
+// Track the responsive default as the window resizes (rAF-coalesced). A session
+// override still wins at 540 and up; below it, the phone overlay takes over. The
+// nav-resizing class suppresses the sidebar's own transitions for the duration, so a
+// breakpoint cross (rail → phone drawer) snaps instead of animating a stray slide.
+let navResizeRaf = 0;
+let navResizeSettle = 0;
+window.addEventListener("resize", () => {
+  document.body.classList.add("nav-resizing");
+  clearTimeout(navResizeSettle);
+  navResizeSettle = setTimeout(() => {
+    document.body.classList.remove("nav-resizing");
+  }, 200);
+  if (navResizeRaf) {
+    return;
+  }
+  navResizeRaf = requestAnimationFrame(() => {
+    navResizeRaf = 0;
+    applyNavMode();
+  });
+});
+applyNavMode();
+
 // ---- Material Symbols icon paths (viewBox 0 -960 960 960) ----
 const ICONS = {
   heading: "M360-280v-400h80v160h160v-160h80v400h-80v-160H440v160h-80Z",
@@ -156,7 +217,9 @@ function renderIdentity() {
     const who = p.email || (p.kind === "service" ? "Service token" : "Signed in");
     identity.innerHTML =
       `<span class="who" title="${esc(who)}">${esc(who)}</span>` +
-      `<a class="ghost" href="/cdn-cgi/access/logout">Sign out</a>`;
+      `<a class="ghost" href="/cdn-cgi/access/logout" title="Sign out">` +
+      `<svg class="signout-icon" aria-hidden="true"><use href="#i-signout"/></svg>` +
+      `<span class="signout-label">Sign out</span></a>`;
   } else {
     identity.innerHTML = `<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`;
   }

@@ -117,23 +117,38 @@ h2 {
   align-items: stretch;
   min-height: 100vh;
 }
+/* The sidebar is two parts so the divider never floats: the outer column stretches to
+   the full page height (it owns the background + right border), and the inner wrapper
+   is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
   flex: 0 0 260px;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+}
+.sidebar-inner {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 18px 14px;
-  background: var(--bg);
-  border-right: 1px solid var(--line);
   position: sticky;
   top: 0;
-  height: 100vh;
+  /* dvh tracks the actual visible viewport, so the foot pins to the real bottom; even
+     where it can't (old browsers, odd emulation) the outer column still runs full
+     height, so the divider never ends short. */
+  height: 100dvh;
   overflow-y: auto;
 }
 body.editor-mode .sidebar,
 body.signed-out .sidebar,
 body.tool-mode .sidebar {
   display: none;
+}
+/* While the window is being resized, kill the sidebar's own transitions so crossing a
+   breakpoint (e.g. rail → phone drawer) snaps instead of animating the slide — app.js
+   adds this class during a resize and drops it once it settles. The drawer's open/close
+   animation is unaffected because that never happens mid-resize. */
+body.nav-resizing .sidebar {
+  transition: none;
 }
 
 /* Reference room: the "learn / set up / integrate" area (Overview · Docs · API).
@@ -413,12 +428,28 @@ body.tool-mode .sidebar {
   margin-top: 2px;
 }
 .nav-primary a {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   text-decoration: none;
   color: var(--muted);
   font-size: 14px;
   padding: 8px 10px;
   border-radius: 6px;
+}
+/* Nav marks. Inherit the link color (muted → fg on hover / active) via currentColor.
+   The view-pub and sign-out marks only surface in the collapsed rail. */
+.nav-icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+}
+.view-pub-icon,
+.signout-icon {
+  display: none;
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
 }
 .nav-primary a:hover {
   color: var(--fg);
@@ -512,6 +543,33 @@ body.tool-mode .sidebar {
   font-weight: 600;
 }
 
+/* Collapse ↔ expand chevron, pushed to the right end of the footer row (opposite the
+   Kestrel mark). Icon-only; overrides the base button chrome. Hidden on phones (the
+   overlay is always full) — see the phone block. */
+.nav-collapse {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.nav-collapse:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+.nav-collapse-icon {
+  /* A chevron only paints part of its box, so it's sized up past the 18px nav icons to
+     read as an equal-weight mark. */
+  width: 22px;
+  height: 22px;
+}
+
 .auth-wall {
   max-width: 420px;
   margin: 64px auto;
@@ -544,10 +602,158 @@ body.tool-mode .content {
   padding: 0;
 }
 
-/* Below the breakpoint the sidebar becomes a top strip and the nav wraps to a row. */
-@media (max-width: 860px) {
+/* --- Collapsed icon rail. Driven by data-nav="rail" on <html> (set from the viewport
+   width and the persisted collapse preference — see app.js and the <head> guard in
+   index.html), so the collapse toggle can pin it at any width in range. The rail is the
+   default across the tablet range and small desktops; the nav keeps its one-click
+   reach, labels move to hover/focus tooltips, and the secondary chrome (brand text,
+   account, tool footer) folds down to its marks. The whole block is gated at ≥540 so a
+   stray data-nav can never fight the phone drawer (<540) mid-resize — below that the
+   overlay rules take over. --- */
+@media (min-width: 540px) {
+  [data-nav="rail"] .sidebar {
+    flex-basis: 64px;
+  }
+  [data-nav="rail"] .sidebar-inner {
+    padding: 18px 8px;
+    /* Lift the rail's stacking context above .content and let the hover tooltips escape
+     the 64px column; the collapsed contents never scroll, so the clip that overflow-y
+     would otherwise force isn't needed here. */
+    overflow: visible;
+    z-index: 20;
+  }
+
+  /* Brand → the logo tile only; the name/tagline folds away. */
+  [data-nav="rail"] .brand {
+    justify-content: center;
+    padding: 6px;
+  }
+  [data-nav="rail"] .brand-meta {
+    display: none;
+  }
+
+  /* View publication → a centered arrow mark (the text rides out as a tooltip). Given
+   the same padded, hover-lit box as a nav item so it reads as a peer control. */
+  [data-nav="rail"] .view-pub {
+    position: relative;
+    display: flex;
+    align-self: stretch;
+    justify-content: center;
+    padding: 10px;
+    margin: 0 0 4px;
+    border-radius: 6px;
+  }
+  [data-nav="rail"] .view-pub:hover {
+    background: var(--hover);
+  }
+  [data-nav="rail"] .view-pub-icon {
+    display: block;
+    width: 20px;
+    height: 20px;
+  }
+
+  /* Primary nav → centered icons. */
+  [data-nav="rail"] .nav-primary a {
+    position: relative;
+    justify-content: center;
+    padding: 10px;
+  }
+
+  /* Labels ride out to the right as tooltips, kept in the DOM (and the accessible name)
+   via opacity + pointer-events rather than display:none. Note there is NO transition
+   at rest: collapsing (toggle) or crossing a breakpoint snaps a label straight to
+   hidden instead of animating it floating across the content. The fade lives on the
+   hover state alone, so only a genuine hover eases one in. */
+  [data-nav="rail"] .nav-primary a > .nav-label,
+  [data-nav="rail"] .view-pub > .view-pub-label {
+    position: absolute;
+    left: calc(100% + 10px);
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 40;
+    padding: 5px 9px;
+    border-radius: 6px;
+    background: var(--fg);
+    color: var(--bg);
+    font-size: 12.5px;
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+    box-shadow: var(--shadow, 0 4px 16px rgba(0, 0, 0, 0.16));
+    opacity: 0;
+    pointer-events: none;
+  }
+  [data-nav="rail"] .nav-primary a:hover > .nav-label,
+  [data-nav="rail"] .nav-primary a:focus-visible > .nav-label,
+  [data-nav="rail"] .view-pub:hover > .view-pub-label,
+  [data-nav="rail"] .view-pub:focus-visible > .view-pub-label {
+    opacity: 1;
+    transition: opacity 0.12s ease;
+  }
+
+  /* Foot → marks only: the account collapses to a sign-out icon, the tool footer to the
+   Kestrel mark. Docs / API drop out here (still reachable at full width and from
+   inside the reference room). */
+  [data-nav="rail"] .identity {
+    align-items: center;
+    padding: 0;
+  }
+  [data-nav="rail"] .identity .who {
+    display: none;
+  }
+  [data-nav="rail"] .identity a.ghost {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px;
+    border-radius: 6px;
+  }
+  [data-nav="rail"] .identity a.ghost:hover {
+    background: var(--hover);
+    color: var(--fg);
+  }
+  [data-nav="rail"] .signout-icon {
+    display: block;
+  }
+  [data-nav="rail"] .signout-label {
+    display: none;
+  }
+  /* Foot stacks: Kestrel mark, then the expand chevron, both centered. The gap is
+     opened up so the pair breathes like the padded nav icons above rather than reading
+     cramped. */
+  [data-nav="rail"] .tool-foot {
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+    padding-left: 0;
+  }
+  [data-nav="rail"] .powered {
+    gap: 0;
+    padding: 4px;
+  }
+  [data-nav="rail"] .powered > span {
+    display: none;
+  }
+  [data-nav="rail"] .nav-tools {
+    display: none;
+  }
+  [data-nav="rail"] .nav-collapse {
+    margin-left: 0;
+  }
+  [data-nav="rail"] .nav-collapse-icon {
+    transform: rotate(180deg);
+  }
+}
+
+/* Phones (<540px): the icon rail gives way — the sidebar leaves the flow and becomes
+   an off-canvas drawer opened by the hamburger, carrying the full brand + labels. */
+@media (max-width: 539px) {
   /* The publication sidebar becomes an off-canvas drawer opened by the hamburger
-     (no bottom tabs — the drawer carries every view). */
+     (no bottom tabs — the drawer carries every view). The footer collapse chevron has
+     no role here: the overlay always shows full labels. */
+  .nav-collapse {
+    display: none;
+  }
   .nav-toggle {
     display: inline-flex;
     align-items: center;
