@@ -63,4 +63,31 @@ describe("schema (0001_init)", () => {
       .run();
     expect(res.meta.changes).toBe(0);
   });
+
+  it("enforces one active send per post via the partial unique index (0004)", async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO posts (id, slug, status, created_at, updated_at) VALUES ('p2','p-2','scheduled',?,?)",
+    )
+      .bind(now, now)
+      .run();
+    const insertSend = (id: string, status: string) =>
+      env.DB.prepare(
+        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES (?, 'p2', ?, ?, '', '', '', ?)",
+      )
+        .bind(id, status, now, now)
+        .run();
+
+    await insertSend("sd1", "scheduled");
+    // A second active send (scheduled or sending) for the same post is rejected.
+    await expect(insertSend("sd2", "scheduled")).rejects.toThrow(/UNIQUE constraint failed/);
+    await expect(insertSend("sd3", "sending")).rejects.toThrow(/UNIQUE constraint failed/);
+
+    // Terminal states fall outside the predicate — many are allowed to coexist,
+    // and once the active send leaves the active set a re-schedule is unblocked.
+    await insertSend("sd4", "canceled");
+    await insertSend("sd5", "failed");
+    await env.DB.prepare("UPDATE sends SET status = 'sent' WHERE id = 'sd1'").run();
+    await insertSend("sd6", "scheduled"); // the post is active-send-free again
+  });
 });

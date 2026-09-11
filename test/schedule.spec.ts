@@ -172,6 +172,52 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(second.send.id).toBe(first.send.id);
   });
 
+  it("yields exactly one active send when two schedules race the same post (0004)", async () => {
+    const id = await makeDraft();
+    const fire = JSON.stringify({ fire_at: future(10 * 60 * 1000) });
+    const call = () =>
+      SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: fire,
+      });
+
+    // Fire both concurrently: whichever loses the race — to the app pre-check or,
+    // under a true isolate interleaving, to the DB's partial unique index — gets a
+    // 409, and the post is left with exactly one active send.
+    const [a, b] = await Promise.all([call(), call()]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([201, 409]);
+
+    const { results } = await env.DB.prepare(
+      "SELECT id FROM sends WHERE post_id = ? AND status IN ('scheduled', 'sending')",
+    )
+      .bind(id)
+      .all();
+    expect(results.length).toBe(1);
+  });
+
+  it("re-schedules a post after its prior send is canceled (predicate excludes terminal states)", async () => {
+    const id = await makeDraft();
+    const first = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      }),
+    );
+    await SELF.fetch(`${base}/sends/${first.send.id}/cancel`, { method: "POST", headers: AUTH });
+
+    // The canceled send is out of the active set, so a fresh schedule succeeds.
+    const again = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(20 * 60 * 1000) }),
+    });
+    expect(again.status).toBe(201);
+    expect((await readJson(again)).send.id).not.toBe(first.send.id);
+  });
+
   it("lists sends and requires auth", async () => {
     const id = await makeDraft();
     await SELF.fetch(`${base}/posts/${id}/schedule`, {

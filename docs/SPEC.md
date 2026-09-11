@@ -145,6 +145,8 @@ A scheduled post is frozen from casual edits. To change it you **unschedule** �
 
 The guarantee that falls out: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again, and scheduling re-freezes the render. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the send immune to app deploys during the multi-day window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
 
+A post has **at most one active (scheduled or sending) send** at a time — the thing that keeps an issue from being scheduled, and sent, twice. This is a database guarantee, not just an app check: the data model carries a uniqueness constraint over active sends per post, so a second schedule can never slip through, even across concurrent requests. Re-scheduling after a send finishes, is canceled, or fails is unaffected — only active sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
+
 ### Firing
 
 A periodic sweep (below) delivers scheduled Sends whose time has come. Because the body is already frozen, firing is just delivery: it fans out to confirmed subscribers, filling in each recipient's unsubscribe link where the frozen body left a placeholder. Batching, retries, and per-recipient tracking are exactly as for an immediate send.
