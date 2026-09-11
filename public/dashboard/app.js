@@ -863,6 +863,26 @@ async function renderEditor(id) {
         markEdited();
       }
     });
+
+    // An empty subject can't be sent — the server blocks it in freeze() (SPEC §6).
+    // Disable Schedule / Send now (with the reason on hover) so the feedback comes
+    // before the request round-trips. Whitespace-only counts as empty.
+    const sendGuardBtns = [
+      document.getElementById("scheduleBtn"),
+      document.getElementById("sendBtn"),
+    ];
+    const reflectSendGuard = () => {
+      const empty = subjectEl.value.trim() === "";
+      for (const btn of sendGuardBtns) {
+        if (!btn) {
+          continue;
+        }
+        btn.disabled = empty;
+        btn.title = empty ? "Add a subject before sending" : "";
+      }
+    };
+    subjectEl.addEventListener("input", reflectSendGuard);
+    reflectSendGuard();
   }
 
   // --- tabs ---

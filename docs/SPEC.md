@@ -137,6 +137,8 @@ Sending is built around a review window, because the window is what makes it saf
 
 Scheduling a post for a future time does three things at once: it **freezes the render** into a new Send in `scheduled` state (this frozen copy is the review artifact, exactly what will fire, and the eventual archive — one object doing all three, I3 and I6); it **soft-locks the post**, so it can't drift away from what was reviewed; and it **records the fire time**.
 
+A post **must have a non-empty subject** to schedule or send. The subject is the one field the reader sees in their inbox, and a send is irreversible (I4), so the freeze that both scheduling and sending-now go through rejects an empty (or whitespace-only) subject with a `400` before anything is frozen — the same guard for both clients. An empty body is only warned about, not blocked. The editor also flags an empty subject as a render warning and disables its Schedule / Send-now buttons, but the freeze is the authority.
+
 From then until it fires, the scheduled Send is **visible and cancelable** (I6). This window is the review gate. A human and Claude review it, test emails go to real inboxes, and if anything's wrong you cancel or unschedule. The intended rhythm is to schedule days ahead, so the window is generous.
 
 ### The soft-lock

@@ -71,6 +71,9 @@ export function render(input: RenderInput, config: Config): RenderResult {
   });
   const cleanHtml = sanitizeEmailHtml(contentHtml);
   const contentText = htmlToText(cleanHtml);
+  if (!meta.subject.trim()) {
+    warnings.push('no subject — the email will show "(no subject)"');
+  }
   const subject = meta.subject || "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
 

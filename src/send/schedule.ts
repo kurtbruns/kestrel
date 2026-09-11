@@ -26,6 +26,12 @@ export async function freeze(
   if (post.status !== "draft") {
     throw conflict("post is not a draft");
   }
+  // The subject is the one field the reader sees in their inbox (SPEC §6). One
+  // check here covers both Schedule and Send-now and both clients (editor + API);
+  // whitespace-only counts as empty.
+  if (!post.subject.trim()) {
+    throw badRequest("add a subject before sending");
+  }
   if (await getActiveSendForPost(env.DB, post.id)) {
     throw conflict("post already has an active send");
   }
