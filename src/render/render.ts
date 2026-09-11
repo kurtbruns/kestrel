@@ -71,10 +71,13 @@ export function render(input: RenderInput, config: Config): RenderResult {
   });
   const cleanHtml = sanitizeEmailHtml(contentHtml);
   const contentText = htmlToText(cleanHtml);
-  if (!meta.subject.trim()) {
+  // Whitespace-only reads as no subject too, so warn and fall back on the trimmed
+  // value — keeping the warning honest and the placeholder shown for either case.
+  const hasSubject = meta.subject.trim() !== "";
+  if (!hasSubject) {
     warnings.push('no subject — the email will show "(no subject)"');
   }
-  const subject = meta.subject || "(no subject)";
+  const subject = hasSubject ? meta.subject : "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
 
   const html = emailLayout({

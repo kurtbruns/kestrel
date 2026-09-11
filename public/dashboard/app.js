@@ -914,20 +914,24 @@ async function renderEditor(id) {
     });
 
     // An empty subject can't be sent — the server blocks it in freeze() (SPEC §6).
-    // Disable Schedule / Send now (with the reason on hover) so the feedback comes
-    // before the request round-trips. Whitespace-only counts as empty.
+    // Disable Schedule / Send now so the feedback comes before the request
+    // round-trips. Whitespace-only counts as empty. The reason goes on the
+    // enclosing row, not the buttons: a disabled button swallows pointer events,
+    // so its own title never shows on hover.
     const sendGuardBtns = [
       document.getElementById("scheduleBtn"),
       document.getElementById("sendBtn"),
     ];
+    const sendGuardRow = sendGuardBtns[0]?.closest(".row");
     const reflectSendGuard = () => {
       const empty = subjectEl.value.trim() === "";
       for (const btn of sendGuardBtns) {
-        if (!btn) {
-          continue;
+        if (btn) {
+          btn.disabled = empty;
         }
-        btn.disabled = empty;
-        btn.title = empty ? "Add a subject before sending" : "";
+      }
+      if (sendGuardRow) {
+        sendGuardRow.title = empty ? "Add a subject before sending" : "";
       }
     };
     subjectEl.addEventListener("input", reflectSendGuard);

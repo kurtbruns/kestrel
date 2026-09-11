@@ -82,13 +82,15 @@ describe("render (the single render path)", () => {
     expect(result.warnings.join(" ")).toMatch(/missing alt/i);
   });
 
-  it("warns on an empty subject and falls back to (no subject)", () => {
-    const result = render(
-      { post: post({ subject: "" }), revision: revision("body", { subject: "" }), images: [] },
-      config,
-    );
-    expect(result.subject).toBe("(no subject)");
-    expect(result.warnings.join(" ")).toMatch(/no subject/i);
+  it("warns on an empty or whitespace-only subject and falls back to (no subject)", () => {
+    for (const subject of ["", "   "]) {
+      const result = render(
+        { post: post({ subject }), revision: revision("body", { subject }), images: [] },
+        config,
+      );
+      expect(result.subject).toBe("(no subject)");
+      expect(result.warnings.join(" ")).toMatch(/no subject/i);
+    }
   });
 
   it("flags an unresolved image reference", () => {
