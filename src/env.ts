@@ -44,8 +44,8 @@ export interface Config {
   /** Origin the public archive lives on. Defaults to `appOrigin` (self-contained);
    *  set to the apex only as the opt-in Cloudflare enhancement (SPEC §10). */
   archiveOrigin: string;
-  /** Base path for archive pages, e.g. `/newsletter`. Drives both the emitted
-   *  archive URL and the route that serves it (SPEC §10); defaults to `/newsletter`. */
+  /** Base path for archive pages, e.g. `/archive`. Drives both the emitted
+   *  archive URL and the route that serves it (SPEC §10); defaults to `/archive`. */
   archiveBasePath: string;
   /** Public base URL for R2-served images. Defaults to the Worker's own `/media`
    *  route; a `media.` custom domain is the optional upgrade (SPEC §10). */
@@ -72,10 +72,10 @@ export interface Config {
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
 
-/** Leading-slash, no-trailing-slash form; defaults to `/newsletter`. Drives both
+/** Leading-slash, no-trailing-slash form; defaults to `/archive`. Drives both
  *  the archive URL and the route registered to serve it, so the two can't drift. */
 function normalizeBasePath(v: string | undefined): string {
-  const raw = (orUndefined(v) ?? "/newsletter").trim();
+  const raw = (orUndefined(v) ?? "/archive").trim();
   const withLead = raw.startsWith("/") ? raw : `/${raw}`;
   return withLead.length > 1 && withLead.endsWith("/") ? withLead.slice(0, -1) : withLead;
 }

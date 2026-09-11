@@ -84,7 +84,7 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     DEV_AUTH_SECRET: DEV_SECRET,
     APP_ORIGIN: "https://newsletter.example.com",
     ARCHIVE_ORIGIN: "https://example.com",
-    ARCHIVE_BASE_PATH: "/newsletter",
+    ARCHIVE_BASE_PATH: "/archive",
     MEDIA_PUBLIC_BASE: "https://media.example.com",
     SENDING_DOMAIN: "send.example.com",
     FROM_ADDRESS: "News <news@send.example.com>",

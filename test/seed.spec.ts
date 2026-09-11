@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
+import { getSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
@@ -30,9 +31,12 @@ async function deliveriesFor(sendId: string): Promise<{ email: string; event: st
   return results;
 }
 
-describe("dev seed (Field Notes dataset)", () => {
+describe("dev seed (Windbreak dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
+
+    // The demo ships a branded identity so the reader surface isn't the bare fallback.
+    expect((await getSettings(env.DB)).publication.name).toBe("Windbreak");
 
     expect(summary.subscribers).toEqual({
       confirmed: CONFIRMED,
@@ -120,7 +124,7 @@ describe("dev seed (Field Notes dataset)", () => {
     await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: { ...(await adminAuth()), "content-type": "application/json" },
-      body: JSON.stringify({ publication: { name: "Field Notes" } }),
+      body: JSON.stringify({ publication: { name: "Windbreak" } }),
     });
 
     const res = await SELF.fetch(`${base}/api/dev/reset`, {
@@ -145,7 +149,7 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("serves a seeded sent issue's frozen render at its archive URL, cover ref intact", async () => {
     await seedDatabase(env, config());
-    const res = await SELF.fetch(`${base}/newsletter/the-hovering-hunter`);
+    const res = await SELF.fetch(`${base}/archive/the-hovering-hunter`);
     expect(res.status).toBe(200);
     const body = await res.text();
     expect(body).toContain("The hovering hunter");
@@ -157,7 +161,7 @@ describe("dev seed (Field Notes dataset)", () => {
   it("keeps drafts and the scheduled issue out of the public archive", async () => {
     await seedDatabase(env, config());
     for (const slug of ["the-secret-life-of-robins", "waxwings-and-fieldfares"]) {
-      const res = await SELF.fetch(`${base}/newsletter/${slug}`);
+      const res = await SELF.fetch(`${base}/archive/${slug}`);
       expect(res.status).toBe(404);
     }
   });

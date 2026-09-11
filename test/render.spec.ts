@@ -8,7 +8,7 @@ const config: Config = {
   provider: "fake",
   appOrigin: "https://app.example",
   archiveOrigin: "https://arc.example",
-  archiveBasePath: "/newsletter",
+  archiveBasePath: "/archive",
   mediaPublicBase: "https://media.example",
   sendingDomain: "send.example",
   fromAddress: "News <news@send.example>",
@@ -115,7 +115,7 @@ describe("render (the single render path)", () => {
     );
     expect(result.text).toContain("here (https://x.com)");
     expect(result.text).toContain(`Unsubscribe: ${UNSUB_SENTINEL}`);
-    expect(result.text).toContain("View in browser: https://arc.example/newsletter/weekly-news");
+    expect(result.text).toContain("View in browser: https://arc.example/archive/weekly-news");
   });
 
   it("substituteUnsubscribe replaces only the sentinel", () => {

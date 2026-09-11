@@ -65,12 +65,14 @@ While you are here, set each environment's public `vars` (these are **not** secr
 | --- | --- | --- |
 | `PROVIDER` | active transport: `fake`, `ses`, or `resend` | `ses` |
 | `APP_ORIGIN` | the origin the app is served from | `https://newsletter.example.com` |
-| `ARCHIVE_BASE_PATH` | path prefix for issue pages (drives the URL *and* the route) | `/newsletter` |
+| `ARCHIVE_BASE_PATH` | path prefix for the archive index + issue pages (drives the URL *and* the route) | `/archive` |
 | `SENDING_DOMAIN` | the sending identity domain | `send.example.com` |
 | `FROM_ADDRESS` | the `From:` header; its display name also names the publication | `Newsletter <newsletter@send.example.com>` |
 | `AWS_REGION` | SES region (ignored by Resend) | `us-east-1` |
 
 `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` are **optional** — leave them unset to stay self-contained (archives and images serve on `APP_ORIGIN`). They are the opt-in enhancements covered in "Wire the archive to a website."
+
+> **Pick `ARCHIVE_BASE_PATH` before your first send.** Archive URLs are permanent (I3): every issue you send carries its `<base>/<slug>` link forever. Changing the prefix later orphans the links already mailed under the old one. The default is `/archive`; if you are migrating an install that already sent `/newsletter/…` links, set `ARCHIVE_BASE_PATH=/newsletter` to keep them alive.
 
 After editing `wrangler.jsonc`, regenerate the binding types and typecheck:
 

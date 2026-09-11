@@ -15,6 +15,18 @@ export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
  *  the masthead is browser-only and the sent bytes stay masthead-free (I3, I5). */
 export const ARCHIVE_MASTHEAD_ANCHOR = "<!--kestrel:masthead-->";
 
+/** Inert marker in the <head>. Emails render it as nothing; the archive route
+ *  replaces it with the web-font stylesheet links (see lib/page.ts), so the
+ *  display serif loads only on the hosted page — never in a sent email (I3). */
+export const ARCHIVE_HEAD_ANCHOR = "<!--kestrel:head-->";
+
+/** Display serif for content headings — the publication's editorial voice, shared
+ *  with the reader chrome's `--r-serif` (lib/page.ts); keep the two in step. Baked
+ *  into the frozen render so the archive page and the email agree (I3). Fraunces is
+ *  a web font loaded only on the hosted page; email and any client without it fall
+ *  back to Georgia, an ubiquitous serif. */
+const HEADING_FONT = "Fraunces, Georgia, 'Times New Roman', serif";
+
 export interface LayoutInput {
   subject: string;
   preheader: string;
@@ -38,9 +50,10 @@ export function emailLayout(i: LayoutInput): string {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
-<title>${escapeHtml(i.subject)}</title>
+<title>${escapeHtml(i.subject)}</title>${ARCHIVE_HEAD_ANCHOR}
 <style>
   :root { color-scheme: light dark; }
+  .k-body h1, .k-body h2, .k-body h3, .k-body h4, .k-body h5, .k-body h6 { font-family:${HEADING_FONT}; }
   @media (prefers-color-scheme: dark) {
     .k-bg { background:#18181b !important; }
     .k-card { background:#18181b !important; }
@@ -60,7 +73,7 @@ ${preheader}
 ${ARCHIVE_MASTHEAD_ANCHOR}${i.contentHtml}
 </td></tr>
 <tr><td class="k-foot" style="padding:16px 32px 28px;font-family:${FONT};font-size:12px;line-height:1.5;color:#71717a;border-top:1px solid #e4e4e7;">
-<a href="${viewUrl}" style="color:#71717a;text-decoration:underline;">View in browser</a> &middot; <a href="${UNSUB_SENTINEL}" style="color:#71717a;text-decoration:underline;">Unsubscribe</a>
+Powered by Kestrel &middot; <a href="${viewUrl}" style="color:#71717a;text-decoration:underline;">View in browser</a> &middot; <a href="${UNSUB_SENTINEL}" style="color:#71717a;text-decoration:underline;">Unsubscribe</a>
 </td></tr>
 </table>
 </td></tr></table>
@@ -89,7 +102,7 @@ export function archiveMasthead(opts: {
     `<div class="k-mast" style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;` +
     `font-family:${FONT};font-size:13px;line-height:1.5;color:#71717a;` +
     `padding-bottom:14px;margin-bottom:28px;border-bottom:1px solid #e4e4e7;">` +
-    `<a href="${url}" style="color:${nameColor};text-decoration:none;font-weight:600;">${name}</a>` +
+    `<a href="${url}" style="color:${nameColor};text-decoration:none;font-weight:600;font-size:15px;font-family:${HEADING_FONT};"><span style="font-family:${FONT};font-weight:500;">&larr;</span>&nbsp;${name}</a>` +
     `<span style="white-space:nowrap;">${date}</span>` +
     `</div>`
   );
