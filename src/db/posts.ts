@@ -1,5 +1,6 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 import { newId } from "../lib/ids";
+import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { slugify } from "../lib/slug";
 import { unwrap } from "../lib/unwrap";
 
@@ -43,17 +44,77 @@ export interface PostListRow extends PostRow {
   fire_at: number | null;
 }
 
-export async function listPosts(db: D1Database): Promise<PostListRow[]> {
-  // Scheduled posts first (soonest fire time), then the rest by most-recently edited.
+/** Narrow the post list by `status` and a subject contains-search. */
+export interface PostFilter {
+  status?: PostStatus;
+  search?: string;
+}
+
+/** The sortable columns exposed by `GET /posts` (see `parseListParams`). */
+export const POST_LIST_SPEC: ListSpec = {
+  columns: {
+    updated: "p.updated_at",
+    title: "p.subject",
+    status: "p.status",
+    scheduled: "s.fire_at",
+  },
+  defaultSort: "updated",
+  defaultDir: "desc",
+};
+
+// Shared WHERE for the list and its matching count.
+function postWhere(filter: PostFilter): { clause: string; binds: unknown[] } {
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  if (filter.status) {
+    where.push("p.status = ?");
+    binds.push(filter.status);
+  }
+  const term = filter.search?.trim().toLowerCase();
+  if (term) {
+    where.push("LOWER(p.subject) LIKE ? ESCAPE '\\'");
+    binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+  }
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+/** One page of posts. With no explicit sort, keeps the bespoke default — scheduled
+ *  posts first (soonest fire time), then the rest by most-recently edited — until the
+ *  reader picks a column. Omit `page` for that default order, unpaginated. */
+export async function listPosts(
+  db: D1Database,
+  filter: PostFilter = {},
+  page?: ListParams,
+): Promise<PostListRow[]> {
+  const { clause, binds } = postWhere(filter);
+  const order =
+    page?.sortExplicit === true
+      ? orderByClause(page, "p.id")
+      : "ORDER BY (s.fire_at IS NULL) ASC, s.fire_at ASC, p.updated_at DESC, p.id DESC";
+  const limit = page ? page.limit : -1; // -1 = SQLite "no limit"
+  const offset = page ? page.offset : 0;
   const { results } = await db
     .prepare(
       `SELECT p.*, s.fire_at AS fire_at
          FROM posts p
          LEFT JOIN sends s ON s.post_id = p.id AND s.status = 'scheduled'
-        ORDER BY (s.fire_at IS NULL) ASC, s.fire_at ASC, p.updated_at DESC`,
+         ${clause}
+         ${order}
+         LIMIT ? OFFSET ?`,
     )
+    .bind(...binds, limit, offset)
     .all<PostListRow>();
   return results;
+}
+
+/** How many posts match `filter` — the `page.total` for the post list. */
+export async function countPosts(db: D1Database, filter: PostFilter = {}): Promise<number> {
+  const { clause, binds } = postWhere(filter);
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM posts p ${clause}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 async function slugTaken(db: D1Database, slug: string, exceptId?: string): Promise<boolean> {

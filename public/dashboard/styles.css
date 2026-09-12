@@ -902,6 +902,22 @@ select {
   background: var(--card);
   color: var(--fg);
 }
+/* Replace the native select caret with one inset from the border (the native caret sat
+   flush against the edge). Scoped to select so inputs/textareas keep their own chrome. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2352525b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  select {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  }
+}
 label {
   display: block;
   font-size: 14px;
@@ -1059,17 +1075,145 @@ td a:hover {
   color: var(--b-bad-fg);
   border-color: var(--b-bad-line);
 }
+/* Suppression is an overlay on the address, not a consent status, so it rides next to
+   the email rather than in the Status column — sized down to read as secondary. */
+.row-flag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  vertical-align: middle;
+}
 
-/* subscribers view: status filter + email search */
-.sub-controls {
+/* list views (posts / subscribers / sends): search on the left, filters pinned right */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
   margin: 12px 0 16px;
 }
-.sub-controls select {
+.list-toolbar .lt-search {
+  flex: 1 1 220px;
+  max-width: 340px;
+}
+.list-toolbar .lt-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+}
+.list-toolbar select {
   width: auto;
 }
-.sub-controls input[type="search"] {
-  flex: 1 1 220px;
-  max-width: 320px;
+/* "Suppressed" toggle: a flag beside the status filter, not inside it. margin:0 resets
+   the global `label` margin (14px 0 8px) — that asymmetric margin was inflating the row
+   and knocking the checkbox/text a few px below the dropdown's text centerline. */
+.lt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+  color: var(--fg);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.lt-toggle input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
+}
+
+/* Fixed layout so a re-sort can't reflow column widths: the structured columns get
+   set widths (via <colgroup>), the text column takes the rest, and long values wrap
+   in place rather than resizing the column. */
+.list-table {
+  table-layout: fixed;
+}
+.list-table td,
+.list-table th {
+  overflow-wrap: anywhere;
+}
+.list-table .c-status {
+  width: 128px;
+}
+.list-table .c-date {
+  width: 148px;
+}
+.list-table .c-num {
+  width: 104px;
+}
+.list-table .c-act {
+  width: 56px;
+}
+
+/* sortable column headers: the label is a borderless button that fills the cell */
+th.sortable {
+  padding: 0;
+}
+th.sortable .th-sort {
+  width: 100%;
+  border: 0;
+  background: none;
+  margin: 0;
+  padding: 10px 12px;
+  text-align: inherit;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+th.sortable .th-sort:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+th.sortable.sorted .th-sort {
+  color: var(--fg);
+}
+/* A fixed-width slot for the sort arrow so the label stays put whether or not the
+   column is the active sort. */
+.th-arrow {
+  display: inline-block;
+  width: 0.85em;
+  margin-left: 3px;
+  text-align: center;
+  color: var(--muted);
+}
+th.num,
+th.num .th-sort {
+  text-align: right;
+}
+
+/* offset pager: "a–b of N" between Prev / Next */
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 14px;
+}
+.pager-range {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.pager button[disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* API reference: query-param table inside a route card */
+.api-query {
+  margin: 6px 0 0;
+}
+.api-query td {
+  padding: 5px 10px;
+  font-size: 13px;
+  vertical-align: top;
+}
+.api-query td:first-child {
+  white-space: nowrap;
+  width: 1%;
 }
 
 /* editor header */

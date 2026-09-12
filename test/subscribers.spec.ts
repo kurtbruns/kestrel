@@ -206,6 +206,81 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(both.map((r) => r.email).sort()).toEqual([a, b].sort());
   });
 
+  it("the suppressed facet: 'only' narrows to suppressed subscribers, 'hide' drops them", async () => {
+    const marker = `sup-${Date.now()}-${seq++}`;
+    const plain = `${marker}-a@example.com`;
+    const suppressed = `${marker}-b@example.com`;
+    await subs.subscribe(env.DB, plain);
+    await subs.subscribe(env.DB, suppressed);
+    await subs.addSuppression(env.DB, suppressed, "bounce");
+
+    const only = await subs.listSubscribers(env.DB, { suppressed: "only", search: marker });
+    expect(only.map((r) => r.email)).toEqual([suppressed]);
+
+    const hide = await subs.listSubscribers(env.DB, { suppressed: "hide", search: marker });
+    expect(hide.map((r) => r.email)).toEqual([plain]);
+  });
+
+  it("GET /subscribers?suppressed=only returns only suppressed rows (still badged), with a page envelope", async () => {
+    const marker = `supq-${Date.now()}-${seq++}`;
+    const plain = `${marker}-a@example.com`;
+    const suppressed = `${marker}-b@example.com`;
+    await subs.subscribe(env.DB, plain);
+    await subs.subscribe(env.DB, suppressed);
+    await subs.addSuppression(env.DB, suppressed, "complaint");
+
+    const res = await SELF.fetch(`${base}/subscribers?suppressed=only&search=${marker}`, {
+      headers: AUTH,
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.subscribers.map((s: any) => s.email)).toEqual([suppressed]);
+    expect(body.subscribers.every((s: any) => s.suppressed)).toBe(true);
+    // The suppression reason is surfaced on each row (for the inline flag).
+    expect(body.subscribers[0].suppression_reason).toBe("complaint");
+    // The page envelope reflects the filtered total, not the whole table.
+    expect(body.page).toMatchObject({ total: 1, offset: 0 });
+  });
+
+  it("GET /subscribers paginates (offset/limit) and sorts by a whitelisted column", async () => {
+    const marker = `pg-${Date.now()}-${seq++}`;
+    // Three subscribers whose emails sort a < b < c.
+    for (const s of ["a", "b", "c"]) {
+      await subs.subscribe(env.DB, `${marker}-${s}@example.com`);
+    }
+    const q = `search=${marker}&sort=email&dir=asc`;
+
+    const page1 = await readJson(
+      await SELF.fetch(`${base}/subscribers?${q}&limit=2&offset=0`, { headers: AUTH }),
+    );
+    expect(page1.subscribers.map((s: any) => s.email)).toEqual([
+      `${marker}-a@example.com`,
+      `${marker}-b@example.com`,
+    ]);
+    expect(page1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "email", dir: "asc" });
+
+    const page2 = await readJson(
+      await SELF.fetch(`${base}/subscribers?${q}&limit=2&offset=2`, { headers: AUTH }),
+    );
+    expect(page2.subscribers.map((s: any) => s.email)).toEqual([`${marker}-c@example.com`]);
+  });
+
+  it("an out-of-whitelist sort falls back to the default (never 500s), including prototype keys", async () => {
+    const marker = `srt-${Date.now()}-${seq++}`;
+    await subs.subscribe(env.DB, `${marker}@example.com`);
+    // `constructor`/`toString`/`hasOwnProperty` are inherited Object keys: the whitelist
+    // must reject them by ownership, not `in`, or they'd reach the ORDER BY as SQL.
+    for (const bogus of ["bogus", "constructor", "toString", "hasOwnProperty"]) {
+      const res = await SELF.fetch(`${base}/subscribers?sort=${bogus}&search=${marker}`, {
+        headers: AUTH,
+      });
+      expect(res.status).toBe(200);
+      const body = await readJson(res);
+      expect(body.page.sort).toBe("joined"); // fell back to the default
+      expect(body.subscribers.map((s: any) => s.email)).toEqual([`${marker}@example.com`]);
+    }
+  });
+
   it("POST /subscribers/:id/unsubscribe requires auth (401)", async () => {
     const res = await SELF.fetch(`${base}/subscribers/anything/unsubscribe`, { method: "POST" });
     expect(res.status).toBe(401);

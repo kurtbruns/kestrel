@@ -11,7 +11,7 @@
  * Served read-only through the authed `/api/reference` route (see routes/docs.ts
  * for the sibling docs surface it mirrors).
  */
-import type { Access, RouteDef } from "../router";
+import type { Access, QueryParam, RouteDef } from "../router";
 
 /** One route as the reference shows it: the manifest metadata, without handler or middleware. */
 export interface ReferenceEntry {
@@ -20,6 +20,7 @@ export interface ReferenceEntry {
   access: Access;
   summary: string;
   description?: string;
+  query?: QueryParam[];
   example?: { request?: unknown; response?: unknown };
 }
 
@@ -71,6 +72,7 @@ export function buildReference(routes: readonly RouteDef[]): ReferenceGroup[] {
         access: r.access,
         summary: r.summary,
         description: r.description,
+        query: r.query,
         example: r.example,
       })),
   })).filter((g) => g.routes.length > 0);

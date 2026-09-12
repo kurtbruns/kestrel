@@ -264,4 +264,31 @@ describe("schedule / send / cancel + soft-lock", () => {
     const noauth = await SELF.fetch(`${base}/sends`);
     expect(noauth.status).toBe(401);
   });
+
+  it("sends list carries a page envelope and honors the status filter + sort", async () => {
+    // Two scheduled sends with different fire times.
+    const idA = await makeDraft();
+    await SELF.fetch(`${base}/posts/${idA}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+    });
+    const idB = await makeDraft();
+    await SELF.fetch(`${base}/posts/${idB}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(20 * 60 * 1000) }),
+    });
+
+    const list = await readJson(
+      await SELF.fetch(`${base}/sends?status=scheduled&sort=fire&dir=asc&limit=100`, {
+        headers: AUTH,
+      }),
+    );
+    expect(list.page).toMatchObject({ sort: "fire", dir: "asc", offset: 0 });
+    expect(list.sends.every((s: any) => s.status === "scheduled")).toBe(true);
+    // fire asc → scheduled sends come back in ascending fire-time order.
+    const fires = list.sends.map((s: any) => s.fire_at);
+    expect(fires).toEqual([...fires].sort((a: number, b: number) => a - b));
+  });
 });

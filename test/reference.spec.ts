@@ -48,6 +48,18 @@ describe("API reference is generated from the route registration", () => {
     expect(defs.some((d) => d.method === "GET" && d.path === "/api/reference")).toBe(true);
   });
 
+  it("carries documented query params through for list routes (filter/sort/pagination)", () => {
+    const groups = buildReference(defs);
+    const listRoute = groups
+      .flatMap((g) => g.routes)
+      .find((r) => r.method === "GET" && r.path === "/subscribers");
+    const names = listRoute?.query?.map((q) => q.name) ?? [];
+    // The list contract — filter + sort + pagination — is documented from the registration.
+    expect(names).toEqual(
+      expect.arrayContaining(["status", "suppressed", "sort", "limit", "offset"]),
+    );
+  });
+
   it("a newly registered route appears in the reference with no separate doc to touch", () => {
     const r = new Router();
     const added: RouteDef = {
