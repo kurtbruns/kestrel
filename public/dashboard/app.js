@@ -1760,12 +1760,27 @@ async function renderSettings() {
   const p = s.publication || { name: "", tagline: "", brandColor: "", logoUrl: "" };
   const fromName = parseFromName(d.fromAddress) || "Your publication";
   const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
+
+  // The public subscribe page and a ready-to-paste embed. The embed is a plain HTML
+  // form that posts to the same public /subscribe endpoint (which already accepts a
+  // cross-origin form post): no script, styles inherit from the host site, and it
+  // starts the double opt-in like any other entry — never an auto-confirm (I1).
+  const appOrigin = d.appOrigin || location.origin;
+  const subscribeUrl = `${appOrigin}/subscribe`;
+  const embedCode =
+    `<form action="${esc(appOrigin)}/subscribe" method="post">\n` +
+    `  <label>\n` +
+    `    Subscribe to ${esc(p.name || fromName)}\n` +
+    `    <input type="email" name="email" placeholder="you@example.com" required>\n` +
+    `  </label>\n` +
+    `  <button type="submit">Subscribe</button>\n` +
+    `</form>`;
   body.innerHTML = `
     <section class="dash-section set-block">
-      <h2>Publication identity</h2>
-      <p class="set-lede">Your name, tagline, logo, and brand color. They paint the public reader surface — the archive and the subscribe pages — and this dashboard. They never change the email itself (its identity is the From address) or an issue that has already been sent.</p>
       <div class="set-identity">
         <div class="set-fields">
+          <h2>Publication identity</h2>
+          <p class="set-lede">How your publication looks on its public pages and in this dashboard.</p>
           <div class="logo-row">
             <div class="logo-preview" id="logoPreview">${
               p.logoUrl
@@ -1781,18 +1796,12 @@ async function renderSettings() {
               <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. A roughly square logo reads best.</p>
             </div>
           </div>
-          <div class="grid2" style="margin-top:16px">
-            <div>
-              <label for="setName">Name</label>
-              <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
-              <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
-            </div>
-            <div>
-              <label for="setTagline">Tagline</label>
-              <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
-              <p class="field-hint">A short line under the name in the masthead.</p>
-            </div>
-          </div>
+          <label for="setName">Name</label>
+          <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
+          <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
+          <label for="setTagline">Tagline</label>
+          <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
+          <p class="field-hint">A short line under the name in the masthead.</p>
           <label for="setBrandHex">Brand color</label>
           <div class="row brand-row">
             <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
@@ -1817,6 +1826,21 @@ async function renderSettings() {
           <p class="set-preview-note">A preview of your archive masthead. <a href="/" target="_blank" rel="noopener">Open the live page&nbsp;↗</a></p>
         </aside>
       </div>
+    </section>
+
+    <section class="dash-section set-block">
+      <h2>Grow your list</h2>
+      <p class="set-lede">Share your subscribe page, or drop the form into your own site. Both start the double opt-in — a reader always confirms by email before joining.</p>
+      <label>Subscribe page</label>
+      <div class="pub-row set-narrow">
+        <code class="pub-val">${esc(subscribeUrl)}</code>
+        <button class="ghost-btn" data-copy="${esc(subscribeUrl)}">Copy</button>
+        <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
+      </div>
+      <label style="margin-top:20px">Embed on your site</label>
+      <p class="field-hint" style="margin-bottom:8px">Paste this HTML anywhere. No script; it inherits your site's styles.</p>
+      <div class="set-embed set-narrow"><pre><code>${esc(embedCode)}</code></pre></div>
+      <div class="row" style="margin-top:10px"><button data-copy="${esc(embedCode)}">Copy code</button></div>
     </section>
 
     <section class="dash-section set-block">
@@ -1892,6 +1916,11 @@ async function renderSettings() {
   nameEl.oninput = updatePreview;
   taglineEl.oninput = updatePreview;
   updatePreview();
+
+  // Copy buttons on the subscribe page URL + the embed snippet.
+  body.querySelectorAll("[data-copy]").forEach((b) => {
+    b.onclick = () => copyText(b.dataset.copy);
+  });
 
   document.getElementById("idSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {

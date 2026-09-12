@@ -2436,7 +2436,10 @@ td.act {
   max-width: 560px;
 }
 
-/* Identity editor: the fields beside a live preview of the reader masthead. */
+/* Identity editor: the fields beside a live preview of the reader masthead. The
+   section heading lives in the left column so the preview pairs with it, top-aligned
+   — "here's the setting / here's how it lands." The heading's own top margin is
+   dropped so both columns start on the same line. */
 .set-identity {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -2446,6 +2449,21 @@ td.act {
 .set-fields {
   min-width: 0;
 }
+/* Both columns must be allowed to shrink below their content: without this the
+   masthead's nowrap name/tagline give the preview a large intrinsic min-width, which
+   blows the column out past the viewport once the grid stacks on a phone. */
+.set-preview {
+  min-width: 0;
+}
+.set-fields h2 {
+  margin-top: 0;
+}
+/* One reading measure for the stacked identity inputs, so Name/Tagline don't run
+   the full column width. Direct children only — the color swatch + hex sit inside
+   .brand-row and keep their own narrower sizing. */
+.set-fields > input {
+  max-width: 440px;
+}
 @media (max-width: 780px) {
   .set-identity {
     grid-template-columns: 1fr;
@@ -2453,6 +2471,20 @@ td.act {
   .set-narrow {
     max-width: none;
   }
+}
+
+/* Embed snippet: the copy-paste subscribe form, shown as read-only source. */
+.set-embed pre {
+  margin: 0;
+  overflow-x: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  font: 12.5px / 1.6 var(--mono);
+}
+.set-embed pre code {
+  white-space: pre;
 }
 
 /* Live masthead preview — a faithful-enough mirror of the reader chrome in
