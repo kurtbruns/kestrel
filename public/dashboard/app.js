@@ -2049,54 +2049,64 @@ const EMAIL_TEMPLATE_VARS = [
 
 // Two starting points; the publisher edits the HTML freely from there. Identity sits
 // at the FOOT (a sign-off), so the email stays faithful to today's masthead-free top.
+// Every style is INLINE. A real HTML email carries no stylesheet — mail clients
+// strip <style> and drop class="" — so an email template is styled attribute by
+// attribute, and the examples model that. (This mirrors src/render/template.ts,
+// which inline-styles every element too.)
 const EMAIL_TEMPLATE_EXAMPLES = {
   signed: {
     label: "Signed",
-    html: `<article>
+    html: `<article style="font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
   {{ post.body }}
-</article>
 
-<hr />
+  <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0" />
 
-<footer class="signoff">
-  <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
-  <div>
-    <p class="name">{{ publication.name }}</p>
-    <p class="tagline">{{ publication.tagline }}</p>
-  </div>
-</footer>
+  <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <tr>
+      <td style="padding-right:12px;vertical-align:middle">
+        <img src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" style="display:block;border-radius:9px" />
+      </td>
+      <td style="vertical-align:middle">
+        <div style="font:600 17px/1.2 Georgia,'Times New Roman',serif">{{ publication.name }}</div>
+        <div style="font-size:13px;color:#52525b;margin-top:2px">{{ publication.tagline }}</div>
+      </td>
+    </tr>
+  </table>
 
-<p class="fineprint">
-  Sent to {{ footer.sentTo }} &middot;
-  <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> &middot;
-  <a href="{{ footer.viewInBrowserUrl }}">View in browser</a><br />
-  {{ publication.name }} &mdash; a Kestrel publication
-</p>`,
+  <p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#71717a">
+    Sent to {{ footer.sentTo }} &middot;
+    <a href="{{ footer.unsubscribeUrl }}" style="color:#71717a">Unsubscribe</a> &middot;
+    <a href="{{ footer.viewInBrowserUrl }}" style="color:#71717a">View in browser</a><br />
+    {{ publication.name }} &mdash; a Kestrel publication
+  </p>
+</article>`,
   },
   plain: {
     label: "Plain",
-    html: `<article>
+    html: `<article style="font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
   {{ post.body }}
-</article>
 
-<hr />
+  <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0" />
 
-<p class="fineprint">
-  You're receiving this because you subscribed to {{ publication.name }}.<br />
-  <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> &middot;
-  <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
-</p>`,
+  <p style="margin:0;font-size:12px;line-height:1.6;color:#71717a">
+    You're receiving this because you subscribed to {{ publication.name }}.<br />
+    <a href="{{ footer.unsubscribeUrl }}" style="color:#71717a">Unsubscribe</a> &middot;
+    <a href="{{ footer.viewInBrowserUrl }}" style="color:#71717a">View in browser</a>
+  </p>
+</article>`,
   },
 };
 
-// Sample post body for the preview — representative prose inside a called-out slot,
-// so it's unmistakable where a real issue's rendered Markdown lands.
+// Sample post body for the preview — representative prose inside a called-out slot
+// (itself inline-styled), so it's unmistakable where a real issue's rendered
+// Markdown lands. In a real send {{ post.body }} is that rendered Markdown; the
+// dashed frame + label are a preview device, not part of the email.
 const EMAIL_TEMPLATE_SAMPLE_BODY =
-  '<div class="set-email-bodyslot">' +
-  '<span class="set-email-bodyslot-tag">Your post’s Markdown renders here</span>' +
-  "<h2>The starlings are back</h2>" +
-  "<p>A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.</p>" +
-  "<p>Three things I noticed this week, and one question for you.</p>" +
+  '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 6px;margin:0 0 4px">' +
+  "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
+  "<h2 style=\"font:600 20px/1.2 Georgia,'Times New Roman',serif;margin:0 0 10px;color:#18181b\">The starlings are back</h2>" +
+  '<p style="margin:0 0 12px">A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.</p>' +
+  '<p style="margin:0">Three things I noticed this week, and one question for you.</p>' +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
@@ -2232,36 +2242,37 @@ async function renderSettings() {
   const templateSection = `
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"), '<span class="set-tag-mock">Mock</span>')}
-      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML with <code>{{ variables }}</code> Kestrel fills in — your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest.</p>
+      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML with <code>{{ variables }}</code> Kestrel fills in — every style inline, the way a real email must be. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest.</p>
       <div class="set-card">
         <div class="set-card-pad">
-          <div class="set-tpl">
-            <div class="set-tpl-col">
+          <div class="set-preview">
+            <div class="set-preview-bar">
+              <span class="set-preview-lbl">Sample email</span>
+              <span class="set-preview-dot">One layout · every issue</span>
+            </div>
+            <div class="set-email" id="tplPreview"></div>
+            <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+          </div>
+
+          <div class="set-tpl-block">
+            <div class="set-tpl-editor-head">
+              <label for="tplEditor">Template</label>
               <div class="set-tpl-examples">
                 <span class="lbl">Start from:</span>
                 <div class="seg" role="group" aria-label="Example template">
                   <button type="button" class="seg-btn active" data-example="signed">Signed</button>
                   <button type="button" class="seg-btn" data-example="plain">Plain</button>
                 </div>
-                <button type="button" class="ghost-btn" id="tplReset">Reset to example</button>
-              </div>
-              <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-              <div class="set-tpl-vars">
-                <div class="set-tpl-vars-label">Available variables</div>
-                ${varsHtml}
               </div>
             </div>
-            <div class="set-tpl-col">
-              <div class="set-preview set-tpl-preview">
-                <div class="set-preview-bar">
-                  <span class="set-preview-lbl">Sample email</span>
-                  <span class="set-preview-dot">One layout · every issue</span>
-                </div>
-                <div class="set-email" id="tplPreview"></div>
-                <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
-              </div>
-            </div>
+            <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
+            <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there.</p>
           </div>
+
+          <details class="set-tpl-vars">
+            <summary>Available variables</summary>
+            <div class="set-tpl-vars-body">${varsHtml}</div>
+          </details>
         </div>
         <div class="set-note">${SET_ICON.info}<span>Mock — editing repaints the preview only; nothing is saved yet. The real layout engine (rendered once, frozen per send) and saved template variables come later.</span></div>
       </div>
@@ -2424,10 +2435,6 @@ async function renderSettings() {
   for (const b of body.querySelectorAll("[data-example]")) {
     b.onclick = () => loadExample(b.dataset.example);
   }
-  document.getElementById("tplReset").onclick = () => {
-    loadExample(tplExample);
-    toast("Template reset to the example");
-  };
   for (const c of body.querySelectorAll(".set-tpl-var code[data-token]")) {
     c.onclick = () => copyText(c.dataset.token);
   }

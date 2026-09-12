@@ -3014,18 +3014,26 @@ td.act {
   color: var(--muted);
 }
 
-/* --- email template (mock): an HTML template + variable reference, a live preview --- */
-.set-tpl {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 18px;
-  align-items: start;
+/* --- email template (mock): a live sample email, then the HTML template, then a
+   collapsible variable reference. The example templates carry INLINE styles — as a
+   real email must, since mail clients strip <style> and classes — so the preview
+   needs only a neutral email frame; the template paints itself. --- */
+.set-tpl-block {
+  margin-top: 16px;
 }
-.set-tpl-col {
-  min-width: 0;
+.set-tpl-editor-head {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.set-tpl-editor-head > label {
+  margin: 0;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 13px;
 }
 .set-tpl-examples {
   display: flex;
@@ -3041,27 +3049,53 @@ td.act {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.55;
-  min-height: 300px;
+  min-height: 260px;
   resize: vertical;
   white-space: pre;
   overflow-wrap: normal;
   tab-size: 2;
 }
-/* Variable reference — what the template can drop in. Logic-less: a token is only
+.set-tpl-hint {
+  margin: 6px 0 0;
+}
+/* Variable reference — a native <details> disclosure. Logic-less: a token is only
    ever replaced by its value, so there's nothing to execute. */
 .set-tpl-vars {
+  margin-top: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--bg);
-  padding: 12px 14px;
 }
-.set-tpl-vars-label {
-  font-size: 10.5px;
+.set-tpl-vars > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 14px;
+  font-size: 11px;
   font-weight: 650;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--muted);
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.set-tpl-vars > summary::-webkit-details-marker {
+  display: none;
+}
+.set-tpl-vars > summary::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(-45deg);
+  transition: transform 0.15s;
+}
+.set-tpl-vars[open] > summary::before {
+  transform: rotate(45deg);
+}
+.set-tpl-vars-body {
+  padding: 2px 14px 14px;
 }
 .set-tpl-vargroup + .set-tpl-vargroup {
   margin-top: 10px;
@@ -3093,100 +3127,17 @@ td.act {
   color: var(--muted);
   line-height: 1.4;
 }
-.set-tpl-preview {
-  position: sticky;
-  top: 16px;
-}
-
-/* The sample email itself: a neutral email-client card; headings in a serif, the
-   body slot called out, the identity sign-off + footer variables at the foot. */
+/* The sample email: a neutral email-client frame. The template's own inline styles
+   do the rest (an email carries no stylesheet), so there are no per-element rules
+   here — only safe container defaults. */
 .set-email {
   background: #ffffff;
   color: #18181b;
   padding: 22px 24px;
-  font: 14px / 1.6 var(--font);
+  font: 15px / 1.6 var(--font);
 }
-.set-email h1,
-.set-email h2,
-.set-email h3 {
-  font-family: Georgia, "Times New Roman", serif;
-  line-height: 1.2;
-}
-.set-email h2 {
-  font-size: 19px;
-  margin: 0 0 10px;
-}
-.set-email p {
-  margin: 0 0 12px;
-}
-.set-email a {
-  color: #3355cc;
-}
-.set-email hr {
-  border: 0;
-  border-top: 1px solid #e4e4e7;
-  margin: 18px 0;
-}
-.set-email img.logo {
-  border-radius: 9px;
-  display: inline-block;
-  vertical-align: middle;
-  object-fit: cover;
-}
-.set-email .signoff {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-.set-email .signoff .logo-fallback {
-  flex: 0 0 auto;
-  width: 44px;
-  height: 44px;
-  border-radius: 9px;
-  background: #f1f1f3;
-  color: #52525b;
-  display: grid;
-  place-items: center;
-  font-weight: 700;
-  font-size: 18px;
-  overflow: hidden;
-}
-.set-email .signoff .name {
-  margin: 0;
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: 17px;
-  font-weight: 600;
-}
-.set-email .signoff .tagline {
-  margin: 2px 0 0;
-  font-size: 12.5px;
-  color: #52525b;
-}
-.set-email .fineprint {
-  margin: 14px 0 0;
-  font-size: 12px;
-  color: #71717a;
-  line-height: 1.6;
-}
-/* The body slot, called out so it's unmistakable where a post's Markdown lands. */
-.set-email-bodyslot {
-  position: relative;
-  border: 1px dashed color-mix(in srgb, #3355cc 40%, #d6d6db);
-  border-radius: 8px;
-  padding: 18px 14px 12px;
-  margin-bottom: 4px;
-}
-.set-email-bodyslot-tag {
-  position: absolute;
-  top: -9px;
-  left: 10px;
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: #3355cc;
-  background: #ffffff;
-  padding: 0 6px;
+.set-email img {
+  max-width: 100%;
 }
 /* The "this is a mock" note under the editor. */
 .set-note {
@@ -3252,12 +3203,6 @@ td.act {
 
 /* --- responsive --- */
 @media (max-width: 780px) {
-  .set-tpl {
-    grid-template-columns: 1fr;
-  }
-  .set-tpl-preview {
-    position: static;
-  }
   .set-id-grid {
     grid-template-columns: 1fr;
   }
