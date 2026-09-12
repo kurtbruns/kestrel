@@ -769,9 +769,11 @@ function th(label, key, state, cls) {
     return `<th${c}>${esc(label)}</th>`;
   }
   const active = state.sort === key;
-  const arrow = active ? (state.dir === "asc" ? " ▲" : " ▼") : "";
+  // A fixed-width slot always reserved (empty when unsorted) so the label doesn't
+  // shift when the arrow appears; light ↑/↓ to match the app's other arrows.
+  const arrow = active ? (state.dir === "asc" ? "↑" : "↓") : "";
   const klass = `${cls ? `${cls} ` : ""}sortable${active ? " sorted" : ""}`;
-  return `<th class="${klass}"><button type="button" class="th-sort" data-sort="${key}">${esc(label)}${arrow}</button></th>`;
+  return `<th class="${klass}"><button type="button" class="th-sort" data-sort="${key}">${esc(label)}<span class="th-arrow" aria-hidden="true">${arrow}</span></button></th>`;
 }
 
 // Wire the sortable headers inside a freshly-rendered table. Clicking a column sorts by
@@ -848,7 +850,7 @@ async function renderPosts() {
         pagerEl.innerHTML = "";
         return;
       }
-      listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Title", "title", state)}${th("Status", "status", state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
         .map(
           (p) =>
             `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
@@ -1819,7 +1821,7 @@ async function renderSends() {
         pagerEl.innerHTML = "";
         return;
       }
-      listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Subject", "subject", state)}${th("Status", "status", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("Status", null, state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
         .map(
           (s) =>
             `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
@@ -1905,7 +1907,7 @@ function renderSubTable(listEl, rows, state, reload) {
     listEl.innerHTML = `<p class="muted">No subscribers match.</p>`;
     return;
   }
-  listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Email", "email", state)}${th("Status", "status", state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
+  listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
         `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,

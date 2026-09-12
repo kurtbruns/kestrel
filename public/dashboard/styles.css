@@ -902,6 +902,22 @@ select {
   background: var(--card);
   color: var(--fg);
 }
+/* Replace the native select caret with one inset from the border (the native caret sat
+   flush against the edge). Scoped to select so inputs/textareas keep their own chrome. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2352525b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 16px;
+}
+@media (prefers-color-scheme: dark) {
+  select {
+    background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m6 9 6 6 6-6'/></svg>");
+  }
+}
 label {
   display: block;
   font-size: 14px;
@@ -1081,6 +1097,29 @@ td a:hover {
   width: auto;
 }
 
+/* Fixed layout so a re-sort can't reflow column widths: the structured columns get
+   set widths (via <colgroup>), the text column takes the rest, and long values wrap
+   in place rather than resizing the column. */
+.list-table {
+  table-layout: fixed;
+}
+.list-table td,
+.list-table th {
+  overflow-wrap: anywhere;
+}
+.list-table .c-status {
+  width: 128px;
+}
+.list-table .c-date {
+  width: 148px;
+}
+.list-table .c-num {
+  width: 104px;
+}
+.list-table .c-act {
+  width: 56px;
+}
+
 /* sortable column headers: the label is a borderless button that fills the cell */
 th.sortable {
   padding: 0;
@@ -1103,6 +1142,15 @@ th.sortable .th-sort:hover {
 }
 th.sortable.sorted .th-sort {
   color: var(--fg);
+}
+/* A fixed-width slot for the sort arrow so the label stays put whether or not the
+   column is the active sort. */
+.th-arrow {
+  display: inline-block;
+  width: 0.85em;
+  margin-left: 3px;
+  text-align: center;
+  color: var(--muted);
 }
 th.num,
 th.num .th-sort {
