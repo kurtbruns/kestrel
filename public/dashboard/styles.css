@@ -33,6 +33,18 @@
   --b-bad-line: #fecaca;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
+     chips, in-settings links, the Save action). Deliberately NOT --brand, which is
+     the *publication's* color and is repainted from settings (renderSidebarBrand):
+     Kestrel's accents must never borrow a publication's brand color (SPEC §8). */
+  --k-accent: #3355cc;
+  --k-accent-contrast: #ffffff;
+  --k-accent-soft: rgba(51, 85, 204, 0.12);
+  /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
+     stronger line + a neutral chip fill, layered on the zinc neutrals above. */
+  --sunken: #efeff1;
+  --line-2: #d6d6db;
+  --chip: #ececee;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -65,6 +77,12 @@
     --b-bad-bg: #4c1d1d;
     --b-bad-fg: #fca5a5;
     --b-bad-line: #b91c1c;
+    --k-accent: #7d9bff;
+    --k-accent-contrast: #10131f;
+    --k-accent-soft: rgba(125, 155, 255, 0.18);
+    --sunken: #1b1b1f;
+    --line-2: #3a3a41;
+    --chip: #2a2a30;
   }
 }
 
@@ -2487,85 +2505,24 @@ td.act {
   line-height: 1.4;
 }
 
-/* --- settings: publication identity (logo + brand color) --- */
-.logo-row {
-  display: flex;
-  gap: 16px;
-  align-items: flex-start;
-  margin: 8px 0 6px;
-}
-.logo-preview {
-  flex: 0 0 auto;
-  width: 64px;
-  height: 64px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--card);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.logo-preview img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.logo-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--brand, var(--accent));
-  color: var(--accent-fg);
-  font-weight: 700;
-  font-size: 24px;
-}
-.logo-actions {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.brand-row {
-  align-items: center;
-}
-.brand-row input[type="color"] {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 38px;
-  padding: 2px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  background: var(--card);
-  cursor: pointer;
-}
-.brand-hex {
-  flex: 1 1 auto;
-  max-width: 320px;
-  font-family: var(--mono);
-}
-.hint code {
-  font: 12px var(--mono);
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 4px;
-  padding: 1px 4px;
-}
-
-/* --- settings: page layout ---
-   Open sections (heading + fields) rather than bordered cards, matching the
-   Posts/Subscribers/Sends/Dashboard section language: the uppercase h2 carries
-   the grouping, whitespace does the rest. Capped to a readable column. */
+/* ============================================================
+   Settings page. Grouped by intent, made visible: each section
+   header carries an intent chip (Editable / Read-only · set at
+   deploy / Copy-out), editable surfaces sit on cards and read-only
+   facts on a recessed "sunken" card. Kestrel's own accents use the
+   fixed --k-accent (a slate-blue), never the publication's --brand.
+   A sticky save bar collects the unsaved, persisted changes
+   (identity + test recipients); the logo and the email-template
+   mock are handled on their own and don't feed it. Theme follows
+   the OS via the tokens at the top of this file.
+   ============================================================ */
 .settings {
   max-width: 940px;
 }
 .settings .page-head {
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.set-block {
-  margin-bottom: 30px;
-}
-/* A lead paragraph under each section heading: what the setting is and where it
+/* A lead paragraph under the page title / each section: what it is and where it
    shows up. Muted and measure-limited so it reads as guidance, not chrome. */
 .set-lede {
   color: var(--muted);
@@ -2574,53 +2531,414 @@ td.act {
   margin: 0 0 16px;
   max-width: 64ch;
 }
-/* Keep the read-only deployment table and the test-recipients box off the full
-   page width — they don't need to stretch under the identity form + preview. */
-.set-narrow {
-  max-width: 560px;
+.set-page-lede {
+  margin: 2px 0 26px;
 }
 
-/* Identity editor: the fields beside a live preview of the reader masthead. The
-   section heading lives in the left column so the preview pairs with it, top-aligned
-   — "here's the setting / here's how it lands." The heading's own top margin is
-   dropped so both columns start on the same line. */
-.set-identity {
+/* --- section scaffold: uppercase title + intent chip(s) + a trailing rule --- */
+.set-sec {
+  margin-bottom: 34px;
+}
+.set-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.set-sec-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.set-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+/* Intent chips — the grouping made visible. Editable wears the Kestrel accent;
+   read-only wears a warn tone; copy-out stays muted. */
+.set-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+  background: var(--card);
+  white-space: nowrap;
+}
+.set-chip svg {
+  width: 12px;
+  height: 12px;
+}
+.set-chip.editable {
+  color: var(--k-accent);
+  border-color: color-mix(in srgb, var(--k-accent) 34%, var(--line-2));
+  background: var(--k-accent-soft);
+}
+.set-chip.readonly {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2));
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+}
+/* A dashed "Mock" tag beside the Email-template chip — says the section is a
+   preview of a feature not wired to the backend yet. */
+.set-tag-mock {
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px dashed var(--line-2);
+  color: var(--muted);
+}
+
+/* --- cards: editable surfaces raised, read-only facts recessed --- */
+.set-card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(24, 24, 27, 0.04);
+  margin-bottom: 16px;
+  overflow: hidden;
+}
+.set-card:last-child {
+  margin-bottom: 0;
+}
+.set-card.sunken {
+  background: var(--sunken);
+  border-color: var(--line-2);
+  box-shadow: none;
+}
+.set-card-pad {
+  padding: 18px;
+}
+
+/* Kestrel-accent links inside the settings cards (operator-guide links, Open ↗). */
+.set-link {
+  color: var(--k-accent);
+  font-weight: 550;
+  text-decoration: none;
+}
+.set-link:hover {
+  text-decoration: underline;
+}
+
+/* --- publication identity: a logo tile beside name + tagline --- */
+.set-id-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 28px;
-  align-items: start;
+  grid-template-columns: 128px 1fr;
+  gap: 18px 22px;
+  padding: 20px;
 }
-.set-fields {
+.set-logo-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.set-logo-tile {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  border: 1px dashed var(--line-2);
+  background: var(--sunken);
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  overflow: hidden;
+  cursor: pointer;
+  background-size: cover;
+  background-position: center;
+}
+.set-logo-tile.has-img {
+  border-style: solid;
+}
+.set-logo-tile:hover {
+  border-color: var(--k-accent);
+}
+.set-logo-ph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  text-align: center;
+  padding: 8px;
+}
+.set-logo-ph svg {
+  width: 20px;
+  height: 20px;
+}
+.set-logo-actions {
+  display: flex;
+  gap: 6px;
+}
+.set-logo-actions button {
+  flex: 1;
+  font-size: 12px;
+  padding: 6px 8px;
+}
+.set-field {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
 }
-/* Both columns must be allowed to shrink below their content: without this the
-   masthead's nowrap name/tagline give the preview a large intrinsic min-width, which
-   blows the column out past the viewport once the grid stacks on a phone. */
-.set-preview {
+.set-field > label {
+  margin: 0 0 6px;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 13px;
+}
+.set-field + .set-field {
+  margin-top: 16px;
+}
+.set-id-fields {
   min-width: 0;
-}
-.set-fields h2 {
-  margin-top: 0;
-}
-/* One reading measure for the stacked identity inputs, so Name/Tagline don't run
-   the full column width. Direct children only — the color swatch + hex sit inside
-   .brand-row and keep their own narrower sizing. */
-.set-fields > input {
-  max-width: 440px;
-}
-@media (max-width: 780px) {
-  .set-identity {
-    grid-template-columns: 1fr;
-  }
-  .set-narrow {
-    max-width: none;
-  }
+  display: flex;
+  flex-direction: column;
 }
 
-/* Embed: a Styled/Plain toggle over the copy-paste source. The snippet is the
-   deliverable — pasted into the author's own site — so it isn't re-rendered here. */
+/* --- framed preview shell (sample email + inbox row) --- */
+.set-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--card);
+}
+.set-preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 13px;
+  background: var(--sunken);
+  border-bottom: 1px solid var(--line);
+}
+.set-preview-lbl {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.set-preview-dot {
+  font-size: 11px;
+  color: var(--muted);
+}
+.set-preview-cap {
+  padding: 9px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  background: var(--card);
+  border-top: 1px solid var(--line);
+}
+
+/* --- read-only note bar + key/value facts (email sender, instance) --- */
+.set-ro-note {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--line-2);
+  background: color-mix(in srgb, var(--warn) 6%, transparent);
+  font-size: 12.5px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.set-ro-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--warn);
+}
+.set-kv {
+  display: grid;
+  grid-template-columns: minmax(120px, 200px) 1fr;
+}
+.set-kv > div {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--line);
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.set-kv > .set-kv-k {
+  color: var(--muted);
+  font-size: 12.5px;
+  font-weight: 550;
+  border-right: 1px solid var(--line);
+  background: color-mix(in srgb, var(--sunken) 55%, transparent);
+}
+.set-kv > .set-kv-v {
+  font-size: 13.5px;
+  overflow-x: auto;
+}
+.set-kv > div:nth-last-child(1),
+.set-kv > div:nth-last-child(2) {
+  border-bottom: 0;
+}
+.settings .mono {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.set-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--muted);
+  border: 1px solid var(--line-2);
+  white-space: nowrap;
+}
+.set-pill.ok {
+  background: var(--b-sent-bg);
+  color: var(--b-sent-fg);
+  border-color: var(--b-sent-line);
+}
+.set-pill svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Inbox preview: how the From line reaches a reader. */
+.set-inbox {
+  display: flex;
+  gap: 13px;
+  padding: 14px 16px;
+  align-items: flex-start;
+}
+.set-inbox-avatar {
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--fg);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 16px;
+  overflow: hidden;
+}
+.set-inbox-body {
+  min-width: 0;
+  flex: 1;
+}
+.set-inbox-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.set-inbox-from {
+  font-weight: 650;
+  font-size: 14px;
+}
+.set-inbox-time {
+  font-size: 12px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.set-inbox-subj {
+  font-size: 13.5px;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.set-inbox-snip {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.set-inbox-addr {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 5px;
+}
+
+/* --- default test recipients: removable chips + add row --- */
+.set-recip {
+  padding: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.set-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.set-recip-empty {
+  font-size: 13px;
+  color: var(--muted);
+}
+.set-recip-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--chip);
+  border: 1px solid var(--line-2);
+  border-radius: 999px;
+  padding: 5px 6px 5px 12px;
+  font-size: 13px;
+  font-family: var(--mono);
+}
+.set-recip-chip button {
+  border: 0;
+  background: color-mix(in srgb, var(--fg) 8%, transparent);
+  color: var(--muted);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+}
+.set-recip-chip button:hover {
+  background: var(--b-bad-bg);
+  color: var(--b-bad-fg);
+}
+.set-recip-chip button svg {
+  width: 10px;
+  height: 10px;
+}
+.set-recip-add {
+  display: flex;
+  gap: 8px;
+  max-width: 420px;
+}
+.set-recip-add input {
+  flex: 1;
+}
+
+/* --- ways to subscribe: URL row reuses .pub-row; embed adds a rendered preview --- */
 .set-embed-head {
-  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 2px 0 8px;
 }
 .set-embed pre {
   margin: 0;
@@ -2634,120 +2952,342 @@ td.act {
 .set-embed pre code {
   white-space: pre;
 }
+.set-embed-preview {
+  margin: 14px 0 0;
+  border: 1px dashed var(--line-2);
+  border-radius: 8px;
+  padding: 18px 16px;
+  background: var(--sunken);
+}
+.set-embed-cap {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+/* Rendered form previews (inert — they never submit here). */
+.set-pf-plain label {
+  display: block;
+  font-size: 13px;
+  margin: 0 0 4px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.set-pf-plain input {
+  max-width: 260px;
+  margin-bottom: 8px;
+}
+.set-pf-plain button {
+  display: block;
+}
+.set-pf-styled {
+  max-width: 440px;
+}
+.set-pf-styled .l {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--fg);
+}
+.set-pf-styled .rowf {
+  display: flex;
+  gap: 8px;
+}
+.set-pf-styled input {
+  flex: 1;
+  min-width: 0;
+}
+.set-pf-styled .sub-btn {
+  flex: 0 0 auto;
+  background: #18181b;
+  color: #fff;
+  border-color: #18181b;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.set-pf-fine {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
 
-/* Segmented toggle (Styled / Plain). */
-.seg {
-  display: inline-flex;
-  gap: 2px;
-  padding: 2px;
-  background: var(--bg);
+/* --- email template (mock): an HTML template + variable reference, a live preview --- */
+.set-tpl {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+.set-tpl-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.set-tpl-examples {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.set-tpl-examples .lbl {
+  font-size: 12px;
+  color: var(--muted);
+}
+.set-tpl-editor {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  min-height: 300px;
+  resize: vertical;
+  white-space: pre;
+  overflow-wrap: normal;
+  tab-size: 2;
+}
+/* Variable reference — what the template can drop in. Logic-less: a token is only
+   ever replaced by its value, so there's nothing to execute. */
+.set-tpl-vars {
   border: 1px solid var(--line);
   border-radius: 8px;
+  background: var(--bg);
+  padding: 12px 14px;
 }
-.seg-btn {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 500;
-  padding: 5px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.seg-btn:hover {
-  color: var(--fg);
-}
-.seg-btn.active {
-  background: var(--card);
-  color: var(--fg);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* Live masthead preview — a faithful-enough mirror of the reader chrome in
-   src/lib/page.ts (a filled brand bar, logo tile, editorial serif name, tagline,
-   and a subscribe pill). Not pixel-exact (the reader loads a display serif); the
-   note links out to the real page. Background + text color are set inline from the
-   current field values (see updatePreview), so currentColor here is the masthead
-   text color and the tile/pill tint off it. */
-.set-preview-label {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.05em;
+.set-tpl-vars-label {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   color: var(--muted);
   margin-bottom: 8px;
 }
-.reader-mast {
+.set-tpl-vargroup + .set-tpl-vargroup {
+  margin-top: 10px;
+}
+.set-tpl-vargroup h4 {
+  margin: 0 0 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.set-tpl-var {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+.set-tpl-var code {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--k-accent);
+  background: var(--k-accent-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  cursor: copy;
+}
+.set-tpl-var-desc {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.set-tpl-preview {
+  position: sticky;
+  top: 16px;
+}
+
+/* The sample email itself: a neutral email-client card; headings in a serif, the
+   body slot called out, the identity sign-off + footer variables at the foot. */
+.set-email {
+  background: #ffffff;
+  color: #18181b;
+  padding: 22px 24px;
+  font: 14px / 1.6 var(--font);
+}
+.set-email h1,
+.set-email h2,
+.set-email h3 {
+  font-family: Georgia, "Times New Roman", serif;
+  line-height: 1.2;
+}
+.set-email h2 {
+  font-size: 19px;
+  margin: 0 0 10px;
+}
+.set-email p {
+  margin: 0 0 12px;
+}
+.set-email a {
+  color: #3355cc;
+}
+.set-email hr {
+  border: 0;
+  border-top: 1px solid #e4e4e7;
+  margin: 18px 0;
+}
+.set-email img.logo {
+  border-radius: 9px;
+  display: inline-block;
+  vertical-align: middle;
+  object-fit: cover;
+}
+.set-email .signoff {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 16px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: #18181b;
-  color: #fff;
-  overflow: hidden;
 }
-.reader-mast-logo {
+.set-email .signoff .logo-fallback {
   flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   border-radius: 9px;
-  background: color-mix(in srgb, currentColor 16%, transparent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #f1f1f3;
+  color: #52525b;
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 18px;
   overflow: hidden;
 }
-.reader-mast-logo img {
-  max-width: 100%;
-  max-height: 100%;
-  display: block;
-}
-.reader-mast-id {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.reader-mast-name {
+.set-email .signoff .name {
+  margin: 0;
   font-family: Georgia, "Times New Roman", serif;
   font-size: 17px;
   font-weight: 600;
-  letter-spacing: -0.01em;
-  line-height: 1.15;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-.reader-mast-tag {
+.set-email .signoff .tagline {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: #52525b;
+}
+.set-email .fineprint {
+  margin: 14px 0 0;
   font-size: 12px;
-  opacity: 0.82;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  color: #71717a;
+  line-height: 1.6;
 }
-.reader-mast-cta {
-  flex: 0 0 auto;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  padding: 5px 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+/* The body slot, called out so it's unmistakable where a post's Markdown lands. */
+.set-email-bodyslot {
+  position: relative;
+  border: 1px dashed color-mix(in srgb, #3355cc 40%, #d6d6db);
+  border-radius: 8px;
+  padding: 18px 14px 12px;
+  margin-bottom: 4px;
 }
-.set-preview-note {
-  font-size: 12px;
+.set-email-bodyslot-tag {
+  position: absolute;
+  top: -9px;
+  left: 10px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #3355cc;
+  background: #ffffff;
+  padding: 0 6px;
+}
+/* The "this is a mock" note under the editor. */
+.set-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+  font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
-  margin: 10px 0 0;
 }
-.set-preview-note a {
+.set-note svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+  margin-top: 1px;
   color: var(--muted);
 }
-.set-preview-note a:hover {
-  color: var(--fg);
+
+/* --- sticky save bar: the unsaved, persisted changes (identity + recipients) --- */
+.set-savebar {
+  position: sticky;
+  bottom: 14px;
+  z-index: 8;
+  margin-top: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--line-2);
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px -14px rgba(24, 24, 27, 0.4);
+}
+.set-savebar .msg {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13.5px;
+}
+.set-savebar .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: 0 0 auto;
+}
+.set-savebar .acts {
+  display: flex;
+  gap: 9px;
+}
+/* The one Kestrel-accent button on the page (the page's primary action); every
+   other primary in the app stays the near-black --accent, so this stays scoped. */
+.set-savebar button.primary {
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+  border-color: var(--k-accent);
+}
+
+/* --- responsive --- */
+@media (max-width: 780px) {
+  .set-tpl {
+    grid-template-columns: 1fr;
+  }
+  .set-tpl-preview {
+    position: static;
+  }
+  .set-id-grid {
+    grid-template-columns: 1fr;
+  }
+  .set-logo-slot {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+  .set-logo-tile {
+    width: 96px;
+    flex: 0 0 96px;
+  }
+  .set-logo-actions {
+    flex-direction: column;
+  }
+}
+@media (max-width: 560px) {
+  .set-kv {
+    grid-template-columns: 1fr;
+  }
+  .set-kv > .set-kv-k {
+    border-right: 0;
+    border-bottom: 0;
+    padding-bottom: 2px;
+  }
+  .set-kv > .set-kv-v {
+    padding-top: 2px;
+  }
+  .set-kv > div:nth-last-child(2) {
+    border-bottom: 1px solid var(--line);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

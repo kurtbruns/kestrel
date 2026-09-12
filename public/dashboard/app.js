@@ -1992,22 +1992,124 @@ function addSubscriberModal(onDone) {
 // config. Secrets never come down this wire (see routes/settings.ts).
 const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resend: "Resend" };
 
-// Black-or-white text for a filled brand color, mirroring readableTextColor in
-// src/db/settings.ts so the live masthead preview matches the rendered reader page.
-// A blank/invalid color means the masthead falls back to the near-black default,
-// which always takes white text.
-function readableOn(hex) {
-  const h = String(hex || "").replace(/^#/, "");
-  if (h.length !== 6) {
-    return "#ffffff";
-  }
-  const r = Number.parseInt(h.slice(0, 2), 16);
-  const g = Number.parseInt(h.slice(2, 4), 16);
-  const b = Number.parseInt(h.slice(4, 6), 16);
-  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
+// Small inline icons for the intent chips, read-only notes, and controls.
+const SET_ICON = {
+  editable:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
+  readonly:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
+  copyout:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
+  upload:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
+  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  check:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+};
+
+// ---- settings: email template (mock) ----
+// The one layout each issue ships inside, authored as an HTML template with
+// logic-less {{ }} placeholders over a fixed variable context. Logic-less means a
+// token is only ever swapped for its value — nothing executes — which is why this
+// is a template editor, not a WYSIWYG. This pass is a MOCK: edits repaint the
+// preview only, nothing persists. The real layout engine (rendered once and frozen
+// per send, I3/I5) and saved template variables come later; conceptually both run
+// through the single render path (SPEC §5, I5) this preview stands in for.
+
+// The variables a template can drop in, grouped for the reference panel.
+const EMAIL_TEMPLATE_VARS = [
+  {
+    group: "Post",
+    vars: [
+      {
+        token: "{{ post.body }}",
+        desc: "Your issue's Markdown, rendered to HTML — the body slot.",
+      },
+      { token: "{{ post.subject }}", desc: "The issue's subject line." },
+    ],
+  },
+  {
+    group: "Publication",
+    vars: [
+      { token: "{{ publication.name }}", desc: "Publication name (from Identity, above)." },
+      { token: "{{ publication.tagline }}", desc: "Your tagline." },
+      { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, if set." },
+    ],
+  },
+  {
+    group: "Footer",
+    vars: [
+      { token: "{{ footer.sentTo }}", desc: "The recipient's address (filled per send)." },
+      { token: "{{ footer.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
+      { token: "{{ footer.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
+    ],
+  },
+];
+
+// Two starting points; the publisher edits the HTML freely from there. Identity sits
+// at the FOOT (a sign-off), so the email stays faithful to today's masthead-free top.
+const EMAIL_TEMPLATE_EXAMPLES = {
+  signed: {
+    label: "Signed",
+    html: `<article>
+  {{ post.body }}
+</article>
+
+<hr />
+
+<footer class="signoff">
+  <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
+  <div>
+    <p class="name">{{ publication.name }}</p>
+    <p class="tagline">{{ publication.tagline }}</p>
+  </div>
+</footer>
+
+<p class="fineprint">
+  Sent to {{ footer.sentTo }} &middot;
+  <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> &middot;
+  <a href="{{ footer.viewInBrowserUrl }}">View in browser</a><br />
+  {{ publication.name }} &mdash; a Kestrel publication
+</p>`,
+  },
+  plain: {
+    label: "Plain",
+    html: `<article>
+  {{ post.body }}
+</article>
+
+<hr />
+
+<p class="fineprint">
+  You're receiving this because you subscribed to {{ publication.name }}.<br />
+  <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> &middot;
+  <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+</p>`,
+  },
+};
+
+// Sample post body for the preview — representative prose inside a called-out slot,
+// so it's unmistakable where a real issue's rendered Markdown lands.
+const EMAIL_TEMPLATE_SAMPLE_BODY =
+  '<div class="set-email-bodyslot">' +
+  '<span class="set-email-bodyslot-tag">Your post’s Markdown renders here</span>' +
+  "<h2>The starlings are back</h2>" +
+  "<p>A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.</p>" +
+  "<p>Three things I noticed this week, and one question for you.</p>" +
+  "</div>";
+
+// Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
+// raw HTML (the rendered Markdown); every other value is escaped, so a stray < or "
+// in a name can't break the surrounding markup. An unknown token renders empty.
+function fillEmailTemplate(html, ctx) {
+  return String(html).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) =>
+    key === "post.body" ? ctx["post.body"] || "" : esc(ctx[key]),
+  );
 }
+
 async function renderSettings() {
-  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each issue is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -2016,299 +2118,544 @@ async function renderSettings() {
     renderError(body, e.message, renderSettings);
     return;
   }
-  const s = data.settings,
-    d = data.deployment;
-  const p = s.publication || { name: "", tagline: "", brandColor: "", logoUrl: "" };
+  const s = data.settings;
+  const d = data.deployment;
+  const p = s.publication || { name: "", tagline: "", logoUrl: "" };
   const fromName = parseFromName(d.fromAddress) || "Your publication";
-  const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
 
-  // The public subscribe page and two ready-to-paste embeds. Both post to the same
-  // public /subscribe endpoint (which already accepts a cross-origin form post): no
-  // script, and each starts the double opt-in like any other entry — never an
-  // auto-confirm (I1). `styled` is self-contained (inline styles + the brand color)
-  // so it drops in looking finished; `plain` is minimal markup for a developer who
-  // wants to style it themselves. The brand color is read from the *saved* identity.
+  // Live, in-memory state. The save bar tracks the PERSISTED editable fields (name,
+  // tagline, test recipients) against the saved baseline. The logo is immediate (its
+  // own endpoints) and the email template is a mock (no persistence), so neither
+  // feeds the bar.
+  const state = {
+    name: p.name || "",
+    tagline: p.tagline || "",
+    logoUrl: p.logoUrl || "",
+    recipients: [...(s.testRecipients || [])],
+  };
+  let baseline = {
+    name: state.name,
+    tagline: state.tagline,
+    recipients: [...state.recipients],
+  };
+
+  const monogram = (v) => (String(v || fromName).trim()[0] || "K").toUpperCase();
+  const bareAddress = (from) => {
+    const m = String(from || "").match(/<([^>]+)>/);
+    return m ? m[1] : String(from || "");
+  };
+  // A neutral placeholder logo (a monogram tile) for the preview when no real logo is
+  // set, so the "Signed" example still renders a complete sign-off. Fully
+  // URL-encoded so it carries no raw <,>," and survives the template's escaping.
+  const sampleLogoDataUri = (v) => {
+    const ch = monogram(v);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" rx="9" fill="#e4e4e7"/><text x="22" y="29" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#52525b" text-anchor="middle">${ch}</text></svg>`;
+    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+  };
+
+  // Subscribe URL + embeds: paste into your own site; both post to the public
+  // /subscribe and start the double opt-in — never an auto-confirm (I1).
   const appOrigin = d.appOrigin || location.origin;
   const subscribeUrl = `${appOrigin}/subscribe`;
-  const embedName = esc(p.name || fromName);
   const embedAction = `${esc(appOrigin)}/subscribe`;
-  const embedBrand = /^#[0-9a-fA-F]{6}$/.test((p.brandColor || "").trim())
-    ? p.brandColor.trim()
-    : "#18181b";
-  const embedBrandText = readableOn(embedBrand);
-  const EMBEDS = {
-    plain:
+  const buildEmbed = (mode, nameRaw) => {
+    const name = esc(nameRaw || fromName);
+    if (mode === "styled") {
+      return (
+        `<form action="${embedAction}" method="post" style="max-width:420px;font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif">\n` +
+        `  <div style="font-weight:600;margin-bottom:6px">Subscribe to ${name}</div>\n` +
+        `  <div style="display:flex;gap:8px;flex-wrap:wrap">\n` +
+        `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 200px;padding:10px 12px;border:1px solid #d4d4d8;border-radius:8px;font:inherit">\n` +
+        `    <button type="submit" style="padding:10px 18px;border:0;border-radius:8px;background:#18181b;color:#fff;font:inherit;font-weight:600;cursor:pointer">Subscribe</button>\n` +
+        `  </div>\n` +
+        `  <p style="margin:8px 0 0;font-size:13px;color:#71717a">Double opt-in — we'll email a confirmation link. Unsubscribe anytime.</p>\n` +
+        `</form>`
+      );
+    }
+    return (
       `<form action="${embedAction}" method="post">\n` +
       `  <label>\n` +
-      `    Subscribe to ${embedName}\n` +
+      `    Subscribe to ${name}\n` +
       `    <input type="email" name="email" placeholder="you@example.com" required>\n` +
       `  </label>\n` +
       `  <button type="submit">Subscribe</button>\n` +
-      `</form>`,
-    styled:
-      `<form action="${embedAction}" method="post" style="max-width:420px;font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif">\n` +
-      `  <div style="font-weight:600;margin-bottom:6px">Subscribe to ${embedName}</div>\n` +
-      `  <div style="display:flex;gap:8px;flex-wrap:wrap">\n` +
-      `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 200px;padding:10px 12px;border:1px solid #d4d4d8;border-radius:8px;font:inherit">\n` +
-      `    <button type="submit" style="padding:10px 18px;border:0;border-radius:8px;background:${embedBrand};color:${embedBrandText};font:inherit;font-weight:600;cursor:pointer">Subscribe</button>\n` +
-      `  </div>\n` +
-      `  <p style="margin:8px 0 0;font-size:13px;color:#71717a">Double opt-in — we’ll email a confirmation link. Unsubscribe anytime.</p>\n` +
-      `</form>`,
+      `</form>`
+    );
   };
-  const EMBED_HINTS = {
-    styled: "Self-contained — inline styles in your brand color. Paste it anywhere.",
-    plain: "Minimal markup, no styles — ready for you to style yourself.",
-  };
-  body.innerHTML = `
-    <section class="dash-section set-block">
-      <div class="set-identity">
-        <div class="set-fields">
-          <h2>Publication identity</h2>
-          <p class="set-lede">How your publication looks on its public pages and in this dashboard — not the email, whose sender is your From address (below).</p>
-          <div class="logo-row">
-            <div class="logo-preview" id="logoPreview">${
-              p.logoUrl
-                ? `<img src="${esc(p.logoUrl)}" alt="Current logo">`
-                : `<span class="logo-placeholder">${esc((p.name || fromName).trim()[0] || "K").toUpperCase()}</span>`
-            }</div>
-            <div class="logo-actions">
-              <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
-              <div class="row">
-                <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
-                <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
-              </div>
-              <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. A roughly square logo reads best.</p>
+
+  const chip = (kind, label) => `<span class="set-chip ${kind}">${SET_ICON[kind]}${label}</span>`;
+  const secHead = (title, chipHtml, extra = "") =>
+    `<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
+
+  const varsHtml = EMAIL_TEMPLATE_VARS.map(
+    (g) =>
+      `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
+        .map(
+          (v) =>
+            `<div class="set-tpl-var"><code data-token="${esc(v.token)}" title="Click to copy">${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
+        )
+        .join("")}</div>`,
+  ).join("");
+
+  const identitySection = `
+    <section class="set-sec">
+      ${secHead("Publication identity", chip("editable", "Editable"))}
+      <div class="set-card">
+        <div class="set-id-grid">
+          <div class="set-logo-slot">
+            <div class="set-logo-tile${state.logoUrl ? " has-img" : ""}" id="logoTile" role="button" tabindex="0" aria-label="Upload logo"${state.logoUrl ? ` style="background-image:url('${esc(state.logoUrl)}')"` : ""}>
+              <span class="set-logo-ph" id="logoPh"${state.logoUrl ? " hidden" : ""}>${SET_ICON.upload}Upload</span>
+            </div>
+            <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+            <div class="set-logo-actions">
+              <button type="button" id="logoReplace">${state.logoUrl ? "Replace" : "Upload"}</button>
+              <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? "" : " hidden"}>Remove</button>
+            </div>
+            <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. Saves immediately.</p>
+          </div>
+          <div class="set-id-fields">
+            <div class="set-field">
+              <label for="setName">Name</label>
+              <input id="setName" value="${esc(state.name)}" placeholder="${esc(fromName)}" maxlength="120" autocomplete="off">
+              <p class="field-hint">Blank falls back to the email “From” name (“${esc(fromName)}”).</p>
+            </div>
+            <div class="set-field">
+              <label for="setTagline">Tagline</label>
+              <input id="setTagline" value="${esc(state.tagline)}" placeholder="A one-line description" maxlength="200" autocomplete="off">
+              <p class="field-hint">A short line under the name on your public pages.</p>
             </div>
           </div>
-          <label for="setName">Name</label>
-          <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
-          <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
-          <label for="setTagline">Tagline</label>
-          <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
-          <p class="field-hint">A short line under the name in the masthead.</p>
-          <label for="setBrandHex">Brand color</label>
-          <div class="row brand-row">
-            <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
-            <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb">
-            <button class="ghost-btn" id="setBrandClear">Clear</button>
-          </div>
-          <p class="field-hint">Fills the masthead bar and tints its links. Blank uses the theme default (near-black).</p>
-          <div class="row" style="margin-top:16px"><button class="primary" id="idSave">Save identity</button></div>
         </div>
-        <aside class="set-preview">
-          <div class="set-preview-label">Reader masthead</div>
-          <div class="reader-mast" id="setMast">
-            <span class="reader-mast-logo" id="pvLogo"${p.logoUrl ? "" : " hidden"}>${
-              p.logoUrl ? `<img src="${esc(p.logoUrl)}" alt="">` : ""
-            }</span>
-            <span class="reader-mast-id">
-              <span class="reader-mast-name" id="pvName"></span>
-              <span class="reader-mast-tag" id="pvTag" hidden></span>
-            </span>
-            <span class="reader-mast-cta">Subscribe →</span>
-          </div>
-          <p class="set-preview-note">A preview of your archive masthead. <a href="/" target="_blank" rel="noopener">Open the live page&nbsp;↗</a></p>
-        </aside>
       </div>
-    </section>
-
-    <section class="dash-section set-block">
-      <h2>Email sender</h2>
-      <p class="set-lede">The identity readers see in their inbox. Set at deploy time and shown read-only — change it through the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
-      <div class="table-wrap set-narrow"><table><tbody>
-        ${kv("From address", d.fromAddress)}
-        ${kv("Sending domain", d.sendingDomain)}
-        ${kv("Email provider", PROVIDER_LABELS[d.provider] || d.provider)}
-      </tbody></table></div>
-    </section>
-
-    <section class="dash-section set-block">
-      <h2>Ways to subscribe</h2>
-      <p class="set-lede">Share your subscribe page, or drop the form into your own site. Both start the double opt-in — a reader always confirms by email before joining.</p>
-      <label>Subscribe page</label>
-      <div class="pub-row set-narrow">
-        <code class="pub-val">${esc(subscribeUrl)}</code>
-        <button class="ghost-btn" data-copy="${esc(subscribeUrl)}">Copy</button>
-        <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
-      </div>
-      <label style="margin-top:20px">Embed on your site</label>
-      <div class="spread set-embed-head set-narrow">
-        <div class="seg" role="tablist" id="embedToggle">
-          <button type="button" class="seg-btn active" data-embed="plain" role="tab" aria-selected="true">Plain HTML</button>
-          <button type="button" class="seg-btn" data-embed="styled" role="tab" aria-selected="false">Styled</button>
-        </div>
-        <button class="ghost-btn" id="embedCopy">Copy code</button>
-      </div>
-      <p class="field-hint" id="embedHint" style="margin:8px 0"></p>
-      <div class="set-embed set-narrow"><pre><code id="embedCode"></code></pre></div>
-    </section>
-
-    <section class="dash-section set-block">
-      <h2>Default test recipients</h2>
-      <p class="set-lede">Pre-filled into <strong>Send test email</strong> so you can check a draft in a real client. One address per line — these are your own inboxes and don't go through the subscribe/consent flow.</p>
-      <textarea id="setTestRecipients" class="set-narrow" rows="4" placeholder="you@example.com">${esc(s.testRecipients.join("\n"))}</textarea>
-      <div class="row" style="margin-top:12px"><button class="primary" id="setSave">Save</button></div>
-    </section>
-
-    <section class="dash-section set-block">
-      <h2>Instance</h2>
-      <p class="set-lede">How this deployment is wired — set at deploy time (env vars + secrets) and shown read-only. To change any of these, see the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
-      <div class="table-wrap set-narrow"><table><tbody>
-        ${kv("App origin", d.appOrigin)}
-        ${kv("Archive URL base", d.archiveOrigin + d.archiveBasePath)}
-        ${kv("Image URL base", d.mediaPublicBase)}
-        ${kv("Auth mode", d.authMode === "access" ? "Cloudflare Access" : "Local dev token")}
-        ${kv("Access configured", d.accessConfigured ? "Yes" : "No")}
-      </tbody></table></div>
     </section>`;
 
-  // Keep the cached config + sidebar brand in step with a save (the brand reads the
-  // same publication identity), and re-render the Settings view so the logo preview
-  // reflects a new/removed logo.
+  const templateSection = `
+    <section class="set-sec">
+      ${secHead("Email template", chip("editable", "Editable"), '<span class="set-tag-mock">Mock</span>')}
+      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML with <code>{{ variables }}</code> Kestrel fills in — your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest.</p>
+      <div class="set-card">
+        <div class="set-card-pad">
+          <div class="set-tpl">
+            <div class="set-tpl-col">
+              <div class="set-tpl-examples">
+                <span class="lbl">Start from:</span>
+                <div class="seg" role="group" aria-label="Example template">
+                  <button type="button" class="seg-btn active" data-example="signed">Signed</button>
+                  <button type="button" class="seg-btn" data-example="plain">Plain</button>
+                </div>
+                <button type="button" class="ghost-btn" id="tplReset">Reset to example</button>
+              </div>
+              <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
+              <div class="set-tpl-vars">
+                <div class="set-tpl-vars-label">Available variables</div>
+                ${varsHtml}
+              </div>
+            </div>
+            <div class="set-tpl-col">
+              <div class="set-preview set-tpl-preview">
+                <div class="set-preview-bar">
+                  <span class="set-preview-lbl">Sample email</span>
+                  <span class="set-preview-dot">One layout · every issue</span>
+                </div>
+                <div class="set-email" id="tplPreview"></div>
+                <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="set-note">${SET_ICON.info}<span>Mock — editing repaints the preview only; nothing is saved yet. The real layout engine (rendered once, frozen per send) and saved template variables come later.</span></div>
+      </div>
+    </section>`;
+
+  const senderSection = `
+    <section class="set-sec">
+      ${secHead("Email sender", chip("readonly", "Read-only · set at deploy"))}
+      <div class="set-card sunken">
+        <div class="set-ro-note">${SET_ICON.readonly}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">operator setup guide</a>, then redeploy. Credentials are never shown.</span></div>
+        <div class="set-preview-bar" style="background:transparent">
+          <span class="set-preview-lbl">Inbox preview</span>
+          <span class="set-preview-dot">How readers see the sender</span>
+        </div>
+        <div class="set-inbox">
+          <div class="set-inbox-avatar">${esc(monogram(fromName))}</div>
+          <div class="set-inbox-body">
+            <div class="set-inbox-top"><span class="set-inbox-from">${esc(fromName)}</span><span class="set-inbox-time">9:02 AM</span></div>
+            <div class="set-inbox-subj">Your latest issue — a sample subject line</div>
+            <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
+            <div class="set-inbox-addr">${esc(bareAddress(d.fromAddress))}</div>
+          </div>
+        </div>
+        <div class="set-kv" style="border-top:1px solid var(--line)">
+          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${esc(d.fromAddress)}</span></div>
+          <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${esc(d.sendingDomain)}</span></div>
+          <div class="set-kv-k">Email provider</div><div class="set-kv-v">${esc(PROVIDER_LABELS[d.provider] || d.provider)}</div>
+        </div>
+      </div>
+    </section>`;
+
+  const recipSection = `
+    <section class="set-sec">
+      ${secHead("Default test recipients", chip("editable", "Editable"))}
+      <div class="set-card">
+        <div class="set-recip">
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses — they don’t go through the subscribe/consent flow.</p>
+          <div class="set-chips" id="recipChips"></div>
+          <div class="set-recip-add">
+            <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">
+            <button type="button" id="recipAdd">Add inbox</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  const subscribeSection = `
+    <section class="set-sec">
+      ${secHead("Ways to subscribe", chip("copyout", "Copy-out"))}
+      <div class="set-card set-card-pad">
+        <div class="set-field">
+          <label>Public subscribe page</label>
+          <div class="pub-row">
+            <code class="pub-val">${esc(subscribeUrl)}</code>
+            <button class="ghost-btn" data-copy="${esc(subscribeUrl)}">Copy</button>
+            <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
+          </div>
+          <p class="field-hint">The double opt-in page Kestrel hosts. Share it directly, or embed the form below.</p>
+        </div>
+        <div class="set-embed-head" style="margin-top:18px">
+          <label style="margin:0">Embeddable subscribe form</label>
+          <div class="seg" role="group" aria-label="Snippet style">
+            <button type="button" class="seg-btn active" data-embed="plain">Plain HTML</button>
+            <button type="button" class="seg-btn" data-embed="styled">Styled</button>
+          </div>
+        </div>
+        <p class="field-hint" id="embedHint" style="margin:0 0 10px"></p>
+        <div class="set-embed-preview">
+          <div class="set-embed-cap">Rendered preview</div>
+          <div id="embedPreview"></div>
+        </div>
+        <div class="set-embed" style="margin-top:14px"><pre><code id="embedCode"></code></pre></div>
+        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost-btn" id="embedCopy">Copy code</button></div>
+      </div>
+    </section>`;
+
+  const archiveBase = `${d.archiveOrigin || ""}${d.archiveBasePath || ""}`;
+  const archiveIsDefault = d.archiveOrigin === d.appOrigin;
+  const instanceSection = `
+    <section class="set-sec">
+      ${secHead("Instance", chip("readonly", "Read-only · set at deploy"))}
+      <div class="set-card sunken">
+        <div class="set-ro-note">${SET_ICON.info}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs">operator setup guide</a> to change them.</span></div>
+        <div class="set-kv">
+          <div class="set-kv-k">App origin</div><div class="set-kv-v"><span class="mono">${esc(d.appOrigin)}</span></div>
+          <div class="set-kv-k">Archive URL base</div><div class="set-kv-v"><span class="mono">${esc(archiveBase)}</span>${archiveIsDefault ? '<span class="set-pill">default: app origin</span>' : ""}</div>
+          <div class="set-kv-k">Image URL base</div><div class="set-kv-v"><span class="mono">${esc(d.mediaPublicBase)}</span></div>
+          <div class="set-kv-k">Auth mode</div><div class="set-kv-v">${d.authMode === "access" ? "Cloudflare Access" : "Local dev token"}</div>
+          <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.accessConfigured ? `<span class="set-pill ok">${SET_ICON.check}Configured</span>` : '<span class="set-pill">Not configured</span>'}</div>
+        </div>
+      </div>
+    </section>`;
+
+  const saveBar = `
+    <div class="set-savebar" id="saveBar" role="region" aria-label="Unsaved changes" hidden>
+      <span class="msg"><span class="dot"></span> You have unsaved changes.</span>
+      <span class="acts">
+        <button type="button" id="discardBtn">Discard</button>
+        <button type="button" class="primary" id="saveBtn">Save changes</button>
+      </span>
+    </div>`;
+
+  body.innerHTML =
+    identitySection +
+    templateSection +
+    senderSection +
+    recipSection +
+    subscribeSection +
+    instanceSection +
+    saveBar;
+
+  // Keep the cached config + sidebar brand in step after a save (the sidebar brand
+  // reads the same publication identity).
   const applySettings = (settings) => {
     appConfig = { ...(appConfig || {}), settings };
     renderSidebarBrand();
   };
 
-  // --- brand color: the text field is the source of truth ("" = theme default);
-  // the picker is a convenience that writes into it.
-  const colorEl = document.getElementById("setBrandColor");
-  const hexEl = document.getElementById("setBrandHex");
   const nameEl = document.getElementById("setName");
   const taglineEl = document.getElementById("setTagline");
+  const saveBarEl = document.getElementById("saveBar");
 
-  // Repaint the masthead preview from the live field values so the publisher sees
-  // how their identity lands on the reader surface before saving. Mirrors the reader
-  // masthead in src/lib/page.ts: a filled brand bar (near-black default when blank)
-  // with readable text; the logo tile follows an upload (a re-render), so only the
-  // name, tagline, and colors update here.
-  const mastEl = document.getElementById("setMast");
-  const updatePreview = () => {
-    const hex = hexEl.value.trim();
-    const bg = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#18181b";
-    mastEl.style.background = bg;
-    mastEl.style.color = readableOn(bg);
-    document.getElementById("pvName").textContent = nameEl.value.trim() || fromName;
-    const tag = taglineEl.value.trim();
-    const tagEl = document.getElementById("pvTag");
-    tagEl.textContent = tag;
-    tagEl.hidden = !tag;
+  // --- dirty tracking: only the persisted fields (name, tagline, recipients).
+  const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const isDirty = () =>
+    state.name !== baseline.name ||
+    state.tagline !== baseline.tagline ||
+    !sameList(state.recipients, baseline.recipients);
+  const refreshDirty = () => {
+    saveBarEl.hidden = !isDirty();
   };
 
-  colorEl.oninput = () => {
-    hexEl.value = colorEl.value;
-    updatePreview();
-  };
-  hexEl.oninput = () => {
-    if (/^#[0-9a-fA-F]{6}$/.test(hexEl.value.trim())) {
-      colorEl.value = hexEl.value.trim();
-    }
-    updatePreview();
-  };
-  document.getElementById("setBrandClear").onclick = () => {
-    hexEl.value = "";
-    updatePreview();
-    hexEl.focus();
-  };
-  nameEl.oninput = updatePreview;
-  taglineEl.oninput = updatePreview;
-  updatePreview();
-
-  // Copy button on the subscribe page URL.
-  body.querySelectorAll("[data-copy]").forEach((b) => {
-    b.onclick = () => copyText(b.dataset.copy);
+  // --- email template preview (mock). The context mirrors what the real engine will
+  // expose; post.body is sample HTML, footer.* stand in for per-send values.
+  const tplEditor = document.getElementById("tplEditor");
+  const tplPreview = document.getElementById("tplPreview");
+  const previewCtx = () => ({
+    "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
+    "post.subject": "The starlings are back",
+    "publication.name": state.name || fromName,
+    "publication.tagline": state.tagline || "Your tagline",
+    "publication.logoUrl": state.logoUrl || sampleLogoDataUri(state.name),
+    "footer.sentTo": "you@example.com",
+    "footer.unsubscribeUrl": "#unsubscribe",
+    "footer.viewInBrowserUrl": "#view-in-browser",
   });
-
-  // Embed: a Styled/Plain toggle drives the shown source, the hint, and the Copy
-  // payload. The snippet is the deliverable (you paste it into your own site), so it
-  // stands on its own — no in-dashboard render of it.
-  const embedCodeEl = document.getElementById("embedCode");
-  const embedHintEl = document.getElementById("embedHint");
-  let embedMode = "plain";
-  const setEmbed = (mode) => {
-    embedMode = EMBEDS[mode] ? mode : "plain";
-    embedCodeEl.textContent = EMBEDS[embedMode];
-    embedHintEl.textContent = EMBED_HINTS[embedMode];
-    for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
-      const on = b.dataset.embed === embedMode;
-      b.classList.toggle("active", on);
-      b.setAttribute("aria-selected", on ? "true" : "false");
-    }
+  const repaintTemplatePreview = () => {
+    tplPreview.innerHTML = fillEmailTemplate(tplEditor.value, previewCtx());
   };
-  for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
-    b.onclick = () => setEmbed(b.dataset.embed);
+  let tplExample = "signed";
+  const loadExample = (key) => {
+    tplExample = EMAIL_TEMPLATE_EXAMPLES[key] ? key : "signed";
+    tplEditor.value = EMAIL_TEMPLATE_EXAMPLES[tplExample].html;
+    for (const b of body.querySelectorAll("[data-example]")) {
+      b.classList.toggle("active", b.dataset.example === tplExample);
+    }
+    repaintTemplatePreview();
+  };
+  tplEditor.addEventListener("input", repaintTemplatePreview);
+  for (const b of body.querySelectorAll("[data-example]")) {
+    b.onclick = () => loadExample(b.dataset.example);
   }
-  document.getElementById("embedCopy").onclick = () => copyText(EMBEDS[embedMode]);
-  setEmbed("plain");
+  document.getElementById("tplReset").onclick = () => {
+    loadExample(tplExample);
+    toast("Template reset to the example");
+  };
+  for (const c of body.querySelectorAll(".set-tpl-var code[data-token]")) {
+    c.onclick = () => copyText(c.dataset.token);
+  }
 
-  document.getElementById("idSave").onclick = (e) =>
-    busy(e.currentTarget, "Saving…", async () => {
-      try {
-        const r = await api("/api/settings", {
-          method: "PUT",
-          json: {
-            publication: {
-              name: document.getElementById("setName").value.trim(),
-              tagline: document.getElementById("setTagline").value.trim(),
-              brandColor: hexEl.value.trim(),
-            },
-          },
-        });
-        applySettings(r.settings);
-        toast("Identity saved");
-        renderSettings();
-      } catch (err) {
-        toast(err.message);
-      }
-    });
-
-  // --- logo upload / remove (immediate; their own endpoints).
+  // --- logo: immediate upload / remove (their own endpoints), updated in place so a
+  // logo change doesn't wipe an in-progress template edit.
   const logoInput = document.getElementById("logoInput");
-  document.getElementById("logoUpload").onclick = () => logoInput.click();
+  const logoTile = document.getElementById("logoTile");
+  const logoPh = document.getElementById("logoPh");
+  const logoReplace = document.getElementById("logoReplace");
+  const logoRemove = document.getElementById("logoRemove");
+  const applyLogoUi = () => {
+    const has = !!state.logoUrl;
+    logoTile.classList.toggle("has-img", has);
+    logoTile.style.backgroundImage = has ? `url('${state.logoUrl}')` : "";
+    logoPh.hidden = has;
+    logoRemove.hidden = !has;
+    logoReplace.textContent = has ? "Replace" : "Upload";
+    repaintTemplatePreview();
+  };
+  logoReplace.onclick = () => logoInput.click();
+  logoTile.addEventListener("click", () => logoInput.click());
+  logoTile.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      logoInput.click();
+    }
+  });
   logoInput.onchange = async () => {
-    const file = logoInput.files[0];
+    const file = logoInput.files?.[0];
     logoInput.value = "";
     if (!file) {
+      return;
+    }
+    if (file.size > 512 * 1024) {
+      toast("That image is over 512 KB — pick a smaller one.");
       return;
     }
     try {
       const fd = new FormData();
       fd.append("file", file);
       const r = await api("/api/settings/logo", { method: "POST", body: fd });
+      state.logoUrl = r.settings.publication.logoUrl || "";
       applySettings(r.settings);
+      applyLogoUi();
       toast("Logo updated");
-      renderSettings();
     } catch (err) {
       toast(err.message);
     }
   };
-  const removeBtn = document.getElementById("logoRemove");
-  if (removeBtn) {
-    removeBtn.onclick = () =>
-      busy(removeBtn, "Removing…", async () => {
-        try {
-          const r = await api("/api/settings/logo", { method: "DELETE" });
-          applySettings(r.settings);
-          toast("Logo removed");
-          renderSettings();
-        } catch (err) {
-          toast(err.message);
-        }
-      });
-  }
-
-  document.getElementById("setSave").onclick = (e) =>
-    busy(e.currentTarget, "Saving…", async () => {
-      const list = parseAddresses(document.getElementById("setTestRecipients").value);
+  logoRemove.onclick = () =>
+    busy(logoRemove, "Removing…", async () => {
       try {
-        const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
-        document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
+        const r = await api("/api/settings/logo", { method: "DELETE" });
+        state.logoUrl = r.settings.publication.logoUrl || "";
         applySettings(r.settings);
-        toast("Test recipients saved");
+        applyLogoUi();
+        toast("Logo removed");
       } catch (err) {
         toast(err.message);
       }
     });
+
+  // --- embed snippet: a Plain/Styled toggle drives the code, the hint, the rendered
+  // preview, and the Copy payload. The name tracks the live identity field.
+  const embedCodeEl = document.getElementById("embedCode");
+  const embedHintEl = document.getElementById("embedHint");
+  const embedPreviewEl = document.getElementById("embedPreview");
+  const EMBED_HINTS = {
+    styled: "Self-contained — inline styles, ready to paste anywhere.",
+    plain: "Minimal markup, no styles — style it to match your site.",
+  };
+  let embedMode = "plain";
+  const renderEmbedPreview = (mode, name) => {
+    if (mode === "styled") {
+      return (
+        `<form class="set-pf-styled">` +
+        `<span class="l">Subscribe to ${esc(name)}</span>` +
+        `<div class="rowf"><input type="email" placeholder="you@example.com" disabled><button type="button" class="sub-btn" tabindex="-1">Subscribe</button></div>` +
+        `<p class="set-pf-fine">Double opt-in — we’ll email a confirmation link.</p>` +
+        `</form>`
+      );
+    }
+    return (
+      `<form class="set-pf-plain">` +
+      `<label>Subscribe to ${esc(name)}</label>` +
+      `<input type="email" placeholder="you@example.com" disabled>` +
+      `<button type="button" tabindex="-1">Subscribe</button>` +
+      `</form>`
+    );
+  };
+  const rebuildEmbed = () => {
+    const name = state.name || fromName;
+    embedCodeEl.textContent = buildEmbed(embedMode, name);
+    embedHintEl.textContent = EMBED_HINTS[embedMode];
+    embedPreviewEl.innerHTML = renderEmbedPreview(embedMode, name);
+  };
+  const setEmbed = (mode) => {
+    embedMode = mode === "styled" ? "styled" : "plain";
+    for (const b of body.querySelectorAll("[data-embed]")) {
+      b.classList.toggle("active", b.dataset.embed === embedMode);
+    }
+    rebuildEmbed();
+  };
+  for (const b of body.querySelectorAll("[data-embed]")) {
+    b.onclick = () => setEmbed(b.dataset.embed);
+  }
+  document.getElementById("embedCopy").onclick = () =>
+    copyText(buildEmbed(embedMode, state.name || fromName));
+
+  // --- live identity fields: repaint everything that shows the name/tagline.
+  const onIdentityInput = () => {
+    state.name = nameEl.value.trim();
+    state.tagline = taglineEl.value.trim();
+    repaintTemplatePreview();
+    rebuildEmbed();
+    refreshDirty();
+  };
+  nameEl.addEventListener("input", onIdentityInput);
+  taglineEl.addEventListener("input", onIdentityInput);
+
+  // --- test recipients: removable chips + an add row.
+  const recipChips = document.getElementById("recipChips");
+  const recipInput = document.getElementById("recipInput");
+  const renderRecipChips = () => {
+    if (!state.recipients.length) {
+      recipChips.innerHTML =
+        '<span class="set-recip-empty">No default recipients yet — add one below.</span>';
+      return;
+    }
+    recipChips.innerHTML = state.recipients
+      .map(
+        (addr, i) =>
+          `<span class="set-recip-chip">${esc(addr)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(addr)}">${SET_ICON.x}</button></span>`,
+      )
+      .join("");
+  };
+  recipChips.addEventListener("click", (ev) => {
+    const b = ev.target.closest("[data-rm]");
+    if (!b) {
+      return;
+    }
+    state.recipients.splice(Number(b.dataset.rm), 1);
+    renderRecipChips();
+    refreshDirty();
+  });
+  const addRecip = () => {
+    const v = recipInput.value.trim().toLowerCase();
+    if (!v) {
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+      toast("That doesn’t look like an email address.");
+      return;
+    }
+    if (state.recipients.includes(v)) {
+      toast("That inbox is already in the list.");
+      recipInput.value = "";
+      return;
+    }
+    state.recipients.push(v);
+    recipInput.value = "";
+    renderRecipChips();
+    refreshDirty();
+  };
+  document.getElementById("recipAdd").onclick = addRecip;
+  recipInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addRecip();
+    }
+  });
+
+  // --- copy buttons (subscribe URL).
+  for (const b of body.querySelectorAll("[data-copy]")) {
+    b.onclick = () => copyText(b.dataset.copy);
+  }
+
+  // --- save / discard.
+  document.getElementById("saveBtn").onclick = (e) =>
+    busy(e.currentTarget, "Saving…", async () => {
+      try {
+        const r = await api("/api/settings", {
+          method: "PUT",
+          json: {
+            publication: { name: state.name, tagline: state.tagline },
+            testRecipients: state.recipients,
+          },
+        });
+        // Adopt the server's normalized result (trim, lowercase, dedupe) as baseline.
+        const ns = r.settings;
+        state.name = ns.publication.name;
+        state.tagline = ns.publication.tagline;
+        state.recipients = [...ns.testRecipients];
+        nameEl.value = state.name;
+        taglineEl.value = state.tagline;
+        baseline = {
+          name: state.name,
+          tagline: state.tagline,
+          recipients: [...state.recipients],
+        };
+        applySettings(ns);
+        renderRecipChips();
+        rebuildEmbed();
+        repaintTemplatePreview();
+        refreshDirty();
+        toast("Settings saved");
+      } catch (err) {
+        toast(err.message);
+      }
+    });
+  document.getElementById("discardBtn").onclick = () => {
+    state.name = baseline.name;
+    state.tagline = baseline.tagline;
+    state.recipients = [...baseline.recipients];
+    nameEl.value = state.name;
+    taglineEl.value = state.tagline;
+    renderRecipChips();
+    rebuildEmbed();
+    repaintTemplatePreview();
+    refreshDirty();
+  };
+
+  // --- initial paint.
+  renderRecipChips();
+  setEmbed("plain");
+  loadExample("signed");
+  refreshDirty();
 }
 
 // ---- docs ----
