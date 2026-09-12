@@ -619,8 +619,8 @@ function route() {
   if (view === "sends") {
     return renderSends();
   }
-  if (view === "publication" || view === "settings") {
-    // "settings" is the legacy hash; the surface is now "Publication".
+  if (view === "settings" || view === "publication") {
+    // "publication" is a short-lived legacy hash; the surface is "Settings".
     return renderSettings();
   }
   if (view === "reference") {
@@ -1389,7 +1389,7 @@ async function renderEditor(id) {
         if (defaults.length && !to.value.trim()) {
           to.value = defaults.join("\n");
           const hint = m.el.querySelector("#testDefaultsHint");
-          hint.textContent = "Pre-filled from your default test recipients (Publication).";
+          hint.textContent = "Pre-filled from your default test recipients (Settings).";
           hint.hidden = false;
         }
       })
@@ -1747,7 +1747,7 @@ function readableOn(hex) {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
 }
 async function renderSettings() {
-  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Publication</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -2513,7 +2513,7 @@ async function renderDashboard() {
     <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
   </div>`;
 
-  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/publication">Edit publication</button></div>`;
+  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
   root.innerHTML = `
     <div class="dash-head">
@@ -2590,7 +2590,7 @@ function setupChecklistHtml(pub, deployment) {
   return `<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
-      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Publication.</span></div><button data-nav="#/publication">Publication</button></li>
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
