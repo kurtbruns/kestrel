@@ -1079,6 +1079,30 @@ async function renderEditor(id) {
         markEdited();
       }
     });
+
+    // An empty subject can't be sent — the server blocks it in freeze() (SPEC §6).
+    // Disable Schedule / Send now so the feedback comes before the request
+    // round-trips. Whitespace-only counts as empty. The reason goes on the
+    // enclosing row, not the buttons: a disabled button swallows pointer events,
+    // so its own title never shows on hover.
+    const sendGuardBtns = [
+      document.getElementById("scheduleBtn"),
+      document.getElementById("sendBtn"),
+    ];
+    const sendGuardRow = sendGuardBtns[0]?.closest(".row");
+    const reflectSendGuard = () => {
+      const empty = subjectEl.value.trim() === "";
+      for (const btn of sendGuardBtns) {
+        if (btn) {
+          btn.disabled = empty;
+        }
+      }
+      if (sendGuardRow) {
+        sendGuardRow.title = empty ? "Add a subject before sending" : "";
+      }
+    };
+    subjectEl.addEventListener("input", reflectSendGuard);
+    reflectSendGuard();
   }
 
   // --- tabs ---
@@ -1644,6 +1668,46 @@ function startCountdowns() {
   statusTimer = setInterval(tick, 1000);
 }
 
+// A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending,
+// but one or more `dispatched` recipients whose fate a transport error left unknown
+// (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
+// can't clear on its own without risking a double-mail (I4).
+function isWedged(s) {
+  return s.status === "sending" && !s.progress?.pending && (s.progress?.dispatched || 0) > 0;
+}
+
+// The one manual step for a wedged send: decide whether the ambiguous batch went out
+// or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
+// explains the trade-off (record accuracy) rather than warning of a double-send.
+function openResolveModal(send, reload) {
+  const n = send.progress?.dispatched || 0;
+  const noun = n === 1 ? "delivery" : "deliveries";
+  const m = modal(
+    `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
+      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this issue.</p>` +
+      `<p class="hint"><strong>Assume not sent</strong> — recorded as failed; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next issue.</p>` +
+      `<p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>` +
+      `<div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rFailed">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
+  );
+  m.el.querySelector("#rCancel").onclick = m.close;
+  const doResolve = (btn, resolution, verb) =>
+    busy(btn, "Resolving…", async () => {
+      try {
+        const res = await api(`/sends/${send.id}/resolve`, {
+          method: "POST",
+          json: { resolution },
+        });
+        m.close();
+        toast(res.completed ? "Send completed" : `Marked ${verb}`);
+        reload();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+  m.el.querySelector("#rFailed").onclick = (e) => doResolve(e.target, "failed", "not sent");
+  m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
+}
+
 const SEND_STATUSES = [
   { value: "scheduled", label: "Scheduled" },
   { value: "sending", label: "Sending" },
@@ -1654,14 +1718,48 @@ const SEND_STATUSES = [
 async function renderSends() {
   const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
   app.innerHTML = `<h1>Sends</h1>
+    <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <h2>All sends</h2>
     ${listToolbar({ statuses: SEND_STATUSES, searchPlaceholder: "Search subject…" })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
+  const stuckEl = document.getElementById("stuck");
   const schedEl = document.getElementById("scheduled");
   const listEl = document.getElementById("sendsList");
   const pagerEl = document.getElementById("sendsPager");
+
+  // Resolving a wedged send or canceling a scheduled one touches several sections at
+  // once, so refresh all three together.
+  function reloadAll() {
+    loadStuck();
+    loadScheduled();
+    loadList();
+  }
+
+  // Wedged sends get their own attention block above the queue (SPEC §11). They are
+  // `sending` rows, so they also appear in the table below — this block is the
+  // actionable view. Drawn from the small `sending` set, filtered client-side.
+  async function loadStuck() {
+    try {
+      const { sends } = await api("/sends?status=sending&limit=200");
+      const wedged = sends.filter(isWedged);
+      stuckEl.innerHTML = wedged
+        .map((s) => {
+          const n = s.progress?.dispatched || 0;
+          const noun = n === 1 ? "delivery" : "deliveries";
+          return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+        })
+        .join("");
+      stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
+        const s = wedged.find((x) => x.id === b.dataset.resolve);
+        b.onclick = () => openResolveModal(s, reloadAll);
+      });
+    } catch {
+      // Non-fatal: the attention block just stays empty if this probe fails.
+      stuckEl.innerHTML = "";
+    }
+  }
 
   // The upcoming queue, soonest-first — the next send to fire (and the one you'd reach
   // for the cancel window on) sits at the top. Fetched on its own so it shows every
@@ -1693,8 +1791,7 @@ async function renderSends() {
               await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
               toast("Canceled");
               // A cancel drops it from the queue and flips it to canceled in the table.
-              loadScheduled();
-              loadList();
+              reloadAll();
             } catch (e) {
               toast(e.message);
             }
@@ -1731,8 +1828,7 @@ async function renderSends() {
   }
 
   wireToolbar(app, state, loadList);
-  loadScheduled();
-  loadList();
+  reloadAll();
 }
 
 // ---- subscribers ----
@@ -2344,16 +2440,28 @@ function computeHealth(sends) {
     });
   }
   const sending = sends.filter((s) => s.status === "sending");
-  const stuck = sending.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
+  // A send wedged on ambiguous in-flight rows needs a decision, not just patience —
+  // flag it red and actionable, and keep it out of the generic in-progress lines
+  // below so it isn't reported twice (SPEC §11; resolve on the Sends page).
+  const wedged = sending.filter(isWedged);
+  if (wedged.length) {
+    const n = wedged.reduce((sum, s) => sum + (s.progress?.dispatched || 0), 0);
+    issues.push({
+      level: "red",
+      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
+    });
+  }
+  const active = sending.filter((s) => !isWedged(s));
+  const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
     issues.push({
       level: "amber",
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
-  } else if (sending.length) {
+  } else if (active.length) {
     issues.push({
       level: "amber",
-      text: `${sending.length} send${sending.length === 1 ? " is" : "s are"} in progress.`,
+      text: `${active.length} send${active.length === 1 ? " is" : "s are"} in progress.`,
     });
   }
   // Delivery trouble: a high share of send-time failures on a recent send. (The list

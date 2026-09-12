@@ -26,6 +26,12 @@ export async function freeze(
   if (post.status !== "draft") {
     throw conflict("post is not a draft");
   }
+  // The subject is the one field the reader sees in their inbox (SPEC §6). One
+  // check here covers both Schedule and Send-now and both clients (editor + API);
+  // whitespace-only counts as empty.
+  if (!post.subject.trim()) {
+    throw badRequest("add a subject before sending");
+  }
   if (await getActiveSendForPost(env.DB, post.id)) {
     throw conflict("post already has an active send");
   }
@@ -40,24 +46,41 @@ export async function freeze(
 
   const now = Date.now();
   const id = newId();
-  await env.DB.batch([
-    env.DB.prepare(
-      "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at) VALUES (?, ?, 'scheduled', ?, ?, ?, ?, ?, ?)",
-    ).bind(
-      id,
-      post.id,
-      fireAt,
-      rendered.html,
-      rendered.text,
-      rendered.subject,
-      audience.length,
-      now,
-    ),
-    env.DB.prepare(
-      "UPDATE posts SET status = 'scheduled', updated_at = ? WHERE id = ? AND status = 'draft'",
-    ).bind(now, post.id),
-  ]);
+  try {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at) VALUES (?, ?, 'scheduled', ?, ?, ?, ?, ?, ?)",
+      ).bind(
+        id,
+        post.id,
+        fireAt,
+        rendered.html,
+        rendered.text,
+        rendered.subject,
+        audience.length,
+        now,
+      ),
+      env.DB.prepare(
+        "UPDATE posts SET status = 'scheduled', updated_at = ? WHERE id = ? AND status = 'draft'",
+      ).bind(now, post.id),
+    ]);
+  } catch (err) {
+    // The pre-check above is UX, not the guarantee: a concurrent freeze() for the
+    // same post can pass it and reach here. The partial unique index (migration 0004)
+    // is the real backstop — it fails the loser's insert, which we map to the same
+    // friendly conflict so the DB, not check-then-act, enforces one active send (I4, I6).
+    if (isActiveSendConflict(err)) {
+      throw conflict("post already has an active send");
+    }
+    throw err;
+  }
   return unwrap(await getSend(env.DB, id), "send");
+}
+
+/** True for the D1/SQLite violation of the "one active send per post" partial unique index. */
+function isActiveSendConflict(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /UNIQUE constraint failed:\s*sends\.post_id/i.test(message);
 }
 
 /** Cancel a pending Send and unlock its post. Only works while `scheduled`. */

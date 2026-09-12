@@ -137,6 +137,8 @@ Sending is built around a review window, because the window is what makes it saf
 
 Scheduling a post for a future time does three things at once: it **freezes the render** into a new Send in `scheduled` state (this frozen copy is the review artifact, exactly what will fire, and the eventual archive — one object doing all three, I3 and I6); it **soft-locks the post**, so it can't drift away from what was reviewed; and it **records the fire time**.
 
+A post **must have a non-empty subject** to schedule or send. The subject is the one field the reader sees in their inbox, and a send is irreversible (I4), so the freeze that both scheduling and sending-now go through rejects an empty (or whitespace-only) subject with a `400` before anything is frozen — the same guard for both clients. An empty body is only warned about, not blocked. The editor also flags an empty subject as a render warning and disables its Schedule / Send-now buttons, but the freeze is the authority.
+
 From then until it fires, the scheduled Send is **visible and cancelable** (I6). This window is the review gate. A human and Claude review it, test emails go to real inboxes, and if anything's wrong you cancel or unschedule. The intended rhythm is to schedule days ahead, so the window is generous.
 
 ### The soft-lock
@@ -144,6 +146,8 @@ From then until it fires, the scheduled Send is **visible and cancelable** (I6).
 A scheduled post is frozen from casual edits. To change it you **unschedule** — which cancels the pending Send and unlocks the post — then edit, re-test, and re-schedule. Editing stays easy but becomes deliberate, and it resets the review.
 
 The guarantee that falls out: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again, and scheduling re-freezes the render. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the send immune to app deploys during the multi-day window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
+
+A post has **at most one active (scheduled or sending) send** at a time — the thing that keeps an issue from being scheduled, and sent, twice. This is a database guarantee, not just an app check: the data model carries a uniqueness constraint over active sends per post, so a second schedule can never slip through, even across concurrent requests. Re-scheduling after a send finishes, is canceled, or fails is unaffected — only active sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
 
 ### Firing
 
@@ -216,7 +220,7 @@ A small status surface, readable in the editor and through the API, answers the 
 
 **What have I sent, and how did it do?** Recent sends, each with its recipient count and a rollup of delivered / bounced / complained, linking to the archive page for that issue.
 
-**Is anything wrong right now?** A send still retrying, a scheduled send that missed its fire time, a bounce spike, a provider problem. This is the only thing that ever needs your attention, so it's the only thing that surfaces loudly.
+**Is anything wrong right now?** A send still retrying, a scheduled send that missed its fire time, a bounce spike, a provider problem. This is the only thing that ever needs your attention, so it's the only thing that surfaces loudly. One of these conditions carries an action rather than just an alarm: a send wedged on an ambiguous in-flight delivery (§11) shows its count *and* the control to resolve it, because a stuck send whose only remedy is raw SQL isn't really inspectable.
 
 **Who's on the list?** The subscriber list is its own view, distinct from send health: it tells the story of the list as a whole rather than of a particular send. It shows the roster — each address, its consent state, and whether it's suppressed — filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From here you can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2). The send-status surface above keeps only scheduling and delivery, so each view answers one question cleanly.
 
@@ -238,7 +242,7 @@ Email asks for things the other channels never would, and this is what the syste
 
 **Batching and idempotency.** Provider send endpoints take tens to a hundred recipients per call, so a send is a loop of batches. No one is mailed twice on a retry because the app records each recipient the instant the provider accepts them, and a resumed or retried batch simply skips those already accepted (I4). A provider-native idempotency key, where it exists, is an extra guard — never the thing the guarantee rests on.
 
-**Bounce and complaint handling.** Provider webhooks feed suppression: soft bounces are tolerated and counted; a hard bounce or a complaint suppresses the address on its own.
+**Bounce and complaint handling.** Provider webhooks feed suppression: soft bounces are tolerated and counted; a hard bounce or a complaint suppresses the address on its own. Events are matched to a delivery by the provider's message id, so a hard bounce or complaint suppresses the address recovered from that matched row even if the event itself carries no recipient address — the suppression guarantee (I1) never rests on the provider echoing the recipient back.
 
 The email provider is treated as **transport** — it carries the message and reports what happened — and it sits behind a narrow, two-method seam: one method sends a batch and returns a per-recipient accept/reject; the other verifies a provider webhook's signature and normalizes it into a delivered / bounced / complained event. Everything provider-specific lives inside the adapter. The two supported providers differ most at the webhook: one posts a signed webhook directly, while the other routes events through a notification service that adds a subscription-confirmation handshake and its own signature scheme. Hold the seam at the *intersection* of what providers offer — the app owns the list, the consent, the deliveries, and the suppressions itself, so it never leans on a provider's managed suppression or list-hosting. That's what makes swapping providers a swap and not a migration, and it's why a fake in-memory adapter behind the same seam can exercise the whole send-and-resume path with no network.
 
@@ -297,6 +301,12 @@ The app is allowed to be a living application — that was the whole point of se
 The posture is: recover quietly, escalate rarely, always be inspectable.
 
 Send-time transient errors — a rate limit, a brief provider hiccup — retry with backoff inside the send, per batch. The retry is safe because it is scoped by what the delivery record already marks as accepted: a recipient marked accepted is never re-sent, so idempotency comes from durable per-recipient state, not from the provider. An interrupted send — the service restarts mid-send — resumes from that same progress, mailing only those not yet accepted (I4). A provider outage keeps the Send open and retrying, and surfaces on the status view only once it has clearly stopped being transient. Bounces and complaints arrive by webhook after the send and update the delivery and suppression records on their own.
+
+### The one ambiguity a human resolves
+
+There is a single delivery outcome the app cannot resolve on its own: a **transport error mid-send on a provider with no idempotency key** — the request left but no response came back, so whether the provider accepted that recipient is genuinely unknown. Blind-retrying it would risk mailing the person twice (I4), so the send loop deliberately does *not* retry it: it leaves that recipient in flight and moves on. The safe refusal has a cost — an in-flight recipient with an unknown fate keeps the send from ever completing, so it stays open, and the sweep flags it loudly (a stuck send, an aging in-flight delivery). Detecting it is not enough on its own; "always be inspectable" has to mean actionable in the UI, not a note in the logs whose only remedy is raw SQL.
+
+So the status surface carries the one manual control in the whole send path: **the operator adjudicates the ambiguous in-flight recipients of a stuck send**, choosing the safe outcome — *assume not sent* (recorded failed; the address is simply picked up by the next issue, and is never re-mailed within this send) or *assume sent* (recorded delivered, for when they have confirmed it in the provider's console). Either choice lets the send reach its normal completion gate and finish. This control touches only the ambiguous, still-in-flight rows — it can **never** re-mail a recipient the record already marks accepted (I4) — and it is the *only* place a human overrides an automatic delivery decision. It is a resolution of an existing ambiguity, not a new way to send: it never widens the audience and never mails anyone.
 
 The one failure that is raised loudly rather than absorbed is a scheduled send that misses its fire time. A send that should have happened and didn't is as bad as one that shouldn't have and did — precisely because nothing happened and no one was watching — so the sweep that fires due sends also catches missed ones and escalates. The schedule lives as durable rows, so a restart or redeploy can't lose it; the sweep simply re-reads and continues.
 
