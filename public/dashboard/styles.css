@@ -1098,11 +1098,28 @@ td a:hover {
 }
 .list-toolbar .lt-filters {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
   margin-left: auto;
 }
 .list-toolbar select {
   width: auto;
+}
+/* "Suppressed only" toggle: a flag beside the status filter, not inside it. */
+.lt-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--fg);
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+}
+.lt-toggle input {
+  width: auto;
+  margin: 0;
+  cursor: pointer;
 }
 
 /* Fixed layout so a re-sort can't reflow column widths: the structured columns get

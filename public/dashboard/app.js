@@ -707,31 +707,31 @@ function listQuery(state) {
   return p.toString();
 }
 
-// A filter/search toolbar: search on the left, one filter dropdown pinned right.
+// A filter/search toolbar: search on the left, the status filter pinned right.
 // `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
-// "Suppressed" option that filters by the suppression overlay — folded into the same
-// control because a publisher picks one slice to look at, not a combination of the two
-// axes. The data model keeps them separate (see routes/subscribers.ts); only the UI
-// surfaces them as one list.
+// separate "Suppressed only" toggle — suppression is a deliverability flag, not a
+// consent status, so it's its own control (an independent axis you can combine with a
+// status), never an option inside the status dropdown.
 function listToolbar(cfg) {
-  const opts = [
-    `<option value="">${cfg.suppressible ? "All subscribers" : "All statuses"}</option>`,
-  ].concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`));
-  if (cfg.suppressible) {
-    opts.push('<option value="suppressed">Suppressed</option>');
-  }
+  const opts = ['<option value="">All statuses</option>']
+    .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
+    .join("");
+  const suppressed = cfg.suppressible
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"> Suppressed only</label>'
+    : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters"><select class="lt-status" aria-label="Filter">${opts.join("")}</select></div>
+    <div class="lt-filters"><select class="lt-status" aria-label="Filter by status">${opts}</select>${suppressed}</div>
   </div>`;
 }
 
 // Wire the toolbar controls (within `root`) to the view's reload, seeding their values
 // from state so a deep-linked filter shows selected. Search is debounced; any change
-// resets to the first page.
+// resets to the first page. Status and the suppression toggle are independent axes.
 function wireToolbar(root, state, reload) {
   const search = root.querySelector(".lt-search");
-  const filter = root.querySelector(".lt-status");
+  const status = root.querySelector(".lt-status");
+  const suppressed = root.querySelector(".lt-suppressed");
   if (search) {
     search.value = state.search || "";
     let t = null;
@@ -744,19 +744,18 @@ function wireToolbar(root, state, reload) {
       }, 250);
     };
   }
-  if (filter) {
-    // The one dropdown drives either the status axis or the suppression overlay:
-    // "suppressed" selects the overlay, any other value a consent status.
-    filter.value = state.suppressed === "only" ? "suppressed" : state.status || "";
-    filter.onchange = () => {
-      const v = filter.value;
-      if (v === "suppressed") {
-        state.suppressed = "only";
-        state.status = "";
-      } else {
-        state.status = v;
-        state.suppressed = "";
-      }
+  if (status) {
+    status.value = state.status || "";
+    status.onchange = () => {
+      state.status = status.value;
+      state.offset = 0;
+      reload();
+    };
+  }
+  if (suppressed) {
+    suppressed.checked = state.suppressed === "only";
+    suppressed.onchange = () => {
+      state.suppressed = suppressed.checked ? "only" : "";
       state.offset = 0;
       reload();
     };
