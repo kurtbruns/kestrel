@@ -2061,18 +2061,55 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   signed: {
     label: "Signed",
     html: `<style>
-  .email { font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b; }
-  .email h1, .email h2, .email h3 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; }
-  .email a { color: #3355cc; }
-  .email .rule { border: 0; border-top: 1px solid #e4e4e7; margin: 28px 0; }
-  .signoff td { vertical-align: middle; }
-  .signoff .logo-cell { padding-right: 14px; }
-  .signoff .logo { display: block; border-radius: 9px; }
-  .signoff .name { font: 600 17px/1.2 Georgia, 'Times New Roman', serif; }
-  .signoff .tagline { font-size: 13px; color: #52525b; margin-top: 2px; }
-  .footer { margin-top: 22px; font-size: 12px; line-height: 1.7; color: #8a8a93; }
-  .footer .attr { color: #52525b; }
-  .footer a { color: #8a8a93; text-decoration: underline; }
+  .email {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #18181b;
+  }
+  .email h1,
+  .email h2,
+  .email h3 {
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.2;
+  }
+  .email a {
+    color: #3355cc;
+  }
+  .email .rule {
+    border: 0;
+    border-top: 1px solid #e4e4e7;
+    margin: 28px 0;
+  }
+  .signoff td {
+    vertical-align: middle;
+  }
+  .signoff .logo-cell {
+    padding-right: 14px;
+  }
+  .signoff .logo {
+    display: block;
+    border-radius: 9px;
+  }
+  .signoff .name {
+    font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
+  }
+  .signoff .tagline {
+    font-size: 13px;
+    color: #52525b;
+    margin-top: 2px;
+  }
+  .footer {
+    margin-top: 22px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #8a8a93;
+  }
+  .footer .attr {
+    color: #52525b;
+  }
+  .footer a {
+    color: #8a8a93;
+    text-decoration: underline;
+  }
 </style>
 
 <div class="email">
@@ -2095,19 +2132,43 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   <div class="footer">
     <div class="attr">{{ publication.name }} — a Kestrel publication</div>
     <div>You subscribed to this newsletter with {{ footer.sentTo }}.</div>
-    <div><a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> · <a href="{{ footer.viewInBrowserUrl }}">View in browser</a></div>
+    <div>
+      <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
+      <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    </div>
   </div>
 </div>`,
   },
   plain: {
     label: "Plain",
     html: `<style>
-  .email { font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b; }
-  .email h1, .email h2, .email h3 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; }
-  .email a { color: #3355cc; }
-  .email .rule { border: 0; border-top: 1px solid #e4e4e7; margin: 28px 0; }
-  .footer { font-size: 12px; line-height: 1.7; color: #8a8a93; }
-  .footer a { color: #8a8a93; text-decoration: underline; }
+  .email {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #18181b;
+  }
+  .email h1,
+  .email h2,
+  .email h3 {
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.2;
+  }
+  .email a {
+    color: #3355cc;
+  }
+  .email .rule {
+    border: 0;
+    border-top: 1px solid #e4e4e7;
+    margin: 28px 0;
+  }
+  .footer {
+    font-size: 12px;
+    line-height: 1.7;
+    color: #8a8a93;
+  }
+  .footer a {
+    color: #8a8a93;
+    text-decoration: underline;
+  }
 </style>
 
 <div class="email">
@@ -2117,7 +2178,10 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     <div>You're receiving this because you subscribed to {{ publication.name }} with {{ footer.sentTo }}.</div>
-    <div><a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> · <a href="{{ footer.viewInBrowserUrl }}">View in browser</a></div>
+    <div>
+      <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
+      <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    </div>
   </div>
 </div>`,
   },
@@ -2270,17 +2334,17 @@ async function renderSettings() {
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"), '<span class="set-tag-mock">Mock</span>')}
       <p class="set-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest. On a real send the styles are inlined for you, since mail clients need it.</p>
+      <div class="set-preview set-tpl-sample">
+        <div class="set-preview-bar">
+          <span class="set-preview-lbl">Sample email</span>
+          <span class="set-preview-dot">One layout · every issue</span>
+        </div>
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+        <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+      </div>
+
       <div class="set-card">
         <div class="set-card-pad">
-          <div class="set-preview">
-            <div class="set-preview-bar">
-              <span class="set-preview-lbl">Sample email</span>
-              <span class="set-preview-dot">One layout · every issue</span>
-            </div>
-            <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
-            <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
-          </div>
-
           <div class="set-tpl-block">
             <div class="set-tpl-editor-head">
               <label for="tplEditor">Template</label>

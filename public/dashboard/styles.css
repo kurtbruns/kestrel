@@ -5,7 +5,7 @@
   --fg: #18181b;
   --muted: #52525b;
   --line: #e4e4e7;
-  --bg: #f4f4f5;
+  --bg: #f8f8f8;
   --card: #fff;
   --hover: #f4f4f5;
   --accent: #18181b;
@@ -3015,12 +3015,16 @@ td.act {
   color: var(--muted);
 }
 
-/* --- email template (mock): a live sample email, then the HTML template, then a
-   collapsible variable reference. The example templates carry INLINE styles — as a
-   real email must, since mail clients strip <style> and classes — so the preview
-   needs only a neutral email frame; the template paints itself. --- */
+/* --- email template (mock): a standalone sample-email frame, then a card holding
+   the HTML template editor and a collapsible variable reference. The example
+   templates are authored with a <style> block; the preview renders them in an
+   isolated iframe, so a template's own styles apply as a mail client would show
+   them and never leak into the dashboard. --- */
+.set-tpl-sample {
+  margin-bottom: 16px;
+}
 .set-tpl-block {
-  margin-top: 16px;
+  margin-top: 0;
 }
 .set-tpl-editor-head {
   display: flex;
@@ -3050,7 +3054,7 @@ td.act {
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.55;
-  min-height: 260px;
+  min-height: 340px;
   resize: vertical;
   white-space: pre;
   overflow-wrap: normal;
