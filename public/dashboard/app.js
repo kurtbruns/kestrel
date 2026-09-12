@@ -798,24 +798,26 @@ function wireSort(container, state, reload) {
 
 // Offset pager: "a–b of N" with Prev/Next. Renders nothing when one page covers all.
 function renderPager(el, state, page, reload) {
-  if (!page || page.total <= state.limit) {
+  // Page by the limit the server actually clamped to (page.limit), not the requested one.
+  const limit = page?.limit ?? state.limit;
+  if (!page || page.total <= limit) {
     el.innerHTML = "";
     return;
   }
   const from = page.total === 0 ? 0 : page.offset + 1;
-  const to = Math.min(page.offset + state.limit, page.total);
+  const to = Math.min(page.offset + limit, page.total);
   const hasPrev = page.offset > 0;
-  const hasNext = page.offset + state.limit < page.total;
+  const hasNext = page.offset + limit < page.total;
   el.innerHTML = `<div class="pager"><button type="button" class="pager-prev"${hasPrev ? "" : " disabled"}>← Prev</button><span class="pager-range muted">${from}–${to} of ${page.total}</span><button type="button" class="pager-next"${hasNext ? "" : " disabled"}>Next →</button></div>`;
   if (hasPrev) {
     el.querySelector(".pager-prev").onclick = () => {
-      state.offset = Math.max(0, page.offset - state.limit);
+      state.offset = Math.max(0, page.offset - limit);
       reload();
     };
   }
   if (hasNext) {
     el.querySelector(".pager-next").onclick = () => {
-      state.offset = page.offset + state.limit;
+      state.offset = page.offset + limit;
       reload();
     };
   }
@@ -872,7 +874,11 @@ async function renderPosts() {
           const pid = b.dataset.menu;
           const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
           if (b.dataset.status === "draft") {
-            items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
+            items.push({
+              label: "Delete draft",
+              danger: true,
+              onClick: () => confirmDelete(pid, load),
+            });
           }
           openMenu(b, items);
         };
@@ -886,7 +892,7 @@ async function renderPosts() {
   load();
 }
 
-function confirmDelete(pid) {
+function confirmDelete(pid, reload = renderPosts) {
   const m = modal(
     `<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`,
   );
@@ -897,7 +903,7 @@ function confirmDelete(pid) {
         await api(`/posts/${pid}`, { method: "DELETE" });
         m.close();
         toast("Draft deleted");
-        renderPosts();
+        reload();
       } catch (e) {
         toast(e.message);
       }
@@ -1725,7 +1731,9 @@ const SEND_STATUSES = [
   { value: "failed", label: "Failed" },
 ];
 async function renderSends() {
-  const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
+  // Default sort = fire desc (the endpoint's own default) so the "When" header shows the
+  // active arrow from the start; posts differ (their default is a bespoke composite order).
+  const state = { status: "", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
   app.innerHTML = `<h1>Sends</h1>
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
@@ -2520,7 +2528,14 @@ async function renderDashboard() {
   const root = document.getElementById("dash");
   let posts, sends, counts;
   try {
-    const [p, s, subs] = await Promise.all([api("/posts"), api("/sends"), api("/subscribers")]);
+    // The health line scans every send and the archive-link slug map needs every post,
+    // so ask for a full window rather than the list default (50). Subscribers is only
+    // read for its (filter-independent) counts, so its row limit doesn't matter.
+    const [p, s, subs] = await Promise.all([
+      api("/posts?limit=200"),
+      api("/sends?limit=200"),
+      api("/subscribers"),
+    ]);
     posts = p.posts;
     sends = s.sends;
     counts = subs.counts;
