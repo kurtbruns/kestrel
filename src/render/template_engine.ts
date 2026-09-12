@@ -209,6 +209,29 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
     color: #8a8a93;
     text-decoration: underline;
   }
+  @media (prefers-color-scheme: dark) {
+    .email {
+      color: #ededed !important;
+    }
+    .email a {
+      color: #93c5fd !important;
+    }
+    .email .rule {
+      border-color: #2e2e33 !important;
+    }
+    .signoff .name {
+      color: #ededed !important;
+    }
+    .signoff .tagline {
+      color: #a1a1aa !important;
+    }
+    .footer {
+      color: #a1a1aa !important;
+    }
+    .footer a {
+      color: #a1a1aa !important;
+    }
+  }
 </style>
 
 <div class="email">

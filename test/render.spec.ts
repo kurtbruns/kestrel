@@ -161,6 +161,18 @@ describe("render (the single render path)", async () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it("ships light+dark support: advertises the color-scheme and keeps a dark @media block", async () => {
+    const result = await render(
+      { post: post(), revision: revision("# Hi\n\nbody"), images: [] },
+      config,
+    );
+    // color-scheme opts the email into client dark handling…
+    expect(result.html).toContain('content="light dark"');
+    // …and the dark rules survive inlining as an @media block (they can't be inlined).
+    expect(result.html).toContain("prefers-color-scheme: dark");
+    expect(result.html).toContain("#ededed"); // light body text in dark mode
+  });
+
   it("falls back to the default template (with a warning) when the active one is invalid", async () => {
     const branding = {
       template: "<div>{{ post.body }}</div>", // no unsubscribe → invalid

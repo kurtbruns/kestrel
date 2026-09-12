@@ -43,21 +43,22 @@ export function emailLayout(i: LayoutInput): string {
         i.preheader,
       )}</span>`
     : "";
-  // Light-only shell: the template owns all presentation (light by default), so the
-  // color-scheme is pinned to light rather than fighting a template's inline colors
-  // with forced-dark overrides. A template that wants dark mode carries its own
-  // `@media (prefers-color-scheme: dark)` — kept as a <style> block through inlining.
-  // The body cell sets a base font/color as a fallback for content the template
-  // doesn't wrap; the template's own rules (inlined) win inside it.
+  // The shell advertises light+dark and darkens only its own frame (the outer
+  // background) in dark mode; the template owns the content's dark colors via its own
+  // `@media` block. Both @media blocks survive CSS inlining (only non-at-rules inline)
+  // and are consolidated into <head>; their dark overrides use !important to beat the
+  // inlined light styles — the standard email dark-mode technique. The body cell sets
+  // a base font/color as a fallback for content the template doesn't wrap.
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light"><meta name="supported-color-schemes" content="light">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(i.subject)}</title>${ARCHIVE_HEAD_ANCHOR}
+<style>@media (prefers-color-scheme: dark) { .k-bg { background: #18181b !important; } }</style>
 </head>
-<body style="margin:0;padding:0;background:#ffffff;">
+<body class="k-bg" style="margin:0;padding:0;background:#ffffff;">
 ${preheader}
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
-<table role="presentation" width="664" cellpadding="0" cellspacing="0" style="max-width:664px;width:100%;background:#ffffff;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-bg" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
+<table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-bg" style="max-width:664px;width:100%;background:#ffffff;">
 <tr><td style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
 ${ARCHIVE_MASTHEAD_ANCHOR}${i.bodyHtml}
 </td></tr>

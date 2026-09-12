@@ -2111,6 +2111,29 @@ const EMAIL_TEMPLATE_EXAMPLES = {
     color: #8a8a93;
     text-decoration: underline;
   }
+  @media (prefers-color-scheme: dark) {
+    .email {
+      color: #ededed !important;
+    }
+    .email a {
+      color: #93c5fd !important;
+    }
+    .email .rule {
+      border-color: #2e2e33 !important;
+    }
+    .signoff .name {
+      color: #ededed !important;
+    }
+    .signoff .tagline {
+      color: #a1a1aa !important;
+    }
+    .footer {
+      color: #a1a1aa !important;
+    }
+    .footer a {
+      color: #a1a1aa !important;
+    }
+  }
 </style>
 
 <div class="email">
@@ -2189,6 +2212,29 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   .footer .address {
     margin-top: 6px;
   }
+  @media (prefers-color-scheme: dark) {
+    .email {
+      color: #ededed !important;
+    }
+    .email a {
+      color: #93c5fd !important;
+    }
+    .email .rule {
+      border-color: #2e2e33 !important;
+    }
+    .signoff .name {
+      color: #ededed !important;
+    }
+    .signoff .tagline {
+      color: #a1a1aa !important;
+    }
+    .footer {
+      color: #a1a1aa !important;
+    }
+    .footer a {
+      color: #a1a1aa !important;
+    }
+  }
 </style>
 
 <div class="email">
@@ -2245,6 +2291,23 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   .footer a {
     color: #8a8a93;
     text-decoration: underline;
+  }
+  @media (prefers-color-scheme: dark) {
+    .email {
+      color: #ededed !important;
+    }
+    .email a {
+      color: #93c5fd !important;
+    }
+    .email .rule {
+      border-color: #2e2e33 !important;
+    }
+    .footer {
+      color: #a1a1aa !important;
+    }
+    .footer a {
+      color: #a1a1aa !important;
+    }
   }
 </style>
 
@@ -2612,6 +2675,7 @@ async function renderSettings() {
     '<!doctype html><html><head><meta charset="utf-8">' +
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     "<style>html,body{margin:0}body{background:#fff}" +
+    "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
     ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
     ".kestrel-email img{max-width:100%}</style></head>" +
     '<body><div class="kestrel-email"></div></body></html>';
