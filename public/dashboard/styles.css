@@ -42,7 +42,7 @@
   --k-accent-soft: rgba(51, 85, 204, 0.12);
   /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
      stronger line + a neutral chip fill, layered on the zinc neutrals above. */
-  --sunken: #efeff1;
+  --sunken: #f6f6f7;
   --line-2: #d6d6db;
   --chip: #ececee;
 }
@@ -131,6 +131,7 @@ h2 {
    sidebar for the full width. Admin→public links are fine here; the reverse is
    never emitted (SPEC §10). --- */
 .layout {
+  background: var(--bg);
   display: flex;
   align-items: stretch;
   min-height: 100vh;
@@ -2777,7 +2778,7 @@ td.act {
   font-size: 12.5px;
   font-weight: 550;
   border-right: 1px solid var(--line);
-  background: color-mix(in srgb, var(--sunken) 55%, transparent);
+  background: color-mix(in srgb, var(--fg) 3%, transparent);
 }
 .set-kv > .set-kv-v {
   font-size: 13.5px;
@@ -3130,14 +3131,17 @@ td.act {
 /* The sample email: a neutral email-client frame. The template's own inline styles
    do the rest (an email carries no stylesheet), so there are no per-element rules
    here — only safe container defaults. */
-.set-email {
+/* The sample email renders in an isolated <iframe> — so the template's own <style>
+   block applies exactly as it would in a mail client and can't leak into the
+   dashboard, and the reading measure is constrained to the email column
+   (~640px, matching the view-in-browser render). Its height is sized to content
+   from script. */
+.set-email-frame {
+  display: block;
+  width: 100%;
+  min-height: 240px;
+  border: 0;
   background: #ffffff;
-  color: #18181b;
-  padding: 22px 24px;
-  font: 15px / 1.6 var(--font);
-}
-.set-email img {
-  max-width: 100%;
 }
 /* The "this is a mock" note under the editor. */
 .set-note {

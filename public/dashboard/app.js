@@ -2049,62 +2049,89 @@ const EMAIL_TEMPLATE_VARS = [
 
 // Two starting points; the publisher edits the HTML freely from there. Identity sits
 // at the FOOT (a sign-off), so the email stays faithful to today's masthead-free top.
-// Every style is INLINE. A real HTML email carries no stylesheet — mail clients
-// strip <style> and drop class="" — so an email template is styled attribute by
-// attribute, and the examples model that. (This mirrors src/render/template.ts,
-// which inline-styles every element too.)
+// The example templates are authored with a <style> block + classes — clean to read
+// and edit. A real send can't rely on a <style> block (Gmail/Outlook strip or ignore
+// it), so the real engine (a later step) would INLINE these rules at render time:
+// author with a stylesheet, inline on the way out — the standard email pattern, and
+// what src/render/template.ts already does by hand (inline base + a <style> block
+// only for what inline can't express, like dark mode). The preview renders the
+// template as-is in an isolated iframe, so a <style> block behaves exactly as a mail
+// client — or the view-in-browser page — would show it.
 const EMAIL_TEMPLATE_EXAMPLES = {
   signed: {
     label: "Signed",
-    html: `<article style="font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
+    html: `<style>
+  .email { font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b; }
+  .email h1, .email h2, .email h3 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; }
+  .email a { color: #3355cc; }
+  .email .rule { border: 0; border-top: 1px solid #e4e4e7; margin: 28px 0; }
+  .signoff td { vertical-align: middle; }
+  .signoff .logo-cell { padding-right: 14px; }
+  .signoff .logo { display: block; border-radius: 9px; }
+  .signoff .name { font: 600 17px/1.2 Georgia, 'Times New Roman', serif; }
+  .signoff .tagline { font-size: 13px; color: #52525b; margin-top: 2px; }
+  .footer { margin-top: 22px; font-size: 12px; line-height: 1.7; color: #8a8a93; }
+  .footer .attr { color: #52525b; }
+  .footer a { color: #8a8a93; text-decoration: underline; }
+</style>
+
+<div class="email">
   {{ post.body }}
 
-  <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0" />
+  <hr class="rule" />
 
-  <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+  <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td style="padding-right:12px;vertical-align:middle">
-        <img src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" style="display:block;border-radius:9px" />
+      <td class="logo-cell">
+        <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
       </td>
-      <td style="vertical-align:middle">
-        <div style="font:600 17px/1.2 Georgia,'Times New Roman',serif">{{ publication.name }}</div>
-        <div style="font-size:13px;color:#52525b;margin-top:2px">{{ publication.tagline }}</div>
+      <td>
+        <div class="name">{{ publication.name }}</div>
+        <div class="tagline">{{ publication.tagline }}</div>
       </td>
     </tr>
   </table>
 
-  <p style="margin:16px 0 0;font-size:12px;line-height:1.6;color:#71717a">
-    Sent to {{ footer.sentTo }} &middot;
-    <a href="{{ footer.unsubscribeUrl }}" style="color:#71717a">Unsubscribe</a> &middot;
-    <a href="{{ footer.viewInBrowserUrl }}" style="color:#71717a">View in browser</a><br />
-    {{ publication.name }} &mdash; a Kestrel publication
-  </p>
-</article>`,
+  <div class="footer">
+    <div class="attr">{{ publication.name }} — a Kestrel publication</div>
+    <div>You subscribed to this newsletter with {{ footer.sentTo }}.</div>
+    <div><a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> · <a href="{{ footer.viewInBrowserUrl }}">View in browser</a></div>
+  </div>
+</div>`,
   },
   plain: {
     label: "Plain",
-    html: `<article style="font:15px/1.6 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#18181b">
+    html: `<style>
+  .email { font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #18181b; }
+  .email h1, .email h2, .email h3 { font-family: Georgia, 'Times New Roman', serif; line-height: 1.2; }
+  .email a { color: #3355cc; }
+  .email .rule { border: 0; border-top: 1px solid #e4e4e7; margin: 28px 0; }
+  .footer { font-size: 12px; line-height: 1.7; color: #8a8a93; }
+  .footer a { color: #8a8a93; text-decoration: underline; }
+</style>
+
+<div class="email">
   {{ post.body }}
 
-  <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0" />
+  <hr class="rule" />
 
-  <p style="margin:0;font-size:12px;line-height:1.6;color:#71717a">
-    You're receiving this because you subscribed to {{ publication.name }}.<br />
-    <a href="{{ footer.unsubscribeUrl }}" style="color:#71717a">Unsubscribe</a> &middot;
-    <a href="{{ footer.viewInBrowserUrl }}" style="color:#71717a">View in browser</a>
-  </p>
-</article>`,
+  <div class="footer">
+    <div>You're receiving this because you subscribed to {{ publication.name }} with {{ footer.sentTo }}.</div>
+    <div><a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> · <a href="{{ footer.viewInBrowserUrl }}">View in browser</a></div>
+  </div>
+</div>`,
   },
 };
 
-// Sample post body for the preview — representative prose inside a called-out slot
-// (itself inline-styled), so it's unmistakable where a real issue's rendered
-// Markdown lands. In a real send {{ post.body }} is that rendered Markdown; the
-// dashed frame + label are a preview device, not part of the email.
+// Sample post body for the preview — representative prose inside a called-out slot,
+// so it's unmistakable where a real issue's rendered Markdown lands. Its typography
+// comes from the template's own .email rules (the callout frame + label are a
+// preview device, not part of the email). In a real send {{ post.body }} is the
+// rendered Markdown.
 const EMAIL_TEMPLATE_SAMPLE_BODY =
-  '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 6px;margin:0 0 4px">' +
+  '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
-  "<h2 style=\"font:600 20px/1.2 Georgia,'Times New Roman',serif;margin:0 0 10px;color:#18181b\">The starlings are back</h2>" +
+  '<h2 style="margin:0 0 10px">The starlings are back</h2>' +
   '<p style="margin:0 0 12px">A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.</p>' +
   '<p style="margin:0">Three things I noticed this week, and one question for you.</p>' +
   "</div>";
@@ -2242,7 +2269,7 @@ async function renderSettings() {
   const templateSection = `
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"), '<span class="set-tag-mock">Mock</span>')}
-      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML with <code>{{ variables }}</code> Kestrel fills in — every style inline, the way a real email must be. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest.</p>
+      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest. On a real send the styles are inlined for you, since mail clients need it.</p>
       <div class="set-card">
         <div class="set-card-pad">
           <div class="set-preview">
@@ -2250,7 +2277,7 @@ async function renderSettings() {
               <span class="set-preview-lbl">Sample email</span>
               <span class="set-preview-dot">One layout · every issue</span>
             </div>
-            <div class="set-email" id="tplPreview"></div>
+            <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
             <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
           </div>
 
@@ -2408,7 +2435,7 @@ async function renderSettings() {
   // --- email template preview (mock). The context mirrors what the real engine will
   // expose; post.body is sample HTML, footer.* stand in for per-send values.
   const tplEditor = document.getElementById("tplEditor");
-  const tplPreview = document.getElementById("tplPreview");
+  const tplFrame = document.getElementById("tplPreview");
   const previewCtx = () => ({
     "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
     "post.subject": "The starlings are back",
@@ -2419,9 +2446,44 @@ async function renderSettings() {
     "footer.unsubscribeUrl": "#unsubscribe",
     "footer.viewInBrowserUrl": "#view-in-browser",
   });
-  const repaintTemplatePreview = () => {
-    tplPreview.innerHTML = fillEmailTemplate(tplEditor.value, previewCtx());
+  // The preview is an isolated iframe document: a white email canvas whose reading
+  // column is capped at the email measure (~640px, matching the view-in-browser
+  // render), so a template's own <style> block applies just as a mail client would
+  // and never leaks into the dashboard.
+  const FRAME_DOC =
+    '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    "<style>html,body{margin:0}body{background:#fff}" +
+    ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
+    ".kestrel-email img{max-width:100%}</style></head>" +
+    '<body><div class="kestrel-email"></div></body></html>';
+  let frameReady = false;
+  const sizeFrame = () => {
+    try {
+      const doc = tplFrame.contentDocument;
+      if (doc) {
+        tplFrame.style.height = `${Math.max(200, doc.documentElement.scrollHeight)}px`;
+      }
+    } catch {}
   };
+  const repaintTemplatePreview = () => {
+    const doc = tplFrame.contentDocument;
+    const slot = frameReady && doc ? doc.querySelector(".kestrel-email") : null;
+    if (!slot) {
+      return;
+    }
+    // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> in the
+    // template stays inert — injected HTML doesn't execute, and an email has none.
+    slot.innerHTML = fillEmailTemplate(tplEditor.value, previewCtx());
+    sizeFrame();
+    // Re-measure once the logo image has laid out (a real logo URL loads async).
+    setTimeout(sizeFrame, 60);
+  };
+  tplFrame.addEventListener("load", () => {
+    frameReady = true;
+    repaintTemplatePreview();
+  });
+  tplFrame.srcdoc = FRAME_DOC;
   let tplExample = "signed";
   const loadExample = (key) => {
     tplExample = EMAIL_TEMPLATE_EXAMPLES[key] ? key : "signed";
