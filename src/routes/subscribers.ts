@@ -54,10 +54,18 @@ export async function list(c: RequestContext): Promise<Response> {
     subscribers.listSubscribers(c.env.DB, filter, page),
     subscribers.listSuppressions(c.env.DB),
   ]);
-  // Annotate each row with whether its address is suppressed, so the list view
-  // can badge it without a per-row lookup.
-  const suppressedSet = new Set(suppressions.map((s) => s.email));
-  const annotated = rows.map((r) => ({ ...r, suppressed: suppressedSet.has(r.email) }));
+  // Annotate each row with its suppression reason (if any), so the list can show WHY
+  // an address is suppressed — bounced / complaint / manual — without a per-row lookup.
+  const suppressedBy = new Map(suppressions.map((s) => [s.email, s]));
+  const annotated = rows.map((r) => {
+    const sup = suppressedBy.get(r.email);
+    return {
+      ...r,
+      suppressed: sup !== undefined,
+      suppression_reason: sup?.reason ?? null,
+      suppression_detail: sup?.detail ?? null,
+    };
+  });
   return json({ counts, subscribers: annotated, page: listPage(total, page) });
 }
 

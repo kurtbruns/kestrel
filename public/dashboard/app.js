@@ -1904,6 +1904,28 @@ async function renderSubscribers(initialFilter) {
   load();
 }
 
+// The inline suppression flag rides next to the email (suppression is a deliverability
+// overlay, not a consent status) and names WHY: bounced / complaint / blocked, with the
+// provider detail in the tooltip. Reasons come from the webhook (bounce, complaint) or a
+// manual block; anything unrecognized falls back to a generic label.
+const SUPPRESSION_LABELS = { bounce: "bounced", complaint: "complaint", manual: "blocked" };
+const SUPPRESSION_TIPS = {
+  bounce: "Hard bounce — mail to this address failed, so it won't be mailed again.",
+  complaint: "Marked as spam — won't be mailed again, whatever the consent state.",
+  manual: "Manually blocked — won't be mailed.",
+};
+function suppressionFlag(s) {
+  if (!s.suppressed) {
+    return "";
+  }
+  const label = SUPPRESSION_LABELS[s.suppression_reason] || "suppressed";
+  const base =
+    SUPPRESSION_TIPS[s.suppression_reason] ||
+    "Suppressed — won't be mailed, whatever the consent state.";
+  const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
+  return ` <span class="badge suppressed row-flag" title="${esc(tip)}">${esc(label)}</span>`;
+}
+
 function renderSubTable(listEl, rows, state, reload) {
   if (!rows.length) {
     listEl.innerHTML = `<p class="muted">No subscribers match.</p>`;
@@ -1912,7 +1934,7 @@ function renderSubTable(listEl, rows, state, reload) {
   listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}${s.suppressed ? ` <span class="badge suppressed row-flag" title="Suppressed: bounced or complained — never mailed, whatever the consent state.">suppressed</span>` : ""}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
   wireSort(listEl, state, reload);

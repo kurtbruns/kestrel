@@ -236,6 +236,8 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const body = await readJson(res);
     expect(body.subscribers.map((s: any) => s.email)).toEqual([suppressed]);
     expect(body.subscribers.every((s: any) => s.suppressed)).toBe(true);
+    // The suppression reason is surfaced on each row (for the inline flag).
+    expect(body.subscribers[0].suppression_reason).toBe("complaint");
     // The page envelope reflects the filtered total, not the whole table.
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });
