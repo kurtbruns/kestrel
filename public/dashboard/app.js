@@ -619,8 +619,7 @@ function route() {
   if (view === "sends") {
     return renderSends();
   }
-  if (view === "settings" || view === "publication") {
-    // "publication" is a short-lived legacy hash; the surface is "Settings".
+  if (view === "settings") {
     return renderSettings();
   }
   if (view === "reference") {
