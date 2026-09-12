@@ -2336,9 +2336,9 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
-  '<h2 style="margin:0 0 10px">The starlings are back</h2>' +
-  '<p style="margin:0 0 12px">A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.</p>' +
-  '<p style="margin:0">Three things I noticed this week, and one question for you.</p>' +
+  '<h2 style="margin:0 0 10px">Notes from this week</h2>' +
+  '<p style="margin:0 0 12px">A few things I\'ve been reading, making, and thinking about, collected in one short letter.</p>' +
+  '<p style="margin:0">As always, let me know what you think.</p>' +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
@@ -2370,7 +2370,7 @@ function templateSampleCtx(identity) {
     "publication.name": id.name || "Your publication",
     "publication.tagline": id.tagline || "Your tagline",
     "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
-    "publication.address": id.address || "123 Marsh Lane, Duluth, MN 55802, USA",
+    "publication.address": id.address || "123 Main Street, Anytown, ST 00000",
     "footer.sentTo": "you@example.com",
     "footer.unsubscribeUrl": "#unsubscribe",
     "footer.viewInBrowserUrl": "#view-in-browser",

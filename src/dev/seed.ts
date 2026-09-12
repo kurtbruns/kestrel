@@ -586,6 +586,7 @@ export async function seedDatabase(
       name: "Windbreak",
       tagline: "Field notes on birds, weather, and paying attention.",
       brandColor: "#227566",
+      address: "123 Beep Boop Lane, San Francisco, CA 94103",
     },
   });
 
