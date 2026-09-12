@@ -2408,6 +2408,140 @@ td.act {
   padding: 1px 4px;
 }
 
+/* --- settings: page layout ---
+   Open sections (heading + fields) rather than bordered cards, matching the
+   Posts/Subscribers/Sends/Dashboard section language: the uppercase h2 carries
+   the grouping, whitespace does the rest. Capped to a readable column. */
+.settings {
+  max-width: 940px;
+}
+.settings .page-head {
+  margin-bottom: 8px;
+}
+.set-block {
+  margin-bottom: 30px;
+}
+/* A lead paragraph under each section heading: what the setting is and where it
+   shows up. Muted and measure-limited so it reads as guidance, not chrome. */
+.set-lede {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+  margin: 0 0 16px;
+  max-width: 64ch;
+}
+/* Keep the read-only deployment table and the test-recipients box off the full
+   page width — they don't need to stretch under the identity form + preview. */
+.set-narrow {
+  max-width: 560px;
+}
+
+/* Identity editor: the fields beside a live preview of the reader masthead. */
+.set-identity {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 28px;
+  align-items: start;
+}
+.set-fields {
+  min-width: 0;
+}
+@media (max-width: 780px) {
+  .set-identity {
+    grid-template-columns: 1fr;
+  }
+  .set-narrow {
+    max-width: none;
+  }
+}
+
+/* Live masthead preview — a faithful-enough mirror of the reader chrome in
+   src/lib/page.ts (a filled brand bar, logo tile, editorial serif name, tagline,
+   and a subscribe pill). Not pixel-exact (the reader loads a display serif); the
+   note links out to the real page. Background + text color are set inline from the
+   current field values (see updatePreview), so currentColor here is the masthead
+   text color and the tile/pill tint off it. */
+.set-preview-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.reader-mast {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #18181b;
+  color: #fff;
+  overflow: hidden;
+}
+.reader-mast-logo {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 16%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.reader-mast-logo img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+.reader-mast-id {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reader-mast-name {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-mast-tag {
+  font-size: 12px;
+  opacity: 0.82;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reader-mast-cta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+}
+.set-preview-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 10px 0 0;
+}
+.set-preview-note a {
+  color: var(--muted);
+}
+.set-preview-note a:hover {
+  color: var(--fg);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component's own transition */

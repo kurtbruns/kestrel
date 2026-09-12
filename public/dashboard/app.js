@@ -1730,8 +1730,23 @@ function addSubscriberModal(onDone) {
 // Runtime preferences (editable) + a read-only reflection of the deploy-time
 // config. Secrets never come down this wire (see routes/settings.ts).
 const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resend: "Resend" };
+
+// Black-or-white text for a filled brand color, mirroring readableTextColor in
+// src/db/settings.ts so the live masthead preview matches the rendered reader page.
+// A blank/invalid color means the masthead falls back to the near-black default,
+// which always takes white text.
+function readableOn(hex) {
+  const h = String(hex || "").replace(/^#/, "");
+  if (h.length !== 6) {
+    return "#ffffff";
+  }
+  const r = Number.parseInt(h.slice(0, 2), 16);
+  const g = Number.parseInt(h.slice(2, 4), 16);
+  const b = Number.parseInt(h.slice(4, 6), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
+}
 async function renderSettings() {
-  app.innerHTML = `<h1>Settings</h1><div id="settingsBody" class="muted">Loading…</div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -1746,54 +1761,75 @@ async function renderSettings() {
   const fromName = parseFromName(d.fromAddress) || "Your publication";
   const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
   body.innerHTML = `
-    <div class="card">
-      <h2 style="margin-top:0">Publication identity</h2>
-      <p class="hint">Your publication's name, tagline, logo, and brand color. These theme the reader surface and this dashboard — never the email itself (its identity is the From address) and never an already-sent issue.</p>
-      <div class="logo-row">
-        <div class="logo-preview" id="logoPreview">${
-          p.logoUrl
-            ? `<img src="${esc(p.logoUrl)}" alt="Current logo">`
-            : `<span class="logo-placeholder">${esc((p.name || fromName).trim()[0] || "K").toUpperCase()}</span>`
-        }</div>
-        <div class="logo-actions">
-          <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
-          <div class="row">
-            <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
-            <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
+    <section class="dash-section set-block">
+      <h2>Publication identity</h2>
+      <p class="set-lede">Your name, tagline, logo, and brand color. They paint the public reader surface — the archive and the subscribe pages — and this dashboard. They never change the email itself (its identity is the From address) or an issue that has already been sent.</p>
+      <div class="set-identity">
+        <div class="set-fields">
+          <div class="logo-row">
+            <div class="logo-preview" id="logoPreview">${
+              p.logoUrl
+                ? `<img src="${esc(p.logoUrl)}" alt="Current logo">`
+                : `<span class="logo-placeholder">${esc((p.name || fromName).trim()[0] || "K").toUpperCase()}</span>`
+            }</div>
+            <div class="logo-actions">
+              <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+              <div class="row">
+                <button id="logoUpload">${p.logoUrl ? "Replace logo" : "Upload logo"}</button>
+                <button class="danger-subtle" id="logoRemove"${p.logoUrl ? "" : " hidden"}>Remove</button>
+              </div>
+              <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. A roughly square logo reads best.</p>
+            </div>
           </div>
-          <p class="hint" style="margin:8px 0 0">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. An SVG can follow light/dark with an internal <code>@media (prefers-color-scheme: dark)</code> rule — <code>currentColor</code> won't inherit, since the logo loads as an image.</p>
+          <div class="grid2" style="margin-top:16px">
+            <div>
+              <label for="setName">Name</label>
+              <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
+              <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
+            </div>
+            <div>
+              <label for="setTagline">Tagline</label>
+              <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
+              <p class="field-hint">A short line under the name in the masthead.</p>
+            </div>
+          </div>
+          <label for="setBrandHex">Brand color</label>
+          <div class="row brand-row">
+            <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
+            <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb">
+            <button class="ghost-btn" id="setBrandClear">Clear</button>
+          </div>
+          <p class="field-hint">Fills the masthead bar and tints its links. Blank uses the theme default (near-black).</p>
+          <div class="row" style="margin-top:16px"><button class="primary" id="idSave">Save identity</button></div>
         </div>
+        <aside class="set-preview">
+          <div class="set-preview-label">How readers see it</div>
+          <div class="reader-mast" id="setMast">
+            <span class="reader-mast-logo" id="pvLogo"${p.logoUrl ? "" : " hidden"}>${
+              p.logoUrl ? `<img src="${esc(p.logoUrl)}" alt="">` : ""
+            }</span>
+            <span class="reader-mast-id">
+              <span class="reader-mast-name" id="pvName"></span>
+              <span class="reader-mast-tag" id="pvTag" hidden></span>
+            </span>
+            <span class="reader-mast-cta">Subscribe →</span>
+          </div>
+          <p class="set-preview-note">A preview of your archive masthead. <a href="/" target="_blank" rel="noopener">Open the live page&nbsp;↗</a></p>
+        </aside>
       </div>
-      <div class="grid2" style="margin-top:4px">
-        <div>
-          <label for="setName">Name</label>
-          <input id="setName" value="${esc(p.name)}" placeholder="${esc(fromName)}" maxlength="120">
-          <p class="field-hint">Blank falls back to the From name (“${esc(fromName)}”).</p>
-        </div>
-        <div>
-          <label for="setTagline">Tagline</label>
-          <input id="setTagline" value="${esc(p.tagline)}" placeholder="A one-line description" maxlength="200">
-        </div>
-      </div>
-      <label for="setBrandHex">Brand color</label>
-      <div class="row brand-row">
-        <input type="color" id="setBrandColor" value="${esc(p.brandColor || "#2563eb")}" aria-label="Brand color picker">
-        <input type="text" id="setBrandHex" class="brand-hex" value="${esc(p.brandColor)}" placeholder="#2563eb">
-        <button class="ghost-btn" id="setBrandClear">Clear</button>
-      </div>
-      <p class="field-hint">Blank uses the theme default.</p>
-      <div class="row" style="margin-top:14px"><button class="primary" id="idSave">Save identity</button></div>
-    </div>
-    <div class="card">
-      <h2 style="margin-top:0">Default test recipients</h2>
-      <p class="hint">Pre-filled into <strong>Send test email</strong>. One address per line. These are your own inboxes — they don't go through the subscribe/consent flow.</p>
-      <textarea id="setTestRecipients" rows="4" placeholder="you@example.com">${esc(s.testRecipients.join("\n"))}</textarea>
+    </section>
+
+    <section class="dash-section set-block">
+      <h2>Default test recipients</h2>
+      <p class="set-lede">Pre-filled into <strong>Send test email</strong> so you can check a draft in a real client. One address per line — these are your own inboxes and don't go through the subscribe/consent flow.</p>
+      <textarea id="setTestRecipients" class="set-narrow" rows="4" placeholder="you@example.com">${esc(s.testRecipients.join("\n"))}</textarea>
       <div class="row" style="margin-top:12px"><button class="primary" id="setSave">Save</button></div>
-    </div>
-    <div class="card">
-      <h2 style="margin-top:0">Deployment</h2>
-      <p class="hint">Set at deploy time (env vars + secrets), shown here read-only. To change any of these, see <a href="#/docs">Docs</a> — the operator setup guide. Credentials are never shown.</p>
-      <div class="table-wrap"><table><tbody>
+    </section>
+
+    <section class="dash-section set-block">
+      <h2>Deployment</h2>
+      <p class="set-lede">Set at deploy time (env vars + secrets) and shown here read-only. To change any of these, see the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
+      <div class="table-wrap set-narrow"><table><tbody>
         ${kv("Email sender", PROVIDER_LABELS[d.provider] || d.provider)}
         ${kv("From address", d.fromAddress)}
         ${kv("Sending domain", d.sendingDomain)}
@@ -1803,7 +1839,7 @@ async function renderSettings() {
         ${kv("Auth mode", d.authMode === "access" ? "Cloudflare Access" : "Local dev token")}
         ${kv("Access configured", d.accessConfigured ? "Yes" : "No")}
       </tbody></table></div>
-    </div>`;
+    </section>`;
 
   // Keep the cached config + sidebar brand in step with a save (the brand reads the
   // same publication identity), and re-render the Settings view so the logo preview
@@ -1817,18 +1853,45 @@ async function renderSettings() {
   // the picker is a convenience that writes into it.
   const colorEl = document.getElementById("setBrandColor");
   const hexEl = document.getElementById("setBrandHex");
+  const nameEl = document.getElementById("setName");
+  const taglineEl = document.getElementById("setTagline");
+
+  // Repaint the masthead preview from the live field values so the publisher sees
+  // how their identity lands on the reader surface before saving. Mirrors the reader
+  // masthead in src/lib/page.ts: a filled brand bar (near-black default when blank)
+  // with readable text; the logo tile follows an upload (a re-render), so only the
+  // name, tagline, and colors update here.
+  const mastEl = document.getElementById("setMast");
+  const updatePreview = () => {
+    const hex = hexEl.value.trim();
+    const bg = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#18181b";
+    mastEl.style.background = bg;
+    mastEl.style.color = readableOn(bg);
+    document.getElementById("pvName").textContent = nameEl.value.trim() || fromName;
+    const tag = taglineEl.value.trim();
+    const tagEl = document.getElementById("pvTag");
+    tagEl.textContent = tag;
+    tagEl.hidden = !tag;
+  };
+
   colorEl.oninput = () => {
     hexEl.value = colorEl.value;
+    updatePreview();
   };
   hexEl.oninput = () => {
     if (/^#[0-9a-fA-F]{6}$/.test(hexEl.value.trim())) {
       colorEl.value = hexEl.value.trim();
     }
+    updatePreview();
   };
   document.getElementById("setBrandClear").onclick = () => {
     hexEl.value = "";
+    updatePreview();
     hexEl.focus();
   };
+  nameEl.oninput = updatePreview;
+  taglineEl.oninput = updatePreview;
+  updatePreview();
 
   document.getElementById("idSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
