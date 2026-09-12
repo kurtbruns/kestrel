@@ -1075,6 +1075,14 @@ td a:hover {
   color: var(--b-bad-fg);
   border-color: var(--b-bad-line);
 }
+/* Suppression is an overlay on the address, not a consent status, so it rides next to
+   the email rather than in the Status column — sized down to read as secondary. */
+.row-flag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  font-size: 11px;
+  vertical-align: middle;
+}
 
 /* list views (posts / subscribers / sends): search on the left, filters pinned right */
 .list-toolbar {

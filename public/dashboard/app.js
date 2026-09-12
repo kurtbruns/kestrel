@@ -1910,7 +1910,7 @@ function renderSubTable(listEl, rows, state, reload) {
   listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}${s.suppressed ? ` <span class="badge suppressed row-flag" title="Suppressed: bounced or complained — never mailed, whatever the consent state.">suppressed</span>` : ""}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
   wireSort(listEl, state, reload);
