@@ -263,6 +263,22 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(page2.subscribers.map((s: any) => s.email)).toEqual([`${marker}-c@example.com`]);
   });
 
+  it("an out-of-whitelist sort falls back to the default (never 500s), including prototype keys", async () => {
+    const marker = `srt-${Date.now()}-${seq++}`;
+    await subs.subscribe(env.DB, `${marker}@example.com`);
+    // `constructor`/`toString`/`hasOwnProperty` are inherited Object keys: the whitelist
+    // must reject them by ownership, not `in`, or they'd reach the ORDER BY as SQL.
+    for (const bogus of ["bogus", "constructor", "toString", "hasOwnProperty"]) {
+      const res = await SELF.fetch(`${base}/subscribers?sort=${bogus}&search=${marker}`, {
+        headers: AUTH,
+      });
+      expect(res.status).toBe(200);
+      const body = await readJson(res);
+      expect(body.page.sort).toBe("joined"); // fell back to the default
+      expect(body.subscribers.map((s: any) => s.email)).toEqual([`${marker}@example.com`]);
+    }
+  });
+
   it("POST /subscribers/:id/unsubscribe requires auth (401)", async () => {
     const res = await SELF.fetch(`${base}/subscribers/anything/unsubscribe`, { method: "POST" });
     expect(res.status).toBe(401);

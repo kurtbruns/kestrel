@@ -57,7 +57,10 @@ const MAX_LIMIT = 200;
 
 export function parseListParams(url: URL, spec: ListSpec): ListParams {
   const sortParam = url.searchParams.get("sort") ?? "";
-  const sortExplicit = sortParam !== "" && sortParam in spec.columns;
+  // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so `sort=constructor`
+  // / `toString` / etc. would pass the whitelist and resolve to an inherited function,
+  // which then interpolates into the ORDER BY as malformed SQL (a 500). Own keys only.
+  const sortExplicit = sortParam !== "" && Object.hasOwn(spec.columns, sortParam);
   const sort = sortExplicit ? sortParam : spec.defaultSort;
   // `sort` is either a validated key or `defaultSort`; a spec whose defaultSort isn't a
   // real column is a programming error, so fail loud rather than emit `ORDER BY undefined`.

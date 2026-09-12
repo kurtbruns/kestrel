@@ -1660,6 +1660,11 @@ async function renderEditor(id) {
 
 // ---- sends ----
 function startCountdowns() {
+  // Clear any prior interval first: reloadAll() re-runs loadScheduled (and this) on
+  // every cancel/resolve, so without this each refresh would leak a 1s interval.
+  if (statusTimer) {
+    clearInterval(statusTimer);
+  }
   const tick = () =>
     document.querySelectorAll("[data-fire]").forEach((el) => {
       el.textContent = untilStr(Number(el.dataset.fire));
