@@ -619,6 +619,9 @@ function route() {
   if (view === "sends") {
     return renderSends();
   }
+  if (view === "template") {
+    return renderTemplate();
+  }
   if (view === "settings") {
     return renderSettings();
   }
@@ -2347,6 +2350,235 @@ function fillEmailTemplate(html, ctx) {
   );
 }
 
+// A neutral placeholder logo (a monogram tile) for the preview when no real logo is
+// set, so a signed sign-off still renders. Fully URL-encoded so it carries no raw
+// <,>," and survives the template's attribute escaping.
+function sampleLogoDataUri(name) {
+  const ch = (String(name || "").trim()[0] || "K").toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" rx="9" fill="#e4e4e7"/><text x="22" y="29" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#52525b" text-anchor="middle">${ch}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+// Sample values the template preview binds — mirrors the render path's context, with
+// footer.* standing in for per-recipient values. `identity` is { name, tagline,
+// logoUrl, address } from the live or loaded settings.
+function templateSampleCtx(identity) {
+  const id = identity || {};
+  return {
+    "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
+    "post.subject": "The starlings are back",
+    "publication.name": id.name || "Your publication",
+    "publication.tagline": id.tagline || "Your tagline",
+    "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
+    "publication.address": id.address || "123 Marsh Lane, Duluth, MN 55802, USA",
+    "footer.sentTo": "you@example.com",
+    "footer.unsubscribeUrl": "#unsubscribe",
+    "footer.viewInBrowserUrl": "#view-in-browser",
+  };
+}
+
+// The isolated preview document: a white (dark in dark mode) email canvas whose
+// reading column is capped at the email measure (~640px, matching view-in-browser),
+// so a template's own <style> applies as a mail client would and never leaks out.
+const TEMPLATE_FRAME_DOC =
+  '<!doctype html><html><head><meta charset="utf-8">' +
+  '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+  "<style>html,body{margin:0}body{background:#fff}" +
+  "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
+  ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
+  ".kestrel-email img{max-width:100%}</style></head>" +
+  '<body><div class="kestrel-email"></div></body></html>';
+
+// Mount a sample-email preview into an <iframe>, kept sized to its content. Returns
+// { repaint } — call after the template or identity changes. getTemplate() returns
+// the current template HTML; getIdentity() the { name, tagline, logoUrl, address }.
+// Shared by the Template page (live editor preview) and Settings (a read-only one).
+function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
+  let ready = false;
+  const size = () => {
+    try {
+      const doc = iframe.contentDocument;
+      if (doc) {
+        iframe.style.height = `${Math.max(200, doc.documentElement.scrollHeight)}px`;
+      }
+    } catch {}
+  };
+  const repaint = () => {
+    const doc = iframe.contentDocument;
+    const slot = ready && doc ? doc.querySelector(".kestrel-email") : null;
+    if (!slot) {
+      return;
+    }
+    // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> stays inert.
+    slot.innerHTML = fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()));
+    size();
+    setTimeout(size, 60); // re-measure once the logo image lays out
+  };
+  iframe.addEventListener("load", () => {
+    ready = true;
+    repaint();
+  });
+  iframe.srcdoc = TEMPLATE_FRAME_DOC;
+  return { repaint };
+}
+
+// The grouped variable reference (a <details> body), shared by both surfaces.
+function templateVarsHtml() {
+  return EMAIL_TEMPLATE_VARS.map(
+    (g) =>
+      `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
+        .map(
+          (v) =>
+            `<div class="set-tpl-var"><code data-token="${esc(v.token)}" title="Click to copy">${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
+        )
+        .join("")}</div>`,
+  ).join("");
+}
+
+/**
+ * The Email template page (top-level "Template" nav item). The one layout each issue
+ * is sent inside: a live sample-email preview over an HTML editor (with starter
+ * examples, a variable reference, and its own validated Save). Editing lives here,
+ * not in Settings, so each surface has a single, unambiguous save.
+ */
+async function renderTemplate() {
+  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown renders in the body. Light and dark supported.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
+  const bodyEl = document.getElementById("tplBody");
+  let data;
+  try {
+    data = await api("/api/settings");
+  } catch (e) {
+    renderError(bodyEl, e.message, renderTemplate);
+    return;
+  }
+  const s = data.settings;
+  const d = data.deployment;
+  const p = s.publication || {};
+  const identity = {
+    name: p.name || parseFromName(d.fromAddress) || "",
+    tagline: p.tagline || "",
+    logoUrl: p.logoUrl || "",
+    address: p.address || "",
+  };
+  let templateBaseline = s.emailTemplate || "";
+
+  bodyEl.innerHTML = `
+    <div class="set-preview set-tpl-sample">
+      <div class="set-preview-bar">
+        <span class="set-preview-lbl">Sample email</span>
+        <span class="set-preview-dot">One layout · every issue</span>
+      </div>
+      <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+      <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+    </div>
+
+    <div class="set-card">
+      <div class="set-card-pad">
+        <div class="set-tpl-block">
+          <div class="set-tpl-editor-head">
+            <label for="tplEditor">Email template</label>
+            <div class="set-tpl-examples">
+              <span class="lbl">Start from:</span>
+              <div class="seg" role="group" aria-label="Example template">
+                <button type="button" class="seg-btn" data-example="signed">Signed</button>
+                <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
+                <button type="button" class="seg-btn" data-example="plain">Plain</button>
+              </div>
+            </div>
+          </div>
+          <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
+          <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue.</p>
+          <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
+          <div class="set-tpl-actions">
+            <button type="button" class="primary" id="tplSave">Save template</button>
+            <button type="button" class="ghost-btn" id="tplRevert" hidden>Revert changes</button>
+            <span class="set-tpl-status" id="tplStatus"></span>
+          </div>
+        </div>
+
+        <details class="set-tpl-vars">
+          <summary>Available variables</summary>
+          <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
+        </details>
+      </div>
+      <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview uses sample data — send yourself a test to see it in a real inbox.</span></div>
+    </div>`;
+
+  const tplEditor = document.getElementById("tplEditor");
+  const preview = mountSampleEmailPreview(
+    document.getElementById("tplPreview"),
+    () => tplEditor.value,
+    () => identity,
+  );
+  const tplStatusEl = document.getElementById("tplStatus");
+  const tplRevertEl = document.getElementById("tplRevert");
+  const tplMsgsEl = document.getElementById("tplMsgs");
+  const refreshDirty = () => {
+    const dirty = tplEditor.value !== templateBaseline;
+    tplRevertEl.hidden = !dirty;
+    tplStatusEl.textContent = dirty ? "Unsaved changes" : "";
+  };
+  const showMsgs = (msgs, kind) => {
+    if (!msgs.length) {
+      tplMsgsEl.hidden = true;
+      tplMsgsEl.innerHTML = "";
+      return;
+    }
+    tplMsgsEl.hidden = false;
+    tplMsgsEl.className = `set-tpl-msgs ${kind}`;
+    tplMsgsEl.innerHTML = msgs.map((m) => `<div>${esc(m)}</div>`).join("");
+  };
+  const loadExample = (key) => {
+    const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
+    tplEditor.value = ex.html;
+    showMsgs([], "");
+    preview.repaint();
+    refreshDirty();
+  };
+  tplEditor.addEventListener("input", () => {
+    preview.repaint();
+    refreshDirty();
+  });
+  for (const b of bodyEl.querySelectorAll("[data-example]")) {
+    b.onclick = () => loadExample(b.dataset.example);
+  }
+  tplRevertEl.onclick = () => {
+    tplEditor.value = templateBaseline;
+    showMsgs([], "");
+    preview.repaint();
+    refreshDirty();
+  };
+  document.getElementById("tplSave").onclick = (e) =>
+    busy(e.currentTarget, "Saving…", async () => {
+      try {
+        const r = await api("/api/settings", {
+          method: "PUT",
+          json: { emailTemplate: tplEditor.value },
+        });
+        // The server may resolve "" to the default — reflect what was actually stored.
+        templateBaseline = r.settings.emailTemplate;
+        tplEditor.value = templateBaseline;
+        appConfig = { ...(appConfig || {}), settings: r.settings };
+        preview.repaint();
+        refreshDirty();
+        const warnings = Array.isArray(r.warnings) ? r.warnings : [];
+        showMsgs(warnings, "warn");
+        toast(warnings.length ? "Template saved with warnings" : "Template saved");
+      } catch (err) {
+        // A rejected template (e.g. no unsubscribe link) comes back as a 400 message.
+        showMsgs([err.message], "error");
+        toast("Template not saved");
+      }
+    });
+  for (const c of bodyEl.querySelectorAll(".set-tpl-var code[data-token]")) {
+    c.onclick = () => copyText(c.dataset.token);
+  }
+
+  tplEditor.value = templateBaseline;
+  preview.repaint();
+  refreshDirty();
+}
+
 async function renderSettings() {
   app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each issue is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
@@ -2380,20 +2612,11 @@ async function renderSettings() {
     address: state.address,
     recipients: [...state.recipients],
   };
-  let templateBaseline = state.template;
 
   const monogram = (v) => (String(v || fromName).trim()[0] || "K").toUpperCase();
   const bareAddress = (from) => {
     const m = String(from || "").match(/<([^>]+)>/);
     return m ? m[1] : String(from || "");
-  };
-  // A neutral placeholder logo (a monogram tile) for the preview when no real logo is
-  // set, so the "Signed" example still renders a complete sign-off. Fully
-  // URL-encoded so it carries no raw <,>," and survives the template's escaping.
-  const sampleLogoDataUri = (v) => {
-    const ch = monogram(v);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" rx="9" fill="#e4e4e7"/><text x="22" y="29" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#52525b" text-anchor="middle">${ch}</text></svg>`;
-    return `data:image/svg+xml,${encodeURIComponent(svg)}`;
   };
 
   // Subscribe URL + embeds: paste into your own site; both post to the public
@@ -2429,16 +2652,6 @@ async function renderSettings() {
   const chip = (kind, label) => `<span class="set-chip ${kind}">${SET_ICON[kind]}${label}</span>`;
   const secHead = (title, chipHtml, extra = "") =>
     `<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
-
-  const varsHtml = EMAIL_TEMPLATE_VARS.map(
-    (g) =>
-      `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
-        .map(
-          (v) =>
-            `<div class="set-tpl-var"><code data-token="${esc(v.token)}" title="Click to copy">${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
-        )
-        .join("")}</div>`,
-  ).join("");
 
   const identitySection = `
     <section class="set-sec">
@@ -2480,47 +2693,15 @@ async function renderSettings() {
   const templateSection = `
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"))}
-      <p class="set-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest. On a real send the styles are inlined for you, since mail clients need it.</p>
+      <p class="set-lede">The one layout every issue is sent inside — its HTML, <code>{{ variables }}</code>, and light/dark styling. Edited on its own page.</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
           <span class="set-preview-lbl">Sample email</span>
-          <span class="set-preview-dot">One layout · every issue</span>
+          <span class="set-preview-dot">Current template</span>
         </div>
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
-        <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
       </div>
-
-      <div class="set-card">
-        <div class="set-card-pad">
-          <div class="set-tpl-block">
-            <div class="set-tpl-editor-head">
-              <label for="tplEditor">Email template</label>
-              <div class="set-tpl-examples">
-                <span class="lbl">Start from:</span>
-                <div class="seg" role="group" aria-label="Example template">
-                  <button type="button" class="seg-btn" data-example="signed">Signed</button>
-                  <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
-                  <button type="button" class="seg-btn" data-example="plain">Plain</button>
-                </div>
-              </div>
-            </div>
-            <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-            <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue.</p>
-            <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
-            <div class="set-tpl-actions">
-              <button type="button" class="primary" id="tplSave">Save template</button>
-              <button type="button" class="ghost-btn" id="tplRevert" hidden>Revert changes</button>
-              <span class="set-tpl-status" id="tplStatus"></span>
-            </div>
-          </div>
-
-          <details class="set-tpl-vars">
-            <summary>Available variables</summary>
-            <div class="set-tpl-vars-body">${varsHtml}</div>
-          </details>
-        </div>
-        <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview above uses sample data — send yourself a test to see it in a real inbox.</span></div>
-      </div>
+      <div class="row" style="margin-top:12px"><button type="button" class="primary" id="tplEditLink">Edit template →</button></div>
     </section>`;
 
   const senderSection = `
@@ -2652,128 +2833,22 @@ async function renderSettings() {
     saveBarEl.hidden = !isDirty();
   };
 
-  // --- email template preview. The context mirrors what the render path binds; the
-  // preview is a client-side approximation (a test send is the authority).
-  const tplEditor = document.getElementById("tplEditor");
-  const tplFrame = document.getElementById("tplPreview");
-  const previewCtx = () => ({
-    "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
-    "post.subject": "The starlings are back",
-    "publication.name": state.name || fromName,
-    "publication.tagline": state.tagline || "Your tagline",
-    "publication.logoUrl": state.logoUrl || sampleLogoDataUri(state.name),
-    "publication.address": state.address || "123 Marsh Lane, Duluth, MN 55802, USA",
-    "footer.sentTo": "you@example.com",
-    "footer.unsubscribeUrl": "#unsubscribe",
-    "footer.viewInBrowserUrl": "#view-in-browser",
-  });
-  // The preview is an isolated iframe document: a white email canvas whose reading
-  // column is capped at the email measure (~640px, matching the view-in-browser
-  // render), so a template's own <style> block applies just as a mail client would
-  // and never leaks into the dashboard.
-  const FRAME_DOC =
-    '<!doctype html><html><head><meta charset="utf-8">' +
-    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-    "<style>html,body{margin:0}body{background:#fff}" +
-    "@media (prefers-color-scheme:dark){body{background:#18181b}}" +
-    ".kestrel-email{max-width:640px;margin:0 auto;padding:26px 20px;box-sizing:border-box}" +
-    ".kestrel-email img{max-width:100%}</style></head>" +
-    '<body><div class="kestrel-email"></div></body></html>';
-  let frameReady = false;
-  const sizeFrame = () => {
-    try {
-      const doc = tplFrame.contentDocument;
-      if (doc) {
-        tplFrame.style.height = `${Math.max(200, doc.documentElement.scrollHeight)}px`;
-      }
-    } catch {}
+  // --- email template: a read-only compact preview of the current template plus a
+  // link to the Template page, where editing lives (so each surface has one save).
+  // The identity fields repaint it live (see onIdentityInput).
+  const templatePreview = mountSampleEmailPreview(
+    document.getElementById("tplPreview"),
+    () => state.template,
+    () => ({
+      name: state.name || fromName,
+      tagline: state.tagline,
+      logoUrl: state.logoUrl,
+      address: state.address,
+    }),
+  );
+  document.getElementById("tplEditLink").onclick = () => {
+    location.hash = "#/template";
   };
-  const repaintTemplatePreview = () => {
-    const doc = tplFrame.contentDocument;
-    const slot = frameReady && doc ? doc.querySelector(".kestrel-email") : null;
-    if (!slot) {
-      return;
-    }
-    // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> in the
-    // template stays inert — injected HTML doesn't execute, and an email has none.
-    slot.innerHTML = fillEmailTemplate(tplEditor.value, previewCtx());
-    sizeFrame();
-    // Re-measure once the logo image has laid out (a real logo URL loads async).
-    setTimeout(sizeFrame, 60);
-  };
-  tplFrame.addEventListener("load", () => {
-    frameReady = true;
-    repaintTemplatePreview();
-  });
-  tplFrame.srcdoc = FRAME_DOC;
-
-  // The template has its own Save (it's validated server-side and can warn), separate
-  // from the identity save bar. Track it against the last-saved value so Revert and
-  // the status only show when there are unsaved edits.
-  const tplStatusEl = document.getElementById("tplStatus");
-  const tplRevertEl = document.getElementById("tplRevert");
-  const tplMsgsEl = document.getElementById("tplMsgs");
-  const refreshTplDirty = () => {
-    const dirty = tplEditor.value !== templateBaseline;
-    tplRevertEl.hidden = !dirty;
-    tplStatusEl.textContent = dirty ? "Unsaved changes" : "";
-  };
-  const showTplMsgs = (msgs, kind) => {
-    if (!msgs.length) {
-      tplMsgsEl.hidden = true;
-      tplMsgsEl.innerHTML = "";
-      return;
-    }
-    tplMsgsEl.hidden = false;
-    tplMsgsEl.className = `set-tpl-msgs ${kind}`;
-    tplMsgsEl.innerHTML = msgs.map((m) => `<div>${esc(m)}</div>`).join("");
-  };
-  const loadExample = (key) => {
-    const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
-    tplEditor.value = ex.html;
-    showTplMsgs([], "");
-    repaintTemplatePreview();
-    refreshTplDirty();
-  };
-  tplEditor.addEventListener("input", () => {
-    repaintTemplatePreview();
-    refreshTplDirty();
-  });
-  for (const b of body.querySelectorAll("[data-example]")) {
-    b.onclick = () => loadExample(b.dataset.example);
-  }
-  tplRevertEl.onclick = () => {
-    tplEditor.value = templateBaseline;
-    showTplMsgs([], "");
-    repaintTemplatePreview();
-    refreshTplDirty();
-  };
-  document.getElementById("tplSave").onclick = (e) =>
-    busy(e.currentTarget, "Saving…", async () => {
-      try {
-        const r = await api("/api/settings", {
-          method: "PUT",
-          json: { emailTemplate: tplEditor.value },
-        });
-        templateBaseline = r.settings.emailTemplate;
-        // The server may resolve "" to the default — reflect what was actually stored.
-        tplEditor.value = templateBaseline;
-        state.template = templateBaseline;
-        applySettings(r.settings);
-        repaintTemplatePreview();
-        refreshTplDirty();
-        const warnings = Array.isArray(r.warnings) ? r.warnings : [];
-        showTplMsgs(warnings, "warn");
-        toast(warnings.length ? "Template saved with warnings" : "Template saved");
-      } catch (err) {
-        // A rejected template (e.g. no unsubscribe link) comes back as a 400 message.
-        showTplMsgs([err.message], "error");
-        toast("Template not saved");
-      }
-    });
-  for (const c of body.querySelectorAll(".set-tpl-var code[data-token]")) {
-    c.onclick = () => copyText(c.dataset.token);
-  }
 
   // --- logo: immediate upload / remove (their own endpoints), updated in place so a
   // logo change doesn't wipe an in-progress template edit.
@@ -2789,7 +2864,7 @@ async function renderSettings() {
     logoPh.hidden = has;
     logoRemove.hidden = !has;
     logoReplace.textContent = has ? "Replace" : "Upload";
-    repaintTemplatePreview();
+    templatePreview.repaint();
   };
   logoReplace.onclick = () => logoInput.click();
   logoTile.addEventListener("click", () => logoInput.click());
@@ -2887,7 +2962,7 @@ async function renderSettings() {
     state.name = nameEl.value.trim();
     state.tagline = taglineEl.value.trim();
     state.address = addressEl.value.trim();
-    repaintTemplatePreview();
+    templatePreview.repaint();
     rebuildEmbed();
     refreshDirty();
   };
@@ -2981,7 +3056,7 @@ async function renderSettings() {
         applySettings(ns);
         renderRecipChips();
         rebuildEmbed();
-        repaintTemplatePreview();
+        templatePreview.repaint();
         refreshDirty();
         toast("Settings saved");
       } catch (err) {
@@ -2998,16 +3073,14 @@ async function renderSettings() {
     addressEl.value = state.address;
     renderRecipChips();
     rebuildEmbed();
-    repaintTemplatePreview();
+    templatePreview.repaint();
     refreshDirty();
   };
 
-  // --- initial paint. Load the persisted (server-resolved) template into the editor.
+  // --- initial paint.
   renderRecipChips();
   setEmbed("plain");
-  tplEditor.value = state.template;
-  repaintTemplatePreview();
-  refreshTplDirty();
+  templatePreview.repaint();
   refreshDirty();
 }
 
