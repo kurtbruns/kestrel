@@ -3,6 +3,7 @@
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { json, notFound } from "../lib/errors";
+import { listPage, parseListParams } from "../lib/list";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -14,11 +15,17 @@ export async function list(c: RequestContext): Promise<Response> {
   const status = valid.includes(statusParam as sends.SendStatus)
     ? (statusParam as sends.SendStatus)
     : undefined;
-  const rows = await sends.listSends(c.env.DB, { status });
+  const search = c.url.searchParams.get("search") ?? undefined;
+  const filter = { status, search } satisfies sends.SendFilter;
+  const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
+  const [total, rows] = await Promise.all([
+    sends.countSends(c.env.DB, filter),
+    sends.listSends(c.env.DB, filter, page),
+  ]);
   const withProgress = await Promise.all(
     rows.map(async (s) => ({ ...s, progress: await sends.deliveryRollup(c.env.DB, s.id) })),
   );
-  return json({ sends: withProgress });
+  return json({ sends: withProgress, page: listPage(total, page) });
 }
 
 export async function get(c: RequestContext): Promise<Response> {

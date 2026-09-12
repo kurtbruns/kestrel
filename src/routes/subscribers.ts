@@ -3,6 +3,7 @@
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
+import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requestSubscription } from "../services/subscriptions";
@@ -40,16 +41,24 @@ export async function list(c: RequestContext): Promise<Response> {
       ? statusParam
       : undefined;
   const search = c.url.searchParams.get("search") ?? undefined;
-  const [counts, rows, suppressions] = await Promise.all([
+  // Suppression is an overlay, not a status, so it's its own facet (see subscriberWhere):
+  // "only" narrows to suppressed addresses, "hide" drops them, absent leaves both.
+  const suppressedParam = c.url.searchParams.get("suppressed");
+  const suppressed =
+    suppressedParam === "only" ? "only" : suppressedParam === "hide" ? "hide" : undefined;
+  const filter = { status, search, suppressed } satisfies subscribers.SubscriberFilter;
+  const page = parseListParams(c.url, subscribers.SUBSCRIBER_LIST_SPEC);
+  const [counts, total, rows, suppressions] = await Promise.all([
     subscribers.counts(c.env.DB),
-    subscribers.listSubscribers(c.env.DB, { status, search }),
+    subscribers.countSubscribers(c.env.DB, filter),
+    subscribers.listSubscribers(c.env.DB, filter, page),
     subscribers.listSuppressions(c.env.DB),
   ]);
   // Annotate each row with whether its address is suppressed, so the list view
   // can badge it without a per-row lookup.
-  const suppressed = new Set(suppressions.map((s) => s.email));
-  const annotated = rows.map((r) => ({ ...r, suppressed: suppressed.has(r.email) }));
-  return json({ counts, subscribers: annotated });
+  const suppressedSet = new Set(suppressions.map((s) => s.email));
+  const annotated = rows.map((r) => ({ ...r, suppressed: suppressedSet.has(r.email) }));
+  return json({ counts, subscribers: annotated, page: listPage(total, page) });
 }
 
 export async function get(c: RequestContext): Promise<Response> {

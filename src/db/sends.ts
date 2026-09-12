@@ -1,6 +1,8 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
  *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
 
+import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
+
 export type SendStatus = "scheduled" | "sending" | "sent" | "canceled" | "failed";
 
 export interface SendRow {
@@ -71,25 +73,69 @@ export async function listPublishedIssues(db: D1Database, limit = 200): Promise<
   return results;
 }
 
+/** Narrow the send list by `status` and a subject contains-search. */
+export interface SendFilter {
+  status?: SendStatus;
+  search?: string;
+}
+
+/** The sortable columns exposed by `GET /sends` (see `parseListParams`). */
+export const SEND_LIST_SPEC: ListSpec = {
+  columns: {
+    fire: "fire_at",
+    status: "status",
+    recipients: "recipient_count",
+    subject: "subject",
+  },
+  defaultSort: "fire",
+  defaultDir: "desc",
+};
+
+// The list projection deliberately omits the large frozen bodies (rendered_html/_text).
+const SEND_LIST_COLS =
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at";
+
+function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
+  const where: string[] = [];
+  const binds: unknown[] = [];
+  if (filter.status) {
+    where.push("status = ?");
+    binds.push(filter.status);
+  }
+  const term = filter.search?.trim().toLowerCase();
+  if (term) {
+    where.push("LOWER(subject) LIKE ? ESCAPE '\\'");
+    binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+  }
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+/** One page of sends (frozen bodies omitted). Omit `page` for the legacy default
+ *  (newest first, first 200) used by internal callers and tests. */
 export async function listSends(
   db: D1Database,
-  opts: { status?: SendStatus; limit?: number } = {},
+  filter: SendFilter = {},
+  page?: ListParams,
 ): Promise<SendSummary[]> {
-  const limit = Math.min(opts.limit ?? 200, 1000);
-  const cols =
-    "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at";
-  if (opts.status) {
-    const { results } = await db
-      .prepare(`SELECT ${cols} FROM sends WHERE status = ? ORDER BY fire_at DESC LIMIT ?`)
-      .bind(opts.status, limit)
-      .all<SendSummary>();
-    return results;
-  }
+  const { clause, binds } = sendWhere(filter);
+  const order = page ? orderByClause(page, "id") : "ORDER BY fire_at DESC, id DESC";
+  const limit = page ? page.limit : 200;
+  const offset = page ? page.offset : 0;
   const { results } = await db
-    .prepare(`SELECT ${cols} FROM sends ORDER BY fire_at DESC LIMIT ?`)
-    .bind(limit)
+    .prepare(`SELECT ${SEND_LIST_COLS} FROM sends ${clause} ${order} LIMIT ? OFFSET ?`)
+    .bind(...binds, limit, offset)
     .all<SendSummary>();
   return results;
+}
+
+/** How many sends match `filter` — the `page.total` for the send list. */
+export async function countSends(db: D1Database, filter: SendFilter = {}): Promise<number> {
+  const { clause, binds } = sendWhere(filter);
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /** Per-recipient state rollup for a send. */

@@ -614,7 +614,7 @@ function route() {
     return renderPosts();
   }
   if (view === "subscribers") {
-    return renderSubscribers();
+    return renderSubscribers(arg);
   }
   if (view === "sends") {
     return renderSends();
@@ -675,44 +675,211 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ---- posts list ----
-async function renderPosts() {
-  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
-  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
-  try {
-    const { posts } = await api("/posts");
-    const list = document.getElementById("list");
-    if (!posts.length) {
-      list.innerHTML = `<p class="muted">No posts yet — create your first draft.</p>`;
-      return;
-    }
-    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
-      .map(
-        (p) =>
-          `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
-      )
-      .join("")}</tbody></table></div>`;
-    list.querySelectorAll("tr[data-id]").forEach((tr) => {
-      tr.onclick = (e) => {
-        if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
-          location.hash = `#/edit/${tr.dataset.id}`;
-        }
-      };
-    });
-    list.querySelectorAll(".menu-btn").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const pid = b.dataset.menu;
-        const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
-        if (b.dataset.status === "draft") {
-          items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
-        }
-        openMenu(b, items);
-      };
-    });
-  } catch (e) {
-    renderError(document.getElementById("list"), e.message, renderPosts);
+// ---- shared list controls (toolbar · sortable headers · pager) ----
+// One convention for the admin list views (Posts, Subscribers, Sends): a search-left
+// / filters-right toolbar, clickable sortable column headers, and offset pagination —
+// all driven by a small per-view `state` object whose reload() rebuilds the query and
+// re-fetches. The hash only seeds the initial filter (dashboard deep-links); sort,
+// page, and filter operate in place, matching the `page` envelope the endpoints return
+// (see src/lib/list.ts).
+
+// Build the query string for a list request from the view state. `sort`/`dir` are sent
+// only once a column is chosen (state.sort set), so a view keeps its endpoint's bespoke
+// default order (e.g. posts' scheduled-first) until the reader sorts.
+function listQuery(state) {
+  const p = new URLSearchParams();
+  if (state.status) {
+    p.set("status", state.status);
   }
+  if (state.suppressed) {
+    p.set("suppressed", state.suppressed);
+  }
+  const term = (state.search || "").trim();
+  if (term) {
+    p.set("search", term);
+  }
+  if (state.sort) {
+    p.set("sort", state.sort);
+    p.set("dir", state.dir);
+  }
+  p.set("limit", String(state.limit));
+  p.set("offset", String(state.offset));
+  return p.toString();
+}
+
+// A filter/search toolbar: search on the left, status filter (+ optional suppression
+// facet) pinned right. `cfg.statuses` = [{value,label}]; `cfg.facet` enables the overlay
+// facet (subscribers only, where suppression is a separate axis from consent status).
+function listToolbar(cfg) {
+  const statusOpts = ['<option value="">All statuses</option>']
+    .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
+    .join("");
+  const facet = cfg.facet
+    ? `<select class="lt-facet" aria-label="Filter by suppression"><option value="">Any suppression</option><option value="only">Suppressed only</option><option value="hide">Hide suppressed</option></select>`
+    : "";
+  return `<div class="list-toolbar">
+    <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
+    <div class="lt-filters"><select class="lt-status" aria-label="Filter by status">${statusOpts}</select>${facet}</div>
+  </div>`;
+}
+
+// Wire the toolbar controls (within `root`) to the view's reload, seeding their values
+// from state so a deep-linked filter shows selected. Search is debounced; any change
+// resets to the first page.
+function wireToolbar(root, state, reload) {
+  const search = root.querySelector(".lt-search");
+  const status = root.querySelector(".lt-status");
+  const facet = root.querySelector(".lt-facet");
+  if (search) {
+    search.value = state.search || "";
+    let t = null;
+    search.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        state.search = search.value;
+        state.offset = 0;
+        reload();
+      }, 250);
+    };
+  }
+  if (status) {
+    status.value = state.status || "";
+    status.onchange = () => {
+      state.status = status.value;
+      state.offset = 0;
+      reload();
+    };
+  }
+  if (facet) {
+    facet.value = state.suppressed || "";
+    facet.onchange = () => {
+      state.suppressed = facet.value;
+      state.offset = 0;
+      reload();
+    };
+  }
+}
+
+// A table header cell. A sortable column (given a `key`) renders a button that toggles
+// asc/desc and shows the active direction; other columns are plain labels. `cls` adds a
+// column class (e.g. "num" for right-aligned numeric columns).
+function th(label, key, state, cls) {
+  const c = cls ? ` class="${cls}"` : "";
+  if (!key) {
+    return `<th${c}>${esc(label)}</th>`;
+  }
+  const active = state.sort === key;
+  const arrow = active ? (state.dir === "asc" ? " ▲" : " ▼") : "";
+  const klass = `${cls ? `${cls} ` : ""}sortable${active ? " sorted" : ""}`;
+  return `<th class="${klass}"><button type="button" class="th-sort" data-sort="${key}">${esc(label)}${arrow}</button></th>`;
+}
+
+// Wire the sortable headers inside a freshly-rendered table. Clicking a column sorts by
+// it (default desc), or flips direction if it is already the sort key; resets to page 1.
+function wireSort(container, state, reload) {
+  container.querySelectorAll(".th-sort").forEach((b) => {
+    b.onclick = () => {
+      const key = b.dataset.sort;
+      if (state.sort === key) {
+        state.dir = state.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.sort = key;
+        state.dir = "desc";
+      }
+      state.offset = 0;
+      reload();
+    };
+  });
+}
+
+// Offset pager: "a–b of N" with Prev/Next. Renders nothing when one page covers all.
+function renderPager(el, state, page, reload) {
+  if (!page || page.total <= state.limit) {
+    el.innerHTML = "";
+    return;
+  }
+  const from = page.total === 0 ? 0 : page.offset + 1;
+  const to = Math.min(page.offset + state.limit, page.total);
+  const hasPrev = page.offset > 0;
+  const hasNext = page.offset + state.limit < page.total;
+  el.innerHTML = `<div class="pager"><button type="button" class="pager-prev"${hasPrev ? "" : " disabled"}>← Prev</button><span class="pager-range muted">${from}–${to} of ${page.total}</span><button type="button" class="pager-next"${hasNext ? "" : " disabled"}>Next →</button></div>`;
+  if (hasPrev) {
+    el.querySelector(".pager-prev").onclick = () => {
+      state.offset = Math.max(0, page.offset - state.limit);
+      reload();
+    };
+  }
+  if (hasNext) {
+    el.querySelector(".pager-next").onclick = () => {
+      state.offset = page.offset + state.limit;
+      reload();
+    };
+  }
+}
+
+// ---- posts list ----
+const POST_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "sent", label: "Sent" },
+];
+async function renderPosts() {
+  // Default sort left empty so the server keeps its scheduled-first order until the
+  // reader clicks a column header.
+  const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div>
+    ${listToolbar({ statuses: POST_STATUSES, searchPlaceholder: "Search subject…" })}
+    <div id="list" class="muted">Loading…</div>
+    <div id="postsPager"></div>`;
+  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
+  const listEl = document.getElementById("list");
+  const pagerEl = document.getElementById("postsPager");
+
+  async function load() {
+    try {
+      const data = await api(`/posts?${listQuery(state)}`);
+      const posts = data.posts;
+      if (!posts.length) {
+        listEl.innerHTML = `<p class="muted">${
+          state.search || state.status
+            ? "No posts match."
+            : "No posts yet — create your first draft."
+        }</p>`;
+        pagerEl.innerHTML = "";
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Title", "title", state)}${th("Status", "status", state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
+        .map(
+          (p) =>
+            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
+        )
+        .join("")}</tbody></table></div>`;
+      wireSort(listEl, state, load);
+      listEl.querySelectorAll("tr[data-id]").forEach((tr) => {
+        tr.onclick = (e) => {
+          if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
+            location.hash = `#/edit/${tr.dataset.id}`;
+          }
+        };
+      });
+      listEl.querySelectorAll(".menu-btn").forEach((b) => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          const pid = b.dataset.menu;
+          const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
+          if (b.dataset.status === "draft") {
+            items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
+          }
+          openMenu(b, items);
+        };
+      });
+      renderPager(pagerEl, state, data.page, load);
+    } catch (e) {
+      renderError(listEl, e.message, load);
+    }
+  }
+  wireToolbar(app, state, load);
+  load();
 }
 
 function confirmDelete(pid) {
@@ -1477,131 +1644,173 @@ function startCountdowns() {
   statusTimer = setInterval(tick, 1000);
 }
 
+const SEND_STATUSES = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "sending", label: "Sending" },
+  { value: "sent", label: "Sent" },
+  { value: "canceled", label: "Canceled" },
+  { value: "failed", label: "Failed" },
+];
 async function renderSends() {
-  app.innerHTML = `<h1>Sends</h1><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
-  try {
-    const { sends } = await api("/sends");
-    // The API returns fire_at DESC (newest-first, which the Recent list below wants).
-    // Scheduled is the upcoming queue, so flip it to soonest-first — the next send to
-    // fire, and the one you'd reach for the cancel window on, sits at the top.
-    const scheduled = sends
-      .filter((s) => s.status === "scheduled")
-      .sort((a, b) => a.fire_at - b.fire_at);
-    const recent = sends
-      .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
-      .slice(0, 20);
+  const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<h1>Sends</h1>
+    <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
+    <h2>All sends</h2>
+    ${listToolbar({ statuses: SEND_STATUSES, searchPlaceholder: "Search subject…" })}
+    <div id="sendsList" class="muted">Loading…</div>
+    <div id="sendsPager"></div>`;
+  const schedEl = document.getElementById("scheduled");
+  const listEl = document.getElementById("sendsList");
+  const pagerEl = document.getElementById("sendsPager");
 
-    document.getElementById("scheduled").innerHTML = scheduled.length
-      ? scheduled
-          .map(
-            (s) =>
-              `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
-          )
-          .join("")
-      : `<p class="muted">Nothing scheduled.</p>`;
-    // The whole card opens the issue; the subject link handles keyboard/middle-click,
-    // and Cancel opts out of navigation (like the posts table's row-click guard).
-    document.querySelectorAll("#scheduled .card.clickable").forEach((card) => {
-      card.onclick = (e) => {
-        if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
-          location.hash = `#/edit/${card.dataset.post}`;
-        }
-      };
-    });
-    document.querySelectorAll("[data-cancel]").forEach((b) => {
-      b.onclick = () =>
-        busy(b, "Canceling…", async () => {
-          try {
-            await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
-            toast("Canceled");
-            renderSends();
-          } catch (e) {
-            toast(e.message);
+  // The upcoming queue, soonest-first — the next send to fire (and the one you'd reach
+  // for the cancel window on) sits at the top. Fetched on its own so it shows every
+  // scheduled send regardless of the table's paging/filter below.
+  async function loadScheduled() {
+    try {
+      const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
+      schedEl.innerHTML = sends.length
+        ? sends
+            .map(
+              (s) =>
+                `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+            )
+            .join("")
+        : `<p class="muted">Nothing scheduled.</p>`;
+      // The whole card opens the issue; the subject link handles keyboard/middle-click,
+      // and Cancel opts out of navigation (like the posts table's row-click guard).
+      schedEl.querySelectorAll(".card.clickable").forEach((card) => {
+        card.onclick = (e) => {
+          if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+            location.hash = `#/edit/${card.dataset.post}`;
           }
-        });
-    });
-    startCountdowns();
-
-    document.getElementById("recent").innerHTML = recent.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th></tr></thead><tbody>${recent
-          .map(
-            (s) =>
-              `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
-          )
-          .join("")}</tbody></table></div>`
-      : `<p class="muted">No sends yet.</p>`;
-  } catch (e) {
-    renderError(document.getElementById("scheduled"), e.message, renderSends);
+        };
+      });
+      schedEl.querySelectorAll("[data-cancel]").forEach((b) => {
+        b.onclick = () =>
+          busy(b, "Canceling…", async () => {
+            try {
+              await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+              toast("Canceled");
+              // A cancel drops it from the queue and flips it to canceled in the table.
+              loadScheduled();
+              loadList();
+            } catch (e) {
+              toast(e.message);
+            }
+          });
+      });
+      startCountdowns();
+    } catch (e) {
+      renderError(schedEl, e.message, loadScheduled);
+    }
   }
+
+  async function loadList() {
+    try {
+      const data = await api(`/sends?${listQuery(state)}`);
+      const sends = data.sends;
+      if (!sends.length) {
+        listEl.innerHTML = `<p class="muted">${
+          state.search || state.status ? "No sends match." : "No sends yet."
+        }</p>`;
+        pagerEl.innerHTML = "";
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Subject", "subject", state)}${th("Status", "status", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
+        .map(
+          (s) =>
+            `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
+        )
+        .join("")}</tbody></table></div>`;
+      wireSort(listEl, state, loadList);
+      renderPager(pagerEl, state, data.page, loadList);
+    } catch (e) {
+      renderError(listEl, e.message, loadList);
+    }
+  }
+
+  wireToolbar(app, state, loadList);
+  loadScheduled();
+  loadList();
 }
 
 // ---- subscribers ----
-// The story of the list as a whole: its composition (by-status counts) and the
-// roster, filterable and searchable. Sends/scheduling live on Status instead.
-async function renderSubscribers() {
+// The story of the list as a whole: its composition (by-status counts) and the roster,
+// filterable, sortable, and searchable. Consent status and suppression are separate
+// axes: the status filter narrows the roster; the suppression facet is an overlay. The
+// dashboard tiles deep-link via #/subscribers/<filter> — `initialFilter` seeds the
+// status filter, or the suppression facet for "suppressed".
+const SUB_STATUSES = [
+  { value: "confirmed", label: "Confirmed" },
+  { value: "pending", label: "Pending" },
+  { value: "unsubscribed", label: "Unsubscribed" },
+];
+async function renderSubscribers(initialFilter) {
+  const state = {
+    status: "",
+    search: "",
+    suppressed: "",
+    sort: "joined",
+    dir: "desc",
+    offset: 0,
+    limit: 50,
+  };
+  if (initialFilter === "suppressed") {
+    state.suppressed = "only";
+  } else if (
+    initialFilter === "confirmed" ||
+    initialFilter === "pending" ||
+    initialFilter === "unsubscribed"
+  ) {
+    state.status = initialFilter;
+  }
+
   app.innerHTML = `
     <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
     <div id="subCounts" class="muted">Loading…</div>
-    <div class="row sub-controls">
-      <select id="subFilter" aria-label="Filter by status">
-        <option value="">All statuses</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="pending">Pending</option>
-        <option value="unsubscribed">Unsubscribed</option>
-      </select>
-      <input id="subSearch" type="search" placeholder="Search email…" aria-label="Search email" autocomplete="off">
-    </div>
-    <div id="subList" class="muted">Loading…</div>`;
+    ${listToolbar({ statuses: SUB_STATUSES, facet: true, searchPlaceholder: "Search email…" })}
+    <div id="subList" class="muted">Loading…</div>
+    <div id="subPager"></div>`;
 
-  const filterEl = document.getElementById("subFilter");
-  const searchEl = document.getElementById("subSearch");
-  let searchTimer = null;
+  const listEl = document.getElementById("subList");
+  const pagerEl = document.getElementById("subPager");
 
   async function load() {
-    const params = new URLSearchParams();
-    if (filterEl.value) {
-      params.set("status", filterEl.value);
-    }
-    const term = searchEl.value.trim();
-    if (term) {
-      params.set("search", term);
-    }
-    const qs = params.toString();
-    const listEl = document.getElementById("subList");
     try {
-      const data = await api(`/subscribers${qs ? `?${qs}` : ""}`);
+      const data = await api(`/subscribers?${listQuery(state)}`);
       const c = data.counts;
+      // The counts card stays a global by-status summary (independent of the active
+      // filter); the page total below reflects the filtered roster.
       document.getElementById("subCounts").innerHTML =
         `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
           "Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.",
           { below: true },
         )}</div>`;
-      renderSubTable(listEl, data.subscribers, load);
+      renderSubTable(listEl, data.subscribers, state, load);
+      renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, e.message, load);
     }
   }
 
   document.getElementById("addSub").onclick = () => addSubscriberModal(load);
-  filterEl.onchange = load;
-  searchEl.oninput = () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(load, 250);
-  };
+  wireToolbar(app, state, load);
   load();
 }
 
-function renderSubTable(listEl, rows, reload) {
+function renderSubTable(listEl, rows, state, reload) {
   if (!rows.length) {
     listEl.innerHTML = `<p class="muted">No subscribers match.</p>`;
     return;
   }
-  listEl.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Confirmed / created</th><th></th></tr></thead><tbody>${rows
+  listEl.innerHTML = `<div class="table-wrap"><table><thead><tr>${th("Email", "email", state)}${th("Status", "status", state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.confirmed_at || s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
+  wireSort(listEl, state, reload);
   listEl.querySelectorAll(".menu-btn").forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
@@ -2010,6 +2219,20 @@ function apiExample(label, value) {
         JSON.stringify(value, null, 2),
       )}</code></pre></div>`;
 }
+// Query params for a list route, rendered as a name→description table so the
+// generated reference documents filter/sort/pagination from the registration.
+function apiQueryHtml(query) {
+  if (!query?.length) {
+    return "";
+  }
+  const rows = query
+    .map(
+      (q) =>
+        `<tr><td><code>${esc(q.name)}</code></td><td class="muted">${esc(q.description)}</td></tr>`,
+    )
+    .join("");
+  return `<div class="api-ex"><span class="api-ex-label">Query</span><table class="api-query"><tbody>${rows}</tbody></table></div>`;
+}
 function apiRouteHtml(r) {
   return `<div class="api-route">
       <div class="api-route-head">
@@ -2019,6 +2242,7 @@ function apiRouteHtml(r) {
       </div>
       <p class="api-summary">${esc(r.summary)}</p>
       ${r.description ? `<p class="api-desc muted">${esc(r.description)}</p>` : ""}
+      ${apiQueryHtml(r.query)}
       ${apiExample("Request", r.example?.request)}
       ${apiExample("Response", r.example?.response)}
     </div>`;
@@ -2192,16 +2416,24 @@ async function renderDashboard() {
         .join("")}</div></div>`
     : "";
 
+  // Each tile deep-links into the roster pre-filtered on its criterion
+  // (#/subscribers/<filter>), so a count is a way in, not just a number.
   const tiles = [
-    { label: "Confirmed", sub: "your audience", emph: true, v: counts.confirmed },
-    { label: "Pending", v: counts.pending },
-    { label: "Unsubscribed", v: counts.unsubscribed },
-    { label: "Suppressed", v: counts.suppressed },
+    {
+      label: "Confirmed",
+      sub: "your audience",
+      emph: true,
+      v: counts.confirmed,
+      filter: "confirmed",
+    },
+    { label: "Pending", v: counts.pending, filter: "pending" },
+    { label: "Unsubscribed", v: counts.unsubscribed, filter: "unsubscribed" },
+    { label: "Suppressed", v: counts.suppressed, filter: "suppressed" },
   ];
   const tilesHtml = `<div class="tiles">${tiles
     .map(
       (t) =>
-        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
+        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers/${t.filter}"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
           t.sub ? `<span class="tile-sub">${esc(t.sub)}</span>` : ""
         }</span></a>`,
     )

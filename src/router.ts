@@ -64,6 +64,12 @@ export interface RouteExample {
   response?: unknown;
 }
 
+/** A documented query parameter, for list routes with filter/sort/pagination. */
+export interface QueryParam {
+  name: string;
+  description: string;
+}
+
 /**
  * A route declared as data. `method` / `path` / `access` are accurate by
  * construction — they are what registers the route — and the same record drives
@@ -76,6 +82,8 @@ export interface RouteDef {
   access: Access;
   summary: string;
   description?: string;
+  /** Query parameters, documented from the registration so the reference can't drift. */
+  query?: QueryParam[];
   example?: RouteExample;
   handler: Handler;
   /** Extra middleware beyond the access-derived gate. Rare; composed after the gate. */

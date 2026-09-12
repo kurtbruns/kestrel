@@ -4,6 +4,7 @@ import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
+import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -71,7 +72,19 @@ export async function createPost(c: RequestContext): Promise<Response> {
 }
 
 export async function listPosts(c: RequestContext): Promise<Response> {
-  return json({ posts: await posts.listPosts(c.env.DB) });
+  const statusParam = c.url.searchParams.get("status") ?? undefined;
+  const status =
+    statusParam === "draft" || statusParam === "scheduled" || statusParam === "sent"
+      ? statusParam
+      : undefined;
+  const search = c.url.searchParams.get("search") ?? undefined;
+  const filter = { status, search } satisfies posts.PostFilter;
+  const page = parseListParams(c.url, posts.POST_LIST_SPEC);
+  const [total, rows] = await Promise.all([
+    posts.countPosts(c.env.DB, filter),
+    posts.listPosts(c.env.DB, filter, page),
+  ]);
+  return json({ posts: rows, page: listPage(total, page) });
 }
 
 export async function getPost(c: RequestContext): Promise<Response> {

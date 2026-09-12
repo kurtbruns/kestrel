@@ -236,3 +236,36 @@ describe("posts + revisions", () => {
     expect(counts).toMatchObject({ posts: 0, sends: 0, deliveries: 0 });
   });
 });
+
+describe("posts list: filter, sort, paginate", () => {
+  it("returns a page envelope; filters by status; sorts and pages by a whitelisted column", async () => {
+    const marker = `plist-${Date.now()}`;
+    // Three drafts whose subjects sort A < B < C.
+    for (const s of ["A", "B", "C"]) {
+      await createPost({ subject: `${marker} ${s}`, markdown: "x" });
+    }
+    const q = `search=${marker}&sort=title&dir=asc`;
+
+    const p1 = await readJson(
+      await SELF.fetch(`${base}/posts?${q}&limit=2&offset=0`, { headers: AUTH }),
+    );
+    expect(p1.posts.map((p: any) => p.subject)).toEqual([`${marker} A`, `${marker} B`]);
+    expect(p1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "title", dir: "asc" });
+
+    const p2 = await readJson(
+      await SELF.fetch(`${base}/posts?${q}&limit=2&offset=2`, { headers: AUTH }),
+    );
+    expect(p2.posts.map((p: any) => p.subject)).toEqual([`${marker} C`]);
+
+    // Status filter: all three are drafts, none are sent.
+    const drafts = await readJson(
+      await SELF.fetch(`${base}/posts?search=${marker}&status=draft`, { headers: AUTH }),
+    );
+    expect(drafts.posts).toHaveLength(3);
+    const sent = await readJson(
+      await SELF.fetch(`${base}/posts?search=${marker}&status=sent`, { headers: AUTH }),
+    );
+    expect(sent.posts).toHaveLength(0);
+    expect(sent.page.total).toBe(0);
+  });
+});
