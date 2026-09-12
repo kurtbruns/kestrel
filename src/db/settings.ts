@@ -30,6 +30,8 @@ export interface PublicationSettings {
   tagline: string;
   /** "" = use the theme accent; otherwise a validated `#rrggbb`. */
   brandColor: string;
+  /** Physical mailing address for the email compliance footer ("" = unset). */
+  address: string;
   logo: PublicationLogo | null;
 }
 
@@ -39,6 +41,13 @@ export interface AppSettings {
   testRecipients: string[];
   /** Publication identity for the reader surface + admin. */
   publication: PublicationSettings;
+  /**
+   * The email layout each issue is sent inside — HTML with a `<style>` block and
+   * `{{ variables }}` the render path fills (SPEC §8). "" means "use the built-in
+   * default"; the API reflects the resolved template so a client always sees one.
+   * Stored as text (no schema), validated for the required variables by the route.
+   */
+  emailTemplate: string;
 }
 
 /** The reserved R2 key the publication logo is stored under (served by /media). */
@@ -46,18 +55,22 @@ export const BRANDING_LOGO_KEY = "branding/logo";
 
 export const DEFAULT_SETTINGS: AppSettings = {
   testRecipients: [],
-  publication: { name: "", tagline: "", brandColor: "", logo: null },
+  publication: { name: "", tagline: "", brandColor: "", address: "", logo: null },
+  emailTemplate: "",
 };
 
 /** Caps so a mistake (or a compromised session) can't grow a field unboundedly. */
 const MAX_TEST_RECIPIENTS = 20;
 const MAX_NAME = 120;
 const MAX_TAGLINE = 200;
+const MAX_ADDRESS = 300;
+const MAX_TEMPLATE = 40_000;
 
 /** A patch the API accepts. Logo is set through the dedicated upload route, not here. */
 export interface SettingsPatch {
   testRecipients?: string[];
-  publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "brandColor">>;
+  publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "brandColor" | "address">>;
+  emailTemplate?: string;
 }
 
 function coercePublication(raw: unknown): PublicationSettings {
@@ -72,6 +85,7 @@ function coercePublication(raw: unknown): PublicationSettings {
     name: str(o.name).slice(0, MAX_NAME),
     tagline: str(o.tagline).slice(0, MAX_TAGLINE),
     brandColor: str(o.brandColor),
+    address: str(o.address).slice(0, MAX_ADDRESS),
     logo,
   };
 }
@@ -83,6 +97,8 @@ function coerce(raw: unknown): AppSettings {
   return {
     testRecipients: list.filter((e): e is string => typeof e === "string"),
     publication: coercePublication(o.publication),
+    emailTemplate:
+      typeof o.emailTemplate === "string" ? o.emailTemplate.slice(0, MAX_TEMPLATE) : "",
   };
 }
 
@@ -131,6 +147,20 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
     if (p.brandColor !== undefined) {
       next.publication.brandColor = normalizeBrandColor(p.brandColor);
     }
+    if (p.address !== undefined) {
+      next.publication.address = normalizeText(p.address, "address", MAX_ADDRESS);
+    }
+  }
+  if (patch.emailTemplate !== undefined) {
+    // Structural validation (required variables, warnings) is the route's job; here
+    // we only enforce the type + storage cap. "" resets to the built-in default.
+    if (typeof patch.emailTemplate !== "string") {
+      throw new Error("emailTemplate must be a string");
+    }
+    if (patch.emailTemplate.length > MAX_TEMPLATE) {
+      throw new Error(`emailTemplate must be ${MAX_TEMPLATE} characters or fewer`);
+    }
+    next.emailTemplate = patch.emailTemplate;
   }
 
   await persist(db, next);

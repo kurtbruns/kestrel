@@ -12,6 +12,15 @@ import { buildImageMap } from "./image_urls";
 import { markdownToHtml } from "./markdown";
 import { sanitizeEmailHtml } from "./sanitize";
 import { emailLayout, UNSUB_SENTINEL } from "./template";
+import {
+  DEFAULT_EMAIL_TEMPLATE,
+  defaultBranding,
+  type EmailBranding,
+  fillEmailTemplate,
+  inlineEmailCss,
+  type TemplateContext,
+  validateEmailTemplate,
+} from "./template_engine";
 import { htmlToText } from "./text";
 
 export { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "./template";
@@ -59,7 +68,11 @@ export function archiveUrl(config: Config, slug: string): string {
   return `${config.archiveOrigin}${config.archiveBasePath}/${slug}`;
 }
 
-export function render(input: RenderInput, config: Config): RenderResult {
+export async function render(
+  input: RenderInput,
+  config: Config,
+  branding: EmailBranding = defaultBranding(),
+): Promise<RenderResult> {
   const meta = readMeta(input.revision, input.post);
   const warnings: string[] = [];
 
@@ -80,12 +93,37 @@ export function render(input: RenderInput, config: Config): RenderResult {
   const subject = hasSubject ? meta.subject : "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
 
-  const html = emailLayout({
-    subject,
-    preheader: derivePreheader(contentText),
-    contentHtml: cleanHtml,
-    viewInBrowserUrl,
-  });
+  // The publisher's template is the email's presentation (SPEC §8). It's validated
+  // when it's set; here we surface its warnings on preview/test and, as defense in
+  // depth, fall back to the built-in default if the active template is somehow
+  // invalid — a broken or unsubscribe-less email must never ship (I2).
+  const validation = validateEmailTemplate(branding.template);
+  let template = branding.template;
+  if (validation.errors.length > 0) {
+    warnings.push(`email template invalid, using the default — ${validation.errors.join(" ")}`);
+    template = DEFAULT_EMAIL_TEMPLATE;
+  } else {
+    warnings.push(...validation.warnings);
+  }
+
+  const context: TemplateContext = {
+    "post.body": cleanHtml,
+    "post.subject": subject,
+    "publication.name": branding.name,
+    "publication.tagline": branding.tagline,
+    "publication.logoUrl": branding.logoUrl,
+    "publication.address": branding.address,
+    // The per-recipient sentinel flows through the template unchanged and is the ONLY
+    // per-recipient edit (substituteUnsubscribe); everything else is identical bytes.
+    "footer.unsubscribeUrl": UNSUB_SENTINEL,
+    "footer.viewInBrowserUrl": viewInBrowserUrl,
+  };
+  const body = fillEmailTemplate(template, context);
+  const shell = emailLayout({ subject, preheader: derivePreheader(contentText), bodyHtml: body });
+  // Inline the template's <style> onto elements (mail clients strip <style>); this is
+  // the last step, so the frozen bytes are exactly what ships and what the archive
+  // serves (I3). Comments (the archive anchors) and the sentinel survive inlining.
+  const html = await inlineEmailCss(shell);
 
   const text = [
     contentText,

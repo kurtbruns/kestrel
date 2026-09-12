@@ -9,12 +9,14 @@ import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
 import { getCurrentRevision } from "../db/posts";
 import { getActiveSendForPost, getSend, type SendRow } from "../db/sends";
+import { getSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
+import { resolveBranding } from "../render/template_engine";
 
 /** Create a scheduled Send from the post's current content and lock the post. */
 export async function freeze(
@@ -41,7 +43,12 @@ export async function freeze(
   }
 
   const images = await listImages(env.DB, post.id);
-  const rendered = render({ post, revision, images }, config);
+  const settings = await getSettings(env.DB);
+  const rendered = await render(
+    { post, revision, images },
+    config,
+    resolveBranding(settings, config),
+  );
   const audience = await audienceEmails(env.DB);
 
   const now = Date.now();

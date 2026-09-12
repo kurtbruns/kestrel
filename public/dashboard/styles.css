@@ -3063,6 +3063,40 @@ td.act {
 .set-tpl-hint {
   margin: 6px 0 0;
 }
+/* The template's own Save + validation feedback (errors reject; warnings inform). */
+.set-tpl-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.set-tpl-actions button.primary {
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+  border-color: var(--k-accent);
+}
+.set-tpl-status {
+  font-size: 12px;
+  color: var(--muted);
+}
+.set-tpl-msgs {
+  margin-top: 12px;
+  border: 1px solid var(--line-2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.set-tpl-msgs.warn {
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2));
+  color: var(--warn);
+}
+.set-tpl-msgs.error {
+  background: var(--b-bad-bg);
+  border-color: var(--b-bad-line);
+  color: var(--b-bad-fg);
+}
 /* Variable reference — a native <details> disclosure. Logic-less: a token is only
    ever replaced by its value, so there's nothing to execute. */
 .set-tpl-vars {

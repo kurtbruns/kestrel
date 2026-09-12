@@ -1,8 +1,9 @@
-/** The single email layout. Content is wrapped once; the footer carries the
- *  per-recipient unsubscribe sentinel and the view-in-browser link. The body
- *  also holds an inert anchor comment the archive route swaps for a browser-only
- *  masthead (`archiveMasthead`) — invisible in every email, present only on the
- *  hosted page (I3). */
+/** The email shell. A filled, CSS-inlined template — which carries its own footer,
+ *  unsubscribe link included — is dropped into one responsive column; this file adds
+ *  only the document, the hidden preheader, and the inert archive anchors. The body
+ *  holds an anchor comment the archive route swaps for a browser-only masthead
+ *  (`archiveMasthead`) — invisible in every email, present only on the hosted page
+ *  (I3). Styling lives in the template (inlined at render); the shell carries none. */
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 
 /** Literal placeholder for the per-recipient unsubscribe URL, substituted at
@@ -30,8 +31,8 @@ const HEADING_FONT = "Fraunces, Georgia, 'Times New Roman', serif";
 export interface LayoutInput {
   subject: string;
   preheader: string;
-  contentHtml: string;
-  viewInBrowserUrl: string;
+  /** The filled + CSS-inlined email template — the whole visible body, footer included. */
+  bodyHtml: string;
 }
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
@@ -42,38 +43,24 @@ export function emailLayout(i: LayoutInput): string {
         i.preheader,
       )}</span>`
     : "";
-  const viewUrl = escapeHtmlAttr(i.viewInBrowserUrl);
-  // Inline styles are the light default; the <style> block layers dark-mode
-  // overrides (with !important, since inline styles win otherwise). Clients that
-  // honor prefers-color-scheme (Apple Mail, iOS, and the web archive/preview)
-  // render dark; everything else falls back to the light inline styles.
+  // The shell advertises light+dark and darkens only its own frame (the outer
+  // background) in dark mode; the template owns the content's dark colors via its own
+  // `@media` block. Both @media blocks survive CSS inlining (only non-at-rules inline)
+  // and are consolidated into <head>; their dark overrides use !important to beat the
+  // inlined light styles — the standard email dark-mode technique. The body cell sets
+  // a base font/color as a fallback for content the template doesn't wrap.
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
 <title>${escapeHtml(i.subject)}</title>${ARCHIVE_HEAD_ANCHOR}
-<style>
-  :root { color-scheme: light dark; }
-  .k-body h1, .k-body h2, .k-body h3, .k-body h4, .k-body h5, .k-body h6 { font-family:${HEADING_FONT}; }
-  @media (prefers-color-scheme: dark) {
-    .k-bg { background:#18181b !important; }
-    .k-card { background:#18181b !important; }
-    .k-body { color:#ededed !important; }
-    .k-body a { color:#93c5fd !important; }
-    .k-foot { color:#a1a1aa !important; border-color:#2e2e33 !important; }
-    .k-foot a { color:#a1a1aa !important; }
-    .k-mast { color:#a1a1aa !important; border-color:#2e2e33 !important; }
-    .k-mast a { color:#a1a1aa !important; }
-  }
-</style></head>
+<style>@media (prefers-color-scheme: dark) { .k-bg { background: #18181b !important; } }</style>
+</head>
 <body class="k-bg" style="margin:0;padding:0;background:#ffffff;">
 ${preheader}
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-bg" style="background:#ffffff;"><tr><td align="center" style="padding:8px 12px 48px;">
-<table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-card" style="max-width:664px;width:100%;background:#ffffff;">
-<tr><td class="k-body" style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
-${ARCHIVE_MASTHEAD_ANCHOR}${i.contentHtml}
-</td></tr>
-<tr><td class="k-foot" style="padding:16px 32px 28px;font-family:${FONT};font-size:12px;line-height:1.5;color:#71717a;border-top:1px solid #e4e4e7;">
-Powered by Kestrel &middot; <a href="${viewUrl}" style="color:#71717a;text-decoration:underline;">View in browser</a> &middot; <a href="${UNSUB_SENTINEL}" style="color:#71717a;text-decoration:underline;">Unsubscribe</a>
+<table role="presentation" width="664" cellpadding="0" cellspacing="0" class="k-bg" style="max-width:664px;width:100%;background:#ffffff;">
+<tr><td style="padding:24px 32px 32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;word-break:break-word;">
+${ARCHIVE_MASTHEAD_ANCHOR}${i.bodyHtml}
 </td></tr>
 </table>
 </td></tr></table>

@@ -16,8 +16,10 @@ async function getSettings() {
           tagline: string;
           brandColor: string;
           brandTextColor: string;
+          address: string;
           logoUrl: string;
         };
+        emailTemplate: string;
       };
       deployment: Record<string, unknown>;
     },
@@ -146,6 +148,61 @@ describe("publication identity (issue #81)", () => {
     const html = await (await SELF.fetch(`${BASE}/`)).text();
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");
+  });
+});
+
+describe("email template (wired to the render path)", () => {
+  const withUnsub = (extra = "") =>
+    `<div>{{ post.body }}${extra}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>`;
+
+  it("returns a concrete default template even when none is stored", async () => {
+    const { body } = await getSettings();
+    expect(body.settings.emailTemplate).toContain("{{ post.body }}");
+    expect(body.settings.emailTemplate).toContain("{{ footer.unsubscribeUrl }}");
+  });
+
+  it("persists a valid template and reflects it back", async () => {
+    const tpl = withUnsub(`<a href="{{ footer.viewInBrowserUrl }}">View</a>`);
+    const put = await putSettings({ emailTemplate: tpl });
+    expect(put.status).toBe(200);
+    expect(((await put.json()) as { warnings: string[] }).warnings).toEqual([]);
+    expect((await getSettings()).body.settings.emailTemplate).toBe(tpl);
+  });
+
+  it("rejects a template with no unsubscribe link (400) — every email must be leavable", async () => {
+    const res = await putSettings({ emailTemplate: "<div>{{ post.body }}</div>" });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { message?: string }).message ?? "").toMatch(/unsubscribe/i);
+  });
+
+  it("rejects a template with no post body (400)", async () => {
+    const res = await putSettings({
+      emailTemplate: '<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a>',
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("warns (but allows) a missing view-in-browser link and unknown variables", async () => {
+    const res = await putSettings({ emailTemplate: withUnsub("{{ made.up }}") });
+    expect(res.status).toBe(200);
+    const warnings = ((await res.json()) as { warnings: string[] }).warnings.join(" ");
+    expect(warnings).toMatch(/view.?in.?browser/i);
+    expect(warnings).toMatch(/made\.up/);
+  });
+
+  it('resets to the built-in default when set to ""', async () => {
+    await putSettings({ emailTemplate: withUnsub() });
+    const reset = await putSettings({ emailTemplate: "" });
+    expect(reset.status).toBe(200);
+    // The reflected template is the concrete default again (has a signed sign-off).
+    expect((await getSettings()).body.settings.emailTemplate).toContain("Powered by Kestrel");
+  });
+
+  it("persists the publication mailing address for the compliance footer", async () => {
+    await putSettings({ publication: { address: "123 Marsh Lane, Duluth, MN 55802" } });
+    expect((await getSettings()).body.settings.publication.address).toBe(
+      "123 Marsh Lane, Duluth, MN 55802",
+    );
   });
 });
 

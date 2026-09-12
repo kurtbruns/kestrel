@@ -26,6 +26,7 @@ import {
 } from "../db/settings";
 import type { Config } from "../env";
 import { badRequest, json } from "../lib/errors";
+import { DEFAULT_EMAIL_TEMPLATE, validateEmailTemplate } from "../render/template_engine";
 import type { RequestContext } from "../router";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
@@ -65,12 +66,19 @@ function publicationView(settings: AppSettings, cfg: Config) {
     tagline: p.tagline,
     brandColor: p.brandColor,
     brandTextColor: p.brandColor ? readableTextColor(p.brandColor) : "",
+    address: p.address,
     logoUrl: p.logo ? `${cfg.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
   };
 }
 
 function settingsView(settings: AppSettings, cfg: Config) {
-  return { testRecipients: settings.testRecipients, publication: publicationView(settings, cfg) };
+  return {
+    testRecipients: settings.testRecipients,
+    publication: publicationView(settings, cfg),
+    // Reflect the RESOLVED template — a blank stored value means "the built-in
+    // default", so a client always receives a concrete template to show and edit.
+    emailTemplate: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
+  };
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -86,9 +94,21 @@ export async function update(c: RequestContext): Promise<Response> {
     throw badRequest("a JSON body is required");
   }
   const patch = readPatch(body);
+  // Structural template validation: a missing unsubscribe (or body) is an error and
+  // rejects the write — no email may ship without a way to leave (I2). Other issues
+  // are warnings, returned so the client can surface them without blocking. An empty
+  // template ("") is a reset to the built-in default and needs no check.
+  let warnings: string[] = [];
+  if (patch.emailTemplate !== undefined && patch.emailTemplate.trim() !== "") {
+    const v = validateEmailTemplate(patch.emailTemplate);
+    if (v.errors.length > 0) {
+      throw badRequest(v.errors.join(" "));
+    }
+    warnings = v.warnings;
+  }
   try {
     const settings = await updateSettings(c.env.DB, patch);
-    return json({ settings: settingsView(settings, c.config) });
+    return json({ settings: settingsView(settings, c.config), warnings });
   } catch (e) {
     // updateSettings throws plain Errors for invalid input (bad address/color, too many).
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
@@ -157,7 +177,16 @@ function readPatch(body: unknown): SettingsPatch {
     if ("brandColor" in p) {
       pub.brandColor = p.brandColor as string;
     }
+    if ("address" in p) {
+      pub.address = p.address as string;
+    }
     patch.publication = pub;
+  }
+  if ("emailTemplate" in o) {
+    if (typeof o.emailTemplate !== "string") {
+      throw badRequest("emailTemplate must be a string");
+    }
+    patch.emailTemplate = o.emailTemplate;
   }
   return patch;
 }
