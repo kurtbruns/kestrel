@@ -2473,28 +2473,11 @@ td.act {
   }
 }
 
-/* Embed area: the source (with a Styled/Plain toggle) beside a live preview,
-   mirroring the identity section's fields+preview pairing. */
-.set-embed-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
-  gap: 24px;
-  align-items: start;
-  margin-top: 8px;
-}
-.set-embed-main {
-  min-width: 0;
-}
+/* Embed: a Styled/Plain toggle over the copy-paste source. The snippet is the
+   deliverable — pasted into the author's own site — so it isn't re-rendered here. */
 .set-embed-head {
   margin-bottom: 2px;
 }
-@media (max-width: 780px) {
-  .set-embed-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-/* Embed snippet: the copy-paste subscribe form, shown as read-only source. */
 .set-embed pre {
   margin: 0;
   overflow-x: auto;
@@ -2534,48 +2517,6 @@ td.act {
   background: var(--card);
   color: var(--fg);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-}
-
-/* Embed preview: a light "sample page" frame, so the styled snippet reads the same
-   in either dashboard theme. Inert (visual only). The neutral controls under
-   .is-plain give the *plain* form a believable default look; the styled snippet's
-   own inline styles need no help and are left untouched. */
-.embed-preview {
-  background: #fff;
-  color: #18181b;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 16px;
-  pointer-events: none;
-}
-.embed-preview form {
-  margin: 0;
-}
-.embed-preview.is-plain label {
-  display: block;
-  margin: 0;
-  color: inherit;
-  font-size: 14px;
-}
-.embed-preview.is-plain input[type="email"] {
-  width: 100%;
-  margin-top: 4px;
-  padding: 8px 10px;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  background: #fff;
-  color: #18181b;
-  font: inherit;
-}
-.embed-preview.is-plain button {
-  margin-top: 8px;
-  padding: 8px 14px;
-  border: 1px solid #d4d4d8;
-  border-radius: 6px;
-  background: #f4f4f5;
-  color: #18181b;
-  font: inherit;
-  cursor: pointer;
 }
 
 /* Live masthead preview — a faithful-enough mirror of the reader chrome in

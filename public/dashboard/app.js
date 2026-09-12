@@ -619,7 +619,8 @@ function route() {
   if (view === "sends") {
     return renderSends();
   }
-  if (view === "settings") {
+  if (view === "publication" || view === "settings") {
+    // "settings" is the legacy hash; the surface is now "Publication".
     return renderSettings();
   }
   if (view === "reference") {
@@ -1388,7 +1389,7 @@ async function renderEditor(id) {
         if (defaults.length && !to.value.trim()) {
           to.value = defaults.join("\n");
           const hint = m.el.querySelector("#testDefaultsHint");
-          hint.textContent = "Pre-filled from your default test recipients (Settings).";
+          hint.textContent = "Pre-filled from your default test recipients (Publication).";
           hint.hidden = false;
         }
       })
@@ -1746,7 +1747,7 @@ function readableOn(hex) {
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#ffffff";
 }
 async function renderSettings() {
-  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Publication</h1></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -1803,7 +1804,7 @@ async function renderSettings() {
       <div class="set-identity">
         <div class="set-fields">
           <h2>Publication identity</h2>
-          <p class="set-lede">How your publication looks on its public pages and in this dashboard.</p>
+          <p class="set-lede">How your publication looks on its public pages and in this dashboard — not the email, whose sender is your From address (below).</p>
           <div class="logo-row">
             <div class="logo-preview" id="logoPreview">${
               p.logoUrl
@@ -1835,7 +1836,7 @@ async function renderSettings() {
           <div class="row" style="margin-top:16px"><button class="primary" id="idSave">Save identity</button></div>
         </div>
         <aside class="set-preview">
-          <div class="set-preview-label">How readers see it</div>
+          <div class="set-preview-label">Reader masthead</div>
           <div class="reader-mast" id="setMast">
             <span class="reader-mast-logo" id="pvLogo"${p.logoUrl ? "" : " hidden"}>${
               p.logoUrl ? `<img src="${esc(p.logoUrl)}" alt="">` : ""
@@ -1852,7 +1853,17 @@ async function renderSettings() {
     </section>
 
     <section class="dash-section set-block">
-      <h2>Grow your list</h2>
+      <h2>Email sender</h2>
+      <p class="set-lede">The identity readers see in their inbox. Set at deploy time and shown read-only — change it through the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
+      <div class="table-wrap set-narrow"><table><tbody>
+        ${kv("From address", d.fromAddress)}
+        ${kv("Sending domain", d.sendingDomain)}
+        ${kv("Email provider", PROVIDER_LABELS[d.provider] || d.provider)}
+      </tbody></table></div>
+    </section>
+
+    <section class="dash-section set-block">
+      <h2>Ways to subscribe</h2>
       <p class="set-lede">Share your subscribe page, or drop the form into your own site. Both start the double opt-in — a reader always confirms by email before joining.</p>
       <label>Subscribe page</label>
       <div class="pub-row set-narrow">
@@ -1861,24 +1872,15 @@ async function renderSettings() {
         <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
       </div>
       <label style="margin-top:20px">Embed on your site</label>
-      <div class="set-embed-grid">
-        <div class="set-embed-main">
-          <div class="spread set-embed-head">
-            <div class="seg" role="tablist" id="embedToggle">
-              <button type="button" class="seg-btn active" data-embed="styled" role="tab" aria-selected="true">Styled</button>
-              <button type="button" class="seg-btn" data-embed="plain" role="tab" aria-selected="false">Plain HTML</button>
-            </div>
-            <button class="ghost-btn" id="embedCopy">Copy code</button>
-          </div>
-          <p class="field-hint" id="embedHint" style="margin:8px 0"></p>
-          <div class="set-embed"><pre><code id="embedCode"></code></pre></div>
+      <div class="spread set-embed-head set-narrow">
+        <div class="seg" role="tablist" id="embedToggle">
+          <button type="button" class="seg-btn active" data-embed="styled" role="tab" aria-selected="true">Styled</button>
+          <button type="button" class="seg-btn" data-embed="plain" role="tab" aria-selected="false">Plain HTML</button>
         </div>
-        <aside class="set-preview">
-          <div class="set-preview-label">How readers see it</div>
-          <div class="embed-preview" id="embedPreview" aria-hidden="true"></div>
-          <p class="set-preview-note">Shown on a sample page. Both post to your hosted subscribe flow.</p>
-        </aside>
+        <button class="ghost-btn" id="embedCopy">Copy code</button>
       </div>
+      <p class="field-hint" id="embedHint" style="margin:8px 0"></p>
+      <div class="set-embed set-narrow"><pre><code id="embedCode"></code></pre></div>
     </section>
 
     <section class="dash-section set-block">
@@ -1889,12 +1891,9 @@ async function renderSettings() {
     </section>
 
     <section class="dash-section set-block">
-      <h2>Deployment</h2>
-      <p class="set-lede">Set at deploy time (env vars + secrets) and shown here read-only. To change any of these, see the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
+      <h2>Instance</h2>
+      <p class="set-lede">How this deployment is wired — set at deploy time (env vars + secrets) and shown read-only. To change any of these, see the <a href="#/docs">operator setup guide</a>. Credentials are never shown.</p>
       <div class="table-wrap set-narrow"><table><tbody>
-        ${kv("Email sender", PROVIDER_LABELS[d.provider] || d.provider)}
-        ${kv("From address", d.fromAddress)}
-        ${kv("Sending domain", d.sendingDomain)}
         ${kv("App origin", d.appOrigin)}
         ${kv("Archive URL base", d.archiveOrigin + d.archiveBasePath)}
         ${kv("Image URL base", d.mediaPublicBase)}
@@ -1960,22 +1959,16 @@ async function renderSettings() {
     b.onclick = () => copyText(b.dataset.copy);
   });
 
-  // Embed: a Styled/Plain toggle drives the shown source, the Copy payload, and a
-  // live (inert) preview of the actual form. The preview is rendered from our own
-  // escaped markup; its submit is neutralized so it can never navigate the editor.
+  // Embed: a Styled/Plain toggle drives the shown source, the hint, and the Copy
+  // payload. The snippet is the deliverable (you paste it into your own site), so it
+  // stands on its own — no in-dashboard render of it.
   const embedCodeEl = document.getElementById("embedCode");
-  const embedPreviewEl = document.getElementById("embedPreview");
   const embedHintEl = document.getElementById("embedHint");
   let embedMode = "styled";
   const setEmbed = (mode) => {
     embedMode = EMBEDS[mode] ? mode : "styled";
     embedCodeEl.textContent = EMBEDS[embedMode];
     embedHintEl.textContent = EMBED_HINTS[embedMode];
-    embedPreviewEl.innerHTML = EMBEDS[embedMode];
-    // The plain form carries no styles of its own; give it believable default
-    // controls in the preview (scoped by .is-plain) without touching the styled one.
-    embedPreviewEl.classList.toggle("is-plain", embedMode === "plain");
-    embedPreviewEl.querySelector("form")?.addEventListener("submit", (e) => e.preventDefault());
     for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
       const on = b.dataset.embed === embedMode;
       b.classList.toggle("active", on);
@@ -2051,7 +2044,7 @@ async function renderSettings() {
         const r = await api("/api/settings", { method: "PUT", json: { testRecipients: list } });
         document.getElementById("setTestRecipients").value = r.settings.testRecipients.join("\n");
         applySettings(r.settings);
-        toast("Settings saved");
+        toast("Test recipients saved");
       } catch (err) {
         toast(err.message);
       }
@@ -2520,7 +2513,7 @@ async function renderDashboard() {
     <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
   </div>`;
 
-  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit identity &amp; template</button></div>`;
+  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/publication">Edit publication</button></div>`;
 
   root.innerHTML = `
     <div class="dash-head">
@@ -2597,7 +2590,7 @@ function setupChecklistHtml(pub, deployment) {
   return `<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
-      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Publication.</span></div><button data-nav="#/publication">Publication</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
