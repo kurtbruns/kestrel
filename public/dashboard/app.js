@@ -707,19 +707,22 @@ function listQuery(state) {
   return p.toString();
 }
 
-// A filter/search toolbar: search on the left, status filter (+ optional suppression
-// facet) pinned right. `cfg.statuses` = [{value,label}]; `cfg.facet` enables the overlay
-// facet (subscribers only, where suppression is a separate axis from consent status).
+// A filter/search toolbar: search on the left, one filter dropdown pinned right.
+// `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
+// "Suppressed" option that filters by the suppression overlay — folded into the same
+// control because a publisher picks one slice to look at, not a combination of the two
+// axes. The data model keeps them separate (see routes/subscribers.ts); only the UI
+// surfaces them as one list.
 function listToolbar(cfg) {
-  const statusOpts = ['<option value="">All statuses</option>']
-    .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
-    .join("");
-  const facet = cfg.facet
-    ? `<select class="lt-facet" aria-label="Filter by suppression"><option value="">Any suppression</option><option value="only">Suppressed only</option><option value="hide">Hide suppressed</option></select>`
-    : "";
+  const opts = [
+    `<option value="">${cfg.suppressible ? "All subscribers" : "All statuses"}</option>`,
+  ].concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`));
+  if (cfg.suppressible) {
+    opts.push('<option value="suppressed">Suppressed</option>');
+  }
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters"><select class="lt-status" aria-label="Filter by status">${statusOpts}</select>${facet}</div>
+    <div class="lt-filters"><select class="lt-status" aria-label="Filter">${opts.join("")}</select></div>
   </div>`;
 }
 
@@ -728,8 +731,7 @@ function listToolbar(cfg) {
 // resets to the first page.
 function wireToolbar(root, state, reload) {
   const search = root.querySelector(".lt-search");
-  const status = root.querySelector(".lt-status");
-  const facet = root.querySelector(".lt-facet");
+  const filter = root.querySelector(".lt-status");
   if (search) {
     search.value = state.search || "";
     let t = null;
@@ -742,18 +744,19 @@ function wireToolbar(root, state, reload) {
       }, 250);
     };
   }
-  if (status) {
-    status.value = state.status || "";
-    status.onchange = () => {
-      state.status = status.value;
-      state.offset = 0;
-      reload();
-    };
-  }
-  if (facet) {
-    facet.value = state.suppressed || "";
-    facet.onchange = () => {
-      state.suppressed = facet.value;
+  if (filter) {
+    // The one dropdown drives either the status axis or the suppression overlay:
+    // "suppressed" selects the overlay, any other value a consent status.
+    filter.value = state.suppressed === "only" ? "suppressed" : state.status || "";
+    filter.onchange = () => {
+      const v = filter.value;
+      if (v === "suppressed") {
+        state.suppressed = "only";
+        state.status = "";
+      } else {
+        state.status = v;
+        state.suppressed = "";
+      }
       state.offset = 0;
       reload();
     };
@@ -1872,7 +1875,7 @@ async function renderSubscribers(initialFilter) {
   app.innerHTML = `
     <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
     <div id="subCounts" class="muted">Loading…</div>
-    ${listToolbar({ statuses: SUB_STATUSES, facet: true, searchPlaceholder: "Search email…" })}
+    ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
     <div id="subPager"></div>`;
 
