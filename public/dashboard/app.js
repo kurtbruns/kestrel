@@ -614,7 +614,7 @@ function route() {
     return renderPosts();
   }
   if (view === "subscribers") {
-    return renderSubscribers();
+    return renderSubscribers(arg);
   }
   if (view === "sends") {
     return renderSends();
@@ -675,47 +675,224 @@ window.addEventListener("keydown", (e) => {
   }
 });
 
-// ---- posts list ----
-async function renderPosts() {
-  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div><div id="list" class="muted">Loading…</div>`;
-  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
-  try {
-    const { posts } = await api("/posts");
-    const list = document.getElementById("list");
-    if (!posts.length) {
-      list.innerHTML = `<p class="muted">No posts yet — create your first draft.</p>`;
-      return;
-    }
-    list.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Title</th><th>Status</th><th>Scheduled</th><th>Updated</th><th></th></tr></thead><tbody>${posts
-      .map(
-        (p) =>
-          `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
-      )
-      .join("")}</tbody></table></div>`;
-    list.querySelectorAll("tr[data-id]").forEach((tr) => {
-      tr.onclick = (e) => {
-        if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
-          location.hash = `#/edit/${tr.dataset.id}`;
-        }
-      };
-    });
-    list.querySelectorAll(".menu-btn").forEach((b) => {
-      b.onclick = (e) => {
-        e.stopPropagation();
-        const pid = b.dataset.menu;
-        const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
-        if (b.dataset.status === "draft") {
-          items.push({ label: "Delete draft", danger: true, onClick: () => confirmDelete(pid) });
-        }
-        openMenu(b, items);
-      };
-    });
-  } catch (e) {
-    renderError(document.getElementById("list"), e.message, renderPosts);
+// ---- shared list controls (toolbar · sortable headers · pager) ----
+// One convention for the admin list views (Posts, Subscribers, Sends): a search-left
+// / filters-right toolbar, clickable sortable column headers, and offset pagination —
+// all driven by a small per-view `state` object whose reload() rebuilds the query and
+// re-fetches. The hash only seeds the initial filter (dashboard deep-links); sort,
+// page, and filter operate in place, matching the `page` envelope the endpoints return
+// (see src/lib/list.ts).
+
+// Build the query string for a list request from the view state. `sort`/`dir` are sent
+// only once a column is chosen (state.sort set), so a view keeps its endpoint's bespoke
+// default order (e.g. posts' scheduled-first) until the reader sorts.
+function listQuery(state) {
+  const p = new URLSearchParams();
+  if (state.status) {
+    p.set("status", state.status);
+  }
+  if (state.suppressed) {
+    p.set("suppressed", state.suppressed);
+  }
+  const term = (state.search || "").trim();
+  if (term) {
+    p.set("search", term);
+  }
+  if (state.sort) {
+    p.set("sort", state.sort);
+    p.set("dir", state.dir);
+  }
+  p.set("limit", String(state.limit));
+  p.set("offset", String(state.offset));
+  return p.toString();
+}
+
+// A filter/search toolbar: search on the left, the status filter pinned right.
+// `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
+// separate "Suppressed only" toggle — suppression is a deliverability flag, not a
+// consent status, so it's its own control (an independent axis you can combine with a
+// status), never an option inside the status dropdown.
+function listToolbar(cfg) {
+  const opts = ['<option value="">All statuses</option>']
+    .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
+    .join("");
+  const suppressed = cfg.suppressible
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
+    : "";
+  return `<div class="list-toolbar">
+    <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
+    <div class="lt-filters"><select class="lt-status" aria-label="Filter by status">${opts}</select>${suppressed}</div>
+  </div>`;
+}
+
+// Wire the toolbar controls (within `root`) to the view's reload, seeding their values
+// from state so a deep-linked filter shows selected. Search is debounced; any change
+// resets to the first page. Status and the suppression toggle are independent axes.
+function wireToolbar(root, state, reload) {
+  const search = root.querySelector(".lt-search");
+  const status = root.querySelector(".lt-status");
+  const suppressed = root.querySelector(".lt-suppressed");
+  if (search) {
+    search.value = state.search || "";
+    let t = null;
+    search.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        state.search = search.value;
+        state.offset = 0;
+        reload();
+      }, 250);
+    };
+  }
+  if (status) {
+    status.value = state.status || "";
+    status.onchange = () => {
+      state.status = status.value;
+      state.offset = 0;
+      reload();
+    };
+  }
+  if (suppressed) {
+    suppressed.checked = state.suppressed === "only";
+    suppressed.onchange = () => {
+      state.suppressed = suppressed.checked ? "only" : "";
+      state.offset = 0;
+      reload();
+    };
   }
 }
 
-function confirmDelete(pid) {
+// A table header cell. A sortable column (given a `key`) renders a button that toggles
+// asc/desc and shows the active direction; other columns are plain labels. `cls` adds a
+// column class (e.g. "num" for right-aligned numeric columns).
+function th(label, key, state, cls) {
+  const c = cls ? ` class="${cls}"` : "";
+  if (!key) {
+    return `<th${c}>${esc(label)}</th>`;
+  }
+  const active = state.sort === key;
+  // A fixed-width slot always reserved (empty when unsorted) so the label doesn't
+  // shift when the arrow appears; light ↑/↓ to match the app's other arrows.
+  const arrow = active ? (state.dir === "asc" ? "↑" : "↓") : "";
+  const klass = `${cls ? `${cls} ` : ""}sortable${active ? " sorted" : ""}`;
+  return `<th class="${klass}"><button type="button" class="th-sort" data-sort="${key}">${esc(label)}<span class="th-arrow" aria-hidden="true">${arrow}</span></button></th>`;
+}
+
+// Wire the sortable headers inside a freshly-rendered table. Clicking a column sorts by
+// it (default desc), or flips direction if it is already the sort key; resets to page 1.
+function wireSort(container, state, reload) {
+  container.querySelectorAll(".th-sort").forEach((b) => {
+    b.onclick = () => {
+      const key = b.dataset.sort;
+      if (state.sort === key) {
+        state.dir = state.dir === "asc" ? "desc" : "asc";
+      } else {
+        state.sort = key;
+        state.dir = "desc";
+      }
+      state.offset = 0;
+      reload();
+    };
+  });
+}
+
+// Offset pager: "a–b of N" with Prev/Next. Renders nothing when one page covers all.
+function renderPager(el, state, page, reload) {
+  // Page by the limit the server actually clamped to (page.limit), not the requested one.
+  const limit = page?.limit ?? state.limit;
+  if (!page || page.total <= limit) {
+    el.innerHTML = "";
+    return;
+  }
+  const from = page.total === 0 ? 0 : page.offset + 1;
+  const to = Math.min(page.offset + limit, page.total);
+  const hasPrev = page.offset > 0;
+  const hasNext = page.offset + limit < page.total;
+  el.innerHTML = `<div class="pager"><button type="button" class="pager-prev"${hasPrev ? "" : " disabled"}>← Prev</button><span class="pager-range muted">${from}–${to} of ${page.total}</span><button type="button" class="pager-next"${hasNext ? "" : " disabled"}>Next →</button></div>`;
+  if (hasPrev) {
+    el.querySelector(".pager-prev").onclick = () => {
+      state.offset = Math.max(0, page.offset - limit);
+      reload();
+    };
+  }
+  if (hasNext) {
+    el.querySelector(".pager-next").onclick = () => {
+      state.offset = page.offset + limit;
+      reload();
+    };
+  }
+}
+
+// ---- posts list ----
+const POST_STATUSES = [
+  { value: "draft", label: "Draft" },
+  { value: "scheduled", label: "Scheduled" },
+  { value: "sent", label: "Sent" },
+];
+async function renderPosts() {
+  // Default sort left empty so the server keeps its scheduled-first order until the
+  // reader clicks a column header.
+  const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div>
+    ${listToolbar({ statuses: POST_STATUSES, searchPlaceholder: "Search subject…" })}
+    <div id="list" class="muted">Loading…</div>
+    <div id="postsPager"></div>`;
+  document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
+  const listEl = document.getElementById("list");
+  const pagerEl = document.getElementById("postsPager");
+
+  async function load() {
+    try {
+      const data = await api(`/posts?${listQuery(state)}`);
+      const posts = data.posts;
+      if (!posts.length) {
+        listEl.innerHTML = `<p class="muted">${
+          state.search || state.status
+            ? "No posts match."
+            : "No posts yet — create your first draft."
+        }</p>`;
+        pagerEl.innerHTML = "";
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
+        .map(
+          (p) =>
+            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
+        )
+        .join("")}</tbody></table></div>`;
+      wireSort(listEl, state, load);
+      listEl.querySelectorAll("tr[data-id]").forEach((tr) => {
+        tr.onclick = (e) => {
+          if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
+            location.hash = `#/edit/${tr.dataset.id}`;
+          }
+        };
+      });
+      listEl.querySelectorAll(".menu-btn").forEach((b) => {
+        b.onclick = (e) => {
+          e.stopPropagation();
+          const pid = b.dataset.menu;
+          const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
+          if (b.dataset.status === "draft") {
+            items.push({
+              label: "Delete draft",
+              danger: true,
+              onClick: () => confirmDelete(pid, load),
+            });
+          }
+          openMenu(b, items);
+        };
+      });
+      renderPager(pagerEl, state, data.page, load);
+    } catch (e) {
+      renderError(listEl, e.message, load);
+    }
+  }
+  wireToolbar(app, state, load);
+  load();
+}
+
+function confirmDelete(pid, reload = renderPosts) {
   const m = modal(
     `<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`,
   );
@@ -726,7 +903,7 @@ function confirmDelete(pid) {
         await api(`/posts/${pid}`, { method: "DELETE" });
         m.close();
         toast("Draft deleted");
-        renderPosts();
+        reload();
       } catch (e) {
         toast(e.message);
       }
@@ -1493,6 +1670,11 @@ async function renderEditor(id) {
 
 // ---- sends ----
 function startCountdowns() {
+  // Clear any prior interval first: reloadAll() re-runs loadScheduled (and this) on
+  // every cancel/resolve, so without this each refresh would leak a 1s interval.
+  if (statusTimer) {
+    clearInterval(statusTimer);
+  }
   const tick = () =>
     document.querySelectorAll("[data-fire]").forEach((el) => {
       el.textContent = untilStr(Number(el.dataset.fire));
@@ -1541,150 +1723,229 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
+const SEND_STATUSES = [
+  { value: "scheduled", label: "Scheduled" },
+  { value: "sending", label: "Sending" },
+  { value: "sent", label: "Sent" },
+  { value: "canceled", label: "Canceled" },
+  { value: "failed", label: "Failed" },
+];
 async function renderSends() {
-  app.innerHTML = `<h1>Sends</h1><div id="stuck"></div><h2>Scheduled</h2><div id="scheduled"></div><h2>Recent sends</h2><div id="recent"></div>`;
-  try {
-    const { sends } = await api("/sends");
-    // The API returns fire_at DESC (newest-first, which the Recent list below wants).
-    // Scheduled is the upcoming queue, so flip it to soonest-first — the next send to
-    // fire, and the one you'd reach for the cancel window on, sits at the top.
-    const scheduled = sends
-      .filter((s) => s.status === "scheduled")
-      .sort((a, b) => a.fire_at - b.fire_at);
-    // Wedged sends get their own attention block above the list; keep them out of the
-    // Recent table so the same send isn't shown twice in two roles.
-    const wedged = sends.filter(isWedged);
-    const recent = sends
-      .filter(
-        (s) =>
-          (s.status === "sent" || s.status === "sending" || s.status === "failed") && !isWedged(s),
-      )
-      .slice(0, 20);
+  // Default sort = fire desc (the endpoint's own default) so the "When" header shows the
+  // active arrow from the start; posts differ (their default is a bespoke composite order).
+  const state = { status: "", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<h1>Sends</h1>
+    <div id="stuck"></div>
+    <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
+    <h2>All sends</h2>
+    ${listToolbar({ statuses: SEND_STATUSES, searchPlaceholder: "Search subject…" })}
+    <div id="sendsList" class="muted">Loading…</div>
+    <div id="sendsPager"></div>`;
+  const stuckEl = document.getElementById("stuck");
+  const schedEl = document.getElementById("scheduled");
+  const listEl = document.getElementById("sendsList");
+  const pagerEl = document.getElementById("sendsPager");
 
-    const stuckEl = document.getElementById("stuck");
-    stuckEl.innerHTML = wedged
-      .map((s) => {
-        const n = s.progress?.dispatched || 0;
-        const noun = n === 1 ? "delivery" : "deliveries";
-        return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
-      })
-      .join("");
-    stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
-      const s = wedged.find((x) => x.id === b.dataset.resolve);
-      b.onclick = () => openResolveModal(s, renderSends);
-    });
-
-    document.getElementById("scheduled").innerHTML = scheduled.length
-      ? scheduled
-          .map(
-            (s) =>
-              `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
-          )
-          .join("")
-      : `<p class="muted">Nothing scheduled.</p>`;
-    // The whole card opens the issue; the subject link handles keyboard/middle-click,
-    // and Cancel opts out of navigation (like the posts table's row-click guard).
-    document.querySelectorAll("#scheduled .card.clickable").forEach((card) => {
-      card.onclick = (e) => {
-        if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
-          location.hash = `#/edit/${card.dataset.post}`;
-        }
-      };
-    });
-    document.querySelectorAll("[data-cancel]").forEach((b) => {
-      b.onclick = () =>
-        busy(b, "Canceling…", async () => {
-          try {
-            await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
-            toast("Canceled");
-            renderSends();
-          } catch (e) {
-            toast(e.message);
-          }
-        });
-    });
-    startCountdowns();
-
-    document.getElementById("recent").innerHTML = recent.length
-      ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th></tr></thead><tbody>${recent
-          .map(
-            (s) =>
-              `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
-          )
-          .join("")}</tbody></table></div>`
-      : `<p class="muted">No sends yet.</p>`;
-  } catch (e) {
-    renderError(document.getElementById("scheduled"), e.message, renderSends);
+  // Resolving a wedged send or canceling a scheduled one touches several sections at
+  // once, so refresh all three together.
+  function reloadAll() {
+    loadStuck();
+    loadScheduled();
+    loadList();
   }
+
+  // Wedged sends get their own attention block above the queue (SPEC §11). They are
+  // `sending` rows, so they also appear in the table below — this block is the
+  // actionable view. Drawn from the small `sending` set, filtered client-side.
+  async function loadStuck() {
+    try {
+      const { sends } = await api("/sends?status=sending&limit=200");
+      const wedged = sends.filter(isWedged);
+      stuckEl.innerHTML = wedged
+        .map((s) => {
+          const n = s.progress?.dispatched || 0;
+          const noun = n === 1 ? "delivery" : "deliveries";
+          return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+        })
+        .join("");
+      stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
+        const s = wedged.find((x) => x.id === b.dataset.resolve);
+        b.onclick = () => openResolveModal(s, reloadAll);
+      });
+    } catch {
+      // Non-fatal: the attention block just stays empty if this probe fails.
+      stuckEl.innerHTML = "";
+    }
+  }
+
+  // The upcoming queue, soonest-first — the next send to fire (and the one you'd reach
+  // for the cancel window on) sits at the top. Fetched on its own so it shows every
+  // scheduled send regardless of the table's paging/filter below.
+  async function loadScheduled() {
+    try {
+      const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
+      schedEl.innerHTML = sends.length
+        ? sends
+            .map(
+              (s) =>
+                `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+            )
+            .join("")
+        : `<p class="muted">Nothing scheduled.</p>`;
+      // The whole card opens the issue; the subject link handles keyboard/middle-click,
+      // and Cancel opts out of navigation (like the posts table's row-click guard).
+      schedEl.querySelectorAll(".card.clickable").forEach((card) => {
+        card.onclick = (e) => {
+          if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+            location.hash = `#/edit/${card.dataset.post}`;
+          }
+        };
+      });
+      schedEl.querySelectorAll("[data-cancel]").forEach((b) => {
+        b.onclick = () =>
+          busy(b, "Canceling…", async () => {
+            try {
+              await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+              toast("Canceled");
+              // A cancel drops it from the queue and flips it to canceled in the table.
+              reloadAll();
+            } catch (e) {
+              toast(e.message);
+            }
+          });
+      });
+      startCountdowns();
+    } catch (e) {
+      renderError(schedEl, e.message, loadScheduled);
+    }
+  }
+
+  async function loadList() {
+    try {
+      const data = await api(`/sends?${listQuery(state)}`);
+      const sends = data.sends;
+      if (!sends.length) {
+        listEl.innerHTML = `<p class="muted">${
+          state.search || state.status ? "No sends match." : "No sends yet."
+        }</p>`;
+        pagerEl.innerHTML = "";
+        return;
+      }
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("Status", null, state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
+        .map(
+          (s) =>
+            `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
+        )
+        .join("")}</tbody></table></div>`;
+      wireSort(listEl, state, loadList);
+      renderPager(pagerEl, state, data.page, loadList);
+    } catch (e) {
+      renderError(listEl, e.message, loadList);
+    }
+  }
+
+  wireToolbar(app, state, loadList);
+  reloadAll();
 }
 
 // ---- subscribers ----
-// The story of the list as a whole: its composition (by-status counts) and the
-// roster, filterable and searchable. Sends/scheduling live on Status instead.
-async function renderSubscribers() {
+// The story of the list as a whole: its composition (by-status counts) and the roster,
+// filterable, sortable, and searchable. Consent status and suppression are separate
+// axes: the status filter narrows the roster; the suppression facet is an overlay. The
+// dashboard tiles deep-link via #/subscribers/<filter> — `initialFilter` seeds the
+// status filter, or the suppression facet for "suppressed".
+const SUB_STATUSES = [
+  { value: "confirmed", label: "Confirmed" },
+  { value: "pending", label: "Pending" },
+  { value: "unsubscribed", label: "Unsubscribed" },
+];
+async function renderSubscribers(initialFilter) {
+  const state = {
+    status: "",
+    search: "",
+    suppressed: "",
+    sort: "joined",
+    dir: "desc",
+    offset: 0,
+    limit: 50,
+  };
+  if (initialFilter === "suppressed") {
+    state.suppressed = "only";
+  } else if (
+    initialFilter === "confirmed" ||
+    initialFilter === "pending" ||
+    initialFilter === "unsubscribed"
+  ) {
+    state.status = initialFilter;
+  }
+
   app.innerHTML = `
     <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
     <div id="subCounts" class="muted">Loading…</div>
-    <div class="row sub-controls">
-      <select id="subFilter" aria-label="Filter by status">
-        <option value="">All statuses</option>
-        <option value="confirmed">Confirmed</option>
-        <option value="pending">Pending</option>
-        <option value="unsubscribed">Unsubscribed</option>
-      </select>
-      <input id="subSearch" type="search" placeholder="Search email…" aria-label="Search email" autocomplete="off">
-    </div>
-    <div id="subList" class="muted">Loading…</div>`;
+    ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
+    <div id="subList" class="muted">Loading…</div>
+    <div id="subPager"></div>`;
 
-  const filterEl = document.getElementById("subFilter");
-  const searchEl = document.getElementById("subSearch");
-  let searchTimer = null;
+  const listEl = document.getElementById("subList");
+  const pagerEl = document.getElementById("subPager");
 
   async function load() {
-    const params = new URLSearchParams();
-    if (filterEl.value) {
-      params.set("status", filterEl.value);
-    }
-    const term = searchEl.value.trim();
-    if (term) {
-      params.set("search", term);
-    }
-    const qs = params.toString();
-    const listEl = document.getElementById("subList");
     try {
-      const data = await api(`/subscribers${qs ? `?${qs}` : ""}`);
+      const data = await api(`/subscribers?${listQuery(state)}`);
       const c = data.counts;
+      // The counts card stays a global by-status summary (independent of the active
+      // filter); the page total below reflects the filtered roster.
       document.getElementById("subCounts").innerHTML =
         `<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
           "Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.",
           { below: true },
         )}</div>`;
-      renderSubTable(listEl, data.subscribers, load);
+      renderSubTable(listEl, data.subscribers, state, load);
+      renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, e.message, load);
     }
   }
 
   document.getElementById("addSub").onclick = () => addSubscriberModal(load);
-  filterEl.onchange = load;
-  searchEl.oninput = () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(load, 250);
-  };
+  wireToolbar(app, state, load);
   load();
 }
 
-function renderSubTable(listEl, rows, reload) {
+// The inline suppression flag rides next to the email (suppression is a deliverability
+// overlay, not a consent status) and names WHY: bounced / complaint / blocked, with the
+// provider detail in the tooltip. Reasons come from the webhook (bounce, complaint) or a
+// manual block; anything unrecognized falls back to a generic label.
+const SUPPRESSION_LABELS = { bounce: "bounced", complaint: "complaint", manual: "blocked" };
+const SUPPRESSION_TIPS = {
+  bounce: "Hard bounce — mail to this address failed, so it won't be mailed again.",
+  complaint: "Marked as spam — won't be mailed again, whatever the consent state.",
+  manual: "Manually blocked — won't be mailed.",
+};
+function suppressionFlag(s) {
+  if (!s.suppressed) {
+    return "";
+  }
+  const label = SUPPRESSION_LABELS[s.suppression_reason] || "suppressed";
+  const base =
+    SUPPRESSION_TIPS[s.suppression_reason] ||
+    "Suppressed — won't be mailed, whatever the consent state.";
+  const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
+  return ` <span class="badge suppressed row-flag" title="${esc(tip)}">${esc(label)}</span>`;
+}
+
+function renderSubTable(listEl, rows, state, reload) {
   if (!rows.length) {
     listEl.innerHTML = `<p class="muted">No subscribers match.</p>`;
     return;
   }
-  listEl.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Email</th><th>Status</th><th>Confirmed / created</th><th></th></tr></thead><tbody>${rows
+  listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}</td><td>${badge(s.status)}${s.suppressed ? ` ${badge("suppressed")}` : ""}</td><td class="muted">${fmt(s.confirmed_at || s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
+  wireSort(listEl, state, reload);
   listEl.querySelectorAll(".menu-btn").forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
@@ -2243,6 +2504,20 @@ function apiExample(label, value) {
         JSON.stringify(value, null, 2),
       )}</code></pre></div>`;
 }
+// Query params for a list route, rendered as a name→description table so the
+// generated reference documents filter/sort/pagination from the registration.
+function apiQueryHtml(query) {
+  if (!query?.length) {
+    return "";
+  }
+  const rows = query
+    .map(
+      (q) =>
+        `<tr><td><code>${esc(q.name)}</code></td><td class="muted">${esc(q.description)}</td></tr>`,
+    )
+    .join("");
+  return `<div class="api-ex"><span class="api-ex-label">Query</span><table class="api-query"><tbody>${rows}</tbody></table></div>`;
+}
 function apiRouteHtml(r) {
   return `<div class="api-route">
       <div class="api-route-head">
@@ -2252,6 +2527,7 @@ function apiRouteHtml(r) {
       </div>
       <p class="api-summary">${esc(r.summary)}</p>
       ${r.description ? `<p class="api-desc muted">${esc(r.description)}</p>` : ""}
+      ${apiQueryHtml(r.query)}
       ${apiExample("Request", r.example?.request)}
       ${apiExample("Response", r.example?.response)}
     </div>`;
@@ -2402,7 +2678,14 @@ async function renderDashboard() {
   const root = document.getElementById("dash");
   let posts, sends, counts;
   try {
-    const [p, s, subs] = await Promise.all([api("/posts"), api("/sends"), api("/subscribers")]);
+    // The health line scans every send and the archive-link slug map needs every post,
+    // so ask for a full window rather than the list default (50). Subscribers is only
+    // read for its (filter-independent) counts, so its row limit doesn't matter.
+    const [p, s, subs] = await Promise.all([
+      api("/posts?limit=200"),
+      api("/sends?limit=200"),
+      api("/subscribers"),
+    ]);
     posts = p.posts;
     sends = s.sends;
     counts = subs.counts;
@@ -2437,16 +2720,24 @@ async function renderDashboard() {
         .join("")}</div></div>`
     : "";
 
+  // Each tile deep-links into the roster pre-filtered on its criterion
+  // (#/subscribers/<filter>), so a count is a way in, not just a number.
   const tiles = [
-    { label: "Confirmed", sub: "your audience", emph: true, v: counts.confirmed },
-    { label: "Pending", v: counts.pending },
-    { label: "Unsubscribed", v: counts.unsubscribed },
-    { label: "Suppressed", v: counts.suppressed },
+    {
+      label: "Confirmed",
+      sub: "your audience",
+      emph: true,
+      v: counts.confirmed,
+      filter: "confirmed",
+    },
+    { label: "Pending", v: counts.pending, filter: "pending" },
+    { label: "Unsubscribed", v: counts.unsubscribed, filter: "unsubscribed" },
+    { label: "Suppressed", v: counts.suppressed, filter: "suppressed" },
   ];
   const tilesHtml = `<div class="tiles">${tiles
     .map(
       (t) =>
-        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
+        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers/${t.filter}"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
           t.sub ? `<span class="tile-sub">${esc(t.sub)}</span>` : ""
         }</span></a>`,
     )

@@ -142,7 +142,20 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts",
       access: "admin",
-      summary: "List posts, newest first.",
+      summary:
+        "List posts. Filter, sort, and paginate via query params; returns a `page` envelope.",
+      query: [
+        { name: "status", description: "Filter by status: `draft`, `scheduled`, or `sent`." },
+        { name: "search", description: "Subject contains-search." },
+        {
+          name: "sort",
+          description:
+            "`updated` (default: scheduled-first, then newest edit), `title`, `status`, or `scheduled`.",
+        },
+        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "limit", description: "Page size (default 50, max 200)." },
+        { name: "offset", description: "Rows to skip, for pagination." },
+      ],
       handler: postRoutes.listPosts,
     },
     {
@@ -292,7 +305,22 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends",
       access: "admin",
-      summary: "List sends (scheduled, sending, sent, failed), newest first.",
+      summary:
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope.",
+      query: [
+        {
+          name: "status",
+          description: "Filter by status: `scheduled`, `sending`, `sent`, `canceled`, or `failed`.",
+        },
+        { name: "search", description: "Subject contains-search." },
+        {
+          name: "sort",
+          description: "`fire` (default), `status`, `recipients`, or `subject`.",
+        },
+        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "limit", description: "Page size (default 50, max 200)." },
+        { name: "offset", description: "Rows to skip, for pagination." },
+      ],
       handler: sendRoutes.list,
     },
     {
@@ -336,7 +364,29 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/subscribers",
       access: "admin",
-      summary: "List subscribers with by-status counts; filter by `status`/`search`.",
+      summary:
+        "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
+      description:
+        "Consent status and suppression are separate axes: `status` filters the roster; `suppressed` is an overlay facet. Pass `email` instead to look up one subscriber.",
+      query: [
+        {
+          name: "status",
+          description: "Filter by consent status: `pending`, `confirmed`, or `unsubscribed`.",
+        },
+        {
+          name: "suppressed",
+          description: "Suppression facet: `only` (suppressed addresses) or `hide` (exclude them).",
+        },
+        { name: "search", description: "Email contains-search." },
+        { name: "sort", description: "`joined` (default), `confirmed`, `email`, or `status`." },
+        { name: "dir", description: "`asc` or `desc` (default `desc`)." },
+        { name: "limit", description: "Page size (default 50, max 200)." },
+        { name: "offset", description: "Rows to skip, for pagination." },
+        {
+          name: "email",
+          description: "Exact-match lookup of a single subscriber (bypasses the list).",
+        },
+      ],
       handler: subscriberRoutes.list,
     },
     {

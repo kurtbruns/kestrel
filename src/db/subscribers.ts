@@ -1,5 +1,6 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { newId, newToken } from "../lib/ids";
+import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
 
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
@@ -184,31 +185,79 @@ export async function unsubscribeById(db: D1Database, id: string): Promise<Subsc
   return getById(db, row.id);
 }
 
-export async function listSubscribers(
-  db: D1Database,
-  opts: { status?: SubscriberStatus; search?: string; limit?: number } = {},
-): Promise<SubscriberRow[]> {
-  const limit = Math.min(opts.limit ?? 100, 1000);
+/** The two orthogonal axes a roster can be narrowed by: consent `status`, and the
+ *  `suppressed` overlay (a separate table — a row can be `confirmed` AND suppressed),
+ *  plus an email contains-search. `suppressed`: "only" keeps suppressed addresses,
+ *  "hide" drops them, absent leaves both. */
+export interface SubscriberFilter {
+  status?: SubscriberStatus;
+  search?: string;
+  suppressed?: "only" | "hide";
+}
+
+/** The sortable columns exposed by `GET /subscribers` (see `parseListParams`). */
+export const SUBSCRIBER_LIST_SPEC: ListSpec = {
+  columns: { joined: "created_at", confirmed: "confirmed_at", email: "email", status: "status" },
+  defaultSort: "joined",
+  defaultDir: "desc",
+};
+
+// Shared WHERE for the roster list and its matching count, so the page total and the
+// rows on it are filtered identically. Suppression is an overlay on the address, not a
+// status (a bounce or complaint can suppress an address whatever its consent state), so
+// it filters by membership in the suppressions table.
+function subscriberWhere(filter: SubscriberFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
   const binds: unknown[] = [];
-  if (opts.status) {
+  if (filter.status) {
     where.push("status = ?");
-    binds.push(opts.status);
+    binds.push(filter.status);
   }
-  // Contains-search on email. Emails are stored normalized (trimmed, lowercased),
-  // so match the term the same way; escape LIKE's own wildcards so `_`/`%` in an
-  // address are literal.
-  const term = opts.search?.trim().toLowerCase();
+  if (filter.suppressed === "only") {
+    where.push("email IN (SELECT email FROM suppressions)");
+  } else if (filter.suppressed === "hide") {
+    where.push("email NOT IN (SELECT email FROM suppressions)");
+  }
+  // Contains-search on email. Emails are stored normalized (trimmed, lowercased), so
+  // match the term the same way; escape LIKE's own wildcards so `_`/`%` in an address
+  // are literal.
+  const term = filter.search?.trim().toLowerCase();
   if (term) {
     where.push("email LIKE ? ESCAPE '\\'");
     binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
   }
-  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
+}
+
+/** The filtered roster, one page's worth. Omit `page` for the legacy default (newest
+ *  first, first 100) used by internal callers and tests. */
+export async function listSubscribers(
+  db: D1Database,
+  filter: SubscriberFilter = {},
+  page?: ListParams,
+): Promise<SubscriberRow[]> {
+  const { clause, binds } = subscriberWhere(filter);
+  const order = page ? orderByClause(page, "id") : "ORDER BY created_at DESC, id DESC";
+  const limit = page ? page.limit : 100;
+  const offset = page ? page.offset : 0;
   const { results } = await db
-    .prepare(`SELECT * FROM subscribers ${clause} ORDER BY created_at DESC LIMIT ?`)
-    .bind(...binds, limit)
+    .prepare(`SELECT * FROM subscribers ${clause} ${order} LIMIT ? OFFSET ?`)
+    .bind(...binds, limit, offset)
     .all<SubscriberRow>();
   return results;
+}
+
+/** How many subscribers match `filter` — the `page.total` for the roster list. */
+export async function countSubscribers(
+  db: D1Database,
+  filter: SubscriberFilter = {},
+): Promise<number> {
+  const { clause, binds } = subscriberWhere(filter);
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM subscribers ${clause}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 export async function counts(db: D1Database): Promise<Counts> {
