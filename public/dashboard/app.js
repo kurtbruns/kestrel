@@ -2103,9 +2103,6 @@ const EMAIL_TEMPLATE_EXAMPLES = {
     line-height: 1.7;
     color: #8a8a93;
   }
-  .footer .attr {
-    color: #52525b;
-  }
   .footer a {
     color: #8a8a93;
     text-decoration: underline;
@@ -2130,12 +2127,9 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   </table>
 
   <div class="footer">
-    <div class="attr">{{ publication.name }} — a Kestrel publication</div>
-    <div>You subscribed to this newsletter with {{ footer.sentTo }}.</div>
-    <div>
-      <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-      <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
-    </div>
+    Powered by Kestrel ·
+    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2177,11 +2171,9 @@ const EMAIL_TEMPLATE_EXAMPLES = {
   <hr class="rule" />
 
   <div class="footer">
-    <div>You're receiving this because you subscribed to {{ publication.name }} with {{ footer.sentTo }}.</div>
-    <div>
-      <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-      <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
-    </div>
+    Powered by Kestrel ·
+    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2347,7 +2339,7 @@ async function renderSettings() {
         <div class="set-card-pad">
           <div class="set-tpl-block">
             <div class="set-tpl-editor-head">
-              <label for="tplEditor">Template</label>
+              <label for="tplEditor">Email template</label>
               <div class="set-tpl-examples">
                 <span class="lbl">Start from:</span>
                 <div class="seg" role="group" aria-label="Example template">
