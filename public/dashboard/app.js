@@ -2035,6 +2035,10 @@ const EMAIL_TEMPLATE_VARS = [
       { token: "{{ publication.name }}", desc: "Publication name (from Identity, above)." },
       { token: "{{ publication.tagline }}", desc: "Your tagline." },
       { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, if set." },
+      {
+        token: "{{ publication.address }}",
+        desc: "Your mailing address, for the compliance footer.",
+      },
     ],
   },
   {
@@ -2130,6 +2134,85 @@ const EMAIL_TEMPLATE_EXAMPLES = {
     Powered by Kestrel ·
     <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
     <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+  </div>
+</div>`,
+  },
+  signedAddress: {
+    label: "Signed + address",
+    html: `<style>
+  .email {
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    color: #18181b;
+  }
+  .email h1,
+  .email h2,
+  .email h3 {
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.2;
+  }
+  .email a {
+    color: #3355cc;
+  }
+  .email .rule {
+    border: 0;
+    border-top: 1px solid #e4e4e7;
+    margin: 28px 0;
+  }
+  .signoff td {
+    vertical-align: middle;
+  }
+  .signoff .logo-cell {
+    padding-right: 14px;
+  }
+  .signoff .logo {
+    display: block;
+    border-radius: 9px;
+  }
+  .signoff .name {
+    font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
+  }
+  .signoff .tagline {
+    font-size: 13px;
+    color: #52525b;
+    margin-top: 2px;
+  }
+  .footer {
+    margin-top: 22px;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #8a8a93;
+  }
+  .footer a {
+    color: #8a8a93;
+    text-decoration: underline;
+  }
+  .footer .address {
+    margin-top: 6px;
+  }
+</style>
+
+<div class="email">
+  {{ post.body }}
+
+  <hr class="rule" />
+
+  <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
+    <tr>
+      <td class="logo-cell">
+        <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
+      </td>
+      <td>
+        <div class="name">{{ publication.name }}</div>
+        <div class="tagline">{{ publication.tagline }}</div>
+      </td>
+    </tr>
+  </table>
+
+  <div class="footer">
+    Powered by Kestrel ·
+    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <div class="address">{{ publication.address }}</div>
   </div>
 </div>`,
   },
@@ -2344,6 +2427,7 @@ async function renderSettings() {
                 <span class="lbl">Start from:</span>
                 <div class="seg" role="group" aria-label="Example template">
                   <button type="button" class="seg-btn active" data-example="signed">Signed</button>
+                  <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
                   <button type="button" class="seg-btn" data-example="plain">Plain</button>
                 </div>
               </div>
@@ -2498,6 +2582,7 @@ async function renderSettings() {
     "publication.name": state.name || fromName,
     "publication.tagline": state.tagline || "Your tagline",
     "publication.logoUrl": state.logoUrl || sampleLogoDataUri(state.name),
+    "publication.address": "123 Marsh Lane, Duluth, MN 55802, USA",
     "footer.sentTo": "you@example.com",
     "footer.unsubscribeUrl": "#unsubscribe",
     "footer.viewInBrowserUrl": "#view-in-browser",
