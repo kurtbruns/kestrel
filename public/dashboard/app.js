@@ -2299,21 +2299,25 @@ async function renderSettings() {
   const p = s.publication || { name: "", tagline: "", logoUrl: "" };
   const fromName = parseFromName(d.fromAddress) || "Your publication";
 
-  // Live, in-memory state. The save bar tracks the PERSISTED editable fields (name,
-  // tagline, test recipients) against the saved baseline. The logo is immediate (its
-  // own endpoints) and the email template is a mock (no persistence), so neither
-  // feeds the bar.
+  // Live, in-memory state. The save bar tracks the PERSISTED identity fields (name,
+  // tagline, address) + test recipients against the saved baseline. The logo is
+  // immediate (its own endpoints); the email template has its own Save (it validates
+  // and can warn), so it doesn't feed the bar.
   const state = {
     name: p.name || "",
     tagline: p.tagline || "",
+    address: p.address || "",
     logoUrl: p.logoUrl || "",
     recipients: [...(s.testRecipients || [])],
+    template: s.emailTemplate || "",
   };
   let baseline = {
     name: state.name,
     tagline: state.tagline,
+    address: state.address,
     recipients: [...state.recipients],
   };
+  let templateBaseline = state.template;
 
   const monogram = (v) => (String(v || fromName).trim()[0] || "K").toUpperCase();
   const bareAddress = (from) => {
@@ -2400,6 +2404,11 @@ async function renderSettings() {
               <input id="setTagline" value="${esc(state.tagline)}" placeholder="A one-line description" maxlength="200" autocomplete="off">
               <p class="field-hint">A short line under the name on your public pages.</p>
             </div>
+            <div class="set-field">
+              <label for="setAddress">Mailing address</label>
+              <input id="setAddress" value="${esc(state.address)}" placeholder="123 Main St, City, ST 00000" maxlength="300" autocomplete="off">
+              <p class="field-hint">A physical postal address for the email footer (<code>{{ publication.address }}</code>) — bulk mail usually requires one.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -2407,7 +2416,7 @@ async function renderSettings() {
 
   const templateSection = `
     <section class="set-sec">
-      ${secHead("Email template", chip("editable", "Editable"), '<span class="set-tag-mock">Mock</span>')}
+      ${secHead("Email template", chip("editable", "Editable"))}
       <p class="set-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in. Your post’s Markdown renders in the body; identity and the unsubscribe footer fill the rest. On a real send the styles are inlined for you, since mail clients need it.</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
@@ -2426,14 +2435,20 @@ async function renderSettings() {
               <div class="set-tpl-examples">
                 <span class="lbl">Start from:</span>
                 <div class="seg" role="group" aria-label="Example template">
-                  <button type="button" class="seg-btn active" data-example="signed">Signed</button>
+                  <button type="button" class="seg-btn" data-example="signed">Signed</button>
                   <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
                   <button type="button" class="seg-btn" data-example="plain">Plain</button>
                 </div>
               </div>
             </div>
             <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-            <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there.</p>
+            <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue.</p>
+            <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
+            <div class="set-tpl-actions">
+              <button type="button" class="primary" id="tplSave">Save template</button>
+              <button type="button" class="ghost-btn" id="tplRevert" hidden>Revert changes</button>
+              <span class="set-tpl-status" id="tplStatus"></span>
+            </div>
           </div>
 
           <details class="set-tpl-vars">
@@ -2441,7 +2456,7 @@ async function renderSettings() {
             <div class="set-tpl-vars-body">${varsHtml}</div>
           </details>
         </div>
-        <div class="set-note">${SET_ICON.info}<span>Mock — editing repaints the preview only; nothing is saved yet. The real layout engine (rendered once, frozen per send) and saved template variables come later.</span></div>
+        <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview above uses sample data — send yourself a test to see it in a real inbox.</span></div>
       </div>
     </section>`;
 
@@ -2562,18 +2577,20 @@ async function renderSettings() {
   const taglineEl = document.getElementById("setTagline");
   const saveBarEl = document.getElementById("saveBar");
 
-  // --- dirty tracking: only the persisted fields (name, tagline, recipients).
+  // --- dirty tracking: the persisted identity fields (name, tagline, address) +
+  // recipients. The email template has its own Save, tracked separately.
   const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
   const isDirty = () =>
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
+    state.address !== baseline.address ||
     !sameList(state.recipients, baseline.recipients);
   const refreshDirty = () => {
     saveBarEl.hidden = !isDirty();
   };
 
-  // --- email template preview (mock). The context mirrors what the real engine will
-  // expose; post.body is sample HTML, footer.* stand in for per-send values.
+  // --- email template preview. The context mirrors what the render path binds; the
+  // preview is a client-side approximation (a test send is the authority).
   const tplEditor = document.getElementById("tplEditor");
   const tplFrame = document.getElementById("tplPreview");
   const previewCtx = () => ({
@@ -2582,7 +2599,7 @@ async function renderSettings() {
     "publication.name": state.name || fromName,
     "publication.tagline": state.tagline || "Your tagline",
     "publication.logoUrl": state.logoUrl || sampleLogoDataUri(state.name),
-    "publication.address": "123 Marsh Lane, Duluth, MN 55802, USA",
+    "publication.address": state.address || "123 Marsh Lane, Duluth, MN 55802, USA",
     "footer.sentTo": "you@example.com",
     "footer.unsubscribeUrl": "#unsubscribe",
     "footer.viewInBrowserUrl": "#view-in-browser",
@@ -2625,19 +2642,71 @@ async function renderSettings() {
     repaintTemplatePreview();
   });
   tplFrame.srcdoc = FRAME_DOC;
-  let tplExample = "signed";
-  const loadExample = (key) => {
-    tplExample = EMAIL_TEMPLATE_EXAMPLES[key] ? key : "signed";
-    tplEditor.value = EMAIL_TEMPLATE_EXAMPLES[tplExample].html;
-    for (const b of body.querySelectorAll("[data-example]")) {
-      b.classList.toggle("active", b.dataset.example === tplExample);
-    }
-    repaintTemplatePreview();
+
+  // The template has its own Save (it's validated server-side and can warn), separate
+  // from the identity save bar. Track it against the last-saved value so Revert and
+  // the status only show when there are unsaved edits.
+  const tplStatusEl = document.getElementById("tplStatus");
+  const tplRevertEl = document.getElementById("tplRevert");
+  const tplMsgsEl = document.getElementById("tplMsgs");
+  const refreshTplDirty = () => {
+    const dirty = tplEditor.value !== templateBaseline;
+    tplRevertEl.hidden = !dirty;
+    tplStatusEl.textContent = dirty ? "Unsaved changes" : "";
   };
-  tplEditor.addEventListener("input", repaintTemplatePreview);
+  const showTplMsgs = (msgs, kind) => {
+    if (!msgs.length) {
+      tplMsgsEl.hidden = true;
+      tplMsgsEl.innerHTML = "";
+      return;
+    }
+    tplMsgsEl.hidden = false;
+    tplMsgsEl.className = `set-tpl-msgs ${kind}`;
+    tplMsgsEl.innerHTML = msgs.map((m) => `<div>${esc(m)}</div>`).join("");
+  };
+  const loadExample = (key) => {
+    const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
+    tplEditor.value = ex.html;
+    showTplMsgs([], "");
+    repaintTemplatePreview();
+    refreshTplDirty();
+  };
+  tplEditor.addEventListener("input", () => {
+    repaintTemplatePreview();
+    refreshTplDirty();
+  });
   for (const b of body.querySelectorAll("[data-example]")) {
     b.onclick = () => loadExample(b.dataset.example);
   }
+  tplRevertEl.onclick = () => {
+    tplEditor.value = templateBaseline;
+    showTplMsgs([], "");
+    repaintTemplatePreview();
+    refreshTplDirty();
+  };
+  document.getElementById("tplSave").onclick = (e) =>
+    busy(e.currentTarget, "Saving…", async () => {
+      try {
+        const r = await api("/api/settings", {
+          method: "PUT",
+          json: { emailTemplate: tplEditor.value },
+        });
+        templateBaseline = r.settings.emailTemplate;
+        // The server may resolve "" to the default — reflect what was actually stored.
+        tplEditor.value = templateBaseline;
+        state.template = templateBaseline;
+        applySettings(r.settings);
+        repaintTemplatePreview();
+        refreshTplDirty();
+        const warnings = Array.isArray(r.warnings) ? r.warnings : [];
+        showTplMsgs(warnings, "warn");
+        toast(warnings.length ? "Template saved with warnings" : "Template saved");
+      } catch (err) {
+        // A rejected template (e.g. no unsubscribe link) comes back as a 400 message.
+        showTplMsgs([err.message], "error");
+        toast("Template not saved");
+      }
+    });
   for (const c of body.querySelectorAll(".set-tpl-var code[data-token]")) {
     c.onclick = () => copyText(c.dataset.token);
   }
@@ -2748,16 +2817,19 @@ async function renderSettings() {
   document.getElementById("embedCopy").onclick = () =>
     copyText(buildEmbed(embedMode, state.name || fromName));
 
-  // --- live identity fields: repaint everything that shows the name/tagline.
+  // --- live identity fields: repaint everything that shows the name/tagline/address.
+  const addressEl = document.getElementById("setAddress");
   const onIdentityInput = () => {
     state.name = nameEl.value.trim();
     state.tagline = taglineEl.value.trim();
+    state.address = addressEl.value.trim();
     repaintTemplatePreview();
     rebuildEmbed();
     refreshDirty();
   };
   nameEl.addEventListener("input", onIdentityInput);
   taglineEl.addEventListener("input", onIdentityInput);
+  addressEl.addEventListener("input", onIdentityInput);
 
   // --- test recipients: removable chips + an add row.
   const recipChips = document.getElementById("recipChips");
@@ -2823,7 +2895,7 @@ async function renderSettings() {
         const r = await api("/api/settings", {
           method: "PUT",
           json: {
-            publication: { name: state.name, tagline: state.tagline },
+            publication: { name: state.name, tagline: state.tagline, address: state.address },
             testRecipients: state.recipients,
           },
         });
@@ -2831,12 +2903,15 @@ async function renderSettings() {
         const ns = r.settings;
         state.name = ns.publication.name;
         state.tagline = ns.publication.tagline;
+        state.address = ns.publication.address;
         state.recipients = [...ns.testRecipients];
         nameEl.value = state.name;
         taglineEl.value = state.tagline;
+        addressEl.value = state.address;
         baseline = {
           name: state.name,
           tagline: state.tagline,
+          address: state.address,
           recipients: [...state.recipients],
         };
         applySettings(ns);
@@ -2852,19 +2927,23 @@ async function renderSettings() {
   document.getElementById("discardBtn").onclick = () => {
     state.name = baseline.name;
     state.tagline = baseline.tagline;
+    state.address = baseline.address;
     state.recipients = [...baseline.recipients];
     nameEl.value = state.name;
     taglineEl.value = state.tagline;
+    addressEl.value = state.address;
     renderRecipChips();
     rebuildEmbed();
     repaintTemplatePreview();
     refreshDirty();
   };
 
-  // --- initial paint.
+  // --- initial paint. Load the persisted (server-resolved) template into the editor.
   renderRecipChips();
   setEmbed("plain");
-  loadExample("signed");
+  tplEditor.value = state.template;
+  repaintTemplatePreview();
+  refreshTplDirty();
   refreshDirty();
 }
 

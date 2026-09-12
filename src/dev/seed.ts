@@ -39,13 +39,14 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
-import { BRANDING_LOGO_KEY, setPublicationLogo, updateSettings } from "../db/settings";
+import { BRANDING_LOGO_KEY, getSettings, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
+import { resolveBranding } from "../render/template_engine";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
@@ -642,6 +643,10 @@ export async function seedDatabase(
   };
   const archiveUrls: string[] = [];
 
+  // Freeze each demo send through the same render path the app uses, with the demo
+  // publication's branding (identity + default template) resolved above.
+  const branding = resolveBranding(await getSettings(db), config);
+
   for (const issue of ISSUES) {
     const images = issue.hasCover ? coverImages : [];
     // Point the cover reference at the actual cover filename (e.g. kestrel.webp).
@@ -660,7 +665,7 @@ export async function seedDatabase(
     if (issue.kind === "scheduled") {
       const at = now;
       const { post, revision } = renderInputFor(issue, at, markdown);
-      const result = render({ post, revision, images }, config);
+      const result = await render({ post, revision, images }, config, branding);
       await insertPost(db, post, revision);
       await insertSend(db, {
         id: newId(),
@@ -687,7 +692,7 @@ export async function seedDatabase(
     const fireAt = completedAt - 30 * 1000; // fired, then completed half a minute later
     const scheduledAt = fireAt - DAY; // scheduled a day ahead of the send
     const { post, revision } = renderInputFor(issue, completedAt, markdown);
-    const result = render({ post, revision, images }, config);
+    const result = await render({ post, revision, images }, config, branding);
     await insertPost(db, post, revision);
     if (issue.hasCover) {
       await insertImage(db, coverRow);

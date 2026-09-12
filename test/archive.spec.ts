@@ -49,8 +49,9 @@ describe("archive / view-in-browser", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
 
     const body = await res.text();
-    // Reviewed content is served unchanged.
-    expect(body).toContain("<h1>Hello</h1>");
+    // Reviewed content is served unchanged (the template styles headings, so the
+    // <h1> now carries an inline serif style; the text and structure are intact).
+    expect(body).toContain(">Hello</h1>");
     expect(body).toContain("the permanent record");
     // The unsubscribe sentinel is substituted for a generic link.
     expect(body).not.toContain(UNSUB_SENTINEL);
@@ -65,10 +66,11 @@ describe("archive / view-in-browser", () => {
   it("loads the display font + reader ground as browser-only chrome, never in the sent bytes (I3)", async () => {
     const post = await sendPost("Fonts", "# Heading\n\nbody copy");
     const send = (await latestSentSendForPost(env.DB, post.id))!;
-    // The frozen/sent bytes carry the serif heading rule but no web font — only the
-    // inert head anchor (so an inbox never fetches a third-party font).
+    // The frozen/sent bytes style headings with a system serif (Georgia, inlined by
+    // the template) but load no web font — only the inert head anchor, so an inbox
+    // never fetches a third-party font.
     expect(send.rendered_html).toContain(ARCHIVE_HEAD_ANCHOR);
-    expect(send.rendered_html).toContain(".k-body h1");
+    expect(send.rendered_html).toContain("Georgia");
     expect(send.rendered_html).not.toContain("fonts.googleapis.com");
 
     const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();

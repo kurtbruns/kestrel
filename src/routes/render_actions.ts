@@ -10,10 +10,12 @@
 
 import * as images from "../db/images";
 import * as posts from "../db/posts";
+import { getSettings } from "../db/settings";
 import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import { type RenderInput, render, substituteUnsubscribe } from "../render/render";
+import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -35,9 +37,14 @@ function genericUnsubscribeUrl(c: RequestContext): string {
   return `${c.config.appOrigin}/unsubscribe`;
 }
 
+/** The branding (template + identity) the render path fills — the same the send uses. */
+async function loadBranding(c: RequestContext): Promise<EmailBranding> {
+  return resolveBranding(await getSettings(c.env.DB), c.config);
+}
+
 export async function preview(c: RequestContext): Promise<Response> {
   const input = await loadRenderInput(c);
-  const result = render(input, c.config);
+  const result = await render(input, c.config, await loadBranding(c));
   return json({
     url: `${c.config.appOrigin}/posts/${input.post.id}/preview`,
     subject: result.subject,
@@ -47,7 +54,7 @@ export async function preview(c: RequestContext): Promise<Response> {
 
 export async function previewPage(c: RequestContext): Promise<Response> {
   const input = await loadRenderInput(c);
-  const result = render(input, c.config);
+  const result = await render(input, c.config, await loadBranding(c));
   const html = substituteUnsubscribe(result, genericUnsubscribeUrl(c)).html;
   return new Response(html, {
     headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
@@ -68,7 +75,7 @@ export async function test(c: RequestContext): Promise<Response> {
     throw badRequest("'to' must be an email address");
   }
 
-  const result = render(input, c.config);
+  const result = await render(input, c.config, await loadBranding(c));
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
