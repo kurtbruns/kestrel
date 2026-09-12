@@ -1,16 +1,19 @@
 /**
  * Preview, test-send, and the fake outbox. All authed.
- *   POST /posts/:id/preview  → { url, subject, warnings } (hosted view-in-browser)
- *   GET  /posts/:id/preview  → the rendered HTML (generic unsubscribe link)
- *   POST /posts/:id/test     → send the real render to one address via the provider
- *   GET  /api/dev/outbox     → fake transport's outbox (fake provider only)
+ *   POST /posts/:id/preview        → { url, subject, warnings } (hosted view-in-browser)
+ *   GET  /posts/:id/preview        → the rendered HTML (generic unsubscribe link)
+ *   POST /posts/:id/test           → send the real render to one address via the provider
+ *   POST /api/settings/template/test → send a SAMPLE issue through the saved template
+ *   GET  /api/dev/outbox           → fake transport's outbox (fake provider only)
  *
  * Every path runs the one render() (I5).
  */
 
 import * as images from "../db/images";
+import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
 import { getSettings } from "../db/settings";
+import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
@@ -87,6 +90,137 @@ export async function test(c: RequestContext): Promise<Response> {
     sent: res?.accepted === true,
     provider: provider.name,
     to,
+    subject: result.subject,
+    warnings: result.warnings,
+  });
+}
+
+// --- template test-send ----------------------------------------------------------
+
+/** How many addresses one template test may fan out to (matches the settings cap). */
+const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
+
+// A synthetic issue that stands in for {{ post.body }} when testing the TEMPLATE
+// itself — there's no real post to render, so this sample supplies one. It flows
+// through the same render() as a real send (I5); only the body's source differs.
+// The prose mirrors the on-page sample preview so the inbox test matches what the
+// editor showed.
+const TEMPLATE_TEST_SUBJECT = "Template test — the starlings are back";
+const TEMPLATE_TEST_MARKDOWN = [
+  "# The starlings are back",
+  "",
+  "A cold front slid off the lake overnight, and with it the first big roost of the season — a few thousand birds turning over the water at dusk.",
+  "",
+  "Three things I noticed this week, and one question for you.",
+  "",
+  "- The light is going gold a full hour earlier.",
+  "- The maples on Marsh Lane have finally turned.",
+  "- Someone left a note in the little free library, addressed to no one.",
+  "",
+  "This is a **sample issue** sent to preview your email template — [links](https://example.com) render like this. A real issue's Markdown fills this space.",
+].join("\n");
+
+/** Build the synthetic render input for a template test — no post, no images. */
+function sampleRenderInput(): RenderInput {
+  const now = Date.now();
+  const post: PostRow = {
+    id: "sample",
+    slug: "sample-issue",
+    subject: TEMPLATE_TEST_SUBJECT,
+    status: "draft",
+    current_revision: "sample-rev",
+    created_at: now,
+    updated_at: now,
+  };
+  const revision: RevisionRow = {
+    id: "sample-rev",
+    post_id: "sample",
+    markdown: TEMPLATE_TEST_MARKDOWN,
+    metadata: JSON.stringify({ subject: TEMPLATE_TEST_SUBJECT, slug: post.slug }),
+    author: null,
+    created_at: now,
+  };
+  return { post, revision, images: [] };
+}
+
+/** Resolve the recipient list: the body's `to` (a string or array), or — when it's
+ *  omitted — the saved default test recipients. Normalizes, validates, and dedupes;
+ *  throws a 400 that names a bad address. */
+function resolveTestRecipients(body: unknown, defaults: string[]): string[] {
+  const raw = (body as { to?: unknown } | null)?.to;
+  let input: unknown[];
+  if (raw === undefined || raw === null) {
+    input = defaults;
+  } else if (Array.isArray(raw)) {
+    input = raw;
+  } else {
+    input = [raw];
+  }
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of input) {
+    if (typeof item !== "string") {
+      throw badRequest("each recipient must be an email address");
+    }
+    const email = normalizeEmail(item);
+    if (!email) {
+      continue;
+    }
+    if (!isValidEmail(email)) {
+      throw badRequest(`not a valid email address: ${item}`);
+    }
+    if (seen.has(email)) {
+      continue;
+    }
+    seen.add(email);
+    out.push(email);
+  }
+  return out;
+}
+
+/**
+ * Send a test of the EMAIL TEMPLATE: render a sample issue through the one render
+ * path with the *saved* branding (template + identity) and deliver it via the
+ * provider, so the operator sees the template in a real inbox (SPEC §5, I5). It
+ * renders what will actually ship — the stored template, never unsaved editor
+ * content — so a clean test is a real guarantee, not a lookalike.
+ */
+export async function templateTest(c: RequestContext): Promise<Response> {
+  const settings = await getSettings(c.env.DB);
+  let body: unknown = null;
+  try {
+    body = await c.req.json();
+  } catch {
+    // An empty/absent body is fine — fall back to the saved default recipients.
+  }
+  const recipients = resolveTestRecipients(body, settings.testRecipients);
+  if (recipients.length === 0) {
+    throw badRequest(
+      "no recipients — pass a 'to' address, or set default test recipients in Settings",
+    );
+  }
+  if (recipients.length > MAX_TEMPLATE_TEST_RECIPIENTS) {
+    throw badRequest(`at most ${MAX_TEMPLATE_TEST_RECIPIENTS} recipients per test`);
+  }
+
+  const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
+  const provider = getProvider(c.config, c.env);
+  const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
+  // A deliberate manual test is a fresh send each press (not a retry), so the
+  // idempotency key is unique per request — an idempotent provider won't fold two
+  // intentional tests into one.
+  const results = await provider.sendBatch(
+    result,
+    recipients.map((email) => ({ email, unsubscribeUrl })),
+    { idempotencyKeyPrefix: `template-test-${Date.now()}` },
+  );
+  const sent = results.filter((r) => r.accepted).length;
+
+  return json({
+    sent,
+    total: recipients.length,
+    provider: provider.name,
+    recipients,
     subject: result.subject,
     warnings: result.warnings,
   });

@@ -2461,6 +2461,7 @@ async function renderTemplate() {
     address: p.address || "",
   };
   let templateBaseline = s.emailTemplate || "";
+  const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
 
   bodyEl.innerHTML = `
     <div class="set-preview set-tpl-sample">
@@ -2491,6 +2492,7 @@ async function renderTemplate() {
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
           <div class="set-tpl-actions">
             <button type="button" class="primary" id="tplSave">Save template</button>
+            <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
             <button type="button" class="ghost-btn" id="tplRevert" hidden>Revert changes</button>
             <span class="set-tpl-status" id="tplStatus"></span>
           </div>
@@ -2513,10 +2515,18 @@ async function renderTemplate() {
   const tplStatusEl = document.getElementById("tplStatus");
   const tplRevertEl = document.getElementById("tplRevert");
   const tplMsgsEl = document.getElementById("tplMsgs");
+  const tplTestEl = document.getElementById("tplTest");
+  const isDirty = () => tplEditor.value !== templateBaseline;
   const refreshDirty = () => {
-    const dirty = tplEditor.value !== templateBaseline;
+    const dirty = isDirty();
     tplRevertEl.hidden = !dirty;
     tplStatusEl.textContent = dirty ? "Unsaved changes" : "";
+    // A test always sends the SAVED template (what will ship, I5). When there are
+    // unsaved edits the button says so plainly: it saves first, then sends.
+    tplTestEl.textContent = dirty ? "Save & send test" : "Send test email";
+    tplTestEl.title = dirty
+      ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
+      : "Sends a sample issue through the saved template so you can see it in a real inbox.";
   };
   const showMsgs = (msgs, kind) => {
     if (!msgs.length) {
@@ -2548,20 +2558,26 @@ async function renderTemplate() {
     preview.repaint();
     refreshDirty();
   };
+  // Persist the current editor content. Returns the server's warnings (empty on a
+  // clean save); throws on a rejected template (e.g. no unsubscribe link → 400), so
+  // callers can decide what to do. Shared by the Save button and Save-&-send-test.
+  const saveTemplate = async () => {
+    const r = await api("/api/settings", {
+      method: "PUT",
+      json: { emailTemplate: tplEditor.value },
+    });
+    // The server may resolve "" to the default — reflect what was actually stored.
+    templateBaseline = r.settings.emailTemplate;
+    tplEditor.value = templateBaseline;
+    appConfig = { ...(appConfig || {}), settings: r.settings };
+    preview.repaint();
+    refreshDirty();
+    return Array.isArray(r.warnings) ? r.warnings : [];
+  };
   document.getElementById("tplSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
       try {
-        const r = await api("/api/settings", {
-          method: "PUT",
-          json: { emailTemplate: tplEditor.value },
-        });
-        // The server may resolve "" to the default — reflect what was actually stored.
-        templateBaseline = r.settings.emailTemplate;
-        tplEditor.value = templateBaseline;
-        appConfig = { ...(appConfig || {}), settings: r.settings };
-        preview.repaint();
-        refreshDirty();
-        const warnings = Array.isArray(r.warnings) ? r.warnings : [];
+        const warnings = await saveTemplate();
         showMsgs(warnings, "warn");
         toast(warnings.length ? "Template saved with warnings" : "Template saved");
       } catch (err) {
@@ -2570,6 +2586,68 @@ async function renderTemplate() {
         toast("Template not saved");
       }
     });
+
+  // --- send a test of the saved template (edit → test → iterate) ---
+  // A test renders a sample issue through the SAVED template — what will actually
+  // ship (I5). So if the editor is dirty we save first (a "Save & send test" flow);
+  // a rejected save (e.g. missing unsubscribe) stops the send, honestly. We never
+  // render unsaved editor content, which would test something that won't ship.
+  tplTestEl.onclick = () => {
+    const dirty = isDirty();
+    const m = modal(
+      `<h3>Send a test email</h3><p class="hint">Delivers a sample issue rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
+        dirty
+          ? `<p class="hint" style="color:var(--warn)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
+          : ""
+      }<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p><div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
+        dirty ? "Save &amp; send test" : "Send test"
+      }</button></div>`,
+    );
+    const to = m.el.querySelector("#tplTestTo");
+    to.focus();
+    // Pre-fill from the saved default test recipients (don't clobber typed input).
+    if (defaultRecipients.length && !to.value.trim()) {
+      to.value = defaultRecipients.join("\n");
+      const hint = m.el.querySelector("#tplTestHint");
+      hint.textContent = "Pre-filled from your default test recipients (Settings).";
+      hint.hidden = false;
+    }
+    m.el.querySelector("#ttCancel").onclick = m.close;
+    m.el.querySelector("#ttGo").onclick = () =>
+      busy(m.el.querySelector("#ttGo"), isDirty() ? "Saving…" : "Sending…", async () => {
+        const addrs = parseAddresses(to.value);
+        if (!addrs.length) {
+          toast("Enter at least one email address");
+          return;
+        }
+        // Honest unsaved-changes handling: persist first so the test renders what ships.
+        if (isDirty()) {
+          try {
+            const warnings = await saveTemplate();
+            showMsgs(warnings, "warn");
+          } catch (err) {
+            showMsgs([err.message], "error");
+            m.close();
+            toast("Template not saved — test not sent");
+            return;
+          }
+        }
+        try {
+          const r = await api("/api/settings/template/test", {
+            method: "POST",
+            json: { to: addrs },
+          });
+          m.close();
+          toast(
+            r.sent === r.total
+              ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
+              : `Sent ${r.sent}/${r.total} — some failed`,
+          );
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+  };
   for (const c of bodyEl.querySelectorAll(".set-tpl-var code[data-token]")) {
     c.onclick = () => copyText(c.dataset.token);
   }
