@@ -717,7 +717,7 @@ function listToolbar(cfg) {
     .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
     .join("");
   const suppressed = cfg.suppressible
-    ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"> Suppressed only</label>'
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
     : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">

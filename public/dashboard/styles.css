@@ -1105,11 +1105,14 @@ td a:hover {
 .list-toolbar select {
   width: auto;
 }
-/* "Suppressed only" toggle: a flag beside the status filter, not inside it. */
+/* "Suppressed" toggle: a flag beside the status filter, not inside it. margin:0 resets
+   the global `label` margin (14px 0 8px) — that asymmetric margin was inflating the row
+   and knocking the checkbox/text a few px below the dropdown's text centerline. */
 .lt-toggle {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  margin: 0;
   font-size: 14px;
   color: var(--fg);
   white-space: nowrap;
