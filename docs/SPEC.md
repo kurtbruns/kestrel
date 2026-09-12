@@ -111,7 +111,7 @@ Preview means two concrete things, and both are the same render aimed differentl
 
 **View in browser** — a hosted page showing the post rendered as the email. Before scheduling it's a live render of the current draft; the link is how you eyeball layout without leaving your desk. Once scheduled, it shows the frozen copy that will fire.
 
-**Send test** — the real email, rendered and delivered to an address you name, so you can see it in an actual mail client where the rendering finally counts.
+**Send test** — the real email, rendered and delivered to an address you name, so you can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific issue to a named address; a **template test**, from the email-template surface, sends a synthetic sample issue so the operator can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template — the one that will ship — not unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. The default recipients (§8) pre-fill both.
 
 There is exactly **one render path**. It turns a post into the email, and the preview, the test, and the real send all call it. That's what makes I5 hold: if the test looks right, the send is right, because they're the same code producing the same output. Email rendering is client-dependent enough that a faithful web preview isn't sufficient on its own — so the test send is the thing you trust before scheduling, and the view-in-browser page is the convenient first look.
 

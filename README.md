@@ -144,7 +144,7 @@ The same guide is available **in the editor** under the **Docs** tab: it renders
 
 ## Settings
 
-The editor's **Settings** tab holds the app's runtime preferences (via the authed `GET`/`PUT /api/settings`) — currently the default **test recipients** the *Send test email* flow pre-fills. It also shows a **read-only** reflection of the deploy-time configuration (active provider, From address, origins, auth mode) with a link to the Docs. Settings hold preferences only — the provider choice, credentials, Access config, and origins stay in env/secrets and are never readable or writable through the API.
+The editor's **Settings** tab holds the app's runtime preferences (via the authed `GET`/`PUT /api/settings`) — currently the default **test recipients** the *Send test email* flows pre-fill (both the post editor's test and the **Email template** page's test, which sends a sample issue through the saved template so you can proof the layout in a real inbox). It also shows a **read-only** reflection of the deploy-time configuration (active provider, From address, origins, auth mode) with a link to the Docs. Settings hold preferences only — the provider choice, credentials, Access config, and origins stay in env/secrets and are never readable or writable through the API.
 
 ## Scripts
 

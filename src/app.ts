@@ -122,6 +122,21 @@ export function createRouter(archiveBasePath: string): Router {
       summary: "Remove the publication logo.",
       handler: settingsRoutes.deleteLogo,
     },
+    {
+      // Sends a SAMPLE issue through the SAVED template (the one render path, I5) so
+      // the operator can see the template in a real inbox. It renders what will ship
+      // — the stored template, never unsaved editor content — so the test is honest.
+      method: "POST",
+      path: "/api/settings/template/test",
+      access: "admin",
+      summary:
+        "Send a sample issue through the saved email template, to `to` or the default recipients (I5).",
+      example: {
+        request: { to: "you@example.com" },
+        response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
+      },
+      handler: renderRoutes.templateTest,
+    },
 
     // --- posts + revisions (authed) ---
     {

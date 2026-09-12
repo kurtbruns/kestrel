@@ -89,3 +89,95 @@ describe("preview + test endpoints", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("template test-send (POST /api/settings/template/test)", () => {
+  it("requires auth", async () => {
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ to: "you@example.com" }),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("renders a sample issue through the one render path and delivers it (I5)", async () => {
+    const to = "template-probe@example.com";
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.sent).toBe(1);
+    expect(body.total).toBe(1);
+    expect(body.provider).toBe("fake");
+
+    const outbox = await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }));
+    const msg = outbox.messages.find((m: any) => m.to === to);
+    expect(msg).toBeTruthy();
+    // The sample body flows through the same render as a real send: sentinel
+    // substituted, the test unsubscribe link present.
+    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).toContain("/unsubscribe?test=1");
+    // The sample subject line proves it rendered the synthetic issue.
+    expect(msg.subject).toContain("Template test");
+  });
+
+  it("accepts several addresses in one call", async () => {
+    const tos = ["multi-a@example.com", "multi-b@example.com"];
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: tos }),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.sent).toBe(2);
+    expect(body.total).toBe(2);
+  });
+
+  it("falls back to the saved default recipients when `to` is omitted", async () => {
+    const dflt = "default-inbox@example.com";
+    const put = await SELF.fetch(`${base}/api/settings`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ testRecipients: [dflt] }),
+    });
+    expect(put.status).toBe(200);
+
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.recipients).toEqual([dflt]);
+    expect(body.sent).toBe(1);
+  });
+
+  it("400s when there are no recipients and no defaults", async () => {
+    // Clear any default recipients a prior test set.
+    await SELF.fetch(`${base}/api/settings`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ testRecipients: [] }),
+    });
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it("400s on an invalid address", async () => {
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: "not-an-email" }),
+    });
+    expect(res.status).toBe(400);
+  });
+});
