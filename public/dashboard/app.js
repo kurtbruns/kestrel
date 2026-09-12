@@ -1874,8 +1874,8 @@ async function renderSettings() {
       <label style="margin-top:20px">Embed on your site</label>
       <div class="spread set-embed-head set-narrow">
         <div class="seg" role="tablist" id="embedToggle">
-          <button type="button" class="seg-btn active" data-embed="styled" role="tab" aria-selected="true">Styled</button>
-          <button type="button" class="seg-btn" data-embed="plain" role="tab" aria-selected="false">Plain HTML</button>
+          <button type="button" class="seg-btn active" data-embed="plain" role="tab" aria-selected="true">Plain HTML</button>
+          <button type="button" class="seg-btn" data-embed="styled" role="tab" aria-selected="false">Styled</button>
         </div>
         <button class="ghost-btn" id="embedCopy">Copy code</button>
       </div>
@@ -1964,9 +1964,9 @@ async function renderSettings() {
   // stands on its own — no in-dashboard render of it.
   const embedCodeEl = document.getElementById("embedCode");
   const embedHintEl = document.getElementById("embedHint");
-  let embedMode = "styled";
+  let embedMode = "plain";
   const setEmbed = (mode) => {
-    embedMode = EMBEDS[mode] ? mode : "styled";
+    embedMode = EMBEDS[mode] ? mode : "plain";
     embedCodeEl.textContent = EMBEDS[embedMode];
     embedHintEl.textContent = EMBED_HINTS[embedMode];
     for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
@@ -1979,7 +1979,7 @@ async function renderSettings() {
     b.onclick = () => setEmbed(b.dataset.embed);
   }
   document.getElementById("embedCopy").onclick = () => copyText(EMBEDS[embedMode]);
-  setEmbed("styled");
+  setEmbed("plain");
 
   document.getElementById("idSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
