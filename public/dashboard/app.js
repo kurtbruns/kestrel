@@ -1761,20 +1761,43 @@ async function renderSettings() {
   const fromName = parseFromName(d.fromAddress) || "Your publication";
   const kv = (k, v) => `<tr><td class="muted">${esc(k)}</td><td>${esc(v)}</td></tr>`;
 
-  // The public subscribe page and a ready-to-paste embed. The embed is a plain HTML
-  // form that posts to the same public /subscribe endpoint (which already accepts a
-  // cross-origin form post): no script, styles inherit from the host site, and it
-  // starts the double opt-in like any other entry — never an auto-confirm (I1).
+  // The public subscribe page and two ready-to-paste embeds. Both post to the same
+  // public /subscribe endpoint (which already accepts a cross-origin form post): no
+  // script, and each starts the double opt-in like any other entry — never an
+  // auto-confirm (I1). `styled` is self-contained (inline styles + the brand color)
+  // so it drops in looking finished; `plain` is minimal markup for a developer who
+  // wants to style it themselves. The brand color is read from the *saved* identity.
   const appOrigin = d.appOrigin || location.origin;
   const subscribeUrl = `${appOrigin}/subscribe`;
-  const embedCode =
-    `<form action="${esc(appOrigin)}/subscribe" method="post">\n` +
-    `  <label>\n` +
-    `    Subscribe to ${esc(p.name || fromName)}\n` +
-    `    <input type="email" name="email" placeholder="you@example.com" required>\n` +
-    `  </label>\n` +
-    `  <button type="submit">Subscribe</button>\n` +
-    `</form>`;
+  const embedName = esc(p.name || fromName);
+  const embedAction = `${esc(appOrigin)}/subscribe`;
+  const embedBrand = /^#[0-9a-fA-F]{6}$/.test((p.brandColor || "").trim())
+    ? p.brandColor.trim()
+    : "#18181b";
+  const embedBrandText = readableOn(embedBrand);
+  const EMBEDS = {
+    plain:
+      `<form action="${embedAction}" method="post">\n` +
+      `  <label>\n` +
+      `    Subscribe to ${embedName}\n` +
+      `    <input type="email" name="email" placeholder="you@example.com" required>\n` +
+      `  </label>\n` +
+      `  <button type="submit">Subscribe</button>\n` +
+      `</form>`,
+    styled:
+      `<form action="${embedAction}" method="post" style="max-width:420px;font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif">\n` +
+      `  <div style="font-weight:600;margin-bottom:6px">Subscribe to ${embedName}</div>\n` +
+      `  <div style="display:flex;gap:8px;flex-wrap:wrap">\n` +
+      `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 200px;padding:10px 12px;border:1px solid #d4d4d8;border-radius:8px;font:inherit">\n` +
+      `    <button type="submit" style="padding:10px 18px;border:0;border-radius:8px;background:${embedBrand};color:${embedBrandText};font:inherit;font-weight:600;cursor:pointer">Subscribe</button>\n` +
+      `  </div>\n` +
+      `  <p style="margin:8px 0 0;font-size:13px;color:#71717a">Double opt-in — we’ll email a confirmation link. Unsubscribe anytime.</p>\n` +
+      `</form>`,
+  };
+  const EMBED_HINTS = {
+    styled: "Self-contained — inline styles in your brand color. Paste it anywhere.",
+    plain: "Minimal markup, no styles — ready for you to style yourself.",
+  };
   body.innerHTML = `
     <section class="dash-section set-block">
       <div class="set-identity">
@@ -1838,9 +1861,24 @@ async function renderSettings() {
         <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
       </div>
       <label style="margin-top:20px">Embed on your site</label>
-      <p class="field-hint" style="margin-bottom:8px">Paste this HTML anywhere. No script; it inherits your site's styles.</p>
-      <div class="set-embed set-narrow"><pre><code>${esc(embedCode)}</code></pre></div>
-      <div class="row" style="margin-top:10px"><button data-copy="${esc(embedCode)}">Copy code</button></div>
+      <div class="set-embed-grid">
+        <div class="set-embed-main">
+          <div class="spread set-embed-head">
+            <div class="seg" role="tablist" id="embedToggle">
+              <button type="button" class="seg-btn active" data-embed="styled" role="tab" aria-selected="true">Styled</button>
+              <button type="button" class="seg-btn" data-embed="plain" role="tab" aria-selected="false">Plain HTML</button>
+            </div>
+            <button class="ghost-btn" id="embedCopy">Copy code</button>
+          </div>
+          <p class="field-hint" id="embedHint" style="margin:8px 0"></p>
+          <div class="set-embed"><pre><code id="embedCode"></code></pre></div>
+        </div>
+        <aside class="set-preview">
+          <div class="set-preview-label">How readers see it</div>
+          <div class="embed-preview" id="embedPreview" aria-hidden="true"></div>
+          <p class="set-preview-note">Shown on a sample page. Both post to your hosted subscribe flow.</p>
+        </aside>
+      </div>
     </section>
 
     <section class="dash-section set-block">
@@ -1917,10 +1955,38 @@ async function renderSettings() {
   taglineEl.oninput = updatePreview;
   updatePreview();
 
-  // Copy buttons on the subscribe page URL + the embed snippet.
+  // Copy button on the subscribe page URL.
   body.querySelectorAll("[data-copy]").forEach((b) => {
     b.onclick = () => copyText(b.dataset.copy);
   });
+
+  // Embed: a Styled/Plain toggle drives the shown source, the Copy payload, and a
+  // live (inert) preview of the actual form. The preview is rendered from our own
+  // escaped markup; its submit is neutralized so it can never navigate the editor.
+  const embedCodeEl = document.getElementById("embedCode");
+  const embedPreviewEl = document.getElementById("embedPreview");
+  const embedHintEl = document.getElementById("embedHint");
+  let embedMode = "styled";
+  const setEmbed = (mode) => {
+    embedMode = EMBEDS[mode] ? mode : "styled";
+    embedCodeEl.textContent = EMBEDS[embedMode];
+    embedHintEl.textContent = EMBED_HINTS[embedMode];
+    embedPreviewEl.innerHTML = EMBEDS[embedMode];
+    // The plain form carries no styles of its own; give it believable default
+    // controls in the preview (scoped by .is-plain) without touching the styled one.
+    embedPreviewEl.classList.toggle("is-plain", embedMode === "plain");
+    embedPreviewEl.querySelector("form")?.addEventListener("submit", (e) => e.preventDefault());
+    for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
+      const on = b.dataset.embed === embedMode;
+      b.classList.toggle("active", on);
+      b.setAttribute("aria-selected", on ? "true" : "false");
+    }
+  };
+  for (const b of document.querySelectorAll("#embedToggle .seg-btn")) {
+    b.onclick = () => setEmbed(b.dataset.embed);
+  }
+  document.getElementById("embedCopy").onclick = () => copyText(EMBEDS[embedMode]);
+  setEmbed("styled");
 
   document.getElementById("idSave").onclick = (e) =>
     busy(e.currentTarget, "Saving…", async () => {
