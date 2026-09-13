@@ -2537,7 +2537,7 @@ function templateVarsHtml() {
       `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
         .map(
           (v) =>
-            `<div class="set-tpl-var"><code data-token="${esc(v.token)}" title="Click to copy">${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
+            `<div class="set-tpl-var"><code>${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span><button type="button" class="set-tpl-copy" data-token="${esc(v.token)}" aria-label="Copy ${esc(v.token)}">${SET_ICON.copyout}<span>Copy</span></button></div>`,
         )
         .join("")}</div>`,
   ).join("");
@@ -2574,11 +2574,22 @@ async function renderTemplate() {
   bodyEl.innerHTML = `
     <div class="set-preview set-tpl-sample">
       <div class="set-preview-bar">
-        <span class="set-preview-lbl">Sample email</span>
-        <span class="set-preview-dot">One layout · every issue</span>
+        <span class="set-preview-titles">
+          <span class="set-preview-lbl">Sample email</span>
+          <span class="set-preview-dot">Rendered with sample data · the layout every issue ships in</span>
+        </span>
+        <span class="set-preview-actions">
+          <span class="set-wtog" role="group" aria-label="Preview width">
+            <button type="button" class="wtog-btn is-on" data-w="640">640</button>
+            <button type="button" class="wtog-btn" data-w="375">375</button>
+          </span>
+          <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
+        </span>
       </div>
-      <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
-      <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+      <div class="set-email-stage" id="tplStage">
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+      </div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send. Email rendering is client-dependent — send a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -2586,29 +2597,31 @@ async function renderTemplate() {
         <div class="set-tpl-block">
           <div class="set-tpl-editor-head">
             <label for="tplEditor">Email template</label>
-            <div class="set-tpl-examples">
-              <span class="lbl">Start from:</span>
-              <div class="seg" role="group" aria-label="Example template">
-                <button type="button" class="seg-btn" data-example="signed">Signed</button>
-                <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
-                <button type="button" class="seg-btn" data-example="plain">Plain</button>
+            <div class="set-menu" id="tplExamples">
+              <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
+              <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
+                <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
+                <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
+                <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
               </div>
             </div>
           </div>
           <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-          <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue — Save and Discard are in the bar at the bottom of the page.</p>
+          <p class="field-hint set-tpl-hint">Author the layout as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code>. Loading an example replaces what’s in the editor. Save and Discard are in the bar at the bottom of the page.</p>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
-          <div class="set-tpl-actions">
-            <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
-          </div>
         </div>
-
-        <details class="set-tpl-vars">
-          <summary>Available variables</summary>
-          <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
-        </details>
       </div>
       <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview uses sample data — send yourself a test to see it in a real inbox.</span></div>
+    </div>
+
+    <div class="set-card set-tpl-varcard">
+      <div class="set-card-pad">
+        <div class="set-tpl-varhead">
+          <h3 class="set-tpl-vartitle">Variables</h3>
+          <p class="field-hint">Copy a token and paste it into the template — Kestrel fills it in at send. Tokens must be typed exactly; an unknown one renders empty.</p>
+        </div>
+        <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
+      </div>
     </div>`;
 
   const tplEditor = document.getElementById("tplEditor");
@@ -2696,8 +2709,44 @@ async function renderTemplate() {
     preview.repaint();
     refreshDirty();
   });
-  for (const b of bodyEl.querySelectorAll("[data-example]")) {
-    b.onclick = () => loadExample(b.dataset.example);
+  // Examples: a "Start from example" dropdown menu (a compact, secondary action —
+  // loading one is destructive, so it isn't a permanent fixture on the page).
+  const exWrap = document.getElementById("tplExamples");
+  const exBtn = document.getElementById("tplExamplesBtn");
+  const exList = document.getElementById("tplExamplesList");
+  const closeExamples = () => {
+    exList.hidden = true;
+    exBtn.setAttribute("aria-expanded", "false");
+  };
+  exBtn.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = exList.hidden;
+    exList.hidden = !willOpen;
+    exBtn.setAttribute("aria-expanded", String(willOpen));
+  };
+  // Dismiss on an outside click; the guard makes it inert once this view is unmounted.
+  document.addEventListener("click", (e) => {
+    if (exWrap.isConnected && !exWrap.contains(e.target)) {
+      closeExamples();
+    }
+  });
+  for (const b of exList.querySelectorAll("[data-example]")) {
+    b.onclick = () => {
+      loadExample(b.dataset.example);
+      closeExamples();
+    };
+  }
+
+  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
+  const frameEl = document.getElementById("tplPreview");
+  for (const wb of bodyEl.querySelectorAll(".wtog-btn")) {
+    wb.onclick = () => {
+      for (const o of bodyEl.querySelectorAll(".wtog-btn")) {
+        o.classList.toggle("is-on", o === wb);
+      }
+      frameEl.style.maxWidth = `${wb.dataset.w}px`;
+      preview.repaint();
+    };
   }
 
   // --- send a test of the saved template (edit → test → iterate) ---
@@ -2762,8 +2811,18 @@ async function renderTemplate() {
         }
       });
   };
-  for (const c of bodyEl.querySelectorAll(".set-tpl-var code[data-token]")) {
-    c.onclick = () => copyText(c.dataset.token);
+  for (const cb of bodyEl.querySelectorAll(".set-tpl-copy")) {
+    cb.onclick = async () => {
+      await copyText(cb.dataset.token);
+      const lbl = cb.querySelector("span");
+      const prev = lbl.textContent;
+      cb.classList.add("copied");
+      lbl.textContent = "Copied";
+      setTimeout(() => {
+        cb.classList.remove("copied");
+        lbl.textContent = prev;
+      }, 1100);
+    };
   }
 
   tplEditor.value = templateBaseline;

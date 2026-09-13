@@ -3148,9 +3148,13 @@ td.act {
 }
 .set-tpl-var {
   display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 2px 0;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 0;
+  border-top: 1px solid var(--line-2);
+}
+.set-tpl-vargroup h4 + .set-tpl-var {
+  border-top: 0;
 }
 .set-tpl-var code {
   flex: 0 0 auto;
@@ -3159,13 +3163,41 @@ td.act {
   color: var(--k-accent);
   background: var(--k-accent-soft);
   border-radius: 4px;
-  padding: 1px 5px;
-  cursor: copy;
+  padding: 2px 6px;
 }
 .set-tpl-var-desc {
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
+}
+/* Explicit copy button per token (simpler and clearer than click-the-token). */
+.set-tpl-copy {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.set-tpl-copy svg {
+  width: 13px;
+  height: 13px;
+}
+.set-tpl-copy:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.set-tpl-copy.copied {
+  color: var(--k-accent);
+  border-color: color-mix(in srgb, var(--k-accent) 45%, var(--line));
 }
 /* The sample email: a neutral email-client frame. The template's own inline styles
    do the rest (an email carries no stylesheet), so there are no per-element rules
@@ -3181,6 +3213,127 @@ td.act {
   min-height: 240px;
   border: 0;
   background: #ffffff;
+}
+
+/* --- Template page: sample-email header actions, dropdown, variables --- */
+.set-preview-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.set-preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+/* Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. */
+.set-wtog {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--card);
+}
+.set-wtog .wtog-btn {
+  border: 0;
+  background: transparent;
+  padding: 3px 9px;
+  font: 600 11px / 1 var(--mono);
+  color: var(--muted);
+  cursor: pointer;
+}
+.set-wtog .wtog-btn + .wtog-btn {
+  border-left: 1px solid var(--line);
+}
+.set-wtog .wtog-btn.is-on {
+  background: var(--k-accent-soft);
+  color: var(--k-accent);
+}
+/* The sample email sits on a sunken stage so the (width-capped) email card reads as a
+   message on a surface; the width toggle sets its max-width. */
+.set-email-stage {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+  background: var(--sunken);
+}
+.set-email-stage .set-email-frame {
+  width: 100%;
+  max-width: 640px;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(15, 18, 25, 0.1);
+  transition: max-width 0.16s ease;
+}
+/* "Start from example" dropdown menu — a compact, secondary action. */
+.set-menu {
+  position: relative;
+}
+.set-menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.set-menu-caret {
+  width: 6px;
+  height: 6px;
+  border-right: 1.6px solid currentColor;
+  border-bottom: 1.6px solid currentColor;
+  transform: translateY(-1px) rotate(45deg);
+  opacity: 0.6;
+}
+.set-menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  width: 280px;
+  max-width: min(280px, 78vw);
+  padding: 5px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px rgba(15, 18, 25, 0.16);
+}
+.set-menu-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.set-menu-list button:hover {
+  background: var(--sunken);
+}
+.set-menu-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.set-menu-desc {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+/* Variables card heading. */
+.set-tpl-vartitle {
+  margin: 0 0 2px;
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--fg);
+}
+.set-tpl-varhead {
+  margin-bottom: 6px;
+}
+.set-tpl-varcard .set-tpl-vars-body {
+  padding: 0;
 }
 /* The "this is a mock" note under the editor. */
 .set-note {
