@@ -2764,7 +2764,7 @@ td.act {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 7px 13px;
+  padding: 11px 14px;
   background: var(--sunken);
   border-bottom: 1px solid var(--line);
 }
@@ -3136,10 +3136,12 @@ td.act {
   color: var(--cx-gutter);
   border-right: 1px solid var(--line);
   user-select: none;
+  /* Line numbers are off by default; the toolbar toggle turns them on. */
+  display: none;
 }
 .set-tpl-hl {
   position: absolute;
-  inset: 0 0 0 47px;
+  inset: 0;
   padding: 12px 14px;
   overflow: hidden;
   white-space: pre;
@@ -3148,7 +3150,7 @@ td.act {
 }
 .set-tpl-editor {
   position: absolute;
-  inset: 0 0 0 47px;
+  inset: 0;
   padding: 12px 14px;
   border: 0;
   resize: none;
@@ -3160,6 +3162,14 @@ td.act {
 }
 .set-tpl-editor:focus {
   outline: none;
+}
+/* With line numbers on, reveal the gutter and inset the code + overlay past it. */
+.set-tpl-editor-wrap.show-lines .set-tpl-gutter {
+  display: block;
+}
+.set-tpl-editor-wrap.show-lines .set-tpl-hl,
+.set-tpl-editor-wrap.show-lines .set-tpl-editor {
+  left: 47px;
 }
 /* Syntax colors (issue #123). */
 .cx-tag {
@@ -3275,10 +3285,6 @@ td.act {
   background: var(--k-accent-soft);
   border-radius: 4px;
   padding: 2px 6px;
-  /* The token is its own copy affordance: a click/double-click selects the whole
-     token (user-select: all), then Cmd/Ctrl+C — no separate copy button needed. */
-  user-select: all;
-  cursor: pointer;
 }
 .set-tpl-var-desc {
   flex: 1 1 auto;
@@ -3328,7 +3334,7 @@ td.act {
 .set-wtog .wtog-btn {
   border: 0;
   background: transparent;
-  padding: 3px 10px;
+  padding: 5px 11px;
   font-size: 11.5px;
   color: var(--muted);
   border-radius: 5px;
@@ -3345,7 +3351,7 @@ td.act {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 11px;
+  padding: 7px 12px;
   font-size: 12.5px;
   font-weight: 550;
   color: var(--k-accent);
@@ -3360,6 +3366,41 @@ td.act {
 }
 .set-btn-accent:hover {
   border-color: var(--k-accent);
+}
+/* Editor toolbar: the dropdown + small icon buttons (line-number toggle, copy). */
+.set-tpl-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.set-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+  background: var(--card);
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
+  cursor: pointer;
+}
+.set-icon-btn svg {
+  width: 15px;
+  height: 15px;
+}
+.set-icon-btn:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+.set-icon-btn[aria-pressed="true"] {
+  color: var(--k-accent);
+  background: var(--k-accent-soft);
+  border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+}
+.set-icon-btn.copied {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 40%, var(--line-2));
 }
 /* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
    absence blocks a save, shown upper-right of the editor toolbar. */
@@ -3379,7 +3420,7 @@ td.act {
   gap: 5px;
   font-family: var(--mono);
   font-size: 11px;
-  padding: 3px 8px;
+  padding: 5px 9px;
   border-radius: 999px;
   border: 1px solid var(--line-2);
   color: var(--muted);
@@ -3440,7 +3481,7 @@ td.act {
 }
 .set-menu-list {
   position: absolute;
-  right: 0;
+  left: 0;
   top: calc(100% + 6px);
   z-index: 20;
   width: 280px;

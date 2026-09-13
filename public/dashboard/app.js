@@ -2118,6 +2118,8 @@ const SET_ICON = {
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
+  lines:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -2642,13 +2644,17 @@ async function renderTemplate() {
       <div class="set-card-pad">
         <div class="set-tpl-block">
           <div class="set-tpl-editor-head">
-            <div class="set-menu" id="tplExamples">
-              <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
-              <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
-                <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
-                <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
-                <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
+            <div class="set-tpl-tools">
+              <div class="set-menu" id="tplExamples">
+                <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
+                <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
+                  <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
+                  <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
+                  <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
+                </div>
               </div>
+              <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
+              <button type="button" class="set-icon-btn" id="tplCopyAll" title="Copy template to clipboard" aria-label="Copy template to clipboard">${SET_ICON.copyout}</button>
             </div>
             <div class="set-tpl-required" aria-label="Required tokens">
               <span class="set-req-lbl">Required</span>
@@ -2838,6 +2844,36 @@ async function renderTemplate() {
       preview.repaint();
     };
   }
+
+  // Line numbers: hidden by default; the toolbar toggle shows them and the choice is
+  // remembered per browser (a lightweight convenience — safe to lose).
+  const editorWrap = document.getElementById("tplEditorWrap");
+  const lineNumsBtn = document.getElementById("tplLineNums");
+  const setLineNums = (on) => {
+    editorWrap.classList.toggle("show-lines", on);
+    lineNumsBtn.setAttribute("aria-pressed", String(on));
+    syncScroll();
+  };
+  let lineNumsOn = false;
+  try {
+    lineNumsOn = localStorage.getItem("kestrel.tpl.lineNums") === "1";
+  } catch {}
+  setLineNums(lineNumsOn);
+  lineNumsBtn.onclick = () => {
+    lineNumsOn = !lineNumsOn;
+    setLineNums(lineNumsOn);
+    try {
+      localStorage.setItem("kestrel.tpl.lineNums", lineNumsOn ? "1" : "0");
+    } catch {}
+  };
+
+  // Copy the whole template to the clipboard.
+  const copyAllBtn = document.getElementById("tplCopyAll");
+  copyAllBtn.onclick = async () => {
+    await copyText(tplEditor.value);
+    copyAllBtn.classList.add("copied");
+    setTimeout(() => copyAllBtn.classList.remove("copied"), 1100);
+  };
 
   // --- send a test of the saved template (edit → test → iterate) ---
   // A test renders a sample issue through the SAVED template — what will actually
