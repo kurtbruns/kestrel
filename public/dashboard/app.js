@@ -2119,7 +2119,7 @@ const SET_ICON = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
   lines:
-    '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"/></svg>',
+    '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="M220-360v-180h-60v-60h120v240h-60Zm140 0v-100q0-17 11.5-28.5T400-500h80v-40H360v-60h140q17 0 28.5 11.5T540-560v60q0 17-11.5 28.5T500-460h-80v40h120v60H360Zm240 0v-60h120v-40h-80v-40h80v-40H600v-60h140q17 0 28.5 11.5T780-560v160q0 17-11.5 28.5T740-360H600Z"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -2598,7 +2598,7 @@ function highlightTemplate(src) {
 }
 
 async function renderTemplate() {
-  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown renders in the body. Light and dark supported.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
   const bodyEl = document.getElementById("tplBody");
   let data;
   try {
@@ -2624,7 +2624,7 @@ async function renderTemplate() {
       <div class="set-preview-bar">
         <span class="set-preview-titles">
           <span class="set-preview-lbl">Sample email</span>
-          <span class="set-preview-dot">Rendered with sample data · the layout every issue ships in</span>
+          <span class="set-preview-dot">A preview with sample content, showing the layout used for a sent email</span>
         </span>
         <span class="set-preview-actions">
           <span class="set-wtog" role="group" aria-label="Preview width">
@@ -2637,7 +2637,7 @@ async function renderTemplate() {
       <div class="set-email-stage" id="tplStage">
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="set-preview-cap">Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send. Email rendering is client-dependent — send a test to see it in a real inbox.</div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ footer.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -2656,7 +2656,7 @@ async function renderTemplate() {
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
               <button type="button" class="set-btn-ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
             </div>
-            <div class="set-tpl-required" aria-label="Required tokens">
+            <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
               <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ post.body }}</span>
               <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ footer.unsubscribeUrl }}</span>
@@ -2670,14 +2670,14 @@ async function renderTemplate() {
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. Save and Discard are in the bar at the bottom; the preview uses sample data, so send yourself a test to see it in a real inbox.</span></div>
+      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template, starting from a sensible default, when you send an email. Each sent email is archived exactly as it went out, so editing the template changes future emails and never ones already sent. Save and Discard are in the bar at the bottom of the page.</span></div>
     </div>
 
     <div class="set-card set-tpl-varcard">
       <div class="set-card-pad">
         <div class="set-tpl-varhead">
           <h3 class="set-tpl-vartitle">Variables</h3>
-          <p class="field-hint">The tokens Kestrel fills in at send — click a token to select it, then copy. They must be typed exactly; an unknown one renders empty.</p>
+          <p class="field-hint">Kestrel replaces these variables with real values when you send an email. Type a variable exactly as shown, or it renders as empty. Double-click a variable to select it, then copy.</p>
         </div>
         <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
       </div>
