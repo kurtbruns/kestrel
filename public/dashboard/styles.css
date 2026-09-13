@@ -7,7 +7,7 @@
   --line: #e4e4e7;
   --bg: #f8f8f8;
   --card: #fff;
-  --hover: #f4f4f5;
+  --hover: #efefef;
   --accent: #18181b;
   --accent-fg: #ffffff;
   --danger: #b91c1c;
@@ -40,6 +40,19 @@
   --k-accent: #3355cc;
   --k-accent-contrast: #ffffff;
   --k-accent-soft: rgba(51, 85, 204, 0.12);
+  /* Syntax-highlight palette for the template editor (issue #123). */
+  --cx-bg: #fbfbfc;
+  --cx-fg: #3f3f46;
+  --cx-gutter: #a1a1aa;
+  --cx-tag: #7a5bd6;
+  --cx-str: #0f7a5a;
+  --cx-prop: #1d4ed8;
+  --cx-sel: #b0530c;
+  --cx-num: #b0530c;
+  --cx-at: #a13d9e;
+  --cx-punct: #a1a1aa;
+  --cx-var: #2d47b8;
+  --cx-var-bg: rgba(51, 85, 204, 0.11);
   /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
      stronger line + a neutral chip fill, layered on the zinc neutrals above. */
   --sunken: #f6f6f7;
@@ -80,6 +93,18 @@
     --k-accent: #7d9bff;
     --k-accent-contrast: #10131f;
     --k-accent-soft: rgba(125, 155, 255, 0.18);
+    --cx-bg: #1a1a1d;
+    --cx-fg: #cfcfd6;
+    --cx-gutter: #5a5a63;
+    --cx-tag: #c4a7ff;
+    --cx-str: #7fd9b0;
+    --cx-prop: #86b6ff;
+    --cx-sel: #f0a86a;
+    --cx-num: #f0a86a;
+    --cx-at: #e79ae0;
+    --cx-punct: #6a6a72;
+    --cx-var: #a9bbf2;
+    --cx-var-bg: rgba(120, 150, 240, 0.18);
     --sunken: #1b1b1f;
     --line-2: #3a3a41;
     --chip: #2a2a30;
@@ -3070,15 +3095,101 @@ td.act {
   font-size: 12px;
   color: var(--muted);
 }
-.set-tpl-editor {
+/* Syntax-highlight overlay editor (issue #123): a transparent <textarea> over a
+   highlighted <pre>, plus a line-number gutter. All three share identical font
+   metrics so the caret sits exactly over the colored text; the textarea is the only
+   scroller and the gutter + overlay are synced to it in script. */
+.set-tpl-editor-wrap {
+  position: relative;
+  height: 420px;
+  min-height: 240px;
+  resize: vertical;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--cx-bg);
   font-family: var(--mono);
   font-size: 12.5px;
-  line-height: 1.55;
-  min-height: 340px;
-  resize: vertical;
-  white-space: pre;
-  overflow-wrap: normal;
+  line-height: 1.6;
   tab-size: 2;
+}
+.set-tpl-editor-wrap:focus-within {
+  border-color: color-mix(in srgb, var(--k-accent) 55%, var(--line));
+}
+.set-tpl-gutter,
+.set-tpl-hl,
+.set-tpl-editor {
+  margin: 0;
+  font: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+  box-sizing: border-box;
+}
+.set-tpl-gutter {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 46px;
+  padding: 12px 8px 12px 0;
+  text-align: right;
+  white-space: pre;
+  overflow: hidden;
+  color: var(--cx-gutter);
+  border-right: 1px solid var(--line);
+  user-select: none;
+}
+.set-tpl-hl {
+  position: absolute;
+  inset: 0 0 0 47px;
+  padding: 12px 14px;
+  overflow: hidden;
+  white-space: pre;
+  color: var(--cx-fg);
+  pointer-events: none;
+}
+.set-tpl-editor {
+  position: absolute;
+  inset: 0 0 0 47px;
+  padding: 12px 14px;
+  border: 0;
+  resize: none;
+  white-space: pre;
+  overflow: auto;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--cx-fg);
+}
+.set-tpl-editor:focus {
+  outline: none;
+}
+/* Syntax colors (issue #123). */
+.cx-tag {
+  color: var(--cx-tag);
+}
+.cx-str {
+  color: var(--cx-str);
+}
+.cx-prop {
+  color: var(--cx-prop);
+}
+.cx-sel {
+  color: var(--cx-sel);
+}
+.cx-num {
+  color: var(--cx-num);
+}
+.cx-at {
+  color: var(--cx-at);
+  font-style: italic;
+}
+.cx-punct {
+  color: var(--cx-punct);
+}
+.cx-var {
+  color: var(--cx-var);
+  background: var(--cx-var-bg);
+  border-radius: 3px;
+  padding: 0 2px;
+  font-weight: 600;
 }
 .set-tpl-hint {
   margin: 6px 0 0;
@@ -3164,6 +3275,10 @@ td.act {
   background: var(--k-accent-soft);
   border-radius: 4px;
   padding: 2px 6px;
+  /* The token is its own copy affordance: a click/double-click selects the whole
+     token (user-select: all), then Cmd/Ctrl+C — no separate copy button needed. */
+  user-select: all;
+  cursor: pointer;
 }
 .set-tpl-var-desc {
   flex: 1 1 auto;
@@ -3171,33 +3286,6 @@ td.act {
   font-size: 12px;
   color: var(--muted);
   line-height: 1.4;
-}
-/* Explicit copy button per token (simpler and clearer than click-the-token). */
-.set-tpl-copy {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 3px 9px;
-  font-size: 11.5px;
-  font-weight: 550;
-  color: var(--muted);
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  cursor: pointer;
-}
-.set-tpl-copy svg {
-  width: 13px;
-  height: 13px;
-}
-.set-tpl-copy:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-.set-tpl-copy.copied {
-  color: var(--k-accent);
-  border-color: color-mix(in srgb, var(--k-accent) 45%, var(--line));
 }
 /* The sample email: a neutral email-client frame. The template's own inline styles
    do the rest (an email carries no stylesheet), so there are no per-element rules
@@ -3231,25 +3319,92 @@ td.act {
 /* Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default. */
 .set-wtog {
   display: inline-flex;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  overflow: hidden;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-2);
+  border-radius: 7px;
   background: var(--card);
 }
 .set-wtog .wtog-btn {
   border: 0;
   background: transparent;
-  padding: 3px 9px;
-  font: 600 11px / 1 var(--mono);
+  padding: 3px 10px;
+  font-size: 11.5px;
   color: var(--muted);
+  border-radius: 5px;
   cursor: pointer;
 }
-.set-wtog .wtog-btn + .wtog-btn {
-  border-left: 1px solid var(--line);
-}
-.set-wtog .wtog-btn.is-on {
+.set-wtog .wtog-btn[aria-pressed="true"] {
   background: var(--k-accent-soft);
   color: var(--k-accent);
+  font-weight: 600;
+}
+/* Send test — an accent-tinted "ghost" button with the send glyph; it's the page's
+   primary standing action (send yourself the saved layout), so it reads accent, not grey. */
+.set-btn-accent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--k-accent);
+  background: var(--k-accent-soft);
+  border: 1px solid color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+  border-radius: 7px;
+  cursor: pointer;
+}
+.set-btn-accent svg {
+  width: 14px;
+  height: 14px;
+}
+.set-btn-accent:hover {
+  border-color: var(--k-accent);
+}
+/* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
+   absence blocks a save, shown upper-right of the editor toolbar. */
+.set-tpl-required {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.set-req-lbl {
+  font-size: 11px;
+  color: var(--muted);
+}
+.set-req-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+}
+.set-req-pill .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.set-req-pill.ok {
+  color: var(--ok);
+  border-color: color-mix(in srgb, var(--ok) 38%, var(--line-2));
+  background: color-mix(in srgb, var(--ok) 10%, transparent);
+}
+.set-req-pill.ok .dot {
+  background: var(--ok);
+}
+.set-req-pill.bad {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 40%, var(--line-2));
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+.set-req-pill.bad .dot {
+  background: var(--danger);
 }
 /* The sample email sits on a sunken stage so the (width-capped) email card reads as a
    message on a surface; the width toggle sets its max-width. */

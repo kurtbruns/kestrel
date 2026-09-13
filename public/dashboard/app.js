@@ -2117,6 +2117,7 @@ const SET_ICON = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -2444,9 +2445,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
-  '<h2 style="margin:0 0 10px">Notes from this week</h2>' +
-  '<p style="margin:0 0 12px">A few things I\'ve been reading, making, and thinking about, collected in one short letter.</p>' +
-  '<p style="margin:0">As always, let me know what you think.</p>' +
+  '<h2 style="margin:0 0 10px">Lorem ipsum,</h2>' +
+  '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
@@ -2537,7 +2537,7 @@ function templateVarsHtml() {
       `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
         .map(
           (v) =>
-            `<div class="set-tpl-var"><code>${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span><button type="button" class="set-tpl-copy" data-token="${esc(v.token)}" aria-label="Copy ${esc(v.token)}">${SET_ICON.copyout}<span>Copy</span></button></div>`,
+            `<div class="set-tpl-var"><code>${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
         )
         .join("")}</div>`,
   ).join("");
@@ -2549,6 +2549,52 @@ function templateVarsHtml() {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
+// --- template syntax highlighting (issue #123) ---
+// A small tokenizer for the overlay editor: colors the {{ tokens }}, HTML tags and
+// attribute strings, and — inside the <style> block — CSS selectors, properties,
+// colors and at-rules. Logic-less templates need nothing heavier, so this stays
+// inside the dashboard's framework-free, no-build ethos (no CodeMirror, no bundler).
+function hlTokens(s) {
+  return s.replace(/\{\{\s*[\w.]+\s*\}\}/g, (m) => `<span class="cx-var">${m}</span>`);
+}
+function hlHtml(raw) {
+  let s = esc(raw);
+  s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
+  s = s.replace(
+    /(&lt;\/?)([a-zA-Z][\w-]*)/g,
+    (_m, br, name) => `<span class="cx-punct">${br}</span><span class="cx-tag">${name}</span>`,
+  );
+  s = s.replace(/(\/?)&gt;/g, (_m, sl) => `<span class="cx-punct">${sl}&gt;</span>`);
+  return hlTokens(s);
+}
+function hlCss(raw) {
+  let s = esc(raw);
+  s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
+  s = s.replace(/#[0-9a-fA-F]{3,8}\b/g, (m) => `<span class="cx-num">${m}</span>`);
+  s = s.replace(/@[\w-]+/g, (m) => `<span class="cx-at">${m}</span>`);
+  s = s.replace(
+    /^(\s*)(?![@\s])([^\n{}<]+?)(\s*)\{$/gm,
+    (_m, ind, sel, sp) => `${ind}<span class="cx-sel">${sel}</span>${sp}{`,
+  );
+  s = s.replace(
+    /^(\s*)([a-z-]+)(\s*:)/gm,
+    (_m, ind, prop, colon) => `${ind}<span class="cx-prop">${prop}</span>${colon}`,
+  );
+  return hlTokens(s);
+}
+function highlightTemplate(src) {
+  return String(src)
+    .split(/(<style>[\s\S]*?<\/style>)/)
+    .map((seg) => {
+      const m = seg.match(/^<style>([\s\S]*?)<\/style>$/);
+      if (m) {
+        return `<span class="cx-punct">&lt;</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>${hlCss(m[1])}<span class="cx-punct">&lt;/</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>`;
+      }
+      return hlHtml(seg);
+    })
+    .join("");
+}
+
 async function renderTemplate() {
   app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown renders in the body. Light and dark supported.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
   const bodyEl = document.getElementById("tplBody");
@@ -2580,10 +2626,10 @@ async function renderTemplate() {
         </span>
         <span class="set-preview-actions">
           <span class="set-wtog" role="group" aria-label="Preview width">
-            <button type="button" class="wtog-btn is-on" data-w="640">640</button>
-            <button type="button" class="wtog-btn" data-w="375">375</button>
+            <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
+            <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
           </span>
-          <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
+          <button type="button" class="set-btn-accent" id="tplTest">${SET_ICON.send}<span id="tplTestLbl">Send test email</span></button>
         </span>
       </div>
       <div class="set-email-stage" id="tplStage">
@@ -2596,7 +2642,6 @@ async function renderTemplate() {
       <div class="set-card-pad">
         <div class="set-tpl-block">
           <div class="set-tpl-editor-head">
-            <label for="tplEditor">Email template</label>
             <div class="set-menu" id="tplExamples">
               <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
               <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
@@ -2605,8 +2650,17 @@ async function renderTemplate() {
                 <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
               </div>
             </div>
+            <div class="set-tpl-required" aria-label="Required tokens">
+              <span class="set-req-lbl">Required</span>
+              <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ post.body }}</span>
+              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ footer.unsubscribeUrl }}</span>
+            </div>
           </div>
-          <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
+          <div class="set-tpl-editor-wrap" id="tplEditorWrap">
+            <div class="set-tpl-gutter" id="tplGutter" aria-hidden="true">1</div>
+            <pre class="set-tpl-hl" id="tplHl" aria-hidden="true"><code></code></pre>
+            <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
+          </div>
           <p class="field-hint set-tpl-hint">Author the layout as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code>. Loading an example replaces what’s in the editor. Save and Discard are in the bar at the bottom of the page.</p>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
@@ -2618,7 +2672,7 @@ async function renderTemplate() {
       <div class="set-card-pad">
         <div class="set-tpl-varhead">
           <h3 class="set-tpl-vartitle">Variables</h3>
-          <p class="field-hint">Copy a token and paste it into the template — Kestrel fills it in at send. Tokens must be typed exactly; an unknown one renders empty.</p>
+          <p class="field-hint">The tokens Kestrel fills in at send — click a token to select it, then copy. They must be typed exactly; an unknown one renders empty.</p>
         </div>
         <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
       </div>
@@ -2632,7 +2686,40 @@ async function renderTemplate() {
   );
   const tplMsgsEl = document.getElementById("tplMsgs");
   const tplTestEl = document.getElementById("tplTest");
+  const tplTestLbl = document.getElementById("tplTestLbl");
   const isDirty = () => tplEditor.value !== templateBaseline;
+
+  // Syntax-highlight overlay (issue #123): a transparent <textarea> over a highlighted
+  // <pre>, plus a line-number gutter, kept in scroll sync. Vanilla, no dependency.
+  const tplHl = document.getElementById("tplHl");
+  const tplHlCode = tplHl.querySelector("code");
+  const tplGutter = document.getElementById("tplGutter");
+  const paintEditor = () => {
+    const src = tplEditor.value;
+    // Trailing newline so the last line renders and the overlay height matches the textarea.
+    tplHlCode.innerHTML = `${highlightTemplate(src)}\n`;
+    let g = "";
+    const lines = src.split("\n").length;
+    for (let i = 1; i <= lines; i++) {
+      g += `${i}\n`;
+    }
+    tplGutter.textContent = g;
+  };
+  const syncScroll = () => {
+    tplHl.scrollTop = tplEditor.scrollTop;
+    tplHl.scrollLeft = tplEditor.scrollLeft;
+    tplGutter.scrollTop = tplEditor.scrollTop;
+  };
+  tplEditor.addEventListener("scroll", syncScroll);
+
+  // The two blocking-required tokens, predicted live in the toolbar pills: green when
+  // present, red when missing — so a rejected save is visible before you press Save.
+  const reqBodyEl = document.getElementById("reqBody");
+  const reqUnsubEl = document.getElementById("reqUnsub");
+  const paintReq = () => {
+    reqBodyEl.className = `set-req-pill ${/\{\{\s*post\.body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+    reqUnsubEl.className = `set-req-pill ${/\{\{\s*footer\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+  };
 
   // Save + Discard live in the shared bottom save bar (onSave/onDiscard below); the
   // page never renders its own Save button. A rejected save (e.g. a template missing
@@ -2642,10 +2729,13 @@ async function renderTemplate() {
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate });
 
   function refreshDirty() {
+    paintEditor();
+    paintReq();
+    syncScroll();
     bar.setDirty(isDirty());
     // A test always sends the SAVED template (what will ship, I5). When there are
     // unsaved edits the button says so plainly: it saves first, then sends.
-    tplTestEl.textContent = isDirty() ? "Save & send test" : "Send test email";
+    tplTestLbl.textContent = isDirty() ? "Save & send test" : "Send test email";
     tplTestEl.title = isDirty()
       ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
       : "Sends a sample issue through the saved template so you can see it in a real inbox.";
@@ -2742,7 +2832,7 @@ async function renderTemplate() {
   for (const wb of bodyEl.querySelectorAll(".wtog-btn")) {
     wb.onclick = () => {
       for (const o of bodyEl.querySelectorAll(".wtog-btn")) {
-        o.classList.toggle("is-on", o === wb);
+        o.setAttribute("aria-pressed", String(o === wb));
       }
       frameEl.style.maxWidth = `${wb.dataset.w}px`;
       preview.repaint();
@@ -2811,20 +2901,6 @@ async function renderTemplate() {
         }
       });
   };
-  for (const cb of bodyEl.querySelectorAll(".set-tpl-copy")) {
-    cb.onclick = async () => {
-      await copyText(cb.dataset.token);
-      const lbl = cb.querySelector("span");
-      const prev = lbl.textContent;
-      cb.classList.add("copied");
-      lbl.textContent = "Copied";
-      setTimeout(() => {
-        cb.classList.remove("copied");
-        lbl.textContent = prev;
-      }, 1100);
-    };
-  }
-
   tplEditor.value = templateBaseline;
   preview.repaint();
   refreshDirty();
