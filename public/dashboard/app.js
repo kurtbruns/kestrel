@@ -2119,7 +2119,7 @@ const SET_ICON = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
   lines:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
+    '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="M120-80v-60h100v-30h-60v-60h60v-30H120v-60h120q17 0 28.5 11.5T280-280v40q0 17-11.5 28.5T240-200q17 0 28.5 11.5T280-160v40q0 17-11.5 28.5T240-80H120Zm0-280v-110q0-17 11.5-28.5T160-510h60v-30H120v-60h120q17 0 28.5 11.5T280-560v70q0 17-11.5 28.5T240-450h-60v30h100v60H120Zm60-280v-180h-60v-60h120v240h-60Zm180 440v-80h480v80H360Zm0-240v-80h480v80H360Zm0-240v-80h480v80H360Z"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -2480,7 +2480,7 @@ function templateSampleCtx(identity) {
     "publication.name": id.name || "Your publication",
     "publication.tagline": id.tagline || "Your tagline",
     "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
-    "publication.address": id.address || "123 Main Street, Anytown, ST 00000",
+    "publication.address": id.address || "123 Main Street, City, State Zip Code",
     "footer.sentTo": "you@example.com",
     "footer.unsubscribeUrl": "#unsubscribe",
     "footer.viewInBrowserUrl": "#view-in-browser",
@@ -2654,7 +2654,7 @@ async function renderTemplate() {
                 </div>
               </div>
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
-              <button type="button" class="set-icon-btn" id="tplCopyAll" title="Copy template to clipboard" aria-label="Copy template to clipboard">${SET_ICON.copyout}</button>
+              <button type="button" class="set-btn-ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
             </div>
             <div class="set-tpl-required" aria-label="Required tokens">
               <span class="set-req-lbl">Required</span>
@@ -2868,10 +2868,15 @@ async function renderTemplate() {
 
   // Copy the whole template to the clipboard.
   const copyAllBtn = document.getElementById("tplCopyAll");
+  const copyAllLbl = document.getElementById("tplCopyLbl");
   copyAllBtn.onclick = async () => {
     await copyText(tplEditor.value);
     copyAllBtn.classList.add("copied");
-    setTimeout(() => copyAllBtn.classList.remove("copied"), 1100);
+    copyAllLbl.textContent = "Copied";
+    setTimeout(() => {
+      copyAllBtn.classList.remove("copied");
+      copyAllLbl.textContent = "Copy";
+    }, 1100);
   };
 
   // --- send a test of the saved template (edit → test → iterate) ---
