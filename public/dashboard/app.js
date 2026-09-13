@@ -3046,7 +3046,7 @@ async function renderSettings() {
             <div class="set-field">
               <label for="setAddress">Mailing address</label>
               <input id="setAddress" value="${esc(state.address)}" placeholder="123 Main St, City, ST 00000" maxlength="300" autocomplete="off">
-              <p class="field-hint">A physical postal address for the email footer (<code>{{ publication.address }}</code>) — bulk mail usually requires one.</p>
+              <p class="field-hint">A physical postal address for the email footer. Bulk or commercial mail usually requires one.</p>
             </div>
           </div>
         </div>
