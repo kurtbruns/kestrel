@@ -2119,7 +2119,7 @@ const SET_ICON = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
   send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
   lines:
-    '<svg viewBox="0 -960 960 960" fill="currentColor"><path d="M220-360v-180h-60v-60h120v240h-60Zm140 0v-100q0-17 11.5-28.5T400-500h80v-40H360v-60h140q17 0 28.5 11.5T540-560v60q0 17-11.5 28.5T500-460h-80v40h120v60H360Zm240 0v-60h120v-40h-80v-40h80v-40H600v-60h140q17 0 28.5 11.5T780-560v160q0 17-11.5 28.5T740-360H600Z"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -3060,7 +3060,7 @@ async function renderSettings() {
   const templateSection = `
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"))}
-      <p class="set-lede">The one layout every issue is sent inside — its HTML, <code>{{ variables }}</code>, and light/dark styling. Edited on its own page.</p>
+      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
           <span class="set-preview-lbl">Sample email</span>
@@ -3102,7 +3102,7 @@ async function renderSettings() {
       ${secHead("Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
-          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses — they don’t go through the subscribe/consent flow.</p>
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
           <div class="set-chips" id="recipChips"></div>
           <div class="set-recip-add">
             <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">
