@@ -584,9 +584,9 @@ export async function seedDatabase(
   await updateSettings(db, {
     publication: {
       name: "Windbreak",
-      tagline: "Field notes on birds, weather, and paying attention.",
+      tagline: "for the birds",
       brandColor: "#227566",
-      address: "123 Beep Boop Lane, San Francisco, CA 94103",
+      address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
   });
 
