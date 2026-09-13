@@ -2667,11 +2667,10 @@ async function renderTemplate() {
             <pre class="set-tpl-hl" id="tplHl" aria-hidden="true"><code></code></pre>
             <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
           </div>
-          <p class="field-hint set-tpl-hint">Author the layout as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code>. Loading an example replaces what’s in the editor. Save and Discard are in the bar at the bottom of the page.</p>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview uses sample data — send yourself a test to see it in a real inbox.</span></div>
+      <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. Save and Discard are in the bar at the bottom; the preview uses sample data, so send yourself a test to see it in a real inbox.</span></div>
     </div>
 
     <div class="set-card set-tpl-varcard">

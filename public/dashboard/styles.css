@@ -3390,6 +3390,8 @@ td.act {
 .set-icon-btn svg {
   width: 15px;
   height: 15px;
+  /* As the button's only flex child it can otherwise collapse to 0 width. */
+  flex: 0 0 auto;
 }
 .set-icon-btn:hover {
   color: var(--fg);
