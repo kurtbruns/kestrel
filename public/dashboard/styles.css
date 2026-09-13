@@ -1446,10 +1446,30 @@ th.num .th-sort {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-/* Save button draws the eye while there are unsaved edits (paired with the "•"). */
-#saveBtn.unsaved {
-  border-color: var(--ring);
-  background: color-mix(in srgb, var(--ring) 8%, var(--card));
+/* The editor's save-state indicator, beside the Save button. It keeps its own
+   autosave model, but the "unsaved" cue reads the same app-wide as the shared save
+   bar: an amber --warn dot + text. Saving…/Saved are the autosave lifecycle it also
+   has; those stay muted (no dot). :empty (locked posts) collapses it out. */
+.save-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.save-status:empty {
+  display: none;
+}
+.save-status.is-dirty {
+  color: var(--fg);
+}
+.save-status.is-dirty::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warn);
+  flex: 0 0 auto;
 }
 
 .warnings {
@@ -3063,22 +3083,8 @@ td.act {
 .set-tpl-hint {
   margin: 6px 0 0;
 }
-/* The template's own Save + validation feedback (errors reject; warnings inform). */
-.set-tpl-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-}
-.set-tpl-actions button.primary {
-  background: var(--k-accent);
-  color: var(--k-accent-contrast);
-  border-color: var(--k-accent);
-}
-.set-tpl-status {
-  font-size: 12px;
-  color: var(--muted);
-}
+/* Advisory warnings about the just-saved template. A rejected save is a blocking
+   error and shows in the shared save bar instead (see .savebar.error). */
 .set-tpl-msgs {
   margin-top: 12px;
   border: 1px solid var(--line-2);
@@ -3091,11 +3097,6 @@ td.act {
   background: color-mix(in srgb, var(--warn) 9%, transparent);
   border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2));
   color: var(--warn);
-}
-.set-tpl-msgs.error {
-  background: var(--b-bad-bg);
-  border-color: var(--b-bad-line);
-  color: var(--b-bad-fg);
 }
 /* Variable reference — a native <details> disclosure. Logic-less: a token is only
    ever replaced by its value, so there's nothing to execute. */
@@ -3200,47 +3201,109 @@ td.act {
   color: var(--muted);
 }
 
-/* --- sticky save bar: the unsaved, persisted changes (identity + recipients) --- */
-.set-savebar {
-  position: sticky;
-  bottom: 14px;
-  z-index: 8;
-  margin-top: 18px;
+/* --- shared unsaved-changes bar -------------------------------------------------
+   One full-width banner fixed to the bottom of the viewport, used by every surface
+   with an explicit save + a revertible baseline (Settings and the Template page).
+   It slides up only while there are unsaved changes, carries Save + Discard, and
+   doubles as the home for a rejected save's error (the bar stays up and says why).
+   The left offset tracks the sidebar — clearing the 260px full column or the 64px
+   icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
+   phone drawer. The post editor keeps its own autosave + conflict model, so it does
+   NOT use this bar. The primary action is Kestrel's own --k-accent (see the note on
+   the token); every other primary in the app stays the near-black --accent. --- */
+.savebar {
+  position: fixed;
+  /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
+  left: 260px;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  padding: 13px 0;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-top: 1px solid var(--line-2);
+  box-shadow: 0 -10px 30px -18px rgba(24, 24, 27, 0.4);
+  transform: translateY(120%);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.savebar.show {
+  transform: translateY(0);
+}
+/* Center the contents on the same column as .content (1040px) so the message and
+   actions sit under the page, not out at the far edge of a wide monitor. */
+.savebar-inner {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 0 32px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 11px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--line-2);
-  background: color-mix(in srgb, var(--card) 90%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  box-shadow: 0 12px 30px -14px rgba(24, 24, 27, 0.4);
 }
-.set-savebar .msg {
+.savebar-msg {
   display: flex;
   align-items: center;
   gap: 9px;
+  min-width: 0;
   font-size: 13.5px;
 }
-.set-savebar .dot {
+.savebar-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
   background: var(--warn);
   flex: 0 0 auto;
 }
-.set-savebar .acts {
+/* A rejected save turns the bar red and the dot into a danger mark. */
+.savebar.error .savebar-msg {
+  color: var(--danger);
+}
+.savebar.error .savebar-dot {
+  background: var(--danger);
+}
+.savebar-acts {
   display: flex;
   gap: 9px;
+  flex: 0 0 auto;
 }
-/* The one Kestrel-accent button on the page (the page's primary action); every
-   other primary in the app stays the near-black --accent, so this stays scoped. */
-.set-savebar button.primary {
+.savebar button.primary {
   background: var(--k-accent);
   color: var(--k-accent-contrast);
   border-color: var(--k-accent);
+}
+/* While a page owns the bar, reserve room below the content so its last section
+   never hides behind the fixed bar (set for the page's whole life — no layout shift
+   as the bar slides in and out). */
+body.has-savebar .content {
+  padding-bottom: 96px;
+}
+@media (min-width: 540px) {
+  [data-nav="rail"] .savebar {
+    left: 64px;
+  }
+}
+@media (max-width: 539px) {
+  .savebar {
+    left: 0;
+  }
+  /* Stack on phones: the message on its own row, the actions right-aligned below,
+     rather than cramming a message and two buttons onto one narrow line. */
+  .savebar-inner {
+    padding: 0 16px;
+    flex-wrap: wrap;
+  }
+  .savebar-msg,
+  .savebar-acts {
+    flex: 1 1 100%;
+  }
+  .savebar-acts {
+    justify-content: flex-end;
+  }
+  /* Room for the taller two-row bar (a wrapped error runs a couple of lines). */
+  body.has-savebar .content {
+    padding-bottom: 140px;
+  }
 }
 
 /* --- responsive --- */
