@@ -2507,9 +2507,12 @@ function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
   let ready = false;
   const size = () => {
     try {
-      const doc = iframe.contentDocument;
-      if (doc) {
-        iframe.style.height = `${Math.max(200, doc.documentElement.scrollHeight)}px`;
+      // Measure the BODY, which is content-sized. documentElement.scrollHeight is floored
+      // at the iframe's own height, so it can grow but never shrink — which is what left
+      // the frame too tall after 375 → 640 and clipped the footer at 640 → 375.
+      const h = iframe.contentDocument?.body?.scrollHeight;
+      if (h) {
+        iframe.style.height = `${Math.max(200, h)}px`;
       }
     } catch {}
   };
@@ -2522,11 +2525,19 @@ function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
     // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> stays inert.
     slot.innerHTML = fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()));
     size();
-    setTimeout(size, 60); // re-measure once the logo image lays out
   };
   iframe.addEventListener("load", () => {
     ready = true;
     repaint();
+    // Keep the frame fitted to its content through every change: an edit, the width
+    // toggle's animated reflow, or a logo/font finishing loading. The body is
+    // content-sized and size() only touches the outer iframe, so this can't loop.
+    try {
+      const doc = iframe.contentDocument;
+      if (doc?.body && typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(size).observe(doc.body);
+      }
+    } catch {}
   });
   iframe.srcdoc = TEMPLATE_FRAME_DOC;
   return { repaint };
