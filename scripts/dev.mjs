@@ -23,6 +23,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { clearDevPort, writeDevPort } from "./dev-port.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -86,6 +87,11 @@ const originArgs = isRemote
       `MEDIA_PUBLIC_BASE:${origin}/media`,
     ];
 
+// Record the port we're binding so a separate `npm run seed` / `npm run reset` in
+// another terminal targets THIS worktree's server instead of defaulting to 8787
+// (see scripts/dev-port.mjs). Cleared on exit; a stale value self-heals on next start.
+writeDevPort(port);
+
 const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",
 });
@@ -93,6 +99,7 @@ const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passth
 // Propagate the child's fate so `npm run dev` exits with wrangler's own status: mirror
 // a fatal signal by re-raising it on ourselves, otherwise exit with its code.
 child.on("exit", (code, signal) => {
+  clearDevPort();
   if (signal) {
     process.kill(process.pid, signal);
   } else {

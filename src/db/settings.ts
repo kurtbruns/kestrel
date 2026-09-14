@@ -28,8 +28,6 @@ export interface PublicationLogo {
 export interface PublicationSettings {
   name: string;
   tagline: string;
-  /** "" = use the theme accent; otherwise a validated `#rrggbb`. */
-  brandColor: string;
   /** Physical mailing address for the email compliance footer ("" = unset). */
   address: string;
   logo: PublicationLogo | null;
@@ -55,7 +53,7 @@ export const BRANDING_LOGO_KEY = "branding/logo";
 
 export const DEFAULT_SETTINGS: AppSettings = {
   testRecipients: [],
-  publication: { name: "", tagline: "", brandColor: "", address: "", logo: null },
+  publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
 };
 
@@ -69,7 +67,7 @@ const MAX_TEMPLATE = 40_000;
 /** A patch the API accepts. Logo is set through the dedicated upload route, not here. */
 export interface SettingsPatch {
   testRecipients?: string[];
-  publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "brandColor" | "address">>;
+  publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "address">>;
   emailTemplate?: string;
 }
 
@@ -84,7 +82,6 @@ function coercePublication(raw: unknown): PublicationSettings {
   return {
     name: str(o.name).slice(0, MAX_NAME),
     tagline: str(o.tagline).slice(0, MAX_TAGLINE),
-    brandColor: str(o.brandColor),
     address: str(o.address).slice(0, MAX_ADDRESS),
     logo,
   };
@@ -144,9 +141,6 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
     if (p.tagline !== undefined) {
       next.publication.tagline = normalizeText(p.tagline, "tagline", MAX_TAGLINE);
     }
-    if (p.brandColor !== undefined) {
-      next.publication.brandColor = normalizeBrandColor(p.brandColor);
-    }
     if (p.address !== undefined) {
       next.publication.address = normalizeText(p.address, "address", MAX_ADDRESS);
     }
@@ -183,38 +177,6 @@ function normalizeText(v: unknown, what: string, max: number): string {
     throw new Error(`${what} must be a string`);
   }
   return v.trim().slice(0, max);
-}
-
-/** Normalize a brand color to lowercase `#rrggbb`; "" clears it. Throws on invalid. */
-export function normalizeBrandColor(v: unknown): string {
-  if (typeof v !== "string") {
-    throw new Error("brandColor must be a string");
-  }
-  const s = v.trim();
-  if (s === "") {
-    return "";
-  }
-  const m = /^#?([0-9a-fA-F]{6}|[0-9a-fA-F]{3})$/.exec(s);
-  if (!m) {
-    throw new Error("brandColor must be a hex color like #2563eb");
-  }
-  const [, group = ""] = m;
-  const h = group.toLowerCase();
-  const full = h.length === 3 ? h.replace(/./g, (c) => c + c) : h;
-  return `#${full}`;
-}
-
-/** A readable text color (#111 / #fff) for text on a filled `brandColor` swatch. */
-export function readableTextColor(hex: string): string {
-  const h = hex.replace(/^#/, "");
-  if (h.length !== 6) {
-    return "#111111";
-  }
-  const r = Number.parseInt(h.slice(0, 2), 16);
-  const g = Number.parseInt(h.slice(2, 4), 16);
-  const b = Number.parseInt(h.slice(4, 6), 16);
-  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return luminance > 0.6 ? "#111111" : "#ffffff";
 }
 
 /** Trim, lowercase, validate, dedupe (order-preserving), and cap the list. */

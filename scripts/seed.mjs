@@ -11,11 +11,14 @@ import { existsSync } from "node:fs";
  *
  * The image travels through the running worker (not an out-of-band `wrangler r2
  * object put`) so it lands in the same R2 the dev server serves, with no stale
- * read. Override the target with `PORT` or a URL argument: `npm run seed -- 8788`.
+ * read. The target defaults to the port `npm run dev` recorded for this worktree
+ * (scripts/dev-port.mjs), so a worktree on a non-8787 port just works; override it
+ * with `PORT` or a URL argument: `npm run seed -- 8788`.
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { readDevPort } from "./dev-port.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -24,7 +27,7 @@ function baseUrl() {
   if (arg) {
     return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
   }
-  const port = process.env.PORT || "8787";
+  const port = process.env.PORT || readDevPort() || "8787";
   return `http://localhost:${port}`;
 }
 

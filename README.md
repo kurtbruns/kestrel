@@ -29,7 +29,10 @@ It applies the D1 migrations automatically the first time a local shadow is empt
 the `migrate:local` step above is optional. It also honors a `PORT` handed to it by
 Claude Code's preview (`.claude/launch.json` has `autoPort`), so parallel worktrees
 each get a free port instead of colliding on 8787; a plain terminal `npm run dev`
-still binds 8787. Pass wrangler flags through with `--`, e.g. `npm run dev -- --remote`.
+still binds 8787. It records the port it bound in `.wrangler/dev-port` (gitignored,
+per-worktree), so `npm run seed` and `npm run reset` (below) target that same server
+automatically — no `PORT` needed even when the worktree isn't on 8787. Pass wrangler
+flags through with `--`, e.g. `npm run dev -- --remote`.
 
 Open the editor at **http://localhost:8787/dashboard/**. Locally there's nothing to
 sign in with — the editor mints its own dev token on load and shows a **Local dev**
