@@ -190,12 +190,14 @@ describe("email template (wired to the render path)", () => {
     expect(warnings).toMatch(/made\.up/);
   });
 
-  it('resets to the built-in default when set to ""', async () => {
+  it("rejects an empty template (400) instead of silently resetting to the default", async () => {
     await putSettings({ emailTemplate: withUnsub() });
-    const reset = await putSettings({ emailTemplate: "" });
-    expect(reset.status).toBe(200);
-    // The reflected template is the concrete default again (has a signed sign-off).
-    expect((await getSettings()).body.settings.emailTemplate).toContain("Powered by Kestrel");
+    const res = await putSettings({ emailTemplate: "" });
+    expect(res.status).toBe(400);
+    // The previously saved template is untouched — no silent reset to the default.
+    const stored = (await getSettings()).body.settings.emailTemplate;
+    expect(stored).toContain("{{ email.unsubscribeUrl }}");
+    expect(stored).not.toContain("Powered by Kestrel");
   });
 
   it("persists the publication mailing address for the compliance footer", async () => {

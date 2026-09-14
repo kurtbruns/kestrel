@@ -97,9 +97,12 @@ export async function update(c: RequestContext): Promise<Response> {
   // Structural template validation: a missing unsubscribe (or body) is an error and
   // rejects the write — no email may ship without a way to leave (I2). Other issues
   // are warnings, returned so the client can surface them without blocking. An empty
-  // template ("") is a reset to the built-in default and needs no check.
+  // template is rejected like any other invalid one (it's missing both required
+  // variables), so clearing the editor and saving reports the error rather than
+  // silently resetting to the default. (A never-set template still resolves to the
+  // built-in default on read — see settingsView / resolveBranding.)
   let warnings: string[] = [];
-  if (patch.emailTemplate !== undefined && patch.emailTemplate.trim() !== "") {
+  if (patch.emailTemplate !== undefined) {
     const v = validateEmailTemplate(patch.emailTemplate);
     if (v.errors.length > 0) {
       throw badRequest(v.errors.join(" "));
