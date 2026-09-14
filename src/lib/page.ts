@@ -77,9 +77,17 @@ const READER_STYLE = `
   /* The masthead sits on the card surface with a hairline rule (the footer's top
      rule, mirrored); the eyebrow/link accent inherits the ink color. */
   --brand-ink:currentColor;
+  /* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only
+     element the reader surface carries — the "Open dashboard" pill. That badge is
+     app chrome, not the publication's identity, so it wears the app's action color
+     rather than the reader ink; keep these values in sync with styles.css. This is
+     the single, deliberate exception to "the reader surface is not styled from the
+     admin tokens" (DESIGN.md, reader-surface note). */
+  --k-accent:#3355cc; --k-accent-contrast:#ffffff;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
+  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199;
+          --k-accent:#7d9bff; --k-accent-contrast:#10131f; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font-family:var(--r-sans); background:var(--r-bg); color:var(--r-ink); line-height:1.6; }
@@ -140,13 +148,17 @@ a.r-t:hover { text-decoration:underline; }
 /* Dev-only affordance (SPEC §5/§10): a fixed corner pill that hops a local
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
    over-the-page dev chrome — deliberately not the publication's own identity — so
-   it reads as tooling, never as part of the reader surface. Absent once deployed. */
+   it reads as tooling, never as part of the reader surface. Absent once deployed.
+   It wears the app's brand accent (--k-accent, DESIGN.md §3), matching a Primary
+   action, so a shortcut INTO the app reads as the app — not the reader's ink. */
 .r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
          font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
-         background:var(--r-ink); color:var(--r-bg); border:1px solid var(--r-ink); box-shadow:0 6px 20px rgba(0,0,0,.22); }
+         background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
+         box-shadow:0 6px 20px rgba(0,0,0,.22); }
 .r-dev:hover { filter:brightness(1.08); }
 .r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
-                    padding:2px 7px; border-radius:999px; background:color-mix(in srgb, var(--r-bg) 26%, transparent); }
+                    padding:2px 7px; border-radius:999px;
+                    background:color-mix(in srgb, var(--k-accent-contrast) 22%, transparent); }
 
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
