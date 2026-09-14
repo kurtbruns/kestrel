@@ -156,9 +156,12 @@ a.r-t:hover { text-decoration:underline; }
          background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
          box-shadow:0 6px 20px rgba(0,0,0,.22); }
 .r-dev:hover { filter:brightness(1.08); }
+/* Inverted badge — solid contrast fill, accent-colored text — so the tiny "DEV"
+   label clears WCAG AA on the accent pill in both themes (a translucent tint left
+   it ~3.6:1). */
 .r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
                     padding:2px 7px; border-radius:999px;
-                    background:color-mix(in srgb, var(--k-accent-contrast) 22%, transparent); }
+                    background:var(--k-accent-contrast); color:var(--k-accent); }
 
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
