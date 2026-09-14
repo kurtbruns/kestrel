@@ -25,6 +25,7 @@ import {
   ARCHIVE_MASTHEAD_ANCHOR,
   archiveMasthead,
   archiveUrl,
+  SENTTO_SENTINEL,
   UNSUB_SENTINEL,
 } from "../render/render";
 import type { RequestContext } from "../router";
@@ -136,6 +137,9 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const html = send.rendered_html
     .split(UNSUB_SENTINEL)
     .join(`${c.config.appOrigin}/unsubscribe`)
+    // The archive is recipient-agnostic, so redact the per-recipient sent-to address.
+    .split(SENTTO_SENTINEL)
+    .join("")
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead)
     .split(ARCHIVE_HEAD_ANCHOR)

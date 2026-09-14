@@ -14,6 +14,7 @@ const ctx: TemplateContext = {
   "publication.tagline": "tag",
   "publication.logoUrl": "https://media.example/logo?v=1",
   "publication.address": "1 Main St",
+  "email.sentTo": "%%SENT_TO%%",
   "email.unsubscribeUrl": "%%UNSUBSCRIBE_URL%%",
   "email.viewInBrowserUrl": "https://arc.example/archive/x",
 };

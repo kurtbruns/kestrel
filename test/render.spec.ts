@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { ImageRow } from "../src/db/images";
 import type { PostRow, RevisionRow } from "../src/db/posts";
 import type { Config } from "../src/env";
-import { render, substituteUnsubscribe, UNSUB_SENTINEL } from "../src/render/render";
+import { render, SENTTO_SENTINEL, substituteRecipient, UNSUB_SENTINEL } from "../src/render/render";
 
 const config: Config = {
   provider: "fake",
@@ -129,13 +129,41 @@ describe("render (the single render path)", async () => {
     expect(result.text).toContain("View in browser: https://arc.example/archive/weekly-news");
   });
 
-  it("substituteUnsubscribe replaces only the sentinel", async () => {
+  it("substituteRecipient replaces the per-recipient sentinels", async () => {
     const result = await render({ post: post(), revision: revision("hi"), images: [] }, config);
-    const sub = substituteUnsubscribe(result, "https://app.example/u/abc");
+    const sub = substituteRecipient(result, {
+      unsubscribeUrl: "https://app.example/u/abc",
+      sentTo: "reader@example.com",
+    });
     expect(sub.subject).toBe(result.subject);
     expect(sub.html).not.toContain(UNSUB_SENTINEL);
     expect(sub.html).toContain("https://app.example/u/abc");
     expect(sub.text).not.toContain(UNSUB_SENTINEL);
+  });
+
+  it("fills {{ email.sentTo }} with the recipient's address at delivery", async () => {
+    const branding = {
+      template:
+        '<div class="email">{{ post.body }}<footer>Sent to {{ email.sentTo }} · ' +
+        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></footer></div>',
+      name: "N",
+      tagline: "t",
+      logoUrl: "",
+      address: "",
+    };
+    const result = await render(
+      { post: post(), revision: revision("hi"), images: [] },
+      config,
+      branding,
+    );
+    // Frozen with the sentinel, not any recipient address (I3).
+    expect(result.html).toContain(SENTTO_SENTINEL);
+    const sub = substituteRecipient(result, {
+      unsubscribeUrl: "https://app.example/u/abc",
+      sentTo: "reader@example.com",
+    });
+    expect(sub.html).not.toContain(SENTTO_SENTINEL);
+    expect(sub.html).toContain("reader@example.com");
   });
 
   it("fills the template with the publication identity + a custom template's markup", async () => {

@@ -151,7 +151,7 @@ A post has **at most one active (scheduled or sending) send** at a time — the 
 
 ### Firing
 
-A periodic sweep (below) delivers scheduled Sends whose time has come. Because the body is already frozen, firing is just delivery: it fans out to confirmed subscribers, filling in each recipient's unsubscribe link where the frozen body left a placeholder. Batching, retries, and per-recipient tracking are exactly as for an immediate send.
+A periodic sweep (below) delivers scheduled Sends whose time has come. Because the body is already frozen, firing is just delivery: it fans out to confirmed subscribers, filling in each recipient's per-recipient values (their unsubscribe link and the address the issue was sent to) where the frozen body left placeholders. Batching, retries, and per-recipient tracking are exactly as for an immediate send.
 
 ### Sending now
 

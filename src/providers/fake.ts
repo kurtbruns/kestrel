@@ -10,7 +10,7 @@
  * (a transient-outage stand-in) so the resume path is testable.
  */
 import type { AppEnv } from "../env";
-import { substituteUnsubscribe } from "../render/render";
+import { substituteRecipient } from "../render/render";
 import type {
   EmailProvider,
   PerRecipientResult,
@@ -70,7 +70,10 @@ export class FakeProvider implements EmailProvider {
         return { email: r.email, accepted: true, providerId: existing };
       }
       const providerId = `fake-${key}`;
-      const final = substituteUnsubscribe(rendered, r.unsubscribeUrl);
+      const final = substituteRecipient(rendered, {
+        unsubscribeUrl: r.unsubscribeUrl,
+        sentTo: r.email,
+      });
       sentKeys.set(key, providerId);
       outbox.push({
         to: r.email,

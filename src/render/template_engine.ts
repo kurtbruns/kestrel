@@ -30,6 +30,7 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   "publication.tagline",
   "publication.logoUrl",
   "publication.address",
+  "email.sentTo",
   "email.unsubscribeUrl",
   "email.viewInBrowserUrl",
 ] as const;
@@ -45,6 +46,7 @@ export interface TemplateContext {
   "publication.tagline": string;
   "publication.logoUrl": string;
   "publication.address": string;
+  "email.sentTo": string;
   "email.unsubscribeUrl": string;
   "email.viewInBrowserUrl": string;
 }

@@ -16,7 +16,7 @@
  */
 import type { AppEnv, Config } from "../env";
 import { timingSafeEqual } from "../lib/constant_time";
-import { substituteUnsubscribe } from "../render/render";
+import { substituteRecipient } from "../render/render";
 import type {
   DeliveryEvent,
   EmailProvider,
@@ -63,7 +63,10 @@ export class ResendProvider implements EmailProvider {
     opts: SendBatchOptions,
   ): Promise<PerRecipientResult[]> {
     const elements: ResendBatchElement[] = recipients.map((r) => {
-      const final = substituteUnsubscribe(rendered, r.unsubscribeUrl);
+      const final = substituteRecipient(rendered, {
+        unsubscribeUrl: r.unsubscribeUrl,
+        sentTo: r.email,
+      });
       return {
         from: this.from,
         to: [r.email],
