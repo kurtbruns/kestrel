@@ -60,6 +60,10 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 
 Any change to sending, consent, the record, or the reader surface updates `docs/SPEC.md` in the same change — code and spec drifting apart is a bug. `README.md` is the user-facing subset; update it when a change is visible to whoever runs the app. Write the spec forward-looking, with no ephemeral references (issue/PR numbers) — state rationale inline; point to `docs/SPEC.md`, never a tracker.
 
+## Keep docs/DESIGN.md in sync
+
+Any change to the admin UI's presentation — a button role, a notification home, a token's meaning, the z-index ladder, or a surface's save model — updates `docs/DESIGN.md` in the same change, exactly as behavior changes update `docs/SPEC.md`. `docs/DESIGN.md` is the UX contract, the presentation-layer sibling to the spec: a new button treatment, a new place a notification appears, or a second token for a color that already has one is a drift bug unless the contract moves with it. Write it forward-looking, with rationale inline and no ephemeral references.
+
 ## Conventions
 
 - **TypeScript, `strict`.** Prefer real types over `any`. Run `npm run typecheck` before finishing.
