@@ -115,8 +115,8 @@ export async function render(
     "publication.address": branding.address,
     // The per-recipient sentinel flows through the template unchanged and is the ONLY
     // per-recipient edit (substituteUnsubscribe); everything else is identical bytes.
-    "footer.unsubscribeUrl": UNSUB_SENTINEL,
-    "footer.viewInBrowserUrl": viewInBrowserUrl,
+    "email.unsubscribeUrl": UNSUB_SENTINEL,
+    "email.viewInBrowserUrl": viewInBrowserUrl,
   };
   const body = fillEmailTemplate(template, context);
   const shell = emailLayout({ subject, preheader: derivePreheader(contentText), bodyHtml: body });

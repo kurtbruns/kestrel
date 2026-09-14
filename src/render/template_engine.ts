@@ -30,8 +30,8 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   "publication.tagline",
   "publication.logoUrl",
   "publication.address",
-  "footer.unsubscribeUrl",
-  "footer.viewInBrowserUrl",
+  "email.unsubscribeUrl",
+  "email.viewInBrowserUrl",
 ] as const;
 
 const KNOWN_VARS = new Set<string>(EMAIL_TEMPLATE_VARIABLES);
@@ -45,8 +45,8 @@ export interface TemplateContext {
   "publication.tagline": string;
   "publication.logoUrl": string;
   "publication.address": string;
-  "footer.unsubscribeUrl": string;
-  "footer.viewInBrowserUrl": string;
+  "email.unsubscribeUrl": string;
+  "email.viewInBrowserUrl": string;
 }
 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
@@ -87,12 +87,12 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   if (!tokens.has("post.body")) {
     errors.push("Add {{ post.body }} — without it the issue's content won't appear.");
   }
-  if (!tokens.has("footer.unsubscribeUrl")) {
-    errors.push("Add {{ footer.unsubscribeUrl }} — every email must carry an unsubscribe link.");
+  if (!tokens.has("email.unsubscribeUrl")) {
+    errors.push("Add {{ email.unsubscribeUrl }} — every email must carry an unsubscribe link.");
   }
-  if (!tokens.has("footer.viewInBrowserUrl")) {
+  if (!tokens.has("email.viewInBrowserUrl")) {
     warnings.push(
-      "Consider {{ footer.viewInBrowserUrl }} so readers can open the issue in a browser.",
+      "Consider {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.",
     );
   }
   for (const t of tokens) {
@@ -253,7 +253,7 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`;

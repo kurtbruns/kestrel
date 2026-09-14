@@ -142,8 +142,8 @@ describe("render (the single render path)", async () => {
     const branding = {
       template:
         '<div class="email">{{ post.body }}<footer>{{ publication.name }} · ' +
-        '<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> · ' +
-        '<a href="{{ footer.viewInBrowserUrl }}">View in browser</a></footer></div>',
+        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> · ' +
+        '<a href="{{ email.viewInBrowserUrl }}">View in browser</a></footer></div>',
       name: "Windbreak",
       tagline: "Field notes",
       logoUrl: "https://media.example/branding/logo?v=1",

@@ -14,14 +14,14 @@ const ctx: TemplateContext = {
   "publication.tagline": "tag",
   "publication.logoUrl": "https://media.example/logo?v=1",
   "publication.address": "1 Main St",
-  "footer.unsubscribeUrl": "%%UNSUBSCRIBE_URL%%",
-  "footer.viewInBrowserUrl": "https://arc.example/archive/x",
+  "email.unsubscribeUrl": "%%UNSUBSCRIBE_URL%%",
+  "email.viewInBrowserUrl": "https://arc.example/archive/x",
 };
 
 describe("fillEmailTemplate", () => {
   it("inserts post.body raw and escapes every other value", () => {
     const out = fillEmailTemplate(
-      '<a href="{{ footer.unsubscribeUrl }}">{{ publication.name }}</a>{{ post.body }}',
+      '<a href="{{ email.unsubscribeUrl }}">{{ publication.name }}</a>{{ post.body }}',
       ctx,
     );
     // Body HTML is inserted verbatim…
@@ -46,13 +46,13 @@ describe("validateEmailTemplate", () => {
       /unsubscribe/i,
     );
     expect(
-      validateEmailTemplate('<a href="{{ footer.unsubscribeUrl }}">x</a>').errors.join(" "),
+      validateEmailTemplate('<a href="{{ email.unsubscribeUrl }}">x</a>').errors.join(" "),
     ).toMatch(/post\.body/);
   });
 
   it("warns on a missing view-in-browser link, unknown variables, and <script>", () => {
     const v = validateEmailTemplate(
-      '{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">u</a>{{ mystery }}<script>x</script>',
+      '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">u</a>{{ mystery }}<script>x</script>',
     );
     expect(v.errors).toEqual([]);
     const w = v.warnings.join(" ");

@@ -2156,11 +2156,11 @@ const EMAIL_TEMPLATE_VARS = [
     ],
   },
   {
-    group: "Footer",
+    group: "Email",
     vars: [
-      { token: "{{ footer.sentTo }}", desc: "The recipient's address (filled per send)." },
-      { token: "{{ footer.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ footer.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
+      { token: "{{ email.sentTo }}", desc: "The recipient's address (filled per send)." },
+      { token: "{{ email.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
+      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
     ],
   },
 ];
@@ -2269,8 +2269,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2370,8 +2370,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
     <div class="address">{{ publication.address }}</div>
   </div>
 </div>`,
@@ -2432,8 +2432,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2470,7 +2470,7 @@ function sampleLogoDataUri(name) {
 }
 
 // Sample values the template preview binds — mirrors the render path's context, with
-// footer.* standing in for per-recipient values. `identity` is { name, tagline,
+// email.* standing in for per-recipient values. `identity` is { name, tagline,
 // logoUrl, address } from the live or loaded settings.
 function templateSampleCtx(identity) {
   const id = identity || {};
@@ -2481,9 +2481,9 @@ function templateSampleCtx(identity) {
     "publication.tagline": id.tagline || "Your tagline",
     "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
     "publication.address": id.address || "123 Main Street, City, State Zip Code",
-    "footer.sentTo": "you@example.com",
-    "footer.unsubscribeUrl": "#unsubscribe",
-    "footer.viewInBrowserUrl": "#view-in-browser",
+    "email.sentTo": "you@example.com",
+    "email.unsubscribeUrl": "#unsubscribe",
+    "email.viewInBrowserUrl": "#view-in-browser",
   };
 }
 
@@ -2637,7 +2637,7 @@ async function renderTemplate() {
       <div class="set-email-stage" id="tplStage">
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ footer.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -2659,7 +2659,7 @@ async function renderTemplate() {
             <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
               <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ post.body }}</span>
-              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ footer.unsubscribeUrl }}</span>
+              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ email.unsubscribeUrl }}</span>
             </div>
           </div>
           <div class="set-tpl-editor-wrap" id="tplEditorWrap">
@@ -2723,12 +2723,12 @@ async function renderTemplate() {
   const reqUnsubEl = document.getElementById("reqUnsub");
   const paintReq = () => {
     reqBodyEl.className = `set-req-pill ${/\{\{\s*post\.body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
-    reqUnsubEl.className = `set-req-pill ${/\{\{\s*footer\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+    reqUnsubEl.className = `set-req-pill ${/\{\{\s*email\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
   };
 
   // Save + Discard live in the shared bottom save bar (onSave/onDiscard below); the
   // page never renders its own Save button. A rejected save (e.g. a template missing
-  // {{ footer.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
+  // {{ email.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate });
