@@ -22,11 +22,17 @@ Every button in the admin UI plays one of five roles, and each role is one class
 
 Primary is Kestrel's own brand accent, `--k-accent` (a fixed slate-blue) — never the near-black neutral. That near-black used to be a second button fill (`button.primary` filled with `--accent`); it is retired as a fill and lives on only as the `--ink` text token (§3). There is exactly one solid brand-blue action in front of the writer at a time.
 
+The roles differ by **treatment — fill, border, weight, font-size — never by height.** All the label roles (Primary, Secondary, Ghost, Danger) share one box height, so a row that mixes them aligns: a quieter, smaller-font role grows to the shared floor with its label centered rather than sitting a few pixels short of the Primary beside it. A role's importance is carried by how it looks, not by making the less-important one smaller. Only the square Icon and the segmented toggle Control keep their own sizing.
+
 These five absorb the treatments the UI accumulated before the contract existed: the bare `button`, `.ghost-btn`, and `.set-btn-ghost` idioms all collapse into **Ghost**; the accent-tinted "Send test email" look (`.set-btn-accent`) becomes **Secondary**; the one-offs (`.sub-btn`, `.doc-pager-btn`) and the settings menu trigger (`.set-menu-btn`, which becomes Secondary or Ghost plus a caret) fold into the roles above. If a new button doesn't fit one of the five, that's a signal to reconsider the button, not to add a sixth role.
 
 ### Toggle is a Control, not a button
 
 A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a mode or a view — is a **Control**, documented apart from the five button roles. It carries `aria-pressed` on its segments, and the active segment uses the Secondary palette (`--k-accent-soft` fill, `--k-accent` text). It is not a Primary, and it is never the thing a Primary would be: a toggle changes what you're looking at, it doesn't commit an action.
+
+### Link is a link, not a sixth button
+
+`button.linkbtn` renders an action as a text link — accent-colored, underlined, no fill or border — and is not one of the five button roles; it's the presentation of a hyperlink applied to a `<button>` (so it stays keyboard- and screen-reader-reachable) for an in-page action that navigates nowhere. Reserve it for a *deliberately subordinate* path that must read as clearly demoted, below even Ghost: the canonical case is **Send now** inside the Schedule modal, where scheduling behind the review window is the default the Primary commits to and sending immediately is the step-down choice. A Ghost button there would sit level with Cancel and undo the demotion; the link says "lesser path" at a glance. If you reach for it anywhere a real button role would do, prefer the role — the link is for demotion, not decoration.
 
 ---
 

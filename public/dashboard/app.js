@@ -369,8 +369,10 @@ function toast(msg) {
   t.textContent = msg;
   toasts.appendChild(t);
   requestAnimationFrame(() => t.classList.add("show"));
-  setTimeout(() => t.classList.remove("show"), 2400);
-  setTimeout(() => t.remove(), 2700);
+  // Linger long enough to read a sentence-length confirmation ("Test sent to 2
+  // addresses") before it fades; the removal trails the fade-out transition.
+  setTimeout(() => t.classList.remove("show"), 3600);
+  setTimeout(() => t.remove(), 3900);
 }
 const esc = (s) =>
   s == null
@@ -1068,11 +1070,11 @@ async function renderEditor(id) {
         ${badge(post.status)}
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost" id="cancelSchedule">Cancel</button></div>` : ""}
-    <div id="freshnessBanner" class="banner banner-conflict" hidden></div>
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span><span aria-hidden="true">📅</span> Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="cancelSchedule">Cancel schedule</button></span></div>` : ""}
+    <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" aria-describedby="f-subject-error" ${dis}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
@@ -1090,7 +1092,7 @@ async function renderEditor(id) {
             <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true">Write</button>
             <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false">Preview</button>
           </div>
-          <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
+          <div class="toolbar" role="toolbar" aria-label="Formatting"${locked ? " hidden" : ""}>${toolbarHtml}</div>
         </div>
         <div class="composer-body" id="composerBody">
           <textarea id="f-markdown" class="editor" placeholder="Type your issue in Markdown…" ${dis}>${esc(markdown)}</textarea>
@@ -1102,15 +1104,18 @@ async function renderEditor(id) {
       <div id="warnings"></div>
 
       <div class="actions-bar">
-        <div class="row">
-          <button id="saveBtn" ${dis}>Save draft</button>
-          <button id="testBtn">Send test email</button>
-          <span class="save-status" id="saveStatus"></span>
-        </div>
         ${
           locked
-            ? ``
-            : `<div class="row"><button id="scheduleBtn">Schedule</button><button class="primary" id="sendBtn">Send now</button></div>`
+            ? `<span class="locked-note">Locked while scheduled — cancel the schedule to edit.</span>
+               <div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
+            : `<div class="row">
+                 <button type="button" class="ghost" id="saveBtn">Save draft</button>
+                 <span class="save-status" id="saveStatus" aria-live="polite"></span>
+               </div>
+               <div class="row">
+                 <button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button>
+                 <button type="button" class="primary" id="scheduleBtn">Schedule</button>
+               </div>`
         }
       </div>
     </div>`;
@@ -1120,6 +1125,36 @@ async function renderEditor(id) {
   const previewFrame = document.getElementById("previewFrame");
   const get = (k) => document.getElementById(`f-${k}`).value;
   const collect = () => ({ subject: get("subject"), slug: get("slug"), markdown: get("markdown") });
+
+  // --- subject validation (SPEC §6: freeze() rejects a subjectless send) ---
+  // Surfaced on the field, not by disabling the button. The old guard greyed out
+  // Schedule and hung the reason in a `title` on the row — invisible to keyboard,
+  // touch, and screen readers. Instead Schedule stays live and we validate on click:
+  // an empty subject puts the input into an error state with the reason directly
+  // beneath it (DESIGN §2, home ④), tied by aria-describedby and announced (role=alert).
+  const subjectErrEl = document.getElementById("f-subject-error");
+  function clearSubjectError() {
+    document.getElementById("f-subject").classList.remove("is-invalid");
+    if (subjectErrEl) {
+      subjectErrEl.hidden = true;
+    }
+  }
+  // Gates both send paths (the scheduled send and the in-modal Send now both open
+  // from Schedule): true when a subject is present; otherwise shows the error, moves
+  // focus to the field, and returns false so the modal never opens.
+  function validateSubject() {
+    const el = document.getElementById("f-subject");
+    if (el.value.trim() === "") {
+      el.classList.add("is-invalid");
+      if (subjectErrEl) {
+        subjectErrEl.hidden = false;
+      }
+      el.focus();
+      return false;
+    }
+    clearSubjectError();
+    return true;
+  }
 
   // Auto-generate slug from subject. The slug stays editable throughout; the
   // checkbox reflects whether it's currently tracking the subject. Typing your
@@ -1178,29 +1213,13 @@ async function renderEditor(id) {
       }
     });
 
-    // An empty subject can't be sent — the server blocks it in freeze() (SPEC §6).
-    // Disable Schedule / Send now so the feedback comes before the request
-    // round-trips. Whitespace-only counts as empty. The reason goes on the
-    // enclosing row, not the buttons: a disabled button swallows pointer events,
-    // so its own title never shows on hover.
-    const sendGuardBtns = [
-      document.getElementById("scheduleBtn"),
-      document.getElementById("sendBtn"),
-    ];
-    const sendGuardRow = sendGuardBtns[0]?.closest(".row");
-    const reflectSendGuard = () => {
-      const empty = subjectEl.value.trim() === "";
-      for (const btn of sendGuardBtns) {
-        if (btn) {
-          btn.disabled = empty;
-        }
+    // Clear the empty-subject error as soon as a real subject is typed; it re-fires
+    // on the next Schedule click if the field is still empty (see validateSubject).
+    subjectEl.addEventListener("input", () => {
+      if (subjectEl.value.trim() !== "") {
+        clearSubjectError();
       }
-      if (sendGuardRow) {
-        sendGuardRow.title = empty ? "Add a subject before sending" : "";
-      }
-    };
-    subjectEl.addEventListener("input", reflectSendGuard);
-    reflectSendGuard();
+    });
   }
 
   // --- tabs ---
@@ -1502,12 +1521,12 @@ async function renderEditor(id) {
     }
     editorConflict = true; // pauses autosave; makes the leave guard prompt
     if (info.schedLocked) {
-      freshnessEl.innerHTML = `<span>⚠️ This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button></span>`;
+      freshnessEl.innerHTML = `<span><span aria-hidden="true">⚠️</span> This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button></span>`;
     } else {
       warnedRevision = info.current_revision;
       const who = friendlyAuthor(info.author);
       freshnessEl.innerHTML =
-        `<span>⚠️ This draft was changed elsewhere${who ? ` — last edited by <strong>${esc(who)}</strong>` : ""}. Reload to load that version (discards your unsaved edits), or keep editing to overwrite it on your next save.</span>` +
+        `<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? ` — last edited by <strong>${esc(who)}</strong>` : ""}. Reload to load that version (discards your unsaved edits), or keep editing to overwrite it on your next save.</span>` +
         `<span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`;
     }
     freshnessEl.hidden = false;
@@ -1712,19 +1731,29 @@ async function renderEditor(id) {
       });
   };
 
-  // --- schedule (modal with datetime-local) ---
+  // --- schedule (the one send entry point; Send now lives inside as a demoted link) ---
+  // Scheduling behind a cancelable review window is the literal default (SPEC §6);
+  // sending immediately is the deliberate sub-choice. Both server flows are unchanged
+  // (/schedule, /send) — this is one modal with two views, so the safer path is what
+  // the Primary opens and the louder one is a step down.
   const scheduleBtn = document.getElementById("scheduleBtn");
   if (scheduleBtn) {
     scheduleBtn.onclick = () => {
+      if (!validateSubject()) {
+        return; // empty subject: the field-level error is now showing; don't open the modal
+      }
       const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const m = modal(
-        `<h3>Schedule this issue</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>`,
-      );
-      m.el.querySelector("#schCancel").onclick = m.close;
-      m.el.querySelector("#schGo").onclick = () =>
-        busy(m.el.querySelector("#schGo"), "Scheduling…", async () => {
-          const v = m.el.querySelector("#schWhen").value;
+      const scheduleView =
+        `<h3 id="schHead">Schedule this issue</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
+        `<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>` +
+        `<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
+      const m = modal(scheduleView);
+      const box = m.el.querySelector(".modal");
+
+      const doSchedule = () =>
+        busy(box.querySelector("#schGo"), "Scheduling…", async () => {
+          const v = box.querySelector("#schWhen").value;
           const t = v ? new Date(v).getTime() : NaN;
           if (Number.isNaN(t)) {
             toast("Pick a valid date & time");
@@ -1743,25 +1772,9 @@ async function renderEditor(id) {
             toast(e.message);
           }
         });
-    };
-  }
 
-  // --- send now (modal with recipient count) ---
-  const sendBtn = document.getElementById("sendBtn");
-  if (sendBtn) {
-    sendBtn.onclick = async () => {
-      let who = "your confirmed subscribers";
-      try {
-        const s = await api("/subscribers");
-        const n = s.counts.confirmed;
-        who = `${n} confirmed subscriber${n === 1 ? "" : "s"}`;
-      } catch (_) {}
-      const m = modal(
-        `<h3>Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong>${esc(who)}</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
-      );
-      m.el.querySelector("#snCancel").onclick = m.close;
-      m.el.querySelector("#snGo").onclick = () =>
-        busy(m.el.querySelector("#snGo"), "Queuing…", async () => {
+      const doSendNow = () =>
+        busy(box.querySelector("#snGo"), "Queuing…", async () => {
           try {
             await saveDraft(true);
             await api(`/posts/${id}/send`, { method: "POST" });
@@ -1772,6 +1785,40 @@ async function renderEditor(id) {
             toast(e.message);
           }
         });
+
+      function wireSchedule() {
+        box.setAttribute("aria-labelledby", "schHead");
+        box.querySelector("#schCancel").onclick = m.close;
+        box.querySelector("#schGo").onclick = doSchedule;
+        box.querySelector("#toSendNow").onclick = showSendNow;
+        box.querySelector("#schWhen").focus();
+      }
+
+      async function showSendNow() {
+        box.innerHTML =
+          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
+          `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
+          `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
+        box.setAttribute("aria-labelledby", "snHead");
+        box.querySelector("#snCancel").onclick = m.close;
+        box.querySelector("#snGo").onclick = doSendNow;
+        box.querySelector("#toSchedule").onclick = () => {
+          box.innerHTML = scheduleView;
+          wireSchedule();
+        };
+        box.querySelector("#snGo").focus();
+        // Fill the real confirmed-subscriber count once known; the copy reads sensibly until then.
+        try {
+          const s = await api("/subscribers");
+          const n = s.counts.confirmed;
+          const whoEl = box.querySelector("#snWho");
+          if (whoEl) {
+            whoEl.textContent = `${n} confirmed subscriber${n === 1 ? "" : "s"}`;
+          }
+        } catch (_) {}
+      }
+
+      wireSchedule();
     };
   }
 }
@@ -2114,7 +2161,7 @@ const SET_ICON = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
+  send: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
   lines:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
 };

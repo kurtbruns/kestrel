@@ -580,13 +580,18 @@ export async function seedDatabase(
   await resetAll(db);
 
   // Give the demo a real identity so the reader surface, subscribe form, and issue
-  // pages are branded out of the box as the mock publication, "Windbreak".
+  // pages are branded out of the box as the mock publication, "Windbreak". The default
+  // test recipients are the publisher's own proofing inboxes (they bypass the
+  // subscribe/consent flow, §7), so "Send test email" pre-fills them out of the box and
+  // that path is exercised without hand-typing an address. `.example` is the reserved
+  // demo TLD, so these can never reach a real inbox even under a live provider.
   await updateSettings(db, {
     publication: {
       name: "Windbreak",
       tagline: "for the birds",
       address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
+    testRecipients: ["editor@windbreak.example", "proof@windbreak.example"],
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.

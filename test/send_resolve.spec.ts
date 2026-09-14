@@ -9,7 +9,7 @@
  * "accepted" behave correctly, and an already-`accepted` recipient is never
  * touched (I4).
  */
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";

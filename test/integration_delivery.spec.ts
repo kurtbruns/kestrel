@@ -18,7 +18,8 @@
  * No real credentials or network: SES send/cert fetches and Resend batch calls
  * are mocked; Svix/SNS payloads are signed locally.
  */
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";

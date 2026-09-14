@@ -1,4 +1,5 @@
-import { createExecutionContext, env, SELF } from "cloudflare:test";
+import { createExecutionContext, SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";

@@ -1,4 +1,5 @@
-import { env, SELF } from "cloudflare:test";
+import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as subs from "../src/db/subscribers";
 import type { AppEnv, Config } from "../src/env";

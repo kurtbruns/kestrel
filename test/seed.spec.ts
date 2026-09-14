@@ -1,7 +1,8 @@
-import { env, SELF } from "cloudflare:test";
+import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
-import { getSettings } from "../src/db/settings";
+import { getSettings, updateSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
@@ -35,8 +36,14 @@ describe("dev seed (Windbreak dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
 
-    // The demo ships a branded identity so the reader surface isn't the bare fallback.
-    expect((await getSettings(env.DB)).publication.name).toBe("Windbreak");
+    // The demo ships a branded identity so the reader surface isn't the bare fallback,
+    // and default test recipients so "Send test email" is pre-filled out of the box.
+    const seededSettings = await getSettings(env.DB);
+    expect(seededSettings.publication.name).toBe("Windbreak");
+    expect(seededSettings.testRecipients).toEqual([
+      "editor@windbreak.example",
+      "proof@windbreak.example",
+    ]);
 
     expect(summary.subscribers).toEqual({
       confirmed: CONFIRMED,
@@ -178,5 +185,20 @@ describe("dev seed (Windbreak dataset)", () => {
       unsubscribed: UNSUBSCRIBED,
       suppressed: SUPPRESSED,
     });
+  });
+
+  it("re-seeding resets the settings singleton, dropping stale operator config", async () => {
+    // An operator whose saved template predates the email.* token migration (it still
+    // uses footer.*), plus a custom identity. resetAll clears settings, and the seed
+    // re-populates only the demo's own — so a re-seed can't carry the stale row forward.
+    await updateSettings(env.DB, {
+      publication: { name: "Old Name" },
+      emailTemplate:
+        '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
+    });
+    await seedDatabase(env, config());
+    const s = await getSettings(env.DB);
+    expect(s.emailTemplate).toBe(""); // back to the built-in email.* default
+    expect(s.publication.name).toBe("Windbreak"); // the demo's identity, not the old one
   });
 });
