@@ -552,7 +552,8 @@ function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
   if (audienceLen === 0) {
     return new Set();
   }
-  const count = Math.max(1, Math.round(audienceLen * SCALE.failureRate));
+  // Jitter the count (±30%) so each send's failure tally is organic, not a fixed fraction.
+  const count = Math.max(1, Math.round(audienceLen * SCALE.failureRate * (0.7 + rand() * 0.6)));
   return new Set(drawDistinct(rand, count, audienceLen));
 }
 
@@ -565,12 +566,16 @@ function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
  * past the 3,600-address bijection.
  */
 export function buildScaledAudience(t: Timeline, size: number, rand: () => number): BuiltAudience {
-  const n = Math.max(1, Math.round(size));
-  const growthA = Math.round(n * SCALE.growthA);
-  const growthB = Math.round(n * SCALE.growthB);
+  // Jitter the target and each cohort with the PRNG so the counts read like a real list —
+  // 1283, not exactly 1000 — instead of landing on round, synthetic-looking numbers. The
+  // jitter is part of the seeded stream, so a given (size, seed) still reproduces exactly.
+  const jitter = (spread: number): number => 1 - spread + rand() * 2 * spread;
+  const n = Math.max(1, Math.round(size * jitter(0.12)));
+  const growthA = Math.round(n * SCALE.growthA * jitter(0.15));
+  const growthB = Math.round(n * SCALE.growthB * jitter(0.15));
   const core = Math.max(1, n - growthA - growthB); // the never-leaving backbone
-  const churnTotal = Math.max(3, Math.round(n * SCALE.churn));
-  const pending = Math.max(1, Math.round(n * SCALE.pending));
+  const churnTotal = Math.max(3, Math.round(n * SCALE.churn * jitter(0.2)));
+  const pending = Math.max(1, Math.round(n * SCALE.pending * jitter(0.25)));
 
   let seq = 0;
   const subscribers: SeedSubscriber[] = [];
@@ -654,8 +659,8 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
   // they were mailed by #1 and #2, then shadowed out of #3 and today). Disjoint draws, so
   // no address is both bounced and complained.
-  const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate));
-  const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate));
+  const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate * jitter(0.3)));
+  const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
   const victims = drawDistinct(rand, bounceCount + complaintCount, coreEmails.length);
   const suppressions: SeedSuppression[] = [];
   const sendTwoEvents = new Map<string, DeliveryEvent>();

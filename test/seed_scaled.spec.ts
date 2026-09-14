@@ -85,10 +85,12 @@ describe("buildScaledAudience", () => {
     const emails = built.subscribers.map((s) => s.email);
     expect(new Set(emails).size).toBe(emails.length);
 
-    // Confirmed-now lands near the requested target (approximate, not exact).
+    // Confirmed-now lands near the requested target — approximate and PRNG-jittered, so
+    // the count reads organic (not exactly 10,000) while staying in a believable band.
     const confirmed = built.subscribers.filter((s) => s.status === "confirmed").length;
-    expect(confirmed).toBeGreaterThan(9_000);
-    expect(confirmed).toBeLessThan(11_000);
+    expect(confirmed).toBeGreaterThan(8_500);
+    expect(confirmed).toBeLessThan(11_500);
+    expect(confirmed).not.toBe(10_000); // organic — not the exact round target
 
     // The three frozen audiences fluctuate — none equal, all non-empty.
     const [a, b, c] = built.sentAudiences;
@@ -122,9 +124,9 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     const summary = await seedDatabase(env, config(), undefined, undefined, { size: 100, seed: 7 });
 
     expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
-    // Confirmed-now ≈ the requested 100.
-    expect(summary.subscribers.confirmed).toBeGreaterThan(85);
-    expect(summary.subscribers.confirmed).toBeLessThan(115);
+    // Confirmed-now ≈ the requested 100 (PRNG-jittered so it reads organic, not exactly 100).
+    expect(summary.subscribers.confirmed).toBeGreaterThan(80);
+    expect(summary.subscribers.confirmed).toBeLessThan(120);
     // I1: the current audience is confirmed − suppressed.
     expect(summary.suppressions).toBeGreaterThanOrEqual(2);
     expect(summary.audience).toBe(summary.subscribers.confirmed - summary.suppressions);
