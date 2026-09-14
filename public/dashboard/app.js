@@ -2799,8 +2799,9 @@ async function renderTemplate() {
       showWarnings(warnings);
       toast(warnings.length ? "Template saved with warnings" : "Template saved");
     } catch (err) {
+      // The bar owns the blocking error (it stays up and says why). No toast — a
+      // bottom-center toast would sit on top of the bar and hide the very message.
       bar.showError(err.message);
-      toast("Template not saved");
     }
   }
 
@@ -2930,9 +2931,11 @@ async function renderTemplate() {
             const warnings = await saveTemplate();
             showWarnings(warnings);
           } catch (err) {
+            // The save failed, so the test can't send what would ship. The bar shows
+            // why (and stays up); closing the dialog returns you to it. No toast — it
+            // would overlay the bar and hide the reason.
             bar.showError(err.message);
             m.close();
-            toast("Template not saved — test not sent");
             return;
           }
         }
