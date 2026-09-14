@@ -34,9 +34,8 @@
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
-     chips, in-settings links, the Save action). Deliberately NOT --brand, which is
-     the *publication's* color and is repainted from settings (renderSidebarBrand):
-     Kestrel's accents must never borrow a publication's brand color (SPEC §8). */
+     chips, in-settings links, the Save action). It is the app's own identity, kept
+     independent of the reader surface's theming (SPEC §8). */
   --k-accent: #3355cc;
   --k-accent-contrast: #ffffff;
   --k-accent-soft: rgba(51, 85, 204, 0.12);
@@ -429,7 +428,7 @@ body.nav-resizing .sidebar {
   display: block;
 }
 .brand-logo-placeholder {
-  background: var(--brand, var(--accent));
+  background: var(--accent);
   color: var(--accent-fg);
 }
 .brand-meta {
@@ -2556,7 +2555,7 @@ td.act {
    header carries an intent chip (Editable / Read-only · set at
    deploy / Copy-out), editable surfaces sit on cards and read-only
    facts on a recessed "sunken" card. Kestrel's own accents use the
-   fixed --k-accent (a slate-blue), never the publication's --brand.
+   fixed --k-accent (a slate-blue), independent of the reader surface.
    A sticky save bar collects the unsaved, persisted changes
    (identity + test recipients); the logo and the email-template
    mock are handled on their own and don't feed it. Theme follows

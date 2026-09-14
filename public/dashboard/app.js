@@ -230,10 +230,10 @@ function renderIdentity() {
 }
 
 // ---- publication identity (sidebar brand) ----
-// The publication's name / tagline / logo / brand color come from the settings
-// surface (settings.publication). Each field falls back sensibly when unset: the
-// name from the From: display name (the read-only deployment reflection), a neutral
-// initial tile for the logo, and the theme accent for the color.
+// The publication's name / tagline / logo come from the settings surface
+// (settings.publication). Each field falls back sensibly when unset: the name from
+// the From: display name (the read-only deployment reflection) and a neutral initial
+// tile for the logo.
 function parseFromName(fromAddress) {
   if (!fromAddress) {
     return null;
@@ -251,7 +251,6 @@ function derivePublication(data) {
     name: p.name || parseFromName(d.fromAddress) || "Your publication",
     tagline: p.tagline || "",
     logoUrl: p.logoUrl || null,
-    color: p.brandColor || null,
   };
 }
 function renderSidebarBrand() {
@@ -275,12 +274,6 @@ function renderSidebarBrand() {
       logoEl.textContent = (pub.name.trim()[0] || "K").toUpperCase();
       logoEl.classList.add("brand-logo-placeholder");
     }
-  }
-  // A brand color tints the logo tile; otherwise it uses the theme accent.
-  if (pub.color) {
-    document.documentElement.style.setProperty("--brand", pub.color);
-  } else {
-    document.documentElement.style.removeProperty("--brand");
   }
 }
 

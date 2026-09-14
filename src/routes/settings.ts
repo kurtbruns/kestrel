@@ -19,7 +19,6 @@ import {
   type AppSettings,
   BRANDING_LOGO_KEY,
   getSettings,
-  readableTextColor,
   type SettingsPatch,
   setPublicationLogo,
   updateSettings,
@@ -57,15 +56,13 @@ function deploymentView(cfg: Config) {
 }
 
 /** The publication identity as the clients consume it: the stored fields plus a
- *  resolved absolute `logoUrl` (cache-busted) and a readable text color for filled
- *  brand controls. The raw logo metadata (R2 version) is an implementation detail. */
+ *  resolved absolute `logoUrl` (cache-busted). The raw logo metadata (R2 version)
+ *  is an implementation detail. */
 function publicationView(settings: AppSettings, cfg: Config) {
   const p = settings.publication;
   return {
     name: p.name,
     tagline: p.tagline,
-    brandColor: p.brandColor,
-    brandTextColor: p.brandColor ? readableTextColor(p.brandColor) : "",
     address: p.address,
     logoUrl: p.logo ? `${cfg.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
   };
@@ -176,9 +173,6 @@ function readPatch(body: unknown): SettingsPatch {
     }
     if ("tagline" in p) {
       pub.tagline = p.tagline as string;
-    }
-    if ("brandColor" in p) {
-      pub.brandColor = p.brandColor as string;
     }
     if ("address" in p) {
       pub.address = p.address as string;

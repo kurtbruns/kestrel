@@ -46,7 +46,6 @@ export async function readerIdentity(c: RequestContext, config: Config): Promise
     name: p.name || fromDisplayName(config.fromAddress),
     tagline: p.tagline,
     logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
-    brandColor: p.brandColor,
   };
 }
 
@@ -127,7 +126,6 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
     name: identity.name,
-    brandColor: identity.brandColor,
     dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
     // Back to the archive index the issue belongs to, on the same (archive) origin —
     // so an apex-hosted issue stays on the apex instead of jumping to the app subdomain.

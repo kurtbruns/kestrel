@@ -14,8 +14,6 @@ async function getSettings() {
         publication: {
           name: string;
           tagline: string;
-          brandColor: string;
-          brandTextColor: string;
           address: string;
           logoUrl: string;
         };
@@ -75,7 +73,6 @@ describe("settings surface", () => {
     expect(body.settings.publication).toMatchObject({
       name: "",
       tagline: "",
-      brandColor: "",
       logoUrl: "",
     });
     // Reflects the env-resolved config (fake transport in tests)…
@@ -116,29 +113,14 @@ describe("settings surface", () => {
 });
 
 describe("publication identity (issue #81)", () => {
-  it("persists name + tagline and normalizes the brand color", async () => {
+  it("persists and normalizes name + tagline", async () => {
     const put = await putSettings({
-      publication: { name: "  Field Notes  ", tagline: "Birding, weekly", brandColor: "#2563EB" },
+      publication: { name: "  Field Notes  ", tagline: "Birding, weekly" },
     });
     expect(put.status).toBe(200);
     const { body } = await getSettings();
     expect(body.settings.publication.name).toBe("Field Notes");
     expect(body.settings.publication.tagline).toBe("Birding, weekly");
-    expect(body.settings.publication.brandColor).toBe("#2563eb");
-    // A readable text color is derived for filled brand controls.
-    expect(body.settings.publication.brandTextColor).toBe("#ffffff");
-  });
-
-  it("expands a 3-digit hex and clears the color with an empty string", async () => {
-    await putSettings({ publication: { brandColor: "#fff" } });
-    expect((await getSettings()).body.settings.publication.brandColor).toBe("#ffffff");
-    await putSettings({ publication: { brandColor: "" } });
-    expect((await getSettings()).body.settings.publication.brandColor).toBe("");
-  });
-
-  it("rejects an invalid brand color with 400", async () => {
-    const res = await putSettings({ publication: { brandColor: "cornflower" } });
-    expect(res.status).toBe(400);
   });
 
   it("themes the public archive index with the name + tagline (a blank name falls back)", async () => {

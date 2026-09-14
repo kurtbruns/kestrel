@@ -7,14 +7,18 @@
  * does the wipe (all content, subscribers, and settings), so this needs the dev
  * server up (`npm run dev`). Use it to see the first-run dashboard + setup checklist.
  *
- * Override the target with `PORT` or a URL argument: `npm run reset -- 8788`.
+ * The target defaults to the port `npm run dev` recorded for this worktree
+ * (scripts/dev-port.mjs), so a worktree on a non-8787 port just works; override it
+ * with `PORT` or a URL argument: `npm run reset -- 8788`.
  */
+import { readDevPort } from "./dev-port.mjs";
+
 function baseUrl() {
   const arg = process.argv[2];
   if (arg) {
     return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
   }
-  return `http://localhost:${process.env.PORT || "8787"}`;
+  return `http://localhost:${process.env.PORT || readDevPort() || "8787"}`;
 }
 
 // Mint a local admin token from the dev-only bootstrap endpoint (404s on any
