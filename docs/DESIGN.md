@@ -54,6 +54,8 @@ The **autosave cue** shows a dot-and-label triple: *Unsaved* (an amber `--warn` 
 
 Two collisions the homes-plus-layering rules exist to prevent, recorded so they don't recur: a toast and the save bar can share the bottom of the screen, so the toast sits above the bar on the z-scale (§4) rather than behind it; and the save bar's error state is a distinct state class (`.savebar.is-error`), *not* the bare `.error` of the global alert component — reusing `.error` let the alert's full border paint onto the bar's open sides. One semantic palette (§3) plus the z-ladder (§4) is what keeps both from returning.
 
+**Dev fake-transport labeling.** In local dev the email provider is the `fake` transport — it records a send but delivers nothing. A confirmation like "Test sent to 2 addresses" or "Queued — cancelable for 5 minutes" would otherwise read exactly like a real send, so the send-action confirmations (test, schedule, send now) carry a `(fake transport — no real delivery)` suffix on their Toast, and the Sends page carries a persistent `.muted` descriptor saying the same of the record itself. Both read from the same read-only deployment reflection as the "Local dev" identity chip, and — like it and the dev-only "Open dashboard" shortcut noted in the intro — are structurally absent once deployed, where the provider is SES/Resend. This is chrome about *how* mail was sent, never part of the frozen issue record (SPEC I3).
+
 ---
 
 ## 3. Tokens — one meaning each

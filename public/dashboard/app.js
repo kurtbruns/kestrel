@@ -305,6 +305,21 @@ function archiveUrlFor(deployment, slug) {
   return `${origin}${base}/${slug}`;
 }
 
+// In local dev the email provider is the `fake` transport — a dead-end that records a
+// send but never delivers. Read that from the same read-only deployment reflection the
+// sidebar and Settings already consume (appConfig.deployment), fetched once at boot.
+// Dev-only by construction: deployed environments use SES/Resend, so the provider is
+// never `fake` there and the labels below are structurally absent in production.
+function isFakeTransport() {
+  return (appConfig?.deployment?.provider || "") === "fake";
+}
+// Suffix a send/test/schedule confirmation so a fake-transport send never reads as a
+// real one. Tense-neutral ("no real delivery") so it fits a test that already ran, a
+// send now queued, and a schedule that will fire later alike.
+function withTransportNote(msg) {
+  return isFakeTransport() ? `${msg} (fake transport — no real delivery)` : msg;
+}
+
 // Access sessions expire at the edge (the request never reaches the app), so the
 // only recovery is a fresh document load that re-triggers the Access login. In dev
 // this shouldn't happen, but a reload re-mints, so the same affordance is safe.
@@ -1721,9 +1736,11 @@ async function renderEditor(id) {
           showWarnings(lastWarnings);
           m.close();
           toast(
-            sent === addrs.length
-              ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}`
-              : `Sent ${sent}/${addrs.length} — some failed`,
+            withTransportNote(
+              sent === addrs.length
+                ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}`
+                : `Sent ${sent}/${addrs.length} — some failed`,
+            ),
           );
         } catch (e) {
           toast(e.message);
@@ -1766,7 +1783,7 @@ async function renderEditor(id) {
               json: { fire_at: new Date(t).toISOString() },
             });
             m.close();
-            toast("Scheduled");
+            toast(withTransportNote("Scheduled"));
             location.hash = "#/sends";
           } catch (e) {
             toast(e.message);
@@ -1779,7 +1796,7 @@ async function renderEditor(id) {
             await saveDraft(true);
             await api(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast("Queued — cancelable for 5 minutes");
+            toast(withTransportNote("Queued — cancelable for 5 minutes"));
             location.hash = "#/sends";
           } catch (e) {
             toast(e.message);
@@ -1890,6 +1907,7 @@ async function renderSends() {
   // active arrow from the start; posts differ (their default is a bespoke composite order).
   const state = { status: "", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
   app.innerHTML = `<h1>Sends</h1>
+    ${isFakeTransport() ? `<p class="muted">These sends use the dev <strong>fake transport</strong> — recorded here, but no mail was delivered.</p>` : ""}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <h2>All sends</h2>
@@ -2998,9 +3016,11 @@ async function renderTemplate() {
           });
           m.close();
           toast(
-            r.sent === r.total
-              ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
-              : `Sent ${r.sent}/${r.total} — some failed`,
+            withTransportNote(
+              r.sent === r.total
+                ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
+                : `Sent ${r.sent}/${r.total} — some failed`,
+            ),
           );
         } catch (e) {
           toast(e.message);
