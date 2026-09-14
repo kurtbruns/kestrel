@@ -154,6 +154,82 @@ export async function deliveryRollup(
   return rollup;
 }
 
+/**
+ * How a send went, as mutually-exclusive buckets that sum to the frozen audience —
+ * the numbers behind the sent record view (SPEC §8). A `deliveries` row carries two
+ * orthogonal facts: the send-loop `status` (did the provider accept the hand-off) and
+ * the later webhook `event` (delivered / bounced / complained). This bucketing reads
+ * the terminal delivery `event` first, then falls back to `status` for rows no event
+ * has landed on yet, so every recipient lands in exactly one bucket and the totals
+ * reconcile. It reflects the record read-only (I3) — it decides nothing and mails no one.
+ */
+export interface DeliveryOutcomes {
+  recipients: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  /** Transport-level send failure (never left; does not itself suppress). */
+  failed: number;
+  /** Excluded at send time (unsubscribed or suppressed after the audience froze). */
+  skipped: number;
+  /** Accepted by the provider, with no delivery event yet (a provider may emit none). */
+  accepted: number;
+  /** Still pending or dispatched — nonzero only while sending or wedged (§11). */
+  in_flight: number;
+}
+
+export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<DeliveryOutcomes> {
+  const row = await db
+    .prepare(
+      `SELECT
+         COUNT(*) AS recipients,
+         COALESCE(SUM(event = 'delivered'), 0) AS delivered,
+         COALESCE(SUM(event = 'bounced'), 0) AS bounced,
+         COALESCE(SUM(event = 'complained'), 0) AS complained,
+         COALESCE(SUM(event IS NULL AND status = 'failed'), 0) AS failed,
+         COALESCE(SUM(event IS NULL AND status = 'skipped'), 0) AS skipped,
+         COALESCE(SUM(event IS NULL AND status = 'accepted'), 0) AS accepted,
+         COALESCE(SUM(event IS NULL AND status IN ('pending', 'dispatched')), 0) AS in_flight
+       FROM deliveries WHERE send_id = ?`,
+    )
+    .bind(sendId)
+    .first<DeliveryOutcomes>();
+  return (
+    row ?? {
+      recipients: 0,
+      delivered: 0,
+      bounced: 0,
+      complained: 0,
+      failed: 0,
+      skipped: 0,
+      accepted: 0,
+      in_flight: 0,
+    }
+  );
+}
+
+/** One recipient's row for the sent record's CSV export — the send-loop `status`
+ *  and the later webhook `event`, the two orthogonal facts (see `deliveryOutcomes`). */
+export interface DeliveryExportRow {
+  email: string;
+  status: string;
+  event: string | null;
+  event_at: number | null;
+  error: string | null;
+}
+
+/** Every recipient of a send, address-ordered, for the record view's CSV export.
+ *  Read-only over the frozen delivery record (I3). */
+export async function listDeliveries(db: D1Database, sendId: string): Promise<DeliveryExportRow[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT email, status, event, event_at, error FROM deliveries WHERE send_id = ? ORDER BY email ASC",
+    )
+    .bind(sendId)
+    .all<DeliveryExportRow>();
+  return results;
+}
+
 // --- send-loop / sweep (M6) -------------------------------------------------
 
 /** Scheduled sends whose fire time has arrived. */

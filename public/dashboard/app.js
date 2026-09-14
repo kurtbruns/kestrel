@@ -713,14 +713,14 @@ function route() {
   if (view === "edit" && arg) {
     return renderEditor(arg);
   }
-  if (view === "posts") {
-    return renderPosts();
+  if (view === "drafts") {
+    return renderDrafts();
   }
   if (view === "subscribers") {
     return renderSubscribers(arg);
   }
-  if (view === "sends") {
-    return renderSends();
+  if (view === "sent") {
+    return arg ? renderSentRecord(arg) : renderSent();
   }
   if (view === "template") {
     return renderTemplate();
@@ -818,16 +818,24 @@ function listQuery(state) {
 // separate "Suppressed only" toggle — suppression is a deliverability flag, not a
 // consent status, so it's its own control (an independent axis you can combine with a
 // status), never an option inside the status dropdown.
+// `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
+// filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
+// two draft-side statuses rather than reaching sent issues. Omit `cfg.statuses` for a
+// search-only toolbar (the Sent list is single-status, so it carries no status filter).
 function listToolbar(cfg) {
-  const opts = ['<option value="">All statuses</option>']
-    .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
-    .join("");
+  const statusSel = cfg.statuses?.length
+    ? `<select class="lt-status" aria-label="Filter by status">${[
+        `<option value="${esc(cfg.allValue || "")}">All statuses</option>`,
+      ]
+        .concat(cfg.statuses.map((s) => `<option value="${s.value}">${esc(s.label)}</option>`))
+        .join("")}</select>`
+    : "";
   const suppressed = cfg.suppressible
     ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
     : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters"><select class="lt-status" aria-label="Filter by status">${opts}</select>${suppressed}</div>
+    <div class="lt-filters">${statusSel}${suppressed}</div>
   </div>`;
 }
 
@@ -929,18 +937,20 @@ function renderPager(el, state, page, reload) {
   }
 }
 
-// ---- posts list ----
-const POST_STATUSES = [
+// ---- drafts list (draft + scheduled) ----
+// The writing side (#147): draft + scheduled only — a sent issue is a frozen record and
+// lives in Sent. "All statuses" is scoped to those two, so it never reaches sent.
+const DRAFT_STATUSES = [
   { value: "draft", label: "Draft" },
   { value: "scheduled", label: "Scheduled" },
-  { value: "sent", label: "Sent" },
 ];
-async function renderPosts() {
+const DRAFTS_SCOPE = "draft,scheduled";
+async function renderDrafts() {
   // Default sort left empty so the server keeps its scheduled-first order until the
   // reader clicks a column header.
-  const state = { status: "", search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
-  app.innerHTML = `<div class="spread page-head"><h1>Posts</h1><button class="primary" id="newPost">New post</button></div>
-    ${listToolbar({ statuses: POST_STATUSES, searchPlaceholder: "Search subject…" })}
+  const state = { status: DRAFTS_SCOPE, search: "", sort: "", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<div class="spread page-head"><h1>Drafts</h1><button class="primary" id="newPost">New post</button></div>
+    ${listToolbar({ statuses: DRAFT_STATUSES, allValue: DRAFTS_SCOPE, searchPlaceholder: "Search subject…" })}
     <div id="list" class="muted">Loading…</div>
     <div id="postsPager"></div>`;
   document.getElementById("newPost").onclick = (e) => createNewPost(e.currentTarget);
@@ -952,10 +962,11 @@ async function renderPosts() {
       const data = await api(`/posts?${listQuery(state)}`);
       const posts = data.posts;
       if (!posts.length) {
+        // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
+        // single-status pick) — so a fresh, empty list still reads as an invitation.
+        const filtered = state.search || (state.status && state.status !== DRAFTS_SCOPE);
         listEl.innerHTML = `<p class="muted">${
-          state.search || state.status
-            ? "No posts match."
-            : "No posts yet — create your first draft."
+          filtered ? "No drafts match." : "No drafts yet — create your first draft."
         }</p>`;
         pagerEl.innerHTML = "";
         return;
@@ -998,7 +1009,7 @@ async function renderPosts() {
   load();
 }
 
-function confirmDelete(pid, reload = renderPosts) {
+function confirmDelete(pid, reload = renderDrafts) {
   const m = modal(
     `<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`,
   );
@@ -1058,11 +1069,20 @@ async function renderEditor(id) {
     post = data.post;
     markdown = data.markdown;
     scheduled = data.scheduled;
+    // A sent issue is a frozen record, not editable (#147/#148): it opens the sent
+    // record view, never the editor. Redirect a stale #/edit link (or a post sent in
+    // another tab / by Claude) there instead of a locked editor.
+    if (post.status === "sent") {
+      location.hash = data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+      return;
+    }
   } catch (e) {
     renderError(app, e.message, () => renderEditor(id));
     return;
   }
 
+  // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
+  // means scheduled — signaled by the scheduled banner, not a status pill (#147).
   const locked = post.status !== "draft";
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
@@ -1081,10 +1101,9 @@ async function renderEditor(id) {
 
   app.innerHTML = `
     <div class="editor-head">
-      <a href="#/posts" class="back">← Posts</a>
+      <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
-        ${badge(post.status)}
       </div>
     </div>
     ${locked && scheduled ? `<div class="banner banner-scheduled"><span><span aria-hidden="true">📅</span> Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="cancelSchedule">Cancel schedule</button></span></div>` : ""}
@@ -1786,7 +1805,7 @@ async function renderEditor(id) {
             });
             m.close();
             toast(withNoProviderNote("Scheduled"));
-            location.hash = "#/sends";
+            location.hash = "#/sent";
           } catch (e) {
             toast(e.message);
           }
@@ -1799,7 +1818,7 @@ async function renderEditor(id) {
             await api(`/posts/${id}/send`, { method: "POST" });
             m.close();
             toast(withNoProviderNote("Queued — cancelable for 5 minutes"));
-            location.hash = "#/sends";
+            location.hash = "#/sent";
           } catch (e) {
             toast(e.message);
           }
@@ -1897,23 +1916,17 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
-const SEND_STATUSES = [
-  { value: "scheduled", label: "Scheduled" },
-  { value: "sending", label: "Sending" },
-  { value: "sent", label: "Sent" },
-  { value: "canceled", label: "Canceled" },
-  { value: "failed", label: "Failed" },
-];
-async function renderSends() {
-  // Default sort = fire desc (the endpoint's own default) so the "When" header shows the
-  // active arrow from the start; posts differ (their default is a bespoke composite order).
-  const state = { status: "", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
-  app.innerHTML = `<h1>Sends</h1>
+async function renderSent() {
+  // The dispatch side (#147): the still-cancelable Scheduled queue on top, then the
+  // frozen Sent records. The table is sent-only, so it carries no status column or
+  // filter; default sort = fire desc so the "When" header shows its arrow from the start.
+  const state = { status: "sent", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
+  app.innerHTML = `<h1>Sent</h1>
     ${noEmailProvider() ? `<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : ""}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
-    <h2>All sends</h2>
-    ${listToolbar({ statuses: SEND_STATUSES, searchPlaceholder: "Search subject…" })}
+    <h2>Sent issues</h2>
+    ${listToolbar({ searchPlaceholder: "Search subject…" })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
   const stuckEl = document.getElementById("stuck");
@@ -1995,24 +2008,34 @@ async function renderSends() {
     }
   }
 
+  // The frozen Sent records — every completed issue, each opening its read-only record
+  // view (#148). Sent-only, so no status column; the "When" is the send's completion.
   async function loadList() {
     try {
       const data = await api(`/sends?${listQuery(state)}`);
       const sends = data.sends;
       if (!sends.length) {
         listEl.innerHTML = `<p class="muted">${
-          state.search || state.status ? "No sends match." : "No sends yet."
+          state.search ? "No sent issues match." : "No sent issues yet."
         }</p>`;
         pagerEl.innerHTML = "";
         return;
       }
-      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("Status", null, state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
         .map(
           (s) =>
-            `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
+            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
         )
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, loadList);
+      // The whole row opens the record; the subject link handles keyboard/middle-click.
+      listEl.querySelectorAll("tr[data-id]").forEach((tr) => {
+        tr.onclick = (e) => {
+          if (e.target.tagName !== "A") {
+            location.hash = `#/sent/${tr.dataset.id}`;
+          }
+        };
+      });
       renderPager(pagerEl, state, data.page, loadList);
     } catch (e) {
       renderError(listEl, e.message, loadList);
@@ -2021,6 +2044,110 @@ async function renderSends() {
 
   wireToolbar(app, state, loadList);
   reloadAll();
+}
+
+// ---- sent record view (#148): a read-only delivery record for one send ----
+// A sent issue is a frozen record (I3), not an editable object, so it opens this
+// instead of a locked editor: how the send went over the frozen audience, and a live
+// link to the archived issue. PR1 renders the `sent` state; the live in-flight watch
+// for a `sending` send is PR2 (see #154).
+async function renderSentRecord(id) {
+  app.innerHTML = `<p class="muted">Loading…</p>`;
+  let data;
+  try {
+    data = await api(`/sends/${id}`);
+  } catch (e) {
+    renderError(app, e.message, () => renderSentRecord(id));
+    return;
+  }
+  const { send, outcomes, archive_url, published } = data;
+
+  // A scheduled send is still cancel-to-edit — its home is the editor, not this record.
+  if (send.status === "scheduled") {
+    location.hash = `#/edit/${send.post_id}`;
+    return;
+  }
+  // A send still in flight has no finished record yet. The rich live watch is PR2; for
+  // now, point back to the queue so this isn't a dead end.
+  if (send.status === "sending") {
+    app.innerHTML = `<div class="editor-head"><a href="#/sent" class="back">← Sent</a></div>
+      <div class="card"><h1 style="margin-top:0">${esc(send.subject) || "<em>untitled</em>"}</h1>
+      <p><span class="badge sending">sending</span></p>
+      <p class="muted">This issue is sending now. A live progress view is coming soon; check back once it finishes.</p></div>`;
+    return;
+  }
+
+  const total = outcomes.recipients;
+  // Buckets that reconcile to the frozen audience (see db/sends.ts deliveryOutcomes).
+  const tiles = [
+    { n: total, label: "Recipients", cls: "", sw: "neutral" },
+    { n: outcomes.delivered, label: "Delivered", cls: "ok", sw: "ok" },
+    { n: outcomes.bounced, label: "Bounced", cls: "warn", sw: "warn" },
+    { n: outcomes.complained, label: "Complained", cls: "danger", sw: "danger" },
+    { n: outcomes.failed, label: "Failed", cls: "", sw: "neutral" },
+  ];
+  const tilesHtml = tiles
+    .map(
+      (t) =>
+        `<div class="rec-tile"><div class="rec-n ${t.cls}">${t.n.toLocaleString()}</div><div class="rec-l"><span class="rec-sw sw-${t.sw}"></span>${t.label}</div></div>`,
+    )
+    .join("");
+  // A short reconciliation line so the numbers visibly add up to the audience; the
+  // residual (accepted-but-not-yet-confirmed, skipped) keeps delivery honest under lag.
+  const residual = outcomes.accepted + outcomes.skipped + outcomes.in_flight;
+  const parts = [`${outcomes.delivered.toLocaleString()} delivered`];
+  if (outcomes.bounced) {
+    parts.push(`${outcomes.bounced.toLocaleString()} bounced`);
+  }
+  if (outcomes.complained) {
+    parts.push(`${outcomes.complained.toLocaleString()} complained`);
+  }
+  if (outcomes.failed) {
+    parts.push(`${outcomes.failed.toLocaleString()} failed`);
+  }
+  if (residual) {
+    parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
+  }
+  const sentAt = send.completed_at ?? send.fire_at;
+
+  app.innerHTML = `
+    <div class="editor-head">
+      <a href="#/sent" class="back">← Sent</a>
+      ${published && archive_url ? `<button type="button" class="primary" id="viewPublished">View published issue&nbsp;↗</button>` : ""}
+    </div>
+    <div class="card rec-card">
+      <div class="rec-head">
+        <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
+        <div class="rec-meta">${badge(send.status)} · Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
+      </div>
+      <div class="rec-tiles">${tilesHtml}</div>
+      <p class="rec-recon muted">All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.</p>
+      <div class="rec-actions">
+        <button type="button" class="ghost" id="csvBtn">Export recipients (CSV)</button>
+      </div>
+      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable. Delivery counts keep updating as receipts arrive.</p>
+    </div>`;
+
+  const viewBtn = document.getElementById("viewPublished");
+  if (viewBtn && archive_url) {
+    viewBtn.onclick = () => window.open(archive_url, "_blank", "noopener");
+  }
+
+  const csvBtn = document.getElementById("csvBtn");
+  csvBtn.onclick = () =>
+    busy(csvBtn, "Exporting…", async () => {
+      try {
+        const csv = await apiText(`/sends/${id}/deliveries.csv`);
+        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${send.subject ? clientSlugify(send.subject) : "send"}-deliveries.csv`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (e) {
+        toast(e.message);
+      }
+    });
 }
 
 // ---- subscribers ----
@@ -3987,10 +4114,13 @@ async function renderDashboard() {
           const url = slug ? archiveUrlFor(deployment, slug) : null;
           const delivered = s.progress?.accepted || 0;
           const failedN = s.progress?.failed || 0;
-          return `<tr><td>${esc(s.subject)}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
+          // A sent row opens its record view (#148); the subject is the keyboard target.
+          const isSent = s.status === "sent";
+          const subj = isSent ? `<a href="#/sent/${s.id}">${esc(s.subject)}</a>` : esc(s.subject);
+          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
             failedN ? ` <span class="muted">(${failedN} failed)</span>` : ""
           }</td><td class="act">${
-            url && s.status === "sent"
+            url && isSent
               ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
               : ""
           }</td></tr>`;
@@ -4051,6 +4181,14 @@ async function renderDashboard() {
     tr.onclick = (e) => {
       if (e.target.tagName !== "A" && !e.target.closest("button")) {
         location.hash = `#/edit/${tr.dataset.id}`;
+      }
+    };
+  });
+  // Recent-sends rows carry a SEND id (not a post id) and open the record view.
+  root.querySelectorAll("tr[data-send]").forEach((tr) => {
+    tr.onclick = (e) => {
+      if (e.target.tagName !== "A") {
+        location.hash = `#/sent/${tr.dataset.send}`;
       }
     };
   });

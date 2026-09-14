@@ -1405,6 +1405,96 @@ th.num .th-sort {
   align-items: center;
   gap: 10px;
 }
+/* Sent record view (#148): a read-only delivery record. The outcome tiles reuse the
+   semantic feedback scales (--ok / --warn / --danger, DESIGN §3); a status badge, not
+   a feedback color, still labels the send's lifecycle. */
+.rec-card {
+  display: flex;
+  flex-direction: column;
+}
+.rec-head h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+.rec-meta {
+  color: var(--muted);
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.rec-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin: 18px 0 4px;
+}
+.rec-tile {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 13px 14px;
+}
+.rec-n {
+  font-size: 24px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.rec-n.ok {
+  color: var(--ok-fg);
+}
+.rec-n.warn {
+  color: var(--warn-fg);
+}
+.rec-n.danger {
+  color: var(--danger-fg);
+}
+.rec-l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.rec-sw {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex: none;
+}
+.rec-sw.sw-neutral {
+  background: var(--muted);
+}
+.rec-sw.sw-ok {
+  background: var(--ok-fg);
+}
+.rec-sw.sw-warn {
+  background: var(--warn-fg);
+}
+.rec-sw.sw-danger {
+  background: var(--danger-fg);
+}
+.rec-recon {
+  margin: 12px 0 0;
+  font-size: 13px;
+}
+.rec-actions {
+  margin: 16px 0 0;
+}
+.rec-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+}
+@media (max-width: 720px) {
+  .rec-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
   border: 1px solid var(--line);

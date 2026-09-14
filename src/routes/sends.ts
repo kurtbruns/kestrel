@@ -35,11 +35,61 @@ export async function get(c: RequestContext): Promise<Response> {
     throw notFound("send");
   }
   const post = await getPost(c.env.DB, send.post_id);
-  const progress = await sends.deliveryRollup(c.env.DB, send.id);
+  const [progress, outcomes] = await Promise.all([
+    sends.deliveryRollup(c.env.DB, send.id),
+    sends.deliveryOutcomes(c.env.DB, send.id),
+  ]);
+  // The archive serves a post's frozen record only once it's sent (drafts/scheduled
+  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the
+  // sent record view's breakdown (SPEC §8); `progress` is kept for existing callers.
   return json({
     send,
     progress,
+    outcomes,
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
+    published: send.status === "sent",
+  });
+}
+
+/** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */
+function csvCell(value: string | number | null): string {
+  const s = value == null ? "" : String(value);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/**
+ * The sent record's per-recipient delivery data as CSV (SPEC §8, §11 "always
+ * inspectable"). Read-only over the frozen record (I3) — one row per recipient of
+ * the frozen audience, with the send-loop status and the later webhook event.
+ */
+export async function deliveriesCsv(c: RequestContext): Promise<Response> {
+  const send = await sends.getSend(c.env.DB, param(c, "id"));
+  if (!send) {
+    throw notFound("send");
+  }
+  const [post, rows] = await Promise.all([
+    getPost(c.env.DB, send.post_id),
+    sends.listDeliveries(c.env.DB, send.id),
+  ]);
+  const header = ["email", "status", "event", "event_at", "error"];
+  const lines = [header.join(",")];
+  for (const r of rows) {
+    lines.push(
+      [
+        csvCell(r.email),
+        csvCell(r.status),
+        csvCell(r.event),
+        csvCell(r.event_at != null ? new Date(r.event_at).toISOString() : ""),
+        csvCell(r.error),
+      ].join(","),
+    );
+  }
+  const filename = `${post?.slug ?? "send"}-deliveries.csv`;
+  return new Response(`${lines.join("\r\n")}\r\n`, {
+    headers: {
+      "content-type": "text/csv; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+    },
   });
 }
 
