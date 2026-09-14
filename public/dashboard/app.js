@@ -475,7 +475,7 @@ async function busy(btn, label, fn) {
   }
 }
 function renderError(container, msg, retryFn) {
-  container.innerHTML = `<div class="error"><span>${esc(msg)}</span><button class="ghost-btn" data-retry>Retry</button></div>`;
+  container.innerHTML = `<div class="error"><span>${esc(msg)}</span><button class="ghost" data-retry>Retry</button></div>`;
   const b = container.querySelector("[data-retry]");
   if (b) {
     b.onclick = retryFn;
@@ -944,18 +944,18 @@ async function renderPosts() {
       listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
         .map(
           (p) =>
-            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="menu-btn" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
+            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
         )
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, load);
       listEl.querySelectorAll("tr[data-id]").forEach((tr) => {
         tr.onclick = (e) => {
-          if (e.target.tagName !== "A" && !e.target.closest(".menu-btn")) {
+          if (e.target.tagName !== "A" && !e.target.closest("[data-menu]")) {
             location.hash = `#/edit/${tr.dataset.id}`;
           }
         };
       });
-      listEl.querySelectorAll(".menu-btn").forEach((b) => {
+      listEl.querySelectorAll("[data-menu]").forEach((b) => {
         b.onclick = (e) => {
           e.stopPropagation();
           const pid = b.dataset.menu;
@@ -1064,11 +1064,11 @@ async function renderEditor(id) {
     <div class="editor-head">
       <a href="#/posts" class="back">← Posts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost-btn" id="openBtn">Open in browser ↗</button>
+        <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
         ${badge(post.status)}
       </div>
     </div>
-    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost-btn" id="cancelSchedule">Cancel</button></div>` : ""}
+    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost" id="cancelSchedule">Cancel</button></div>` : ""}
     <div id="freshnessBanner" class="fresh-banner" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1502,13 +1502,13 @@ async function renderEditor(id) {
     }
     editorConflict = true; // pauses autosave; makes the leave guard prompt
     if (info.schedLocked) {
-      freshnessEl.innerHTML = `<span>⚠️ This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost-btn" id="freshReload">Reload</button></span>`;
+      freshnessEl.innerHTML = `<span>⚠️ This draft was scheduled elsewhere and can no longer be edited here.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button></span>`;
     } else {
       warnedRevision = info.current_revision;
       const who = friendlyAuthor(info.author);
       freshnessEl.innerHTML =
         `<span>⚠️ This draft was changed elsewhere${who ? ` — last edited by <strong>${esc(who)}</strong>` : ""}. Reload to load that version (discards your unsaved edits), or keep editing to overwrite it on your next save.</span>` +
-        `<span class="row"><button type="button" class="ghost-btn" id="freshReload">Reload</button><button type="button" class="ghost-btn" id="freshKeep">Keep editing</button></span>`;
+        `<span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`;
     }
     freshnessEl.hidden = false;
     freshnessEl.querySelector("#freshReload").onclick = () => {
@@ -2050,11 +2050,11 @@ function renderSubTable(listEl, rows, state, reload) {
   listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="menu-btn" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
   wireSort(listEl, state, reload);
-  listEl.querySelectorAll(".menu-btn").forEach((b) => {
+  listEl.querySelectorAll("[data-menu]").forEach((b) => {
     b.onclick = (e) => {
       e.stopPropagation();
       const row = rows.find((r) => r.id === b.dataset.menu);
@@ -2639,7 +2639,7 @@ async function renderTemplate() {
             <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
             <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
           </span>
-          <button type="button" class="set-btn-accent" id="tplTest">${SET_ICON.send}<span id="tplTestLbl">Send test email</span></button>
+          <button type="button" class="secondary" id="tplTest">${SET_ICON.send}<span id="tplTestLbl">Send test email</span></button>
         </span>
       </div>
       <div class="set-email-stage" id="tplStage">
@@ -2654,7 +2654,7 @@ async function renderTemplate() {
           <div class="set-tpl-editor-head">
             <div class="set-tpl-tools">
               <div class="set-menu" id="tplExamples">
-                <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
+                <button type="button" class="ghost set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
                 <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
                   <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
                   <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
@@ -2662,7 +2662,7 @@ async function renderTemplate() {
                 </div>
               </div>
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
-              <button type="button" class="set-btn-ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
+              <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
             </div>
             <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
@@ -3139,7 +3139,7 @@ async function renderSettings() {
           <label>Public subscribe page</label>
           <div class="pub-row">
             <code class="pub-val">${esc(subscribeUrl)}</code>
-            <button class="ghost-btn" data-copy="${esc(subscribeUrl)}">Copy</button>
+            <button class="ghost" data-copy="${esc(subscribeUrl)}">Copy</button>
             <a class="ghost-link" href="${esc(subscribeUrl)}" target="_blank" rel="noopener">Open&nbsp;↗</a>
           </div>
           <p class="field-hint">The double opt-in page Kestrel hosts. Share it directly, or embed the form below.</p>
@@ -3157,7 +3157,7 @@ async function renderSettings() {
           <div id="embedPreview"></div>
         </div>
         <div class="set-embed" style="margin-top:14px"><pre><code id="embedCode"></code></pre></div>
-        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost-btn" id="embedCopy">Copy code</button></div>
+        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost" id="embedCopy">Copy code</button></div>
       </div>
     </section>`;
 
@@ -3943,15 +3943,15 @@ async function renderDashboard() {
   const archiveBase =
     (deployment.archiveOrigin || location.origin) + (deployment.archiveBasePath || "");
   const pubCardHtml = `<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
-    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${esc(archiveBase)}</code><button class="ghost-btn" data-copy="${esc(archiveBase)}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${esc(archiveBase)}</code><button class="ghost" data-copy="${esc(archiveBase)}">Copy</button></div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
   // Connect the API — the API's first client is an agent, so the base URL is
   // copyable right here (no need to open the reference room to wire up Claude).
   const apiCardHtml = `<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Base&nbsp;URL</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost-btn" data-copy="${esc(appOrigin)}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Base&nbsp;URL</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost" data-copy="${esc(appOrigin)}">Copy</button></div>
     <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
   </div>`;
 

@@ -906,17 +906,91 @@ button:hover {
 button:active {
   transform: translateY(0.5px);
 }
+/* --- Buttons: five roles (DESIGN §1), chosen by importance and consequence, one
+   class each. The bare `button` above is the neutral default (Ghost's card-filled
+   end); the classes below step up to Primary / Secondary or down to the quiet Ghost,
+   plus Danger and the square Icon. Exactly one solid brand-blue action — Primary — is
+   in front of the writer at a time, and it is --k-accent, never the near-black neutral
+   (now the --ink text token, never a button fill). --- */
+
+/* Primary — the single most-important action of a view (one per view). */
 button.primary {
-  background: var(--ink);
-  color: var(--ink-on);
-  border-color: var(--ink);
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+  border-color: var(--k-accent);
 }
 button.primary:hover {
-  filter: brightness(1.12);
+  filter: brightness(1.08);
 }
 button.primary:active {
   filter: brightness(0.94);
 }
+
+/* Secondary — an important standing action that isn't *the* action (e.g. Send test
+   email beside a Save): soft accent fill, accent text, accent-tinted border. */
+button.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--k-accent-soft);
+  color: var(--k-accent);
+  border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 7px 12px;
+  border-radius: 7px;
+}
+button.secondary:hover {
+  border-color: var(--k-accent);
+}
+
+/* Ghost — the quiet neutral role: back, cancel, a menu trigger, a pager step, a copy
+   control. The default for anything not asking for attention; absorbs the old
+   .ghost-btn / .set-btn-ghost idioms. */
+button.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+button.ghost:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+/* A copy control flashes green (--ok) once the clipboard write lands. */
+button.ghost.copied {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
+}
+/* An icon inside a Secondary/Ghost label button (Send test, Copy). */
+button.secondary svg,
+button.ghost svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* Icon — a square, icon-only control where a label would be noise (a ⋯ trigger, a
+   toolbar glyph). Inherits Ghost's neutral treatment; always carries an aria-label. */
+button.icon {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+button.icon:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
 button.danger {
   background: var(--danger-fg);
   color: var(--danger-on);
@@ -944,11 +1018,6 @@ button.danger-subtle:hover {
 }
 button.danger-subtle:active {
   background: color-mix(in srgb, var(--danger-fg) 14%, transparent);
-}
-button.ghost {
-  border: 0;
-  background: transparent;
-  font-size: 18px;
 }
 button:disabled {
   opacity: 0.5;
@@ -1310,20 +1379,6 @@ th.num .th-sort {
   align-items: center;
   gap: 10px;
 }
-.ghost-btn {
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  font-size: 13px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.ghost-btn:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
   border: 1px solid var(--line);
@@ -1604,20 +1659,6 @@ td.act {
   text-align: right;
   width: 1%;
   white-space: nowrap;
-}
-.menu-btn {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.menu-btn:hover {
-  background: var(--hover);
-  color: var(--fg);
 }
 .menu-overlay {
   position: fixed;
@@ -2447,7 +2488,7 @@ td.act {
   border-radius: 6px;
   padding: 6px 9px;
 }
-.pub-row .ghost-btn {
+.pub-row button.ghost {
   flex: 0 0 auto;
 }
 .pub-foot {
@@ -3070,11 +3111,14 @@ td.act {
   flex: 1;
   min-width: 0;
 }
+/* The styled subscribe-form preview shows reader-facing chrome, not an admin control,
+   so it isn't one of the five button roles — but it rides the neutral --ink token
+   (was a hardcoded near-black that vanished in dark mode) so it themes correctly. */
 .set-pf-styled .sub-btn {
   flex: 0 0 auto;
-  background: #18181b;
-  color: #fff;
-  border-color: #18181b;
+  background: var(--ink);
+  color: var(--ink-on);
+  border-color: var(--ink);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -3371,28 +3415,6 @@ td.act {
   color: var(--k-accent);
   font-weight: 600;
 }
-/* Send test — an accent-tinted "ghost" button with the send glyph; it's the page's
-   primary standing action (send yourself the saved layout), so it reads accent, not grey. */
-.set-btn-accent {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--k-accent);
-  background: var(--k-accent-soft);
-  border: 1px solid color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
-  border-radius: 7px;
-  cursor: pointer;
-}
-.set-btn-accent svg {
-  width: 14px;
-  height: 14px;
-}
-.set-btn-accent:hover {
-  border-color: var(--k-accent);
-}
 /* Editor toolbar: the dropdown + small icon buttons (line-number toggle, copy). */
 .set-tpl-tools {
   display: flex;
@@ -3427,34 +3449,6 @@ td.act {
   border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
 }
 .set-icon-btn.copied {
-  color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
-}
-/* A compact labelled ghost button (icon + text) — the editor's Copy control. */
-.set-btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 11px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--card);
-  border: 1px solid var(--line-2);
-  border-radius: 7px;
-  cursor: pointer;
-}
-.set-btn-ghost svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-.set-btn-ghost:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-.set-btn-ghost.copied {
   color: var(--ok-fg);
   border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
 }
@@ -3618,8 +3612,8 @@ td.act {
    The left offset tracks the sidebar — clearing the 260px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    phone drawer. The post editor keeps its own autosave + conflict model, so it does
-   NOT use this bar. The primary action is Kestrel's own --k-accent (see the note on
-   the token); every other primary in the app stays the near-black --accent. --- */
+   NOT use this bar. Its Save is a Primary button — now brand-blue --k-accent app-wide
+   (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
   /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
@@ -3678,11 +3672,6 @@ td.act {
   display: flex;
   gap: 9px;
   flex: 0 0 auto;
-}
-.savebar button.primary {
-  background: var(--k-accent);
-  color: var(--k-accent-contrast);
-  border-color: var(--k-accent);
 }
 /* While a page owns the bar, reserve room below the content so its last section
    never hides behind the fixed bar (set for the page's whole life — no layout shift
