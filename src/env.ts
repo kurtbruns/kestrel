@@ -62,6 +62,16 @@ export interface Config {
   /** Optional allowlist of human admin emails; empty/unset allows any valid Access login. */
   accessAllowedEmails?: string[];
   /**
+   * True only in a dev-shaped env with the dev credential live (fake transport, no
+   * Access, dev secret present) — the single case where `/dashboard` is reachable
+   * without an Access wall, because the editor auto-mints a dev token on load. Gates
+   * the dev-only "Open dashboard" link the public reader surface injects for a local
+   * developer (SPEC §5, §10); structurally false in any deployed env, so the reader
+   * surface never links toward the Access gate there. Presentation only — the route
+   * gate in `app.ts` is identical in every environment.
+   */
+  devMode: boolean;
+  /**
    * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (fake transport,
    * no Access configured). Undefined in any deployed env, which disables the dev
    * credential path entirely — Access is then the only door.
@@ -88,6 +98,14 @@ export function getConfig(env: AppEnv): Config {
   const appOrigin = env.APP_ORIGIN;
   const provider = (env.PROVIDER as ProviderName) ?? "fake";
   const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
+  // Belt-and-suspenders: only honor the dev credential when the env is unambiguously
+  // dev-shaped — fake transport AND no Access configured. Combined with the secret
+  // never being committed (it lives in the gitignored `.dev.vars`, not in
+  // `wrangler.jsonc` vars), a deployed Worker has no secret and this stays undefined
+  // — the dev auth path is off, Access is the only door. This one predicate is also
+  // what `devMode` keys on, so "this is local dev" has a single source.
+  const devShaped = provider === "fake" && !accessTeamDomain;
+  const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
   return {
     provider,
     appOrigin,
@@ -100,13 +118,11 @@ export function getConfig(env: AppEnv): Config {
     accessTeamDomain,
     accessAud: orUndefined(env.ACCESS_AUD),
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
-    // Belt-and-suspenders: only honor the dev credential when the env is
-    // unambiguously dev-shaped — fake transport AND no Access configured. Combined
-    // with the secret never being committed (it lives in the gitignored `.dev.vars`,
-    // not in `wrangler.jsonc` vars), a deployed Worker has no secret and this stays
-    // undefined — the dev auth path is off, Access is the only door.
-    devAuthSecret:
-      provider === "fake" && !accessTeamDomain ? orUndefined(env.DEV_AUTH_SECRET) : undefined,
+    // Show the dev-only dashboard link exactly when clicking it would work: the
+    // dev credential path is live (dev-shaped AND the secret resolved). Never true
+    // in a deployed env, so the reader surface stays clean of any admin link there.
+    devMode: devAuthSecret !== undefined,
+    devAuthSecret,
   };
 }
 
