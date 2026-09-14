@@ -519,7 +519,7 @@ const savebar = (() => {
 
   function detach() {
     token++;
-    el.classList.remove("show", "error");
+    el.classList.remove("show", "is-error");
     el.hidden = true;
     saveBtn.onclick = null;
     discardBtn.onclick = null;
@@ -535,7 +535,7 @@ const savebar = (() => {
     const mine = ++token;
     saveBtn.textContent = saveLabel;
     discardBtn.textContent = discardLabel;
-    el.classList.remove("show", "error");
+    el.classList.remove("show", "is-error");
     setMsg("You have unsaved changes.");
     el.hidden = true; // revealed on the first setDirty(true) / showError()
     // Reserve bottom room on the content for the whole time this page is mounted, so
@@ -549,7 +549,7 @@ const savebar = (() => {
         if (!alive()) {
           return;
         }
-        el.classList.remove("error");
+        el.classList.remove("is-error");
         if (dirty) {
           setMsg("You have unsaved changes.");
           reveal();
@@ -561,7 +561,7 @@ const savebar = (() => {
         if (!alive()) {
           return;
         }
-        el.classList.add("error");
+        el.classList.add("is-error");
         setMsg(text);
         reveal();
       },

@@ -3205,7 +3205,7 @@ td.act {
   margin: 6px 0 0;
 }
 /* Advisory warnings about the just-saved template. A rejected save is a blocking
-   error and shows in the shared save bar instead (see .savebar.error). */
+   error and shows in the shared save bar instead (see .savebar.is-error). */
 .set-tpl-msgs {
   margin-top: 12px;
   border: 1px solid var(--line-2);
@@ -3636,11 +3636,14 @@ td.act {
   background: var(--warn);
   flex: 0 0 auto;
 }
-/* A rejected save turns the bar red and the dot into a danger mark. */
-.savebar.error .savebar-msg {
+/* A rejected save turns the bar red and the dot into a danger mark. The state class
+   is `is-error`, NOT the bare `error` — a global `.error` alert component (a bordered,
+   rounded, padded red box) would otherwise match the bar and paint a stray red border
+   on the three sides the bar doesn't re-specify. */
+.savebar.is-error .savebar-msg {
   color: var(--danger);
 }
-.savebar.error .savebar-dot {
+.savebar.is-error .savebar-dot {
   background: var(--danger);
 }
 .savebar-acts {
