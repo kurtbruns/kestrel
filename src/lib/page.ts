@@ -77,9 +77,17 @@ const READER_STYLE = `
   /* The masthead sits on the card surface with a hairline rule (the footer's top
      rule, mirrored); the eyebrow/link accent inherits the ink color. */
   --brand-ink:currentColor;
+  /* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only
+     element the reader surface carries — the "Open dashboard" pill. That badge is
+     app chrome, not the publication's identity, so it wears the app's action color
+     rather than the reader ink; keep these values in sync with styles.css. This is
+     the single, deliberate exception to "the reader surface is not styled from the
+     admin tokens" (DESIGN.md, reader-surface note). */
+  --k-accent:#3355cc; --k-accent-contrast:#ffffff;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
+  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199;
+          --k-accent:#7d9bff; --k-accent-contrast:#10131f; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font-family:var(--r-sans); background:var(--r-bg); color:var(--r-ink); line-height:1.6; }
@@ -137,6 +145,24 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
+/* Dev-only affordance (SPEC §5/§10): a fixed corner pill that hops a local
+   developer into the editor. Shown solely on a dev-shaped instance and rendered as
+   over-the-page dev chrome — deliberately not the publication's own identity — so
+   it reads as tooling, never as part of the reader surface. Absent once deployed.
+   It wears the app's brand accent (--k-accent, DESIGN.md §3), matching a Primary
+   action, so a shortcut INTO the app reads as the app — not the reader's ink. */
+.r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
+         font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
+         background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
+         box-shadow:0 6px 20px rgba(0,0,0,.22); }
+.r-dev:hover { filter:brightness(1.08); }
+/* Inverted badge — solid contrast fill, accent-colored text — so the tiny "DEV"
+   label clears WCAG AA on the accent pill in both themes (a translucent tint left
+   it ~3.6:1). */
+.r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+                    padding:2px 7px; border-radius:999px;
+                    background:var(--k-accent-contrast); color:var(--k-accent); }
+
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
 @media (max-width:560px) {
@@ -179,6 +205,19 @@ export interface ReaderIdentity {
   logoUrl?: string;
 }
 
+/** The dev-only editor shortcut (SPEC §5/§10): a fixed corner pill linking a local
+ *  developer straight into `/dashboard`. Rendered only when `url` is set — the
+ *  callers pass it solely on a dev-shaped instance (`config.devMode`), where
+ *  `/dashboard` carries no Access wall — so it is structurally absent once deployed
+ *  and never turns the public front door into a link toward the admin gate. */
+function devDashboardBadge(url?: string): string {
+  // The "DEV" chip flags it as tooling; the title spells out the scope for anyone
+  // who wonders whether it ships — it never does (see the doc above).
+  return url
+    ? `<a class="r-dev" href="${escapeHtmlAttr(url)}" title="Shown only on your local dev server"><span class="r-dev-tag">Dev</span>Open dashboard &rarr;</a>`
+    : "";
+}
+
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
  *  `mainHtml`. Public + indexable; every link points only at public pages (§10). */
@@ -190,6 +229,9 @@ export function readerPage(opts: {
   /** When set, the masthead shows the subscribe CTA linking here. Omitted on the
    *  subscribe pages themselves, where the CTA would point at the current page. */
   subscribeUrl?: string;
+  /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
+   *  on a dev-shaped instance (§10); omitted — and so hidden — in any deployed env. */
+  devDashboardUrl?: string;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
 }): Response {
@@ -217,6 +259,7 @@ ${cta}
 </div></header>
 <main class="r-body">${opts.mainHtml}</main>
 <footer class="r-foot"><div class="r-foot-in">Powered by Kestrel &middot; Unsubscribe anytime &middot; Consent is double opt-in.</div></footer>
+${devDashboardBadge(opts.devDashboardUrl)}
 </body>
 </html>`;
   return new Response(doc, {
@@ -243,6 +286,8 @@ export function landingPage(opts: {
   featured?: ArchiveIndexIssue;
   /** The next-most-recent issues, listed beneath the feature. */
   recent: ArchiveIndexIssue[];
+  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  devDashboardUrl?: string;
 }): Response {
   let main: string;
   if (!opts.featured) {
@@ -266,6 +311,7 @@ export function landingPage(opts: {
     homeUrl: opts.homeUrl,
     title: opts.identity.name,
     mainHtml: main,
+    devDashboardUrl: opts.devDashboardUrl,
   });
 }
 
@@ -276,6 +322,8 @@ export function archiveIndexPage(opts: {
   subscribeUrl: string;
   homeUrl: string;
   issues: ArchiveIndexIssue[];
+  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  devDashboardUrl?: string;
 }): Response {
   const list = opts.issues.length
     ? `<ul class="r-list">${opts.issues.map(issueRow).join("")}</ul>`
@@ -286,6 +334,7 @@ export function archiveIndexPage(opts: {
     homeUrl: opts.homeUrl,
     title: `Archive · ${opts.identity.name}`,
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
+    devDashboardUrl: opts.devDashboardUrl,
   });
 }
 

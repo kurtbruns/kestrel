@@ -49,6 +49,42 @@ describe("getConfig — self-contained defaults", () => {
   });
 });
 
+// `devMode` gates the dev-only "Open dashboard" link the reader surface injects
+// (SPEC §5/§10). It must be on ONLY where the dev credential path is live — the one
+// case `/dashboard` is reachable without an Access wall — and structurally off in
+// any deployed env, so a public page never links toward the Access gate there.
+describe("getConfig — the dev-mode reader-surface gate", () => {
+  it("is on in a dev-shaped env with the dev secret present", () => {
+    const config = getConfig(envWith({ PROVIDER: "fake", DEV_AUTH_SECRET: "s" }));
+    expect(config.devMode).toBe(true);
+    expect(config.devAuthSecret).toBe("s");
+  });
+
+  it("is off without a dev secret — the auto-minted token, and so the link, can't work", () => {
+    const config = getConfig(envWith({ PROVIDER: "fake" }));
+    expect(config.devMode).toBe(false);
+    expect(config.devAuthSecret).toBeUndefined();
+  });
+
+  it("is off once Access is configured, even on the fake transport", () => {
+    const config = getConfig(
+      envWith({
+        PROVIDER: "fake",
+        DEV_AUTH_SECRET: "s",
+        ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+      }),
+    );
+    expect(config.devMode).toBe(false);
+    expect(config.devAuthSecret).toBeUndefined();
+  });
+
+  it("is off on a real provider (a deployed env is never dev-shaped)", () => {
+    const config = getConfig(envWith({ PROVIDER: "ses", DEV_AUTH_SECRET: "s" }));
+    expect(config.devMode).toBe(false);
+    expect(config.devAuthSecret).toBeUndefined();
+  });
+});
+
 describe("createRouter — archive route follows the base path", () => {
   beforeEach(async () => {
     await env.DB.batch([

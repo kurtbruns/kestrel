@@ -1,10 +1,13 @@
-import { env, SELF } from "cloudflare:test";
+import { createExecutionContext, env, SELF } from "cloudflare:test";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
 import { getConfig } from "../src/env";
+import { archiveIndexPage, landingPage } from "../src/lib/page";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, UNSUB_SENTINEL } from "../src/render/render";
+import type { RequestContext } from "../src/router";
+import { archiveIndex, landing } from "../src/routes/archive";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -146,11 +149,15 @@ describe("landing page (the public front door, §5)", () => {
     expect(body).toContain('href="http://localhost:8787/archive"');
   });
 
-  it("never links into the Access-gated admin surface", async () => {
+  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
     await publish("An Issue", 1_000);
     const body = await (await SELF.fetch(`${base}/`)).text();
-    // The admin SPA lives at /dashboard; the public front door must never link into it (SPEC §10).
-    expect(body).not.toContain("/dashboard");
+    // The test env is dev-shaped (fake transport, no Access, dev secret set), so the
+    // reader surface injects the local-developer editor shortcut. `/dashboard` here
+    // is dev-token-gated, not an Access wall, so this respects §10 — and the paired
+    // page-level test below proves it is absent once deployed.
+    expect(body).toContain('class="r-dev"');
+    expect(body).toContain("http://localhost:8787/dashboard/");
   });
 
   it("shows an empty state when nothing has been sent", async () => {
@@ -181,10 +188,11 @@ describe("archive index (the full list, §5)", () => {
     expect(body.indexOf("The Newer One")).toBeLessThan(body.indexOf("The Older One"));
   });
 
-  it("never links into the Access-gated admin surface", async () => {
+  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
     await publish("An Issue", 1_000);
     const body = await (await SELF.fetch(`${base}/archive`)).text();
-    expect(body).not.toContain("/dashboard");
+    expect(body).toContain('class="r-dev"');
+    expect(body).toContain("http://localhost:8787/dashboard/");
   });
 
   it("shows an empty state and excludes drafts / scheduled posts", async () => {
@@ -205,5 +213,85 @@ describe("archive index (the full list, §5)", () => {
       expect(body).toContain("An Issue");
       expect(body).toContain(`http://localhost:8787/archive/${post.slug}`);
     }
+  });
+});
+
+// The §10 guarantee, proven independent of the test env's dev shape: a deployed
+// instance passes no `devDashboardUrl`, so the reader shell renders no admin link
+// at all — the public front door never points at the Access-gated editor. The
+// SELF.fetch tests above cover the dev-shaped direction (the link IS shown).
+describe("reader surface — no admin link once deployed (§10)", () => {
+  const identity = { name: "The Publication" };
+
+  it("landing page omits the dashboard link when devDashboardUrl is unset", async () => {
+    const withLink = await landingPage({
+      identity,
+      subscribeUrl: "https://app.example/subscribe",
+      homeUrl: "https://app.example/",
+      archiveUrl: "https://app.example/archive",
+      recent: [],
+      devDashboardUrl: "https://app.example/dashboard/",
+    }).text();
+    const deployed = await landingPage({
+      identity,
+      subscribeUrl: "https://app.example/subscribe",
+      homeUrl: "https://app.example/",
+      archiveUrl: "https://app.example/archive",
+      recent: [],
+    }).text();
+    expect(withLink).toContain("/dashboard/");
+    expect(withLink).toContain('class="r-dev"');
+    // The tooltip spells out the dev-only scope for anyone who wonders if it ships.
+    expect(withLink).toContain("Shown only on your local dev server");
+    expect(deployed).not.toContain("/dashboard");
+    expect(deployed).not.toContain('class="r-dev"');
+  });
+
+  it("archive index omits the dashboard link when devDashboardUrl is unset", async () => {
+    const deployed = await archiveIndexPage({
+      identity,
+      subscribeUrl: "https://app.example/subscribe",
+      homeUrl: "https://app.example/",
+      issues: [],
+    }).text();
+    expect(deployed).not.toContain("/dashboard");
+    expect(deployed).not.toContain('class="r-dev"');
+  });
+});
+
+// The two guarantees above cover the shell in isolation. This closes the loop at
+// the ROUTE level: the real landing/archive handlers must gate the pill on
+// `config.devMode`. The Vitest env is always dev-shaped, so we drive the handlers
+// directly with a fabricated config to exercise BOTH branches — the deployed
+// (devMode:false) branch of `devDashboardUrl(config)` is otherwise never hit
+// end-to-end, and dropping that gate would break §10 without failing a test.
+describe("reader routes gate the pill on config.devMode (§10)", () => {
+  function ctxFor(devMode: boolean): RequestContext {
+    return {
+      req: new Request(`${base}/`),
+      env,
+      ctx: createExecutionContext(),
+      url: new URL(`${base}/`),
+      params: {},
+      config: { ...getConfig(env), devMode },
+    };
+  }
+
+  it("landing renders the pill only when devMode is true", async () => {
+    await publish("An Issue", 1_000);
+    const on = await (await landing(ctxFor(true))).text();
+    const off = await (await landing(ctxFor(false))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("/dashboard");
+  });
+
+  it("archive index renders the pill only when devMode is true", async () => {
+    await publish("An Issue", 1_000);
+    const on = await (await archiveIndex(ctxFor(true))).text();
+    const off = await (await archiveIndex(ctxFor(false))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("/dashboard");
   });
 });
