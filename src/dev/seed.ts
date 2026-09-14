@@ -219,7 +219,7 @@ interface Timeline {
   sentAt: [number, number, number];
 }
 
-function buildTimeline(now: number): Timeline {
+export function buildTimeline(now: number): Timeline {
   const send2At = now - 7 * WEEK;
   return {
     now,
@@ -327,9 +327,10 @@ interface BuiltAudience {
   suppressions: SeedSuppression[];
   /** The mailable audience frozen at each completed send (sorted emails), oldest first. */
   sentAudiences: [string[], string[], string[]];
-  /** The two confirmed subscribers a later send shadows via a suppression. */
-  bounceEmail: string;
-  complaintEmail: string;
+  /** The bounce/complaint webhook events attributed to send #2 (reported just after it,
+   *  and the source of this dataset's suppressions), keyed by recipient email. Applied to
+   *  that send's delivery rows so the record carries the event that shadowed each address. */
+  sendTwoEvents: Map<string, DeliveryEvent>;
 }
 
 /** A subscriber's status AT A PAST MOMENT `t`, read from the consent timestamps rather
@@ -459,7 +460,264 @@ function buildAudience(t: Timeline): BuiltAudience {
     string[],
     string[],
   ];
-  return { subscribers, suppressions, sentAudiences, bounceEmail, complaintEmail };
+  // The bounce and complaint were reported just after issue #2, so their delivery events
+  // belong to that send alone (see the loop in seedDatabase).
+  const sendTwoEvents = new Map<string, DeliveryEvent>([
+    [
+      bounceEmail,
+      { event: "bounced", detail: "Recipient address rejected (550 5.1.1)", at: t.bounceAt },
+    ],
+    [complaintEmail, { event: "complained", detail: "abuse", at: t.complaintAt }],
+  ]);
+  return { subscribers, suppressions, sentAudiences, sendTwoEvents };
+}
+
+// --- scaled audience (parametric seed) --------------------------------------
+
+/** Options for a parametric seed. `size` is the approximate confirmed-now list size (an
+ *  approximate target, not exact); absent, the curated Windbreak dataset is loaded
+ *  unchanged. `seed` makes a given `(size, seed)` reproducible. */
+export interface SeedOptions {
+  size?: number;
+  seed?: number;
+}
+
+/** The default PRNG seed, so `--size 1k` alone is reproducible run to run. */
+export const DEFAULT_SEED = 0x5eed;
+
+/** A tiny seeded PRNG (mulberry32): a single 32-bit seed drives a reproducible stream of
+ *  floats in [0, 1). This replaces the curated list's determinism-by-fixed-index with
+ *  reproducible pseudo-randomness, so churn timing, suppression victims, and per-send
+ *  failures vary believably while a given `(size, seed)` still reproduces exactly. */
+export function makePrng(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * A collision-free, human-plausible address for ANY global index — unbounded, unlike the
+ * 3,600-address `emailFor` bijection, so a scaled list can reach 10k/100k. The (first,
+ * last) pair uses the same diagonal spread as `emailFor` over its 900 combinations; once
+ * those are exhausted the local part gains a cycle number (`ada.finch`, then `ada.finch2`,
+ * `ada.finch3`, …), which real mail providers hand out too. (first, last, cycle) is a
+ * bijection with `n`, so addresses never collide at any size.
+ */
+export function scaledEmailFor(n: number): string {
+  const F = FIRST_NAMES.length;
+  const L = LAST_NAMES.length;
+  const pair = n % (F * L); // 0..899 — a unique (first, last) within a cycle
+  const cycle = Math.floor(n / (F * L));
+  const first = FIRST_NAMES[pair % F];
+  const last = LAST_NAMES[(pair + Math.floor(pair / F)) % L];
+  const domain = DOMAINS[n % DOMAINS.length];
+  const local = cycle === 0 ? `${first}.${last}` : `${first}.${last}${cycle + 1}`;
+  return `${local}@${domain}`;
+}
+
+/** Cohort proportions and low outcome rates for a scaled list, expressed as fractions of
+ *  the approximate confirmed-now `size`. Chosen so the scaled dataset keeps the curated
+ *  list's story shape — an imported core, two growth cohorts, a churn wave after each
+ *  issue, a small pending tail, and a few suppressions — with realistic percentages at
+ *  every size (low bounce/complaint/failure rates). */
+const SCALE = {
+  growthA: 0.11, // confirmed between #1 and #2
+  growthB: 0.09, // confirmed between #2 and #3
+  churn: 0.06, // total unsubscribes, split across three post-issue waves
+  pending: 0.03, // still-unconfirmed tail
+  bounceRate: 0.004, // hard bounces (drawn from the core) → suppressions
+  complaintRate: 0.001, // spam complaints (drawn from the core) → suppressions
+  failureRate: 0.006, // per-send transport failures — do NOT suppress
+};
+
+/** Draw up to `count` distinct integers in [0, n) from the PRNG (fewer only if n < count).
+ *  The guard bounds the loop when collisions crowd a small range. */
+function drawDistinct(rand: () => number, count: number, n: number): number[] {
+  const out = new Set<number>();
+  const want = Math.min(count, n);
+  let guard = want * 20 + 50;
+  while (out.size < want && guard-- > 0) {
+    out.add(Math.floor(rand() * n));
+  }
+  return [...out];
+}
+
+/** Per-send transport failures as audience indices — about `failureRate` of the frozen
+ *  audience, at least one, PRNG-placed so the failures fall on different rows each send. */
+function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
+  if (audienceLen === 0) {
+    return new Set();
+  }
+  // Jitter the count (±30%) so each send's failure tally is organic, not a fixed fraction.
+  const count = Math.max(1, Math.round(audienceLen * SCALE.failureRate * (0.7 + rand() * 0.6)));
+  return new Set(drawDistinct(rand, count, audienceLen));
+}
+
+/**
+ * The scaled counterpart to `buildAudience`: the same lifecycle (imported core, two growth
+ * cohorts, three churn waves, a pending tail, and bounce/complaint suppressions) sized to
+ * an approximate confirmed-now `size` and driven by the seeded PRNG, so `(size, seed)` is
+ * reproducible while churn timing, suppression victims, and growth spread vary believably
+ * instead of sitting on fixed indices. Addresses come from `scaledEmailFor`, collision-free
+ * past the 3,600-address bijection.
+ */
+export function buildScaledAudience(t: Timeline, size: number, rand: () => number): BuiltAudience {
+  // Jitter the target and each cohort with the PRNG so the counts read like a real list —
+  // 1283, not exactly 1000 — instead of landing on round, synthetic-looking numbers. The
+  // jitter is part of the seeded stream, so a given (size, seed) still reproduces exactly.
+  const jitter = (spread: number): number => 1 - spread + rand() * 2 * spread;
+  const n = Math.max(1, Math.round(size * jitter(0.12)));
+  const growthA = Math.round(n * SCALE.growthA * jitter(0.15));
+  const growthB = Math.round(n * SCALE.growthB * jitter(0.15));
+  const core = Math.max(1, n - growthA - growthB); // the never-leaving backbone
+  const churnTotal = Math.max(3, Math.round(n * SCALE.churn * jitter(0.2)));
+  const pending = Math.max(1, Math.round(n * SCALE.pending * jitter(0.25)));
+
+  let seq = 0;
+  const subscribers: SeedSubscriber[] = [];
+  const make = (
+    status: SeedSubscriber["status"],
+    createdAt: number,
+    confirmedAt: number | null,
+    unsubscribedAt: number | null,
+  ): string => {
+    const email = scaledEmailFor(seq++);
+    subscribers.push({
+      id: newId(),
+      email,
+      status,
+      confirm_token: newToken(),
+      unsub_token: newToken(),
+      created_at: createdAt,
+      confirmed_at: confirmedAt,
+      unsubscribed_at: unsubscribedAt,
+    });
+    return email;
+  };
+
+  // A churn member leaves at a PRNG-dispersed moment after its issue but before the next
+  // send, front-loaded (r² pushes most leaves soon after the issue) — so it's still mailed
+  // by the issue it followed, and the frozen per-send audiences stay clean.
+  const churnAt = (sentAt: number, nextAt: number): number => {
+    const window = Math.max(HOUR, nextAt - sentAt - 12 * HOUR);
+    const r = rand();
+    return Math.round(sentAt + 6 * HOUR + r * r * window);
+  };
+
+  // Import: the core that stays, then three waves that each churn out after an issue
+  // (wave 0 after #1, 1 after #2, 2 after #3) — imported already-confirmed, like a real
+  // bulk migration, and dispersed over the ~10 days before send #1.
+  const importCount = core + churnTotal;
+  const importStep = (10 * DAY) / importCount;
+  const churnWave1 = Math.round(churnTotal * 0.4); // leaves after #1
+  const churnWave2 = Math.round(churnTotal * 0.33); // leaves after #2
+  const churnWave3 = churnTotal - churnWave1 - churnWave2; // leaves after #3 (still gone today)
+  const coreEmails: string[] = [];
+  let importIdx = 0;
+  const addImport = (count: number, wave: 0 | 1 | 2 | null) => {
+    for (let i = 0; i < count; i++) {
+      const createdAt = Math.round(t.importAt + importIdx * importStep);
+      let unsubAt: number | null = null;
+      let status: SeedSubscriber["status"] = "confirmed";
+      if (wave != null) {
+        const sentAt = unwrap(t.sentAt[wave], "send timeline slot");
+        const nextAt = wave < 2 ? unwrap(t.sentAt[wave + 1], "send timeline slot") : t.now;
+        unsubAt = churnAt(sentAt, nextAt);
+        status = "unsubscribed";
+      }
+      const email = make(status, createdAt, createdAt, unsubAt);
+      if (wave == null) {
+        coreEmails.push(email);
+      }
+      importIdx++;
+    }
+  };
+  addImport(core, null);
+  addImport(churnWave1, 0);
+  addImport(churnWave2, 1);
+  addImport(churnWave3, 2);
+
+  // Growth cohort A: confirmed between #1 and #2 (mailed by #2 and #3, not #1).
+  for (let i = 0; i < growthA; i++) {
+    const confirmedAt = Math.round(t.growthAAt + (i * (2 * DAY)) / Math.max(1, growthA));
+    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  }
+  // Growth cohort B: confirmed between #2 and #3 (mailed by #3 only).
+  for (let i = 0; i < growthB; i++) {
+    const confirmedAt = Math.round(t.growthBAt + (i * (2 * DAY)) / Math.max(1, growthB));
+    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  }
+  // Still pending: subscribed in the last few days, not yet confirmed — in no audience.
+  for (let i = 0; i < pending; i++) {
+    make("pending", t.now - ((i % 6) + 1) * DAY, null, null);
+  }
+
+  // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
+  // they were mailed by #1 and #2, then shadowed out of #3 and today). Disjoint draws, so
+  // no address is both bounced and complained.
+  const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate * jitter(0.3)));
+  const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
+  const victims = drawDistinct(rand, bounceCount + complaintCount, coreEmails.length);
+  const suppressions: SeedSuppression[] = [];
+  const sendTwoEvents = new Map<string, DeliveryEvent>();
+  victims.slice(0, bounceCount).forEach((idx) => {
+    const email = unwrap(coreEmails[idx], "core subscriber");
+    suppressions.push({
+      email,
+      reason: "bounce",
+      detail: "550 5.1.1 user unknown",
+      created_at: t.bounceAt,
+    });
+    sendTwoEvents.set(email, {
+      event: "bounced",
+      detail: "Recipient address rejected (550 5.1.1)",
+      at: t.bounceAt,
+    });
+  });
+  victims.slice(bounceCount).forEach((idx) => {
+    const email = unwrap(coreEmails[idx], "core subscriber");
+    suppressions.push({
+      email,
+      reason: "complaint",
+      detail: "abuse report via feedback loop",
+      created_at: t.complaintAt,
+    });
+    sendTwoEvents.set(email, { event: "complained", detail: "abuse", at: t.complaintAt });
+  });
+
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
+    string[],
+    string[],
+    string[],
+  ];
+  return { subscribers, suppressions, sentAudiences, sendTwoEvents };
+}
+
+/**
+ * Parse a seed-size token — `100`, `1k`, `10k`, `100k`, or a raw integer — into a count,
+ * capped at 100k. Returns undefined for an absent or unparseable value, which selects the
+ * curated (unscaled) demo dataset.
+ */
+export function parseSeedSize(raw: string | null | undefined): number | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const m = /^\s*(\d+)\s*(k)?\s*$/i.exec(raw);
+  if (!m) {
+    return undefined;
+  }
+  let value = Number.parseInt(m[1] ?? "", 10);
+  if (m[2]) {
+    value *= 1000;
+  }
+  if (!Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+  return Math.min(value, 100_000);
 }
 
 // --- deliveries -------------------------------------------------------------
@@ -474,18 +732,20 @@ interface DeliveryEvent {
 /**
  * Synthesize the per-recipient delivery record for one completed send. The audience is
  * the list frozen at send time, so the row count and `recipient_count` are that moment's
- * numbers, not today's. Most recipients are accepted and later marked delivered; a couple
- * fail at the transport level (a send-loop failure, which does NOT itself suppress — only
- * the webhook events below do); and the addresses in `events` carry the bounce/complaint
- * that produced this send's suppressions.
+ * numbers, not today's. Most recipients are accepted and later marked delivered; the
+ * recipients at `failedSlots` (audience indices the caller picks — fixed for the curated
+ * demo, drawn from the seeded PRNG for a scaled list) fail at the transport level (a
+ * send-loop failure, which does NOT itself suppress — only the webhook events below do);
+ * and the addresses in `events` carry the bounce/complaint that produced this send's
+ * suppressions.
  */
 function buildDeliveries(
   sendId: string,
   audience: string[],
   sentAt: number,
   events: Map<string, DeliveryEvent>,
+  failedSlots: Set<number>,
 ): SeedDelivery[] {
-  const failedSlots = new Set([7, 53]); // two transport failures per send, deterministic
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
       id: newId(),
@@ -572,6 +832,7 @@ export async function seedDatabase(
   config: Config,
   kestrelFile?: { bytes: ArrayBuffer; contentType: string; filename: string },
   logoFile?: { bytes: ArrayBuffer; contentType: string },
+  options?: SeedOptions,
 ): Promise<SeedSummary> {
   const db = env.DB;
   const now = Date.now();
@@ -608,7 +869,14 @@ export async function seedDatabase(
 
   // Audience first, so recipient counts and deliveries are grounded in real rows. The
   // suppressions go in before we read the current audience, so it's confirmed − suppressed.
-  const built = buildAudience(timeline);
+  //
+  // A `size` selects the parametric, PRNG-driven audience (100 / 1k / 10k / 100k — an
+  // approximate target for the confirmed-now list); without it the curated, story-shaped
+  // list is unchanged. One PRNG instance threads through the audience build and the
+  // per-send transport-failure draws, so a given (size, seed) reproduces the same dataset.
+  const size = options?.size;
+  const rand = makePrng(options?.seed ?? DEFAULT_SEED);
+  const built = size != null ? buildScaledAudience(timeline, size, rand) : buildAudience(timeline);
   await insertSubscribers(db, built.subscribers);
   await insertSuppressions(db, built.suppressions);
 
@@ -718,24 +986,12 @@ export async function seedDatabase(
     });
     // The bounce and the complaint were reported just after issue #2, so their events
     // (and the suppressions they produced) belong to that send alone.
-    const events: Map<string, DeliveryEvent> =
-      sentIndex === 1
-        ? new Map([
-            [
-              built.bounceEmail,
-              {
-                event: "bounced",
-                detail: "Recipient address rejected (550 5.1.1)",
-                at: timeline.bounceAt,
-              },
-            ],
-            [
-              built.complaintEmail,
-              { event: "complained", detail: "abuse", at: timeline.complaintAt },
-            ],
-          ])
-        : new Map();
-    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events);
+    const events: Map<string, DeliveryEvent> = sentIndex === 1 ? built.sendTwoEvents : new Map();
+    // Transport failures: the curated list's two fixed slots, or a PRNG-drawn set scaled
+    // to the frozen audience when a size was requested.
+    const failedSlots =
+      size != null ? drawFailedSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
+    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, failedSlots);
     await insertDeliveries(db, deliveries);
     counts.sent++;
     counts.deliveries += deliveries.length;

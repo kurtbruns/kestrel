@@ -70,6 +70,15 @@ archive look populated. It's a thin wrapper around a dev-only `POST /api/dev/see
 route that is available **only under the fake transport**, so it can never touch a
 deployed database. Re-run it any time to reset to a known state.
 
+By default the seed builds a small, story-shaped list (~155 subscribers). To load and
+inspect the app at scale — the Sends page, the delivery record, the subscriber roster —
+pass an approximate size with `--size` (`100` / `1k` / `10k` / `100k`); a seeded PRNG
+keeps the outcomes realistic and makes a given size reproducible, and `--seed` pins it:
+
+```bash
+npm run seed -- --size 10k
+```
+
 The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
 the seed still runs (that one image just 404s until you drop the file in and re-seed).
 View the result at `/dashboard/` and at the archived issues, e.g.
