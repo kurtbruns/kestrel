@@ -6,13 +6,15 @@
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
  *   POST /api/dev/seed  → reset the DB and load the local "Windbreak" dataset.
  *                         Optional multipart files: `kestrel` → the cover image,
- *                         `logo` → the publication logo.
+ *                         `logo` → the publication logo. Optional query: `size`
+ *                         (100 / 1k / 10k / 100k) scales the list via a seeded PRNG,
+ *                         and `seed` pins it; absent, the curated demo list loads.
  */
 
 import { mintDevToken } from "../auth/dev_token";
 import { resetAll } from "../db/seed";
 import { BRANDING_LOGO_KEY } from "../db/settings";
-import { seedDatabase } from "../dev/seed";
+import { parseSeedSize, seedDatabase } from "../dev/seed";
 import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 
@@ -60,7 +62,16 @@ export async function seed(c: RequestContext): Promise<Response> {
     }
   }
 
-  const summary = await seedDatabase(c.env, c.config, kestrelFile, logoFile);
+  // Optional scale controls: `?size=` (100 / 1k / 10k / 100k, an approximate target)
+  // selects the parametric PRNG-driven list; absent, the curated demo list loads unchanged.
+  // `?seed=` pins the PRNG so a given (size, seed) is reproducible.
+  const size = parseSeedSize(c.url.searchParams.get("size"));
+  const seedRaw = c.url.searchParams.get("seed");
+  const seedNum = seedRaw ? Number.parseInt(seedRaw, 10) : Number.NaN;
+  const seed = Number.isFinite(seedNum) ? seedNum : undefined;
+  const options = size != null ? { size, seed } : undefined;
+
+  const summary = await seedDatabase(c.env, c.config, kestrelFile, logoFile, options);
   return json(summary);
 }
 

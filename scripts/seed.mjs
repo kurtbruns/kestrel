@@ -14,6 +14,10 @@ import { existsSync } from "node:fs";
  * read. The target defaults to the port `npm run dev` recorded for this worktree
  * (scripts/dev-port.mjs), so a worktree on a non-8787 port just works; override it
  * with `PORT` or a URL argument: `npm run seed -- 8788`.
+ *
+ * Scale the demo list with `--size` (100 / 1k / 10k / 100k, an approximate target)
+ * and pin the seeded PRNG with `--seed`: `npm run seed -- --size 10k`. Without
+ * `--size`, the curated story-shaped list (~155 subscribers) loads unchanged.
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
@@ -22,8 +26,28 @@ import { readDevPort } from "./dev-port.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-function baseUrl() {
-  const arg = process.argv[2];
+/** Split argv into `--flag value` / `--flag=value` pairs and bare positionals, so the
+ *  base URL / port positional and the scale flags can be given in any order. */
+function parseArgs(argv) {
+  const flags = {};
+  const positional = [];
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    const eq = /^--([^=]+)=(.*)$/.exec(a);
+    if (eq) {
+      flags[eq[1]] = eq[2];
+    } else if (a.startsWith("--")) {
+      flags[a.slice(2)] = argv[i + 1] ?? "";
+      i++;
+    } else {
+      positional.push(a);
+    }
+  }
+  return { flags, positional };
+}
+
+function baseUrl(positional) {
+  const arg = positional[0];
   if (arg) {
     return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
   }
@@ -56,8 +80,17 @@ async function devToken(base) {
 }
 
 async function main() {
-  const base = baseUrl();
-  const url = `${base}/api/dev/seed`;
+  const { flags, positional } = parseArgs(process.argv.slice(2));
+  const base = baseUrl(positional);
+  const params = new URLSearchParams();
+  if (flags.size) {
+    params.set("size", flags.size);
+  }
+  if (flags.seed) {
+    params.set("seed", flags.seed);
+  }
+  const qs = params.toString();
+  const url = `${base}/api/dev/seed${qs ? `?${qs}` : ""}`;
   const token = await devToken(base);
 
   const form = new FormData();
@@ -115,6 +148,9 @@ async function main() {
 
   const summary = await res.json();
   console.log("[seed] done:");
+  if (flags.size) {
+    console.log(`  size: ~${flags.size} requested (approximate; PRNG-seeded)`);
+  }
   console.log(
     `  subscribers: ${summary.subscribers.confirmed} confirmed, ${summary.subscribers.pending} pending, ${summary.subscribers.unsubscribed} unsubscribed`,
   );
