@@ -137,6 +137,17 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
+/* Dev-only affordance (SPEC §5/§10): a fixed corner pill that hops a local
+   developer into the editor. Shown solely on a dev-shaped instance and rendered as
+   over-the-page dev chrome — deliberately not the publication's own identity — so
+   it reads as tooling, never as part of the reader surface. Absent once deployed. */
+.r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
+         font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
+         background:var(--r-ink); color:var(--r-bg); border:1px solid var(--r-ink); box-shadow:0 6px 20px rgba(0,0,0,.22); }
+.r-dev:hover { filter:brightness(1.08); }
+.r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+                    padding:2px 7px; border-radius:999px; background:color-mix(in srgb, var(--r-bg) 26%, transparent); }
+
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
 @media (max-width:560px) {
@@ -179,6 +190,19 @@ export interface ReaderIdentity {
   logoUrl?: string;
 }
 
+/** The dev-only editor shortcut (SPEC §5/§10): a fixed corner pill linking a local
+ *  developer straight into `/dashboard`. Rendered only when `url` is set — the
+ *  callers pass it solely on a dev-shaped instance (`config.devMode`), where
+ *  `/dashboard` carries no Access wall — so it is structurally absent once deployed
+ *  and never turns the public front door into a link toward the admin gate. */
+function devDashboardBadge(url?: string): string {
+  // The "DEV" chip flags it as tooling; the title spells out the scope for anyone
+  // who wonders whether it ships — it never does (see the doc above).
+  return url
+    ? `<a class="r-dev" href="${escapeHtmlAttr(url)}" title="Shown only on your local dev server"><span class="r-dev-tag">Dev</span>Open dashboard &rarr;</a>`
+    : "";
+}
+
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
  *  `mainHtml`. Public + indexable; every link points only at public pages (§10). */
@@ -190,6 +214,9 @@ export function readerPage(opts: {
   /** When set, the masthead shows the subscribe CTA linking here. Omitted on the
    *  subscribe pages themselves, where the CTA would point at the current page. */
   subscribeUrl?: string;
+  /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
+   *  on a dev-shaped instance (§10); omitted — and so hidden — in any deployed env. */
+  devDashboardUrl?: string;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
 }): Response {
@@ -217,6 +244,7 @@ ${cta}
 </div></header>
 <main class="r-body">${opts.mainHtml}</main>
 <footer class="r-foot"><div class="r-foot-in">Powered by Kestrel &middot; Unsubscribe anytime &middot; Consent is double opt-in.</div></footer>
+${devDashboardBadge(opts.devDashboardUrl)}
 </body>
 </html>`;
   return new Response(doc, {
@@ -243,6 +271,8 @@ export function landingPage(opts: {
   featured?: ArchiveIndexIssue;
   /** The next-most-recent issues, listed beneath the feature. */
   recent: ArchiveIndexIssue[];
+  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  devDashboardUrl?: string;
 }): Response {
   let main: string;
   if (!opts.featured) {
@@ -266,6 +296,7 @@ export function landingPage(opts: {
     homeUrl: opts.homeUrl,
     title: opts.identity.name,
     mainHtml: main,
+    devDashboardUrl: opts.devDashboardUrl,
   });
 }
 
@@ -276,6 +307,8 @@ export function archiveIndexPage(opts: {
   subscribeUrl: string;
   homeUrl: string;
   issues: ArchiveIndexIssue[];
+  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  devDashboardUrl?: string;
 }): Response {
   const list = opts.issues.length
     ? `<ul class="r-list">${opts.issues.map(issueRow).join("")}</ul>`
@@ -286,6 +319,7 @@ export function archiveIndexPage(opts: {
     homeUrl: opts.homeUrl,
     title: `Archive · ${opts.identity.name}`,
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
+    devDashboardUrl: opts.devDashboardUrl,
   });
 }
 

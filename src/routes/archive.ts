@@ -64,6 +64,13 @@ function archiveHomeUrl(config: Config): string {
   return `${config.archiveOrigin}${config.archiveBasePath}`;
 }
 
+/** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
+ *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
+ *  a deployed public page never points at the Access-gated editor (SPEC §5, §10). */
+function devDashboardUrl(config: Config): string | undefined {
+  return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
+}
+
 /** The public front door (§5): a landing page featuring the latest issue over a few
  *  recent ones, with the publication identity and a subscribe call to action. Never
  *  bounces a visitor toward an admin path (§10). */
@@ -85,6 +92,7 @@ export async function landing(c: RequestContext): Promise<Response> {
     archiveUrl: archiveHomeUrl(c.config),
     featured,
     recent,
+    devDashboardUrl: devDashboardUrl(c.config),
   });
 }
 
@@ -104,6 +112,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
       url: archiveUrl(c.config, i.slug),
       dateLabel: formatSentDate(i.sent_at),
     })),
+    devDashboardUrl: devDashboardUrl(c.config),
   });
 }
 

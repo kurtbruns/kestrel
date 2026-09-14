@@ -13,6 +13,7 @@ const config: Config = {
   sendingDomain: "send.example",
   fromAddress: "News <news@send.example>",
   awsRegion: "us-east-1",
+  devMode: false,
 };
 
 function post(over: Partial<PostRow> = {}): PostRow {

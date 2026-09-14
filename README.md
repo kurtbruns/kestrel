@@ -36,7 +36,10 @@ flags through with `--`, e.g. `npm run dev -- --remote`.
 
 Open the editor at **http://localhost:8787/dashboard/**. Locally there's nothing to
 sign in with — the editor mints its own dev token on load and shows a **Local dev**
-chip.
+chip. You don't have to type that path: on a local dev instance the public pages
+(the landing page at `/` and the archive index) carry a small **Open dashboard**
+shortcut in the corner, so the preview — which opens at `/` — is one click from the
+editor. That link is dev-only; a deployed public page never links into the editor.
 Everything the editor does is also available on the HTTP API — the editor is just a
 client of it.
 
