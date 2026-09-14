@@ -1068,8 +1068,8 @@ async function renderEditor(id) {
         ${badge(post.status)}
       </div>
     </div>
-    ${locked && scheduled ? `<div class="sched-banner"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost" id="cancelSchedule">Cancel</button></div>` : ""}
-    <div id="freshnessBanner" class="fresh-banner" hidden></div>
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>📅 Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong></span><button type="button" class="ghost" id="cancelSchedule">Cancel</button></div>` : ""}
+    <div id="freshnessBanner" class="banner banner-conflict" hidden></div>
     <div class="card">
       <div class="grid2">
         <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" ${dis}></div>
