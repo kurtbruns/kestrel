@@ -111,9 +111,13 @@
     --b-sending-bg: #45350f;
     --b-sending-fg: #fcd34d;
     --b-sending-line: #b45309;
-    --k-accent: #7d9bff;
+    /* Brightened from a plain dark tint so Secondary text (--k-accent on the soft
+       fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
+       reached only ~4.4:1. Primary keeps huge contrast (dark --k-accent-contrast text
+       on this lighter fill). The soft fill tracks the same hue. */
+    --k-accent: #8fabff;
     --k-accent-contrast: #10131f;
-    --k-accent-soft: rgba(125, 155, 255, 0.18);
+    --k-accent-soft: rgba(143, 171, 255, 0.18);
     --cx-bg: #1a1a1d;
     --cx-fg: #cfcfd6;
     --cx-gutter: #5a5a63;
@@ -1544,15 +1548,25 @@ th.num .th-sort {
 
 .actions-bar {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   margin-top: 16px;
   flex-wrap: wrap;
 }
-/* The editor's save-state indicator, beside the Save button. It keeps its own
-   autosave model, but the "unsaved" cue reads the same app-wide as the shared save
-   bar: an amber --warn dot + text. Saving…/Saved are the autosave lifecycle it also
-   has; those stay muted (no dot). :empty (locked posts) collapses it out. */
+/* Left-hand note in the actions bar of a locked (scheduled) post, where there is no
+   Primary and nothing to autosave — it stands in for the Save draft + cue that a
+   draft shows, explaining why the row is quiet. */
+.locked-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+/* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
+   Unsaved (amber --warn dot) · Saving… (pulsing --k-accent dot) · Saved (green --ok
+   dot). The dot is a reinforcement, never the whole signal — the text label carries
+   each state too, so the cue survives a reader who can't tell the dot's color. The
+   "unsaved" cue reads the same amber as the shared save bar so both save models feel
+   like one app. :empty (locked posts, which can't autosave) collapses it out. */
 .save-status {
   display: inline-flex;
   align-items: center;
@@ -1566,13 +1580,33 @@ th.num .th-sort {
 .save-status.is-dirty {
   color: var(--fg);
 }
-.save-status.is-dirty::before {
+.save-status.is-dirty::before,
+.save-status.is-saving::before,
+.save-status.is-saved::before {
   content: "";
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--warn-fg);
   flex: 0 0 auto;
+}
+.save-status.is-dirty::before {
+  background: var(--warn-fg);
+}
+.save-status.is-saving::before {
+  background: var(--k-accent);
+  animation: save-pulse 1s ease-in-out infinite;
+}
+.save-status.is-saved::before {
+  background: var(--ok-fg);
+}
+@keyframes save-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 .warnings {
@@ -1646,6 +1680,48 @@ th.num .th-sort {
   gap: 10px;
   margin-top: 18px;
 }
+/* A quiet divider row in a modal for a subordinate alternate path — e.g. the demoted
+   "Send now →" beneath Schedule, and the "← Back to schedule" that returns from it. */
+.modal .altrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+/* The alternate-path row can carry a plain note beside its link. */
+.modal .altrow .altrow-note {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+/* The back link at the top of the Send-now view needs no divider — it returns from,
+   rather than demotes below, the Schedule view. */
+.modal .altrow-top {
+  margin: -4px 0 10px;
+  padding-top: 0;
+  border-top: 0;
+  justify-content: flex-start;
+}
+/* Link — a text-link-styled action (DESIGN §1), not one of the button roles. Reserved
+   for a deliberately subordinate choice, like the in-modal Send now that sits below
+   the Schedule Primary: it must read as clearly demoted, so it is a link, not a Ghost
+   button that would compete with Cancel. Still a real <button>, so it's keyboard- and
+   screen-reader-reachable (it's now the only route to Send now). */
+button.linkbtn {
+  border: 0;
+  background: transparent;
+  color: var(--k-accent);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 0;
+  text-decoration: underline;
+  border-radius: 4px;
+}
+button.linkbtn:hover {
+  filter: brightness(1.08);
+}
 
 .countdown {
   font-variant-numeric: tabular-nums;
@@ -1700,6 +1776,26 @@ td.act {
   font-size: 12px;
   color: var(--muted);
   margin-top: 4px;
+}
+/* --- Field validation (DESIGN §2, home ④): an error about one field lives on that
+   field — the input goes to an invalid state and the reason sits directly beneath it,
+   tied by aria-describedby. This replaces the old disable-the-button + `title` tooltip,
+   which never reached keyboard, touch, or screen-reader users. --- */
+input.is-invalid,
+textarea.is-invalid {
+  border-color: color-mix(in srgb, var(--danger-fg) 55%, var(--line-2));
+  background: color-mix(in srgb, var(--danger-fg) 5%, var(--card));
+}
+.field-error {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 6px;
+  font-size: 12.5px;
+  color: var(--danger-fg);
+}
+.field-error .field-error-ico {
+  font-weight: 700;
 }
 /* Label + info icon grouped at the top of the slug field. */
 .label-row {
@@ -3755,5 +3851,7 @@ body.has-savebar .content {
   * {
     /* biome-ignore lint/complexity/noImportantStyles: reduced-motion must override every component's own transition */
     transition: none !important;
+    /* biome-ignore lint/complexity/noImportantStyles: and every looping animation (e.g. the Saving… cue's pulsing dot) */
+    animation: none !important;
   }
 }

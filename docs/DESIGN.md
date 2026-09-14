@@ -28,6 +28,10 @@ These five absorb the treatments the UI accumulated before the contract existed:
 
 A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a mode or a view — is a **Control**, documented apart from the five button roles. It carries `aria-pressed` on its segments, and the active segment uses the Secondary palette (`--k-accent-soft` fill, `--k-accent` text). It is not a Primary, and it is never the thing a Primary would be: a toggle changes what you're looking at, it doesn't commit an action.
 
+### Link is a link, not a sixth button
+
+`button.linkbtn` renders an action as a text link — accent-colored, underlined, no fill or border — and is not one of the five button roles; it's the presentation of a hyperlink applied to a `<button>` (so it stays keyboard- and screen-reader-reachable) for an in-page action that navigates nowhere. Reserve it for a *deliberately subordinate* path that must read as clearly demoted, below even Ghost: the canonical case is **Send now** inside the Schedule modal, where scheduling behind the review window is the default the Primary commits to and sending immediately is the step-down choice. A Ghost button there would sit level with Cancel and undo the demotion; the link says "lesser path" at a glance. If you reach for it anywhere a real button role would do, prefer the role — the link is for demotion, not decoration.
+
 ---
 
 ## 2. Notifications — one home per kind
