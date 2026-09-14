@@ -917,6 +917,24 @@ button:active {
    in front of the writer at a time, and it is --k-accent, never the near-black neutral
    (now the --ink text token, never a button fill). --- */
 
+/* One box height across the label roles, so a row that mixes them (the editor's
+   Save draft / Send test email / Schedule, a modal's Cancel + confirm) aligns:
+   roles differ by treatment — fill, weight, font-size — never by height (DESIGN §1).
+   A smaller-font role (Secondary, Ghost) grows to this floor with its label centered
+   rather than sitting a few pixels short of the Primary beside it. The bare `button`
+   default already meets it; the square Icon role and the segmented toggle Control keep
+   their own sizing and are deliberately excluded. */
+button.primary,
+button.secondary,
+button.ghost,
+button.danger,
+button.danger-subtle {
+  min-height: 35px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Primary — the single most-important action of a view (one per view). */
 button.primary {
   background: var(--k-accent);
