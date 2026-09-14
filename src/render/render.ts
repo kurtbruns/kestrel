@@ -8,10 +8,11 @@
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import type { Config } from "../env";
+import { escapeHtmlAttr } from "../lib/html";
 import { buildImageMap } from "./image_urls";
 import { markdownToHtml } from "./markdown";
 import { sanitizeEmailHtml } from "./sanitize";
-import { emailLayout, UNSUB_SENTINEL } from "./template";
+import { emailLayout, SENTTO_SENTINEL, UNSUB_SENTINEL } from "./template";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   defaultBranding,
@@ -24,7 +25,7 @@ import {
 import { htmlToText } from "./text";
 
 export { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "./template";
-export { UNSUB_SENTINEL };
+export { SENTTO_SENTINEL, UNSUB_SENTINEL };
 
 /** Widest image column an email client will show for our 600px content column. */
 const EMAIL_MAX_WIDTH = 600;
@@ -113,10 +114,11 @@ export async function render(
     "publication.tagline": branding.tagline,
     "publication.logoUrl": branding.logoUrl,
     "publication.address": branding.address,
-    // The per-recipient sentinel flows through the template unchanged and is the ONLY
-    // per-recipient edit (substituteUnsubscribe); everything else is identical bytes.
-    "footer.unsubscribeUrl": UNSUB_SENTINEL,
-    "footer.viewInBrowserUrl": viewInBrowserUrl,
+    // Two per-recipient sentinels flow through the template unchanged and are the only
+    // per-recipient edits (substituteRecipient); everything else is identical bytes.
+    "email.unsubscribeUrl": UNSUB_SENTINEL,
+    "email.sentTo": SENTTO_SENTINEL,
+    "email.viewInBrowserUrl": viewInBrowserUrl,
   };
   const body = fillEmailTemplate(template, context);
   const shell = emailLayout({ subject, preheader: derivePreheader(contentText), bodyHtml: body });
@@ -138,11 +140,25 @@ export async function render(
   return { subject, html, text, warnings };
 }
 
-/** Replace the unsubscribe sentinel in a rendered email. The ONLY per-recipient edit. */
-export function substituteUnsubscribe(r: RenderedEmail, unsubscribeUrl: string): RenderedEmail {
+/** Replace the per-recipient sentinels (the unsubscribe URL and the sent-to address)
+ *  in a rendered email — the only per-recipient edits. The sent-to address is
+ *  HTML-escaped in the HTML part. */
+export function substituteRecipient(
+  r: RenderedEmail,
+  opts: { unsubscribeUrl: string; sentTo: string },
+): RenderedEmail {
+  const sentToHtml = escapeHtmlAttr(opts.sentTo);
   return {
     subject: r.subject,
-    html: r.html.split(UNSUB_SENTINEL).join(unsubscribeUrl),
-    text: r.text.split(UNSUB_SENTINEL).join(unsubscribeUrl),
+    html: r.html
+      .split(UNSUB_SENTINEL)
+      .join(opts.unsubscribeUrl)
+      .split(SENTTO_SENTINEL)
+      .join(sentToHtml),
+    text: r.text
+      .split(UNSUB_SENTINEL)
+      .join(opts.unsubscribeUrl)
+      .split(SENTTO_SENTINEL)
+      .join(opts.sentTo),
   };
 }

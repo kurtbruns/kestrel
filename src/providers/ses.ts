@@ -20,7 +20,7 @@
  */
 import { AwsClient } from "aws4fetch";
 import type { AppEnv, Config } from "../env";
-import { substituteUnsubscribe } from "../render/render";
+import { substituteRecipient } from "../render/render";
 import { base64Utf8, buildRawMessage } from "./ses_mime";
 import { isSnsHost, mapSesNotification, type SnsEnvelope, verifySnsSignature } from "./sns";
 import type {
@@ -82,7 +82,10 @@ export class SesProvider implements EmailProvider {
   }
 
   private async sendOne(rendered: RenderedEmail, r: Recipient): Promise<PerRecipientResult> {
-    const final = substituteUnsubscribe(rendered, r.unsubscribeUrl);
+    const final = substituteRecipient(rendered, {
+      unsubscribeUrl: r.unsubscribeUrl,
+      sentTo: r.email,
+    });
     const raw = buildRawMessage({
       from: this.from,
       to: r.email,

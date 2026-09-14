@@ -30,8 +30,9 @@ export const EMAIL_TEMPLATE_VARIABLES = [
   "publication.tagline",
   "publication.logoUrl",
   "publication.address",
-  "footer.unsubscribeUrl",
-  "footer.viewInBrowserUrl",
+  "email.sentTo",
+  "email.unsubscribeUrl",
+  "email.viewInBrowserUrl",
 ] as const;
 
 const KNOWN_VARS = new Set<string>(EMAIL_TEMPLATE_VARIABLES);
@@ -45,8 +46,9 @@ export interface TemplateContext {
   "publication.tagline": string;
   "publication.logoUrl": string;
   "publication.address": string;
-  "footer.unsubscribeUrl": string;
-  "footer.viewInBrowserUrl": string;
+  "email.sentTo": string;
+  "email.unsubscribeUrl": string;
+  "email.viewInBrowserUrl": string;
 }
 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
@@ -85,19 +87,19 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   }
 
   if (!tokens.has("post.body")) {
-    errors.push("Add {{ post.body }} — without it the issue's content won't appear.");
+    errors.push("Every email must include {{ post.body }} to render the content of the post.");
   }
-  if (!tokens.has("footer.unsubscribeUrl")) {
-    errors.push("Add {{ footer.unsubscribeUrl }} — every email must carry an unsubscribe link.");
-  }
-  if (!tokens.has("footer.viewInBrowserUrl")) {
-    warnings.push(
-      "Consider {{ footer.viewInBrowserUrl }} so readers can open the issue in a browser.",
+  if (!tokens.has("email.unsubscribeUrl")) {
+    errors.push(
+      "Every email must carry an unsubscribe link. Add {{ email.unsubscribeUrl }} to the template.",
     );
+  }
+  if (!tokens.has("email.viewInBrowserUrl")) {
+    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.");
   }
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {
-      warnings.push(`Unknown variable {{ ${t} }} — it will render empty.`);
+      warnings.push(`{{ ${t} }} is not a known variable and will render empty.`);
     }
   }
   if (/<script[\s/>]/i.test(html)) {
@@ -253,7 +255,7 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`;

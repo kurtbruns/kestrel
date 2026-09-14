@@ -17,7 +17,7 @@ import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
-import { type RenderInput, render, substituteUnsubscribe } from "../render/render";
+import { type RenderInput, render, substituteRecipient } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -58,7 +58,10 @@ export async function preview(c: RequestContext): Promise<Response> {
 export async function previewPage(c: RequestContext): Promise<Response> {
   const input = await loadRenderInput(c);
   const result = await render(input, c.config, await loadBranding(c));
-  const html = substituteUnsubscribe(result, genericUnsubscribeUrl(c)).html;
+  const html = substituteRecipient(result, {
+    unsubscribeUrl: genericUnsubscribeUrl(c),
+    sentTo: "",
+  }).html;
   return new Response(html, {
     headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
   });

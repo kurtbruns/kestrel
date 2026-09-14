@@ -15,6 +15,10 @@ let session = null; // { principal: { kind, email? }, auth: { mode } } once boot
 let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
+// The Template page's "Start from example" menu binds its outside-click dismissal
+// exactly once for the app's lifetime (see renderTemplate); this guards against
+// re-binding — and so leaking a listener — on every visit to the page.
+let exampleMenuDismissBound = false;
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.
 let autosaveIdleTimer = null;
@@ -519,7 +523,7 @@ const savebar = (() => {
 
   function detach() {
     token++;
-    el.classList.remove("show", "error");
+    el.classList.remove("show", "is-error");
     el.hidden = true;
     saveBtn.onclick = null;
     discardBtn.onclick = null;
@@ -535,7 +539,7 @@ const savebar = (() => {
     const mine = ++token;
     saveBtn.textContent = saveLabel;
     discardBtn.textContent = discardLabel;
-    el.classList.remove("show", "error");
+    el.classList.remove("show", "is-error");
     setMsg("You have unsaved changes.");
     el.hidden = true; // revealed on the first setDirty(true) / showError()
     // Reserve bottom room on the content for the whole time this page is mounted, so
@@ -549,7 +553,7 @@ const savebar = (() => {
         if (!alive()) {
           return;
         }
-        el.classList.remove("error");
+        el.classList.remove("is-error");
         if (dirty) {
           setMsg("You have unsaved changes.");
           reveal();
@@ -561,7 +565,7 @@ const savebar = (() => {
         if (!alive()) {
           return;
         }
-        el.classList.add("error");
+        el.classList.add("is-error");
         setMsg(text);
         reveal();
       },
@@ -2117,6 +2121,9 @@ const SET_ICON = {
   x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   check:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+  send: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
+  lines:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
 };
 
 // ---- settings: email template (mock) ----
@@ -2153,11 +2160,11 @@ const EMAIL_TEMPLATE_VARS = [
     ],
   },
   {
-    group: "Footer",
+    group: "Email",
     vars: [
-      { token: "{{ footer.sentTo }}", desc: "The recipient's address (filled per send)." },
-      { token: "{{ footer.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ footer.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
+      { token: "{{ email.sentTo }}", desc: "The recipient's address (filled per send)." },
+      { token: "{{ email.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
+      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
     ],
   },
 ];
@@ -2266,8 +2273,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2367,8 +2374,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
     <div class="address">{{ publication.address }}</div>
   </div>
 </div>`,
@@ -2429,8 +2436,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ footer.viewInBrowserUrl }}">View in browser</a>
+    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
+    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
   </div>
 </div>`,
   },
@@ -2444,9 +2451,8 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
   "<span style=\"position:absolute;top:-8px;left:10px;font:650 10px/1.4 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#3355cc;background:#fff;padding:0 6px\">Your post’s Markdown renders here</span>" +
-  '<h2 style="margin:0 0 10px">Notes from this week</h2>' +
-  '<p style="margin:0 0 12px">A few things I\'ve been reading, making, and thinking about, collected in one short letter.</p>' +
-  '<p style="margin:0">As always, let me know what you think.</p>' +
+  '<h2 style="margin:0 0 10px">Lorem ipsum,</h2>' +
+  '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
   "</div>";
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
@@ -2468,7 +2474,7 @@ function sampleLogoDataUri(name) {
 }
 
 // Sample values the template preview binds — mirrors the render path's context, with
-// footer.* standing in for per-recipient values. `identity` is { name, tagline,
+// email.* standing in for per-recipient values. `identity` is { name, tagline,
 // logoUrl, address } from the live or loaded settings.
 function templateSampleCtx(identity) {
   const id = identity || {};
@@ -2478,10 +2484,10 @@ function templateSampleCtx(identity) {
     "publication.name": id.name || "Your publication",
     "publication.tagline": id.tagline || "Your tagline",
     "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
-    "publication.address": id.address || "123 Main Street, Anytown, ST 00000",
-    "footer.sentTo": "you@example.com",
-    "footer.unsubscribeUrl": "#unsubscribe",
-    "footer.viewInBrowserUrl": "#view-in-browser",
+    "publication.address": id.address || "123 Main Street, City, State Zip Code",
+    "email.sentTo": "you@example.com",
+    "email.unsubscribeUrl": "#unsubscribe",
+    "email.viewInBrowserUrl": "#view-in-browser",
   };
 }
 
@@ -2505,9 +2511,12 @@ function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
   let ready = false;
   const size = () => {
     try {
-      const doc = iframe.contentDocument;
-      if (doc) {
-        iframe.style.height = `${Math.max(200, doc.documentElement.scrollHeight)}px`;
+      // Measure the BODY, which is content-sized. documentElement.scrollHeight is floored
+      // at the iframe's own height, so it can grow but never shrink — which is what left
+      // the frame too tall after 375 → 640 and clipped the footer at 640 → 375.
+      const h = iframe.contentDocument?.body?.scrollHeight;
+      if (h) {
+        iframe.style.height = `${Math.max(200, h)}px`;
       }
     } catch {}
   };
@@ -2520,11 +2529,19 @@ function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
     // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> stays inert.
     slot.innerHTML = fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()));
     size();
-    setTimeout(size, 60); // re-measure once the logo image lays out
   };
   iframe.addEventListener("load", () => {
     ready = true;
     repaint();
+    // Keep the frame fitted to its content through every change: an edit, the width
+    // toggle's animated reflow, or a logo/font finishing loading. The body is
+    // content-sized and size() only touches the outer iframe, so this can't loop.
+    try {
+      const doc = iframe.contentDocument;
+      if (doc?.body && typeof ResizeObserver !== "undefined") {
+        new ResizeObserver(size).observe(doc.body);
+      }
+    } catch {}
   });
   iframe.srcdoc = TEMPLATE_FRAME_DOC;
   return { repaint };
@@ -2537,7 +2554,7 @@ function templateVarsHtml() {
       `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
         .map(
           (v) =>
-            `<div class="set-tpl-var"><code data-token="${esc(v.token)}" title="Click to copy">${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
+            `<div class="set-tpl-var"><code>${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
         )
         .join("")}</div>`,
   ).join("");
@@ -2549,8 +2566,54 @@ function templateVarsHtml() {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
+// --- template syntax highlighting (issue #123) ---
+// A small tokenizer for the overlay editor: colors the {{ tokens }}, HTML tags and
+// attribute strings, and — inside the <style> block — CSS selectors, properties,
+// colors and at-rules. Logic-less templates need nothing heavier, so this stays
+// inside the dashboard's framework-free, no-build ethos (no CodeMirror, no bundler).
+function hlTokens(s) {
+  return s.replace(/\{\{\s*[\w.]+\s*\}\}/g, (m) => `<span class="cx-var">${m}</span>`);
+}
+function hlHtml(raw) {
+  let s = esc(raw);
+  s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
+  s = s.replace(
+    /(&lt;\/?)([a-zA-Z][\w-]*)/g,
+    (_m, br, name) => `<span class="cx-punct">${br}</span><span class="cx-tag">${name}</span>`,
+  );
+  s = s.replace(/(\/?)&gt;/g, (_m, sl) => `<span class="cx-punct">${sl}&gt;</span>`);
+  return hlTokens(s);
+}
+function hlCss(raw) {
+  let s = esc(raw);
+  s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
+  s = s.replace(/#[0-9a-fA-F]{3,8}\b/g, (m) => `<span class="cx-num">${m}</span>`);
+  s = s.replace(/@[\w-]+/g, (m) => `<span class="cx-at">${m}</span>`);
+  s = s.replace(
+    /^(\s*)(?![@\s])([^\n{}<]+?)(\s*)\{$/gm,
+    (_m, ind, sel, sp) => `${ind}<span class="cx-sel">${sel}</span>${sp}{`,
+  );
+  s = s.replace(
+    /^(\s*)([a-z-]+)(\s*:)/gm,
+    (_m, ind, prop, colon) => `${ind}<span class="cx-prop">${prop}</span>${colon}`,
+  );
+  return hlTokens(s);
+}
+function highlightTemplate(src) {
+  return String(src)
+    .split(/(<style>[\s\S]*?<\/style>)/)
+    .map((seg) => {
+      const m = seg.match(/^<style>([\s\S]*?)<\/style>$/);
+      if (m) {
+        return `<span class="cx-punct">&lt;</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>${hlCss(m[1])}<span class="cx-punct">&lt;/</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>`;
+      }
+      return hlHtml(seg);
+    })
+    .join("");
+}
+
 async function renderTemplate() {
-  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The one layout every issue is sent inside. Author it as HTML — a <code>&lt;style&gt;</code> block plus <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown renders in the body. Light and dark supported.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
   const bodyEl = document.getElementById("tplBody");
   let data;
   try {
@@ -2574,41 +2637,65 @@ async function renderTemplate() {
   bodyEl.innerHTML = `
     <div class="set-preview set-tpl-sample">
       <div class="set-preview-bar">
-        <span class="set-preview-lbl">Sample email</span>
-        <span class="set-preview-dot">One layout · every issue</span>
+        <span class="set-preview-titles">
+          <span class="set-preview-lbl">Sample email</span>
+          <span class="set-preview-dot">A preview with sample content, showing the layout used for a sent email</span>
+        </span>
+        <span class="set-preview-actions">
+          <span class="set-wtog" role="group" aria-label="Preview width">
+            <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
+            <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
+          </span>
+          <button type="button" class="set-btn-accent" id="tplTest">${SET_ICON.send}<span id="tplTestLbl">Send test email</span></button>
+        </span>
       </div>
-      <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
-      <div class="set-preview-cap">Rendered with sample data. Your post’s Markdown fills the body; the <code>{{ footer.* }}</code> values are filled per recipient at send.</div>
+      <div class="set-email-stage" id="tplStage">
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
+      </div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
       <div class="set-card-pad">
         <div class="set-tpl-block">
           <div class="set-tpl-editor-head">
-            <label for="tplEditor">Email template</label>
-            <div class="set-tpl-examples">
-              <span class="lbl">Start from:</span>
-              <div class="seg" role="group" aria-label="Example template">
-                <button type="button" class="seg-btn" data-example="signed">Signed</button>
-                <button type="button" class="seg-btn" data-example="signedAddress">Signed + address</button>
-                <button type="button" class="seg-btn" data-example="plain">Plain</button>
+            <div class="set-tpl-tools">
+              <div class="set-menu" id="tplExamples">
+                <button type="button" class="ghost-btn set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
+                <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
+                  <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
+                  <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
+                  <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
+                </div>
               </div>
+              <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
+              <button type="button" class="set-btn-ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
+            </div>
+            <div class="set-tpl-required" aria-label="Required variables">
+              <span class="set-req-lbl">Required</span>
+              <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ post.body }}</span>
+              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ email.unsubscribeUrl }}</span>
             </div>
           </div>
-          <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-          <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue — Save and Discard are in the bar at the bottom of the page.</p>
-          <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
-          <div class="set-tpl-actions">
-            <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
+          <div class="set-tpl-editor-wrap" id="tplEditorWrap">
+            <div class="set-tpl-gutter" id="tplGutter" aria-hidden="true">1</div>
+            <pre class="set-tpl-hl" id="tplHl" aria-hidden="true"><code></code></pre>
+            <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
           </div>
+          <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
-
-        <details class="set-tpl-vars">
-          <summary>Available variables</summary>
-          <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
-        </details>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Saved and used for every issue you send, rendered through Kestrel's one render path. The preview uses sample data — send yourself a test to see it in a real inbox.</span></div>
+      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template, starting from a sensible default, when you send an email. Each sent email is archived exactly as it went out, so editing the template changes future emails and never ones already sent. Save and Discard are in the bar at the bottom of the page.</span></div>
+    </div>
+
+    <div class="set-card set-tpl-varcard">
+      <div class="set-card-pad">
+        <div class="set-tpl-varhead">
+          <h3 class="set-tpl-vartitle">Variables</h3>
+          <p class="field-hint">Kestrel replaces these variables with real values when you send an email. Type a variable exactly as shown, or it renders as empty. Double-click a variable to select it, then copy.</p>
+        </div>
+        <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
+      </div>
     </div>`;
 
   const tplEditor = document.getElementById("tplEditor");
@@ -2619,20 +2706,56 @@ async function renderTemplate() {
   );
   const tplMsgsEl = document.getElementById("tplMsgs");
   const tplTestEl = document.getElementById("tplTest");
+  const tplTestLbl = document.getElementById("tplTestLbl");
   const isDirty = () => tplEditor.value !== templateBaseline;
+
+  // Syntax-highlight overlay (issue #123): a transparent <textarea> over a highlighted
+  // <pre>, plus a line-number gutter, kept in scroll sync. Vanilla, no dependency.
+  const tplHl = document.getElementById("tplHl");
+  const tplHlCode = tplHl.querySelector("code");
+  const tplGutter = document.getElementById("tplGutter");
+  const paintEditor = () => {
+    const src = tplEditor.value;
+    // Trailing newline so the last line renders and the overlay height matches the textarea.
+    tplHlCode.innerHTML = `${highlightTemplate(src)}\n`;
+    let g = "";
+    const lines = src.split("\n").length;
+    for (let i = 1; i <= lines; i++) {
+      g += `${i}\n`;
+    }
+    tplGutter.textContent = g;
+  };
+  const syncScroll = () => {
+    tplHl.scrollTop = tplEditor.scrollTop;
+    tplHl.scrollLeft = tplEditor.scrollLeft;
+    tplGutter.scrollTop = tplEditor.scrollTop;
+  };
+  tplEditor.addEventListener("scroll", syncScroll);
+
+  // The two blocking-required tokens, predicted live in the toolbar pills: green when
+  // present, red when missing — so a rejected save is visible before you press Save.
+  const reqBodyEl = document.getElementById("reqBody");
+  const reqUnsubEl = document.getElementById("reqUnsub");
+  const paintReq = () => {
+    reqBodyEl.className = `set-req-pill ${/\{\{\s*post\.body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+    reqUnsubEl.className = `set-req-pill ${/\{\{\s*email\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+  };
 
   // Save + Discard live in the shared bottom save bar (onSave/onDiscard below); the
   // page never renders its own Save button. A rejected save (e.g. a template missing
-  // {{ footer.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
+  // {{ email.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate });
 
   function refreshDirty() {
+    paintEditor();
+    paintReq();
+    syncScroll();
     bar.setDirty(isDirty());
     // A test always sends the SAVED template (what will ship, I5). When there are
     // unsaved edits the button says so plainly: it saves first, then sends.
-    tplTestEl.textContent = isDirty() ? "Save & send test" : "Send test email";
+    tplTestLbl.textContent = isDirty() ? "Save & send test" : "Send test email";
     tplTestEl.title = isDirty()
       ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
       : "Sends a sample issue through the saved template so you can see it in a real inbox.";
@@ -2680,8 +2803,9 @@ async function renderTemplate() {
       showWarnings(warnings);
       toast(warnings.length ? "Template saved with warnings" : "Template saved");
     } catch (err) {
+      // The bar owns the blocking error (it stays up and says why). No toast — a
+      // bottom-center toast would sit on top of the bar and hide the very message.
       bar.showError(err.message);
-      toast("Template not saved");
     }
   }
 
@@ -2696,9 +2820,88 @@ async function renderTemplate() {
     preview.repaint();
     refreshDirty();
   });
-  for (const b of bodyEl.querySelectorAll("[data-example]")) {
-    b.onclick = () => loadExample(b.dataset.example);
+  // Examples: a "Start from example" dropdown menu (a compact, secondary action —
+  // loading one is destructive, so it isn't a permanent fixture on the page).
+  const exBtn = document.getElementById("tplExamplesBtn");
+  const exList = document.getElementById("tplExamplesList");
+  const closeExamples = () => {
+    exList.hidden = true;
+    exBtn.setAttribute("aria-expanded", "false");
+  };
+  exBtn.onclick = (e) => {
+    e.stopPropagation();
+    const willOpen = exList.hidden;
+    exList.hidden = !willOpen;
+    exBtn.setAttribute("aria-expanded", String(willOpen));
+  };
+  for (const b of exList.querySelectorAll("[data-example]")) {
+    b.onclick = () => {
+      loadExample(b.dataset.example);
+      closeExamples();
+    };
   }
+  // Outside-click dismissal, bound ONCE for the app's lifetime (not per visit, which
+  // leaked a listener + a detached wrapper each time). It resolves the menu live by id,
+  // so it's inert whenever the Template page isn't mounted, and it can't race the open
+  // click — that click's target is inside #tplExamples, so it's ignored here.
+  if (!exampleMenuDismissBound) {
+    exampleMenuDismissBound = true;
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("tplExamples");
+      const list = document.getElementById("tplExamplesList");
+      if (wrap && list && !list.hidden && !wrap.contains(e.target)) {
+        list.hidden = true;
+        document.getElementById("tplExamplesBtn")?.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
+  const frameEl = document.getElementById("tplPreview");
+  for (const wb of bodyEl.querySelectorAll(".wtog-btn")) {
+    wb.onclick = () => {
+      for (const o of bodyEl.querySelectorAll(".wtog-btn")) {
+        o.setAttribute("aria-pressed", String(o === wb));
+      }
+      frameEl.style.maxWidth = `${wb.dataset.w}px`;
+      preview.repaint();
+    };
+  }
+
+  // Line numbers: hidden by default; the toolbar toggle shows them and the choice is
+  // remembered per browser (a lightweight convenience — safe to lose).
+  const editorWrap = document.getElementById("tplEditorWrap");
+  const lineNumsBtn = document.getElementById("tplLineNums");
+  const setLineNums = (on) => {
+    editorWrap.classList.toggle("show-lines", on);
+    lineNumsBtn.setAttribute("aria-pressed", String(on));
+    syncScroll();
+  };
+  let lineNumsOn = false;
+  try {
+    lineNumsOn = localStorage.getItem("kestrel.tpl.lineNums") === "1";
+  } catch {}
+  setLineNums(lineNumsOn);
+  lineNumsBtn.onclick = () => {
+    lineNumsOn = !lineNumsOn;
+    setLineNums(lineNumsOn);
+    try {
+      localStorage.setItem("kestrel.tpl.lineNums", lineNumsOn ? "1" : "0");
+    } catch {}
+  };
+
+  // Copy the whole template to the clipboard.
+  const copyAllBtn = document.getElementById("tplCopyAll");
+  const copyAllLbl = document.getElementById("tplCopyLbl");
+  copyAllBtn.onclick = async () => {
+    await copyText(tplEditor.value);
+    copyAllBtn.classList.add("copied");
+    copyAllLbl.textContent = "Copied";
+    setTimeout(() => {
+      copyAllBtn.classList.remove("copied");
+      copyAllLbl.textContent = "Copy";
+    }, 1100);
+  };
 
   // --- send a test of the saved template (edit → test → iterate) ---
   // A test renders a sample issue through the SAVED template — what will actually
@@ -2740,9 +2943,11 @@ async function renderTemplate() {
             const warnings = await saveTemplate();
             showWarnings(warnings);
           } catch (err) {
+            // The save failed, so the test can't send what would ship. The bar shows
+            // why (and stays up); closing the dialog returns you to it. No toast — it
+            // would overlay the bar and hide the reason.
             bar.showError(err.message);
             m.close();
-            toast("Template not saved — test not sent");
             return;
           }
         }
@@ -2762,10 +2967,6 @@ async function renderTemplate() {
         }
       });
   };
-  for (const c of bodyEl.querySelectorAll(".set-tpl-var code[data-token]")) {
-    c.onclick = () => copyText(c.dataset.token);
-  }
-
   tplEditor.value = templateBaseline;
   preview.repaint();
   refreshDirty();
@@ -2875,7 +3076,7 @@ async function renderSettings() {
             <div class="set-field">
               <label for="setAddress">Mailing address</label>
               <input id="setAddress" value="${esc(state.address)}" placeholder="123 Main St, City, ST 00000" maxlength="300" autocomplete="off">
-              <p class="field-hint">A physical postal address for the email footer (<code>{{ publication.address }}</code>) — bulk mail usually requires one.</p>
+              <p class="field-hint">A physical postal address for the email footer. Bulk or commercial mail usually requires one.</p>
             </div>
           </div>
         </div>
@@ -2885,7 +3086,7 @@ async function renderSettings() {
   const templateSection = `
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"))}
-      <p class="set-lede">The one layout every issue is sent inside — its HTML, <code>{{ variables }}</code>, and light/dark styling. Edited on its own page.</p>
+      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
           <span class="set-preview-lbl">Sample email</span>
@@ -2927,7 +3128,7 @@ async function renderSettings() {
       ${secHead("Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
-          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses — they don’t go through the subscribe/consent flow.</p>
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
           <div class="set-chips" id="recipChips"></div>
           <div class="set-recip-add">
             <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">

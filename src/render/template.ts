@@ -11,6 +11,11 @@ import { escapeHtml, escapeHtmlAttr } from "../lib/html";
  *  A plain sentinel (not `{{ }}`) so it survives SES template semantics. */
 export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
 
+/** Literal placeholder for the per-recipient "sent to" address, substituted at
+ *  delivery (real send / test) with the recipient's address, and neutralized to an
+ *  empty string on recipient-agnostic pages (preview / archive) so no address leaks. */
+export const SENTTO_SENTINEL = "%%SENT_TO%%";
+
 /** Inert marker at the top of the content column. Emails render it as nothing
  *  (an HTML comment); the archive route replaces it with `archiveMasthead`, so
  *  the masthead is browser-only and the sent bytes stay masthead-free (I3, I5). */
