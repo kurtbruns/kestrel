@@ -132,8 +132,8 @@ describe("render (the single render path)", async () => {
   it("substituteRecipient replaces the per-recipient sentinels", async () => {
     const result = await render({ post: post(), revision: revision("hi"), images: [] }, config);
     const sub = substituteRecipient(result, {
-      unsubscribeUrl: "https://app.example/u/abc",
-      sentTo: "reader@example.com",
+      "email.unsubscribeUrl": "https://app.example/u/abc",
+      "email.sentTo": "reader@example.com",
     });
     expect(sub.subject).toBe(result.subject);
     expect(sub.html).not.toContain(UNSUB_SENTINEL);
@@ -159,11 +159,46 @@ describe("render (the single render path)", async () => {
     // Frozen with the sentinel, not any recipient address (I3).
     expect(result.html).toContain(SENTTO_SENTINEL);
     const sub = substituteRecipient(result, {
-      unsubscribeUrl: "https://app.example/u/abc",
-      sentTo: "reader@example.com",
+      "email.unsubscribeUrl": "https://app.example/u/abc",
+      "email.sentTo": "reader@example.com",
     });
     expect(sub.html).not.toContain(SENTTO_SENTINEL);
     expect(sub.html).toContain("reader@example.com");
+  });
+
+  it("delivery substitution is byte-identical to a raw sentinel replacement (flavor 2, I5)", async () => {
+    // The unified delivery pass must emit the exact bytes the pre-unification split/join
+    // did, for a fixed (post, template, recipient) — the unification changes no wire byte.
+    const branding = {
+      template:
+        '<div class="email">{{ post.body }}<footer>Sent to {{ email.sentTo }} · ' +
+        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></footer></div>',
+      name: "N",
+      tagline: "t",
+      logoUrl: "",
+      address: "",
+    };
+    const result = await render(
+      { post: post(), revision: revision("# Hi\n\nbody"), images: [] },
+      config,
+      branding,
+    );
+    // A multi-param URL (with `&`) proves the unsubscribe URL is inserted RAW, not
+    // attribute-escaped — the property flavor 2 preserves. `sentTo` here has no special
+    // characters, so its attribute-safe form equals its raw form and a plain join matches.
+    const url = "https://app.example/unsubscribe?token=abc&uid=42";
+    const sentTo = "reader@example.com";
+    const sub = substituteRecipient(result, {
+      "email.unsubscribeUrl": url,
+      "email.sentTo": sentTo,
+    });
+    expect(sub.html).toBe(
+      result.html.split(UNSUB_SENTINEL).join(url).split(SENTTO_SENTINEL).join(sentTo),
+    );
+    expect(sub.text).toBe(
+      result.text.split(UNSUB_SENTINEL).join(url).split(SENTTO_SENTINEL).join(sentTo),
+    );
+    expect(sub.html).toContain(`href="${url}"`); // the `&` survives unescaped
   });
 
   it("fills the template with the publication identity + a custom template's markup", async () => {

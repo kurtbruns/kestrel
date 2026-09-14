@@ -25,9 +25,8 @@ import {
   ARCHIVE_MASTHEAD_ANCHOR,
   archiveMasthead,
   archiveUrl,
-  SENTTO_SENTINEL,
-  UNSUB_SENTINEL,
 } from "../render/render";
+import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -134,12 +133,14 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     // so an apex-hosted issue stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(c.config),
   });
-  const html = send.rendered_html
-    .split(UNSUB_SENTINEL)
-    .join(`${c.config.appOrigin}/unsubscribe`)
-    // The archive is recipient-agnostic, so redact the per-recipient sent-to address.
-    .split(SENTTO_SENTINEL)
-    .join("")
+  // Fill the delivery-phase tokens for a recipient-agnostic page: a generic unsubscribe
+  // link (no single recipient here) and an empty sent-to address (redacted so none leaks).
+  // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
+  const html = fillDeliveryTokens(
+    send.rendered_html,
+    { "email.unsubscribeUrl": `${c.config.appOrigin}/unsubscribe`, "email.sentTo": "" },
+    "html",
+  )
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead)
     .split(ARCHIVE_HEAD_ANCHOR)

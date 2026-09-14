@@ -1,25 +1,30 @@
 /**
  * THE single render path. preview, test, schedule and send all call this (I5),
  * so a clean test proves the real send. Deterministic: same input → same bytes.
- * The output carries the %%UNSUBSCRIBE_URL%% sentinel verbatim; consumers
- * substitute it per-recipient (send/test) or with a generic link (preview/archive).
+ * The output carries the delivery-phase sentinels verbatim (the frozen placeholders
+ * for the per-recipient unsubscribe URL and sent-to address); consumers fill them at
+ * delivery via `substituteRecipient` (send/test) or with generic/empty values
+ * (preview/archive). Both go through the one token engine (render/template_engine.ts).
  */
 
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import type { Config } from "../env";
-import { escapeHtmlAttr } from "../lib/html";
 import { buildImageMap } from "./image_urls";
 import { markdownToHtml } from "./markdown";
 import { sanitizeEmailHtml } from "./sanitize";
-import { emailLayout, SENTTO_SENTINEL, UNSUB_SENTINEL } from "./template";
+import { emailLayout } from "./template";
 import {
   DEFAULT_EMAIL_TEMPLATE,
+  type DeliveryContext,
   defaultBranding,
   type EmailBranding,
+  fillDeliveryTokens,
   fillEmailTemplate,
   inlineEmailCss,
-  type TemplateContext,
+  type RenderContext,
+  SENTTO_SENTINEL,
+  UNSUB_SENTINEL,
   validateEmailTemplate,
 } from "./template_engine";
 import { htmlToText } from "./text";
@@ -107,19 +112,18 @@ export async function render(
     warnings.push(...validation.warnings);
   }
 
-  const context: TemplateContext = {
+  const context: RenderContext = {
     "post.body": cleanHtml,
     "post.subject": subject,
     "publication.name": branding.name,
     "publication.tagline": branding.tagline,
     "publication.logoUrl": branding.logoUrl,
     "publication.address": branding.address,
-    // Two per-recipient sentinels flow through the template unchanged and are the only
-    // per-recipient edits (substituteRecipient); everything else is identical bytes.
-    "email.unsubscribeUrl": UNSUB_SENTINEL,
-    "email.sentTo": SENTTO_SENTINEL,
     "email.viewInBrowserUrl": viewInBrowserUrl,
   };
+  // fillEmailTemplate freezes the delivery-phase tokens (the unsubscribe URL and sent-to
+  // address) to their sentinels here; substituteRecipient fills them per recipient. Those
+  // sentinels are the only per-recipient edits — everything else is identical bytes (I3).
   const body = fillEmailTemplate(template, context);
   const shell = emailLayout({ subject, preheader: derivePreheader(contentText), bodyHtml: body });
   // Inline the template's <style> onto elements (mail clients strip <style>); this is
@@ -140,25 +144,15 @@ export async function render(
   return { subject, html, text, warnings };
 }
 
-/** Replace the per-recipient sentinels (the unsubscribe URL and the sent-to address)
- *  in a rendered email — the only per-recipient edits. The sent-to address is
- *  HTML-escaped in the HTML part. */
-export function substituteRecipient(
-  r: RenderedEmail,
-  opts: { unsubscribeUrl: string; sentTo: string },
-): RenderedEmail {
-  const sentToHtml = escapeHtmlAttr(opts.sentTo);
+/** The DELIVERY pass over a rendered email: fill the per-recipient (delivery-phase)
+ *  tokens — the unsubscribe URL and the sent-to address — the only edits made after the
+ *  render is frozen (I3/I4). Drives both surfaces through the one token engine: the HTML
+ *  part escapes per the registry (unsubscribe URL raw, sent-to attribute-safe), the text
+ *  part inserts raw. Byte-for-byte a direct sentinel replacement. */
+export function substituteRecipient(r: RenderedEmail, ctx: DeliveryContext): RenderedEmail {
   return {
     subject: r.subject,
-    html: r.html
-      .split(UNSUB_SENTINEL)
-      .join(opts.unsubscribeUrl)
-      .split(SENTTO_SENTINEL)
-      .join(sentToHtml),
-    text: r.text
-      .split(UNSUB_SENTINEL)
-      .join(opts.unsubscribeUrl)
-      .split(SENTTO_SENTINEL)
-      .join(opts.sentTo),
+    html: fillDeliveryTokens(r.html, ctx, "html"),
+    text: fillDeliveryTokens(r.text, ctx, "text"),
   };
 }
