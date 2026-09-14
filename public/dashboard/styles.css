@@ -3490,6 +3490,10 @@ td.act {
 .set-email-stage .set-email-frame {
   width: 100%;
   max-width: 640px;
+  /* Floor the auto-sized frame at the default template's height, so emptying or
+     shortening the template doesn't collapse the preview and yank the page scroll
+     (the frame can still grow taller for a longer template or the 375 measure). */
+  min-height: 392px;
   border-radius: 6px;
   box-shadow: 0 1px 4px rgba(15, 18, 25, 0.1);
   transition: max-width 0.16s ease;
