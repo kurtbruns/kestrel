@@ -35,8 +35,14 @@ describe("dev seed (Windbreak dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
 
-    // The demo ships a branded identity so the reader surface isn't the bare fallback.
-    expect((await getSettings(env.DB)).publication.name).toBe("Windbreak");
+    // The demo ships a branded identity so the reader surface isn't the bare fallback,
+    // and default test recipients so "Send test email" is pre-filled out of the box.
+    const seededSettings = await getSettings(env.DB);
+    expect(seededSettings.publication.name).toBe("Windbreak");
+    expect(seededSettings.testRecipients).toEqual([
+      "editor@windbreak.example",
+      "proof@windbreak.example",
+    ]);
 
     expect(summary.subscribers).toEqual({
       confirmed: CONFIRMED,
