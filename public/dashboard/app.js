@@ -305,19 +305,21 @@ function archiveUrlFor(deployment, slug) {
   return `${origin}${base}/${slug}`;
 }
 
-// In local dev the email provider is the `fake` transport — a dead-end that records a
-// send but never delivers. Read that from the same read-only deployment reflection the
-// sidebar and Settings already consume (appConfig.deployment), fetched once at boot.
-// Dev-only by construction: deployed environments use SES/Resend, so the provider is
-// never `fake` there and the labels below are structurally absent in production.
-function isFakeTransport() {
+// True when no real email provider is configured — internally the dev `fake` transport,
+// which records a send but never delivers. Read from the same read-only deployment
+// reflection the sidebar and Settings already consume (appConfig.deployment), fetched
+// once at boot. Dev-only by construction: deployed environments require SES/Resend, so
+// this is structurally absent in production. The user-facing copy avoids the internal
+// "fake transport" term (see docs/DESIGN.md §2); a later issue will make this notice
+// environment-aware and link to the setup docs.
+function noEmailProvider() {
   return (appConfig?.deployment?.provider || "") === "fake";
 }
-// Suffix a send/test/schedule confirmation so a fake-transport send never reads as a
-// real one. Tense-neutral ("no real delivery") so it fits a test that already ran, a
-// send now queued, and a schedule that will fire later alike.
-function withTransportNote(msg) {
-  return isFakeTransport() ? `${msg} (fake transport — no real delivery)` : msg;
+// Suffix a send/test/schedule confirmation so it never reads as a real send when no
+// provider is set up. Tense-neutral ("nothing is delivered") so it fits a test that
+// already ran, a send now queued, and a schedule that will fire later alike.
+function withNoProviderNote(msg) {
+  return noEmailProvider() ? `${msg} (no email provider configured — nothing is delivered)` : msg;
 }
 
 // Access sessions expire at the edge (the request never reaches the app), so the
@@ -1736,7 +1738,7 @@ async function renderEditor(id) {
           showWarnings(lastWarnings);
           m.close();
           toast(
-            withTransportNote(
+            withNoProviderNote(
               sent === addrs.length
                 ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}`
                 : `Sent ${sent}/${addrs.length} — some failed`,
@@ -1783,7 +1785,7 @@ async function renderEditor(id) {
               json: { fire_at: new Date(t).toISOString() },
             });
             m.close();
-            toast(withTransportNote("Scheduled"));
+            toast(withNoProviderNote("Scheduled"));
             location.hash = "#/sends";
           } catch (e) {
             toast(e.message);
@@ -1796,7 +1798,7 @@ async function renderEditor(id) {
             await saveDraft(true);
             await api(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withTransportNote("Queued — cancelable for 5 minutes"));
+            toast(withNoProviderNote("Queued — cancelable for 5 minutes"));
             location.hash = "#/sends";
           } catch (e) {
             toast(e.message);
@@ -1907,7 +1909,7 @@ async function renderSends() {
   // active arrow from the start; posts differ (their default is a bespoke composite order).
   const state = { status: "", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
   app.innerHTML = `<h1>Sends</h1>
-    ${isFakeTransport() ? `<p class="muted">These sends use the dev <strong>fake transport</strong> — recorded here, but no mail was delivered.</p>` : ""}
+    ${noEmailProvider() ? `<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : ""}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <h2>All sends</h2>
@@ -3016,7 +3018,7 @@ async function renderTemplate() {
           });
           m.close();
           toast(
-            withTransportNote(
+            withNoProviderNote(
               r.sent === r.total
                 ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
                 : `Sent ${r.sent}/${r.total} — some failed`,
