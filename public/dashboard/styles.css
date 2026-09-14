@@ -2,18 +2,40 @@
    prefers-color-scheme (see the dark block below). */
 :root {
   color-scheme: light dark;
+  /* Layering — one named z-index ladder (DESIGN §4). Every fixed or floating surface
+     references a rung by token, never a bare literal; the order encodes the intent.
+     z-index is theme-independent, so it lives only here (not the dark block). */
+  --z-content: 1;
+  --z-header: 10;
+  --z-menu: 20;
+  --z-bar: 30;
+  --z-toast: 40;
+  --z-modal: 50;
   --fg: #18181b;
   --muted: #52525b;
   --line: #e4e4e7;
   --bg: #f8f8f8;
   --card: #fff;
   --hover: #efefef;
-  --accent: #18181b;
-  --accent-fg: #ffffff;
-  --danger: #b91c1c;
-  --danger-fg: #ffffff;
-  --ok: #15803d;
-  --warn: #b45309;
+  /* Neutral ink — the strong near-black/near-white neutral (DESIGN §3). A text token
+     for headings and strong labels; never a button fill (Primary is --k-accent). */
+  --ink: #18181b;
+  --ink-on: #ffffff;
+  /* Semantic feedback — one {fg, bg, line} scale each for danger / warn / ok (DESIGN §3).
+     fg is the saturated hue (text on the soft bg, or a solid fill paired with an on-color);
+     bg is the soft tint behind a notice; line is its border. There is one red, not two —
+     the old --danger vs --b-bad-* split is collapsed here. Kept distinct from the
+     status-badge scales below, which label a post's lifecycle, not a feedback meaning. */
+  --danger-fg: #b91c1c;
+  --danger-bg: #fee2e2;
+  --danger-line: #fecaca;
+  --danger-on: #ffffff;
+  --warn-fg: #b45309;
+  --warn-bg: #fef3c7;
+  --warn-line: #fde68a;
+  --ok-fg: #15803d;
+  --ok-bg: #dcfce7;
+  --ok-line: #bbf7d0;
   --ring: #2563eb;
   --banner-bg: #eff6ff;
   --banner-line: #bfdbfe;
@@ -28,9 +50,6 @@
   --b-sending-bg: #fef3c7;
   --b-sending-fg: #b45309;
   --b-sending-line: #fde68a;
-  --b-bad-bg: #fee2e2;
-  --b-bad-fg: #b91c1c;
-  --b-bad-line: #fecaca;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
@@ -66,12 +85,18 @@
     --bg: #18181b;
     --card: #232327;
     --hover: #2a2a2f;
-    --accent: #e5e7eb;
-    --accent-fg: #18181b;
-    --danger: #f87171;
-    --danger-fg: #18181b;
-    --ok: #4ade80;
-    --warn: #fbbf24;
+    --ink: #e5e7eb;
+    --ink-on: #18181b;
+    --danger-fg: #f87171;
+    --danger-bg: #4c1d1d;
+    --danger-line: #b91c1c;
+    --danger-on: #18181b;
+    --warn-fg: #fbbf24;
+    --warn-bg: #45350f;
+    --warn-line: #b45309;
+    --ok-fg: #4ade80;
+    --ok-bg: #14532d;
+    --ok-line: #15803d;
     --ring: #60a5fa;
     --banner-bg: #1e293b;
     --banner-line: #334155;
@@ -86,9 +111,6 @@
     --b-sending-bg: #45350f;
     --b-sending-fg: #fcd34d;
     --b-sending-line: #b45309;
-    --b-bad-bg: #4c1d1d;
-    --b-bad-fg: #fca5a5;
-    --b-bad-line: #b91c1c;
     --k-accent: #7d9bff;
     --k-accent-contrast: #10131f;
     --k-accent-soft: rgba(125, 155, 255, 0.18);
@@ -208,7 +230,7 @@ body.nav-resizing .sidebar {
 .room-bar {
   position: sticky;
   top: 0;
-  z-index: 6;
+  z-index: var(--z-header);
   display: grid;
   grid-template-columns: var(--rail) 1fr;
   align-items: stretch;
@@ -428,8 +450,8 @@ body.nav-resizing .sidebar {
   display: block;
 }
 .brand-logo-placeholder {
-  background: var(--accent);
-  color: var(--accent-fg);
+  background: var(--ink);
+  color: var(--ink-on);
 }
 .brand-meta {
   display: flex;
@@ -665,9 +687,9 @@ body.tool-mode .content {
     padding: 18px 8px;
     /* Lift the rail's stacking context above .content and let the hover tooltips escape
      the 64px column; the collapsed contents never scroll, so the clip that overflow-y
-     would otherwise force isn't needed here. */
+     would otherwise force isn't needed here. The side rail sits on the header rung. */
     overflow: visible;
-    z-index: 20;
+    z-index: var(--z-header);
   }
 
   /* Brand → the logo tile only; the name/tagline folds away. */
@@ -717,7 +739,7 @@ body.tool-mode .content {
     left: calc(100% + 10px);
     top: 50%;
     transform: translateY(-50%);
-    z-index: 40;
+    z-index: var(--z-menu);
     padding: 5px 9px;
     border-radius: 6px;
     background: var(--fg);
@@ -808,7 +830,7 @@ body.tool-mode .content {
     position: fixed;
     top: 12px;
     left: 12px;
-    z-index: 27;
+    z-index: var(--z-menu);
     width: 40px;
     height: 40px;
     /* Reset the base button's padding (8px 14px): with box-sizing:border-box it
@@ -839,7 +861,9 @@ body.tool-mode .content {
     left: 0;
     height: 100vh;
     width: min(280px, 82vw);
-    z-index: 28;
+    /* The drawer, its scrim and the hamburger share the menu rung; DOM order
+       (toggle → scrim → drawer) keeps the drawer painting above the scrim. */
+    z-index: var(--z-menu);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
   }
@@ -850,7 +874,7 @@ body.tool-mode .content {
     display: block;
     position: fixed;
     inset: 0;
-    z-index: 27;
+    z-index: var(--z-menu);
     background: rgba(0, 0, 0, 0.45);
   }
   .content {
@@ -882,21 +906,95 @@ button:hover {
 button:active {
   transform: translateY(0.5px);
 }
+/* --- Buttons: five roles (DESIGN §1), chosen by importance and consequence, one
+   class each. The bare `button` above is the neutral default (Ghost's card-filled
+   end); the classes below step up to Primary / Secondary or down to the quiet Ghost,
+   plus Danger and the square Icon. Exactly one solid brand-blue action — Primary — is
+   in front of the writer at a time, and it is --k-accent, never the near-black neutral
+   (now the --ink text token, never a button fill). --- */
+
+/* Primary — the single most-important action of a view (one per view). */
 button.primary {
-  background: var(--accent);
-  color: var(--accent-fg);
-  border-color: var(--accent);
+  background: var(--k-accent);
+  color: var(--k-accent-contrast);
+  border-color: var(--k-accent);
 }
 button.primary:hover {
-  filter: brightness(1.12);
+  filter: brightness(1.08);
 }
 button.primary:active {
   filter: brightness(0.94);
 }
+
+/* Secondary — an important standing action that isn't *the* action (e.g. Send test
+   email beside a Save): soft accent fill, accent text, accent-tinted border. */
+button.secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--k-accent-soft);
+  color: var(--k-accent);
+  border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+  font-size: 12.5px;
+  font-weight: 550;
+  padding: 7px 12px;
+  border-radius: 7px;
+}
+button.secondary:hover {
+  border-color: var(--k-accent);
+}
+
+/* Ghost — the quiet neutral role: back, cancel, a menu trigger, a pager step, a copy
+   control. The default for anything not asking for attention; absorbs the old
+   .ghost-btn / .set-btn-ghost idioms. */
+button.ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  font-size: 13px;
+  padding: 6px 12px;
+  border-radius: 6px;
+}
+button.ghost:hover {
+  color: var(--fg);
+  border-color: var(--muted);
+}
+/* A copy control flashes green (--ok) once the clipboard write lands. */
+button.ghost.copied {
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
+}
+/* An icon inside a Secondary/Ghost label button (Send test, Copy). */
+button.secondary svg,
+button.ghost svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+/* Icon — a square, icon-only control where a label would be noise (a ⋯ trigger, a
+   toolbar glyph). Inherits Ghost's neutral treatment; always carries an aria-label. */
+button.icon {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+button.icon:hover {
+  background: var(--hover);
+  color: var(--fg);
+}
+
 button.danger {
-  background: var(--danger);
-  color: var(--danger-fg);
-  border-color: var(--danger);
+  background: var(--danger-fg);
+  color: var(--danger-on);
+  border-color: var(--danger-fg);
 }
 button.danger:hover {
   filter: brightness(1.08);
@@ -914,17 +1012,12 @@ button.danger-subtle {
     background 0.12s;
 }
 button.danger-subtle:hover {
-  color: var(--danger);
-  border-color: var(--danger);
-  background: color-mix(in srgb, var(--danger) 8%, transparent);
+  color: var(--danger-fg);
+  border-color: var(--danger-fg);
+  background: color-mix(in srgb, var(--danger-fg) 8%, transparent);
 }
 button.danger-subtle:active {
-  background: color-mix(in srgb, var(--danger) 14%, transparent);
-}
-button.ghost {
-  border: 0;
-  background: transparent;
-  font-size: 18px;
+  background: color-mix(in srgb, var(--danger-fg) 14%, transparent);
 }
 button:disabled {
   opacity: 0.5;
@@ -1009,9 +1102,9 @@ label {
 }
 
 .error {
-  color: var(--b-bad-fg);
-  background: var(--b-bad-bg);
-  border: 1px solid var(--b-bad-line);
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
   border-radius: 8px;
   padding: 12px 14px;
   font-size: 14px;
@@ -1094,9 +1187,9 @@ td a:hover {
 }
 .badge.canceled,
 .badge.failed {
-  background: var(--b-bad-bg);
-  color: var(--b-bad-fg);
-  border-color: var(--b-bad-line);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
 }
 /* subscriber consent states (reuse the send-status colors) */
 .badge.confirmed {
@@ -1114,9 +1207,9 @@ td a:hover {
   color: var(--b-draft-fg);
 }
 .badge.suppressed {
-  background: var(--b-bad-bg);
-  color: var(--b-bad-fg);
-  border-color: var(--b-bad-line);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
 }
 /* Suppression is an overlay on the address, not a consent status, so it rides next to
    the email rather than in the Status column — sized down to read as secondary. */
@@ -1286,20 +1379,6 @@ th.num .th-sort {
   align-items: center;
   gap: 10px;
 }
-.ghost-btn {
-  border: 1px solid var(--line);
-  background: var(--card);
-  color: var(--muted);
-  font-size: 13px;
-  padding: 6px 12px;
-  border-radius: 6px;
-  cursor: pointer;
-}
-.ghost-btn:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
   border: 1px solid var(--line);
@@ -1492,14 +1571,14 @@ th.num .th-sort {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--warn);
+  background: var(--warn-fg);
   flex: 0 0 auto;
 }
 
 .warnings {
-  background: var(--b-sending-bg);
-  border: 1px solid var(--b-sending-line);
-  color: var(--warn);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  color: var(--warn-fg);
   border-radius: 6px;
   padding: 8px 12px;
   font-size: 13px;
@@ -1516,7 +1595,7 @@ th.num .th-sort {
   flex-direction: column;
   gap: 8px;
   align-items: center;
-  z-index: 30;
+  z-index: var(--z-toast);
   pointer-events: none;
 }
 .toast {
@@ -1540,7 +1619,7 @@ th.num .th-sort {
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 20;
+  z-index: var(--z-modal);
   padding: 16px;
 }
 .modal {
@@ -1581,28 +1660,15 @@ td.act {
   width: 1%;
   white-space: nowrap;
 }
-.menu-btn {
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 2px 8px;
-  border-radius: 6px;
-}
-.menu-btn:hover {
-  background: var(--hover);
-  color: var(--fg);
-}
 .menu-overlay {
   position: fixed;
   inset: 0;
-  z-index: 39;
+  z-index: var(--z-menu);
 }
 .menu {
   position: absolute;
-  z-index: 40;
+  /* Same rung as its overlay; the menu is appended after the overlay, so it paints on top. */
+  z-index: var(--z-menu);
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -1626,7 +1692,7 @@ td.act {
   background: var(--hover);
 }
 .menu-item.danger-item {
-  color: var(--danger);
+  color: var(--danger-fg);
 }
 
 /* editor field hints + scheduled banner */
@@ -1683,7 +1749,7 @@ td.act {
      max-width is also capped to the viewport so the box itself always fits. */
   left: var(--tip-x, 0px);
   bottom: calc(100% + 8px);
-  z-index: 30;
+  z-index: var(--z-menu);
   width: max-content;
   /* Cap the content box so the border box never exceeds the viewport minus an 8px
      gutter each side: 34px = 2×8 gutter + 2×9 horizontal padding (content-box). */
@@ -1743,40 +1809,43 @@ td.act {
 #f-slug.slug-auto {
   color: var(--muted);
 }
-.sched-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  background: var(--b-scheduled-bg);
-  color: var(--b-scheduled-fg);
-  border: 1px solid var(--b-scheduled-line);
-  border-radius: 8px;
-  padding: 10px 14px;
-  margin-bottom: 14px;
-  font-size: 14px;
-}
-/* Out-of-date notice: the draft changed elsewhere (another tab, or Claude). Warm
-   tone (like warnings) since it asks the writer to choose, not an error. */
-.fresh-banner {
+/* --- Editor-state banner (DESIGN §2, home ③): one persistent, in-flow notice at the
+   top of the editor, in three variants. `scheduled` marks a frozen/soft-locked post
+   (SPEC §6); `conflict` warns the draft changed elsewhere (another tab, or Claude) —
+   its two actions are equal-weight Ghost, since both choices lose something; `info` is
+   a neutral notice. It replaces the old `.sched-banner` + `.fresh-banner` pair. --- */
+.banner {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  background: var(--b-sending-bg);
-  color: var(--warn);
-  border: 1px solid var(--b-sending-line);
+  border: 1px solid;
   border-radius: 8px;
   padding: 10px 14px;
   margin-bottom: 14px;
   font-size: 14px;
 }
-.fresh-banner .row {
+.banner .row {
   flex: 0 0 auto;
 }
-.fresh-banner strong {
+.banner strong {
   color: inherit;
+}
+.banner-scheduled {
+  background: var(--b-scheduled-bg);
+  color: var(--b-scheduled-fg);
+  border-color: var(--b-scheduled-line);
+}
+.banner-conflict {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+}
+.banner-info {
+  background: var(--banner-bg);
+  color: var(--fg);
+  border-color: var(--banner-line);
 }
 
 .grid2 {
@@ -1941,7 +2010,7 @@ td.act {
   border-radius: 0;
   background: none;
   vertical-align: middle;
-  accent-color: var(--accent);
+  accent-color: var(--ink);
 }
 .doc code {
   font-family: var(--mono);
@@ -2045,12 +2114,18 @@ td.act {
   border-top: 1px solid var(--line);
   margin: 32px 0;
 }
+/* A prose table is a bordered grid, not one of the app's card-style data tables, so
+   reset the card chrome the global `table` rule would otherwise lend it (a rounded
+   outer border + fill that fights the square cell grid) — the cell borders carry it. */
 .doc table {
   border-collapse: collapse;
   width: 100%;
   margin: 16px 0;
   display: block;
   overflow-x: auto;
+  background: none;
+  border: 0;
+  border-radius: 0;
 }
 .doc th,
 .doc td {
@@ -2062,6 +2137,7 @@ td.act {
 }
 .doc th {
   background: var(--bg);
+  color: var(--fg);
   font-weight: 600;
 }
 .doc img {
@@ -2304,14 +2380,14 @@ td.act {
   line-height: 1.45;
 }
 .health.amber {
-  color: var(--warn);
-  border-color: var(--b-sending-line);
-  background: var(--b-sending-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+  background: var(--warn-bg);
 }
 .health.red {
-  color: var(--danger);
-  border-color: var(--b-bad-line);
-  background: var(--b-bad-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
 }
 
 /* A wedged send on the Sends page: ambiguous in-flight deliveries that need an
@@ -2322,9 +2398,9 @@ td.act {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  color: var(--b-bad-fg);
-  border-color: var(--b-bad-line);
-  background: var(--b-bad-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
+  background: var(--danger-bg);
 }
 .stuck-card .stuck-head {
   display: flex;
@@ -2377,12 +2453,12 @@ td.act {
   font-size: 12px;
 }
 .tile-emph {
-  border-color: var(--b-sent-line);
-  background: var(--b-sent-bg);
+  border-color: var(--ok-line);
+  background: var(--ok-bg);
 }
 .tile-emph .tile-n,
 .tile-emph .tile-sub {
-  color: var(--ok);
+  color: var(--ok-fg);
 }
 
 /* Recent-sends "Archive ↗" link + the drafts table live on the shared table styles. */
@@ -2422,7 +2498,7 @@ td.act {
   border-radius: 6px;
   padding: 6px 9px;
 }
-.pub-row .ghost-btn {
+.pub-row button.ghost {
   flex: 0 0 auto;
 }
 .pub-foot {
@@ -2629,9 +2705,9 @@ td.act {
   background: var(--k-accent-soft);
 }
 .set-chip.readonly {
-  color: var(--warn);
-  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2));
-  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  color: var(--warn-fg);
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-2));
+  background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
 }
 /* A dashed "Mock" tag beside the Email-template chip — says the section is a
    preview of a feature not wired to the backend yet. */
@@ -2793,7 +2869,7 @@ td.act {
   align-items: flex-start;
   padding: 11px 16px;
   border-bottom: 1px solid var(--line-2);
-  background: color-mix(in srgb, var(--warn) 6%, transparent);
+  background: color-mix(in srgb, var(--warn-fg) 6%, transparent);
   font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
@@ -2803,7 +2879,7 @@ td.act {
   height: 15px;
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--warn);
+  color: var(--warn-fg);
 }
 .set-kv {
   display: grid;
@@ -2850,9 +2926,9 @@ td.act {
   white-space: nowrap;
 }
 .set-pill.ok {
-  background: var(--b-sent-bg);
-  color: var(--b-sent-fg);
-  border-color: var(--b-sent-line);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-line);
 }
 .set-pill svg {
   width: 12px;
@@ -2960,8 +3036,8 @@ td.act {
   padding: 0;
 }
 .set-recip-chip button:hover {
-  background: var(--b-bad-bg);
-  color: var(--b-bad-fg);
+  background: var(--danger-bg);
+  color: var(--danger-fg);
 }
 .set-recip-chip button svg {
   width: 10px;
@@ -3045,11 +3121,14 @@ td.act {
   flex: 1;
   min-width: 0;
 }
+/* The styled subscribe-form preview shows reader-facing chrome, not an admin control,
+   so it isn't one of the five button roles — but it rides the neutral --ink token
+   (was a hardcoded near-black that vanished in dark mode) so it themes correctly. */
 .set-pf-styled .sub-btn {
   flex: 0 0 auto;
-  background: #18181b;
-  color: #fff;
-  border-color: #18181b;
+  background: var(--ink);
+  color: var(--ink-on);
+  border-color: var(--ink);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -3214,9 +3293,9 @@ td.act {
   line-height: 1.5;
 }
 .set-tpl-msgs.warn {
-  background: color-mix(in srgb, var(--warn) 9%, transparent);
-  border-color: color-mix(in srgb, var(--warn) 30%, var(--line-2));
-  color: var(--warn);
+  background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-2));
+  color: var(--warn-fg);
 }
 /* Variable reference — a native <details> disclosure. Logic-less: a token is only
    ever replaced by its value, so there's nothing to execute. */
@@ -3346,28 +3425,6 @@ td.act {
   color: var(--k-accent);
   font-weight: 600;
 }
-/* Send test — an accent-tinted "ghost" button with the send glyph; it's the page's
-   primary standing action (send yourself the saved layout), so it reads accent, not grey. */
-.set-btn-accent {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--k-accent);
-  background: var(--k-accent-soft);
-  border: 1px solid color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
-  border-radius: 7px;
-  cursor: pointer;
-}
-.set-btn-accent svg {
-  width: 14px;
-  height: 14px;
-}
-.set-btn-accent:hover {
-  border-color: var(--k-accent);
-}
 /* Editor toolbar: the dropdown + small icon buttons (line-number toggle, copy). */
 .set-tpl-tools {
   display: flex;
@@ -3402,36 +3459,8 @@ td.act {
   border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
 }
 .set-icon-btn.copied {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line-2));
-}
-/* A compact labelled ghost button (icon + text) — the editor's Copy control. */
-.set-btn-ghost {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 30px;
-  padding: 0 11px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  background: var(--card);
-  border: 1px solid var(--line-2);
-  border-radius: 7px;
-  cursor: pointer;
-}
-.set-btn-ghost svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
-.set-btn-ghost:hover {
-  color: var(--fg);
-  border-color: var(--muted);
-}
-.set-btn-ghost.copied {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 40%, var(--line-2));
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
 }
 /* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
    absence blocks a save, shown upper-right of the editor toolbar. */
@@ -3463,20 +3492,20 @@ td.act {
   background: var(--muted);
 }
 .set-req-pill.ok {
-  color: var(--ok);
-  border-color: color-mix(in srgb, var(--ok) 38%, var(--line-2));
-  background: color-mix(in srgb, var(--ok) 10%, transparent);
+  color: var(--ok-fg);
+  border-color: color-mix(in srgb, var(--ok-fg) 38%, var(--line-2));
+  background: color-mix(in srgb, var(--ok-fg) 10%, transparent);
 }
 .set-req-pill.ok .dot {
-  background: var(--ok);
+  background: var(--ok-fg);
 }
 .set-req-pill.bad {
-  color: var(--danger);
-  border-color: color-mix(in srgb, var(--danger) 40%, var(--line-2));
-  background: color-mix(in srgb, var(--danger) 9%, transparent);
+  color: var(--danger-fg);
+  border-color: color-mix(in srgb, var(--danger-fg) 40%, var(--line-2));
+  background: color-mix(in srgb, var(--danger-fg) 9%, transparent);
 }
 .set-req-pill.bad .dot {
-  background: var(--danger);
+  background: var(--danger-fg);
 }
 /* The sample email sits on a sunken stage so the (width-capped) email card reads as a
    message on a surface; the width toggle sets its max-width. */
@@ -3518,7 +3547,7 @@ td.act {
   position: absolute;
   left: 0;
   top: calc(100% + 6px);
-  z-index: 20;
+  z-index: var(--z-menu);
   width: 280px;
   max-width: min(280px, 78vw);
   padding: 5px;
@@ -3593,15 +3622,15 @@ td.act {
    The left offset tracks the sidebar — clearing the 260px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    phone drawer. The post editor keeps its own autosave + conflict model, so it does
-   NOT use this bar. The primary action is Kestrel's own --k-accent (see the note on
-   the token); every other primary in the app stays the near-black --accent. --- */
+   NOT use this bar. Its Save is a Primary button — now brand-blue --k-accent app-wide
+   (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
   /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
   left: 260px;
   right: 0;
   bottom: 0;
-  z-index: 20;
+  z-index: var(--z-bar);
   padding: 13px 0;
   background: color-mix(in srgb, var(--card) 88%, transparent);
   backdrop-filter: blur(10px);
@@ -3636,7 +3665,7 @@ td.act {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--warn);
+  background: var(--warn-fg);
   flex: 0 0 auto;
 }
 /* A rejected save turns the bar red and the dot into a danger mark. The state class
@@ -3644,20 +3673,15 @@ td.act {
    rounded, padded red box) would otherwise match the bar and paint a stray red border
    on the three sides the bar doesn't re-specify. */
 .savebar.is-error .savebar-msg {
-  color: var(--danger);
+  color: var(--danger-fg);
 }
 .savebar.is-error .savebar-dot {
-  background: var(--danger);
+  background: var(--danger-fg);
 }
 .savebar-acts {
   display: flex;
   gap: 9px;
   flex: 0 0 auto;
-}
-.savebar button.primary {
-  background: var(--k-accent);
-  color: var(--k-accent-contrast);
-  border-color: var(--k-accent);
 }
 /* While a page owns the bar, reserve room below the content so its last section
    never hides behind the fixed bar (set for the page's whole life — no layout shift
