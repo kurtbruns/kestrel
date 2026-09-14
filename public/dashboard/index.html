@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=e2ca56a9">
+<link rel="stylesheet" href="./styles.css?v=96c18115">
 <script>
 // Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
 // sidebar renders in its final width with no flash. The collapse toggle's override is
@@ -97,8 +97,23 @@
   </aside>
   <main id="app" class="content"></main>
 </div>
+<!-- Shared unsaved-changes bar: one full-width banner fixed to the bottom of the
+     viewport, offset past the sidebar on desktop and edge-to-edge once the sidebar
+     is the off-canvas drawer. Every surface with an explicit save + a revertible
+     baseline (Settings, the Template page) drives it through the savebar controller
+     in app.js; route() detaches it on each navigation. The post editor keeps its own
+     autosave + conflict model and deliberately does not use this. -->
+<section class="savebar" id="savebar" aria-label="Unsaved changes" aria-live="polite" hidden>
+  <div class="savebar-inner">
+    <span class="savebar-msg"></span>
+    <span class="savebar-acts">
+      <button type="button" id="savebarDiscard">Discard</button>
+      <button type="button" class="primary" id="savebarSave">Save changes</button>
+    </span>
+  </div>
+</section>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=68b67e35"></script>
+<script src="./app.js?v=75dec2f2"></script>
 </body>
 </html>

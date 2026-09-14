@@ -485,6 +485,92 @@ function renderError(container, msg, retryFn) {
   }
 }
 
+// ---- shared unsaved-changes bar ----
+// One full-width banner fixed to the bottom of the viewport (markup in index.html),
+// shared by every surface with an explicit save + a revertible baseline: Settings
+// and the Template page. A page attaches once on mount, then drives it — setDirty()
+// slides it up while there are unsaved changes, showError() keeps it up after a
+// rejected save and says why (right beside Save). route() detaches it on every
+// navigation, so a page owns the bar only while it's mounted. The post editor keeps
+// its own autosave + conflict model (see renderEditor) and deliberately does not use
+// this — a "Save / Discard against a baseline" bar doesn't fit continuous autosave.
+const savebar = (() => {
+  const el = document.getElementById("savebar");
+  const msgEl = el.querySelector(".savebar-msg");
+  const saveBtn = document.getElementById("savebarSave");
+  const discardBtn = document.getElementById("savebarDiscard");
+  // Bumped on every attach/detach so a stale async handler (a save that resolves
+  // after the user navigated away) can never drive a bar a new page now owns.
+  let token = 0;
+
+  const setMsg = (text) => {
+    msgEl.innerHTML = `<span class="savebar-dot"></span><span></span>`;
+    msgEl.lastChild.textContent = text;
+  };
+  const reveal = () => {
+    el.hidden = false;
+    // Arm the slide-up: un-hide, then force a reflow so the off-screen base transform
+    // is the established start state before .show flips it (a hidden → .show toggle in
+    // one tick wouldn't transition). A synchronous reflow works even when the tab is
+    // backgrounded and requestAnimationFrame is paused.
+    void el.offsetHeight;
+    el.classList.add("show");
+  };
+
+  function detach() {
+    token++;
+    el.classList.remove("show", "error");
+    el.hidden = true;
+    saveBtn.onclick = null;
+    discardBtn.onclick = null;
+    // Drop the bottom padding the page reserved for the (fixed) bar.
+    document.body.classList.remove("has-savebar");
+  }
+
+  // Mount the bar for the current page; returns the handle the page drives. onSave
+  // runs inside busy() on the shared Save button, so the page's callback is a plain
+  // async function (it should call handle.setDirty(false) on success, or
+  // handle.showError(msg) on a rejected save).
+  function attach({ onSave, onDiscard, saveLabel = "Save changes", discardLabel = "Discard" }) {
+    const mine = ++token;
+    saveBtn.textContent = saveLabel;
+    discardBtn.textContent = discardLabel;
+    el.classList.remove("show", "error");
+    setMsg("You have unsaved changes.");
+    el.hidden = true; // revealed on the first setDirty(true) / showError()
+    // Reserve bottom room on the content for the whole time this page is mounted, so
+    // the last section never slides under the fixed bar (no shift as it toggles).
+    document.body.classList.add("has-savebar");
+    saveBtn.onclick = () => busy(saveBtn, "Saving…", () => Promise.resolve(onSave()));
+    discardBtn.onclick = () => onDiscard();
+    const alive = () => token === mine;
+    return {
+      setDirty(dirty) {
+        if (!alive()) {
+          return;
+        }
+        el.classList.remove("error");
+        if (dirty) {
+          setMsg("You have unsaved changes.");
+          reveal();
+        } else {
+          el.classList.remove("show");
+        }
+      },
+      showError(text) {
+        if (!alive()) {
+          return;
+        }
+        el.classList.add("error");
+        setMsg(text);
+        reveal();
+      },
+    };
+  }
+
+  return { attach, detach };
+})();
+
 // Keep an info tooltip within the viewport. The tip is a CSS pseudo-element
 // anchored to the icon's left edge; pure CSS can't see the viewport, so before it
 // shows we measure the icon and, if the (width-capped) tip would run off the right
@@ -586,6 +672,7 @@ function route() {
   editorHash = null; // renderEditor re-establishes these when it mounts
   editorLeaveFlush = null;
   editorManualSave = null;
+  savebar.detach(); // the mounting page re-attaches if it uses the shared save bar
   const hash = location.hash || "#/dashboard";
   const [, view, arg] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
@@ -1021,6 +1108,7 @@ async function renderEditor(id) {
         <div class="row">
           <button id="saveBtn" ${dis}>Save draft</button>
           <button id="testBtn">Send test email</button>
+          <span class="save-status" id="saveStatus"></span>
         </div>
         ${
           locked
@@ -1227,22 +1315,41 @@ async function renderEditor(id) {
 
   // --- unsaved-changes tracking + save ---
   // A snapshot of the last-saved field values; the editor is "dirty" whenever the
-  // current values differ. We reflect that on the Save button (tint + • suffix),
-  // guard navigation (at the router, via isEditorDirty), and autosave.
+  // current values differ. We reflect that in a save-status indicator beside the
+  // button, guard navigation (at the router, via isEditorDirty), and autosave.
   editorHash = location.hash;
   const saveBtn = document.getElementById("saveBtn");
+  const saveStatus = document.getElementById("saveStatus");
   const snapshot = () => JSON.stringify(collect());
   let savedSnapshot = snapshot();
   let saving = false;
-  function refreshDirty() {
-    isEditorDirty = snapshot() !== savedSnapshot;
-    if (saveBtn) {
-      saveBtn.classList.toggle("unsaved", isEditorDirty);
+  // The autosave editor's counterpart to the shared save bar's dot: same amber
+  // "unsaved" cue (dot + text), extended to the autosave lifecycle it actually has —
+  // Saving… while a save is in flight, Saved once it lands. Empty while locked
+  // (a scheduled post can't be edited here).
+  function renderSaveStatus() {
+    if (!saveStatus) {
+      return;
     }
-    if (saveBtn && !saving) {
-      saveBtn.textContent = isEditorDirty ? "Save draft •" : "Save draft";
+    if (locked) {
+      saveStatus.className = "save-status";
+      saveStatus.textContent = "";
+    } else if (saving) {
+      saveStatus.className = "save-status is-saving";
+      saveStatus.textContent = "Saving…";
+    } else if (isEditorDirty) {
+      saveStatus.className = "save-status is-dirty";
+      saveStatus.textContent = "Unsaved changes";
+    } else {
+      saveStatus.className = "save-status is-saved";
+      saveStatus.textContent = "Saved";
     }
   }
+  function refreshDirty() {
+    isEditorDirty = snapshot() !== savedSnapshot;
+    renderSaveStatus();
+  }
+  renderSaveStatus(); // paint the initial state (Saved on a fresh draft; empty if locked)
   // Autosave: save after IDLE_MS of quiet, but never let an edit sit unsaved
   // longer than MAX_MS even during continuous typing (the idle timer keeps
   // resetting; the cap timer, started on the first edit after a save, does not).
@@ -1287,6 +1394,7 @@ async function renderEditor(id) {
     }
     clearAutosaveTimers(); // a save is starting — cancel any pending autosave trigger
     saving = true;
+    renderSaveStatus(); // reflect Saving… right away; the finally re-renders when done
     try {
       const { post: u } = await api(`/posts/${id}`, {
         method: "PUT",
@@ -2488,13 +2596,10 @@ async function renderTemplate() {
             </div>
           </div>
           <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" aria-label="Email template HTML"></textarea>
-          <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue.</p>
+          <p class="field-hint set-tpl-hint">Picking an example loads it into the editor, replacing what’s there. Save to use it for every issue — Save and Discard are in the bar at the bottom of the page.</p>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
           <div class="set-tpl-actions">
-            <button type="button" class="primary" id="tplSave">Save template</button>
             <button type="button" class="ghost-btn" id="tplTest">Send test email</button>
-            <button type="button" class="ghost-btn" id="tplRevert" hidden>Revert changes</button>
-            <span class="set-tpl-status" id="tplStatus"></span>
           </div>
         </div>
 
@@ -2512,36 +2617,78 @@ async function renderTemplate() {
     () => tplEditor.value,
     () => identity,
   );
-  const tplStatusEl = document.getElementById("tplStatus");
-  const tplRevertEl = document.getElementById("tplRevert");
   const tplMsgsEl = document.getElementById("tplMsgs");
   const tplTestEl = document.getElementById("tplTest");
   const isDirty = () => tplEditor.value !== templateBaseline;
-  const refreshDirty = () => {
-    const dirty = isDirty();
-    tplRevertEl.hidden = !dirty;
-    tplStatusEl.textContent = dirty ? "Unsaved changes" : "";
+
+  // Save + Discard live in the shared bottom save bar (onSave/onDiscard below); the
+  // page never renders its own Save button. A rejected save (e.g. a template missing
+  // {{ footer.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
+  // (which stays up, right beside Save). Warnings are advisory and describe the
+  // template that was just saved, so they stay inline under the editor.
+  const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate });
+
+  function refreshDirty() {
+    bar.setDirty(isDirty());
     // A test always sends the SAVED template (what will ship, I5). When there are
     // unsaved edits the button says so plainly: it saves first, then sends.
-    tplTestEl.textContent = dirty ? "Save & send test" : "Send test email";
-    tplTestEl.title = dirty
+    tplTestEl.textContent = isDirty() ? "Save & send test" : "Send test email";
+    tplTestEl.title = isDirty()
       ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
       : "Sends a sample issue through the saved template so you can see it in a real inbox.";
-  };
-  const showMsgs = (msgs, kind) => {
+  }
+  // Advisory warnings for the template that was just saved; blocking errors go to the
+  // save bar instead (bar.showError), so the bar owns the blocking state and this owns
+  // the post-save advisory state.
+  function showWarnings(msgs) {
     if (!msgs.length) {
       tplMsgsEl.hidden = true;
       tplMsgsEl.innerHTML = "";
       return;
     }
     tplMsgsEl.hidden = false;
-    tplMsgsEl.className = `set-tpl-msgs ${kind}`;
+    tplMsgsEl.className = "set-tpl-msgs warn";
     tplMsgsEl.innerHTML = msgs.map((m) => `<div>${esc(m)}</div>`).join("");
-  };
+  }
+  function revertTemplate() {
+    tplEditor.value = templateBaseline;
+    showWarnings([]);
+    preview.repaint();
+    refreshDirty();
+  }
+  // Persist the current editor content. Returns the server's warnings (empty on a
+  // clean save); THROWS on a rejected template (e.g. no unsubscribe link → 400), so
+  // callers decide what to do. Shared by the save bar's Save and Save-&-send-test.
+  async function saveTemplate() {
+    const r = await api("/api/settings", {
+      method: "PUT",
+      json: { emailTemplate: tplEditor.value },
+    });
+    // The server may resolve "" to the default — reflect what was actually stored.
+    templateBaseline = r.settings.emailTemplate;
+    tplEditor.value = templateBaseline;
+    appConfig = { ...(appConfig || {}), settings: r.settings };
+    preview.repaint();
+    refreshDirty(); // clean now — slides the bar away
+    return Array.isArray(r.warnings) ? r.warnings : [];
+  }
+  // The shared save bar's Save button (run inside busy() by the controller). Persists,
+  // surfaces warnings inline; a rejected save keeps the bar up and shows why in it.
+  async function onSaveTemplate() {
+    try {
+      const warnings = await saveTemplate();
+      showWarnings(warnings);
+      toast(warnings.length ? "Template saved with warnings" : "Template saved");
+    } catch (err) {
+      bar.showError(err.message);
+      toast("Template not saved");
+    }
+  }
+
   const loadExample = (key) => {
     const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
     tplEditor.value = ex.html;
-    showMsgs([], "");
+    showWarnings([]);
     preview.repaint();
     refreshDirty();
   };
@@ -2552,40 +2699,6 @@ async function renderTemplate() {
   for (const b of bodyEl.querySelectorAll("[data-example]")) {
     b.onclick = () => loadExample(b.dataset.example);
   }
-  tplRevertEl.onclick = () => {
-    tplEditor.value = templateBaseline;
-    showMsgs([], "");
-    preview.repaint();
-    refreshDirty();
-  };
-  // Persist the current editor content. Returns the server's warnings (empty on a
-  // clean save); throws on a rejected template (e.g. no unsubscribe link → 400), so
-  // callers can decide what to do. Shared by the Save button and Save-&-send-test.
-  const saveTemplate = async () => {
-    const r = await api("/api/settings", {
-      method: "PUT",
-      json: { emailTemplate: tplEditor.value },
-    });
-    // The server may resolve "" to the default — reflect what was actually stored.
-    templateBaseline = r.settings.emailTemplate;
-    tplEditor.value = templateBaseline;
-    appConfig = { ...(appConfig || {}), settings: r.settings };
-    preview.repaint();
-    refreshDirty();
-    return Array.isArray(r.warnings) ? r.warnings : [];
-  };
-  document.getElementById("tplSave").onclick = (e) =>
-    busy(e.currentTarget, "Saving…", async () => {
-      try {
-        const warnings = await saveTemplate();
-        showMsgs(warnings, "warn");
-        toast(warnings.length ? "Template saved with warnings" : "Template saved");
-      } catch (err) {
-        // A rejected template (e.g. no unsubscribe link) comes back as a 400 message.
-        showMsgs([err.message], "error");
-        toast("Template not saved");
-      }
-    });
 
   // --- send a test of the saved template (edit → test → iterate) ---
   // A test renders a sample issue through the SAVED template — what will actually
@@ -2621,12 +2734,13 @@ async function renderTemplate() {
           return;
         }
         // Honest unsaved-changes handling: persist first so the test renders what ships.
+        // A rejected save shows in the bar and stops the send.
         if (isDirty()) {
           try {
             const warnings = await saveTemplate();
-            showMsgs(warnings, "warn");
+            showWarnings(warnings);
           } catch (err) {
-            showMsgs([err.message], "error");
+            bar.showError(err.message);
             m.close();
             toast("Template not saved — test not sent");
             return;
@@ -2870,23 +2984,13 @@ async function renderSettings() {
       </div>
     </section>`;
 
-  const saveBar = `
-    <div class="set-savebar" id="saveBar" role="region" aria-label="Unsaved changes" hidden>
-      <span class="msg"><span class="dot"></span> You have unsaved changes.</span>
-      <span class="acts">
-        <button type="button" id="discardBtn">Discard</button>
-        <button type="button" class="primary" id="saveBtn">Save changes</button>
-      </span>
-    </div>`;
-
   body.innerHTML =
     identitySection +
     templateSection +
     senderSection +
     recipSection +
     subscribeSection +
-    instanceSection +
-    saveBar;
+    instanceSection;
 
   // Keep the cached config + sidebar brand in step after a save (the sidebar brand
   // reads the same publication identity).
@@ -2897,10 +3001,12 @@ async function renderSettings() {
 
   const nameEl = document.getElementById("setName");
   const taglineEl = document.getElementById("setTagline");
-  const saveBarEl = document.getElementById("saveBar");
+  // The shared bottom save bar (Save + Discard). Its callbacks are the hoisted
+  // saveSettings / discardSettings below; refreshDirty just slides it up or down.
+  const bar = savebar.attach({ onSave: saveSettings, onDiscard: discardSettings });
 
   // --- dirty tracking: the persisted identity fields (name, tagline, address) +
-  // recipients. The email template has its own Save, tracked separately.
+  // recipients. The email template is edited on its own page, so it isn't tracked here.
   const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
   const isDirty = () =>
     state.name !== baseline.name ||
@@ -2908,7 +3014,7 @@ async function renderSettings() {
     state.address !== baseline.address ||
     !sameList(state.recipients, baseline.recipients);
   const refreshDirty = () => {
-    saveBarEl.hidden = !isDirty();
+    bar.setDirty(isDirty());
   };
 
   // --- email template: a read-only compact preview of the current template plus a
@@ -3105,43 +3211,44 @@ async function renderSettings() {
     b.onclick = () => copyText(b.dataset.copy);
   }
 
-  // --- save / discard.
-  document.getElementById("saveBtn").onclick = (e) =>
-    busy(e.currentTarget, "Saving…", async () => {
-      try {
-        const r = await api("/api/settings", {
-          method: "PUT",
-          json: {
-            publication: { name: state.name, tagline: state.tagline, address: state.address },
-            testRecipients: state.recipients,
-          },
-        });
-        // Adopt the server's normalized result (trim, lowercase, dedupe) as baseline.
-        const ns = r.settings;
-        state.name = ns.publication.name;
-        state.tagline = ns.publication.tagline;
-        state.address = ns.publication.address;
-        state.recipients = [...ns.testRecipients];
-        nameEl.value = state.name;
-        taglineEl.value = state.tagline;
-        addressEl.value = state.address;
-        baseline = {
-          name: state.name,
-          tagline: state.tagline,
-          address: state.address,
-          recipients: [...state.recipients],
-        };
-        applySettings(ns);
-        renderRecipChips();
-        rebuildEmbed();
-        templatePreview.repaint();
-        refreshDirty();
-        toast("Settings saved");
-      } catch (err) {
-        toast(err.message);
-      }
-    });
-  document.getElementById("discardBtn").onclick = () => {
+  // --- save / discard. Wired into the shared save bar above; the controller runs
+  // saveSettings inside busy() on its Save button, so these stay plain callbacks.
+  async function saveSettings() {
+    try {
+      const r = await api("/api/settings", {
+        method: "PUT",
+        json: {
+          publication: { name: state.name, tagline: state.tagline, address: state.address },
+          testRecipients: state.recipients,
+        },
+      });
+      // Adopt the server's normalized result (trim, lowercase, dedupe) as baseline.
+      const ns = r.settings;
+      state.name = ns.publication.name;
+      state.tagline = ns.publication.tagline;
+      state.address = ns.publication.address;
+      state.recipients = [...ns.testRecipients];
+      nameEl.value = state.name;
+      taglineEl.value = state.tagline;
+      addressEl.value = state.address;
+      baseline = {
+        name: state.name,
+        tagline: state.tagline,
+        address: state.address,
+        recipients: [...state.recipients],
+      };
+      applySettings(ns);
+      renderRecipChips();
+      rebuildEmbed();
+      templatePreview.repaint();
+      refreshDirty(); // clean now — slides the bar away
+      toast("Settings saved");
+    } catch (err) {
+      // A failed save leaves the edits in place (still dirty → bar stays up).
+      toast(err.message);
+    }
+  }
+  function discardSettings() {
     state.name = baseline.name;
     state.tagline = baseline.tagline;
     state.address = baseline.address;
@@ -3153,7 +3260,7 @@ async function renderSettings() {
     rebuildEmbed();
     templatePreview.repaint();
     refreshDirty();
-  };
+  }
 
   // --- initial paint.
   renderRecipChips();
