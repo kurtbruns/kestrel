@@ -15,6 +15,10 @@ let session = null; // { principal: { kind, email? }, auth: { mode } } once boot
 let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
+// The Template page's "Start from example" menu binds its outside-click dismissal
+// exactly once for the app's lifetime (see renderTemplate); this guards against
+// re-binding — and so leaking a listener — on every visit to the page.
+let exampleMenuDismissBound = false;
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.
 let autosaveIdleTimer = null;
@@ -2818,7 +2822,6 @@ async function renderTemplate() {
   });
   // Examples: a "Start from example" dropdown menu (a compact, secondary action —
   // loading one is destructive, so it isn't a permanent fixture on the page).
-  const exWrap = document.getElementById("tplExamples");
   const exBtn = document.getElementById("tplExamplesBtn");
   const exList = document.getElementById("tplExamplesList");
   const closeExamples = () => {
@@ -2831,17 +2834,26 @@ async function renderTemplate() {
     exList.hidden = !willOpen;
     exBtn.setAttribute("aria-expanded", String(willOpen));
   };
-  // Dismiss on an outside click; the guard makes it inert once this view is unmounted.
-  document.addEventListener("click", (e) => {
-    if (exWrap.isConnected && !exWrap.contains(e.target)) {
-      closeExamples();
-    }
-  });
   for (const b of exList.querySelectorAll("[data-example]")) {
     b.onclick = () => {
       loadExample(b.dataset.example);
       closeExamples();
     };
+  }
+  // Outside-click dismissal, bound ONCE for the app's lifetime (not per visit, which
+  // leaked a listener + a detached wrapper each time). It resolves the menu live by id,
+  // so it's inert whenever the Template page isn't mounted, and it can't race the open
+  // click — that click's target is inside #tplExamples, so it's ignored here.
+  if (!exampleMenuDismissBound) {
+    exampleMenuDismissBound = true;
+    document.addEventListener("click", (e) => {
+      const wrap = document.getElementById("tplExamples");
+      const list = document.getElementById("tplExamplesList");
+      if (wrap && list && !list.hidden && !wrap.contains(e.target)) {
+        list.hidden = true;
+        document.getElementById("tplExamplesBtn")?.setAttribute("aria-expanded", "false");
+      }
+    });
   }
 
   // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
