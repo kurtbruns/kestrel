@@ -6,15 +6,8 @@
  *  (I3). Styling lives in the template (inlined at render); the shell carries none. */
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 
-/** Literal placeholder for the per-recipient unsubscribe URL, substituted at
- *  delivery (real send / test) or with a generic link (preview / archive).
- *  A plain sentinel (not `{{ }}`) so it survives SES template semantics. */
-export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
-
-/** Literal placeholder for the per-recipient "sent to" address, substituted at
- *  delivery (real send / test) with the recipient's address, and neutralized to an
- *  empty string on recipient-agnostic pages (preview / archive) so no address leaks. */
-export const SENTTO_SENTINEL = "%%SENT_TO%%";
+// The per-recipient delivery sentinels (UNSUB_SENTINEL / SENTTO_SENTINEL) live with the
+// token engine that freezes and fills them — see render/template_engine.ts.
 
 /** Inert marker at the top of the content column. Emails render it as nothing
  *  (an HTML comment); the archive route replaces it with `archiveMasthead`, so

@@ -83,8 +83,8 @@ export class SesProvider implements EmailProvider {
 
   private async sendOne(rendered: RenderedEmail, r: Recipient): Promise<PerRecipientResult> {
     const final = substituteRecipient(rendered, {
-      unsubscribeUrl: r.unsubscribeUrl,
-      sentTo: r.email,
+      "email.unsubscribeUrl": r.unsubscribeUrl,
+      "email.sentTo": r.email,
     });
     const raw = buildRawMessage({
       from: this.from,

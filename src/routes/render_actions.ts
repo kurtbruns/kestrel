@@ -59,8 +59,8 @@ export async function previewPage(c: RequestContext): Promise<Response> {
   const input = await loadRenderInput(c);
   const result = await render(input, c.config, await loadBranding(c));
   const html = substituteRecipient(result, {
-    unsubscribeUrl: genericUnsubscribeUrl(c),
-    sentTo: "",
+    "email.unsubscribeUrl": genericUnsubscribeUrl(c),
+    "email.sentTo": "",
   }).html;
   return new Response(html, {
     headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },

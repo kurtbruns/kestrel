@@ -71,8 +71,8 @@ export class FakeProvider implements EmailProvider {
       }
       const providerId = `fake-${key}`;
       const final = substituteRecipient(rendered, {
-        unsubscribeUrl: r.unsubscribeUrl,
-        sentTo: r.email,
+        "email.unsubscribeUrl": r.unsubscribeUrl,
+        "email.sentTo": r.email,
       });
       sentKeys.set(key, providerId);
       outbox.push({
