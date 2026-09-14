@@ -2906,7 +2906,7 @@ async function renderTemplate() {
     const m = modal(
       `<h3>Send a test email</h3><p class="hint">Delivers a sample issue rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
         dirty
-          ? `<p class="hint" style="color:var(--warn)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
+          ? `<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
           : ""
       }<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p><div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
         dirty ? "Save &amp; send test" : "Send test"
