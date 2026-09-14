@@ -1,7 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
-import { getSettings } from "../src/db/settings";
+import { getSettings, updateSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
@@ -184,5 +184,20 @@ describe("dev seed (Windbreak dataset)", () => {
       unsubscribed: UNSUBSCRIBED,
       suppressed: SUPPRESSED,
     });
+  });
+
+  it("re-seeding resets the settings singleton, dropping stale operator config", async () => {
+    // An operator whose saved template predates the email.* token migration (it still
+    // uses footer.*), plus a custom identity. resetAll clears settings, and the seed
+    // re-populates only the demo's own — so a re-seed can't carry the stale row forward.
+    await updateSettings(env.DB, {
+      publication: { name: "Old Name" },
+      emailTemplate:
+        '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
+    });
+    await seedDatabase(env, config());
+    const s = await getSettings(env.DB);
+    expect(s.emailTemplate).toBe(""); // back to the built-in email.* default
+    expect(s.publication.name).toBe("Windbreak"); // the demo's identity, not the old one
   });
 });

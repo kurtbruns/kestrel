@@ -74,10 +74,9 @@ export async function reset(c: RequestContext): Promise<Response> {
   if (c.config.provider !== "fake") {
     throw notFound("not available for this transport");
   }
-  await resetAll(c.env.DB);
-  // Also clear the settings singleton (identity + preferences) and the one global
-  // branding asset, so a fresh reset shows the From-name fallback and no logo.
-  await c.env.DB.prepare("DELETE FROM settings").run();
+  await resetAll(c.env.DB); // clears every D1 table, the settings singleton included
+  // resetAll can't reach R2, so drop the one global branding asset here too — a fresh
+  // reset then shows the From-name fallback and no logo.
   try {
     await c.env.MEDIA.delete(BRANDING_LOGO_KEY);
   } catch {
