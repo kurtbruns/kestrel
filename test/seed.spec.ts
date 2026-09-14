@@ -1,4 +1,5 @@
-import { env, SELF } from "cloudflare:test";
+import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
 import { getSettings, updateSettings } from "../src/db/settings";
