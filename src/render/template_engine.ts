@@ -87,19 +87,19 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   }
 
   if (!tokens.has("post.body")) {
-    errors.push("Add {{ post.body }} — without it the issue's content won't appear.");
+    errors.push("Every email must include {{ post.body }} to render the content of the post.");
   }
   if (!tokens.has("email.unsubscribeUrl")) {
-    errors.push("Add {{ email.unsubscribeUrl }} — every email must carry an unsubscribe link.");
+    errors.push(
+      "Every email must carry an unsubscribe link. Add {{ email.unsubscribeUrl }} to the template.",
+    );
   }
   if (!tokens.has("email.viewInBrowserUrl")) {
-    warnings.push(
-      "Consider {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.",
-    );
+    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.");
   }
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {
-      warnings.push(`Unknown variable {{ ${t} }} — it will render empty.`);
+      warnings.push(`{{ ${t} }} is not a known variable and will render empty.`);
     }
   }
   if (/<script[\s/>]/i.test(html)) {
