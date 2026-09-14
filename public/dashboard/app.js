@@ -369,8 +369,10 @@ function toast(msg) {
   t.textContent = msg;
   toasts.appendChild(t);
   requestAnimationFrame(() => t.classList.add("show"));
-  setTimeout(() => t.classList.remove("show"), 2400);
-  setTimeout(() => t.remove(), 2700);
+  // Linger long enough to read a sentence-length confirmation ("Test sent to 2
+  // addresses") before it fades; the removal trails the fade-out transition.
+  setTimeout(() => t.classList.remove("show"), 3600);
+  setTimeout(() => t.remove(), 3900);
 }
 const esc = (s) =>
   s == null

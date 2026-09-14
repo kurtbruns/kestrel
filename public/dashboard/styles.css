@@ -41,6 +41,7 @@
   --banner-line: #bfdbfe;
   --b-draft-bg: #f4f4f5;
   --b-draft-fg: #52525b;
+  --b-draft-line: #d4d4d8;
   --b-scheduled-bg: #dbeafe;
   --b-scheduled-fg: #1d4ed8;
   --b-scheduled-line: #bfdbfe;
@@ -102,6 +103,7 @@
     --banner-line: #334155;
     --b-draft-bg: #2e2e33;
     --b-draft-fg: #a1a1aa;
+    --b-draft-line: #52525b;
     --b-scheduled-bg: #1e3a5f;
     --b-scheduled-fg: #93c5fd;
     --b-scheduled-line: #1d4ed8;
@@ -1191,6 +1193,7 @@ td a:hover {
 .badge.draft {
   background: var(--b-draft-bg);
   color: var(--b-draft-fg);
+  border-color: var(--b-draft-line);
 }
 .badge.scheduled {
   background: var(--b-scheduled-bg);
@@ -1227,6 +1230,7 @@ td a:hover {
 .badge.unsubscribed {
   background: var(--b-draft-bg);
   color: var(--b-draft-fg);
+  border-color: var(--b-draft-line);
 }
 .badge.suppressed {
   background: var(--danger-bg);
