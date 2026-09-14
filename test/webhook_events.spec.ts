@@ -1,4 +1,4 @@
-import { env } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isSuppressed } from "../src/db/subscribers";
 import type { DeliveryEvent } from "../src/providers/types";

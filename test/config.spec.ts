@@ -1,7 +1,8 @@
 // Self-contained-by-default config (SPEC §10): the archive origin and media base
 // fall back to the app's own origin, and ARCHIVE_BASE_PATH drives both the emitted
 // archive URL and the route registered to serve it.
-import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
+import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";

@@ -1,4 +1,5 @@
-import { applyD1Migrations, env } from "cloudflare:test";
+import { applyD1Migrations } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import type { D1Migration } from "@cloudflare/vitest-pool-workers";
 
 // Applies the schema to the isolated test D1 before each test file runs.
