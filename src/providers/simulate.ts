@@ -95,7 +95,10 @@ export class SimProvider implements EmailProvider {
       paceState.set(sendId, { windowStart: now, lastCallAt: now });
     } else if (now - st.windowStart > PACE_BUDGET_MS) {
       paceState.delete(sendId);
-      console.log("[sim] pause: budget spent this run, requeueing until the next tick", { sendId });
+      // The sole dev breadcrumb: an injected pause is the simulator's own decision, not
+      // something you'd read off a real send. How a send is *going* is observed through
+      // the API (GET /sends/:id/progress) — never through these logs.
+      console.log("[sim] injected rate-limit pause; requeueing until the next tick", { sendId });
       throw new Error("simulated rate limit — pausing until the next tick");
     } else {
       st.lastCallAt = now;
@@ -104,7 +107,7 @@ export class SimProvider implements EmailProvider {
     // Pace: a real batch takes time. This is what makes the dispatch bar fill live.
     await sleep(LATENCY_MS);
 
-    const results = recipients.map((r): PerRecipientResult => {
+    return recipients.map((r): PerRecipientResult => {
       const key = `${sendId}:${r.email}`;
       const rand = recipientRand(sendId, r.email);
       const transientDraw = rand();
@@ -139,12 +142,6 @@ export class SimProvider implements EmailProvider {
       });
       return { email: r.email, accepted: true, providerId: `sim-${key}` };
     });
-
-    const accepted = results.filter((x) => x.accepted).length;
-    const retry = results.filter((x) => !x.accepted && x.retryable).length;
-    const failed = results.length - accepted - retry;
-    console.log("[sim] batch", { sendId, size: results.length, accepted, retry, failed });
-    return results;
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {
@@ -205,9 +202,5 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
     return 0;
   }
   const { applied } = await applyDeliveryEvents(env.DB, events);
-  const delivered = events.filter((e) => e.type === "delivered").length;
-  const bounced = events.filter((e) => e.type === "bounced").length;
-  const complained = events.filter((e) => e.type === "complained").length;
-  console.log("[sim] drained synthetic receipts", { applied, delivered, bounced, complained });
   return applied;
 }
