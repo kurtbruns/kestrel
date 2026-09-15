@@ -51,9 +51,9 @@
   --b-sent-bg: #dcfce7;
   --b-sent-fg: #15803d;
   --b-sent-line: #bbf7d0;
-  --b-sending-bg: #fef3c7;
-  --b-sending-fg: #b45309;
-  --b-sending-line: #fde68a;
+  --b-sending-bg: #dbeafe;
+  --b-sending-fg: #2563eb;
+  --b-sending-line: #bfdbfe;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
@@ -113,9 +113,9 @@
     --b-sent-bg: #14532d;
     --b-sent-fg: #86efac;
     --b-sent-line: #15803d;
-    --b-sending-bg: #45350f;
-    --b-sending-fg: #fcd34d;
-    --b-sending-line: #b45309;
+    --b-sending-bg: #172554;
+    --b-sending-fg: #60a5fa;
+    --b-sending-line: #2563eb;
     /* Brightened from a plain dark tint so Secondary text (--k-accent on the soft
        fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
        reached only ~4.4:1. Primary keeps huge contrast (dark --k-accent-contrast text
