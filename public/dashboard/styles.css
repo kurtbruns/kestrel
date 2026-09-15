@@ -42,12 +42,12 @@
   --b-draft-bg: #f4f4f5;
   --b-draft-fg: #52525b;
   --b-draft-line: #d4d4d8;
-  /* Scheduled is a muted violet, deliberately off the slate-blue action accent
-     (--k-accent) so the "scheduled" status never reads as the primary action
-     (DESIGN §3); the line is strong enough to border the scheduled cards. */
-  --b-scheduled-bg: #eeeaf7;
-  --b-scheduled-fg: #62518d;
-  --b-scheduled-line: #c9bce8;
+  /* Scheduled is a violet, deliberately off the slate-blue action accent (--k-accent)
+     so the "scheduled" status never reads as the primary action (DESIGN §3); the fill
+     backs the scheduled pill, banner, and cards, and the line borders them. */
+  --b-scheduled-bg: #ece6f9;
+  --b-scheduled-fg: #6743ac;
+  --b-scheduled-line: #cbbcf1;
   --b-sent-bg: #dcfce7;
   --b-sent-fg: #15803d;
   --b-sent-line: #bbf7d0;
@@ -107,9 +107,9 @@
     --b-draft-bg: #2e2e33;
     --b-draft-fg: #a1a1aa;
     --b-draft-line: #52525b;
-    --b-scheduled-bg: #2b2542;
-    --b-scheduled-fg: #b4a7d4;
-    --b-scheduled-line: #5f5090;
+    --b-scheduled-bg: #2e2450;
+    --b-scheduled-fg: #bfa9ec;
+    --b-scheduled-line: #6a4fae;
     --b-sent-bg: #14532d;
     --b-sent-fg: #86efac;
     --b-sent-line: #15803d;
@@ -1849,10 +1849,21 @@ button.linkbtn:hover {
   color: var(--b-scheduled-fg);
 }
 /* Scheduled cards — the dashboard's "Scheduled" section and the Sent page's next-up
-   queue — take the violet border so a queued send reads as scheduled at a glance
-   (the two-class selector wins over `.card`'s neutral border). */
+   queue — take the violet fill + border so a queued send reads as scheduled at a
+   glance (the two-class selector wins over `.card`'s neutral surface + border). */
 .card.sched-card {
+  background: var(--b-scheduled-bg);
   border-color: var(--b-scheduled-line);
+}
+/* One title weight/size across every scheduled notice (card subject + banner date),
+   so the "title" is consistent from the Drafts list to the Sent queue to the editor. */
+.sched-subj {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.banner-scheduled strong {
+  font-weight: 600;
 }
 
 /* posts page + row-action menu */

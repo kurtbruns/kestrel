@@ -448,27 +448,27 @@ function toLocalInput(d) {
 // A countdown that gets coarser the further out the fire time is: it ticks seconds
 // only inside the last few minutes (the imminent / send-now cancel window), then
 // counts down by the minute, by the hour within a day, and by whole days beyond —
-// so a send scheduled days away reads "fires in 2 days", not a ticking "47h 47m".
+// so a send scheduled days away reads "Sends in 2 days", not a ticking "47h 47m".
 function untilStr(fireAt) {
   const d = fireAt - Date.now();
   if (d <= 0) {
-    return "firing now…";
+    return "Sending now…";
   }
   const s = Math.floor(d / 1000);
   const min = Math.floor(s / 60);
   const hr = Math.floor(min / 60);
   if (s < 300) {
-    return min > 0 ? `fires in ${min}m ${String(s % 60).padStart(2, "0")}s` : `fires in ${s}s`;
+    return min > 0 ? `Sends in ${min}m ${String(s % 60).padStart(2, "0")}s` : `Sends in ${s}s`;
   }
   if (min < 60) {
-    return `fires in ${min}m`;
+    return `Sends in ${min}m`;
   }
   if (hr < 24) {
     const rm = min % 60;
-    return rm > 0 ? `fires in ${hr}h ${rm}m` : `fires in ${hr}h`;
+    return rm > 0 ? `Sends in ${hr}h ${rm}m` : `Sends in ${hr}h`;
   }
   const days = Math.round(hr / 24);
-  return `fires in ${days} day${days === 1 ? "" : "s"}`;
+  return `Sends in ${days} day${days === 1 ? "" : "s"}`;
 }
 function modal(html) {
   const back = document.createElement("div");
@@ -1117,7 +1117,7 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span><span aria-hidden="true">📅</span> Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="cancelSchedule">Cancel schedule</button></span></div>` : ""}
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="cancelSchedule">Cancel schedule</button></span></div>` : ""}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1984,7 +1984,7 @@ async function renderSent() {
     try {
       const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
       const schedCard = (s) =>
-        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`;
+        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`;
       if (!sends.length) {
         schedEl.innerHTML = `<p class="muted">Nothing scheduled.</p>`;
       } else {
@@ -4101,7 +4101,6 @@ async function renderDashboard() {
   const tiles = [
     {
       label: "Confirmed",
-      sub: "your audience",
       emph: true,
       v: counts.confirmed,
       filter: "confirmed",
@@ -4126,7 +4125,7 @@ async function renderDashboard() {
     ? scheduled
         .map(
           (s) =>
-            `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+            `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
         )
         .join("")
     : `<p class="muted">Nothing scheduled.</p>`;
@@ -4220,24 +4219,15 @@ async function renderDashboard() {
       }
     };
   });
+  // The dashboard's scheduled cards are read-only summaries: the whole card links into
+  // the editor, where the schedule is actually managed (cancel / reschedule). The Sent
+  // page keeps the one-call cancel that the review window needs (SPEC §8).
   root.querySelectorAll(".nextup").forEach((card) => {
     card.onclick = (e) => {
-      if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+      if (e.target.tagName !== "A") {
         location.hash = `#/edit/${card.dataset.post}`;
       }
     };
-  });
-  root.querySelectorAll("[data-cancel]").forEach((b) => {
-    b.onclick = () =>
-      busy(b, "Canceling…", async () => {
-        try {
-          await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
-          toast("Canceled");
-          renderDashboard();
-        } catch (e) {
-          toast(e.message);
-        }
-      });
   });
   startCountdowns();
 }
