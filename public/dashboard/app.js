@@ -2048,59 +2048,65 @@ async function renderSent() {
   // Resolving a wedged send or canceling a scheduled one touches several sections at
   // once, so refresh them together.
   function reloadAll() {
-    loadStuck();
     loadScheduled();
-    loadActive();
     loadList();
+    refreshSending();
   }
 
-  // The active send gets a home above the sent records: an in-progress row with a live
-  // mini dispatch bar and a Watch link into the record view's live watch (#154). Drawn
-  // from the small `sending` set (wedged ones are handled by loadStuck above, so they're
-  // excluded here). Polled on its own short interval so the bar moves without a reload.
-  async function loadActive() {
-    try {
-      const { sends } = await api("/sends?status=sending&limit=200");
-      const active = sends.filter((s) => !isWedged(s));
-      if (!active.length) {
-        activeEl.innerHTML = "";
-        return;
-      }
-      activeEl.innerHTML = `<h2>In progress</h2>${active.map(activeRowHtml).join("")}`;
-      activeEl.querySelectorAll("[data-watch]").forEach((card) => {
-        card.onclick = (e) => {
-          if (e.target.tagName !== "A") {
-            location.hash = `#/sent/${card.dataset.watch}`;
-          }
-        };
-      });
-    } catch {
-      // Non-fatal: the in-progress section just stays empty if this probe fails.
-      activeEl.innerHTML = "";
-    }
+  // The in-flight set drives two sections — the wedged attention block (§11) and the
+  // in-progress active rows (#154) — so one fetch renders both. Tracking the set's
+  // signature lets us tell a real transition (a send fired or finished) from a mere bar
+  // advance: on a transition we also refresh the scheduled queue (it lost this send) and
+  // the sent list (it gained it), so a fired issue leaves the scheduled slot and lands in
+  // the records without a manual reload. Polled every 3s (matching the watch + dashboard).
+  let sentActiveSig = "";
+  function renderActive(sends) {
+    const active = sends.filter((s) => !isWedged(s));
+    activeEl.innerHTML = active.length
+      ? `<h2>In progress</h2>${active.map(activeRowHtml).join("")}`
+      : "";
+    activeEl.querySelectorAll("[data-watch]").forEach((card) => {
+      card.onclick = (e) => {
+        if (e.target.tagName !== "A") {
+          location.hash = `#/sent/${card.dataset.watch}`;
+        }
+      };
+    });
   }
-
-  // Wedged sends get their own attention block above the queue (SPEC §11). They are
-  // `sending` rows, so they also appear in the table below — this block is the
-  // actionable view. Drawn from the small `sending` set, filtered client-side.
-  async function loadStuck() {
+  function renderStuck(sends) {
+    const wedged = sends.filter(isWedged);
+    stuckEl.innerHTML = wedged
+      .map((s) => {
+        const n = s.progress?.dispatched || 0;
+        const noun = n === 1 ? "delivery" : "deliveries";
+        return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+      })
+      .join("");
+    stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
+      const s = wedged.find((x) => x.id === b.dataset.resolve);
+      b.onclick = () => openResolveModal(s, reloadAll);
+    });
+  }
+  async function refreshSending() {
+    let sends;
     try {
-      const { sends } = await api("/sends?status=sending&limit=200");
-      const wedged = sends.filter(isWedged);
-      stuckEl.innerHTML = wedged
-        .map((s) => {
-          const n = s.progress?.dispatched || 0;
-          const noun = n === 1 ? "delivery" : "deliveries";
-          return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
-        })
-        .join("");
-      stuckEl.querySelectorAll("[data-resolve]").forEach((b) => {
-        const s = wedged.find((x) => x.id === b.dataset.resolve);
-        b.onclick = () => openResolveModal(s, reloadAll);
-      });
+      ({ sends } = await api("/sends?status=sending&limit=200"));
     } catch {
-      // Non-fatal: the attention block just stays empty if this probe fails.
+      // Non-fatal: the in-flight sections just stay empty if this probe fails.
       stuckEl.innerHTML = "";
+      activeEl.innerHTML = "";
+      return;
+    }
+    renderStuck(sends);
+    renderActive(sends);
+    const sig = sends
+      .map((s) => s.id)
+      .sort()
+      .join(",");
+    if (sig !== sentActiveSig) {
+      sentActiveSig = sig;
+      loadScheduled(); // a fired send left the queue; the next one moves up
+      loadList(); // a finished send joins the records
     }
   }
 
@@ -2199,9 +2205,17 @@ async function renderSent() {
 
   wireToolbar(app, state, loadList);
   reloadAll();
-  // Keep the in-progress section's mini bar live without a full reload. Cleared on
-  // navigation (route() clears progressTimer); the countdowns run on statusTimer.
-  progressTimer = setInterval(loadActive, 5000);
+  // Poll the in-flight sections every 3s (matching the watch + dashboard): the active
+  // bar advances, and a fired/finished send moves through the queue → in-progress →
+  // records on its own. A recursive setTimeout so a slow read never overlaps; cleared on
+  // navigation (route() clears progressTimer). Countdowns run on statusTimer.
+  const scheduleSentPoll = () => {
+    progressTimer = setTimeout(async () => {
+      await refreshSending();
+      scheduleSentPoll();
+    }, 3000);
+  };
+  scheduleSentPoll();
 }
 
 // ---- sent record view (#148) + live in-flight watch (#154) ----
