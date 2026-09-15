@@ -1972,14 +1972,31 @@ async function renderSent() {
   async function loadScheduled() {
     try {
       const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
-      schedEl.innerHTML = sends.length
-        ? sends
-            .map(
-              (s) =>
-                `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
-            )
-            .join("")
-        : `<p class="muted">Nothing scheduled.</p>`;
+      const schedCard = (s) =>
+        `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`;
+      if (!sends.length) {
+        schedEl.innerHTML = `<p class="muted">Nothing scheduled.</p>`;
+      } else {
+        // Show only the soonest to send, so the sent records stay near the top of the
+        // page; any others collapse behind a "Show all" toggle (usually there are none —
+        // a post has at most one active send).
+        const [first, ...rest] = sends;
+        schedEl.innerHTML =
+          schedCard(first) +
+          (rest.length
+            ? `<div id="schedMore" hidden>${rest.map(schedCard).join("")}</div><button type="button" class="ghost sched-toggle" id="schedToggle" aria-expanded="false">Show all ${sends.length} scheduled</button>`
+            : "");
+        const toggle = schedEl.querySelector("#schedToggle");
+        if (toggle) {
+          toggle.onclick = () => {
+            const more = schedEl.querySelector("#schedMore");
+            const show = more.hidden;
+            more.hidden = !show;
+            toggle.setAttribute("aria-expanded", String(show));
+            toggle.textContent = show ? "Show fewer" : `Show all ${sends.length} scheduled`;
+          };
+        }
+      }
       // The whole card opens the issue; the subject link handles keyboard/middle-click,
       // and Cancel opts out of navigation (like the posts table's row-click guard).
       schedEl.querySelectorAll(".card.clickable").forEach((card) => {
@@ -2118,7 +2135,7 @@ async function renderSentRecord(id) {
     <div class="card rec-card">
       <div class="rec-head">
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
-        <div class="rec-meta">${badge(send.status)} · Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
+        <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
       <div class="rec-tiles">${tilesHtml}</div>
       <p class="rec-recon muted">All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.</p>
@@ -4164,10 +4181,10 @@ async function renderDashboard() {
     ${healthHtml}
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div class="dash-cols">
-      <section class="dash-section"><h2>Next up</h2>${nextUpHtml}</section>
-      <section class="dash-section"><h2>Continue writing</h2>${draftsHtml}</section>
+      <section class="dash-section"><h2>Scheduled</h2>${nextUpHtml}</section>
+      <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>
     </div>
-    <section class="dash-section"><h2>Recent sends</h2>${recentHtml}</section>
+    <section class="dash-section"><h2>Sent</h2>${recentHtml}</section>
     <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>

@@ -42,9 +42,11 @@
   --b-draft-bg: #f4f4f5;
   --b-draft-fg: #52525b;
   --b-draft-line: #d4d4d8;
-  --b-scheduled-bg: #dbeafe;
-  --b-scheduled-fg: #1d4ed8;
-  --b-scheduled-line: #bfdbfe;
+  /* Scheduled is a violet, deliberately off the slate-blue action accent (--k-accent)
+     so the "scheduled" status never reads as the primary action (DESIGN §3). */
+  --b-scheduled-bg: #ede9fe;
+  --b-scheduled-fg: #6d28d9;
+  --b-scheduled-line: #ddd6fe;
   --b-sent-bg: #dcfce7;
   --b-sent-fg: #15803d;
   --b-sent-line: #bbf7d0;
@@ -104,9 +106,9 @@
     --b-draft-bg: #2e2e33;
     --b-draft-fg: #a1a1aa;
     --b-draft-line: #52525b;
-    --b-scheduled-bg: #1e3a5f;
-    --b-scheduled-fg: #93c5fd;
-    --b-scheduled-line: #1d4ed8;
+    --b-scheduled-bg: #33215c;
+    --b-scheduled-fg: #c4b5fd;
+    --b-scheduled-line: #6d28d9;
     --b-sent-bg: #14532d;
     --b-sent-fg: #86efac;
     --b-sent-line: #15803d;
@@ -1490,6 +1492,10 @@ th.num .th-sort {
   margin: 14px 0 0;
   font-size: 13px;
 }
+/* "Show all N scheduled" expander under the soonest queued send on the Sent page. */
+.sched-toggle {
+  margin-top: 8px;
+}
 @media (max-width: 720px) {
   .rec-tiles {
     grid-template-columns: repeat(2, 1fr);
@@ -1837,6 +1843,9 @@ button.linkbtn:hover {
 
 .countdown {
   font-variant-numeric: tabular-nums;
+  /* The scheduled violet (DESIGN §3), so the fire-time countdown on the scheduled
+     cards (Sent page + dashboard) carries the same "scheduled" cue as the pill. */
+  color: var(--b-scheduled-fg);
 }
 
 /* posts page + row-action menu */
