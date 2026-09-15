@@ -445,19 +445,30 @@ function toLocalInput(d) {
   const p = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+// A countdown that gets coarser the further out the fire time is: it ticks seconds
+// only inside the last few minutes (the imminent / send-now cancel window), then
+// counts down by the minute, by the hour within a day, and by whole days beyond —
+// so a send scheduled days away reads "fires in 2 days", not a ticking "47h 47m".
 function untilStr(fireAt) {
   const d = fireAt - Date.now();
   if (d <= 0) {
     return "firing now…";
   }
-  const s = Math.floor(d / 1000),
-    h = Math.floor(s / 3600),
-    m = Math.floor((s % 3600) / 60),
-    sec = s % 60;
-  if (h > 0) {
-    return `fires in ${h}h ${m}m`;
+  const s = Math.floor(d / 1000);
+  const min = Math.floor(s / 60);
+  const hr = Math.floor(min / 60);
+  if (s < 300) {
+    return min > 0 ? `fires in ${min}m ${String(s % 60).padStart(2, "0")}s` : `fires in ${s}s`;
   }
-  return `fires in ${m}m ${String(sec).padStart(2, "0")}s`;
+  if (min < 60) {
+    return `fires in ${min}m`;
+  }
+  if (hr < 24) {
+    const rm = min % 60;
+    return rm > 0 ? `fires in ${hr}h ${rm}m` : `fires in ${hr}h`;
+  }
+  const days = Math.round(hr / 24);
+  return `fires in ${days} day${days === 1 ? "" : "s"}`;
 }
 function modal(html) {
   const back = document.createElement("div");
@@ -1973,7 +1984,7 @@ async function renderSent() {
     try {
       const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
       const schedCard = (s) =>
-        `<div class="card spread clickable" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`;
+        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`;
       if (!sends.length) {
         schedEl.innerHTML = `<p class="muted">Nothing scheduled.</p>`;
       } else {
@@ -4115,7 +4126,7 @@ async function renderDashboard() {
     ? scheduled
         .map(
           (s) =>
-            `<div class="card spread clickable nextup" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
+            `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><strong><a class="card-link" href="#/edit/${s.post_id}">${esc(s.subject)}</a></strong><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="danger-subtle" data-cancel="${s.id}">Cancel</button></div>`,
         )
         .join("")
     : `<p class="muted">Nothing scheduled.</p>`;
