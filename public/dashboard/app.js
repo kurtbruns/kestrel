@@ -988,29 +988,37 @@ async function renderDrafts() {
         return;
       }
       listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
-        .map(
-          (p) =>
-            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${p.status}" aria-label="Post actions">⋯</button></td></tr>`,
-        )
+        .map((p) => {
+          // A post whose send is in flight is no longer an editable/cancelable draft —
+          // show it as `sending` and route it to the live watch, not the editor (#162).
+          const sending = p.active_send_status === "sending";
+          const href = sending ? `#/sent/${p.active_send_id}` : `#/edit/${p.id}`;
+          return `<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions">⋯</button></td></tr>`;
+        })
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, load);
       listEl.querySelectorAll("tr[data-id]").forEach((tr) => {
         tr.onclick = (e) => {
           if (e.target.tagName !== "A" && !e.target.closest("[data-menu]")) {
-            location.hash = `#/edit/${tr.dataset.id}`;
+            location.hash = tr.dataset.target;
           }
         };
       });
       listEl.querySelectorAll("[data-menu]").forEach((b) => {
         b.onclick = (e) => {
           e.stopPropagation();
-          const pid = b.dataset.menu;
-          const items = [{ label: "Open", onClick: () => (location.hash = `#/edit/${pid}`) }];
-          if (b.dataset.status === "draft") {
+          const st = b.dataset.status;
+          const items = [
+            {
+              label: st === "sending" ? "Watch send" : "Open",
+              onClick: () => (location.hash = b.dataset.target),
+            },
+          ];
+          if (st === "draft") {
             items.push({
               label: "Delete draft",
               danger: true,
-              onClick: () => confirmDelete(pid, load),
+              onClick: () => confirmDelete(b.dataset.menu, load),
             });
           }
           openMenu(b, items);
@@ -1090,6 +1098,13 @@ async function renderEditor(id) {
     // another tab / by Claude) there instead of a locked editor.
     if (post.status === "sent") {
       location.hash = data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+      return;
+    }
+    // A post whose send is in flight is no longer an editable/cancelable scheduled draft —
+    // it's an active send. Send a direct #/edit link to the live watch, not a soft-locked
+    // editor with a dead Cancel (#162).
+    if (data.sending) {
+      location.hash = `#/sent/${data.sending.id}`;
       return;
     }
   } catch (e) {

@@ -39,9 +39,14 @@ export function getBySlug(db: D1Database, slug: string): Promise<PostRow | null>
   return db.prepare("SELECT * FROM posts WHERE slug = ?").bind(slug).first<PostRow>();
 }
 
-/** A post plus the fire time of its active scheduled send (null otherwise). */
+/** A post plus its active send, if any. `fire_at` is the send's fire time; `active_send_*`
+ *  identify it and — crucially — carry its status, so a post whose send is in flight
+ *  (`sending`) can be told apart from one still merely `scheduled` even though the post's
+ *  own status is `scheduled` for both until the send completes (SPEC §6). */
 export interface PostListRow extends PostRow {
   fire_at: number | null;
+  active_send_id: string | null;
+  active_send_status: "scheduled" | "sending" | null;
 }
 
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
@@ -98,11 +103,14 @@ export async function listPosts(
       : "ORDER BY (s.fire_at IS NULL) ASC, s.fire_at ASC, p.updated_at DESC, p.id DESC";
   const limit = page ? page.limit : -1; // -1 = SQLite "no limit"
   const offset = page ? page.offset : 0;
+  // Join the post's ACTIVE send — scheduled OR sending — so an in-flight post carries its
+  // send id and status (a post has at most one active send, migration 0004, so the join
+  // is 1:1). The scheduled-first default sort keys on that fire time.
   const { results } = await db
     .prepare(
-      `SELECT p.*, s.fire_at AS fire_at
+      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status
          FROM posts p
-         LEFT JOIN sends s ON s.post_id = p.id AND s.status = 'scheduled'
+         LEFT JOIN sends s ON s.post_id = p.id AND s.status IN ('scheduled', 'sending')
          ${clause}
          ${order}
          LIMIT ? OFFSET ?`,

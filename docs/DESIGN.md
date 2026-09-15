@@ -80,6 +80,8 @@ The badge belongs in the lists and the **sent record view**, not the editor head
 
 So `--b-sending` is now load-bearing beyond the badge: it is the single "in flight" cue across the pill, the dispatch bars, and the active-send cards — the amber counterpart to the scheduled violet, and kept clear of the slate-blue action accent so "this is sending" never reads as "click here."
 
+The **`sending` badge also appears on the Drafts list** for a post whose send is in flight (SPEC §8): that row is labeled `sending`, opens the **live watch** rather than the editor, and drops its editable affordances (no Delete) — because an issue that is going out is dispatch-side, not an editable draft, even though the post's stored status is still `scheduled` until the send completes. The editor enforces the same rule: opening an in-flight post redirects to the watch, the mirror of a sent post redirecting to its record view.
+
 Everything else is the neutral surface set — `--fg`, `--muted`, `--line`, `--bg`, `--card`, and the recessed/`--line-2`/`--chip` layer — and the one focus `--ring`. The syntax-highlight (`--cx-*`) palette is a self-contained set for the template editor and is out of scope for this contract. Every token has a light and a dark value; a color defined in only one theme is a bug.
 
 ---
