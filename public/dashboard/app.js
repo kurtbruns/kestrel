@@ -2283,6 +2283,23 @@ function progressBar(tone, label, value, total, sub) {
       ${sub ? `<div class="wbar-sub muted">${sub}</div>` : ""}
     </div>`;
 }
+// The delivery bar shares the dispatch bar's scale (denominator = the whole audience), so
+// the two pair up: a grey `accepted` segment tracks the exact frontier the dispatch bar
+// reaches, and green fills in behind it as receipts confirm. Green can never pass grey, so
+// delivery visibly LAGS dispatch instead of racing ahead of it (which it did when the two
+// bars used different denominators).
+function deliveryBar(label, confirmed, accepted, total, sub) {
+  const acceptedPct = total > 0 ? clampPct((100 * accepted) / total) : 0;
+  const confirmedPct = total > 0 ? clampPct((100 * confirmed) / total) : 0;
+  return `<div class="wbar-row">
+      <div class="wbar-head"><span class="wbar-label">${label}</span><span class="wbar-count">${confirmed.toLocaleString()} of ${accepted.toLocaleString()} accepted</span></div>
+      <div class="wbar dual" role="progressbar" aria-valuenow="${confirmedPct}" aria-valuemin="0" aria-valuemax="100">
+        <div class="wbar-fill tone-accepted" style="width:${acceptedPct}%"></div>
+        <div class="wbar-fill tone-ok" style="width:${confirmedPct}%"></div>
+      </div>
+      ${sub ? `<div class="wbar-sub muted">${sub}</div>` : ""}
+    </div>`;
+}
 function fmtDuration(ms) {
   if (ms == null || !Number.isFinite(ms) || ms <= 0) {
     return "—";
@@ -2335,12 +2352,12 @@ function watchBodyHtml(prog) {
   return `
     <div class="wbars">
       ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.total, dispatchSub)}
-      ${progressBar(
-        "ok",
+      ${deliveryBar(
         "Delivery — webhook-confirmed",
         prog.delivery.confirmed,
         acceptedTotal,
-        "Delivery lags acceptance — receipts keep arriving after the send finishes.",
+        prog.total,
+        "Delivery lags acceptance — grey is accepted-but-unconfirmed, green fills in as receipts arrive.",
       )}
     </div>
     ${watchCountsHtml(c)}
@@ -4510,14 +4527,7 @@ async function renderDashboard() {
   const scheduled = sends
     .filter((s) => s.status === "scheduled")
     .sort((a, b) => a.fire_at - b.fire_at);
-  const nextUpHtml = scheduled.length
-    ? scheduled
-        .map(
-          (s) =>
-            `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
-        )
-        .join("")
-    : `<p class="muted">Nothing scheduled.</p>`;
+  const nextUpHtml = dashScheduledHtml(scheduled);
 
   const slugById = new Map(posts.map((p) => [p.id, p.slug]));
   const recent = sends
@@ -4581,7 +4591,7 @@ async function renderDashboard() {
     <div id="dashActive">${dashActiveHtml(activeSends)}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div class="dash-cols">
-      <section class="dash-section"><h2>Scheduled</h2>${nextUpHtml}</section>
+      <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${nextUpHtml}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>
     </div>
     <section class="dash-section"><h2>Sent</h2>${recentHtml}</section>
@@ -4610,20 +4620,36 @@ async function renderDashboard() {
     };
   });
   wireDashActiveCards();
-  // The dashboard's scheduled cards are read-only summaries: the whole card links into
-  // the editor, where the schedule is actually managed (cancel / reschedule). The Sent
-  // page keeps the one-call cancel that the review window needs (SPEC §8).
-  root.querySelectorAll(".nextup").forEach((card) => {
+  wireDashScheduledCards();
+  startCountdowns();
+  // Keep the send sections live: advance the active-send widget's bar, and when a send
+  // starts or finishes, refresh the Scheduled queue so a fired issue clears out of it (its
+  // home is now the In-progress widget, then the records). Cleared on navigation.
+  scheduleDashActivePoll();
+}
+
+/** The dashboard's scheduled cards are read-only summaries: the whole card links into the
+ *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
+ *  the review window needs (SPEC §8). */
+function dashScheduledHtml(scheduled) {
+  if (!scheduled.length) {
+    return `<p class="muted">Nothing scheduled.</p>`;
+  }
+  return scheduled
+    .map(
+      (s) =>
+        `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
+    )
+    .join("");
+}
+function wireDashScheduledCards() {
+  document.querySelectorAll("#dashScheduled .nextup").forEach((card) => {
     card.onclick = (e) => {
       if (e.target.tagName !== "A") {
         location.hash = `#/edit/${card.dataset.post}`;
       }
     };
   });
-  startCountdowns();
-  // Keep the active-send widget live: advance its bar, and reveal/clear it when a send
-  // starts or finishes. Cleared on navigation (route() clears progressTimer).
-  scheduleDashActivePoll();
 }
 
 /** The dashboard active-send section (empty string when nothing is in flight). */
@@ -4647,9 +4673,9 @@ function wireDashActiveCards() {
 // Poll the in-flight set (~3s) and repaint ONLY the widget container in place — it slides
 // in as a send starts, advances, and clears when it finishes, with no full-page re-render
 // (a full re-render flashed the whole dashboard as the send started). The health line and
-// Sent table are glance snapshots that refresh on navigation; the widget is the live
-// element. A recursive setTimeout, so a slow read never overlaps; `progressTimer` holds it
-// so navigation clears it.
+// Sent table is a glance snapshot that refreshes on navigation. A recursive setTimeout, so
+// a slow read never overlaps; `progressTimer` holds it so navigation clears it.
+let dashActiveSig = "";
 function scheduleDashActivePoll() {
   progressTimer = setTimeout(async () => {
     let sends;
@@ -4665,8 +4691,32 @@ function scheduleDashActivePoll() {
       el.innerHTML = dashActiveHtml(active);
       wireDashActiveCards();
     }
+    // On a transition (a send started or finished) the scheduled queue changed — a fired
+    // send left it — so refresh just that section in place (no full-page re-render).
+    const sig = active
+      .map((s) => s.id)
+      .sort()
+      .join(",");
+    if (sig !== dashActiveSig) {
+      dashActiveSig = sig;
+      refreshDashScheduled();
+    }
     scheduleDashActivePoll();
   }, 3000);
+}
+async function refreshDashScheduled() {
+  const el = document.getElementById("dashScheduled");
+  if (!el) {
+    return;
+  }
+  try {
+    const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
+    el.innerHTML = dashScheduledHtml(sends);
+    wireDashScheduledCards();
+    startCountdowns(); // re-arm the countdown ticker over the refreshed cards
+  } catch {
+    /* non-fatal — the scheduled section keeps its last render */
+  }
 }
 
 // Controls shared by the Dashboard and the Getting-started view: hash navigation,

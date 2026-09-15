@@ -1589,23 +1589,33 @@ th.num .th-sort {
   font-variant-numeric: tabular-nums;
 }
 .wbar {
+  position: relative;
   height: 10px;
   border-radius: 999px;
   background: var(--line-2);
   overflow: hidden;
 }
+/* Fills are absolutely stacked from the left so the dual (delivery) bar can layer a green
+   `confirmed` fill over a grey `accepted` fill (green ≤ grey, so grey shows behind it). */
 .wbar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
   height: 100%;
   border-radius: 999px;
   transition: width 0.6s ease;
 }
-/* Dispatch fill is the solid amber sending hue; delivery fill is the green "delivered"
-   hue, lighter, so the lagging bar reads as the secondary of the two. */
+/* Dispatch fill is the solid amber sending hue. The delivery bar pairs to dispatch's scale:
+   a grey `accepted` segment (the same frontier the dispatch bar reaches) with green
+   `confirmed` filling in behind it as receipts arrive. */
 .wbar-fill.tone-sending {
   background: var(--b-sending-fg);
 }
+.wbar-fill.tone-accepted {
+  background: color-mix(in srgb, var(--muted) 50%, var(--line-2));
+}
 .wbar-fill.tone-ok {
-  background: color-mix(in srgb, var(--ok-fg) 78%, transparent);
+  background: var(--ok-fg);
 }
 .wbar-sub {
   margin-top: 6px;

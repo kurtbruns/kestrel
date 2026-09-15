@@ -17,6 +17,11 @@ export default defineConfig(async () => {
             // Deterministic dev-token signing secret for auth tests. The env is
             // dev-shaped (fake transport, no Access), so getConfig honors it.
             DEV_AUTH_SECRET: "test-dev-secret",
+            // Force the dev send simulation OFF for the suite regardless of a local
+            // `.dev.vars` (miniflare bindings win over it). The simulation's paced
+            // sleeps + injected edge states would make the deterministic tests slow and
+            // flaky; it's a demo-only tool, exercised directly in send_simulation.spec.
+            SIMULATE_SENDS: "",
           },
         },
       }),
