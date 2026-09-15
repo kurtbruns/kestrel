@@ -211,13 +211,12 @@ TODO:
 interface Timeline {
   now: number;
   importAt: number;
-  growthAAt: number; // confirmations arriving between #1 and #2
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
-  growthBAt: number; // confirmations arriving between #2 and #3
   scheduledFireAt: number;
-  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`.
-   *  Each also anchors the wave of unsubscribes it prompts (see `unsubAfter`). */
+  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`. Each also
+   *  anchors the churn wave it prompts and bounds the growth cohort confirmed after it: the
+   *  gaps between these are where sign-ups and unsubscribes are dispersed. */
   sentAt: [number, number, number];
 }
 
@@ -226,10 +225,8 @@ export function buildTimeline(now: number): Timeline {
   return {
     now,
     importAt: now - 14 * WEEK,
-    growthAAt: now - 10 * WEEK,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
-    growthBAt: now - 5 * WEEK,
     scheduledFireAt: now + 2 * DAY,
     sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
   };
@@ -246,7 +243,12 @@ function unsubscribedAfter(sentAt: number, indexInWave: number): number {
 
 // --- audience ---------------------------------------------------------------
 
-const FIRST_NAMES = [
+// The address pools, drawn from three wells so a scaled list reads as a roster of distinct
+// people rather than a short sequence repeated with a counter: human GIVEN_NAMES, and
+// SURNAMES built from bird species and the words of a bird's world (talon, hedgerow,
+// thicket, …). The two pools are DISJOINT — no word appears in both — which is exactly what
+// lets the local-part formats below never collide with one another (see `scaledEmailFor`).
+const GIVEN_NAMES = [
   "ada",
   "rowan",
   "marina",
@@ -277,12 +279,45 @@ const FIRST_NAMES = [
   "viktor",
   "mira",
   "yusuf",
+  "arlo",
+  "maya",
+  "nils",
+  "dahlia",
+  "pearl",
+  "edwin",
+  "greta",
+  "milo",
+  "saoirse",
+  "jonah",
+  "esme",
+  "tariq",
+  "linnea",
+  "cole",
+  "freya",
+  "amos",
+  "ivy",
+  "reuben",
+  "marisol",
+  "dev",
+  "opal",
+  "silas",
+  "thea",
+  "aziz",
+  "colette",
+  "hank",
+  "magda",
+  "quinn",
+  "roscoe",
+  "lucia",
+  "omar",
+  "delia",
+  "pascal",
+  "nina",
 ];
-const LAST_NAMES = [
+const SURNAMES = [
   "finch",
   "swift",
   "merlin",
-  "hawthorn",
   "plover",
   "linnet",
   "tern",
@@ -309,19 +344,124 @@ const LAST_NAMES = [
   "jay",
   "rook",
   "wren",
+  "wagtail",
+  "goldfinch",
+  "greenfinch",
+  "bullfinch",
+  "nightjar",
+  "kittiwake",
+  "godwit",
+  "dunlin",
+  "sanderling",
+  "turnstone",
+  "redstart",
+  "stonechat",
+  "whinchat",
+  "chiffchaff",
+  "blackcap",
+  "firecrest",
+  "goldcrest",
+  "treecreeper",
+  "nuthatch",
+  "dipper",
+  "shrike",
+  "harrier",
+  "buzzard",
+  "goshawk",
+  "hobby",
+  "osprey",
+  "bittern",
+  "avocet",
+  "lapwing",
+  "woodcock",
+  "nightingale",
+  "blackbird",
+  "skylark",
+  "crossbill",
+  "hawfinch",
+  "chough",
+  "raven",
+  "magpie",
+  "jackdaw",
+  "talon",
+  "hedgerow",
+  "thicket",
+  "reed",
+  "marsh",
+  "quill",
+  "feather",
+  "plume",
+  "roost",
+  "bramble",
+  "heather",
+  "gorse",
+  "sedge",
+  "meadow",
+  "copse",
+  "spinney",
+  "covert",
+  "warren",
+  "furrow",
+  "estuary",
 ];
-const DOMAINS = ["example.com", "example.org", "example.net", "example.co"];
 
-/** A deterministic, collision-free address from a global index. Both name parts advance
- *  every row (so no cohort clusters on one surname), while the pair stays unique: the
- *  first index is `n % F` and the last is diagonal, `(n + ⌊n / F⌋) % L`. That is a
- *  bijection over the roster as long as `gcd(F + 1, L) = 1` — which holds for these
- *  equal-length lists (F = L = 30, and 31 is coprime to 30). */
-function emailFor(n: number): string {
-  const first = FIRST_NAMES[n % FIRST_NAMES.length];
-  const last = LAST_NAMES[(n + Math.floor(n / FIRST_NAMES.length)) % LAST_NAMES.length];
-  const domain = DOMAINS[n % DOMAINS.length];
-  return `${first}.${last}@${domain}`;
+// Reserved, un-deliverable domains only: `example.{com,net,org}` (RFC 2606) and labels under
+// the reserved `.example` TLD (RFC 6761). Even under a live provider these can never reach a
+// real inbox — the same guarantee `.example` gives the test recipients.
+const DOMAINS = [
+  "example.com",
+  "example.net",
+  "example.org",
+  "mail.example",
+  "post.example",
+  "inbox.example",
+];
+
+// Realistic local-part shapes. Each keeps BOTH whole name tokens around a single separator,
+// so within a format the (given, surname) pair is recoverable; and because the two pools are
+// disjoint, no two formats can ever render the same string (`ada.finch` vs `finch.ada` would
+// need a word living in both pools). That disjointness is what makes `scaledEmailFor` a
+// clean bijection across formats.
+const LOCAL_FORMATS: ((given: string, surname: string) => string)[] = [
+  (given, surname) => `${given}.${surname}`,
+  (given, surname) => `${surname}.${given}`,
+  (given, surname) => `${given}_${surname}`,
+  (given, surname) => `${surname}_${given}`,
+];
+
+// The address space is every (name-pair × format × domain) combination — far larger than the
+// 100k seed cap, so a scaled list never has to reuse a combination or fall back to a numeric
+// suffix (the "loop and repeat" a small pool forces).
+const NAME_PAIRS = GIVEN_NAMES.length * SURNAMES.length;
+const ADDRESS_SPACE = NAME_PAIRS * LOCAL_FORMATS.length * DOMAINS.length;
+
+// A full-period linear-congruential permutation of [0, ADDRESS_SPACE): `n ↦ (MULT·n + INC)
+// mod ADDRESS_SPACE` is a bijection because MULT is coprime to ADDRESS_SPACE. It scatters
+// consecutive indices to far-apart points, so successive subscribers differ in name AND
+// format AND domain — no run shares a surname, a format, or a domain. MULT is the golden-ratio
+// odd constant (coprime to ADDRESS_SPACE = 2¹²·3·11); INC only shifts where the cycle starts.
+const SCRAMBLE_MULT = 0x9e3779b1;
+const SCRAMBLE_INC = 1013904223;
+
+/**
+ * A deterministic, collision-free, human-plausible address for ANY global index `n`. The
+ * index is permuted across the whole (name-pair × format × domain) space and decoded into a
+ * given name, a surname, a local-part format, and a domain — so every address is unique and,
+ * up to the 100k seed cap, none carries a numeric suffix. (An `n` past the space — unreachable
+ * at any supported size — wraps with a trailing cycle number as a last-resort safety net.)
+ */
+export function scaledEmailFor(n: number): string {
+  const cycle = Math.floor(n / ADDRESS_SPACE);
+  const s = (SCRAMBLE_MULT * (n % ADDRESS_SPACE) + SCRAMBLE_INC) % ADDRESS_SPACE;
+  const formatIdx = s % LOCAL_FORMATS.length;
+  const domainIdx = Math.floor(s / LOCAL_FORMATS.length) % DOMAINS.length;
+  const pairIdx = Math.floor(s / (LOCAL_FORMATS.length * DOMAINS.length));
+  const given = unwrap(GIVEN_NAMES[pairIdx % GIVEN_NAMES.length], "given name");
+  const surname = unwrap(SURNAMES[Math.floor(pairIdx / GIVEN_NAMES.length)], "surname");
+  const format = unwrap(LOCAL_FORMATS[formatIdx], "local-part format");
+  const domain = unwrap(DOMAINS[domainIdx], "email domain");
+  const local = cycle === 0 ? format(given, surname) : `${format(given, surname)}${cycle + 1}`;
+  return `${local}@${domain}`;
 }
 
 interface BuiltAudience {
@@ -357,12 +497,12 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
 }
 
 /**
- * Build the whole audience as a lifecycle: an imported core plus two later growth
- * cohorts, three churn waves that each unsubscribe in the days after an issue lands,
- * a few still-pending sign-ups, and two suppressions (a bounce and a complaint) drawn
- * from the core so they visibly shadow the current audience. The counts are chosen so
- * the mailable audience genuinely fluctuates from send to send (140 → 152 → 159, then
- * 155 now).
+ * Build the whole audience as a lifecycle: an imported core, a continuous stream of later
+ * confirmations (the list keeps growing to today), three churn waves that each unsubscribe in
+ * the days after an issue lands, a few still-pending sign-ups biased toward the recent past,
+ * and two suppressions (a bounce and a complaint) drawn from the core so they visibly shadow
+ * the current audience. The counts are chosen so the mailable audience genuinely fluctuates
+ * from send to send (140 → 147 → 151) and settles at 155 today (157 confirmed − 2 suppressed).
  */
 function buildAudience(t: Timeline): BuiltAudience {
   let seq = 0;
@@ -373,7 +513,7 @@ function buildAudience(t: Timeline): BuiltAudience {
     confirmedAt: number | null,
     unsubscribedAt: number | null,
   ): string => {
-    const email = emailFor(seq++);
+    const email = scaledEmailFor(seq++);
     subscribers.push({
       id: newId(),
       email,
@@ -388,53 +528,72 @@ function buildAudience(t: Timeline): BuiltAudience {
     return email;
   };
 
-  // Initial import: already-confirmed addresses migrated in before issue #1 (a real
-  // list starts as a bulk import, not one opt-in at a time). Three waves of them later
-  // churn out — each wave leaving in the days after the last issue it received, so its
-  // members are still mailed by that issue but not the next; the rest are the core that
-  // stays. `unsubAfter` is the issue that prompts the wave (null = never leaves).
+  // Initial import: already-confirmed addresses migrated in before issue #1 (a real list
+  // starts as a bulk import, not one opt-in at a time). Three waves of them later churn out
+  // — each wave leaving in the days after the last issue it received, so its members are
+  // still mailed by that issue but not the next; the rest are the core that stays.
+  //
+  // The churners are scattered THROUGH the import window, not appended after the core, so a
+  // subscriber's signup date carries no hint of whether they later leave — the roster reads
+  // as mixed statuses over time, not a block of confirmations followed by a block of
+  // unsubscribes. The wave tags are interleaved (round-robin) across those scattered slots
+  // too, so "left after #1" and "left after #3" both span the whole window.
   const IMPORT = 140;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
-  const importPlan: { count: number; unsubAfter: number | null }[] = [
-    { count: 125, unsubAfter: null }, // core — never leave
-    { count: 6, unsubAfter: t.sentAt[0] }, // wave after #1 — leaves before #2
-    { count: 5, unsubAfter: t.sentAt[1] }, // wave after #2 — leaves before #3
-    { count: 4, unsubAfter: t.sentAt[2] }, // wave after #3 — still gone today
+  const churnWaves = [
+    { sentAt: t.sentAt[0], count: 6 }, // wave after #1 — leaves before #2
+    { sentAt: t.sentAt[1], count: 5 }, // wave after #2 — leaves before #3
+    { sentAt: t.sentAt[2], count: 4 }, // wave after #3 — still gone today
   ];
-  const coreEmails: string[] = [];
-  let importIdx = 0;
-  for (const group of importPlan) {
-    for (let i = 0; i < group.count; i++) {
-      const createdAt = Math.round(t.importAt + importIdx * importStep);
-      const email = make(
-        group.unsubAfter == null ? "confirmed" : "unsubscribed",
-        createdAt,
-        createdAt, // imported already confirmed
-        group.unsubAfter == null ? null : unsubscribedAfter(group.unsubAfter, i),
-      );
-      if (group.unsubAfter == null) {
-        coreEmails.push(email);
+  // One entry per churner, waves interleaved round by round; `inWave` (the round) feeds the
+  // front-loaded unsub spike so early members leave sooner than later ones.
+  const churnEntries: { sentAt: number; inWave: number }[] = [];
+  const maxWave = Math.max(...churnWaves.map((w) => w.count));
+  for (let round = 0; round < maxWave; round++) {
+    for (const w of churnWaves) {
+      if (round < w.count) {
+        churnEntries.push({ sentAt: w.sentAt, inWave: round });
       }
-      importIdx++;
+    }
+  }
+  // Place the churners at evenly spaced slots across the whole import cohort.
+  const churnBySlot = new Map<number, { sentAt: number; inWave: number }>();
+  churnEntries.forEach((entry, j) => {
+    churnBySlot.set(Math.round(((j + 0.5) * IMPORT) / churnEntries.length), entry);
+  });
+  const coreEmails: string[] = [];
+  for (let slot = 0; slot < IMPORT; slot++) {
+    const createdAt = Math.round(t.importAt + slot * importStep); // imported already confirmed
+    const churn = churnBySlot.get(slot);
+    if (churn) {
+      make("unsubscribed", createdAt, createdAt, unsubscribedAfter(churn.sentAt, churn.inWave));
+    } else {
+      coreEmails.push(make("confirmed", createdAt, createdAt, null));
     }
   }
 
-  // Growth cohort A: confirmed between #1 and #2, so mailed by #2 and #3 but not #1.
-  const GROWTH_A = 18;
-  for (let i = 0; i < GROWTH_A; i++) {
-    const confirmedAt = Math.round(t.growthAAt + (i * (2 * DAY)) / GROWTH_A);
-    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
+  // first issue right up to today — the list is still growing, it doesn't stop at the last
+  // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
+  // most), and the stream spans all three sends, so every completed send freezes a different,
+  // growing slice while the newest confirmations sit near "now".
+  const GROWTH = 32;
+  const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
+  const growthSpan = t.now - growthStart;
+  for (let i = 0; i < GROWTH; i++) {
+    const signupAt = Math.round(growthStart + ((i + 0.5) * growthSpan) / GROWTH);
+    const confirmLatency = Math.round((0.3 + (i % 5) * 0.4) * HOUR); // ~20 min to ~2 h
+    make("confirmed", signupAt, signupAt + confirmLatency, null);
   }
-  // Growth cohort B: confirmed between #2 and #3, so mailed by #3 only.
-  const GROWTH_B = 14;
-  for (let i = 0; i < GROWTH_B; i++) {
-    const confirmedAt = Math.round(t.growthBAt + (i * (2 * DAY)) / GROWTH_B);
-    make("confirmed", confirmedAt - DAY, confirmedAt, null);
-  }
-  // Still pending: subscribed in the last few days, not yet confirmed — in no audience.
-  const PENDING = 5;
+  // Still pending: signed up but never clicked confirm — in no audience. Confirmation is
+  // near-instant for almost everyone, so a still-pending row is either a sign-up from the last
+  // few hours (not clicked YET) or a rare abandon; the likelihood drops off fast with age (a
+  // month-old pending is unusual). A cubic recency bias packs most into the last day or two,
+  // with a thin tail reaching back a couple of weeks. (`confirmed_at` null → no audience effect.)
+  const PENDING = 3;
   for (let i = 0; i < PENDING; i++) {
-    make("pending", t.now - (i + 1) * DAY, null, null);
+    const u = (i + 0.5) / PENDING;
+    make("pending", Math.round(t.now - u * u * u * (14 * DAY)), null, null);
   }
 
   // Two core subscribers draw a hard bounce and a spam complaint just after issue #2.
@@ -488,26 +647,6 @@ export interface SeedOptions {
 // it here so `--size`/`--seed` reproducibility and its tests keep their existing import.
 export { DEFAULT_SEED, makePrng };
 
-/**
- * A collision-free, human-plausible address for ANY global index — unbounded, unlike the
- * 3,600-address `emailFor` bijection, so a scaled list can reach 10k/100k. The (first,
- * last) pair uses the same diagonal spread as `emailFor` over its 900 combinations; once
- * those are exhausted the local part gains a cycle number (`ada.finch`, then `ada.finch2`,
- * `ada.finch3`, …), which real mail providers hand out too. (first, last, cycle) is a
- * bijection with `n`, so addresses never collide at any size.
- */
-export function scaledEmailFor(n: number): string {
-  const F = FIRST_NAMES.length;
-  const L = LAST_NAMES.length;
-  const pair = n % (F * L); // 0..899 — a unique (first, last) within a cycle
-  const cycle = Math.floor(n / (F * L));
-  const first = FIRST_NAMES[pair % F];
-  const last = LAST_NAMES[(pair + Math.floor(pair / F)) % L];
-  const domain = DOMAINS[n % DOMAINS.length];
-  const local = cycle === 0 ? `${first}.${last}` : `${first}.${last}${cycle + 1}`;
-  return `${local}@${domain}`;
-}
-
 /** Cohort proportions and low outcome rates for a scaled list, expressed as fractions of
  *  the approximate confirmed-now `size`. Chosen so the scaled dataset keeps the curated
  *  list's story shape — an imported core, two growth cohorts, a churn wave after each
@@ -517,7 +656,7 @@ const SCALE = {
   growthA: 0.11, // confirmed between #1 and #2
   growthB: 0.09, // confirmed between #2 and #3
   churn: 0.06, // total unsubscribes, split across three post-issue waves
-  pending: 0.03, // still-unconfirmed tail
+  pending: 0.012, // small still-unconfirmed backlog — most sign-ups confirm
   bounceRate: 0.004, // hard bounces (drawn from the core) → suppressions
   complaintRate: 0.001, // spam complaints (drawn from the core) → suppressions
   failureRate: 0.006, // per-send transport failures — do NOT suppress
@@ -547,12 +686,13 @@ function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
 }
 
 /**
- * The scaled counterpart to `buildAudience`: the same lifecycle (imported core, two growth
- * cohorts, three churn waves, a pending tail, and bounce/complaint suppressions) sized to
- * an approximate confirmed-now `size` and driven by the seeded PRNG, so `(size, seed)` is
+ * The scaled counterpart to `buildAudience`: the same lifecycle (imported core, a rolling
+ * confirmed-growth stream to today, three churn waves, a recency-biased pending tail, and
+ * bounce/complaint suppressions) sized to an approximate confirmed-now `size` and driven by
+ * the seeded PRNG, so `(size, seed)` is
  * reproducible while churn timing, suppression victims, and growth spread vary believably
  * instead of sitting on fixed indices. Addresses come from `scaledEmailFor`, collision-free
- * past the 3,600-address bijection.
+ * to the 100k cap and beyond.
  */
 export function buildScaledAudience(t: Timeline, size: number, rand: () => number): BuiltAudience {
   // Jitter the target and each cohort with the PRNG so the counts read like a real list —
@@ -597,52 +737,60 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     return Math.round(sentAt + 6 * HOUR + r * r * window);
   };
 
-  // Import: the core that stays, then three waves that each churn out after an issue
-  // (wave 0 after #1, 1 after #2, 2 after #3) — imported already-confirmed, like a real
-  // bulk migration, and dispersed over the ~10 days before send #1.
+  // Import: a core that stays plus three churn waves that each leave after an issue (wave 0
+  // after #1, 1 after #2, 2 after #3) — imported already-confirmed, like a real bulk
+  // migration, and dispersed over the ~10 days before send #1. The churners are drawn at
+  // RANDOM positions across the whole cohort (not appended after the core), so a subscriber's
+  // signup date is uncorrelated with whether they later leave; the wave tags land on those
+  // positions in the PRNG's own draw order, so no wave clusters at one end of the window.
   const importCount = core + churnTotal;
   const importStep = (10 * DAY) / importCount;
   const churnWave1 = Math.round(churnTotal * 0.4); // leaves after #1
   const churnWave2 = Math.round(churnTotal * 0.33); // leaves after #2
   const churnWave3 = churnTotal - churnWave1 - churnWave2; // leaves after #3 (still gone today)
+  const waveTags: (0 | 1 | 2)[] = [
+    ...Array<0 | 1 | 2>(churnWave1).fill(0),
+    ...Array<0 | 1 | 2>(churnWave2).fill(1),
+    ...Array<0 | 1 | 2>(churnWave3).fill(2),
+  ];
+  const waveBySlot = new Map<number, 0 | 1 | 2>();
+  drawDistinct(rand, churnTotal, importCount).forEach((slot, j) => {
+    waveBySlot.set(slot, unwrap(waveTags[j], "churn wave tag"));
+  });
   const coreEmails: string[] = [];
-  let importIdx = 0;
-  const addImport = (count: number, wave: 0 | 1 | 2 | null) => {
-    for (let i = 0; i < count; i++) {
-      const createdAt = Math.round(t.importAt + importIdx * importStep);
-      let unsubAt: number | null = null;
-      let status: SeedSubscriber["status"] = "confirmed";
-      if (wave != null) {
-        const sentAt = unwrap(t.sentAt[wave], "send timeline slot");
-        const nextAt = wave < 2 ? unwrap(t.sentAt[wave + 1], "send timeline slot") : t.now;
-        unsubAt = churnAt(sentAt, nextAt);
-        status = "unsubscribed";
-      }
-      const email = make(status, createdAt, createdAt, unsubAt);
-      if (wave == null) {
-        coreEmails.push(email);
-      }
-      importIdx++;
+  for (let slot = 0; slot < importCount; slot++) {
+    const createdAt = Math.round(t.importAt + slot * importStep);
+    const wave = waveBySlot.get(slot);
+    if (wave != null) {
+      const sentAt = unwrap(t.sentAt[wave], "send timeline slot");
+      const nextAt = wave < 2 ? unwrap(t.sentAt[wave + 1], "send timeline slot") : t.now;
+      make("unsubscribed", createdAt, createdAt, churnAt(sentAt, nextAt));
+    } else {
+      coreEmails.push(make("confirmed", createdAt, createdAt, null));
     }
-  };
-  addImport(core, null);
-  addImport(churnWave1, 0);
-  addImport(churnWave2, 1);
-  addImport(churnWave3, 2);
+  }
 
-  // Growth cohort A: confirmed between #1 and #2 (mailed by #2 and #3, not #1).
-  for (let i = 0; i < growthA; i++) {
-    const confirmedAt = Math.round(t.growthAAt + (i * (2 * DAY)) / Math.max(1, growthA));
-    make("confirmed", confirmedAt - DAY, confirmedAt, null);
+  // Organic growth: one continuous stream of confirmed sign-ups from just after the first
+  // issue right up to today (the list is still growing, not frozen at the last historical
+  // send), PRNG-dispersed so it reads as steady week-over-week growth. Each confirms shortly
+  // after signing up. `growthA`/`growthB` only size the stream (and the core above); the two
+  // are now one rolling cohort, so the newest confirmations sit near "now".
+  const growthTotal = growthA + growthB;
+  const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
+  const growthSpan = t.now - growthStart;
+  for (let i = 0; i < growthTotal; i++) {
+    const signupAt = Math.round(growthStart + rand() * growthSpan);
+    const confirmLatency = Math.round((0.2 + rand() * 3) * HOUR); // near-instant confirm
+    make("confirmed", signupAt, signupAt + confirmLatency, null);
   }
-  // Growth cohort B: confirmed between #2 and #3 (mailed by #3 only).
-  for (let i = 0; i < growthB; i++) {
-    const confirmedAt = Math.round(t.growthBAt + (i * (2 * DAY)) / Math.max(1, growthB));
-    make("confirmed", confirmedAt - DAY, confirmedAt, null);
-  }
-  // Still pending: subscribed in the last few days, not yet confirmed — in no audience.
+  // Still pending: signed up but never clicked confirm — in no audience. Confirmation is
+  // near-instant for almost everyone, so a still-pending row is either a sign-up from the last
+  // few hours (not clicked YET) or a rare abandon; the likelihood falls off fast with age. A
+  // cubic recency bias packs most into the last day or two, with a thin tail back a couple of
+  // weeks — no month-old block. (`confirmed_at` null → no audience effect.)
   for (let i = 0; i < pending; i++) {
-    make("pending", t.now - ((i % 6) + 1) * DAY, null, null);
+    const u = rand();
+    make("pending", Math.round(t.now - u * u * u * (14 * DAY)), null, null);
   }
 
   // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
