@@ -11,17 +11,18 @@ import { adminAuth } from "./support/auth";
 const base = "https://kestrel.test";
 const config = () => getConfig(env);
 
-// The seeded publication's shape. The list is imported, grows, and churns across three
-// completed sends, so the mailable audience fluctuates 140 → 152 → 159 and settles at
-// 155 today (157 confirmed − 2 suppressed). These are the numbers the lifecycle produces;
-// they lock the "frozen at send time" behavior, so a regression is obvious.
+// The seeded publication's shape. The list is imported, grows in a continuous confirmed
+// stream to today, and churns across three completed sends, so the mailable audience
+// fluctuates 140 → 147 → 151 and settles at 155 today (157 confirmed − 2 suppressed). These
+// are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
+// regression is obvious.
 const CONFIRMED = 157;
-const PENDING = 5;
+const PENDING = 3;
 const UNSUBSCRIBED = 15;
 const SUPPRESSED = 2;
 const AUDIENCE_NOW = CONFIRMED - SUPPRESSED; // 155
-const SENT_RECIPIENTS = [140, 152, 159]; // oldest → newest
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 451
+const SENT_RECIPIENTS = [140, 147, 151]; // oldest → newest
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 438
 
 /** Delivery rows for one send (email + any post-send event) — proves the record is real
  *  rows, not a summary count. */
