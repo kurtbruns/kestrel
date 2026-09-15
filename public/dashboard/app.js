@@ -1642,6 +1642,27 @@ async function renderEditor(id) {
       }
     };
     editorPollTimer = setInterval(pollFreshness, 10000);
+  } else {
+    // A scheduled post is soft-locked here (read-only, showing the scheduled banner). If its
+    // send FIRES while the editor is open, it's no longer a cancelable scheduled draft — it's
+    // an active send — so redirect to the live watch, the same as opening it fresh would
+    // (#162). Likewise jump to the record if it finishes while we're sitting here.
+    const pollSchedule = async () => {
+      if (document.hidden) {
+        return;
+      }
+      try {
+        const data = await api(`/posts/${id}`);
+        if (data.sending) {
+          location.hash = `#/sent/${data.sending.id}`;
+        } else if (data.post.status === "sent") {
+          location.hash = data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+        }
+      } catch (_) {
+        /* transient — try again next tick */
+      }
+    };
+    editorPollTimer = setInterval(pollSchedule, 10000);
   }
 
   // --- open in browser ---
@@ -1911,8 +1932,19 @@ function startCountdowns() {
 // but one or more `dispatched` recipients whose fate a transport error left unknown
 // (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
 // can't clear on its own without risking a double-mail (I4).
+// The lease check is essential: while the loop is ACTIVELY working a send it holds the
+// lease (`locked_until` in the future) — so a normal send's final dispatched batch
+// (pending 0, in flight > 0) is not a wedge, just work in progress. A genuine wedge has
+// released the lease. Without this, every send briefly flashed "needs attention" at the
+// tail of its dispatch.
 function isWedged(s) {
-  return s.status === "sending" && !s.progress?.pending && (s.progress?.dispatched || 0) > 0;
+  const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
+  return (
+    s.status === "sending" &&
+    !s.progress?.pending &&
+    (s.progress?.dispatched || 0) > 0 &&
+    !leaseHeld
+  );
 }
 
 // The one manual step for a wedged send: decide whether the ambiguous batch went out
@@ -4354,17 +4386,15 @@ function computeHealth(sends) {
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
     });
   }
+  // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
+  // its home (a bar + a Watch link, kept live by the poll). The health line is loud-only,
+  // so it keeps just the *stuck* case: a send that's been running unusually long.
   const active = sending.filter((s) => !isWedged(s));
   const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
     issues.push({
       level: "amber",
       text: "A send has been in progress over 10 minutes — it may be retrying.",
-    });
-  } else if (active.length) {
-    issues.push({
-      level: "amber",
-      text: `${active.length} send${active.length === 1 ? " is" : "s are"} in progress.`,
     });
   }
   // Delivery trouble: a high share of send-time failures on a recent send. (The list
@@ -4579,12 +4609,7 @@ async function renderDashboard() {
   startCountdowns();
   // Keep the active-send widget live: advance its bar, and reveal/clear it when a send
   // starts or finishes. Cleared on navigation (route() clears progressTimer).
-  scheduleDashActivePoll(
-    activeSends
-      .map((s) => s.id)
-      .sort()
-      .join(","),
-  );
+  scheduleDashActivePoll();
 }
 
 /** The dashboard active-send section (empty string when nothing is in flight). */
@@ -4605,34 +4630,28 @@ function wireDashActiveCards() {
     };
   });
 }
-// Poll the in-flight set (~3s). If it changed — a send started or finished — re-render the
-// whole dashboard so the health line and Sent table update too; otherwise just repaint the
-// widget in place so its mini bar advances. A recursive setTimeout, so a slow read never
-// overlaps; `progressTimer` holds it so navigation clears it.
-function scheduleDashActivePoll(prevIds) {
+// Poll the in-flight set (~3s) and repaint ONLY the widget container in place — it slides
+// in as a send starts, advances, and clears when it finishes, with no full-page re-render
+// (a full re-render flashed the whole dashboard as the send started). The health line and
+// Sent table are glance snapshots that refresh on navigation; the widget is the live
+// element. A recursive setTimeout, so a slow read never overlaps; `progressTimer` holds it
+// so navigation clears it.
+function scheduleDashActivePoll() {
   progressTimer = setTimeout(async () => {
     let sends;
     try {
       ({ sends } = await api("/sends?status=sending&limit=200"));
     } catch {
-      scheduleDashActivePoll(prevIds);
+      scheduleDashActivePoll();
       return;
     }
     const active = sends.filter((s) => !isWedged(s));
-    const ids = active
-      .map((s) => s.id)
-      .sort()
-      .join(",");
-    if (ids !== prevIds) {
-      renderDashboard(); // set changed → refresh health, Sent, and the widget together
-      return;
-    }
     const el = document.getElementById("dashActive");
     if (el) {
       el.innerHTML = dashActiveHtml(active);
       wireDashActiveCards();
     }
-    scheduleDashActivePoll(prevIds);
+    scheduleDashActivePoll();
   }, 3000);
 }
 

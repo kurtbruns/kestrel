@@ -238,19 +238,35 @@ describe("buildSendProgress — derived phase", () => {
   it("needs-attention (wedged) when nothing is pending but rows are stuck in flight", () => {
     expect(phase({ status: "sending", c_pending: 0, c_in_flight: 2 })).toBe("needs-attention");
   });
+  it("progressing (NOT needs-attention) while the loop holds the lease on the final batch", () => {
+    // pending 0, in flight > 0, but the loop is actively working it (lease in the future):
+    // the tail of a normal dispatch, not a wedge. Without the lease check this flashed
+    // "needs attention" at the end of every send.
+    expect(
+      phase({ status: "sending", c_pending: 0, c_in_flight: 2, locked_until: Date.now() + 60_000 }),
+    ).toBe("progressing");
+  });
   it("settling once sent while receipts are outstanding, complete when confirmed", () => {
     expect(phase({ status: "sent", c_accepted: 4 })).toBe("settling");
     expect(phase({ status: "sent", c_accepted: 0, c_delivered: 4 })).toBe("complete");
   });
-  it("flags a wedged send in attention with its count", () => {
-    const p = buildSendProgress(
+  it("flags a wedged send in attention with its count, but never while the lease is held", () => {
+    const wedged = buildSendProgress(
       mkSend({ status: "sending", c_in_flight: 3 }),
       "fake",
       false,
       Date.now(),
     );
-    expect(p.attention.wedged).toBe(true);
-    expect(p.attention.wedged_count).toBe(3);
+    expect(wedged.attention.wedged).toBe(true);
+    expect(wedged.attention.wedged_count).toBe(3);
+    // Same counts, but the loop holds the lease → actively working, not wedged.
+    const working = buildSendProgress(
+      mkSend({ status: "sending", c_in_flight: 3, locked_until: Date.now() + 60_000 }),
+      "fake",
+      false,
+      Date.now(),
+    );
+    expect(working.attention.wedged).toBe(false);
   });
 });
 

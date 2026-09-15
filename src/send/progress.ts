@@ -66,7 +66,12 @@ export interface SendProgress {
   attention: { wedged: boolean; wedged_count: number; stuck: boolean; missed: boolean };
 }
 
-function derivePhase(status: SendStatus, counts: SendCounts, hasRetries: boolean): SendPhase {
+function derivePhase(
+  status: SendStatus,
+  counts: SendCounts,
+  hasRetries: boolean,
+  wedged: boolean,
+): SendPhase {
   switch (status) {
     case "scheduled":
       return "scheduled";
@@ -79,8 +84,8 @@ function derivePhase(status: SendStatus, counts: SendCounts, hasRetries: boolean
       return counts.accepted > 0 ? "settling" : "complete";
     default: {
       // sending
-      if (counts.pending === 0 && counts.in_flight > 0) {
-        return "needs-attention"; // wedged: nothing left to send, rows stuck in flight
+      if (wedged) {
+        return "needs-attention"; // dispatched rows stuck in flight, no lease, nothing left to send
       }
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
@@ -141,7 +146,13 @@ export function buildSendProgress(
   const confirmed = counts.delivered + counts.bounced + counts.complained;
   const deliveryPercent = acceptedTotal > 0 ? round((100 * confirmed) / acceptedTotal) : 0;
 
-  const wedged = send.status === "sending" && counts.pending === 0 && counts.in_flight > 0;
+  // A wedged send is one the loop has GIVEN UP on this cycle — nothing left to hand off,
+  // rows stuck in flight, and the lease released (SPEC §11). The lease check is what keeps
+  // a normal send's final dispatched batch (pending 0, in flight > 0, lease still held while
+  // the loop finishes it) from momentarily reading as "needs attention."
+  const leaseHeld = send.locked_until != null && send.locked_until > now;
+  const wedged =
+    send.status === "sending" && counts.pending === 0 && counts.in_flight > 0 && !leaseHeld;
   const stuck =
     send.status === "sending" &&
     send.started_at != null &&
@@ -150,7 +161,7 @@ export function buildSendProgress(
 
   return {
     state: send.status,
-    phase: derivePhase(send.status, counts, hasRetries),
+    phase: derivePhase(send.status, counts, hasRetries, wedged),
     total,
     counts,
     dispatch: { done, percent: dispatchPercent, rate_per_min: ratePerMin, eta_ms: etaMs },
