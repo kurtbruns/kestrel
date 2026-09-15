@@ -1312,6 +1312,11 @@ td a:hover {
 .list-table .c-act {
   width: 56px;
 }
+/* The dashboard's summary tables (Drafts / Sent) take a stronger border than the
+   default hairline, which nearly disappears against the off-white dashboard ground. */
+.dash-section table {
+  border-color: var(--line-2);
+}
 
 /* sortable column headers: the label is a borderless button that fills the cell */
 th.sortable {
@@ -1858,9 +1863,12 @@ button.linkbtn:hover {
 /* One title weight/size across every scheduled notice (card subject + banner date),
    so the "title" is consistent from the Drafts list to the Sent queue to the editor. */
 .sched-subj {
+  display: block;
+  color: var(--fg);
   font-size: 15px;
   font-weight: 600;
   letter-spacing: -0.01em;
+  margin-bottom: 3px;
 }
 .banner-scheduled strong {
   font-weight: 600;
@@ -2694,6 +2702,12 @@ textarea.is-invalid {
 .tile-emph .tile-n,
 .tile-emph .tile-sub {
   color: var(--ok-fg);
+}
+/* On hover, each tile deepens its OWN resting border rather than jumping to a generic
+   grey — so the green Confirmed tile takes a green border matching its dark-green text,
+   not a mismatched neutral one. */
+.tile-emph:hover {
+  border-color: var(--ok-fg);
 }
 
 /* Recent-sends "Archive ↗" link + the drafts table live on the shared table styles. */
