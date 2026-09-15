@@ -7,6 +7,7 @@ import { listPage, parseListParams } from "../lib/list";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend } from "../send/schedule";
 
@@ -49,6 +50,23 @@ export async function get(c: RequestContext): Promise<Response> {
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
   });
+}
+
+/**
+ * The cheap poll target for the live in-flight watch (SPEC §8). A single-row read off
+ * the denormalized counters (migration 0006) — no aggregate over the audience — plus
+ * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
+ * the loud attention flags (§11). `deliveries` stays the source of truth; this is its
+ * rebuildable cache. Both the watch view and the dashboard active-send widget poll it.
+ */
+export async function progress(c: RequestContext): Promise<Response> {
+  const send = await sends.getSend(c.env.DB, param(c, "id"));
+  if (!send) {
+    throw notFound("send");
+  }
+  const hasRetries =
+    send.status === "sending" ? await sends.hasActiveRetries(c.env.DB, send.id) : false;
+  return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
 /** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */

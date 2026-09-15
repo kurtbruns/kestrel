@@ -18,6 +18,145 @@ export interface SendRow {
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
+  // Denormalized progress counters (migration 0006). A rebuildable cache of the
+  // `deliveries` bucketing, maintained in the same transactions as each recipient
+  // transition so `GET /sends/:id/progress` is a single-row read (SPEC §8).
+  c_pending: number;
+  c_in_flight: number;
+  c_accepted: number;
+  c_delivered: number;
+  c_bounced: number;
+  c_complained: number;
+  c_skipped: number;
+  c_failed: number;
+}
+
+/** The eight denormalized progress counters on a `sends` row. */
+export interface SendCounts {
+  pending: number;
+  in_flight: number;
+  accepted: number;
+  delivered: number;
+  bounced: number;
+  complained: number;
+  skipped: number;
+  failed: number;
+}
+
+/** Read the counter columns off a send row into the API-facing `SendCounts` shape. */
+export function countsOf(send: SendRow): SendCounts {
+  return {
+    pending: send.c_pending,
+    in_flight: send.c_in_flight,
+    accepted: send.c_accepted,
+    delivered: send.c_delivered,
+    bounced: send.c_bounced,
+    complained: send.c_complained,
+    skipped: send.c_skipped,
+    failed: send.c_failed,
+  };
+}
+
+// --- denormalized counter maintenance (migration 0006) ----------------------
+//
+// The counters mirror `deliveryOutcomes`: each recipient falls in exactly one of
+// eight mutually-exclusive buckets, the webhook `event` winning over the send-loop
+// `status`. Every transition below moves a recipient between buckets by adjusting
+// two columns by ±n, batched atomically with the `deliveries` write so the cache
+// can never partially diverge from the source of truth. `recomputeSendCounters`
+// rebuilds them from the aggregate (backfill, and the exactness pass at completion).
+
+const COUNTER_COLS = [
+  "c_pending",
+  "c_in_flight",
+  "c_accepted",
+  "c_delivered",
+  "c_bounced",
+  "c_complained",
+  "c_skipped",
+  "c_failed",
+] as const;
+type CounterCol = (typeof COUNTER_COLS)[number];
+
+/** The counter column a recipient contributes to, given its status and webhook event
+ *  — the event wins over the status, exactly as `deliveryOutcomes` buckets. */
+function bucketCol(status: string, event: string | null): CounterCol {
+  if (event === "delivered") {
+    return "c_delivered";
+  }
+  if (event === "bounced") {
+    return "c_bounced";
+  }
+  if (event === "complained") {
+    return "c_complained";
+  }
+  switch (status) {
+    case "dispatched":
+      return "c_in_flight";
+    case "accepted":
+      return "c_accepted";
+    case "skipped":
+      return "c_skipped";
+    case "failed":
+      return "c_failed";
+    default:
+      return "c_pending";
+  }
+}
+
+/** A statement moving `n` recipients between two counter buckets of one send. The
+ *  column names come from the fixed `CounterCol` union, never user input. */
+function counterMove(
+  db: D1Database,
+  sendId: string,
+  from: CounterCol,
+  to: CounterCol,
+  n: number,
+): D1PreparedStatement {
+  return db
+    .prepare(`UPDATE sends SET ${from} = ${from} - ?, ${to} = ${to} + ? WHERE id = ?`)
+    .bind(n, n, sendId);
+}
+
+/**
+ * Rebuild the eight counters from `deliveries` (the source of truth) for one send,
+ * bucketed exactly as `deliveryOutcomes`. The counters are a cache, so this both
+ * backfills (migration 0006) and runs as the exactness pass when a send completes,
+ * guaranteeing the permanent record's numbers equal the aggregate.
+ */
+export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE sends SET
+         c_pending    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'pending'),
+         c_in_flight  = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'dispatched'),
+         c_accepted   = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'accepted'),
+         c_delivered  = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'delivered'),
+         c_bounced    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'bounced'),
+         c_complained = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'complained'),
+         c_skipped    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'skipped'),
+         c_failed     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'failed')
+       WHERE id = ?`,
+    )
+    .bind(sendId);
+}
+
+export async function recomputeSendCounters(db: D1Database, sendId: string): Promise<void> {
+  await recomputeSendCountersStmt(db, sendId).run();
+}
+
+/** Whether the send still has a recipient that has been retried (attempts > 0) and is
+ *  not yet terminal — the signal that separates the `retrying` phase from a clean
+ *  `progressing` one. An indexed EXISTS probe (send_id, status), so it stays cheap
+ *  even on a large audience and keeps `/progress` off a full aggregate. */
+export async function hasActiveRetries(db: D1Database, sendId: string): Promise<boolean> {
+  const row = await db
+    .prepare(
+      "SELECT 1 AS x FROM deliveries WHERE send_id = ? AND status IN ('pending', 'dispatched') AND attempts > 0 LIMIT 1",
+    )
+    .bind(sendId)
+    .first<{ x: number }>();
+  return row != null;
 }
 
 /** List view — omits the large frozen bodies. */
@@ -91,9 +230,11 @@ export const SEND_LIST_SPEC: ListSpec = {
   defaultDir: "desc",
 };
 
-// The list projection deliberately omits the large frozen bodies (rendered_html/_text).
+// The list projection deliberately omits the large frozen bodies (rendered_html/_text)
+// but carries the denormalized counters, so a list row is enough for the Sent-page
+// active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_failed";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -315,6 +456,10 @@ export async function completeSend(
         "UPDATE posts SET status = 'sent', updated_at = ? WHERE id = ? AND status = 'scheduled'",
       )
       .bind(now, postId),
+    // Exactness pass: rebuild the counters from the aggregate as the record becomes
+    // permanent, so its numbers equal `deliveries` regardless of any live-delta drift.
+    // Delivery events keep arriving after this and update the counters on their own.
+    recomputeSendCountersStmt(db, sendId),
   ]);
 }
 
@@ -327,16 +472,25 @@ export async function materializeAudience(
   sendId: string,
   now: number,
 ): Promise<void> {
-  await db
-    .prepare(
-      `INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at)
-         SELECT lower(hex(randomblob(16))), ?, s.email, 'pending', 0, ?
-           FROM subscribers s
-          WHERE s.status = 'confirmed'
-            AND s.email NOT IN (SELECT email FROM suppressions)`,
-    )
-    .bind(sendId, now)
-    .run();
+  // Insert the audience, then set c_pending to the true count of queued rows — an
+  // absolute set (not a delta) so it is correct on the first run and idempotent on a
+  // resume, and atomic with the insert so the counter can't diverge from a crash mid-way.
+  await db.batch([
+    db
+      .prepare(
+        `INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at)
+           SELECT lower(hex(randomblob(16))), ?, s.email, 'pending', 0, ?
+             FROM subscribers s
+            WHERE s.status = 'confirmed'
+              AND s.email NOT IN (SELECT email FROM suppressions)`,
+      )
+      .bind(sendId, now),
+    db
+      .prepare(
+        "UPDATE sends SET c_pending = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id AND status = 'pending' AND event IS NULL) WHERE id = ?",
+      )
+      .bind(sendId),
+  ]);
 }
 
 export interface DeliveryWork {
@@ -377,8 +531,10 @@ export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<
   return results;
 }
 
+/** Move a chunk of `pending` rows to `dispatched` (the intent-before-network step). */
 export async function setDeliveriesDispatched(
   db: D1Database,
+  sendId: string,
   ids: string[],
   now: number,
 ): Promise<void> {
@@ -386,59 +542,85 @@ export async function setDeliveriesDispatched(
     return;
   }
   const placeholders = ids.map(() => "?").join(",");
-  await db
-    .prepare(
-      `UPDATE deliveries SET status = 'dispatched', updated_at = ? WHERE id IN (${placeholders})`,
-    )
-    .bind(now, ...ids)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        `UPDATE deliveries SET status = 'dispatched', updated_at = ? WHERE id IN (${placeholders})`,
+      )
+      .bind(now, ...ids),
+    counterMove(db, sendId, "c_pending", "c_in_flight", ids.length),
+  ]);
 }
 
 export async function setDeliveryAccepted(
   db: D1Database,
+  sendId: string,
   id: string,
   providerId: string,
   now: number,
 ): Promise<void> {
-  await db
-    .prepare(
-      "UPDATE deliveries SET status = 'accepted', provider_id = ?, error = NULL, updated_at = ? WHERE id = ?",
-    )
-    .bind(providerId, now, id)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE deliveries SET status = 'accepted', provider_id = ?, error = NULL, updated_at = ? WHERE id = ?",
+      )
+      .bind(providerId, now, id),
+    counterMove(db, sendId, "c_in_flight", "c_accepted", 1),
+  ]);
 }
 
+/**
+ * Mark a recipient failed. `from` names the bucket it is leaving — `pending` for a
+ * recipient failed before dispatch (max-attempts / suppressed at claim), `dispatched`
+ * for a non-retryable rejection after the network call — so the counter move is exact.
+ */
 export async function setDeliveryFailed(
   db: D1Database,
+  sendId: string,
   id: string,
   error: string,
   now: number,
+  from: "pending" | "dispatched",
 ): Promise<void> {
-  await db
-    .prepare("UPDATE deliveries SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
-    .bind(error, now, id)
-    .run();
+  await db.batch([
+    db
+      .prepare("UPDATE deliveries SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
+      .bind(error, now, id),
+    counterMove(db, sendId, from === "pending" ? "c_pending" : "c_in_flight", "c_failed", 1),
+  ]);
 }
 
-export async function setDeliverySkipped(db: D1Database, id: string, now: number): Promise<void> {
-  await db
-    .prepare("UPDATE deliveries SET status = 'skipped', updated_at = ? WHERE id = ?")
-    .bind(now, id)
-    .run();
+/** Skip a `pending` recipient excluded at claim time (unsubscribed / suppressed, I2). */
+export async function setDeliverySkipped(
+  db: D1Database,
+  sendId: string,
+  id: string,
+  now: number,
+): Promise<void> {
+  await db.batch([
+    db
+      .prepare("UPDATE deliveries SET status = 'skipped', updated_at = ? WHERE id = ?")
+      .bind(now, id),
+    counterMove(db, sendId, "c_pending", "c_skipped", 1),
+  ]);
 }
 
+/** Requeue a `dispatched` recipient to `pending` for the next tick (retryable outcome). */
 export async function requeueDelivery(
   db: D1Database,
+  sendId: string,
   id: string,
   error: string,
   now: number,
 ): Promise<void> {
-  await db
-    .prepare(
-      "UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(error, now, id)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?",
+      )
+      .bind(error, now, id),
+    counterMove(db, sendId, "c_in_flight", "c_pending", 1),
+  ]);
 }
 
 /** Reset a prior invocation's in-flight rows back to pending (idempotent providers only). */
@@ -453,7 +635,11 @@ export async function resetDispatchedToPending(
     )
     .bind(now, sendId)
     .run();
-  return res.meta.changes ?? 0;
+  const n = res.meta.changes ?? 0;
+  if (n > 0) {
+    await counterMove(db, sendId, "c_in_flight", "c_pending", n).run();
+  }
+  return n;
 }
 
 /**
@@ -477,7 +663,19 @@ export async function resolveDispatched(
     )
     .bind(outcome, note, now, sendId)
     .run();
-  return res.meta.changes ?? 0;
+  const n = res.meta.changes ?? 0;
+  if (n > 0) {
+    // A dispatched row carries no webhook event yet, so it leaves c_in_flight for the
+    // adjudicated terminal bucket.
+    await counterMove(
+      db,
+      sendId,
+      "c_in_flight",
+      outcome === "failed" ? "c_failed" : "c_accepted",
+      n,
+    ).run();
+  }
+  return n;
 }
 
 export async function countDeliveries(
@@ -529,34 +727,78 @@ export async function markDeliveryEvent(
   u: DeliveryEventUpdate,
 ): Promise<DeliveryEventResult> {
   const detail = u.detail ?? null;
+  // Locate the target row first so the counter delta knows the bucket it is leaving
+  // (an event can land on an `accepted` row, or overwrite an earlier event). Matching
+  // is by `provider_id` (unique per delivery) then by the recipient's most recent row.
+  let row: {
+    id: string;
+    send_id: string;
+    email: string;
+    status: string;
+    event: string | null;
+  } | null = null;
   if (u.providerId) {
-    const { results } = await db
+    row = await db
       .prepare(
-        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE provider_id = ? RETURNING email",
+        "SELECT id, send_id, email, status, event FROM deliveries WHERE provider_id = ? LIMIT 1",
       )
-      .bind(u.event, detail, u.at, u.providerId)
-      .all<{ email: string }>();
-    const matched = results[0];
-    if (matched) {
-      return { changes: results.length, email: matched.email };
-    }
-    if (!u.email) {
-      return { changes: 0, email: null };
-    }
-    // Fall through to email match if the providerId wasn't found on any row.
+      .bind(u.providerId)
+      .first();
   }
-  if (!u.email) {
+  if (!row && u.email) {
+    row = await db
+      .prepare(
+        "SELECT id, send_id, email, status, event FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1",
+      )
+      .bind(u.email)
+      .first();
+  }
+  if (!row) {
     return { changes: 0, email: null };
   }
-  const res = await db
+
+  const fromCol = bucketCol(row.status, row.event);
+  const toCol = bucketCol(row.status, u.event);
+  const stmts: D1PreparedStatement[] = [
+    db
+      .prepare("UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE id = ?")
+      .bind(u.event, detail, u.at, row.id),
+  ];
+  if (fromCol !== toCol) {
+    stmts.push(counterMove(db, row.send_id, fromCol, toCol, 1));
+  }
+  await db.batch(stmts);
+  return { changes: 1, email: row.email };
+}
+
+/** An accepted recipient with no delivery event yet — a candidate for the dev send
+ *  simulation to fabricate a delayed delivered / bounced / complained webhook against
+ *  (see src/providers/simulate.ts). Read-only; never used by the real send path. */
+export interface AcceptedAwaitingEvent {
+  send_id: string;
+  email: string;
+  provider_id: string | null;
+  updated_at: number;
+}
+
+/** Accepted-but-unconfirmed deliveries of in-flight or recently-sent sends, oldest
+ *  first, for the dev simulation's delayed synthetic webhooks. Bounded by `limit`. */
+export async function acceptedAwaitingEvent(
+  db: D1Database,
+  limit: number,
+): Promise<AcceptedAwaitingEvent[]> {
+  const { results } = await db
     .prepare(
-      `UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?
-        WHERE id = (SELECT id FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1)`,
+      `SELECT d.send_id AS send_id, d.email AS email, d.provider_id AS provider_id, d.updated_at AS updated_at
+         FROM deliveries d JOIN sends s ON s.id = d.send_id
+        WHERE d.status = 'accepted' AND d.event IS NULL
+          AND s.status IN ('sending', 'sent')
+        ORDER BY d.updated_at ASC
+        LIMIT ?`,
     )
-    .bind(u.event, detail, u.at, u.email)
-    .run();
-  const changes = res.meta.changes ?? 0;
-  return { changes, email: changes > 0 ? u.email : null };
+    .bind(limit)
+    .all<AcceptedAwaitingEvent>();
+  return results;
 }
 
 /** Dispatched rows older than a threshold — ambiguous on non-idempotent providers. */

@@ -15,6 +15,7 @@ let session = null; // { principal: { kind, email? }, auth: { mode } } once boot
 let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
+let progressTimer = null; // live in-flight /progress poll (watch view + active-send widget), cleared on navigation
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
 // re-binding — and so leaking a listener — on every visit to the page.
@@ -691,6 +692,10 @@ function route() {
   if (editorPollTimer) {
     clearInterval(editorPollTimer);
     editorPollTimer = null;
+  }
+  if (progressTimer) {
+    clearInterval(progressTimer);
+    progressTimer = null;
   }
   clearAutosaveTimers();
   isEditorDirty = false;
@@ -1927,6 +1932,52 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
+// Dispatch/delivery numbers from a `/sends` list row's denormalized counters (SEND_LIST_COLS),
+// so the active-send row and the dashboard widget need no per-send /progress read. `done`
+// is the dispatch fraction (accepted vs the frozen total), matching the watch's dispatch bar.
+function listRowCounts(s) {
+  const total =
+    (s.c_pending || 0) +
+    (s.c_in_flight || 0) +
+    (s.c_accepted || 0) +
+    (s.c_delivered || 0) +
+    (s.c_bounced || 0) +
+    (s.c_complained || 0) +
+    (s.c_skipped || 0) +
+    (s.c_failed || 0);
+  const t = total > 0 ? total : s.recipient_count || 0;
+  const done =
+    (s.c_accepted || 0) + (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
+  const confirmed = (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
+  const pct = t > 0 ? Math.round((100 * done) / t) : 0;
+  // Rough ETA from the average rate since the send started — the same cumulative
+  // estimate /progress reports, computed here off the list row so no extra read is needed.
+  let etaMs = null;
+  if (s.started_at && done > 0 && t > done) {
+    const elapsed = Date.now() - s.started_at;
+    if (elapsed > 0) {
+      etaMs = ((t - done) * elapsed) / done;
+    }
+  }
+  return { total: t, accepted: done, confirmed, pct, etaMs };
+}
+// One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
+// The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
+function activeRowHtml(s) {
+  const c = listRowCounts(s);
+  const eta = c.etaMs != null ? ` · ~${fmtDuration(c.etaMs)} left` : "";
+  return `<div class="card spread clickable active-card" data-watch="${s.id}">
+      <div class="active-main">
+        <a class="card-link active-subj" href="#/sent/${s.id}">${esc(s.subject) || "<em>untitled</em>"}</a>
+        <div class="active-bar"><div class="active-fill" style="width:${clampPct(c.pct)}%"></div></div>
+        <div class="muted active-stat">Sending — ${c.accepted.toLocaleString()} of ${c.total.toLocaleString()} accepted${
+          c.confirmed ? ` · ${c.confirmed.toLocaleString()} confirmed` : ""
+        }${eta}</div>
+      </div>
+      <a class="ghost-link" href="#/sent/${s.id}">Watch&nbsp;→</a>
+    </div>`;
+}
+
 async function renderSent() {
   // The dispatch side (#147): the still-cancelable Scheduled queue on top, then the
   // frozen Sent records. The table is sent-only, so it carries no status column or
@@ -1936,21 +1987,50 @@ async function renderSent() {
     ${noEmailProvider() ? `<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : ""}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
+    <div id="active"></div>
     <h2>Sent issues</h2>
     ${listToolbar({ searchPlaceholder: "Search subject…" })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
   const stuckEl = document.getElementById("stuck");
   const schedEl = document.getElementById("scheduled");
+  const activeEl = document.getElementById("active");
   const listEl = document.getElementById("sendsList");
   const pagerEl = document.getElementById("sendsPager");
 
   // Resolving a wedged send or canceling a scheduled one touches several sections at
-  // once, so refresh all three together.
+  // once, so refresh them together.
   function reloadAll() {
     loadStuck();
     loadScheduled();
+    loadActive();
     loadList();
+  }
+
+  // The active send gets a home above the sent records: an in-progress row with a live
+  // mini dispatch bar and a Watch link into the record view's live watch (#154). Drawn
+  // from the small `sending` set (wedged ones are handled by loadStuck above, so they're
+  // excluded here). Polled on its own short interval so the bar moves without a reload.
+  async function loadActive() {
+    try {
+      const { sends } = await api("/sends?status=sending&limit=200");
+      const active = sends.filter((s) => !isWedged(s));
+      if (!active.length) {
+        activeEl.innerHTML = "";
+        return;
+      }
+      activeEl.innerHTML = `<h2>In progress</h2>${active.map(activeRowHtml).join("")}`;
+      activeEl.querySelectorAll("[data-watch]").forEach((card) => {
+        card.onclick = (e) => {
+          if (e.target.tagName !== "A") {
+            location.hash = `#/sent/${card.dataset.watch}`;
+          }
+        };
+      });
+    } catch {
+      // Non-fatal: the in-progress section just stays empty if this probe fails.
+      activeEl.innerHTML = "";
+    }
   }
 
   // Wedged sends get their own attention block above the queue (SPEC §11). They are
@@ -2072,13 +2152,18 @@ async function renderSent() {
 
   wireToolbar(app, state, loadList);
   reloadAll();
+  // Keep the in-progress section's mini bar live without a full reload. Cleared on
+  // navigation (route() clears progressTimer); the countdowns run on statusTimer.
+  progressTimer = setInterval(loadActive, 5000);
 }
 
-// ---- sent record view (#148): a read-only delivery record for one send ----
-// A sent issue is a frozen record (I3), not an editable object, so it opens this
-// instead of a locked editor: how the send went over the frozen audience, and a live
-// link to the archived issue. PR1 renders the `sent` state; the live in-flight watch
-// for a `sending` send is PR2 (see #154).
+// ---- sent record view (#148) + live in-flight watch (#154) ----
+// A sent issue is a frozen record (I3), not an editable object, so it opens this instead
+// of a locked editor: how the send went over the frozen audience, with a link to the
+// archived issue. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
+// the lagging delivery), a derived phase, a counts grid, throughput, and a provider-
+// health strip — polling /progress until dispatch completes, after which the record keeps
+// absorbing delivery receipts as they settle (SPEC §6/§8/§11).
 async function renderSentRecord(id) {
   app.innerHTML = `<p class="muted">Loading…</p>`;
   let data;
@@ -2088,40 +2173,233 @@ async function renderSentRecord(id) {
     renderError(app, e.message, () => renderSentRecord(id));
     return;
   }
-  const { send, outcomes, archive_url, published } = data;
+  const { send } = data;
 
   // A scheduled send is still cancel-to-edit — its home is the editor, not this record.
   if (send.status === "scheduled") {
     location.hash = `#/edit/${send.post_id}`;
     return;
   }
-  // A send still in flight has no finished record yet. The rich live watch is PR2; for
-  // now, point back to the queue so this isn't a dead end.
+  // A send still in flight opens the live watch, which polls /progress.
   if (send.status === "sending") {
-    app.innerHTML = `<div class="editor-head"><a href="#/sent" class="back">← Sent</a></div>
-      <div class="card"><h1 style="margin-top:0">${esc(send.subject) || "<em>untitled</em>"}</h1>
-      <p><span class="badge sending">sending</span></p>
-      <p class="muted">This issue is sending now. A live progress view is coming soon; check back once it finishes.</p></div>`;
+    return startWatch(id, send);
+  }
+  return renderFrozenRecord(id, data);
+}
+
+// Phase → { label, tone } for the derived-phase pill. Tones reuse the status/semantic
+// palettes: sending = amber (the in-flight treatment, DESIGN §3), ok = green, warn/danger
+// as usual, scheduled = violet.
+const PHASE_META = {
+  scheduled: { label: "Scheduled", tone: "scheduled" },
+  progressing: { label: "Sending", tone: "sending" },
+  retrying: { label: "Retrying", tone: "warn" },
+  "backing-off": { label: "Backing off", tone: "warn" },
+  "needs-attention": { label: "Needs attention", tone: "danger" },
+  settling: { label: "Settling", tone: "sending" },
+  complete: { label: "Complete", tone: "ok" },
+  failed: { label: "Failed", tone: "danger" },
+  canceled: { label: "Canceled", tone: "muted" },
+};
+const PHASE_BLURB = {
+  progressing: "Handing recipients to the provider.",
+  retrying: "Some recipients hit a transient error and will be retried.",
+  "backing-off": "Paused between ticks — it resumes on the next sweep.",
+  "needs-attention": "Some deliveries are stuck and need a decision.",
+  settling: "Dispatch complete — waiting on delivery receipts.",
+};
+function phasePill(phase) {
+  const m = PHASE_META[phase] || { label: phase, tone: "muted" };
+  return `<span class="phase-pill tone-${m.tone}">${esc(m.label)}</span>`;
+}
+const clampPct = (n) => Math.max(0, Math.min(100, Math.round(n || 0)));
+// A labeled progress bar: `tone` picks the fill color, `sub` is a muted sub-line.
+function progressBar(tone, label, value, total, sub) {
+  const p = total > 0 ? clampPct((100 * value) / total) : 0;
+  return `<div class="wbar-row">
+      <div class="wbar-head"><span class="wbar-label">${label}</span><span class="wbar-count">${value.toLocaleString()} / ${total.toLocaleString()}</span></div>
+      <div class="wbar" role="progressbar" aria-valuenow="${p}" aria-valuemin="0" aria-valuemax="100"><div class="wbar-fill tone-${tone}" style="width:${p}%"></div></div>
+      ${sub ? `<div class="wbar-sub muted">${sub}</div>` : ""}
+    </div>`;
+}
+function fmtDuration(ms) {
+  if (ms == null || !Number.isFinite(ms) || ms <= 0) {
+    return "—";
+  }
+  const s = Math.round(ms / 1000);
+  if (s < 90) {
+    return `${s}s`;
+  }
+  const m = Math.round(s / 60);
+  if (m < 90) {
+    return `${m} min`;
+  }
+  return `${Math.round(m / 60)} hr`;
+}
+
+// The counts grid mirrors the eight denormalized buckets; each swatch reuses the record
+// tile palette so a bucket reads the same here and on the frozen record.
+const WATCH_COUNTS = [
+  { key: "pending", label: "Pending", sw: "neutral" },
+  { key: "in_flight", label: "In flight", sw: "sending" },
+  { key: "accepted", label: "Accepted", sw: "sending" },
+  { key: "delivered", label: "Delivered", sw: "ok" },
+  { key: "bounced", label: "Bounced", sw: "warn" },
+  { key: "complained", label: "Complained", sw: "danger" },
+  { key: "failed", label: "Failed", sw: "neutral" },
+  { key: "skipped", label: "Skipped", sw: "neutral" },
+];
+function watchCountsHtml(counts) {
+  return `<div class="wcounts">${WATCH_COUNTS.map(
+    (c) =>
+      `<div class="wcount"><div class="wcount-n">${(counts[c.key] || 0).toLocaleString()}</div><div class="wcount-l"><span class="rec-sw sw-${c.sw}"></span>${c.label}</div></div>`,
+  ).join("")}</div>`;
+}
+
+// The dynamic half of the watch (bars + counts + health strip), repainted on each poll.
+function watchBodyHtml(prog) {
+  const c = prog.counts;
+  const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
+  const rate = prog.dispatch.rate_per_min;
+  const dispatchSub =
+    prog.state === "sending"
+      ? `${PHASE_BLURB[prog.phase] || ""}${
+          rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
+        }`
+      : "Dispatch complete.";
+  const trouble = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
+  const providerText = noEmailProvider()
+    ? "No email provider configured — nothing is delivered"
+    : `Provider: ${esc(prog.provider?.name || "—")}`;
+  return `
+    <div class="wbars">
+      ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.total, dispatchSub)}
+      ${progressBar(
+        "ok",
+        "Delivery — webhook-confirmed",
+        prog.delivery.confirmed,
+        acceptedTotal,
+        "Delivery lags acceptance — receipts keep arriving after the send finishes.",
+      )}
+    </div>
+    ${watchCountsHtml(c)}
+    <div class="whealth${trouble ? " has-trouble" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
+      trouble ? `${trouble.toLocaleString()} bounced / failed / complained` : "no delivery trouble"
+    }</span></div>`;
+}
+function watchMetaHtml(send, prog) {
+  const started = send.started_at ? `Started ${esc(fmt(send.started_at))}` : "Sending now";
+  return `${started} · ${prog.total.toLocaleString()} recipients`;
+}
+function watchHtml(send, prog) {
+  return `
+    <div class="editor-head">
+      <a href="#/sent" class="back">← Sent</a>
+      ${prog.attention?.wedged ? `<button type="button" class="primary" id="resolveBtn">Resolve…</button>` : ""}
+    </div>
+    <div class="card rec-card watch-card">
+      <div class="rec-head">
+        <div class="watch-title"><h1>${esc(send.subject) || "<em>untitled</em>"}</h1><span id="watchPill">${phasePill(prog.phase)}</span></div>
+        <div class="rec-meta" id="watchMeta">${watchMetaHtml(send, prog)}</div>
+      </div>
+      <div id="watchBody">${watchBodyHtml(prog)}</div>
+      <p class="rec-note muted">This view updates live while the send is in flight. Delivery receipts keep arriving after dispatch finishes — the record stays accurate as they settle.</p>
+    </div>`;
+}
+
+// Wire the header's Resolve control (present only when the send is wedged, §11). It
+// reuses the same modal the Sent page uses, shimming the shape it reads.
+function wireWatchHeader(id, send, prog) {
+  const rb = document.getElementById("resolveBtn");
+  if (rb) {
+    rb.onclick = () =>
+      openResolveModal(
+        {
+          id,
+          subject: send.subject,
+          progress: { dispatched: prog.counts.in_flight, pending: prog.counts.pending },
+        },
+        () => renderSentRecord(id),
+      );
+  }
+}
+function paintWatch(send, prog) {
+  const pill = document.getElementById("watchPill");
+  if (pill) {
+    pill.innerHTML = phasePill(prog.phase);
+  }
+  const meta = document.getElementById("watchMeta");
+  if (meta) {
+    meta.innerHTML = watchMetaHtml(send, prog);
+  }
+  const body = document.getElementById("watchBody");
+  if (body) {
+    body.innerHTML = watchBodyHtml(prog);
+  }
+}
+
+async function startWatch(id, send) {
+  let prog;
+  try {
+    prog = await api(`/sends/${id}/progress`);
+  } catch (e) {
+    renderError(app, e.message, () => renderSentRecord(id));
     return;
   }
+  // It may have finished between the two reads — fall through to the frozen record.
+  if (prog.state !== "sending") {
+    return renderSentRecord(id);
+  }
+  app.innerHTML = watchHtml(send, prog);
+  wireWatchHeader(id, send, prog);
+  scheduleWatchPoll(id, send);
+}
 
-  const total = outcomes.recipients;
-  // Buckets that reconcile to the frozen audience (see db/sends.ts deliveryOutcomes).
+// Poll /progress (~3s) while sending; a recursive setTimeout so a slow read never
+// overlaps. `progressTimer` holds the pending id so route() clears it on navigation.
+function scheduleWatchPoll(id, send) {
+  progressTimer = setTimeout(async () => {
+    let prog;
+    try {
+      prog = await api(`/sends/${id}/progress`);
+    } catch {
+      scheduleWatchPoll(id, send); // transient — keep the last view, try again
+      return;
+    }
+    if (prog.state !== "sending") {
+      progressTimer = null;
+      return renderSentRecord(id); // dispatch done → the frozen record (which settles)
+    }
+    // If it just wedged, the header needs the Resolve control it didn't have — re-render.
+    if (prog.attention?.wedged && !document.getElementById("resolveBtn")) {
+      app.innerHTML = watchHtml(send, prog);
+      wireWatchHeader(id, send, prog);
+    } else {
+      paintWatch(send, prog);
+    }
+    scheduleWatchPoll(id, send);
+  }, 3000);
+}
+
+// The delivery-outcome tiles + reconciliation line — the frozen record's body, factored
+// so the settling poll can repaint them in place as late receipts arrive.
+function outcomeTilesHtml(outcomes) {
   const tiles = [
-    { n: total, label: "Recipients", cls: "", sw: "neutral" },
+    { n: outcomes.recipients, label: "Recipients", cls: "", sw: "neutral" },
     { n: outcomes.delivered, label: "Delivered", cls: "ok", sw: "ok" },
     { n: outcomes.bounced, label: "Bounced", cls: "warn", sw: "warn" },
     { n: outcomes.complained, label: "Complained", cls: "danger", sw: "danger" },
     { n: outcomes.failed, label: "Failed", cls: "", sw: "neutral" },
   ];
-  const tilesHtml = tiles
+  return tiles
     .map(
       (t) =>
         `<div class="rec-tile"><div class="rec-n ${t.cls}">${t.n.toLocaleString()}</div><div class="rec-l"><span class="rec-sw sw-${t.sw}"></span>${t.label}</div></div>`,
     )
     .join("");
-  // A short reconciliation line so the numbers visibly add up to the audience; the
-  // residual (accepted-but-not-yet-confirmed, skipped) keeps delivery honest under lag.
+}
+function outcomeReconHtml(outcomes) {
+  const total = outcomes.recipients;
   const residual = outcomes.accepted + outcomes.skipped + outcomes.in_flight;
   const parts = [`${outcomes.delivered.toLocaleString()} delivered`];
   if (outcomes.bounced) {
@@ -2136,6 +2414,12 @@ async function renderSentRecord(id) {
   if (residual) {
     parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
   }
+  return `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.`;
+}
+
+function renderFrozenRecord(id, data) {
+  const { send, outcomes, archive_url, published } = data;
+  const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;
 
   app.innerHTML = `
@@ -2148,8 +2432,8 @@ async function renderSentRecord(id) {
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
         <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
-      <div class="rec-tiles">${tilesHtml}</div>
-      <p class="rec-recon muted">All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.</p>
+      <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
+      <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
         <button type="button" class="ghost" id="csvBtn">Export recipients (CSV)</button>
       </div>
@@ -2176,6 +2460,45 @@ async function renderSentRecord(id) {
         toast(e.message);
       }
     });
+
+  // Still settling: the record keeps absorbing delivery receipts after dispatch (§6), so
+  // poll ~15s and repaint the tiles until every accepted recipient is confirmed. Capped
+  // so a provider that never confirms doesn't leave the poll running forever.
+  if (outcomes.accepted > 0) {
+    scheduleSettlePoll(id, 0);
+  }
+}
+
+function scheduleSettlePoll(id, count) {
+  if (count > 40) {
+    return; // ~10 min ceiling — stop chasing receipts that may never arrive
+  }
+  progressTimer = setTimeout(async () => {
+    let data;
+    try {
+      data = await api(`/sends/${id}`);
+    } catch {
+      scheduleSettlePoll(id, count + 1);
+      return;
+    }
+    if (data.send.status === "sending") {
+      progressTimer = null;
+      return renderSentRecord(id); // resumed (a wedged resolve, say) → back to the watch
+    }
+    const tiles = app.querySelector(".rec-tiles");
+    const recon = app.querySelector(".rec-recon");
+    if (tiles) {
+      tiles.innerHTML = outcomeTilesHtml(data.outcomes);
+    }
+    if (recon) {
+      recon.innerHTML = outcomeReconHtml(data.outcomes);
+    }
+    if (data.outcomes.accepted > 0) {
+      scheduleSettlePoll(id, count + 1);
+    } else {
+      progressTimer = null;
+    }
+  }, 15000);
 }
 
 // ---- subscribers ----
@@ -4096,6 +4419,16 @@ async function renderDashboard() {
         .join("")}</div></div>`
     : "";
 
+  // Active-send widget: when a send is in flight (and not wedged — that's a red health
+  // line above), show it with a live mini dispatch bar, an ETA, and a Watch link into the
+  // record view's live watch (#154). A glanceable entry point sitting with the health area.
+  const activeSends = sends.filter((s) => s.status === "sending" && !isWedged(s));
+  const activeWidgetHtml = activeSends.length
+    ? `<section class="dash-section"><h2>Active send${activeSends.length === 1 ? "" : "s"}</h2>${activeSends
+        .map(activeRowHtml)
+        .join("")}</section>`
+    : "";
+
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
   const tiles = [
@@ -4189,6 +4522,7 @@ async function renderDashboard() {
       <button class="primary" data-act="new-post">New post</button>
     </div>
     ${healthHtml}
+    ${activeWidgetHtml}
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Scheduled</h2>${nextUpHtml}</section>
@@ -4216,6 +4550,14 @@ async function renderDashboard() {
     tr.onclick = (e) => {
       if (e.target.tagName !== "A") {
         location.hash = `#/sent/${tr.dataset.send}`;
+      }
+    };
+  });
+  // The active-send widget opens the live watch (the subject/Watch links keep keyboard access).
+  root.querySelectorAll(".active-card[data-watch]").forEach((card) => {
+    card.onclick = (e) => {
+      if (e.target.tagName !== "A") {
+        location.hash = `#/sent/${card.dataset.watch}`;
       }
     };
   });

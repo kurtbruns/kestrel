@@ -1507,6 +1507,202 @@ th.num .th-sort {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
+/* The sending treatment is amber (--b-sending-*, DESIGN §3) — distinct from the
+   scheduled violet — carried by the phase pill, the dispatch bar, and the swatch. */
+.rec-sw.sw-sending {
+  background: var(--b-sending-fg);
+}
+.watch-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.watch-title h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+/* The derived-phase pill (progressing / retrying / backing-off / needs-attention /
+   settling / …). Tones reuse the status + semantic palettes so a phase reads the same
+   hue as its badge elsewhere. */
+.phase-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.phase-pill.tone-sending {
+  background: var(--b-sending-bg);
+  color: var(--b-sending-fg);
+  border-color: var(--b-sending-line);
+}
+.phase-pill.tone-ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-line);
+}
+.phase-pill.tone-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+}
+.phase-pill.tone-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
+}
+.phase-pill.tone-scheduled {
+  background: var(--b-scheduled-bg);
+  color: var(--b-scheduled-fg);
+  border-color: var(--b-scheduled-line);
+}
+.phase-pill.tone-muted {
+  background: var(--b-draft-bg);
+  color: var(--b-draft-fg);
+  border-color: var(--b-draft-line);
+}
+.wbars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 18px 0 4px;
+}
+.wbar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.wbar-label {
+  font-weight: 600;
+}
+.wbar-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wbar {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.wbar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+/* Dispatch fill is the solid amber sending hue; delivery fill is the green "delivered"
+   hue, lighter, so the lagging bar reads as the secondary of the two. */
+.wbar-fill.tone-sending {
+  background: var(--b-sending-fg);
+}
+.wbar-fill.tone-ok {
+  background: color-mix(in srgb, var(--ok-fg) 78%, transparent);
+}
+.wbar-sub {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.wcounts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 18px 0 4px;
+}
+.wcount {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.wcount-n {
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.wcount-l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.whealth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.whealth-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ok-fg);
+  flex: none;
+}
+.whealth.has-trouble {
+  color: var(--warn-fg);
+}
+.whealth.has-trouble .whealth-dot {
+  background: var(--warn-fg);
+}
+@media (max-width: 720px) {
+  .wcounts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---- active-send row (Sent page "In progress") + dashboard widget (#154) ---- */
+/* An in-flight send as a card with a live mini dispatch bar; amber, so it reads as
+   "sending" — distinct from the scheduled violet cards and the neutral sent rows. */
+.card.active-card {
+  background: var(--b-sending-bg);
+  border-color: var(--b-sending-line);
+  gap: 16px;
+}
+.active-main {
+  flex: 1;
+  min-width: 0;
+}
+.active-subj {
+  display: block;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.active-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--b-sending-fg) 22%, transparent);
+  overflow: hidden;
+}
+.active-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--b-sending-fg);
+  transition: width 0.6s ease;
+}
+.active-stat {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
   border: 1px solid var(--line);

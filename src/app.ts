@@ -352,6 +352,35 @@ export function createRouter(archiveBasePath: string): Router {
     },
     {
       method: "GET",
+      path: "/sends/:id/progress",
+      access: "admin",
+      summary:
+        "Live in-flight progress: a single-row read off the counters — dispatch/delivery bars, derived phase, and attention flags. The poll target for the watch view.",
+      example: {
+        response: {
+          state: "sending",
+          phase: "progressing",
+          total: 1200,
+          counts: {
+            pending: 700,
+            in_flight: 40,
+            accepted: 455,
+            delivered: 300,
+            bounced: 3,
+            complained: 1,
+            skipped: 1,
+            failed: 0,
+          },
+          dispatch: { done: 460, percent: 38, rate_per_min: 920, eta_ms: 48000 },
+          delivery: { confirmed: 304, percent_of_accepted: 40 },
+          provider: { name: "fake" },
+          attention: { wedged: false, wedged_count: 0, stuck: false, missed: false },
+        },
+      },
+      handler: sendRoutes.progress,
+    },
+    {
+      method: "GET",
       path: "/sends/:id/deliveries.csv",
       access: "admin",
       summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
