@@ -40,9 +40,12 @@ import type {
 // --- tuning (dev-only; chosen for a watchable demo, not production fidelity) --------
 const MAX_BATCH = 8; // small, so the counters step visibly as a send progresses
 const LATENCY_MS = 900; // per-batch pacing latency — makes dispatch take real seconds
-const PACE_BUDGET_MS = 20_000; // wall-clock per run before a between-ticks pause (large sends)
+// Only pause a *large* send between ticks; a normal-size send (hundreds) must dispatch in
+// one continuous window so its bar fills smoothly instead of freezing mid-dispatch waiting
+// for the next sweep. At ~18s per ~150 recipients this clears a few thousand per window.
+const PACE_BUDGET_MS = 90_000;
 const NEW_RUN_GAP_MS = 5_000; // a gap between batches larger than this marks a new sweep tick
-const P_TRANSIENT = 0.06; // recipients that hit one transient error, then succeed on retry
+const P_TRANSIENT = 0.04; // recipients that hit one transient error, then succeed on retry
 const P_HARD_FAIL = 0.01; // recipients whose hand-off fails at the transport level (no suppress)
 const DELIVERY_MIN_MS = 3_000; // earliest a delivery receipt lags acceptance
 const DELIVERY_SPREAD_MS = 27_000; // added spread, so receipts trickle in over ~30s
@@ -92,6 +95,7 @@ export class SimProvider implements EmailProvider {
       paceState.set(sendId, { windowStart: now, lastCallAt: now });
     } else if (now - st.windowStart > PACE_BUDGET_MS) {
       paceState.delete(sendId);
+      console.log("[sim] pause: budget spent this run, requeueing until the next tick", { sendId });
       throw new Error("simulated rate limit — pausing until the next tick");
     } else {
       st.lastCallAt = now;
@@ -100,7 +104,7 @@ export class SimProvider implements EmailProvider {
     // Pace: a real batch takes time. This is what makes the dispatch bar fill live.
     await sleep(LATENCY_MS);
 
-    return recipients.map((r): PerRecipientResult => {
+    const results = recipients.map((r): PerRecipientResult => {
       const key = `${sendId}:${r.email}`;
       const rand = recipientRand(sendId, r.email);
       const transientDraw = rand();
@@ -135,6 +139,12 @@ export class SimProvider implements EmailProvider {
       });
       return { email: r.email, accepted: true, providerId: `sim-${key}` };
     });
+
+    const accepted = results.filter((x) => x.accepted).length;
+    const retry = results.filter((x) => !x.accepted && x.retryable).length;
+    const failed = results.length - accepted - retry;
+    console.log("[sim] batch", { sendId, size: results.length, accepted, retry, failed });
+    return results;
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {
@@ -195,5 +205,9 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
     return 0;
   }
   const { applied } = await applyDeliveryEvents(env.DB, events);
+  const delivered = events.filter((e) => e.type === "delivered").length;
+  const bounced = events.filter((e) => e.type === "bounced").length;
+  const complained = events.filter((e) => e.type === "complained").length;
+  console.log("[sim] drained synthetic receipts", { applied, delivered, bounced, complained });
   return applied;
 }

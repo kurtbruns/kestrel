@@ -4422,12 +4422,9 @@ async function renderDashboard() {
   // Active-send widget: when a send is in flight (and not wedged — that's a red health
   // line above), show it with a live mini dispatch bar, an ETA, and a Watch link into the
   // record view's live watch (#154). A glanceable entry point sitting with the health area.
+  // It lives in its own `#dashActive` container and is polled live (below), so its bar
+  // advances and it appears/clears without a manual reload.
   const activeSends = sends.filter((s) => s.status === "sending" && !isWedged(s));
-  const activeWidgetHtml = activeSends.length
-    ? `<section class="dash-section"><h2>Active send${activeSends.length === 1 ? "" : "s"}</h2>${activeSends
-        .map(activeRowHtml)
-        .join("")}</section>`
-    : "";
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -4522,7 +4519,7 @@ async function renderDashboard() {
       <button class="primary" data-act="new-post">New post</button>
     </div>
     ${healthHtml}
-    ${activeWidgetHtml}
+    <div id="dashActive">${dashActiveHtml(activeSends)}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Scheduled</h2>${nextUpHtml}</section>
@@ -4553,14 +4550,7 @@ async function renderDashboard() {
       }
     };
   });
-  // The active-send widget opens the live watch (the subject/Watch links keep keyboard access).
-  root.querySelectorAll(".active-card[data-watch]").forEach((card) => {
-    card.onclick = (e) => {
-      if (e.target.tagName !== "A") {
-        location.hash = `#/sent/${card.dataset.watch}`;
-      }
-    };
-  });
+  wireDashActiveCards();
   // The dashboard's scheduled cards are read-only summaries: the whole card links into
   // the editor, where the schedule is actually managed (cancel / reschedule). The Sent
   // page keeps the one-call cancel that the review window needs (SPEC §8).
@@ -4572,6 +4562,63 @@ async function renderDashboard() {
     };
   });
   startCountdowns();
+  // Keep the active-send widget live: advance its bar, and reveal/clear it when a send
+  // starts or finishes. Cleared on navigation (route() clears progressTimer).
+  scheduleDashActivePoll(
+    activeSends
+      .map((s) => s.id)
+      .sort()
+      .join(","),
+  );
+}
+
+/** The dashboard active-send section (empty string when nothing is in flight). */
+function dashActiveHtml(active) {
+  if (!active.length) {
+    return "";
+  }
+  return `<section class="dash-section"><h2>Active send${active.length === 1 ? "" : "s"}</h2>${active
+    .map(activeRowHtml)
+    .join("")}</section>`;
+}
+function wireDashActiveCards() {
+  document.querySelectorAll("#dashActive .active-card[data-watch]").forEach((card) => {
+    card.onclick = (e) => {
+      if (e.target.tagName !== "A") {
+        location.hash = `#/sent/${card.dataset.watch}`;
+      }
+    };
+  });
+}
+// Poll the in-flight set (~3s). If it changed — a send started or finished — re-render the
+// whole dashboard so the health line and Sent table update too; otherwise just repaint the
+// widget in place so its mini bar advances. A recursive setTimeout, so a slow read never
+// overlaps; `progressTimer` holds it so navigation clears it.
+function scheduleDashActivePoll(prevIds) {
+  progressTimer = setTimeout(async () => {
+    let sends;
+    try {
+      ({ sends } = await api("/sends?status=sending&limit=200"));
+    } catch {
+      scheduleDashActivePoll(prevIds);
+      return;
+    }
+    const active = sends.filter((s) => !isWedged(s));
+    const ids = active
+      .map((s) => s.id)
+      .sort()
+      .join(",");
+    if (ids !== prevIds) {
+      renderDashboard(); // set changed → refresh health, Sent, and the widget together
+      return;
+    }
+    const el = document.getElementById("dashActive");
+    if (el) {
+      el.innerHTML = dashActiveHtml(active);
+      wireDashActiveCards();
+    }
+    scheduleDashActivePoll(prevIds);
+  }, 3000);
 }
 
 // Controls shared by the Dashboard and the Getting-started view: hash navigation,
