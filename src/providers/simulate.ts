@@ -12,14 +12,23 @@
  * Two halves, both seeded from the PRNG (#149) keyed per (send, recipient) so a run is
  * reproducible:
  *   1. `SimProvider.sendBatch` paces acceptance with per-batch latency (watchable
- *      dispatch), injects transient errors (→ retry/backoff, phase `retrying`), a small
- *      fraction of hard transport failures (→ `failed`), and — on a large send — a
+ *      dispatch), injects transient errors (→ retry/backoff, phase `retrying`), a RARE
+ *      permanent transport failure (→ `failed`; most bad addresses are accepted here and
+ *      bounce asynchronously below, as they do in reality), and — on a large send — a
  *      wall-clock budget that pauses the run between sweep ticks (phase `backing-off`),
  *      exercising resume.
  *   2. `drainSimulatedWebhooks` fabricates DELAYED delivered / bounced / complained
  *      events for accepted recipients and feeds them through the REAL webhook ingest
- *      (`applyDeliveryEvents`), so the accepted→delivered lag is real and hard bounces /
- *      complaints suppress on their own (I1) — the two-phase "done" made visible.
+ *      (`applyDeliveryEvents`). Bounces come in both flavors of the taxonomy every real
+ *      provider shares — a PERMANENT (hard) bounce or a complaint suppresses on its own
+ *      (I1), a TRANSIENT (soft) bounce is counted but never suppresses (SPEC §9). Receipt
+ *      lag is modeled per outcome so the counters settle in the realistic order —
+ *      delivered first, bounces next, complaints (feedback loops) last.
+ *
+ * Provider-agnostic on purpose: this models a generic idempotent, batched provider, so it
+ * deliberately does NOT reproduce SES's no-idempotency / ambiguous-transport-error →
+ * wedged-send → Resolve path (SPEC §11) — that stays covered by the real SES adapter and
+ * the resolve tests — nor reputation-threshold account state.
  */
 
 import { acceptedAwaitingEvent } from "../db/sends";
@@ -46,14 +55,117 @@ const LATENCY_MS = 900; // per-batch pacing latency — makes dispatch take real
 const PACE_BUDGET_MS = 90_000;
 const NEW_RUN_GAP_MS = 5_000; // a gap between batches larger than this marks a new sweep tick
 const P_TRANSIENT = 0.04; // recipients that hit one transient error, then succeed on retry
-const P_HARD_FAIL = 0.01; // recipients whose hand-off fails at the transport level (no suppress)
-const DELIVERY_MIN_MS = 3_000; // earliest a delivery receipt lags acceptance
-const DELIVERY_SPREAD_MS = 27_000; // added spread, so receipts trickle in over ~30s
-const BOUNCE_RATE = 0.02; // accepted recipients that later hard-bounce (→ suppression, I1)
-const COMPLAINT_RATE = 0.005; // accepted recipients that later complain (→ suppression, I1)
+// Permanent submit-time rejection is RARE in reality (virus/policy); a syntactically-valid
+// but nonexistent address is accepted at submit and bounces asynchronously (see the bounce
+// rates below). So submit failures are dominated by the transient throttling above, and a
+// hard hand-off failure is a rounding error.
+const P_HARD_FAIL = 0.001; // recipients whose hand-off fails at the transport level (no suppress)
 const DRAIN_LIMIT = 400; // synthetic events fabricated per drain, to bound a burst
 
+// --- outcome mix for accepted recipients (dev-only; ordered, compressed, provider-agnostic) ---
+// A NORMAL simulated send lands ~2.3% bounce / ~0.1% complaint (plus a small demo floor,
+// below) — comfortably under any plausible deliverability alarm, so a routine watch never
+// trips a false "bounce spike."
+//
+// Bounces split into the taxonomy every real provider shares (SES `bounceType`, Resend
+// `data.bounce.type`): a PERMANENT (hard) bounce suppresses the address (I1); a TRANSIENT
+// (soft) bounce is tolerated and counted but never suppresses (SPEC §9). The ingest already
+// branches on `hard` — emitting soft bounces is what exercises the counted-not-suppressed path.
+const HARD_BOUNCE_RATE = 0.015; // permanent (nonexistent mailbox / blocked) → suppression (I1)
+const SOFT_BOUNCE_RATE = 0.008; // transient (mailbox full / temporarily unavailable) → counted only
+// Complaints are rare on a healthy list. SES's reputation guidance keeps this < 0.1% and
+// PAUSES an account at 0.5% — so the realistic base is 0.1%, not the old 0.5% that sat right
+// on the suspension line. On a small demo list 0.1% rounds to ~zero complaints (undemonstrative),
+// so a per-send floor (scaled to the audience) lifts the effective rate just enough to surface
+// ~one complaint on a small send, while large sends converge back to the realistic base. This
+// is a labeled dev visibility aid, in the same spirit as the compressed lag timescale below.
+const COMPLAINT_BASE_RATE = 0.001; // realistic complaint rate on a large, healthy list
+const COMPLAINT_DEMO_FLOOR_COUNT = 1; // target ~1 complaint even on a small demo list
+const COMPLAINT_MAX_RATE = 0.015; // clamp so a tiny list can't manufacture an absurd rate
+
+type SimOutcome = "delivered" | "hard_bounce" | "soft_bounce" | "complaint";
+
+// Receipt lag by outcome — the ABSOLUTE timescale is compressed to seconds for a watchable
+// demo, but the RELATIVE ordering holds as real feedback does: a delivery lands in seconds,
+// a bounce in seconds-to-a-minute, a complaint hours-to-days later (feedback loops). The
+// windows don't overlap, so during a live send the counters settle in the real sequence —
+// delivered first, bounces next, complaints last.
+const LAG_WINDOWS: Record<SimOutcome, { min: number; spread: number }> = {
+  delivered: { min: 3_000, spread: 9_000 }, // ~3–12s
+  hard_bounce: { min: 12_000, spread: 18_000 }, // ~12–30s
+  soft_bounce: { min: 12_000, spread: 18_000 }, // ~12–30s
+  complaint: { min: 45_000, spread: 45_000 }, // ~45–90s (stands in for hours–days)
+};
+
+// Apply order within a single drain: delivered, then bounces, then complaints — so even
+// when many receipts fall due in one tick (e.g. a long-past send), the ingest still sees
+// them in the realistic sequence.
+const APPLY_ORDER: Record<SimOutcome, number> = {
+  delivered: 0,
+  hard_bounce: 1,
+  soft_bounce: 1,
+  complaint: 2,
+};
+
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Per-send effective complaint rate: the realistic base, floored so a small demo still
+ *  shows a complaint, clamped so a tiny list can't manufacture an absurd rate. */
+function complaintRateFor(recipientCount: number): number {
+  const floor = COMPLAINT_DEMO_FLOOR_COUNT / Math.max(1, recipientCount);
+  return Math.min(COMPLAINT_MAX_RATE, Math.max(COMPLAINT_BASE_RATE, floor));
+}
+
+/** Classify an accepted recipient's eventual fate from one [0,1) draw, against a cumulative
+ *  ladder ordered rarest-first: complaint, then hard bounce, then soft bounce, else delivered. */
+function classifyOutcome(draw: number, complaintRate: number): SimOutcome {
+  if (draw < complaintRate) {
+    return "complaint";
+  }
+  if (draw < complaintRate + HARD_BOUNCE_RATE) {
+    return "hard_bounce";
+  }
+  if (draw < complaintRate + HARD_BOUNCE_RATE + SOFT_BOUNCE_RATE) {
+    return "soft_bounce";
+  }
+  return "delivered";
+}
+
+/** Receipt lag for an outcome, from one [0,1) draw over that outcome's window. */
+function lagFor(outcome: SimOutcome, draw: number): number {
+  const w = LAG_WINDOWS[outcome];
+  return w.min + draw * w.spread;
+}
+
+/** The normalized delivery event an outcome produces, as it would arrive over the seam. */
+function outcomeEvent(
+  outcome: SimOutcome,
+  email: string,
+  providerId: string | undefined,
+): DeliveryEvent {
+  switch (outcome) {
+    case "complaint":
+      return { type: "complained", providerId, email, detail: "simulated complaint" };
+    case "hard_bounce":
+      return {
+        type: "bounced",
+        providerId,
+        email,
+        hard: true,
+        detail: "simulated hard bounce (550, nonexistent mailbox)",
+      };
+    case "soft_bounce":
+      return {
+        type: "bounced",
+        providerId,
+        email,
+        hard: false,
+        detail: "simulated soft bounce (transient; mailbox full)",
+      };
+    case "delivered":
+      return { type: "delivered", providerId, email };
+  }
+}
 
 /** Per-recipient PRNG, keyed by (send, email), so every decision about a recipient is
  *  deterministic and independent of batch order — a run reproduces exactly. */
@@ -124,8 +236,9 @@ export class SimProvider implements EmailProvider {
           error: "simulated transient error (429); will retry",
         };
       }
-      // A small fraction fail hard at the transport level (does NOT suppress — only the
-      // webhook bounce/complaint below does).
+      // A rare permanent hand-off failure (virus/policy — NOT a bad address, which is
+      // accepted here and bounces asynchronously). Does NOT suppress; only the webhook
+      // bounce/complaint below does.
       if (failDraw < P_HARD_FAIL) {
         return {
           email: r.email,
@@ -159,10 +272,13 @@ export function simulationActive(config: Config): boolean {
 /**
  * Fabricate any now-due delayed delivery webhooks for accepted-but-unconfirmed
  * recipients and apply them through the REAL ingest, so delivery lags acceptance and
- * hard bounces / complaints suppress on their own (I1). Deterministic per (send,
- * recipient): the lag and the outcome are drawn from the same seeded PRNG, so a given
- * recipient always resolves the same way and a re-drain never double-applies (an event
- * clears `event IS NULL`). No-op unless the simulation is active. Returns events applied.
+ * hard bounces / complaints suppress on their own (I1) while soft bounces are counted
+ * without suppressing (SPEC §9). Deterministic per (send, recipient): the outcome and its
+ * lag are drawn from the same seeded PRNG, so a given recipient always resolves the same
+ * way and a re-drain never double-applies (an event clears `event IS NULL`). Because the
+ * lag is longest for complaints and shortest for deliveries, receipts come due — and are
+ * applied — in the realistic order. No-op unless the simulation is active. Returns events
+ * applied.
  */
 export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promise<number> {
   if (!simulationActive(config)) {
@@ -170,37 +286,25 @@ export async function drainSimulatedWebhooks(env: AppEnv, config: Config): Promi
   }
   const now = Date.now();
   const rows = await acceptedAwaitingEvent(env.DB, DRAIN_LIMIT);
-  const events: DeliveryEvent[] = [];
+  const due: { outcome: SimOutcome; event: DeliveryEvent }[] = [];
   for (const row of rows) {
     const rand = recipientRand(row.send_id, row.email);
-    const lag = DELIVERY_MIN_MS + rand() * DELIVERY_SPREAD_MS;
+    // Outcome first (its lag depends on it), then the lag draw — both deterministic.
+    const outcome = classifyOutcome(rand(), complaintRateFor(row.recipient_count));
+    const lag = lagFor(outcome, rand());
     if (row.updated_at + lag > now) {
-      continue; // not due yet — its receipt still lags
+      continue; // not due yet — its receipt still lags (longest for complaints)
     }
-    const outcomeDraw = rand();
-    const providerId = row.provider_id ?? undefined;
-    if (outcomeDraw < COMPLAINT_RATE) {
-      events.push({
-        type: "complained",
-        providerId,
-        email: row.email,
-        detail: "simulated complaint",
-      });
-    } else if (outcomeDraw < COMPLAINT_RATE + BOUNCE_RATE) {
-      events.push({
-        type: "bounced",
-        providerId,
-        email: row.email,
-        hard: true,
-        detail: "simulated hard bounce (550)",
-      });
-    } else {
-      events.push({ type: "delivered", providerId, email: row.email });
-    }
+    due.push({ outcome, event: outcomeEvent(outcome, row.email, row.provider_id ?? undefined) });
   }
-  if (events.length === 0) {
+  if (due.length === 0) {
     return 0;
   }
-  const { applied } = await applyDeliveryEvents(env.DB, events);
+  // Feed the ingest in realistic order: delivered first, bounces next, complaints last.
+  due.sort((a, b) => APPLY_ORDER[a.outcome] - APPLY_ORDER[b.outcome]);
+  const { applied } = await applyDeliveryEvents(
+    env.DB,
+    due.map((d) => d.event),
+  );
   return applied;
 }
