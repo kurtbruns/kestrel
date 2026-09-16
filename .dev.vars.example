@@ -24,3 +24,12 @@ SNS_TOPIC_ARN=""           # expected topic ARN, checked on webhook verification
 # --- Resend (alternate transport) ---
 RESEND_API_KEY=""
 RESEND_WEBHOOK_SECRET=""   # Svix signing secret for webhook verification
+
+# --- Dev send simulation (optional; local only) ---
+# Swap the instant `fake` transport for a seeded simulation that paces a send over real
+# time and produces a believable outcome mix (transient retries, a rate-limit pause on a
+# large send, a few transport failures, plus delayed delivered/bounced/complained
+# webhooks) — so the in-flight watch view (#/sent/:id of a `sending` send) is actually
+# watchable. Off by default; only honored in a dev-shaped env (fake transport, no
+# Access), never deployed. Uncomment to enable, then restart `npm run dev`.
+# SIMULATE_SENDS="1"

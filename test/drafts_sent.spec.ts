@@ -116,6 +116,39 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   return { postId, sendId };
 }
 
+// #162: a post stays `scheduled` while its send is in flight, but it's no longer an
+// editable/cancelable draft — the list carries the active send's id + status so the
+// Drafts page can relabel/route it, and GET /posts points the editor at the live watch.
+describe("in-flight post routing (#162)", () => {
+  it("surfaces a sending post as active and routes it to the watch, not the editor", async () => {
+    const marker = `inflight-${uniq()}`;
+    const postId = await createDraft(`${marker} issue`);
+    const sched = await readJson(
+      await SELF.fetch(`${base}/posts/${postId}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
+      }),
+    );
+    const sendId = sched.send.id;
+    // Flip the send in flight, as the sweep would (the post stays `scheduled`).
+    await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?").bind(sendId).run();
+
+    // GET /posts/:id reports `sending` (not `scheduled`) so the editor redirects to the watch.
+    const detail = await readJson(await SELF.fetch(`${base}/posts/${postId}`, { headers: AUTH }));
+    expect(detail.sending).toEqual({ id: sendId });
+    expect(detail.scheduled).toBeNull();
+
+    // The list row carries the active send's id + status for the Drafts relabel/route.
+    const list = await readJson(
+      await SELF.fetch(`${base}/posts?search=${marker}&status=draft,scheduled`, { headers: AUTH }),
+    );
+    const row = list.posts.find((p: any) => p.id === postId);
+    expect(row.active_send_status).toBe("sending");
+    expect(row.active_send_id).toBe(sendId);
+  });
+});
+
 describe("sent record view — GET /sends/:id", () => {
   it("returns outcome buckets that reconcile to the frozen audience, plus published", async () => {
     const slug = `rec-${uniq()}`;

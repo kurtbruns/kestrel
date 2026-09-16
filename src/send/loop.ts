@@ -13,6 +13,7 @@ import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
+import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { PerRecipientResult, Recipient } from "../providers/types";
 
 export interface SendLoopResult {
@@ -81,10 +82,10 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     const t = Date.now();
     for (const d of work) {
       if (d.sub_status !== "confirmed" || d.suppressed || !d.unsub_token) {
-        await sends.setDeliverySkipped(env.DB, d.id, t);
+        await sends.setDeliverySkipped(env.DB, sendId, d.id, t);
         result.skipped += 1;
       } else if (d.attempts >= MAX_DELIVERY_ATTEMPTS) {
-        await sends.setDeliveryFailed(env.DB, d.id, "max attempts exceeded", t);
+        await sends.setDeliveryFailed(env.DB, sendId, d.id, "max attempts exceeded", t, "pending");
         result.failed += 1;
       } else {
         live.push({ id: d.id, email: d.email, unsubToken: d.unsub_token });
@@ -97,6 +98,7 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     // Phase 1: record intent before the network call.
     await sends.setDeliveriesDispatched(
       env.DB,
+      sendId,
       live.map((l) => l.id),
       Date.now(),
     );
@@ -120,7 +122,13 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
       const t2 = Date.now();
       if (provider.idempotentRetry) {
         for (const l of live) {
-          await sends.requeueDelivery(env.DB, l.id, String((err as Error).message ?? err), t2);
+          await sends.requeueDelivery(
+            env.DB,
+            sendId,
+            l.id,
+            String((err as Error).message ?? err),
+            t2,
+          );
           result.requeued += 1;
         }
       }
@@ -136,13 +144,13 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
         continue;
       }
       if (r.accepted) {
-        await sends.setDeliveryAccepted(env.DB, id, r.providerId, t3);
+        await sends.setDeliveryAccepted(env.DB, sendId, id, r.providerId, t3);
         result.accepted += 1;
       } else if (r.retryable) {
-        await sends.requeueDelivery(env.DB, id, r.error, t3);
+        await sends.requeueDelivery(env.DB, sendId, id, r.error, t3);
         result.requeued += 1;
       } else {
-        await sends.setDeliveryFailed(env.DB, id, r.error, t3);
+        await sends.setDeliveryFailed(env.DB, sendId, id, r.error, t3, "dispatched");
         result.failed += 1;
       }
     }
@@ -157,5 +165,9 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
   } else {
     await sends.releaseLease(env.DB, sendId);
   }
+  // Dev-only: settle any now-due synthetic receipts from this run's fresh acceptances,
+  // so the delivery bar starts filling without waiting for the next sweep. No-op unless
+  // the simulation is active.
+  await drainSimulatedWebhooks(env, config);
   return result;
 }

@@ -4,9 +4,11 @@ import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { badRequest, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend } from "../send/schedule";
 
@@ -50,6 +52,35 @@ export async function get(c: RequestContext): Promise<Response> {
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
   });
+}
+
+/**
+ * The cheap poll target for the live in-flight watch (SPEC §8). A single-row read off
+ * the denormalized counters (migration 0006) — no aggregate over the audience — plus
+ * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
+ * the loud attention flags (§11). `deliveries` stays the source of truth; this is its
+ * rebuildable cache. Both the watch view and the dashboard active-send widget poll it.
+ */
+export async function progress(c: RequestContext): Promise<Response> {
+  // Dev-only simulation glue: the watch polls this endpoint, so settle any now-due
+  // synthetic receipts here too (not just on the cron sweep). That makes the delivery
+  // bar advance smoothly as you watch instead of freezing between ticks — mimicking how
+  // real provider webhooks arrive continuously. A strict no-op in a deployed env (a real
+  // provider is configured there), and never allowed to fail the read.
+  if (simulationActive(c.config)) {
+    try {
+      await drainSimulatedWebhooks(c.env, c.config);
+    } catch {
+      /* best effort — the progress read must still succeed */
+    }
+  }
+  const send = await sends.getSend(c.env.DB, param(c, "id"));
+  if (!send) {
+    throw notFound("send");
+  }
+  const hasRetries =
+    send.status === "sending" ? await sends.hasActiveRetries(c.env.DB, send.id) : false;
+  return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
 /** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */

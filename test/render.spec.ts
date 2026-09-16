@@ -14,6 +14,7 @@ const config: Config = {
   fromAddress: "News <news@send.example>",
   awsRegion: "us-east-1",
   devMode: false,
+  simulateSends: false,
 };
 
 function post(over: Partial<PostRow> = {}): PostRow {

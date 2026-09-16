@@ -39,11 +39,13 @@ import {
   type SeedSubscriber,
   type SeedSuppression,
 } from "../db/seed";
+import { recomputeSendCounters } from "../db/sends";
 import { BRANDING_LOGO_KEY, getSettings, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
 import { probeImageDimensions } from "../lib/image_dims";
+import { DEFAULT_SEED, makePrng } from "../lib/prng";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
@@ -641,22 +643,9 @@ export interface SeedOptions {
   seed?: number;
 }
 
-/** The default PRNG seed, so `--size 1k` alone is reproducible run to run. */
-export const DEFAULT_SEED = 0x5eed;
-
-/** A tiny seeded PRNG (mulberry32): a single 32-bit seed drives a reproducible stream of
- *  floats in [0, 1). This replaces the curated list's determinism-by-fixed-index with
- *  reproducible pseudo-randomness, so churn timing, suppression victims, and per-send
- *  failures vary believably while a given `(size, seed)` still reproduces exactly. */
-export function makePrng(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// The seeded PRNG lives in lib/prng.ts (shared with the dev send simulation); re-export
+// it here so `--size`/`--seed` reproducibility and its tests keep their existing import.
+export { DEFAULT_SEED, makePrng };
 
 /** Cohort proportions and low outcome rates for a scaled list, expressed as fractions of
  *  the approximate confirmed-now `size`. Chosen so the scaled dataset keeps the curated
@@ -1141,6 +1130,9 @@ export async function seedDatabase(
       size != null ? drawFailedSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
     const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, failedSlots);
     await insertDeliveries(db, deliveries);
+    // The seed writes delivery rows directly (fixture data the normal path never
+    // produces), so bring the denormalized counters (migration 0006) in line with them.
+    await recomputeSendCounters(db, sendId);
     counts.sent++;
     counts.deliveries += deliveries.length;
     archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${issue.slug}`);

@@ -10,11 +10,14 @@
 
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
+import { getConfig } from "../env";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { drainSimulatedWebhooks } from "../providers/simulate";
 import { runSend } from "./loop";
 
 export async function sweep(env: AppEnv): Promise<void> {
   const now = Date.now();
+  const config = getConfig(env);
   // Handle each send at most once per tick. A transient failure releases the
   // lease, so without this a just-failed send would be retried again in the same
   // sweep; instead it waits for the next tick (the backoff).
@@ -47,6 +50,11 @@ export async function sweep(env: AppEnv): Promise<void> {
   if (ambiguous > 0) {
     console.error("AMBIGUOUS_DELIVERY", { count: ambiguous });
   }
+
+  // Dev-only: feed any now-due synthetic delivery webhooks through the real ingest, so
+  // an in-flight simulated send settles (delivered / bounced / complained) over ticks
+  // exactly as a real provider's webhooks would. No-op unless the simulation is active.
+  await drainSimulatedWebhooks(env, config);
 }
 
 async function safeRun(env: AppEnv, sendId: string): Promise<void> {

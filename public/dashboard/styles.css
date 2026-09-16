@@ -51,9 +51,9 @@
   --b-sent-bg: #dcfce7;
   --b-sent-fg: #15803d;
   --b-sent-line: #bbf7d0;
-  --b-sending-bg: #fef3c7;
-  --b-sending-fg: #b45309;
-  --b-sending-line: #fde68a;
+  --b-sending-bg: #dbeafe;
+  --b-sending-fg: #2563eb;
+  --b-sending-line: #bfdbfe;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
@@ -113,9 +113,9 @@
     --b-sent-bg: #14532d;
     --b-sent-fg: #86efac;
     --b-sent-line: #15803d;
-    --b-sending-bg: #45350f;
-    --b-sending-fg: #fcd34d;
-    --b-sending-line: #b45309;
+    --b-sending-bg: #172554;
+    --b-sending-fg: #60a5fa;
+    --b-sending-line: #2563eb;
     /* Brightened from a plain dark tint so Secondary text (--k-accent on the soft
        fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
        reached only ~4.4:1. Primary keeps huge contrast (dark --k-accent-contrast text
@@ -1507,6 +1507,212 @@ th.num .th-sort {
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
+/* The sending treatment is blue (--b-sending-*, DESIGN §3) — distinct from the action
+   slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
+.rec-sw.sw-sending {
+  background: var(--b-sending-fg);
+}
+.watch-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.watch-title h1 {
+  margin: 0 0 6px;
+  font-size: 22px;
+  letter-spacing: -0.01em;
+}
+/* The derived-phase pill (progressing / retrying / backing-off / needs-attention /
+   settling / …). Tones reuse the status + semantic palettes so a phase reads the same
+   hue as its badge elsewhere. */
+.phase-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.phase-pill.tone-sending {
+  background: var(--b-sending-bg);
+  color: var(--b-sending-fg);
+  border-color: var(--b-sending-line);
+}
+.phase-pill.tone-ok {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  border-color: var(--ok-line);
+}
+.phase-pill.tone-warn {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+}
+.phase-pill.tone-danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
+}
+.phase-pill.tone-scheduled {
+  background: var(--b-scheduled-bg);
+  color: var(--b-scheduled-fg);
+  border-color: var(--b-scheduled-line);
+}
+.phase-pill.tone-muted {
+  background: var(--b-draft-bg);
+  color: var(--b-draft-fg);
+  border-color: var(--b-draft-line);
+}
+.wbars {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 18px 0 4px;
+}
+.wbar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+}
+.wbar-label {
+  font-weight: 600;
+}
+.wbar-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.wbar {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+/* Fills are absolutely stacked from the left so the dual (delivery) bar can layer a green
+   `confirmed` fill over a grey `accepted` fill (green ≤ grey, so grey shows behind it). */
+.wbar-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+/* Dispatch fill is the solid blue sending hue. The delivery bar pairs to dispatch's scale:
+   a grey `accepted` segment (the same frontier the dispatch bar reaches) with green
+   `confirmed` filling in behind it as receipts arrive. */
+.wbar-fill.tone-sending {
+  background: var(--b-sending-fg);
+}
+.wbar-fill.tone-accepted {
+  background: color-mix(in srgb, var(--muted) 50%, var(--line-2));
+}
+.wbar-fill.tone-ok {
+  background: var(--ok-fg);
+}
+.wbar-sub {
+  margin-top: 6px;
+  font-size: 12.5px;
+}
+.wcounts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin: 18px 0 4px;
+}
+.wcount {
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 11px 12px;
+}
+.wcount-n {
+  font-size: 20px;
+  font-weight: 680;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.wcount-l {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 5px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.whealth {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.whealth-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 999px;
+  background: var(--ok-fg);
+  flex: none;
+}
+.whealth.has-trouble {
+  color: var(--warn-fg);
+}
+.whealth.has-trouble .whealth-dot {
+  background: var(--warn-fg);
+}
+@media (max-width: 720px) {
+  .wcounts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ---- active-send row (Sent page "In progress") + dashboard widget (#154) ---- */
+/* An in-flight send as a card with a live mini dispatch bar; blue, so it reads as
+   "sending" — distinct from the scheduled violet cards and the neutral sent rows. */
+.card.active-card {
+  background: var(--b-sending-bg);
+  border-color: var(--b-sending-line);
+  gap: 16px;
+}
+.active-main {
+  flex: 1;
+  min-width: 0;
+}
+.active-subj {
+  display: block;
+  color: var(--fg);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin-bottom: 6px;
+}
+.active-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--b-sending-fg) 22%, transparent);
+  overflow: hidden;
+}
+.active-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--b-sending-fg);
+  transition: width 0.6s ease;
+}
+.active-stat {
+  margin-top: 6px;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
   border: 1px solid var(--line);

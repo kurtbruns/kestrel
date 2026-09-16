@@ -31,6 +31,13 @@ export interface Secrets {
   /** Resend. */
   RESEND_API_KEY?: string;
   RESEND_WEBHOOK_SECRET?: string;
+  /**
+   * Dev-only opt-in for the seeded send simulation (SPEC §9). When truthy in a
+   * dev-shaped env, the fake transport is swapped for the pacing/edge-state simulation
+   * so an in-flight send is watchable; unset (the default) keeps the plain, instant
+   * fake. Ships commented in `.dev.vars.example`; never set in a deployed env.
+   */
+  SIMULATE_SENDS?: string;
 }
 
 export type AppEnv = Env & Secrets;
@@ -77,6 +84,13 @@ export interface Config {
    * credential path entirely — Access is then the only door.
    */
   devAuthSecret?: string;
+  /**
+   * Whether to run the dev-only seeded send simulation instead of the plain fake
+   * transport (SPEC §9). True only in a dev-shaped env with `SIMULATE_SENDS` set —
+   * structurally false once deployed (a real provider is configured there), so it can
+   * never pace or fabricate events against a real inbox. Opt-in; the default is off.
+   */
+  simulateSends: boolean;
 }
 
 const orUndefined = (v: string | undefined): string | undefined =>
@@ -123,7 +137,19 @@ export function getConfig(env: AppEnv): Config {
     // in a deployed env, so the reader surface stays clean of any admin link there.
     devMode: devAuthSecret !== undefined,
     devAuthSecret,
+    // Only ever active in a dev-shaped env; a deployed env runs a real provider, so the
+    // simulation can never engage there whatever the var says.
+    simulateSends: devShaped && isTruthy(env.SIMULATE_SENDS),
   };
+}
+
+/** Treat the usual "on" spellings as truthy for a dev opt-in flag. */
+function isTruthy(v: string | undefined): boolean {
+  if (!v) {
+    return false;
+  }
+  const s = v.trim().toLowerCase();
+  return s === "1" || s === "true" || s === "yes" || s === "on";
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {
