@@ -160,7 +160,11 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "List posts. Filter, sort, and paginate via query params; returns a `page` envelope.",
       query: [
-        { name: "status", description: "Filter by status: `draft`, `scheduled`, or `sent`." },
+        {
+          name: "status",
+          description:
+            "Filter by status: `draft`, `scheduled`, or `sent`; a comma list (`draft,scheduled`) matches any.",
+        },
         { name: "search", description: "Subject contains-search." },
         {
           name: "sort",
@@ -342,8 +346,16 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends/:id",
       access: "admin",
-      summary: "One send with its delivery progress.",
+      summary:
+        "One send: the frozen record, the delivery-outcome breakdown, and its archive URL (published once sent).",
       handler: sendRoutes.get,
+    },
+    {
+      method: "GET",
+      path: "/sends/:id/deliveries.csv",
+      access: "admin",
+      summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
+      handler: sendRoutes.deliveriesCsv,
     },
     {
       method: "POST",

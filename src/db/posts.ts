@@ -44,9 +44,10 @@ export interface PostListRow extends PostRow {
   fire_at: number | null;
 }
 
-/** Narrow the post list by `status` and a subject contains-search. */
+/** Narrow the post list by `status` (one status, or a set — the Drafts view passes
+ *  `['draft','scheduled']`) and a subject contains-search. */
 export interface PostFilter {
-  status?: PostStatus;
+  status?: PostStatus | PostStatus[];
   search?: string;
 }
 
@@ -66,9 +67,13 @@ export const POST_LIST_SPEC: ListSpec = {
 function postWhere(filter: PostFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
   const binds: unknown[] = [];
-  if (filter.status) {
+  const statuses = filter.status == null ? [] : ([] as PostStatus[]).concat(filter.status);
+  if (statuses.length === 1) {
     where.push("p.status = ?");
-    binds.push(filter.status);
+    binds.push(statuses[0]);
+  } else if (statuses.length > 1) {
+    where.push(`p.status IN (${statuses.map(() => "?").join(", ")})`);
+    binds.push(...statuses);
   }
   const term = filter.search?.trim().toLowerCase();
   if (term) {

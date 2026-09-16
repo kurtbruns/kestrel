@@ -2,7 +2,7 @@
 
 import * as images from "../db/images";
 import * as posts from "../db/posts";
-import { getActiveSendForPost } from "../db/sends";
+import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
@@ -71,12 +71,27 @@ export async function createPost(c: RequestContext): Promise<Response> {
   return json({ post, revision_id: revision.id }, 201, revisionHeaders(post));
 }
 
+const POST_STATUSES: posts.PostStatus[] = ["draft", "scheduled", "sent"];
+
+/** Parse the `status` query param: one status, or a comma list (`draft,scheduled`,
+ *  which the Drafts view sends). Unknown values are dropped; empty → no filter. */
+function parseStatusFilter(raw: string | null): posts.PostStatus | posts.PostStatus[] | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  const seen = new Set<posts.PostStatus>();
+  for (const part of raw.split(",")) {
+    const s = part.trim();
+    if ((POST_STATUSES as string[]).includes(s)) {
+      seen.add(s as posts.PostStatus);
+    }
+  }
+  const list = [...seen];
+  return list.length === 0 ? undefined : list.length === 1 ? list[0] : list;
+}
+
 export async function listPosts(c: RequestContext): Promise<Response> {
-  const statusParam = c.url.searchParams.get("status") ?? undefined;
-  const status =
-    statusParam === "draft" || statusParam === "scheduled" || statusParam === "sent"
-      ? statusParam
-      : undefined;
+  const status = parseStatusFilter(c.url.searchParams.get("status"));
   const search = c.url.searchParams.get("search") ?? undefined;
   const filter = { status, search } satisfies posts.PostFilter;
   const page = parseListParams(c.url, posts.POST_LIST_SPEC);
@@ -94,12 +109,16 @@ export async function getPost(c: RequestContext): Promise<Response> {
   }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
   const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
+  // A sent post no longer opens the editor (#147): the editor uses this send id to
+  // redirect to the sent record view (#/sent/:id).
+  const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
   return json(
     {
       post,
       markdown: revision?.markdown ?? "",
       author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
       scheduled: active ? { id: active.id, fire_at: active.fire_at } : null,
+      sent: sent ? { id: sent.id } : null,
     },
     200,
     revisionHeaders(post),
