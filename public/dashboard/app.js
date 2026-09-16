@@ -1147,7 +1147,7 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1692,6 +1692,13 @@ async function renderEditor(id) {
       }
     });
 
+  // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
+  const rescheduleBtn = document.getElementById("rescheduleSchedule");
+  if (rescheduleBtn && scheduled) {
+    rescheduleBtn.onclick = () =>
+      openRescheduleModal(scheduled.id, scheduled.fire_at, () => renderEditor(id));
+  }
+
   // --- cancel schedule (from the scheduled banner) ---
   const cancelScheduleBtn = document.getElementById("cancelSchedule");
   if (cancelScheduleBtn && scheduled) {
@@ -1986,6 +1993,47 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
+// Move a scheduled send's fire time without unscheduling or re-editing: the content stays
+// frozen (I3) and the cancelable review window is preserved (I6) — only fire_at moves, via
+// POST /sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule modal,
+// prefilled with the current fire time and floored at the minimum lead. Shared by the
+// editor's scheduled banner and the Sent page's scheduled card (SPEC §8), so `onDone`
+// re-renders whichever surface opened it.
+function openRescheduleModal(sendId, currentFireAt, onDone) {
+  const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
+  const cur = toLocalInput(new Date(currentFireAt));
+  const m = modal(
+    `<h3 id="rsHead">Reschedule this issue</h3>` +
+      `<p class="hint">Move when it sends (at least 5 minutes out). The content stays frozen and the cancelable window is kept — only the time changes.</p>` +
+      `<label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">` +
+      `<div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
+  );
+  const box = m.el.querySelector(".modal");
+  box.setAttribute("aria-labelledby", "rsHead");
+  box.querySelector("#rsCancel").onclick = m.close;
+  box.querySelector("#rsGo").onclick = () =>
+    busy(box.querySelector("#rsGo"), "Rescheduling…", async () => {
+      const v = box.querySelector("#rsWhen").value;
+      const t = v ? new Date(v).getTime() : NaN;
+      if (Number.isNaN(t)) {
+        toast("Pick a valid date & time");
+        return;
+      }
+      try {
+        await api(`/sends/${sendId}/reschedule`, {
+          method: "POST",
+          json: { fire_at: new Date(t).toISOString() },
+        });
+        m.close();
+        toast("Rescheduled");
+        onDone();
+      } catch (e) {
+        toast(e.message);
+      }
+    });
+  box.querySelector("#rsWhen").focus();
+}
+
 // Dispatch/delivery numbers from a `/sends` list row's denormalized counters (SEND_LIST_COLS),
 // so the active-send row and the dashboard widget need no per-send /progress read. `done`
 // is the dispatch fraction (accepted vs the frozen total), matching the watch's dispatch bar.
@@ -2146,7 +2194,7 @@ async function renderSent() {
     try {
       const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
       const schedCard = (s) =>
-        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><button class="ghost" data-cancel="${s.id}">Cancel</button></div>`;
+        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
       if (!sends.length) {
         schedEl.innerHTML = `<p class="muted">Nothing scheduled.</p>`;
       } else {
@@ -2171,13 +2219,18 @@ async function renderSent() {
         }
       }
       // The whole card opens the issue; the subject link handles keyboard/middle-click,
-      // and Cancel opts out of navigation (like the posts table's row-click guard).
+      // and the schedule-management buttons (Reschedule, Cancel) opt out of navigation
+      // (like the posts table's row-click guard).
       schedEl.querySelectorAll(".card.clickable").forEach((card) => {
         card.onclick = (e) => {
-          if (e.target.tagName !== "A" && !e.target.closest("[data-cancel]")) {
+          if (e.target.tagName !== "A" && !e.target.closest("button")) {
             location.hash = `#/edit/${card.dataset.post}`;
           }
         };
+      });
+      schedEl.querySelectorAll("[data-reschedule]").forEach((b) => {
+        const s = sends.find((x) => x.id === b.dataset.reschedule);
+        b.onclick = () => openRescheduleModal(s.id, s.fire_at, reloadAll);
       });
       schedEl.querySelectorAll("[data-cancel]").forEach((b) => {
         b.onclick = () =>

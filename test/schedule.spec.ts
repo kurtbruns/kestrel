@@ -168,6 +168,105 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(twice.status).toBe(409);
   });
 
+  it("reschedules a scheduled send: moves fire_at, keeps the frozen render and the lock (I3, I6)", async () => {
+    const id = await makeDraft("frozen body");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      }),
+    );
+    const sendId = scheduled.send.id;
+    const frozenHtml = scheduled.send.rendered_html;
+
+    const newFire = future(60 * 60 * 1000);
+    const res = await SELF.fetch(`${base}/sends/${sendId}/reschedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: newFire }),
+    });
+    expect(res.status).toBe(200);
+    const { send } = await readJson(res);
+    // only the fire time moved: still scheduled, at the new time
+    expect(send.status).toBe("scheduled");
+    expect(send.fire_at).toBe(Date.parse(newFire));
+    // the frozen render and audience are untouched — no re-freeze (I3)
+    expect(send.rendered_html).toBe(frozenHtml);
+    expect(send.rendered_html).toContain("frozen body");
+    expect(send.recipient_count).toBe(scheduled.send.recipient_count);
+    // scheduled_at is the review window's anchor: preserved, not reset — the window is
+    // moved, not restarted (I6, SPEC §6 "Moving the fire time")
+    expect(send.scheduled_at).toBe(scheduled.send.scheduled_at);
+    // the post stays soft-locked (still scheduled) — reschedule never unlocks (I6)
+    expect(await postStatus(id)).toBe("scheduled");
+    // still the post's one active send, now at the new time
+    const still = await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }));
+    expect(still.send.fire_at).toBe(Date.parse(newFire));
+  });
+
+  it("rejects a reschedule fire_at that isn't at least the buffer out (400), leaving the time unchanged", async () => {
+    const id = await makeDraft();
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      }),
+    );
+    for (const fire_at of [future(-1000), future(60 * 1000)]) {
+      const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at }),
+      });
+      expect(res.status).toBe(400);
+    }
+    const still = await readJson(
+      await SELF.fetch(`${base}/sends/${scheduled.send.id}`, { headers: AUTH }),
+    );
+    expect(still.send.fire_at).toBe(scheduled.send.fire_at);
+  });
+
+  it("won't reschedule a send that's no longer scheduled (409)", async () => {
+    const id = await makeDraft();
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      }),
+    );
+    await SELF.fetch(`${base}/sends/${scheduled.send.id}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
+
+    const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(30 * 60 * 1000) }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("404s rescheduling an unknown send, and requires auth", async () => {
+    const known = future(30 * 60 * 1000);
+    const missing = await SELF.fetch(`${base}/sends/does-not-exist/reschedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: known }),
+    });
+    expect(missing.status).toBe(404);
+
+    const noauth = await SELF.fetch(`${base}/sends/does-not-exist/reschedule`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ fire_at: known }),
+    });
+    expect(noauth.status).toBe(401);
+  });
+
   it("snapshots recipient_count at schedule time", async () => {
     const now = Date.now();
     for (let i = 0; i < 3; i++) {
