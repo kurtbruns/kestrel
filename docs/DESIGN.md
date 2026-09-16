@@ -4,7 +4,7 @@ The UX contract for Kestrel's admin UI. It is the presentation-layer sibling to 
 
 The scope is deliberately small. This is a framework-free app with no build step, so the contract is a shared vocabulary — one class per role, one home per notification kind, one semantic palette, one stacking order — not a component library, a token pipeline, or a theming system. A new treatment is a smell: reach for an existing role before inventing one, and if none fits, change the contract here in the same breath as the code (see CLAUDE.md's sync rule).
 
-This covers the **admin UI only** — the editor and authoring surfaces behind auth. The reader surface (archive index, per-issue pages) is governed by SPEC §5 and §10 and is intentionally not styled from these tokens. The single, deliberate exception is the dev-only "Open dashboard" shortcut the reader surface shows on a local dev instance (SPEC §5): it is app chrome, not the publication's identity, and it links *into* the app, so it wears the brand accent (`--k-accent`, §3) rather than the reader ink — the one place that token appears off the admin surface. It is present only in local dev and structurally absent once deployed.
+This covers the **admin UI only** — the editor and authoring surfaces behind auth. The reader surface (archive index, per-issue pages) is governed by SPEC §5 and §10 and is intentionally not styled from these tokens. The single, deliberate exception is the dev-only "Open dashboard" shortcut the reader surface shows on a local dev instance (SPEC §5): it is app chrome, not the publication's identity, and it links *into* the app, so it wears the brand accent (`--accent`, §3) rather than the reader ink — the one place that token appears off the admin surface. It is present only in local dev and structurally absent once deployed.
 
 ---
 
@@ -14,13 +14,13 @@ Every button in the admin UI plays one of five roles, and each role is one class
 
 | Role | When to use | Class | Token mapping |
 | --- | --- | --- | --- |
-| **Primary** | The single most-important action of a view — the one thing you came to this view to do. **One per view.** | `button.primary` | Solid `--k-accent` fill, `--k-accent-contrast` text and border. |
-| **Secondary** | An important standing action that is not *the* action — e.g. "Send test email" beside a Save. Soft, accent-tinted, clearly clickable. | `button.secondary` | `--k-accent-soft` fill, `--k-accent` text, accent-tinted border. |
+| **Primary** | The single most-important action of a view — the one thing you came to this view to do. **One per view.** | `button.primary` | Solid `--accent` fill, `--accent-on` text and border. |
+| **Secondary** | An important standing action that is not *the* action — e.g. "Send test email" beside a Save. Soft, accent-tinted, clearly clickable. | `button.secondary` | `--accent-soft` fill, `--accent` text, accent-tinted border. |
 | **Ghost** | A quiet, neutral action — back, cancel, a menu trigger, a pager step. The default for anything that isn't asking for attention. | `button.ghost` | Transparent (or card) fill, `--ink`/`--muted` text, `--line` border or none. |
 | **Danger** | A destructive action. Solid only for a final confirm in a modal; the subtle variant everywhere else, so a destructive control never shouts over the row it sits on. | `button.danger` (solid) · `button.danger-subtle` | `--danger-*` scale (§3). Subtle rests neutral and reveals red on hover. |
 | **Icon** | A square, icon-only control where a label would be noise — a close ✕, an inline edit, a toolbar glyph. Always carries an `aria-label`. | `button.icon` | Inherits Ghost's neutral treatment; sized square. |
 
-Primary is Kestrel's own brand accent, `--k-accent` (a fixed slate-blue) — never the near-black neutral. That near-black used to be a second button fill (`button.primary` filled with `--accent`); it is retired as a fill and lives on only as the `--ink` text token (§3). There is exactly one solid brand-blue action in front of the writer at a time.
+Primary is Kestrel's own brand accent, `--accent` (a fixed slate-blue) — never the near-black neutral. That near-black used to be a second button fill (`button.primary` filled with `--accent`); it is retired as a fill and lives on only as the `--ink` text token (§3). There is exactly one solid brand-blue action in front of the writer at a time.
 
 The roles differ by **treatment — fill, border, weight, font-size — never by height.** All the label roles (Primary, Secondary, Ghost, Danger) share one box height, so a row that mixes them aligns: a quieter, smaller-font role grows to the shared floor with its label centered rather than sitting a few pixels short of the Primary beside it. A role's importance is carried by how it looks, not by making the less-important one smaller. Only the square Icon and the segmented toggle Control keep their own sizing.
 
@@ -28,7 +28,7 @@ These five absorb the treatments the UI accumulated before the contract existed:
 
 ### Toggle is a Control, not a button
 
-A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a mode or a view — is a **Control**, documented apart from the five button roles. It carries `aria-pressed` on its segments, and the active segment uses the Secondary palette (`--k-accent-soft` fill, `--k-accent` text). It is not a Primary, and it is never the thing a Primary would be: a toggle changes what you're looking at, it doesn't commit an action.
+A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a mode or a view — is a **Control**, documented apart from the five button roles. It carries `aria-pressed` on its segments, and the active segment uses the Secondary palette (`--accent-soft` fill, `--accent` text). It is not a Primary, and it is never the thing a Primary would be: a toggle changes what you're looking at, it doesn't commit an action.
 
 ### Link is a link, not a sixth button
 
@@ -60,21 +60,36 @@ Two collisions the homes-plus-layering rules exist to prevent, recorded so they 
 
 ## 3. Tokens — one meaning each
 
-A token means one thing, and a color has one job. The palette is small on purpose; a second token for a color that already has one is how the interface drifts.
+A token means one thing, and a color has one job; a second token for a color that already has one is how the interface drifts. The palette, at a glance:
 
-**Semantic feedback — one scale for each of `danger`, `warn`, `ok`.** Each is a consistent `{fg, bg, line}` triple: `fg` is the saturated hue (as text on the soft fill, or as a solid fill with an on-color), `bg` is the soft tint behind a notice, and `line` is its border. There is one red, not two: the old split between a strong `--danger` (a solid-button fill) and a separate soft `--b-bad-*` (an alert triple) is collapsed into a single `danger` scale that serves both. That split was the literal cause of a stray-red-border bug — two reds meant a component could pick up one token's border against another's fill — and merging them removes the class of bug, not just the instance.
+| Token(s) | Role | Notes |
+| --- | --- | --- |
+| `--danger` · `--warn` · `--ok` | Semantic feedback — a `{fg, bg, line}` triple each: red · amber · green | One scale per meaning. `--danger` serves both a solid-button fill and the soft alert — one red, not two; the earlier split (`--danger` vs a separate `--b-bad-*`) caused a stray-red-border bug. |
+| `--accent` (+ `--accent-on`, `--accent-soft`) | The one **action** hue — a fixed slate-blue | Primary + Secondary buttons only, never a status. Independent of the reader-surface theme (SPEC §8) — the app's own chrome, not the newsletter's. |
+| `--ink` | Strong near-black/near-white **text** — headings, strong labels | Never a button fill. Renamed from `--accent`, which once doubled as a fill; there is one accent, and it is blue. |
+| `--status-draft` · `--status-scheduled` · `--status-sending` · `--status-sent` | Lifecycle badge hues — gray · violet · blue · green | Facts, not warnings; distinct from the feedback scales. `--status-sending`'s blue is its own shade, **not** the action `--accent`. Full state→hue map below. |
+| `--fg` `--muted` `--line` `--line-soft` `--chip` `--bg` `--card` | Neutral surface set | Text, borders, page/card grounds, and the recessed layer. |
+| `--ring` | Focus | The one focus treatment. |
+| `--syntax-*` | Template-editor syntax highlight | Self-contained; out of scope for this contract. |
 
-**Brand accent — `--k-accent` is the one action hue.** A fixed slate-blue (`--k-accent-contrast` for text on it, `--k-accent-soft` for tinted fills), used by Primary and Secondary and nothing else — never as a status color, so a button and a status don't share a fill. It stays independent of the reader surface's theming (SPEC §8) — it is the app's own chrome, not the newsletter's. The lifecycle states each carry their own hue — **scheduled violet, sending blue, sent green, draft gray** — each its own shade, the sending blue distinct from the action slate-blue.
+Every token has a light and a dark value; a color defined in only one theme is a bug.
 
-**Neutral ink — `--accent` is renamed `--ink`.** The strong near-black/near-white neutral is a *text* token — headings, strong labels — and **never a button fill**. Renaming it removes the misread that there were two accents (a blue one and a dark one); there is one accent, and it is blue.
+**Badges — one hue per state; a semantic scale is reused only when the state's meaning *is* that feedback.** Post lifecycle states carry their own `--status-*` hue; subscriber consent states borrow the hue whose meaning fits. The full mapping, so an overload shows up here instead of hiding in the CSS:
 
-**Status badges stay their own set.** The `--b-scheduled`, `--b-sent`, `--b-sending`, and `--b-draft` scales label a post's lifecycle state (SPEC §2) and are documented and maintained *separately* from the semantic feedback scales above. A "scheduled" badge is a fact about a post, not a warning to the reader; conflating the two would tie a status color to a feedback meaning. Keep them distinct.
+| Badge | Scale | Hue |
+| --- | --- | --- |
+| post `draft` · subscriber `unsubscribed` | `--status-draft` | gray |
+| post `scheduled` | `--status-scheduled` | violet |
+| post `sending` | `--status-sending` | blue |
+| post `sent` · subscriber `confirmed` | `--status-sent` | green |
+| subscriber `pending` | `--warn` | amber |
+| post `canceled`/`failed` · subscriber `suppressed` | `--danger` | red |
+
+The four lifecycle hues (draft gray, scheduled violet, sending blue, sent green) are *facts*, kept distinct from the `danger`/`warn`/`ok` feedback scales — a `scheduled` badge is neither good nor bad. Reusing a feedback scale is allowed only when the state genuinely carries that reading: `failed`/`canceled`/`suppressed` → `danger`, and `pending` (awaiting double-opt-in) → `warn` amber — the same "one red, one amber" economy as above, not a conflation. The rule this encodes: `pending` takes `warn`, **never** `--status-sending`. The two coincided only while `--status-sending` was itself amber; when the dispatch treatment went blue, the `pending` pill went blue with it until it was repointed at `warn` — a token doing double duty is exactly the drift this section exists to catch.
 
 The badge belongs in the lists and the **sent record view**, not the editor head: the editor only ever opens a draft or a scheduled (frozen) post — a sent issue routes to its record view instead (SPEC §8) — and both editor states are already signaled (the editable layout; the scheduled banner, §2 home ③), so the editor carries no status pill. The sent record view is where the delivery-outcome counts appear in **full** — every bucket, reconciled to the frozen audience — and they read in the **semantic feedback** scales (delivered `ok`, bounced `warn`, complained `danger`) — a genuine good/bad reading of how the send landed — while the `sent` badge beside them stays a lifecycle fact. The two scales sitting together there is exactly why they must not be conflated. The send lists (the Sent-issue table, the dashboard's recent sends) compress the same outcomes to a glance: a **Delivered** cell that is the *confirmed-delivered* count — never provider-accepted — with any bounces, complaints, or send-time failures called out beside it as a muted trouble note, in that same feedback voice. Because both read from the one set of denormalized counters, a list and a record can never tell different stories about the same send (SPEC §8). The **per-recipient rows** listed beneath those tiles (SPEC §8) carry the same reading down to the row: each row's outcome cell reuses the very swatch palette of the tiles (`sw-ok` / `sw-warn` / `sw-danger`, plus `sw-sending` for an accepted-not-yet-confirmed row and `sw-neutral` for a failed/skipped one), so a row reads the same bucket as its tile and the record adds **no new token** — a bounce row further splits *soft* from *hard* by the kind frozen on that row for this send (SPEC §8), not by a color and not by the mutable suppression list.
 
-**The in-flight watch reuses these scales; it adds no palette.** A sending send opens the record view in a live state (§5) built from existing tokens: a **phase pill** whose tone borrows the matching lifecycle or feedback scale; **two progress bars drawn on one shared scale** — the whole frozen audience is the denominator for both — a **dispatch** bar in the `sending` hue, and beneath it a **delivery** bar that pairs to it: a neutral grey `accepted` segment with the `ok` green `confirmed` filling in behind, so delivery always reads as *lagging* dispatch, never ahead of it; and **active-send cards** (the dashboard widget, the Sent "In progress" row) in the `sending` hue, as scheduled cards are in violet. So `--b-sending` is the one "in flight" cue across the badge, pill, bars, and cards. It also labels an in-flight post on the **Drafts list**, which routes to the watch rather than the editor (SPEC §8) — a going-out issue is dispatch-side, not an editable draft.
-
-Everything else is the neutral surface set — `--fg`, `--muted`, `--line`, `--bg`, `--card`, and the recessed/`--line-2`/`--chip` layer — and the one focus `--ring`. The syntax-highlight (`--cx-*`) palette is a self-contained set for the template editor and is out of scope for this contract. Every token has a light and a dark value; a color defined in only one theme is a bug.
+**The in-flight watch adds no palette — it reuses these scales.** A **phase pill** borrows the matching lifecycle or feedback tone; **two progress bars share one scale** (the frozen audience is the denominator for both) — a **dispatch** bar in the `sending` hue, and a **delivery** bar beneath it pairing a neutral-grey `accepted` frontier with the `ok` green `confirmed` filling in behind, so delivery always reads as *lagging* dispatch; and **active-send cards** (dashboard widget, Sent "In progress" row) in the `sending` hue, as scheduled cards are violet. So `--status-sending` is the single "in flight" cue across badge, pill, bars, and cards — including the in-flight post's **Drafts-list** label, which routes to the watch, not the editor (SPEC §8).
 
 ---
 

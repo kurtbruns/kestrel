@@ -18,7 +18,7 @@
   --card: #fff;
   --hover: #efefef;
   /* Neutral ink — the strong near-black/near-white neutral (DESIGN §3). A text token
-     for headings and strong labels; never a button fill (Primary is --k-accent). */
+     for headings and strong labels; never a button fill (Primary is --accent). */
   --ink: #18181b;
   --ink-on: #ffffff;
   /* Semantic feedback — one {fg, bg, line} scale each for danger / warn / ok (DESIGN §3).
@@ -39,46 +39,46 @@
   --ring: #2563eb;
   --banner-bg: #eff6ff;
   --banner-line: #bfdbfe;
-  --b-draft-bg: #f4f4f5;
-  --b-draft-fg: #52525b;
-  --b-draft-line: #d4d4d8;
-  /* Scheduled is a violet, deliberately off the slate-blue action accent (--k-accent)
+  --status-draft-bg: #f4f4f5;
+  --status-draft-fg: #52525b;
+  --status-draft-line: #d4d4d8;
+  /* Scheduled is a violet, deliberately off the slate-blue action accent (--accent)
      so the "scheduled" status never reads as the primary action (DESIGN §3); the fill
      backs the scheduled pill, banner, and cards, and the line borders them. */
-  --b-scheduled-bg: #ece6f9;
-  --b-scheduled-fg: #6743ac;
-  --b-scheduled-line: #cbbcf1;
-  --b-sent-bg: #dcfce7;
-  --b-sent-fg: #15803d;
-  --b-sent-line: #bbf7d0;
-  --b-sending-bg: #dbeafe;
-  --b-sending-fg: #2563eb;
-  --b-sending-line: #bfdbfe;
+  --status-scheduled-bg: #ece6f9;
+  --status-scheduled-fg: #6743ac;
+  --status-scheduled-line: #cbbcf1;
+  --status-sent-bg: #dcfce7;
+  --status-sent-fg: #15803d;
+  --status-sent-line: #bbf7d0;
+  --status-sending-bg: #dbeafe;
+  --status-sending-fg: #2563eb;
+  --status-sending-line: #bfdbfe;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   /* Kestrel's own accent — a fixed slate-blue for the app's own chrome (intent
      chips, in-settings links, the Save action). It is the app's own identity, kept
      independent of the reader surface's theming (SPEC §8). */
-  --k-accent: #3355cc;
-  --k-accent-contrast: #ffffff;
-  --k-accent-soft: rgba(51, 85, 204, 0.12);
+  --accent: #3355cc;
+  --accent-on: #ffffff;
+  --accent-soft: rgba(51, 85, 204, 0.12);
   /* Syntax-highlight palette for the template editor (issue #123). */
-  --cx-bg: #fbfbfc;
-  --cx-fg: #3f3f46;
-  --cx-gutter: #a1a1aa;
-  --cx-tag: #7a5bd6;
-  --cx-str: #0f7a5a;
-  --cx-prop: #1d4ed8;
-  --cx-sel: #b0530c;
-  --cx-num: #b0530c;
-  --cx-at: #a13d9e;
-  --cx-punct: #a1a1aa;
-  --cx-var: #2d47b8;
-  --cx-var-bg: rgba(51, 85, 204, 0.11);
+  --syntax-bg: #fbfbfc;
+  --syntax-fg: #3f3f46;
+  --syntax-gutter: #a1a1aa;
+  --syntax-tag: #7a5bd6;
+  --syntax-string: #0f7a5a;
+  --syntax-property: #1d4ed8;
+  --syntax-selector: #b0530c;
+  --syntax-number: #b0530c;
+  --syntax-at-rule: #a13d9e;
+  --syntax-punctuation: #a1a1aa;
+  --syntax-variable: #2d47b8;
+  --syntax-variable-bg: rgba(51, 85, 204, 0.11);
   /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
      stronger line + a neutral chip fill, layered on the zinc neutrals above. */
   --sunken: #f6f6f7;
-  --line-2: #d6d6db;
+  --line-soft: #d6d6db;
   --chip: #ececee;
 }
 @media (prefers-color-scheme: dark) {
@@ -104,39 +104,39 @@
     --ring: #60a5fa;
     --banner-bg: #1e293b;
     --banner-line: #334155;
-    --b-draft-bg: #2e2e33;
-    --b-draft-fg: #a1a1aa;
-    --b-draft-line: #52525b;
-    --b-scheduled-bg: #2e2450;
-    --b-scheduled-fg: #bfa9ec;
-    --b-scheduled-line: #6a4fae;
-    --b-sent-bg: #14532d;
-    --b-sent-fg: #86efac;
-    --b-sent-line: #15803d;
-    --b-sending-bg: #172554;
-    --b-sending-fg: #60a5fa;
-    --b-sending-line: #2563eb;
-    /* Brightened from a plain dark tint so Secondary text (--k-accent on the soft
+    --status-draft-bg: #2e2e33;
+    --status-draft-fg: #a1a1aa;
+    --status-draft-line: #52525b;
+    --status-scheduled-bg: #2e2450;
+    --status-scheduled-fg: #bfa9ec;
+    --status-scheduled-line: #6a4fae;
+    --status-sent-bg: #14532d;
+    --status-sent-fg: #86efac;
+    --status-sent-line: #15803d;
+    --status-sending-bg: #172554;
+    --status-sending-fg: #60a5fa;
+    --status-sending-line: #2563eb;
+    /* Brightened from a plain dark tint so Secondary text (--accent on the soft
        fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
-       reached only ~4.4:1. Primary keeps huge contrast (dark --k-accent-contrast text
+       reached only ~4.4:1. Primary keeps huge contrast (dark --accent-on text
        on this lighter fill). The soft fill tracks the same hue. */
-    --k-accent: #8fabff;
-    --k-accent-contrast: #10131f;
-    --k-accent-soft: rgba(143, 171, 255, 0.18);
-    --cx-bg: #1a1a1d;
-    --cx-fg: #cfcfd6;
-    --cx-gutter: #5a5a63;
-    --cx-tag: #c4a7ff;
-    --cx-str: #7fd9b0;
-    --cx-prop: #86b6ff;
-    --cx-sel: #f0a86a;
-    --cx-num: #f0a86a;
-    --cx-at: #e79ae0;
-    --cx-punct: #6a6a72;
-    --cx-var: #a9bbf2;
-    --cx-var-bg: rgba(120, 150, 240, 0.18);
+    --accent: #8fabff;
+    --accent-on: #10131f;
+    --accent-soft: rgba(143, 171, 255, 0.18);
+    --syntax-bg: #1a1a1d;
+    --syntax-fg: #cfcfd6;
+    --syntax-gutter: #5a5a63;
+    --syntax-tag: #c4a7ff;
+    --syntax-string: #7fd9b0;
+    --syntax-property: #86b6ff;
+    --syntax-selector: #f0a86a;
+    --syntax-number: #f0a86a;
+    --syntax-at-rule: #e79ae0;
+    --syntax-punctuation: #6a6a72;
+    --syntax-variable: #a9bbf2;
+    --syntax-variable-bg: rgba(120, 150, 240, 0.18);
     --sunken: #1b1b1f;
-    --line-2: #3a3a41;
+    --line-soft: #3a3a41;
     --chip: #2a2a30;
   }
 }
@@ -958,7 +958,7 @@ button:active {
    class each. The bare `button` above is the neutral default (Ghost's card-filled
    end); the classes below step up to Primary / Secondary or down to the quiet Ghost,
    plus Danger and the square Icon. Exactly one solid brand-blue action — Primary — is
-   in front of the writer at a time, and it is --k-accent, never the near-black neutral
+   in front of the writer at a time, and it is --accent, never the near-black neutral
    (now the --ink text token, never a button fill). --- */
 
 /* One box height across the label roles, so a row that mixes them (the editor's
@@ -981,9 +981,9 @@ button.danger-subtle {
 
 /* Primary — the single most-important action of a view (one per view). */
 button.primary {
-  background: var(--k-accent);
-  color: var(--k-accent-contrast);
-  border-color: var(--k-accent);
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent);
 }
 button.primary:hover {
   filter: brightness(1.08);
@@ -998,16 +998,16 @@ button.secondary {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  background: var(--k-accent-soft);
-  color: var(--k-accent);
-  border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line-soft));
   font-size: 12.5px;
   font-weight: 550;
   padding: 7px 12px;
   border-radius: 7px;
 }
 button.secondary:hover {
-  border-color: var(--k-accent);
+  border-color: var(--accent);
 }
 
 /* Ghost — the quiet neutral role: back, cancel, a menu trigger, a pager step, a copy
@@ -1031,7 +1031,7 @@ button.ghost:hover {
 /* A copy control flashes green (--ok) once the clipboard write lands. */
 button.ghost.copied {
   color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-soft));
 }
 /* An icon inside a Secondary/Ghost label button (Send test, Copy). */
 button.secondary svg,
@@ -1233,24 +1233,24 @@ td a:hover {
   border: 1px solid var(--line);
 }
 .badge.draft {
-  background: var(--b-draft-bg);
-  color: var(--b-draft-fg);
-  border-color: var(--b-draft-line);
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+  border-color: var(--status-draft-line);
 }
 .badge.scheduled {
-  background: var(--b-scheduled-bg);
-  color: var(--b-scheduled-fg);
-  border-color: var(--b-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-color: var(--status-scheduled-line);
 }
 .badge.sent {
-  background: var(--b-sent-bg);
-  color: var(--b-sent-fg);
-  border-color: var(--b-sent-line);
+  background: var(--status-sent-bg);
+  color: var(--status-sent-fg);
+  border-color: var(--status-sent-line);
 }
 .badge.sending {
-  background: var(--b-sending-bg);
-  color: var(--b-sending-fg);
-  border-color: var(--b-sending-line);
+  background: var(--status-sending-bg);
+  color: var(--status-sending-fg);
+  border-color: var(--status-sending-line);
 }
 .badge.canceled,
 .badge.failed {
@@ -1258,21 +1258,26 @@ td a:hover {
   color: var(--danger-fg);
   border-color: var(--danger-line);
 }
-/* subscriber consent states (reuse the send-status colors) */
+/* Subscriber consent states borrow a hue that matches the state's meaning: confirmed →
+   the sent green, unsubscribed → the draft grey, suppressed → danger red (below). Pending
+   awaits double-opt-in — a waiting/attention state — so it takes the amber `warn` scale,
+   NOT `--status-sending`: the send "sending" badge is blue (DESIGN §3), and a pending subscriber
+   must never read as a send in flight. (The two coincided only while `--status-sending` was
+   amber; when it went blue for the dispatch treatment, this pill must stay amber.) */
 .badge.confirmed {
-  background: var(--b-sent-bg);
-  color: var(--b-sent-fg);
-  border-color: var(--b-sent-line);
+  background: var(--status-sent-bg);
+  color: var(--status-sent-fg);
+  border-color: var(--status-sent-line);
 }
 .badge.pending {
-  background: var(--b-sending-bg);
-  color: var(--b-sending-fg);
-  border-color: var(--b-sending-line);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
 }
 .badge.unsubscribed {
-  background: var(--b-draft-bg);
-  color: var(--b-draft-fg);
-  border-color: var(--b-draft-line);
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+  border-color: var(--status-draft-line);
 }
 .badge.suppressed {
   background: var(--danger-bg);
@@ -1354,7 +1359,7 @@ td a:hover {
 /* The dashboard's summary tables (Drafts / Sent) take a stronger border than the
    default hairline, which nearly disappears against the off-white dashboard ground. */
 .dash-section table {
-  border-color: var(--line-2);
+  border-color: var(--line-soft);
 }
 
 /* sortable column headers: the label is a borderless button that fills the cell */
@@ -1576,7 +1581,7 @@ th.num .th-sort {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   border-radius: 7px;
   background: var(--card);
 }
@@ -1590,8 +1595,8 @@ th.num .th-sort {
   cursor: pointer;
 }
 .rec-view-btn[aria-pressed="true"] {
-  background: var(--k-accent-soft);
-  color: var(--k-accent);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 600;
 }
 .rec-people-search {
@@ -1620,10 +1625,10 @@ th.num .th-sort {
 }
 
 /* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
-/* The sending treatment is blue (--b-sending-*, DESIGN §3) — distinct from the action
-   slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
+/* The sending treatment is blue (--status-sending-*, DESIGN §3) — distinct from the
+   action slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
 .rec-sw.sw-sending {
-  background: var(--b-sending-fg);
+  background: var(--status-sending-fg);
 }
 .watch-title {
   display: flex;
@@ -1649,9 +1654,9 @@ th.num .th-sort {
   white-space: nowrap;
 }
 .phase-pill.tone-sending {
-  background: var(--b-sending-bg);
-  color: var(--b-sending-fg);
-  border-color: var(--b-sending-line);
+  background: var(--status-sending-bg);
+  color: var(--status-sending-fg);
+  border-color: var(--status-sending-line);
 }
 .phase-pill.tone-ok {
   background: var(--ok-bg);
@@ -1669,14 +1674,14 @@ th.num .th-sort {
   border-color: var(--danger-line);
 }
 .phase-pill.tone-scheduled {
-  background: var(--b-scheduled-bg);
-  color: var(--b-scheduled-fg);
-  border-color: var(--b-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-color: var(--status-scheduled-line);
 }
 .phase-pill.tone-muted {
-  background: var(--b-draft-bg);
-  color: var(--b-draft-fg);
-  border-color: var(--b-draft-line);
+  background: var(--status-draft-bg);
+  color: var(--status-draft-fg);
+  border-color: var(--status-draft-line);
 }
 .wbars {
   display: flex;
@@ -1703,7 +1708,7 @@ th.num .th-sort {
   position: relative;
   height: 10px;
   border-radius: 999px;
-  background: var(--line-2);
+  background: var(--line-soft);
   overflow: hidden;
 }
 /* Fills are absolutely stacked from the left so the dual (delivery) bar can layer a green
@@ -1720,10 +1725,10 @@ th.num .th-sort {
    a grey `accepted` segment (the same frontier the dispatch bar reaches) with green
    `confirmed` filling in behind it as receipts arrive. */
 .wbar-fill.tone-sending {
-  background: var(--b-sending-fg);
+  background: var(--status-sending-fg);
 }
 .wbar-fill.tone-accepted {
-  background: color-mix(in srgb, var(--muted) 50%, var(--line-2));
+  background: color-mix(in srgb, var(--muted) 50%, var(--line-soft));
 }
 .wbar-fill.tone-ok {
   background: var(--ok-fg);
@@ -1790,8 +1795,8 @@ th.num .th-sort {
 /* An in-flight send as a card with a live mini dispatch bar; blue, so it reads as
    "sending" — distinct from the scheduled violet cards and the neutral sent rows. */
 .card.active-card {
-  background: var(--b-sending-bg);
-  border-color: var(--b-sending-line);
+  background: var(--status-sending-bg);
+  border-color: var(--status-sending-line);
   gap: 16px;
 }
 .active-main {
@@ -1809,13 +1814,13 @@ th.num .th-sort {
 .active-bar {
   height: 8px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--b-sending-fg) 22%, transparent);
+  background: color-mix(in srgb, var(--status-sending-fg) 22%, transparent);
   overflow: hidden;
 }
 .active-fill {
   height: 100%;
   border-radius: 999px;
-  background: var(--b-sending-fg);
+  background: var(--status-sending-fg);
   transition: width 0.6s ease;
 }
 .active-stat {
@@ -2003,7 +2008,7 @@ th.num .th-sort {
   color: var(--muted);
 }
 /* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
-   Unsaved (amber --warn dot) · Saving… (pulsing --k-accent dot) · Saved (green --ok
+   Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
    dot). The dot is a reinforcement, never the whole signal — the text label carries
    each state too, so the cue survives a reader who can't tell the dot's color. The
    "unsaved" cue reads the same amber as the shared save bar so both save models feel
@@ -2034,7 +2039,7 @@ th.num .th-sort {
   background: var(--warn-fg);
 }
 .save-status.is-saving::before {
-  background: var(--k-accent);
+  background: var(--accent);
   animation: save-pulse 1s ease-in-out infinite;
 }
 .save-status.is-saved::before {
@@ -2153,7 +2158,7 @@ th.num .th-sort {
 button.linkbtn {
   border: 0;
   background: transparent;
-  color: var(--k-accent);
+  color: var(--accent);
   font-size: 12.5px;
   font-weight: 500;
   padding: 0;
@@ -2168,14 +2173,14 @@ button.linkbtn:hover {
   font-variant-numeric: tabular-nums;
   /* The scheduled violet (DESIGN §3), so the fire-time countdown on the scheduled
      cards (Sent page + dashboard) carries the same "scheduled" cue as the pill. */
-  color: var(--b-scheduled-fg);
+  color: var(--status-scheduled-fg);
 }
 /* Scheduled cards — the dashboard's "Scheduled" section and the Sent page's next-up
    queue — take the violet fill + border so a queued send reads as scheduled at a
    glance (the two-class selector wins over `.card`'s neutral surface + border). */
 .card.sched-card {
-  background: var(--b-scheduled-bg);
-  border-color: var(--b-scheduled-line);
+  background: var(--status-scheduled-bg);
+  border-color: var(--status-scheduled-line);
 }
 /* One title weight/size across every scheduled notice (card subject + banner date),
    so the "title" is consistent from the Drafts list to the Sent queue to the editor. */
@@ -2247,7 +2252,7 @@ td.act {
    which never reached keyboard, touch, or screen-reader users. --- */
 input.is-invalid,
 textarea.is-invalid {
-  border-color: color-mix(in srgb, var(--danger-fg) 55%, var(--line-2));
+  border-color: color-mix(in srgb, var(--danger-fg) 55%, var(--line-soft));
   background: color-mix(in srgb, var(--danger-fg) 5%, var(--card));
 }
 .field-error {
@@ -2393,9 +2398,9 @@ textarea.is-invalid {
   color: inherit;
 }
 .banner-scheduled {
-  background: var(--b-scheduled-bg);
-  color: var(--b-scheduled-fg);
-  border-color: var(--b-scheduled-line);
+  background: var(--status-scheduled-bg);
+  color: var(--status-scheduled-fg);
+  border-color: var(--status-scheduled-line);
 }
 .banner-conflict {
   background: var(--warn-bg);
@@ -3197,7 +3202,7 @@ textarea.is-invalid {
    header carries an intent chip (Editable / Read-only · set at
    deploy / Copy-out), editable surfaces sit on cards and read-only
    facts on a recessed "sunken" card. Kestrel's own accents use the
-   fixed --k-accent (a slate-blue), independent of the reader surface.
+   fixed --accent (a slate-blue), independent of the reader surface.
    A sticky save bar collects the unsaved, persisted changes
    (identity + test recipients); the logo and the email-template
    mock are handled on their own and don't feed it. Theme follows
@@ -3256,7 +3261,7 @@ textarea.is-invalid {
   font-weight: 600;
   padding: 3px 9px 3px 7px;
   border-radius: 999px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   color: var(--muted);
   background: var(--card);
   white-space: nowrap;
@@ -3266,13 +3271,13 @@ textarea.is-invalid {
   height: 12px;
 }
 .set-chip.editable {
-  color: var(--k-accent);
-  border-color: color-mix(in srgb, var(--k-accent) 34%, var(--line-2));
-  background: var(--k-accent-soft);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line-soft));
+  background: var(--accent-soft);
 }
 .set-chip.readonly {
   color: var(--warn-fg);
-  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-2));
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-soft));
   background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
 }
 /* A dashed "Mock" tag beside the Email-template chip — says the section is a
@@ -3284,7 +3289,7 @@ textarea.is-invalid {
   text-transform: uppercase;
   padding: 3px 7px;
   border-radius: 6px;
-  border: 1px dashed var(--line-2);
+  border: 1px dashed var(--line-soft);
   color: var(--muted);
 }
 
@@ -3302,7 +3307,7 @@ textarea.is-invalid {
 }
 .set-card.sunken {
   background: var(--sunken);
-  border-color: var(--line-2);
+  border-color: var(--line-soft);
   box-shadow: none;
 }
 .set-card-pad {
@@ -3311,7 +3316,7 @@ textarea.is-invalid {
 
 /* Kestrel-accent links inside the settings cards (operator-guide links, Open ↗). */
 .set-link {
-  color: var(--k-accent);
+  color: var(--accent);
   font-weight: 550;
   text-decoration: none;
 }
@@ -3335,7 +3340,7 @@ textarea.is-invalid {
   width: 100%;
   aspect-ratio: 1;
   border-radius: 10px;
-  border: 1px dashed var(--line-2);
+  border: 1px dashed var(--line-soft);
   background: var(--sunken);
   display: grid;
   place-items: center;
@@ -3349,7 +3354,7 @@ textarea.is-invalid {
   border-style: solid;
 }
 .set-logo-tile:hover {
-  border-color: var(--k-accent);
+  border-color: var(--accent);
 }
 .set-logo-ph {
   display: flex;
@@ -3434,7 +3439,7 @@ textarea.is-invalid {
   gap: 9px;
   align-items: flex-start;
   padding: 11px 16px;
-  border-bottom: 1px solid var(--line-2);
+  border-bottom: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--warn-fg) 6%, transparent);
   font-size: 12.5px;
   color: var(--muted);
@@ -3488,7 +3493,7 @@ textarea.is-invalid {
   border-radius: 999px;
   background: var(--chip);
   color: var(--muted);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   white-space: nowrap;
 }
 .set-pill.ok {
@@ -3583,7 +3588,7 @@ textarea.is-invalid {
   align-items: center;
   gap: 8px;
   background: var(--chip);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   border-radius: 999px;
   padding: 5px 6px 5px 12px;
   font-size: 13px;
@@ -3641,7 +3646,7 @@ textarea.is-invalid {
 }
 .set-embed-preview {
   margin: 14px 0 0;
-  border: 1px dashed var(--line-2);
+  border: 1px dashed var(--line-soft);
   border-radius: 8px;
   padding: 18px 16px;
   background: var(--sunken);
@@ -3751,14 +3756,14 @@ textarea.is-invalid {
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--cx-bg);
+  background: var(--syntax-bg);
   font-family: var(--mono);
   font-size: 12.5px;
   line-height: 1.6;
   tab-size: 2;
 }
 .set-tpl-editor-wrap:focus-within {
-  border-color: color-mix(in srgb, var(--k-accent) 55%, var(--line));
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 .set-tpl-gutter,
 .set-tpl-hl,
@@ -3777,7 +3782,7 @@ textarea.is-invalid {
   text-align: right;
   white-space: pre;
   overflow: hidden;
-  color: var(--cx-gutter);
+  color: var(--syntax-gutter);
   border-right: 1px solid var(--line);
   user-select: none;
   /* Line numbers are off by default; the toolbar toggle turns them on. */
@@ -3789,7 +3794,7 @@ textarea.is-invalid {
   padding: 12px 14px;
   overflow: hidden;
   white-space: pre;
-  color: var(--cx-fg);
+  color: var(--syntax-fg);
   pointer-events: none;
 }
 .set-tpl-editor {
@@ -3802,7 +3807,7 @@ textarea.is-invalid {
   overflow: auto;
   background: transparent;
   color: transparent;
-  caret-color: var(--cx-fg);
+  caret-color: var(--syntax-fg);
 }
 .set-tpl-editor:focus {
   outline: none;
@@ -3817,30 +3822,30 @@ textarea.is-invalid {
 }
 /* Syntax colors (issue #123). */
 .cx-tag {
-  color: var(--cx-tag);
+  color: var(--syntax-tag);
 }
 .cx-str {
-  color: var(--cx-str);
+  color: var(--syntax-string);
 }
 .cx-prop {
-  color: var(--cx-prop);
+  color: var(--syntax-property);
 }
 .cx-sel {
-  color: var(--cx-sel);
+  color: var(--syntax-selector);
 }
 .cx-num {
-  color: var(--cx-num);
+  color: var(--syntax-number);
 }
 .cx-at {
-  color: var(--cx-at);
+  color: var(--syntax-at-rule);
   font-style: italic;
 }
 .cx-punct {
-  color: var(--cx-punct);
+  color: var(--syntax-punctuation);
 }
 .cx-var {
-  color: var(--cx-var);
-  background: var(--cx-var-bg);
+  color: var(--syntax-variable);
+  background: var(--syntax-variable-bg);
   border-radius: 3px;
   padding: 0 2px;
   font-weight: 600;
@@ -3852,7 +3857,7 @@ textarea.is-invalid {
    error and shows in the shared save bar instead (see .savebar.is-error). */
 .set-tpl-msgs {
   margin-top: 12px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   border-radius: 8px;
   padding: 9px 12px;
   font-size: 12.5px;
@@ -3860,7 +3865,7 @@ textarea.is-invalid {
 }
 .set-tpl-msgs.warn {
   background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
-  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-2));
+  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-soft));
   color: var(--warn-fg);
 }
 /* Variable reference — a native <details> disclosure. Logic-less: a token is only
@@ -3916,7 +3921,7 @@ textarea.is-invalid {
   gap: 10px;
   align-items: center;
   padding: 7px 0;
-  border-top: 1px solid var(--line-2);
+  border-top: 1px solid var(--line-soft);
 }
 .set-tpl-vargroup h4 + .set-tpl-var {
   border-top: 0;
@@ -3927,8 +3932,8 @@ textarea.is-invalid {
   font-size: 11.5px;
   /* Match the weight of the {{ tokens }} highlighted in the editor (.cx-var). */
   font-weight: 600;
-  color: var(--k-accent);
-  background: var(--k-accent-soft);
+  color: var(--accent);
+  background: var(--accent-soft);
   border-radius: 4px;
   padding: 2px 6px;
 }
@@ -3973,7 +3978,7 @@ textarea.is-invalid {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   border-radius: 7px;
   background: var(--card);
 }
@@ -3987,8 +3992,8 @@ textarea.is-invalid {
   cursor: pointer;
 }
 .set-wtog .wtog-btn[aria-pressed="true"] {
-  background: var(--k-accent-soft);
-  color: var(--k-accent);
+  background: var(--accent-soft);
+  color: var(--accent);
   font-weight: 600;
 }
 /* Editor toolbar: the dropdown + small icon buttons (line-number toggle, copy). */
@@ -4005,7 +4010,7 @@ textarea.is-invalid {
   height: 30px;
   color: var(--muted);
   background: var(--card);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   border-radius: 7px;
   cursor: pointer;
 }
@@ -4020,13 +4025,13 @@ textarea.is-invalid {
   border-color: var(--muted);
 }
 .set-icon-btn[aria-pressed="true"] {
-  color: var(--k-accent);
-  background: var(--k-accent-soft);
-  border-color: color-mix(in srgb, var(--k-accent) 30%, var(--line-2));
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line-soft));
 }
 .set-icon-btn.copied {
   color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-2));
+  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-soft));
 }
 /* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
    absence blocks a save, shown upper-right of the editor toolbar. */
@@ -4048,7 +4053,7 @@ textarea.is-invalid {
   font-size: 11px;
   padding: 5px 9px;
   border-radius: 999px;
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--line-soft);
   color: var(--muted);
 }
 .set-req-pill .dot {
@@ -4059,7 +4064,7 @@ textarea.is-invalid {
 }
 .set-req-pill.ok {
   color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 38%, var(--line-2));
+  border-color: color-mix(in srgb, var(--ok-fg) 38%, var(--line-soft));
   background: color-mix(in srgb, var(--ok-fg) 10%, transparent);
 }
 .set-req-pill.ok .dot {
@@ -4067,7 +4072,7 @@ textarea.is-invalid {
 }
 .set-req-pill.bad {
   color: var(--danger-fg);
-  border-color: color-mix(in srgb, var(--danger-fg) 40%, var(--line-2));
+  border-color: color-mix(in srgb, var(--danger-fg) 40%, var(--line-soft));
   background: color-mix(in srgb, var(--danger-fg) 9%, transparent);
 }
 .set-req-pill.bad .dot {
@@ -4188,7 +4193,7 @@ textarea.is-invalid {
    The left offset tracks the sidebar — clearing the 260px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    phone drawer. The post editor keeps its own autosave + conflict model, so it does
-   NOT use this bar. Its Save is a Primary button — now brand-blue --k-accent app-wide
+   NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
    (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
@@ -4201,7 +4206,7 @@ textarea.is-invalid {
   background: color-mix(in srgb, var(--card) 88%, transparent);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  border-top: 1px solid var(--line-2);
+  border-top: 1px solid var(--line-soft);
   box-shadow: 0 -10px 30px -18px rgba(24, 24, 27, 0.4);
   transform: translateY(120%);
   transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
