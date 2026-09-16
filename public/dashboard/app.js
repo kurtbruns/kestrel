@@ -16,6 +16,12 @@ let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
 let progressTimer = null; // live in-flight /progress poll (watch view + active-send widget), cleared on navigation
+// Bumped on every navigation (route()). The recursive-setTimeout pollers below capture it
+// when they schedule and bail after their await if it changed: clearing progressTimer stops
+// the *next* tick, but a poll whose fetch is already in flight when the user navigates would
+// otherwise resolve afterward and repaint (or swap) the view they just opened — and clobber
+// that new view's own poll timer. The generation check is the guard that in-flight poll can't.
+let navGeneration = 0;
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
 // re-binding — and so leaking a listener — on every visit to the page.
@@ -697,6 +703,10 @@ function route() {
     clearInterval(progressTimer);
     progressTimer = null;
   }
+  // Invalidate any poll whose fetch is already in flight: clearing progressTimer only stops
+  // the pending tick, not one mid-await, so a stale callback would resolve into the view we're
+  // about to mount. Bumping the generation makes that callback bail (see navGeneration).
+  navGeneration++;
   clearAutosaveTimers();
   isEditorDirty = false;
   editorSaveFailed = false;
@@ -1929,9 +1939,11 @@ function startCountdowns() {
 }
 
 // A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending,
-// but one or more `dispatched` recipients whose fate a transport error left unknown
+// but one or more in-flight recipients whose fate a transport error left unknown
 // (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
-// can't clear on its own without risking a double-mail (I4).
+// can't clear on its own without risking a double-mail (I4). Read straight off the row's
+// denormalized counters (c_pending / c_in_flight, migration 0006) — the same signals the
+// server's buildSendProgress derives `wedged` from, so the list and the watch agree.
 // The lease check is essential: while the loop is ACTIVELY working a send it holds the
 // lease (`locked_until` in the future) — so a normal send's final dispatched batch
 // (pending 0, in flight > 0) is not a wedge, just work in progress. A genuine wedge has
@@ -1939,19 +1951,14 @@ function startCountdowns() {
 // tail of its dispatch.
 function isWedged(s) {
   const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
-  return (
-    s.status === "sending" &&
-    !s.progress?.pending &&
-    (s.progress?.dispatched || 0) > 0 &&
-    !leaseHeld
-  );
+  return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
 }
 
 // The one manual step for a wedged send: decide whether the ambiguous batch went out
 // or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
 // explains the trade-off (record accuracy) rather than warning of a double-send.
 function openResolveModal(send, reload) {
-  const n = send.progress?.dispatched || 0;
+  const n = send.c_in_flight || 0;
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
     `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
@@ -2007,6 +2014,28 @@ function listRowCounts(s) {
     }
   }
   return { total: t, accepted: done, confirmed, pct, etaMs };
+}
+
+// A `/sends` list row's "Delivered" cell, from its denormalized counters (#90). It reports
+// TRUE delivered — webhook-confirmed `c_delivered`, not provider-`accepted` — so the Sent
+// list and dashboard recent-sends agree with the record view's "Delivered" for the same
+// send, and a bounced/complained recipient is never miscounted as delivered. Any bounce /
+// complaint / send-time-failure shows as a muted trouble suffix, so a bad send reads as
+// trouble at a glance instead of a clean number. `deliveries` stays the source of truth.
+function deliveredCell(s) {
+  const delivered = s.c_delivered || 0;
+  const notes = [];
+  if (s.c_bounced) {
+    notes.push(`${(s.c_bounced || 0).toLocaleString()} bounced`);
+  }
+  if (s.c_complained) {
+    notes.push(`${(s.c_complained || 0).toLocaleString()} complained`);
+  }
+  if (s.c_failed) {
+    notes.push(`${(s.c_failed || 0).toLocaleString()} failed`);
+  }
+  const suffix = notes.length ? ` <span class="muted">(${notes.join(", ")})</span>` : "";
+  return `${delivered.toLocaleString()}${suffix}`;
 }
 // One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
 // The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
@@ -2077,7 +2106,7 @@ async function renderSent() {
     const wedged = sends.filter(isWedged);
     stuckEl.innerHTML = wedged
       .map((s) => {
-        const n = s.progress?.dispatched || 0;
+        const n = s.c_in_flight || 0;
         const noun = n === 1 ? "delivery" : "deliveries";
         return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
       })
@@ -2185,7 +2214,7 @@ async function renderSent() {
       listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
         .map(
           (s) =>
-            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
+            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td></tr>`,
         )
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, loadList);
@@ -2210,8 +2239,14 @@ async function renderSent() {
   // records on its own. A recursive setTimeout so a slow read never overlaps; cleared on
   // navigation (route() clears progressTimer). Countdowns run on statusTimer.
   const scheduleSentPoll = () => {
+    const gen = navGeneration;
     progressTimer = setTimeout(async () => {
       await refreshSending();
+      // Navigated off the Sent page mid-fetch — the sections refreshSending paints are gone and
+      // the reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
+      if (gen !== navGeneration) {
+        return;
+      }
       scheduleSentPoll();
     }, 3000);
   };
@@ -2391,13 +2426,8 @@ function wireWatchHeader(id, send, prog) {
   const rb = document.getElementById("resolveBtn");
   if (rb) {
     rb.onclick = () =>
-      openResolveModal(
-        {
-          id,
-          subject: send.subject,
-          progress: { dispatched: prog.counts.in_flight, pending: prog.counts.pending },
-        },
-        () => renderSentRecord(id),
+      openResolveModal({ id, subject: send.subject, c_in_flight: prog.counts.in_flight }, () =>
+        renderSentRecord(id),
       );
   }
 }
@@ -2436,12 +2466,21 @@ async function startWatch(id, send) {
 // Poll /progress (~3s) while sending; a recursive setTimeout so a slow read never
 // overlaps. `progressTimer` holds the pending id so route() clears it on navigation.
 function scheduleWatchPoll(id, send) {
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let prog;
     try {
       prog = await api(`/sends/${id}/progress`);
     } catch {
-      scheduleWatchPoll(id, send); // transient — keep the last view, try again
+      // transient — keep the last view, try again (unless we've since navigated away)
+      if (gen === navGeneration) {
+        scheduleWatchPoll(id, send);
+      }
+      return;
+    }
+    // Navigated away while the fetch was in flight: the new view owns the screen and its own
+    // poll now — don't renderSentRecord over it, swap it, or reschedule onto its timer.
+    if (gen !== navGeneration) {
       return;
     }
     if (prog.state !== "sending") {
@@ -2495,6 +2534,98 @@ function outcomeReconHtml(outcomes) {
   return `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.`;
 }
 
+// The per-recipient record (#164): the outcome tiles summarize, this shows the actual
+// rows. A row's OUTCOME is derived from the same two facts the tiles bucket — the webhook
+// `event` winning over the send-loop `status` — so a row reads the same bucket (and reuses
+// the same swatch palette) as its tile. A bounce splits soft vs hard on `bounce_kind` — the
+// provider's permanent/transient signal frozen onto the row when the event landed (SPEC §8),
+// a fact of THIS send, not a read of the current suppression list. Null = kind unknown.
+function deliveryOutcome(r) {
+  if (r.event === "delivered") {
+    return { label: "Delivered", sw: "ok" };
+  }
+  if (r.event === "bounced") {
+    if (r.bounce_kind === "hard") {
+      return { label: "Hard bounce", sw: "warn", hint: "permanent — suppressed the address" };
+    }
+    if (r.bounce_kind === "soft") {
+      return { label: "Soft bounce", sw: "warn", hint: "transient — counted, not suppressed" };
+    }
+    return { label: "Bounce", sw: "warn" };
+  }
+  if (r.event === "complained") {
+    return { label: "Complained", sw: "danger", hint: "suppressed" };
+  }
+  switch (r.status) {
+    case "failed":
+      return { label: "Failed", sw: "neutral" };
+    case "skipped":
+      return { label: "Skipped", sw: "neutral" };
+    case "accepted":
+      return { label: "Accepted", sw: "sending", hint: "awaiting a delivery receipt" };
+    default:
+      return { label: "In flight", sw: "sending" };
+  }
+}
+
+// The three view tabs the record opens on — issues first (the rows that went wrong).
+const DELIVERY_VIEWS = [
+  { v: "issues", label: "Issues" },
+  { v: "delivered", label: "Delivered" },
+  { v: "all", label: "All" },
+];
+
+// A positive/neutral empty state per view — an empty "issues" list is good news, not a gap.
+function deliveryEmpty(dstate) {
+  if (dstate.search) {
+    return "No recipients match that address.";
+  }
+  if (dstate.view === "issues") {
+    return "No delivery issues — every recipient was accepted or delivered.";
+  }
+  if (dstate.view === "delivered") {
+    return "No delivery receipts confirmed yet.";
+  }
+  return "No recipients on this send.";
+}
+
+function recordDeliveryQuery(d) {
+  const p = new URLSearchParams();
+  p.set("view", d.view);
+  const term = (d.search || "").trim();
+  if (term) {
+    p.set("search", term);
+  }
+  if (d.sort) {
+    p.set("sort", d.sort);
+    p.set("dir", d.dir);
+  }
+  p.set("limit", String(d.limit));
+  p.set("offset", String(d.offset));
+  return p.toString();
+}
+
+function deliveryRowsHtml(rows, dstate) {
+  const body = rows
+    .map((r) => {
+      const o = deliveryOutcome(r);
+      const outcome = `<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${esc(o.label)}${
+        o.hint ? ` <span class="rec-out-hint muted">${esc(o.hint)}</span>` : ""
+      }</span>`;
+      const detail = r.error || r.event_detail || "";
+      const when = r.event_at ? fmt(r.event_at) : "";
+      return `<tr><td class="rec-email">${esc(r.email)}</td><td>${outcome}</td><td class="muted">${
+        detail ? esc(detail) : "—"
+      }</td><td class="muted">${when ? esc(when) : "—"}</td></tr>`;
+    })
+    .join("");
+  return `<div class="table-wrap"><table class="list-table rec-people-table"><colgroup><col><col class="c-out"><col><col class="c-date"></colgroup><thead><tr>${th(
+    "Recipient",
+    "email",
+    dstate,
+  )}<th class="c-out">Outcome</th><th>Detail</th><th class="c-date">When</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function renderFrozenRecord(id, data) {
   const { send, outcomes, archive_url, published, slug } = data;
   const total = outcomes.recipients;
@@ -2510,18 +2641,79 @@ function renderFrozenRecord(id, data) {
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
         <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
+      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published issue are fixed as sent.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
         <button type="button" class="ghost" id="csvBtn">Export recipients (CSV)</button>
       </div>
-      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable. Delivery counts keep updating as receipts arrive.</p>
+      <div class="rec-people">
+        <div class="rec-people-head">
+          <h2 class="rec-people-title">Recipients</h2>
+          <div class="rec-views" role="group" aria-label="Which recipients to show">
+            ${DELIVERY_VIEWS.map(
+              (t, i) =>
+                `<button type="button" class="rec-view-btn" data-view="${t.v}" aria-pressed="${i === 0 ? "true" : "false"}">${t.label}</button>`,
+            ).join("")}
+          </div>
+        </div>
+        <input class="rec-people-search" type="search" placeholder="Search email…" aria-label="Search recipients by email" autocomplete="off">
+        <div id="recRows" class="muted">Loading…</div>
+        <div id="recPager"></div>
+      </div>
+      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable.</p>
     </div>`;
 
   const viewBtn = document.getElementById("viewPublished");
   if (viewBtn && archive_url) {
     viewBtn.onclick = () => window.open(archive_url, "_blank", "noopener");
   }
+
+  // The per-recipient record, its own paged/filtered state (independent of the tiles).
+  // Default view is "issues" so the rows that went wrong lead; default sort mirrors the
+  // CSV (email asc). The tiles above stay the live summary as receipts settle; this list
+  // reloads on interaction (a view/search/sort/page change, or re-clicking the view).
+  const dstate = { view: "issues", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
+  const rowsEl = document.getElementById("recRows");
+  const recPagerEl = document.getElementById("recPager");
+  const loadDeliveries = async () => {
+    try {
+      const d = await api(`/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`);
+      if (!d.deliveries.length) {
+        rowsEl.innerHTML = `<p class="rec-people-empty muted">${esc(deliveryEmpty(dstate))}</p>`;
+        recPagerEl.innerHTML = "";
+        return;
+      }
+      rowsEl.innerHTML = deliveryRowsHtml(d.deliveries, dstate);
+      wireSort(rowsEl, dstate, loadDeliveries);
+      renderPager(recPagerEl, dstate, d.page, loadDeliveries);
+    } catch (e) {
+      renderError(rowsEl, e.message, loadDeliveries);
+    }
+  };
+  app.querySelectorAll(".rec-view-btn").forEach((b) => {
+    b.onclick = () => {
+      dstate.view = b.dataset.view;
+      dstate.offset = 0;
+      app.querySelectorAll(".rec-view-btn").forEach((x) => {
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      loadDeliveries();
+    };
+  });
+  const recSearch = app.querySelector(".rec-people-search");
+  if (recSearch) {
+    let t = null;
+    recSearch.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        dstate.search = recSearch.value;
+        dstate.offset = 0;
+        loadDeliveries();
+      }, 250);
+    };
+  }
+  loadDeliveries();
 
   const csvBtn = document.getElementById("csvBtn");
   csvBtn.onclick = () =>
@@ -2553,12 +2745,20 @@ function scheduleSettlePoll(id, count) {
   if (count > 40) {
     return; // ~10 min ceiling — stop chasing receipts that may never arrive
   }
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let data;
     try {
       data = await api(`/sends/${id}`);
     } catch {
-      scheduleSettlePoll(id, count + 1);
+      if (gen === navGeneration) {
+        scheduleSettlePoll(id, count + 1);
+      }
+      return;
+    }
+    // Navigated away mid-fetch — the tiles we'd repaint belong to a view that's gone, and the
+    // reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
+    if (gen !== navGeneration) {
       return;
     }
     if (data.send.status === "sending") {
@@ -4388,6 +4588,14 @@ async function renderReference() {
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
 
+// SES puts a sender under review at a 5% bounce rate, so that danger-zone threshold is
+// what the health line treats as a "bounce spike" (SPEC §8/§11). It sits well above the
+// dev send simulator's normal ~2% simulated bounce rate (src/providers/simulate.ts), so a
+// demo send never false-alarms. A small absolute floor keeps a tiny audience's inherently
+// noisy rate (one bad address out of a handful) from tripping it.
+const BOUNCE_SPIKE_RATE = 0.05;
+const BOUNCE_SPIKE_MIN = 3;
+
 // Health (SPEC §8 "is anything wrong", §11 loud failure): calm in the common case,
 // loud only when something needs attention. Derived from GET /sends.
 function computeHealth(sends) {
@@ -4413,7 +4621,7 @@ function computeHealth(sends) {
   // below so it isn't reported twice (SPEC §11; resolve on the Sends page).
   const wedged = sending.filter(isWedged);
   if (wedged.length) {
-    const n = wedged.reduce((sum, s) => sum + (s.progress?.dispatched || 0), 0);
+    const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
     issues.push({
       level: "red",
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
@@ -4430,21 +4638,29 @@ function computeHealth(sends) {
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
   }
-  // Delivery trouble: a high share of send-time failures on a recent send. (The list
-  // rollup is by delivery *status* — accepted / failed / skipped — so asynchronous
-  // bounce webhook events aren't reflected here; a true bounce-rate view would need a
-  // dedicated endpoint, which this reuse-only change deliberately doesn't add.)
+  // Bounce spike (SPEC §8 "is anything wrong", §11): a recent send whose real bounce rate
+  // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
+  // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
+  // send-time-`failed` proxy, which couldn't see asynchronous bounce events at all. The
+  // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
+  // from tripping it. Read-only reporting — it never throttles or halts a send (§11 leaves
+  // an automatic deliverability circuit-breaker deferred).
   const spiky = sends
     .filter((s) => s.status === "sent")
     .slice(0, 5)
     .find((s) => {
-      const f = s.progress?.failed || 0;
-      return s.recipient_count > 0 && f >= 3 && f / s.recipient_count >= 0.1;
+      const bounced = s.c_bounced || 0;
+      return (
+        s.recipient_count > 0 &&
+        bounced >= BOUNCE_SPIKE_MIN &&
+        bounced / s.recipient_count >= BOUNCE_SPIKE_RATE
+      );
     });
   if (spiky) {
+    const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
     issues.push({
       level: "amber",
-      text: "Elevated delivery failures on a recent send — check Sends.",
+      text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
     });
   }
   return issues;
@@ -4541,14 +4757,10 @@ async function renderDashboard() {
         .map((s) => {
           const slug = slugById.get(s.post_id);
           const url = slug ? archiveUrlFor(deployment, slug) : null;
-          const delivered = s.progress?.accepted || 0;
-          const failedN = s.progress?.failed || 0;
           // A sent row opens its record view (#148); the subject is the keyboard target.
           const isSent = s.status === "sent";
           const subj = isSent ? `<a href="#/sent/${s.id}">${esc(s.subject)}</a>` : esc(s.subject);
-          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
-            failedN ? ` <span class="muted">(${failedN} failed)</span>` : ""
-          }</td><td class="act">${
+          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
             url && isSent
               ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
               : ""
@@ -4679,12 +4891,20 @@ function wireDashActiveCards() {
 // a slow read never overlaps; `progressTimer` holds it so navigation clears it.
 let dashActiveSig = "";
 function scheduleDashActivePoll() {
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let sends;
     try {
       ({ sends } = await api("/sends?status=sending&limit=200"));
     } catch {
-      scheduleDashActivePoll();
+      if (gen === navGeneration) {
+        scheduleDashActivePoll();
+      }
+      return;
+    }
+    // Navigated off the dashboard mid-fetch: #dashActive is gone (or belongs to a re-mounted
+    // dashboard with its own poll), so don't repaint or reschedule onto it (see navGeneration).
+    if (gen !== navGeneration) {
       return;
     }
     const active = sends.filter((s) => !isWedged(s));
