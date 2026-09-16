@@ -2088,7 +2088,7 @@ async function renderSentRecord(id) {
     renderError(app, e.message, () => renderSentRecord(id));
     return;
   }
-  const { send, outcomes, archive_url, published } = data;
+  const { send, outcomes, archive_url, published, slug } = data;
 
   // A scheduled send is still cancel-to-edit — its home is the editor, not this record.
   if (send.status === "scheduled") {
@@ -2100,8 +2100,18 @@ async function renderSentRecord(id) {
   if (send.status === "sending") {
     app.innerHTML = `<div class="editor-head"><a href="#/sent" class="back">← Sent</a></div>
       <div class="card"><h1 style="margin-top:0">${esc(send.subject) || "<em>untitled</em>"}</h1>
-      <p><span class="badge sending">sending</span></p>
+      <p>${badge(send.status)}</p>
       <p class="muted">This issue is sending now. A live progress view is coming soon; check back once it finishes.</p></div>`;
+    return;
+  }
+  // Only a completed `sent` send has a delivery record. A canceled or failed send never
+  // reached the audience — don't render it as if readers received it (the record prose
+  // and the archive link both assume a real send). Show its state and a way back.
+  if (send.status !== "sent") {
+    app.innerHTML = `<div class="editor-head"><a href="#/sent" class="back">← Sent</a></div>
+      <div class="card"><h1 style="margin-top:0">${esc(send.subject) || "<em>untitled</em>"}</h1>
+      <p>${badge(send.status)}</p>
+      <p class="muted">This issue ${send.status === "canceled" ? "was canceled before it fired" : "did not complete"}, so there is no delivery record to show.</p></div>`;
     return;
   }
 
@@ -2120,9 +2130,12 @@ async function renderSentRecord(id) {
         `<div class="rec-tile"><div class="rec-n ${t.cls}">${t.n.toLocaleString()}</div><div class="rec-l"><span class="rec-sw sw-${t.sw}"></span>${t.label}</div></div>`,
     )
     .join("");
-  // A short reconciliation line so the numbers visibly add up to the audience; the
-  // residual (accepted-but-not-yet-confirmed, skipped) keeps delivery honest under lag.
-  const residual = outcomes.accepted + outcomes.skipped + outcomes.in_flight;
+  // A short reconciliation line so the numbers visibly add up to the audience. The two
+  // non-terminal buckets are distinct facts and read as separate clauses: `skipped`
+  // recipients were excluded at send time (unsubscribed/suppressed after the audience
+  // froze) and never mailed, while `pending` reached the provider but has no delivery
+  // event yet — conflating them would report never-mailed addresses as awaiting a receipt.
+  const pending = outcomes.accepted + outcomes.in_flight;
   const parts = [`${outcomes.delivered.toLocaleString()} delivered`];
   if (outcomes.bounced) {
     parts.push(`${outcomes.bounced.toLocaleString()} bounced`);
@@ -2133,8 +2146,11 @@ async function renderSentRecord(id) {
   if (outcomes.failed) {
     parts.push(`${outcomes.failed.toLocaleString()} failed`);
   }
-  if (residual) {
-    parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
+  if (outcomes.skipped) {
+    parts.push(`${outcomes.skipped.toLocaleString()} skipped (unsubscribed or suppressed)`);
+  }
+  if (pending) {
+    parts.push(`${pending.toLocaleString()} accepted, awaiting a delivery receipt`);
   }
   const sentAt = send.completed_at ?? send.fire_at;
 
@@ -2146,7 +2162,7 @@ async function renderSentRecord(id) {
     <div class="card rec-card">
       <div class="rec-head">
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
-        <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
+        <div class="rec-meta">${badge(send.status)} Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
       <div class="rec-tiles">${tilesHtml}</div>
       <p class="rec-recon muted">All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.</p>
@@ -2169,7 +2185,9 @@ async function renderSentRecord(id) {
         const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${send.subject ? clientSlugify(send.subject) : "send"}-deliveries.csv`;
+        // Match the server's content-disposition (routes/sends.ts) so the file is named
+        // the same however it's fetched — the archive slug, not a re-slug of the subject.
+        a.download = `${slug ?? "send"}-deliveries.csv`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {
