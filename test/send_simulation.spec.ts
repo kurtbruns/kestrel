@@ -89,27 +89,47 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     const settled = row!.c_delivered + row!.c_bounced + row!.c_complained;
     expect(settled).toBe(300);
     expect(row!.c_delivered).toBeGreaterThan(0);
-    // Some bad receipts land: hard + soft bounces and (with the small-list floor) complaints.
-    const bad = row!.c_bounced + row!.c_complained;
-    expect(bad).toBeGreaterThan(0);
 
-    // The suppression invariant: a HARD bounce or ANY complaint suppresses; a SOFT bounce
-    // is counted (in c_bounced) but must NOT suppress. So suppressions == hard + complaints,
-    // strictly fewer than every bad receipt whenever a soft bounce landed.
+    // The suppression invariant: a HARD bounce or ANY complaint suppresses; a SOFT bounce is
+    // counted (in c_bounced) but must NOT suppress. So suppressions == hard bounces + complaints,
+    // and a soft bounce sits in c_bounced without a matching suppression.
     const { hard, soft } = await bounceBreakdown("s-drain");
     expect(hard + soft).toBe(row!.c_bounced);
+    expect(soft).toBeGreaterThan(0); // the guaranteed floor ensures the counted-not-suppressed path
     const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
       n: number;
     }>();
     expect(sup!.n).toBe(hard + row!.c_complained);
-    expect(sup!.n).toBeLessThan(bad + soft); // soft bounces are among `bad` yet unsuppressed
 
     // Idempotent: a second drain finds nothing left awaiting a receipt.
     expect(await drainSimulatedWebhooks(env, simConfig())).toBe(0);
   });
 
+  it("guarantees every edge state on a small send, even at the realistic (rounds-to-zero) rates", async () => {
+    // At ~0.1% complaint / ~0.8% soft / ~1.5% hard, a 40-address send rolls ~zero of each edge
+    // state. The guaranteed floor (small sends only) must still surface all three so a live watch
+    // of a small demo send always shows the full taxonomy.
+    await seedAccepted("s-floor", 40, 2 * HOUR);
+    const applied = await drainSimulatedWebhooks(env, simConfig());
+    expect(applied).toBe(40);
+
+    const row = await sends.getSend(env.DB, "s-floor");
+    const { hard, soft } = await bounceBreakdown("s-floor");
+    expect(row!.c_complained).toBeGreaterThan(0); // forced when the natural roll produced none
+    expect(soft).toBeGreaterThan(0);
+    expect(hard).toBeGreaterThan(0);
+    // Minimal: it fills gaps, it doesn't juice the rate — a 40-address send stays mostly delivered.
+    expect(row!.c_delivered).toBeGreaterThan(30);
+    // And it still respects the suppression rule: soft bounces don't suppress.
+    const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
+      n: number;
+    }>();
+    expect(sup!.n).toBe(hard + row!.c_complained);
+  });
+
   it("counts a soft (transient) bounce without suppressing it (SPEC §9)", async () => {
-    // A comfortably large send so the ~0.8% soft-bounce rate deterministically lands some.
+    // Soft bounces land both from the ~0.8% rate and, if none did, the guaranteed floor — either
+    // way at least one is present to exercise the counted-not-suppressed branch.
     await seedAccepted("s-soft", 380, 2 * HOUR);
     await drainSimulatedWebhooks(env, simConfig());
 
