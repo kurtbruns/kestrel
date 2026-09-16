@@ -1219,16 +1219,21 @@ td a:hover {
   color: var(--danger-fg);
   border-color: var(--danger-line);
 }
-/* subscriber consent states (reuse the send-status colors) */
+/* Subscriber consent states borrow a hue that matches the state's meaning: confirmed →
+   the sent green, unsubscribed → the draft grey, suppressed → danger red (below). Pending
+   awaits double-opt-in — a waiting/attention state — so it takes the amber `warn` scale,
+   NOT `--b-sending`: the send "sending" badge is blue (DESIGN §3), and a pending subscriber
+   must never read as a send in flight. (The two coincided only while `--b-sending` was
+   amber; when it went blue for the dispatch treatment, this pill must stay amber.) */
 .badge.confirmed {
   background: var(--b-sent-bg);
   color: var(--b-sent-fg);
   border-color: var(--b-sent-line);
 }
 .badge.pending {
-  background: var(--b-sending-bg);
-  color: var(--b-sending-fg);
-  border-color: var(--b-sending-line);
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
 }
 .badge.unsubscribed {
   background: var(--b-draft-bg);

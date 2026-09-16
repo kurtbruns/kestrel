@@ -68,7 +68,18 @@ A token means one thing, and a color has one job. The palette is small on purpos
 
 **Neutral ink — `--accent` is renamed `--ink`.** The strong near-black/near-white neutral is a *text* token — headings, strong labels — and **never a button fill**. Renaming it removes the misread that there were two accents (a blue one and a dark one); there is one accent, and it is blue.
 
-**Status badges stay their own set.** The `--b-scheduled`, `--b-sent`, `--b-sending`, and `--b-draft` scales label a post's lifecycle state (SPEC §2) and are documented and maintained *separately* from the semantic feedback scales above. A "scheduled" badge is a fact about a post, not a warning to the reader; conflating the two would tie a status color to a feedback meaning. Keep them distinct.
+**Badges — one hue per state; a semantic scale is reused only when the state's meaning *is* that feedback.** Post lifecycle states carry their own `--b-*` hue; subscriber consent states borrow the hue whose meaning fits. The full mapping, so an overload shows up here instead of hiding in the CSS:
+
+| Badge | Scale | Hue |
+| --- | --- | --- |
+| post `draft` · subscriber `unsubscribed` | `--b-draft` | gray |
+| post `scheduled` | `--b-scheduled` | violet |
+| post `sending` | `--b-sending` | blue |
+| post `sent` · subscriber `confirmed` | `--b-sent` | green |
+| subscriber `pending` | `--warn` | amber |
+| post `canceled`/`failed` · subscriber `suppressed` | `--danger` | red |
+
+The four lifecycle hues (draft gray, scheduled violet, sending blue, sent green) are *facts*, kept distinct from the `danger`/`warn`/`ok` feedback scales — a `scheduled` badge is neither good nor bad. Reusing a feedback scale is allowed only when the state genuinely carries that reading: `failed`/`canceled`/`suppressed` → `danger`, and `pending` (awaiting double-opt-in) → `warn` amber — the same "one red, one amber" economy as above, not a conflation. The rule this encodes: `pending` takes `warn`, **never** `--b-sending`. The two coincided only while `--b-sending` was itself amber; when the dispatch treatment went blue, the `pending` pill went blue with it until it was repointed at `warn` — a token doing double duty is exactly the drift this section exists to catch.
 
 The badge belongs in the lists and the **sent record view**, not the editor head: the editor only ever opens a draft or a scheduled (frozen) post — a sent issue routes to its record view instead (SPEC §8) — and both editor states are already signaled (the editable layout; the scheduled banner, §2 home ③), so the editor carries no status pill. The sent record view is the one place the delivery-outcome counts appear, and they read in the **semantic feedback** scales (delivered `ok`, bounced `warn`, complained `danger`) — a genuine good/bad reading of how the send landed — while the `sent` badge beside them stays a lifecycle fact. The two scales sitting together there is exactly why they must not be conflated.
 
