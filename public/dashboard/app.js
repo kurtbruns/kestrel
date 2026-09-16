@@ -3524,11 +3524,12 @@ function highlightTemplate(src) {
 // from chaining .replace() calls — an italic pass eating a bold marker). Marks are colored, the
 // content plain: emphasis asterisks are pink and the word carries only weight/slant; a link's
 // text stays plain and only its URL is treated; inline `code` sits on a chip. Order at a given
-// position: `code`, then [links]/images, then **strong** before *em*.
+// position: `code`, then [links]/images, then **strong** before *em*. Single-underscore _em_ is
+// guarded by \b so intra-word underscores (snake_case, price_1) stay literal, not emphasized.
 function hlMdInline(raw) {
   return esc(raw).replace(
-    /(`[^`\n]+`)|(!?)(\[[^\]\n]*\])\(([^)\n]*)\)|(\*\*|__)([^\n]+?)\5|([*_])([^*_\n]+?)\7/g,
-    (_m, code, bang, ltext, lurl, bd, btext, it, itext) => {
+    /(`[^`\n]+`)|(!?)(\[[^\]\n]*\])\(([^)\n]*)\)|(\*\*|__)([^\n]+?)\5|\*([^*\n]+?)\*|\b_([^_\n]+?)_\b/g,
+    (_m, code, bang, ltext, lurl, bd, btext, aem, uem) => {
       if (code) {
         return `<span class="cx-md-code">${code}</span>`;
       }
@@ -3539,7 +3540,9 @@ function hlMdInline(raw) {
       if (bd) {
         return `<span class="cx-md-mark">${bd}</span><span class="cx-md-strong">${btext}</span><span class="cx-md-mark">${bd}</span>`;
       }
-      return `<span class="cx-md-mark">${it}</span><span class="cx-md-em">${itext}</span><span class="cx-md-mark">${it}</span>`;
+      // Emphasis: asterisk and underscore share the same treatment; the delimiter is a literal.
+      const [d, text] = aem !== undefined ? ["*", aem] : ["_", uem];
+      return `<span class="cx-md-mark">${d}</span><span class="cx-md-em">${text}</span><span class="cx-md-mark">${d}</span>`;
     },
   );
 }
