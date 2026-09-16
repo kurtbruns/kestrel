@@ -1939,9 +1939,11 @@ function startCountdowns() {
 }
 
 // A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending,
-// but one or more `dispatched` recipients whose fate a transport error left unknown
+// but one or more in-flight recipients whose fate a transport error left unknown
 // (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
-// can't clear on its own without risking a double-mail (I4).
+// can't clear on its own without risking a double-mail (I4). Read straight off the row's
+// denormalized counters (c_pending / c_in_flight, migration 0006) — the same signals the
+// server's buildSendProgress derives `wedged` from, so the list and the watch agree.
 // The lease check is essential: while the loop is ACTIVELY working a send it holds the
 // lease (`locked_until` in the future) — so a normal send's final dispatched batch
 // (pending 0, in flight > 0) is not a wedge, just work in progress. A genuine wedge has
@@ -1949,19 +1951,14 @@ function startCountdowns() {
 // tail of its dispatch.
 function isWedged(s) {
   const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
-  return (
-    s.status === "sending" &&
-    !s.progress?.pending &&
-    (s.progress?.dispatched || 0) > 0 &&
-    !leaseHeld
-  );
+  return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
 }
 
 // The one manual step for a wedged send: decide whether the ambiguous batch went out
 // or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
 // explains the trade-off (record accuracy) rather than warning of a double-send.
 function openResolveModal(send, reload) {
-  const n = send.progress?.dispatched || 0;
+  const n = send.c_in_flight || 0;
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
     `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
@@ -2017,6 +2014,28 @@ function listRowCounts(s) {
     }
   }
   return { total: t, accepted: done, confirmed, pct, etaMs };
+}
+
+// A `/sends` list row's "Delivered" cell, from its denormalized counters (#90). It reports
+// TRUE delivered — webhook-confirmed `c_delivered`, not provider-`accepted` — so the Sent
+// list and dashboard recent-sends agree with the record view's "Delivered" for the same
+// send, and a bounced/complained recipient is never miscounted as delivered. Any bounce /
+// complaint / send-time-failure shows as a muted trouble suffix, so a bad send reads as
+// trouble at a glance instead of a clean number. `deliveries` stays the source of truth.
+function deliveredCell(s) {
+  const delivered = s.c_delivered || 0;
+  const notes = [];
+  if (s.c_bounced) {
+    notes.push(`${(s.c_bounced || 0).toLocaleString()} bounced`);
+  }
+  if (s.c_complained) {
+    notes.push(`${(s.c_complained || 0).toLocaleString()} complained`);
+  }
+  if (s.c_failed) {
+    notes.push(`${(s.c_failed || 0).toLocaleString()} failed`);
+  }
+  const suffix = notes.length ? ` <span class="muted">(${notes.join(", ")})</span>` : "";
+  return `${delivered.toLocaleString()}${suffix}`;
 }
 // One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
 // The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
@@ -2087,7 +2106,7 @@ async function renderSent() {
     const wedged = sends.filter(isWedged);
     stuckEl.innerHTML = wedged
       .map((s) => {
-        const n = s.progress?.dispatched || 0;
+        const n = s.c_in_flight || 0;
         const noun = n === 1 ? "delivery" : "deliveries";
         return `<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${esc(s.subject)}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
       })
@@ -2195,7 +2214,7 @@ async function renderSent() {
       listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
         .map(
           (s) =>
-            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${s.progress?.accepted || 0}</td></tr>`,
+            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td></tr>`,
         )
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, loadList);
@@ -2407,13 +2426,8 @@ function wireWatchHeader(id, send, prog) {
   const rb = document.getElementById("resolveBtn");
   if (rb) {
     rb.onclick = () =>
-      openResolveModal(
-        {
-          id,
-          subject: send.subject,
-          progress: { dispatched: prog.counts.in_flight, pending: prog.counts.pending },
-        },
-        () => renderSentRecord(id),
+      openResolveModal({ id, subject: send.subject, c_in_flight: prog.counts.in_flight }, () =>
+        renderSentRecord(id),
       );
   }
 }
@@ -4421,6 +4435,14 @@ async function renderReference() {
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
 
+// SES puts a sender under review at a 5% bounce rate, so that danger-zone threshold is
+// what the health line treats as a "bounce spike" (SPEC §8/§11). It sits well above the
+// dev send simulator's normal ~2% simulated bounce rate (src/providers/simulate.ts), so a
+// demo send never false-alarms. A small absolute floor keeps a tiny audience's inherently
+// noisy rate (one bad address out of a handful) from tripping it.
+const BOUNCE_SPIKE_RATE = 0.05;
+const BOUNCE_SPIKE_MIN = 3;
+
 // Health (SPEC §8 "is anything wrong", §11 loud failure): calm in the common case,
 // loud only when something needs attention. Derived from GET /sends.
 function computeHealth(sends) {
@@ -4446,7 +4468,7 @@ function computeHealth(sends) {
   // below so it isn't reported twice (SPEC §11; resolve on the Sends page).
   const wedged = sending.filter(isWedged);
   if (wedged.length) {
-    const n = wedged.reduce((sum, s) => sum + (s.progress?.dispatched || 0), 0);
+    const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
     issues.push({
       level: "red",
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
@@ -4463,21 +4485,29 @@ function computeHealth(sends) {
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
   }
-  // Delivery trouble: a high share of send-time failures on a recent send. (The list
-  // rollup is by delivery *status* — accepted / failed / skipped — so asynchronous
-  // bounce webhook events aren't reflected here; a true bounce-rate view would need a
-  // dedicated endpoint, which this reuse-only change deliberately doesn't add.)
+  // Bounce spike (SPEC §8 "is anything wrong", §11): a recent send whose real bounce rate
+  // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
+  // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
+  // send-time-`failed` proxy, which couldn't see asynchronous bounce events at all. The
+  // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
+  // from tripping it. Read-only reporting — it never throttles or halts a send (§11 leaves
+  // an automatic deliverability circuit-breaker deferred).
   const spiky = sends
     .filter((s) => s.status === "sent")
     .slice(0, 5)
     .find((s) => {
-      const f = s.progress?.failed || 0;
-      return s.recipient_count > 0 && f >= 3 && f / s.recipient_count >= 0.1;
+      const bounced = s.c_bounced || 0;
+      return (
+        s.recipient_count > 0 &&
+        bounced >= BOUNCE_SPIKE_MIN &&
+        bounced / s.recipient_count >= BOUNCE_SPIKE_RATE
+      );
     });
   if (spiky) {
+    const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
     issues.push({
       level: "amber",
-      text: "Elevated delivery failures on a recent send — check Sends.",
+      text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
     });
   }
   return issues;
@@ -4573,14 +4603,10 @@ async function renderDashboard() {
         .map((s) => {
           const slug = slugById.get(s.post_id);
           const url = slug ? archiveUrlFor(deployment, slug) : null;
-          const delivered = s.progress?.accepted || 0;
-          const failedN = s.progress?.failed || 0;
           // A sent row opens its record view (#148); the subject is the keyboard target.
           const isSent = s.status === "sent";
           const subj = isSent ? `<a href="#/sent/${s.id}">${esc(s.subject)}</a>` : esc(s.subject);
-          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${delivered}${
-            failedN ? ` <span class="muted">(${failedN} failed)</span>` : ""
-          }</td><td class="act">${
+          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
             url && isSent
               ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
               : ""
