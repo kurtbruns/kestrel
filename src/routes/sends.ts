@@ -4,13 +4,15 @@ import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { badRequest, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
-import { cancel as cancelSend } from "../send/schedule";
+import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
+import { parseFireAt } from "./schedule";
 
 export async function list(c: RequestContext): Promise<Response> {
   const statusParam = c.url.searchParams.get("status") ?? undefined;
@@ -165,6 +167,29 @@ export async function deliveriesCsv(c: RequestContext): Promise<Response> {
 
 export async function cancel(c: RequestContext): Promise<Response> {
   const send = await cancelSend(c.env, param(c, "id"));
+  return json({ send });
+}
+
+/**
+ * Move a scheduled send's fire time without re-freezing the render (SPEC §6). The
+ * frozen bytes and the frozen audience are untouched (I3) and the review window is
+ * preserved (I6) — only `fire_at` moves. Same minimum-lead guard as scheduling, and
+ * `scheduled`-status only (the state machine's CAS enforces the latter, I6).
+ */
+export async function reschedule(c: RequestContext): Promise<Response> {
+  let body: { fire_at?: unknown };
+  try {
+    body = (await c.req.json()) as { fire_at?: unknown };
+  } catch {
+    throw badRequest("JSON body with 'fire_at' is required");
+  }
+  const fireAt = parseFireAt(body.fire_at);
+  if (fireAt < Date.now() + SEND_NOW_BUFFER_MS) {
+    throw badRequest(
+      `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future`,
+    );
+  }
+  const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
   return json({ send });
 }
 

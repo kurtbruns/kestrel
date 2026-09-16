@@ -8,7 +8,9 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { freeze } from "../send/schedule";
 
-function parseFireAt(input: unknown): number {
+/** Parse a `fire_at` field (ISO-8601 timestamp or epoch millis) to epoch millis, or
+ *  throw a 400. Shared by scheduling and rescheduling so both accept the same shapes. */
+export function parseFireAt(input: unknown): number {
   if (typeof input === "number" && Number.isFinite(input)) {
     return input;
   }
