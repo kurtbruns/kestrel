@@ -4482,7 +4482,8 @@ async function renderDashboard() {
       `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
         pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
       }<p class="muted">Let's get your first issue out the door.</p></div></div>` +
-      setupChecklistHtml(pub, deployment);
+      setupChecklistHtml(pub, deployment) +
+      `<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`;
     wireDashActions(root, renderDashboard);
     return;
   }
@@ -4575,12 +4576,11 @@ async function renderDashboard() {
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
-  // Connect the API — the API's first client is an agent, so the base URL is
-  // copyable right here (no need to open the reference room to wire up Claude).
-  const apiCardHtml = `<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Base&nbsp;URL</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost" data-copy="${esc(appOrigin)}">Copy</button></div>
-    <p class="pub-note">One API drives Kestrel — the editor and Claude are equal clients of it. <a href="#/reference">Browse the API reference →</a></p>
-  </div>`;
+  // Has Claude (the `service` principal) edited here? Authorship on any current revision
+  // flips the API-access card to "connected" (SPEC §4). Uses the author already on each
+  // list row, so no extra fetch; a post a human later re-edited no longer counts.
+  const claudeConnected = posts.some((p) => p.author === "service");
+  const apiCardHtml = apiConnectCard(claudeConnected);
 
   const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
@@ -4600,7 +4600,7 @@ async function renderDashboard() {
     <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
-      <section class="dash-section"><h2>Connect the API</h2>${apiCardHtml}</section>
+      <section class="dash-section"><h2>API access</h2>${apiCardHtml}</section>
     </div>`;
 
   wireDashActions(root, renderDashboard);
@@ -4741,6 +4741,27 @@ function wireDashActions(root, reload) {
 }
 
 // The onboarding checklist, shared by the first-run dashboard and Getting-started.
+// The "API access" card. Two states: an invitation to connect Claude, or — once Claude
+// (the `service` principal, SPEC §4) has edited here — a plain "Claude is connected" note.
+// Shared by the populated dashboard and the first-run state (a card below the setup
+// checklist), so the two can't drift; connecting an agent is optional, so this is never a
+// required setup step. Typography-led with no base-URL field: the operator already knows
+// their own origin (it's the Publication card's URL right beside this one), and the
+// connect guide is where that URL is actually used.
+function apiConnectCard(connected) {
+  if (connected) {
+    return `<div class="card pub-card">
+    <p class="conn-status"><span class="conn-dot" aria-hidden="true"></span>Claude is connected.</p>
+    <div class="pub-foot pub-links"><a href="#/reference">API reference →</a><a href="#/docs/connect-claude">Connection guide →</a></div>
+  </div>`;
+  }
+  return `<div class="card pub-card">
+    <p class="pub-note">Let Claude draft, proofread, and schedule your issues.</p>
+    <p class="pub-cta"><a href="#/docs/connect-claude">Connect Claude →</a></p>
+    <p class="pub-foot"><a href="#/reference">API reference →</a></p>
+  </div>`;
+}
+
 function setupChecklistHtml(pub, deployment) {
   const subscribeUrl = `${deployment.appOrigin || location.origin}/subscribe`;
   return `<div class="card setup">

@@ -47,6 +47,9 @@ export interface PostListRow extends PostRow {
   fire_at: number | null;
   active_send_id: string | null;
   active_send_status: "scheduled" | "sending" | null;
+  /** The current revision's author ("Claude" surfaces as `service`; SPEC §4). Lets the
+   *  dashboard tell whether the agent has edited here without a per-post revision fetch. */
+  author: string | null;
 }
 
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
@@ -108,9 +111,10 @@ export async function listPosts(
   // is 1:1). The scheduled-first default sort keys on that fire time.
   const { results } = await db
     .prepare(
-      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status
+      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status, cr.author AS author
          FROM posts p
          LEFT JOIN sends s ON s.post_id = p.id AND s.status IN ('scheduled', 'sending')
+         LEFT JOIN post_revisions cr ON cr.id = p.current_revision
          ${clause}
          ${order}
          LIMIT ? OFFSET ?`,
