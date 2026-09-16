@@ -1172,6 +1172,7 @@ async function renderEditor(id) {
           <div class="toolbar" role="toolbar" aria-label="Formatting"${locked ? " hidden" : ""}>${toolbarHtml}</div>
         </div>
         <div class="composer-body" id="composerBody">
+          <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor" placeholder="Type your issue in Markdown…" ${dis}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
@@ -1200,6 +1201,26 @@ async function renderEditor(id) {
   const ta = document.getElementById("f-markdown");
   const toolbarEl = app.querySelector(".toolbar");
   const previewFrame = document.getElementById("previewFrame");
+
+  // Syntax-highlight overlay (issue #138): a transparent <textarea> over a highlighted
+  // <pre>, kept in scroll sync — the template editor's scaffolding, tokenizing Markdown.
+  // Prose soft-wraps, so both layers share pre-wrap and identical metrics (the caret lands
+  // on the colored text); that wrapping is also why there's no line-number gutter — a
+  // number can't track a wrapped line and prose doesn't want one. The highlight is the point.
+  const mdHl = document.getElementById("mdHl");
+  const mdHlCode = mdHl.querySelector("code");
+  const syncMdScroll = () => {
+    mdHl.scrollTop = ta.scrollTop;
+    mdHl.scrollLeft = ta.scrollLeft;
+  };
+  const paintMarkdown = () => {
+    // Trailing newline so the final line renders and the overlay height tracks the textarea.
+    mdHlCode.innerHTML = `${highlightMarkdown(ta.value)}\n`;
+    syncMdScroll();
+  };
+  ta.addEventListener("scroll", syncMdScroll);
+  paintMarkdown(); // paint the initial content (a scheduled post is read-only but still highlighted)
+
   const get = (k) => document.getElementById(`f-${k}`).value;
   const collect = () => ({ subject: get("subject"), slug: get("slug"), markdown: get("markdown") });
 
@@ -1308,8 +1329,12 @@ async function renderEditor(id) {
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
     ta.hidden = name !== "write";
+    mdHl.hidden = name !== "write"; // the highlight layer travels with the textarea
     previewFrame.hidden = name !== "preview";
     toolbarEl.classList.toggle("off", name !== "write");
+    if (name === "write") {
+      syncMdScroll();
+    }
   }
   async function showPreview() {
     showTab("preview");
@@ -1465,6 +1490,7 @@ async function renderEditor(id) {
     if (locked) {
       return;
     }
+    paintMarkdown(); // repaint the highlight overlay from the new textarea value
     refreshDirty();
     if (!editorConflict) {
       scheduleAutosave();
@@ -3428,6 +3454,74 @@ function highlightTemplate(src) {
       return hlHtml(seg);
     })
     .join("");
+}
+
+// --- post (Markdown) syntax highlighting (issue #138) ---
+// highlightTemplate()'s counterpart for the post editor: the same transparent-textarea-
+// over-highlighted-<pre> overlay, tokenizing Markdown instead of HTML/CSS, in the same
+// framework-free, no-build spirit. It is a light, line-oriented pass — the marks an author
+// scans for (headings, emphasis, code, links, lists, quotes), not a full CommonMark parser
+// — and it reuses the shared --syntax-* palette through the .cx-md-* classes. Prose is left
+// uncolored on purpose: the color is a wayfinding aid, not a rendering of the email.
+
+// Inline constructs within one line of prose, in a single left-to-right pass. One alternation
+// consumes each construct whole so we never re-tokenize inside a span we just emitted (the
+// classic bug from chaining .replace() calls — an italic pass eating a bold marker). Order is
+// the priority at a given position: `code`, then [links]/images, then **strong** before *em*.
+function hlMdInline(raw) {
+  return esc(raw).replace(
+    /(`[^`\n]+`)|(!?\[[^\]\n]*\]\([^)\n]*\))|(\*\*[^\n]+?\*\*|__[^\n]+?__)|(\*[^*\n]+?\*|\b_[^_\n]+?_\b)/g,
+    (m, code, link, strong) => {
+      if (code) {
+        return `<span class="cx-md-code">${m}</span>`;
+      }
+      if (link) {
+        return `<span class="cx-md-link">${m}</span>`;
+      }
+      if (strong) {
+        return `<span class="cx-md-strong">${m}</span>`;
+      }
+      return `<span class="cx-md-em">${m}</span>`;
+    },
+  );
+}
+function highlightMarkdown(src) {
+  let inFence = false;
+  return String(src)
+    .split("\n")
+    .map((line) => {
+      // Fenced code block: a ``` or ~~~ line toggles the fence; every line within is code.
+      const fence = line.match(/^(\s*)(```+|~~~+)(.*)$/);
+      if (fence) {
+        inFence = !inFence;
+        return `${fence[1]}<span class="cx-md-code">${esc(fence[2] + fence[3])}</span>`;
+      }
+      if (inFence) {
+        return `<span class="cx-md-code">${esc(line)}</span>`;
+      }
+      // ATX heading (# … ######, a space or line-end after the hashes) — the whole line reads
+      // as a heading; inner emphasis is left plain to keep the line calm.
+      const h = line.match(/^\s{0,3}#{1,6}(?:\s.*)?$/);
+      if (h) {
+        return `<span class="cx-md-h">${esc(line)}</span>`;
+      }
+      // Thematic break: --- *** ___ (three or more of one mark), alone on the line.
+      if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+        return `<span class="cx-md-marker">${esc(line)}</span>`;
+      }
+      // Blockquote: the > markers muted, the quoted text tinted and inline-tokenized.
+      const q = line.match(/^(\s{0,3}(?:>\s?)+)(.*)$/);
+      if (q) {
+        return `<span class="cx-md-quote"><span class="cx-md-marker">${esc(q[1])}</span>${hlMdInline(q[2])}</span>`;
+      }
+      // List item: -, *, + (unordered) or 1. / 1) (ordered); marker muted, rest inline.
+      const li = line.match(/^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/);
+      if (li) {
+        return `${li[1]}<span class="cx-md-marker">${esc(li[2])}</span>${li[3]}${hlMdInline(li[4])}`;
+      }
+      return hlMdInline(line);
+    })
+    .join("\n");
 }
 
 async function renderTemplate() {

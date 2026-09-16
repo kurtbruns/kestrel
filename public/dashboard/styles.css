@@ -62,7 +62,8 @@
   --accent: #3355cc;
   --accent-on: #ffffff;
   --accent-soft: rgba(51, 85, 204, 0.12);
-  /* Syntax-highlight palette for the template editor (issue #123). */
+  /* Syntax-highlight palette, shared by the template (issue #123) and post (issue #138)
+     editors — the HTML/CSS .cx-* tokens and the Markdown .cx-md-* tokens map onto it. */
   --syntax-bg: #fbfbfc;
   --syntax-fg: #3f3f46;
   --syntax-gutter: #a1a1aa;
@@ -1935,22 +1936,55 @@ th.num .th-sort {
 .composer-body {
   position: relative;
 }
+/* Post editor syntax-highlight overlay (issue #138): a transparent <textarea> layered over
+   a highlighted <pre> that shows the colored Markdown beneath the caret. The two share
+   identical box + font metrics so the caret sits exactly on the colored text; the textarea
+   is the only scroller and the <pre> is synced to it in script. Unlike the template editor
+   this soft-wraps (Markdown is prose, not code) — hence pre-wrap on both and no line-number
+   gutter — and reuses the shared --syntax-* palette. The textarea keeps normal flow (it owns
+   the height + resize) and paints above the absolutely-positioned <pre> by DOM order, so no
+   z-index is needed and the drop overlay still layers on top. */
+.md-hl,
 .composer-body textarea.editor {
+  margin: 0;
+  padding: 14px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  tab-size: 2;
+}
+.md-hl {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  color: var(--syntax-fg);
+  background: var(--syntax-bg);
+  pointer-events: none;
+}
+.md-hl code {
+  font: inherit;
+}
+.composer-body textarea.editor {
+  position: relative;
   border: 0;
   border-radius: 0;
   width: 100%;
   min-height: 320px;
-  margin: 0;
-  padding: 14px;
-  font-family: var(--mono);
-  line-height: 1.6;
   resize: vertical;
   display: block;
   background: transparent;
-  color: var(--fg);
+  color: transparent;
+  caret-color: var(--fg);
 }
 .composer-body textarea.editor:focus {
   outline: none;
+}
+.composer-body textarea.editor::selection {
+  /* The textarea's own text is transparent, so a plain selection would be invisible —
+     tint the selection background instead so the highlighted text beneath reads as selected. */
+  background: var(--accent-soft);
 }
 .composer-body iframe.preview {
   width: 100%;
@@ -3848,6 +3882,36 @@ textarea.is-invalid {
   background: var(--syntax-variable-bg);
   border-radius: 3px;
   padding: 0 2px;
+  font-weight: 600;
+}
+/* Markdown token colors (issue #138) — the post editor's highlight classes, mapped onto the
+   same --syntax-* palette (no new colors; DESIGN §3 keeps one color per job). Weight and slant
+   are what Markdown adds over the template's HTML/CSS tokens: strong/em carry the emphasis they
+   mark, headings read bold, and the structural marks (#, -, >, list numbers) are muted. */
+.cx-md-h {
+  color: var(--syntax-tag);
+  font-weight: 700;
+}
+.cx-md-strong {
+  color: var(--syntax-fg);
+  font-weight: 700;
+}
+.cx-md-em {
+  color: var(--syntax-fg);
+  font-style: italic;
+}
+.cx-md-code {
+  color: var(--syntax-string);
+}
+.cx-md-link {
+  color: var(--syntax-property);
+}
+.cx-md-quote {
+  color: var(--syntax-selector);
+  font-style: italic;
+}
+.cx-md-marker {
+  color: var(--syntax-punctuation);
   font-weight: 600;
 }
 .set-tpl-hint {
