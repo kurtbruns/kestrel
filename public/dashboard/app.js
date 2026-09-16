@@ -2495,6 +2495,94 @@ function outcomeReconHtml(outcomes) {
   return `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.`;
 }
 
+// The per-recipient record (#164): the outcome tiles summarize, this shows the actual
+// rows. A row's OUTCOME is derived from the same two facts the tiles bucket — the webhook
+// `event` winning over the send-loop `status` — so a row reads the same bucket (and reuses
+// the same swatch palette) as its tile. A bounce splits soft vs hard on the durable signal
+// the spec defines the split by: a hard bounce suppressed the address, a soft one didn't.
+function deliveryOutcome(r) {
+  if (r.event === "delivered") {
+    return { label: "Delivered", sw: "ok" };
+  }
+  if (r.event === "bounced") {
+    const hard = r.suppressed && r.suppressed_reason === "bounce";
+    return hard
+      ? { label: "Hard bounce", sw: "warn", hint: "suppressed" }
+      : { label: "Soft bounce", sw: "warn", hint: "counted, not suppressed" };
+  }
+  if (r.event === "complained") {
+    return { label: "Complained", sw: "danger", hint: "suppressed" };
+  }
+  switch (r.status) {
+    case "failed":
+      return { label: "Failed", sw: "neutral" };
+    case "skipped":
+      return { label: "Skipped", sw: "neutral" };
+    case "accepted":
+      return { label: "Accepted", sw: "sending", hint: "awaiting a delivery receipt" };
+    default:
+      return { label: "In flight", sw: "sending" };
+  }
+}
+
+// The three view tabs the record opens on — issues first (the rows that went wrong).
+const DELIVERY_VIEWS = [
+  { v: "issues", label: "Issues" },
+  { v: "delivered", label: "Delivered" },
+  { v: "all", label: "All" },
+];
+
+// A positive/neutral empty state per view — an empty "issues" list is good news, not a gap.
+function deliveryEmpty(dstate) {
+  if (dstate.search) {
+    return "No recipients match that address.";
+  }
+  if (dstate.view === "issues") {
+    return "No delivery issues — every recipient was accepted or delivered.";
+  }
+  if (dstate.view === "delivered") {
+    return "No delivery receipts confirmed yet.";
+  }
+  return "No recipients on this send.";
+}
+
+function recordDeliveryQuery(d) {
+  const p = new URLSearchParams();
+  p.set("view", d.view);
+  const term = (d.search || "").trim();
+  if (term) {
+    p.set("search", term);
+  }
+  if (d.sort) {
+    p.set("sort", d.sort);
+    p.set("dir", d.dir);
+  }
+  p.set("limit", String(d.limit));
+  p.set("offset", String(d.offset));
+  return p.toString();
+}
+
+function deliveryRowsHtml(rows, dstate) {
+  const body = rows
+    .map((r) => {
+      const o = deliveryOutcome(r);
+      const outcome = `<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${esc(o.label)}${
+        o.hint ? ` <span class="rec-out-hint muted">${esc(o.hint)}</span>` : ""
+      }</span>`;
+      const detail = r.error || r.event_detail || "";
+      const when = r.event_at ? fmt(r.event_at) : "";
+      return `<tr><td class="rec-email">${esc(r.email)}</td><td>${outcome}</td><td class="muted">${
+        detail ? esc(detail) : "—"
+      }</td><td class="muted">${when ? esc(when) : "—"}</td></tr>`;
+    })
+    .join("");
+  return `<div class="table-wrap"><table class="list-table rec-people-table"><colgroup><col><col class="c-out"><col><col class="c-date"></colgroup><thead><tr>${th(
+    "Recipient",
+    "email",
+    dstate,
+  )}<th class="c-out">Outcome</th><th>Detail</th><th class="c-date">When</th></tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function renderFrozenRecord(id, data) {
   const { send, outcomes, archive_url, published, slug } = data;
   const total = outcomes.recipients;
@@ -2515,6 +2603,20 @@ function renderFrozenRecord(id, data) {
       <div class="rec-actions">
         <button type="button" class="ghost" id="csvBtn">Export recipients (CSV)</button>
       </div>
+      <div class="rec-people">
+        <div class="rec-people-head">
+          <h2 class="rec-people-title">Recipients</h2>
+          <div class="rec-views" role="group" aria-label="Which recipients to show">
+            ${DELIVERY_VIEWS.map(
+              (t, i) =>
+                `<button type="button" class="rec-view-btn" data-view="${t.v}" aria-pressed="${i === 0 ? "true" : "false"}">${t.label}</button>`,
+            ).join("")}
+          </div>
+        </div>
+        <input class="rec-people-search" type="search" placeholder="Search email…" aria-label="Search recipients by email" autocomplete="off">
+        <div id="recRows" class="muted">Loading…</div>
+        <div id="recPager"></div>
+      </div>
       <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable. Delivery counts keep updating as receipts arrive.</p>
     </div>`;
 
@@ -2522,6 +2624,52 @@ function renderFrozenRecord(id, data) {
   if (viewBtn && archive_url) {
     viewBtn.onclick = () => window.open(archive_url, "_blank", "noopener");
   }
+
+  // The per-recipient record, its own paged/filtered state (independent of the tiles).
+  // Default view is "issues" so the rows that went wrong lead; default sort mirrors the
+  // CSV (email asc). The tiles above stay the live summary as receipts settle; this list
+  // reloads on interaction (a view/search/sort/page change, or re-clicking the view).
+  const dstate = { view: "issues", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
+  const rowsEl = document.getElementById("recRows");
+  const recPagerEl = document.getElementById("recPager");
+  const loadDeliveries = async () => {
+    try {
+      const d = await api(`/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`);
+      if (!d.deliveries.length) {
+        rowsEl.innerHTML = `<p class="rec-people-empty muted">${esc(deliveryEmpty(dstate))}</p>`;
+        recPagerEl.innerHTML = "";
+        return;
+      }
+      rowsEl.innerHTML = deliveryRowsHtml(d.deliveries, dstate);
+      wireSort(rowsEl, dstate, loadDeliveries);
+      renderPager(recPagerEl, dstate, d.page, loadDeliveries);
+    } catch (e) {
+      renderError(rowsEl, e.message, loadDeliveries);
+    }
+  };
+  app.querySelectorAll(".rec-view-btn").forEach((b) => {
+    b.onclick = () => {
+      dstate.view = b.dataset.view;
+      dstate.offset = 0;
+      app.querySelectorAll(".rec-view-btn").forEach((x) => {
+        x.setAttribute("aria-pressed", String(x === b));
+      });
+      loadDeliveries();
+    };
+  });
+  const recSearch = app.querySelector(".rec-people-search");
+  if (recSearch) {
+    let t = null;
+    recSearch.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        dstate.search = recSearch.value;
+        dstate.offset = 0;
+        loadDeliveries();
+      }, 250);
+    };
+  }
+  loadDeliveries();
 
   const csvBtn = document.getElementById("csvBtn");
   csvBtn.onclick = () =>

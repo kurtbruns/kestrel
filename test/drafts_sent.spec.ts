@@ -212,3 +212,130 @@ describe("sent record view — GET /sends/:id", () => {
     expect((await SELF.fetch(`${base}/sends/whatever/deliveries.csv`)).status).toBe(401);
   });
 });
+
+// #164: the record view shows the per-recipient rows in-app, not just as the CSV — a
+// paginated, filterable JSON endpoint read DIRECTLY off `deliveries` (the source of
+// truth), not the `c_*` counters. The default view is "issues" (bounced/complained/
+// failed), and a bounce splits soft vs hard by whether the address is now suppressed.
+describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
+  // Storage isn't isolated between tests in this file, and `suppressions.email` is a
+  // global PK, so each record gets a unique address tag. The `fail/hard/soft/spam`
+  // prefixes still sort the same way, so the default email-asc order is deterministic.
+  async function seedRecord() {
+    const tag = uniq();
+    const e = {
+      d1: `d1-${tag}@example.com`,
+      d2: `d2-${tag}@example.com`,
+      hard: `hard-${tag}@example.com`,
+      soft: `soft-${tag}@example.com`,
+      spam: `spam-${tag}@example.com`,
+      fail: `fail-${tag}@example.com`,
+      skip: `skip-${tag}@example.com`,
+      wait: `wait-${tag}@example.com`,
+    };
+    const { sendId } = await seedSentSend("Rows Test", `rows-${tag}`, [
+      { email: e.d1, status: "accepted", event: "delivered" },
+      { email: e.d2, status: "accepted", event: "delivered" },
+      { email: e.hard, status: "accepted", event: "bounced" },
+      { email: e.soft, status: "accepted", event: "bounced" },
+      { email: e.spam, status: "accepted", event: "complained" },
+      { email: e.fail, status: "failed" },
+      { email: e.skip, status: "skipped" },
+      { email: e.wait, status: "accepted" }, // accepted, no event yet
+    ]);
+    // A hard bounce suppresses the address (I1); the soft one does not — so the join is
+    // what lets the record label the two apart, since the row itself stores no such flag.
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'bounce', 'hard bounce', ?)",
+    )
+      .bind(e.hard, Date.now())
+      .run();
+    return { sendId, e };
+  }
+
+  it("defaults to the issues view (bounced/complained/failed), email-sorted", async () => {
+    const { sendId, e } = await seedRecord();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    expect(body.view).toBe("issues");
+    // Only the rows that went wrong, and in the default email-asc order (matches the CSV).
+    expect(body.deliveries.map((d: any) => d.email)).toEqual([e.fail, e.hard, e.soft, e.spam]);
+    expect(body.page).toMatchObject({ total: 4, sort: "email", dir: "asc" });
+  });
+
+  it("splits soft vs hard bounce by suppression", async () => {
+    const { sendId, e } = await seedRecord();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
+    expect(byEmail[e.hard]).toMatchObject({
+      event: "bounced",
+      suppressed: 1,
+      suppressed_reason: "bounce",
+    });
+    expect(byEmail[e.soft]).toMatchObject({
+      event: "bounced",
+      suppressed: 0,
+      suppressed_reason: null,
+    });
+  });
+
+  it("filters to delivered, and to a single bucket", async () => {
+    const { sendId, e } = await seedRecord();
+    const del = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=delivered`, { headers: AUTH }),
+    );
+    expect(del.deliveries.map((d: any) => d.email)).toEqual([e.d1, e.d2]);
+    expect(del.deliveries.every((d: any) => d.event === "delivered")).toBe(true);
+
+    const failed = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=failed`, { headers: AUTH }),
+    );
+    expect(failed.deliveries.map((d: any) => d.email)).toEqual([e.fail]);
+  });
+
+  it("shows all recipients and paginates", async () => {
+    const { sendId } = await seedRecord();
+    const all = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all`, { headers: AUTH }),
+    );
+    expect(all.page.total).toBe(8);
+
+    const p1 = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=0`, {
+        headers: AUTH,
+      }),
+    );
+    expect(p1.deliveries).toHaveLength(3);
+    expect(p1.page).toMatchObject({ total: 8, limit: 3, offset: 0 });
+
+    const p3 = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=6`, {
+        headers: AUTH,
+      }),
+    );
+    expect(p3.deliveries).toHaveLength(2); // the tail page: 8 − 6
+  });
+
+  it("searches by address and falls back to issues on an unknown view", async () => {
+    const { sendId, e } = await seedRecord();
+    const hit = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&search=HARD-`, {
+        headers: AUTH,
+      }),
+    );
+    expect(hit.deliveries.map((d: any) => d.email)).toEqual([e.hard]);
+
+    const bogus = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, { headers: AUTH }),
+    );
+    expect(bogus.view).toBe("issues");
+  });
+
+  it("404s for an unknown send and requires auth", async () => {
+    expect((await SELF.fetch(`${base}/sends/whatever/deliveries`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/sends/nope/deliveries`, { headers: AUTH })).status).toBe(404);
+  });
+});

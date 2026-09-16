@@ -371,6 +371,149 @@ export async function listDeliveries(db: D1Database, sendId: string): Promise<De
   return results;
 }
 
+// --- per-recipient record rows (in-app, paginated) --------------------------
+//
+// The record view (SPEC §8) shows the delivery rows inside the app, not just as the
+// CSV export. It reads `deliveries` DIRECTLY — the source of truth — never the `c_*`
+// counters (those are the aggregate cache for the cheap poll). A `view` narrows the
+// rows to a mutually-exclusive outcome bucket (or the `issues` group / `all`), using
+// the SAME event-wins-over-status bucketing as `deliveryOutcomes` so a filtered list
+// reconciles to its tile. Since it isn't polled, this read can be heavier than
+// `/progress` — an aggregate + a page, plus a suppression join for the soft/hard split.
+
+/** The recognized `view` values: the three UI toggles (`issues` default / `delivered`
+ *  / `all`) plus the individual outcome buckets, so a caller can filter to any one. */
+export const DELIVERY_VIEWS = [
+  "issues",
+  "delivered",
+  "all",
+  "bounced",
+  "complained",
+  "failed",
+  "skipped",
+  "accepted",
+  "in_flight",
+] as const;
+export type DeliveryView = (typeof DELIVERY_VIEWS)[number];
+
+/** The sortable columns exposed by `GET /sends/:id/deliveries`. Default `email` asc
+ *  matches the CSV order, so the in-app list and the export read the same. */
+export const DELIVERY_LIST_SPEC: ListSpec = {
+  columns: {
+    email: "d.email",
+    status: "d.status",
+    event: "d.event",
+    updated: "d.updated_at",
+  },
+  defaultSort: "email",
+  defaultDir: "asc",
+};
+
+/** One recipient's row for the in-app record. Carries the two orthogonal facts (the
+ *  send-loop `status` and the later webhook `event`, see `deliveryOutcomes`), the
+ *  provider detail/error, and whether the address is now suppressed — the durable
+ *  signal that splits a HARD bounce (suppressed on its own) from a SOFT one (counted,
+ *  never suppressed), since the delivery row itself stores no soft/hard flag. */
+export interface DeliveryRecordRow {
+  email: string;
+  status: string;
+  event: string | null;
+  event_detail: string | null;
+  event_at: number | null;
+  error: string | null;
+  attempts: number;
+  /** 0/1 — whether the address is in `suppressions` (a hard bounce or a complaint). */
+  suppressed: number;
+  /** The suppression's reason (`bounce` | `complaint` | `manual`), or null if none. */
+  suppressed_reason: string | null;
+}
+
+/** The WHERE fragment for one `view`, bucketed exactly as `deliveryOutcomes` (the
+ *  webhook `event` winning over the send-loop `status`). Empty string = `all`. */
+function deliveryViewClause(view: DeliveryView): string {
+  switch (view) {
+    case "delivered":
+      return "d.event = 'delivered'";
+    case "bounced":
+      return "d.event = 'bounced'";
+    case "complained":
+      return "d.event = 'complained'";
+    case "failed":
+      return "d.event IS NULL AND d.status = 'failed'";
+    case "skipped":
+      return "d.event IS NULL AND d.status = 'skipped'";
+    case "accepted":
+      return "d.event IS NULL AND d.status = 'accepted'";
+    case "in_flight":
+      return "d.event IS NULL AND d.status IN ('pending', 'dispatched')";
+    case "issues":
+      // Bounced / complained / failed — the rows that went wrong, front-and-center.
+      return "(d.event IN ('bounced', 'complained')) OR (d.event IS NULL AND d.status = 'failed')";
+    default:
+      return "";
+  }
+}
+
+function deliveryListWhere(
+  sendId: string,
+  view: DeliveryView,
+  search?: string,
+): { clause: string; binds: unknown[] } {
+  const where = ["d.send_id = ?"];
+  const binds: unknown[] = [sendId];
+  const viewClause = deliveryViewClause(view);
+  if (viewClause) {
+    where.push(`(${viewClause})`);
+  }
+  const term = search?.trim().toLowerCase();
+  if (term) {
+    where.push("LOWER(d.email) LIKE ? ESCAPE '\\'");
+    binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+  }
+  return { clause: `WHERE ${where.join(" AND ")}`, binds };
+}
+
+/** One page of a send's per-recipient rows for the in-app record, filtered by `view`
+ *  and an optional email search. Read-only over the frozen delivery record (I3). */
+export async function listDeliveriesPage(
+  db: D1Database,
+  sendId: string,
+  view: DeliveryView,
+  page: ListParams,
+  search?: string,
+): Promise<DeliveryRecordRow[]> {
+  const { clause, binds } = deliveryListWhere(sendId, view, search);
+  // Address is UNIQUE per send, so it is the stable tiebreak for offset paging.
+  const order = orderByClause(page, "d.email");
+  const { results } = await db
+    .prepare(
+      `SELECT d.email AS email, d.status AS status, d.event AS event, d.event_detail AS event_detail,
+              d.event_at AS event_at, d.error AS error, d.attempts AS attempts,
+              (sup.email IS NOT NULL) AS suppressed, sup.reason AS suppressed_reason
+         FROM deliveries d
+         LEFT JOIN suppressions sup ON sup.email = d.email
+         ${clause} ${order} LIMIT ? OFFSET ?`,
+    )
+    .bind(...binds, page.limit, page.offset)
+    .all<DeliveryRecordRow>();
+  return results;
+}
+
+/** How many recipients match `view` (+ search) — the `page.total` for the record list. */
+export async function countDeliveriesFiltered(
+  db: D1Database,
+  sendId: string,
+  view: DeliveryView,
+  search?: string,
+): Promise<number> {
+  const { clause, binds } = deliveryListWhere(sendId, view, search);
+  const row = await db
+    .prepare(`SELECT COUNT(*) AS n FROM deliveries d ${clause}`)
+    .bind(...binds)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 // --- send-loop / sweep (M6) -------------------------------------------------
 
 /** Scheduled sends whose fire time has arrived. */
