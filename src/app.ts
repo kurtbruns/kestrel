@@ -381,6 +381,44 @@ export function createRouter(archiveBasePath: string): Router {
     },
     {
       method: "GET",
+      path: "/sends/:id/deliveries",
+      access: "admin",
+      summary:
+        "The send's per-recipient delivery rows (JSON), filtered by outcome view and paginated; returns a `page` envelope. Reads the delivery rows directly (the source of truth), not the progress counters — heavier than `/progress`, so it is not a poll target.",
+      query: [
+        {
+          name: "view",
+          description:
+            "`issues` (default: bounced/complained/failed), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `failed`, `skipped`, `accepted`, `in_flight`).",
+        },
+        { name: "search", description: "Email contains-search." },
+        { name: "sort", description: "`email` (default), `status`, `event`, or `updated`." },
+        { name: "dir", description: "`asc` (default) or `desc`." },
+        { name: "limit", description: "Page size (default 50, max 200)." },
+        { name: "offset", description: "Rows to skip, for pagination." },
+      ],
+      example: {
+        response: {
+          deliveries: [
+            {
+              email: "bounce@example.com",
+              status: "accepted",
+              event: "bounced",
+              event_detail: "Permanent/General",
+              event_at: 1768467700000,
+              error: null,
+              attempts: 1,
+              bounce_kind: "hard",
+            },
+          ],
+          view: "issues",
+          page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
+        },
+      },
+      handler: sendRoutes.deliveries,
+    },
+    {
+      method: "GET",
       path: "/sends/:id/deliveries.csv",
       access: "admin",
       summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
