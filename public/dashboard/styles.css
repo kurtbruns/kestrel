@@ -1509,8 +1509,8 @@ th.num .th-sort {
 }
 
 /* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
-/* The sending treatment is amber (--b-sending-*, DESIGN §3) — distinct from the
-   scheduled violet — carried by the phase pill, the dispatch bar, and the swatch. */
+/* The sending treatment is blue (--b-sending-*, DESIGN §3) — distinct from the action
+   slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
 .rec-sw.sw-sending {
   background: var(--b-sending-fg);
 }
@@ -1605,7 +1605,7 @@ th.num .th-sort {
   border-radius: 999px;
   transition: width 0.6s ease;
 }
-/* Dispatch fill is the solid amber sending hue. The delivery bar pairs to dispatch's scale:
+/* Dispatch fill is the solid blue sending hue. The delivery bar pairs to dispatch's scale:
    a grey `accepted` segment (the same frontier the dispatch bar reaches) with green
    `confirmed` filling in behind it as receipts arrive. */
 .wbar-fill.tone-sending {
@@ -1676,7 +1676,7 @@ th.num .th-sort {
 }
 
 /* ---- active-send row (Sent page "In progress") + dashboard widget (#154) ---- */
-/* An in-flight send as a card with a live mini dispatch bar; amber, so it reads as
+/* An in-flight send as a card with a live mini dispatch bar; blue, so it reads as
    "sending" — distinct from the scheduled violet cards and the neutral sent rows. */
 .card.active-card {
   background: var(--b-sending-bg);

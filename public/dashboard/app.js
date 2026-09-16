@@ -2249,7 +2249,7 @@ async function renderSentRecord(id) {
 }
 
 // Phase → { label, tone } for the derived-phase pill. Tones reuse the status/semantic
-// palettes: sending = amber (the in-flight treatment, DESIGN §3), ok = green, warn/danger
+// palettes: sending = blue (the in-flight treatment, DESIGN §3), ok = green, warn/danger
 // as usual, scheduled = violet.
 const PHASE_META = {
   scheduled: { label: "Scheduled", tone: "scheduled" },
@@ -2496,7 +2496,7 @@ function outcomeReconHtml(outcomes) {
 }
 
 function renderFrozenRecord(id, data) {
-  const { send, outcomes, archive_url, published } = data;
+  const { send, outcomes, archive_url, published, slug } = data;
   const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;
 
@@ -2531,7 +2531,9 @@ function renderFrozenRecord(id, data) {
         const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${send.subject ? clientSlugify(send.subject) : "send"}-deliveries.csv`;
+        // Match the server's content-disposition (routes/sends.ts) so the file is named
+        // the same however it's fetched — the archive slug, not a re-slug of the subject.
+        a.download = `${slug ?? "send"}-deliveries.csv`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {

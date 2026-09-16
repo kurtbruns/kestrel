@@ -48,6 +48,7 @@ export async function get(c: RequestContext): Promise<Response> {
     send,
     progress,
     outcomes,
+    slug: post?.slug ?? null, // the archive slug — names the CSV export the same way the CSV endpoint does
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
   });
