@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { recomputeSendCounters } from "../src/db/sends";
 import { adminAuth } from "./support/auth";
 
 // PR1 (#147/#148): the Drafts view scopes /posts to draft+scheduled via a comma status
@@ -113,6 +114,10 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
       )
       .run();
   }
+  // Seed the denormalized counters from the rows just as the real send path does at
+  // completion (the exactness pass in completeSend), so the seeded row carries the same
+  // c_* counters production would — what GET /sends/:id's `progress` now reads (#166).
+  await recomputeSendCounters(env.DB, sendId);
   return { postId, sendId };
 }
 
@@ -182,6 +187,25 @@ describe("sent record view — GET /sends/:id", () => {
     const sum =
       o.delivered + o.bounced + o.complained + o.failed + o.skipped + o.accepted + o.in_flight;
     expect(sum).toBe(o.recipients);
+
+    // `progress` is now the single-row buildSendProgress shape (off the c_* counters),
+    // not the old per-row deliveryRollup (#166). Its counts read TRUE delivered — so a
+    // list built on it agrees with the record's own breakdown, never counting a bounced
+    // recipient as delivered (#90).
+    const p = body.progress;
+    expect(p.state).toBe("sent");
+    expect(p.total).toBe(o.recipients);
+    expect(p.counts).toMatchObject({
+      delivered: o.delivered,
+      bounced: o.bounced,
+      complained: o.complained,
+      failed: o.failed,
+      skipped: o.skipped,
+      accepted: o.accepted,
+    });
+    // The seed has 8 provider-accepted rows but only 5 confirmed-delivered — the exact gap
+    // the old "Delivered = provider-accepted" column got wrong (#90). `delivered` is 5.
+    expect(p.counts.delivered).toBe(5);
 
     expect(body.published).toBe(true);
     expect(body.archive_url).toContain(slug);
