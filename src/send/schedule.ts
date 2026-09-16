@@ -97,7 +97,9 @@ function isActiveSendConflict(err: unknown): boolean {
  * audience are untouched and it stays the post's single active send throughout — only
  * the moment it fires changes. A CAS on `scheduled` status is the guarantee: a send that
  * has begun sending (or is sent/canceled/failed) is past the window and cannot be moved,
- * even if it transitions between the read and the update.
+ * even if it transitions between the read and the update. The reverse race — the sweep
+ * firing a send this call just moved forward — is closed on the sweep side, where
+ * `acquireLease` re-checks `fire_at` before leasing a `scheduled` send.
  */
 export async function reschedule(env: AppEnv, sendId: string, fireAt: number): Promise<SendRow> {
   const send = await getSend(env.DB, sendId);

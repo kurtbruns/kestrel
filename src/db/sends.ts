@@ -549,8 +549,17 @@ export async function stuckSends(db: D1Database, olderThan: number): Promise<Sen
 
 /**
  * Acquire/renew the send lease and move scheduled → sending. CAS: succeeds only
- * if the send is still scheduled/sending AND unleased (or the lease expired).
- * Returns true iff this caller now owns the send.
+ * if the send is unleased (or the lease expired) AND it is either already `sending`
+ * (a resume) or a `scheduled` send whose fire time has arrived. Returns true iff this
+ * caller now owns the send.
+ *
+ * The `fire_at <= now` guard on the scheduled branch is what closes the
+ * reschedule-vs-sweep race: the sweep snapshots due sends (`dueSends`) and then leases
+ * each one, and a `reschedule` that moves a just-due send forward lands in that gap. It
+ * leaves the row `scheduled` (only `fire_at` changes), so a status-only CAS would still
+ * fire it at its old time even though the API returned "rescheduled". Re-checking
+ * `fire_at` here means a send moved back into the future is not leased or fired until its
+ * new time — the counterpart to `reschedule`'s own `scheduled`-only guard (I6).
  */
 export async function acquireLease(
   db: D1Database,
@@ -565,10 +574,10 @@ export async function acquireLease(
              started_at = COALESCE(started_at, ?),
              locked_until = ?
        WHERE id = ?
-         AND status IN ('scheduled', 'sending')
+         AND (status = 'sending' OR (status = 'scheduled' AND fire_at <= ?))
          AND (locked_until IS NULL OR locked_until < ?)`,
     )
-    .bind(now, now + leaseTtlMs, sendId, now)
+    .bind(now, now + leaseTtlMs, sendId, now, now)
     .run();
   return (res.meta.changes ?? 0) > 0;
 }

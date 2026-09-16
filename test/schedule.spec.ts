@@ -195,6 +195,9 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(send.rendered_html).toBe(frozenHtml);
     expect(send.rendered_html).toContain("frozen body");
     expect(send.recipient_count).toBe(scheduled.send.recipient_count);
+    // scheduled_at is the review window's anchor: preserved, not reset — the window is
+    // moved, not restarted (I6, SPEC §6 "Moving the fire time")
+    expect(send.scheduled_at).toBe(scheduled.send.scheduled_at);
     // the post stays soft-locked (still scheduled) — reschedule never unlocks (I6)
     expect(await postStatus(id)).toBe("scheduled");
     // still the post's one active send, now at the new time
