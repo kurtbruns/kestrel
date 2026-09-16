@@ -3528,7 +3528,7 @@ function highlightTemplate(src) {
 function hlMdInline(raw) {
   return esc(raw).replace(
     /(`[^`\n]+`)|(!?)(\[[^\]\n]*\])\(([^)\n]*)\)|(\*\*|__)([^\n]+?)\5|([*_])([^*_\n]+?)\7/g,
-    (m, code, bang, ltext, lurl, bd, btext, it, itext) => {
+    (_m, code, bang, ltext, lurl, bd, btext, it, itext) => {
       if (code) {
         return `<span class="cx-md-code">${code}</span>`;
       }

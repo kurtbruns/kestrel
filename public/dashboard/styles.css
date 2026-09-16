@@ -1969,6 +1969,12 @@ th.num .th-sort {
   white-space: pre-wrap;
   overflow-wrap: break-word;
   tab-size: 2;
+  /* Reserve the scrollbar's width on BOTH layers, always. Where scrollbars take layout space
+     (Windows/Linux, or "always show"), the textarea's would otherwise shrink its wrap width
+     only when it scrolls — wrapping long lines a column earlier than the full-width overlay and
+     drifting the caret off the colored text. A stable gutter keeps both wrap identically; with
+     macOS overlay scrollbars it reserves nothing, so nothing changes there. */
+  scrollbar-gutter: stable;
 }
 .md-hl {
   position: absolute;
