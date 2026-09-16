@@ -385,6 +385,45 @@ body.nav-resizing .sidebar {
   margin: 10px 2px 0;
   line-height: 1.5;
 }
+/* API-access card: the primary "Connect Claude" action leads (a link, not a button —
+   DESIGN §1); the base URL below it is a supporting detail. */
+.pub-cta {
+  margin: 2px 2px 0;
+}
+.pub-cta a {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ring);
+  text-decoration: none;
+}
+.pub-cta a:hover {
+  text-decoration: underline;
+}
+/* The connected state: an inline status line reusing the --ok feedback scale (DESIGN §3),
+   not a notification — a quiet confirmation the agent has edited here. */
+.conn-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  margin: 2px 2px 0;
+  line-height: 1.5;
+}
+.conn-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok-fg);
+}
+/* Stacked secondary links (connected state) — each on its own line, matching the
+   disconnected card's stacked "Connect Claude" / "API reference". */
+.pub-links {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
 .pub-note a {
   color: var(--ring);
   text-decoration: none;

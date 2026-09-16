@@ -5,6 +5,9 @@ node_modules/
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
+.kestrel.env
+.kestrel.env.*
+!.kestrel.env.example
 
 # wrangler / miniflare local state
 .wrangler/

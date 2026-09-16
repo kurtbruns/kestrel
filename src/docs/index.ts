@@ -19,6 +19,7 @@ import emailSender from "../../docs/setup/03-email-sender.md";
 import sendingDomain from "../../docs/setup/04-sending-domain-dns.md";
 import archiveWebsite from "../../docs/setup/05-archive-website.md";
 import verify from "../../docs/setup/06-verify.md";
+import connectClaude from "../../docs/setup/07-connect-claude.md";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
 
@@ -36,6 +37,7 @@ const SOURCES: DocSource[] = [
   { slug: "sending-domain", markdown: sendingDomain },
   { slug: "archive-website", markdown: archiveWebsite },
   { slug: "verify", markdown: verify },
+  { slug: "connect-claude", markdown: connectClaude },
 ];
 
 /** Title = the doc's first `# H1`, so titles live in the source markdown. */
