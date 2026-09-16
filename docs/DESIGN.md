@@ -74,7 +74,7 @@ A token means one thing, and a color has one job; a second token for a color tha
 
 Every token has a light and a dark value; a color defined in only one theme is a bug.
 
-**Badges — one hue per state; a semantic scale is reused only when the state's meaning *is* that feedback.** Post lifecycle states carry their own `--b-*` hue; subscriber consent states borrow the hue whose meaning fits. The full mapping, so an overload shows up here instead of hiding in the CSS:
+**Badges — one hue per state; a semantic scale is reused only when the state's meaning *is* that feedback.** Post lifecycle states carry their own `--status-*` hue; subscriber consent states borrow the hue whose meaning fits. The full mapping, so an overload shows up here instead of hiding in the CSS:
 
 | Badge | Scale | Hue |
 | --- | --- | --- |
