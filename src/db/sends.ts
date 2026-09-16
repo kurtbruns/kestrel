@@ -424,8 +424,8 @@ export interface DeliveryRecordRow {
   error: string | null;
   attempts: number;
   /** For a bounced row: `hard` | `soft` as the provider reported it on this send, or
-   *  null when unknown (a pre-`bounce_kind` row, or a provider detail we couldn't
-   *  classify) — rendered then as a plain "Bounce". */
+   *  null when the kind is unknown (a bounce recorded without a hard/soft signal) —
+   *  rendered then as a plain "Bounce". */
   bounce_kind: string | null;
 }
 
