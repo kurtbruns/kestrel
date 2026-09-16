@@ -8,9 +8,8 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { freeze } from "../send/schedule";
 
-/** Parse a `fire_at` field (ISO-8601 timestamp or epoch millis) to epoch millis, or
- *  throw a 400. Shared by scheduling and rescheduling so both accept the same shapes. */
-export function parseFireAt(input: unknown): number {
+/** Parse a `fire_at` field (ISO-8601 timestamp or epoch millis) to epoch millis, or throw a 400. */
+function parseFireAt(input: unknown): number {
   if (typeof input === "number" && Number.isFinite(input)) {
     return input;
   }
@@ -27,6 +26,23 @@ export function parseFireAt(input: unknown): number {
   throw badRequest("fire_at must be an ISO-8601 timestamp or epoch milliseconds");
 }
 
+/**
+ * Parse `fire_at` and require it to be at least the review buffer out — the single
+ * minimum-lead rule every future-dated send obeys, so scheduling and rescheduling can't
+ * drift on it (I6). `immediateHint` appends the send-now pointer, which fits the schedule
+ * path (a reschedule has no immediate alternative to point at).
+ */
+export function parseFutureFireAt(input: unknown, immediateHint = false): number {
+  const fireAt = parseFireAt(input);
+  if (fireAt < Date.now() + SEND_NOW_BUFFER_MS) {
+    const hint = immediateHint ? "; use POST /posts/:id/send for immediate delivery" : "";
+    throw badRequest(
+      `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future${hint}`,
+    );
+  }
+  return fireAt;
+}
+
 export async function schedule(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
@@ -39,14 +55,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   } catch {
     throw badRequest("JSON body with 'fire_at' is required");
   }
-  const fireAt = parseFireAt(body.fire_at);
-  const earliest = Date.now() + SEND_NOW_BUFFER_MS;
-  if (fireAt < earliest) {
-    throw badRequest(
-      `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future; use POST /posts/:id/send for immediate delivery`,
-    );
-  }
-
+  const fireAt = parseFutureFireAt(body.fire_at, true);
   const send = await freeze(c.env, c.config, post, fireAt);
   return json({ send }, 201);
 }

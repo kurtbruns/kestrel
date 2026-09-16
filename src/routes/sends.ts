@@ -4,7 +4,6 @@ import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { badRequest, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
-import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
@@ -12,7 +11,7 @@ import { param } from "../router";
 import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
-import { parseFireAt } from "./schedule";
+import { parseFutureFireAt } from "./schedule";
 
 export async function list(c: RequestContext): Promise<Response> {
   const statusParam = c.url.searchParams.get("status") ?? undefined;
@@ -183,12 +182,7 @@ export async function reschedule(c: RequestContext): Promise<Response> {
   } catch {
     throw badRequest("JSON body with 'fire_at' is required");
   }
-  const fireAt = parseFireAt(body.fire_at);
-  if (fireAt < Date.now() + SEND_NOW_BUFFER_MS) {
-    throw badRequest(
-      `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future`,
-    );
-  }
+  const fireAt = parseFutureFireAt(body.fire_at);
   const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
   return json({ send });
 }
