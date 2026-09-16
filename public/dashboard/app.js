@@ -16,6 +16,12 @@ let appConfig = null;
 let statusTimer = null; // countdown interval, cleared on navigation
 let editorPollTimer = null; // freshness poll while the editor is open, cleared on navigation
 let progressTimer = null; // live in-flight /progress poll (watch view + active-send widget), cleared on navigation
+// Bumped on every navigation (route()). The recursive-setTimeout pollers below capture it
+// when they schedule and bail after their await if it changed: clearing progressTimer stops
+// the *next* tick, but a poll whose fetch is already in flight when the user navigates would
+// otherwise resolve afterward and repaint (or swap) the view they just opened — and clobber
+// that new view's own poll timer. The generation check is the guard that in-flight poll can't.
+let navGeneration = 0;
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
 // re-binding — and so leaking a listener — on every visit to the page.
@@ -697,6 +703,10 @@ function route() {
     clearInterval(progressTimer);
     progressTimer = null;
   }
+  // Invalidate any poll whose fetch is already in flight: clearing progressTimer only stops
+  // the pending tick, not one mid-await, so a stale callback would resolve into the view we're
+  // about to mount. Bumping the generation makes that callback bail (see navGeneration).
+  navGeneration++;
   clearAutosaveTimers();
   isEditorDirty = false;
   editorSaveFailed = false;
@@ -2229,8 +2239,14 @@ async function renderSent() {
   // records on its own. A recursive setTimeout so a slow read never overlaps; cleared on
   // navigation (route() clears progressTimer). Countdowns run on statusTimer.
   const scheduleSentPoll = () => {
+    const gen = navGeneration;
     progressTimer = setTimeout(async () => {
       await refreshSending();
+      // Navigated off the Sent page mid-fetch — the sections refreshSending paints are gone and
+      // the reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
+      if (gen !== navGeneration) {
+        return;
+      }
       scheduleSentPoll();
     }, 3000);
   };
@@ -2450,12 +2466,21 @@ async function startWatch(id, send) {
 // Poll /progress (~3s) while sending; a recursive setTimeout so a slow read never
 // overlaps. `progressTimer` holds the pending id so route() clears it on navigation.
 function scheduleWatchPoll(id, send) {
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let prog;
     try {
       prog = await api(`/sends/${id}/progress`);
     } catch {
-      scheduleWatchPoll(id, send); // transient — keep the last view, try again
+      // transient — keep the last view, try again (unless we've since navigated away)
+      if (gen === navGeneration) {
+        scheduleWatchPoll(id, send);
+      }
+      return;
+    }
+    // Navigated away while the fetch was in flight: the new view owns the screen and its own
+    // poll now — don't renderSentRecord over it, swap it, or reschedule onto its timer.
+    if (gen !== navGeneration) {
       return;
     }
     if (prog.state !== "sending") {
@@ -2567,12 +2592,20 @@ function scheduleSettlePoll(id, count) {
   if (count > 40) {
     return; // ~10 min ceiling — stop chasing receipts that may never arrive
   }
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let data;
     try {
       data = await api(`/sends/${id}`);
     } catch {
-      scheduleSettlePoll(id, count + 1);
+      if (gen === navGeneration) {
+        scheduleSettlePoll(id, count + 1);
+      }
+      return;
+    }
+    // Navigated away mid-fetch — the tiles we'd repaint belong to a view that's gone, and the
+    // reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
+    if (gen !== navGeneration) {
       return;
     }
     if (data.send.status === "sending") {
@@ -4705,12 +4738,20 @@ function wireDashActiveCards() {
 // a slow read never overlaps; `progressTimer` holds it so navigation clears it.
 let dashActiveSig = "";
 function scheduleDashActivePoll() {
+  const gen = navGeneration;
   progressTimer = setTimeout(async () => {
     let sends;
     try {
       ({ sends } = await api("/sends?status=sending&limit=200"));
     } catch {
-      scheduleDashActivePoll();
+      if (gen === navGeneration) {
+        scheduleDashActivePoll();
+      }
+      return;
+    }
+    // Navigated off the dashboard mid-fetch: #dashActive is gone (or belongs to a re-mounted
+    // dashboard with its own poll), so don't repaint or reschedule onto it (see navGeneration).
+    if (gen !== navGeneration) {
       return;
     }
     const active = sends.filter((s) => !isWedged(s));
