@@ -90,6 +90,37 @@ export async function progress(c: RequestContext): Promise<Response> {
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
+/** Validate the `view` query param against the recognized set, defaulting to `issues`
+ *  (the record view opens on the rows that went wrong). */
+function parseDeliveryView(raw: string | null): sends.DeliveryView {
+  return sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)
+    ? (raw as sends.DeliveryView)
+    : "issues";
+}
+
+/**
+ * The sent record's per-recipient rows as paginated JSON (SPEC §8, §11 "always
+ * inspectable"). Reads the `deliveries` rows DIRECTLY — the source of truth — not the
+ * `c_*` progress counters, so it is heavier than `/progress` and deliberately NOT the
+ * poll target. Filter by `view` (issues / delivered / all / a single bucket) and an
+ * optional email search; sort and paginate via the shared list convention. Read-only
+ * over the frozen record (I3) — it decides nothing and mails no one.
+ */
+export async function deliveries(c: RequestContext): Promise<Response> {
+  const send = await sends.getSend(c.env.DB, param(c, "id"));
+  if (!send) {
+    throw notFound("send");
+  }
+  const view = parseDeliveryView(c.url.searchParams.get("view"));
+  const search = c.url.searchParams.get("search") ?? undefined;
+  const page = parseListParams(c.url, sends.DELIVERY_LIST_SPEC);
+  const [total, rows] = await Promise.all([
+    sends.countDeliveriesFiltered(c.env.DB, send.id, view, search),
+    sends.listDeliveriesPage(c.env.DB, send.id, view, page, search),
+  ]);
+  return json({ deliveries: rows, view, page: listPage(total, page) });
+}
+
 /** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */
 function csvCell(value: string | number | null): string {
   const s = value == null ? "" : String(value);

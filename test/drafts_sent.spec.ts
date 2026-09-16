@@ -67,6 +67,7 @@ interface SeedDelivery {
   email: string;
   status: string;
   event?: string | null;
+  bounce_kind?: string | null;
 }
 
 async function seedSentSend(subject: string, slug: string, deliveries: SeedDelivery[]) {
@@ -97,7 +98,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   let i = 0;
   for (const d of deliveries) {
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO deliveries (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
       .bind(
         `d-${sendId}-${i++}`,
@@ -111,6 +112,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
         d.event ?? null,
         null,
         d.event ? now : null,
+        d.bounce_kind ?? null,
       )
       .run();
   }
@@ -234,5 +236,138 @@ describe("sent record view — GET /sends/:id", () => {
 
   it("requires auth", async () => {
     expect((await SELF.fetch(`${base}/sends/whatever/deliveries.csv`)).status).toBe(401);
+  });
+});
+
+// #164: the record view shows the per-recipient rows in-app, not just as the CSV — a
+// paginated, filterable JSON endpoint read DIRECTLY off `deliveries` (the source of
+// truth), not the `c_*` counters. The default view is "issues" (bounced/complained/
+// failed), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
+// ingest (SPEC §8) — a fact of this send, not a read of the global suppression list.
+describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
+  // Storage isn't isolated between tests in this file, and `suppressions.email` is a
+  // global PK, so each record gets a unique address tag. The `fail/hard/soft/spam`
+  // prefixes still sort the same way, so the default email-asc order is deterministic.
+  async function seedRecord() {
+    const tag = uniq();
+    const e = {
+      d1: `d1-${tag}@example.com`,
+      d2: `d2-${tag}@example.com`,
+      hard: `hard-${tag}@example.com`,
+      soft: `soft-${tag}@example.com`,
+      spam: `spam-${tag}@example.com`,
+      fail: `fail-${tag}@example.com`,
+      skip: `skip-${tag}@example.com`,
+      wait: `wait-${tag}@example.com`,
+    };
+    // The soft/hard split is carried on the delivery row itself (`bounce_kind`), the way
+    // the webhook ingest freezes it — not inferred from the mutable `suppressions` table.
+    const { sendId } = await seedSentSend("Rows Test", `rows-${tag}`, [
+      { email: e.d1, status: "accepted", event: "delivered" },
+      { email: e.d2, status: "accepted", event: "delivered" },
+      { email: e.hard, status: "accepted", event: "bounced", bounce_kind: "hard" },
+      { email: e.soft, status: "accepted", event: "bounced", bounce_kind: "soft" },
+      { email: e.spam, status: "accepted", event: "complained" },
+      { email: e.fail, status: "failed" },
+      { email: e.skip, status: "skipped" },
+      { email: e.wait, status: "accepted" }, // accepted, no event yet
+    ]);
+    return { sendId, e };
+  }
+
+  it("defaults to the issues view (bounced/complained/failed), email-sorted", async () => {
+    const { sendId, e } = await seedRecord();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    expect(body.view).toBe("issues");
+    // Only the rows that went wrong, and in the default email-asc order (matches the CSV).
+    expect(body.deliveries.map((d: any) => d.email)).toEqual([e.fail, e.hard, e.soft, e.spam]);
+    expect(body.page).toMatchObject({ total: 4, sort: "email", dir: "asc" });
+  });
+
+  it("splits soft vs hard bounce on the per-send frozen kind", async () => {
+    const { sendId, e } = await seedRecord();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
+    expect(byEmail[e.hard]).toMatchObject({ event: "bounced", bounce_kind: "hard" });
+    expect(byEmail[e.soft]).toMatchObject({ event: "bounced", bounce_kind: "soft" });
+  });
+
+  it("keeps the soft/hard label frozen — a later global suppression can't rewrite it", async () => {
+    // The bug this replaces: reading the label from the global `suppressions` table let an
+    // unrelated later suppression of the same address flip this frozen record's outcome
+    // (SPEC §8). Suppress the soft-bounced address as another send would, then re-read: the
+    // record still reports the soft bounce it recorded, because the label is a fact of the row.
+    const { sendId, e } = await seedRecord();
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'bounce', 'hard bounce', ?)",
+    )
+      .bind(e.soft, Date.now())
+      .run();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
+    expect(byEmail[e.soft]).toMatchObject({ event: "bounced", bounce_kind: "soft" });
+  });
+
+  it("filters to delivered, and to a single bucket", async () => {
+    const { sendId, e } = await seedRecord();
+    const del = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=delivered`, { headers: AUTH }),
+    );
+    expect(del.deliveries.map((d: any) => d.email)).toEqual([e.d1, e.d2]);
+    expect(del.deliveries.every((d: any) => d.event === "delivered")).toBe(true);
+
+    const failed = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=failed`, { headers: AUTH }),
+    );
+    expect(failed.deliveries.map((d: any) => d.email)).toEqual([e.fail]);
+  });
+
+  it("shows all recipients and paginates", async () => {
+    const { sendId } = await seedRecord();
+    const all = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all`, { headers: AUTH }),
+    );
+    expect(all.page.total).toBe(8);
+
+    const p1 = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=0`, {
+        headers: AUTH,
+      }),
+    );
+    expect(p1.deliveries).toHaveLength(3);
+    expect(p1.page).toMatchObject({ total: 8, limit: 3, offset: 0 });
+
+    const p3 = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=6`, {
+        headers: AUTH,
+      }),
+    );
+    expect(p3.deliveries).toHaveLength(2); // the tail page: 8 − 6
+  });
+
+  it("searches by address and falls back to issues on an unknown view", async () => {
+    const { sendId, e } = await seedRecord();
+    const hit = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&search=HARD-`, {
+        headers: AUTH,
+      }),
+    );
+    expect(hit.deliveries.map((d: any) => d.email)).toEqual([e.hard]);
+
+    const bogus = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, { headers: AUTH }),
+    );
+    expect(bogus.view).toBe("issues");
+  });
+
+  it("404s for an unknown send and requires auth", async () => {
+    expect((await SELF.fetch(`${base}/sends/whatever/deliveries`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/sends/nope/deliveries`, { headers: AUTH })).status).toBe(404);
   });
 });

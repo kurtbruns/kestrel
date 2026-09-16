@@ -33,6 +33,9 @@ export async function applyDeliveryEvents(
       email: e.email,
       event: e.type,
       detail: eventDetail(e),
+      // The provider's permanent/transient signal, frozen onto the delivery row so the
+      // record's soft/hard split is a per-send fact, not a read of global suppression.
+      hard: e.type === "bounced" ? e.hard : undefined,
       at: now,
     });
     applied += 1;
