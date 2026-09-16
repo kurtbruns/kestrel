@@ -84,6 +84,7 @@ export interface SeedDelivery {
   event: string | null;
   event_detail: string | null;
   event_at: number | null;
+  bounce_kind?: string | null;
 }
 
 /** Split into chunks small enough to stay well under D1's per-batch bind limit. */
@@ -237,8 +238,8 @@ export async function insertDeliveries(db: D1Database, rows: SeedDelivery[]): Pr
         db
           .prepare(
             `INSERT INTO deliveries
-               (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             r.id,
@@ -252,6 +253,7 @@ export async function insertDeliveries(db: D1Database, rows: SeedDelivery[]): Pr
             r.event,
             r.event_detail,
             r.event_at,
+            r.bounce_kind ?? null,
           ),
       ),
     );

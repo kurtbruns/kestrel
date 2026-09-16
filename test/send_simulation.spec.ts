@@ -5,14 +5,29 @@ import { getConfig } from "../src/env";
 import { drainSimulatedWebhooks, SimProvider, simulationActive } from "../src/providers/simulate";
 import type { RenderedEmail } from "../src/providers/types";
 
-// #156: the dev-only seeded send simulation behind the provider seam. The valuable,
+// #156/#163: the dev-only seeded send simulation behind the provider seam. The valuable,
 // honest surface to test is the delayed-webhook drain — it runs through the REAL ingest
-// (applyDeliveryEvents), so delivery lags acceptance and hard bounces/complaints suppress
-// on their own (I1) — plus that the plain fake stays untouched (the simulation is
-// strictly opt-in and dev-shaped).
+// (applyDeliveryEvents), so delivery lags acceptance, hard bounces/complaints suppress on
+// their own (I1), and soft bounces are counted without suppressing (SPEC §9) — plus that
+// the plain fake stays untouched (the simulation is strictly opt-in and dev-shaped).
 
 const HOUR = 60 * 60 * 1000;
 const rendered: RenderedEmail = { subject: "Subj", html: "<p>hi</p>", text: "hi" };
+
+/** Bounce rows split by the taxonomy the sim now emits, read from the recorded detail. */
+async function bounceBreakdown(sendId: string): Promise<{ hard: number; soft: number }> {
+  const hard = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND event = 'bounced' AND event_detail LIKE '%hard%'",
+  )
+    .bind(sendId)
+    .first<{ n: number }>();
+  const soft = await env.DB.prepare(
+    "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND event = 'bounced' AND event_detail LIKE '%soft%'",
+  )
+    .bind(sendId)
+    .first<{ n: number }>();
+  return { hard: hard!.n, soft: soft!.n };
+}
 
 /** A `sending` send with `n` accepted-but-unconfirmed recipients, accepted `ageMs` ago. */
 async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<void> {
@@ -64,7 +79,7 @@ describe("simulationActive gating", () => {
 describe("drainSimulatedWebhooks (delayed synthetic receipts through the real ingest)", () => {
   const simConfig = () => ({ ...getConfig(env), simulateSends: true });
 
-  it("fabricates due delivered/bounced/complained events and suppresses the bad addresses (I1)", async () => {
+  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §9)", async () => {
     await seedAccepted("s-drain", 300, 2 * HOUR); // long-past accepts → all lags elapsed (< the drain cap)
 
     const applied = await drainSimulatedWebhooks(env, simConfig());
@@ -74,16 +89,92 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     const settled = row!.c_delivered + row!.c_bounced + row!.c_complained;
     expect(settled).toBe(300);
     expect(row!.c_delivered).toBeGreaterThan(0);
-    // At ~2% bounce + ~0.5% complaint over 300, some bad receipts land and suppress.
-    const bad = row!.c_bounced + row!.c_complained;
-    expect(bad).toBeGreaterThan(0);
+
+    // The suppression invariant: a HARD bounce or ANY complaint suppresses; a SOFT bounce is
+    // counted (in c_bounced) but must NOT suppress. So suppressions == hard bounces + complaints,
+    // and a soft bounce sits in c_bounced without a matching suppression.
+    const { hard, soft } = await bounceBreakdown("s-drain");
+    expect(hard + soft).toBe(row!.c_bounced);
+    expect(soft).toBeGreaterThan(0); // the guaranteed floor ensures the counted-not-suppressed path
     const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
       n: number;
     }>();
-    expect(sup!.n).toBe(bad);
+    expect(sup!.n).toBe(hard + row!.c_complained);
 
     // Idempotent: a second drain finds nothing left awaiting a receipt.
     expect(await drainSimulatedWebhooks(env, simConfig())).toBe(0);
+  });
+
+  it("guarantees every edge state on a small send, even at the realistic (rounds-to-zero) rates", async () => {
+    // At ~0.1% complaint / ~0.8% soft / ~1.5% hard, a 40-address send rolls ~zero of each edge
+    // state. The guaranteed floor (small sends only) must still surface all three so a live watch
+    // of a small demo send always shows the full taxonomy.
+    await seedAccepted("s-floor", 40, 2 * HOUR);
+    const applied = await drainSimulatedWebhooks(env, simConfig());
+    expect(applied).toBe(40);
+
+    const row = await sends.getSend(env.DB, "s-floor");
+    const { hard, soft } = await bounceBreakdown("s-floor");
+    expect(row!.c_complained).toBeGreaterThan(0); // forced when the natural roll produced none
+    expect(soft).toBeGreaterThan(0);
+    expect(hard).toBeGreaterThan(0);
+    // Minimal: it fills gaps, it doesn't juice the rate — a 40-address send stays mostly delivered.
+    expect(row!.c_delivered).toBeGreaterThan(30);
+    // And it still respects the suppression rule: soft bounces don't suppress.
+    const sup = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{
+      n: number;
+    }>();
+    expect(sup!.n).toBe(hard + row!.c_complained);
+  });
+
+  it("counts a soft (transient) bounce without suppressing it (SPEC §9)", async () => {
+    // Soft bounces land both from the ~0.8% rate and, if none did, the guaranteed floor — either
+    // way at least one is present to exercise the counted-not-suppressed branch.
+    await seedAccepted("s-soft", 380, 2 * HOUR);
+    await drainSimulatedWebhooks(env, simConfig());
+
+    const soft = await env.DB.prepare(
+      "SELECT email FROM deliveries WHERE send_id = ? AND event = 'bounced' AND event_detail LIKE '%soft%'",
+    )
+      .bind("s-soft")
+      .all<{ email: string }>();
+    expect(soft.results.length).toBeGreaterThan(0); // the counted-not-suppressed branch is exercised
+
+    // None of the soft-bounced addresses were suppressed — that branch is dead for soft bounces.
+    for (const { email } of soft.results) {
+      const hit = await env.DB.prepare("SELECT COUNT(*) AS n FROM suppressions WHERE email = ?")
+        .bind(email)
+        .first<{ n: number }>();
+      expect(hit!.n).toBe(0);
+    }
+  });
+
+  it("settles receipts in realistic order — delivered before complaints (lag by outcome)", async () => {
+    // Accepts aged into the BOUNCE window: past the delivered (~≤12s) and bounce (~≤30s)
+    // lags, but short of the complaint (~≥45s) lag. So on this drain every delivery and
+    // bounce is due, and no complaint is yet — delivered/bounces genuinely precede complaints.
+    await seedAccepted("s-order", 300, 35_000);
+    await drainSimulatedWebhooks(env, simConfig());
+
+    const mid = await sends.getSend(env.DB, "s-order");
+    expect(mid!.c_delivered).toBeGreaterThan(0);
+    expect(mid!.c_complained).toBe(0); // complaints lag longest — none have come due
+    // The only rows still awaiting a receipt are the future complainers.
+    expect(mid!.c_accepted).toBeGreaterThan(0);
+
+    // Advance time past the complaint window for the still-unconfirmed rows, then drain again.
+    const past = Date.now() - 120_000;
+    await env.DB.prepare(
+      "UPDATE deliveries SET updated_at = ? WHERE send_id = ? AND status = 'accepted' AND event IS NULL",
+    )
+      .bind(past, "s-order")
+      .run();
+    await sends.recomputeSendCounters(env.DB, "s-order");
+    await drainSimulatedWebhooks(env, simConfig());
+
+    const done = await sends.getSend(env.DB, "s-order");
+    expect(done!.c_complained).toBeGreaterThan(0); // complaints arrive last, as feedback loops do
+    expect(done!.c_accepted).toBe(0); // everyone now has a receipt
   });
 
   it("leaves not-yet-due recipients unconfirmed (delivery lags acceptance)", async () => {

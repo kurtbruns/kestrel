@@ -38,6 +38,13 @@ async function deliveryEvent(providerId: string): Promise<string | null> {
   return row?.event ?? null;
 }
 
+async function deliveryBounceKind(providerId: string): Promise<string | null> {
+  const row = await env.DB.prepare("SELECT bounce_kind FROM deliveries WHERE provider_id = ?")
+    .bind(providerId)
+    .first<{ bounce_kind: string | null }>();
+  return row?.bounce_kind ?? null;
+}
+
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM deliveries"),
@@ -57,6 +64,8 @@ describe("applyDeliveryEvents — suppression address recovery", () => {
     expect(applied).toEqual({ applied: 1, suppressed: 1 });
     expect(await isSuppressed(env.DB, "idonly-hard@example.com")).toBe(true);
     expect(await deliveryEvent("msg-idonly-hard")).toBe("bounced");
+    // The permanent/transient signal is frozen on the row for the record view (SPEC §8).
+    expect(await deliveryBounceKind("msg-idonly-hard")).toBe("hard");
   });
 
   it("suppresses via the matched delivery row when a complaint carries only a provider id", async () => {
@@ -81,6 +90,7 @@ describe("applyDeliveryEvents — suppression address recovery", () => {
     expect(await isSuppressed(env.DB, "idonly-soft@example.com")).toBe(false);
     // Still recorded on the row — a soft bounce is observed, just not suppressed.
     expect(await deliveryEvent("msg-idonly-soft")).toBe("bounced");
+    expect(await deliveryBounceKind("msg-idonly-soft")).toBe("soft");
   });
 
   it("records but does not suppress when a provider-id-only event matches no row", async () => {

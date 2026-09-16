@@ -25,10 +25,13 @@ export async function list(c: RequestContext): Promise<Response> {
     sends.countSends(c.env.DB, filter),
     sends.listSends(c.env.DB, filter, page),
   ]);
-  const withProgress = await Promise.all(
-    rows.map(async (s) => ({ ...s, progress: await sends.deliveryRollup(c.env.DB, s.id) })),
-  );
-  return json({ sends: withProgress, page: listPage(total, page) });
+  // Every row already carries the denormalized c_* counters (SEND_LIST_COLS), so the
+  // list surfaces dispatch/delivery progress and the wedged signal straight off the row.
+  // The per-row `deliveryRollup` aggregate this once ran — an O(rows × audience) scan on
+  // every Sent-page load and every ~3s active-send poll — is exactly what the counters
+  // (migration 0006) make redundant, so it is gone (#166). `deliveries` stays the source
+  // of truth; the counters are its rebuildable cache (SPEC §8).
+  return json({ sends: rows, page: listPage(total, page) });
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -37,13 +40,17 @@ export async function get(c: RequestContext): Promise<Response> {
     throw notFound("send");
   }
   const post = await getPost(c.env.DB, send.post_id);
-  const [progress, outcomes] = await Promise.all([
-    sends.deliveryRollup(c.env.DB, send.id),
+  const [outcomes, hasRetries] = await Promise.all([
     sends.deliveryOutcomes(c.env.DB, send.id),
+    send.status === "sending" ? sends.hasActiveRetries(c.env.DB, send.id) : Promise.resolve(false),
   ]);
   // The archive serves a post's frozen record only once it's sent (drafts/scheduled
-  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the
-  // sent record view's breakdown (SPEC §8); `progress` is kept for existing callers.
+  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the sent
+  // record view's per-recipient delivery breakdown (SPEC §8). `progress` is the same
+  // single-row counter shape `/progress` reports (buildSendProgress) — consolidated onto
+  // the c_* counters so this detail read no longer runs the redundant deliveryRollup
+  // aggregate (#166); it decides nothing and mails no one (I3).
+  const progress = buildSendProgress(send, c.config.provider, hasRetries, Date.now());
   return json({
     send,
     progress,
@@ -81,6 +88,37 @@ export async function progress(c: RequestContext): Promise<Response> {
   const hasRetries =
     send.status === "sending" ? await sends.hasActiveRetries(c.env.DB, send.id) : false;
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
+}
+
+/** Validate the `view` query param against the recognized set, defaulting to `issues`
+ *  (the record view opens on the rows that went wrong). */
+function parseDeliveryView(raw: string | null): sends.DeliveryView {
+  return sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)
+    ? (raw as sends.DeliveryView)
+    : "issues";
+}
+
+/**
+ * The sent record's per-recipient rows as paginated JSON (SPEC §8, §11 "always
+ * inspectable"). Reads the `deliveries` rows DIRECTLY — the source of truth — not the
+ * `c_*` progress counters, so it is heavier than `/progress` and deliberately NOT the
+ * poll target. Filter by `view` (issues / delivered / all / a single bucket) and an
+ * optional email search; sort and paginate via the shared list convention. Read-only
+ * over the frozen record (I3) — it decides nothing and mails no one.
+ */
+export async function deliveries(c: RequestContext): Promise<Response> {
+  const send = await sends.getSend(c.env.DB, param(c, "id"));
+  if (!send) {
+    throw notFound("send");
+  }
+  const view = parseDeliveryView(c.url.searchParams.get("view"));
+  const search = c.url.searchParams.get("search") ?? undefined;
+  const page = parseListParams(c.url, sends.DELIVERY_LIST_SPEC);
+  const [total, rows] = await Promise.all([
+    sends.countDeliveriesFiltered(c.env.DB, send.id, view, search),
+    sends.listDeliveriesPage(c.env.DB, send.id, view, page, search),
+  ]);
+  return json({ deliveries: rows, view, page: listPage(total, page) });
 }
 
 /** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */

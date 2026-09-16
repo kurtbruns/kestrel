@@ -899,8 +899,11 @@ function buildDeliveries(
     };
     const ev = events.get(email);
     if (ev) {
-      // Accepted by the provider, then bounced/complained via a later webhook.
-      return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at };
+      // Accepted by the provider, then bounced/complained via a later webhook. The demo's
+      // bounces are permanent (they draw the send's suppressions), so their frozen kind is
+      // `hard`; a complaint carries no bounce kind.
+      const bounce_kind = ev.event === "bounced" ? "hard" : null;
+      return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at, bounce_kind };
     }
     if (failedSlots.has(i)) {
       return {

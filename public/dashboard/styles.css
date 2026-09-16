@@ -1438,11 +1438,17 @@ th.num .th-sort {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* Names the living layer of the record: the outcome tiles below keep moving as receipts
+   arrive, while the audience and published issue are frozen (SPEC §8). */
+.rec-tiles-cap {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+}
 .rec-tiles {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 10px;
-  margin: 18px 0 4px;
+  margin: 10px 0 4px;
 }
 .rec-tile {
   background: var(--sunken);
@@ -1511,6 +1517,72 @@ th.num .th-sort {
   .rec-tiles {
     grid-template-columns: repeat(2, 1fr);
   }
+}
+
+/* ---- per-recipient record (#164): the rows behind the outcome tiles ---- */
+.rec-people {
+  margin-top: 26px;
+}
+.rec-people-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.rec-people-title {
+  margin: 0;
+  font-size: 15px;
+}
+/* The view toggle (Issues / Delivered / All) is a Control, not a button (DESIGN §1):
+   the same segmented, aria-pressed pill group as the Template preview-width toggle, its
+   active segment in the Secondary palette. It switches what you're looking at; it never
+   commits an action. */
+.rec-views {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line-soft);
+  border-radius: 7px;
+  background: var(--card);
+}
+.rec-view-btn {
+  border: 0;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+  border-radius: 5px;
+  cursor: pointer;
+}
+.rec-view-btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.rec-people-search {
+  margin: 12px 0;
+  max-width: 300px;
+}
+.rec-people-table .c-out {
+  width: 190px;
+}
+.rec-people-table .rec-email {
+  font-weight: 500;
+}
+/* An outcome cell reuses the tile swatch palette (sw-ok / sw-warn / sw-danger /
+   sw-sending / sw-neutral) so a row reads the same bucket as its tile above. */
+.rec-out {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.rec-out-hint {
+  font-size: 11.5px;
+}
+.rec-people-empty {
+  margin: 14px 0 0;
+  font-size: 13px;
 }
 
 /* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
