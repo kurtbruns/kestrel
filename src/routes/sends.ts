@@ -25,10 +25,13 @@ export async function list(c: RequestContext): Promise<Response> {
     sends.countSends(c.env.DB, filter),
     sends.listSends(c.env.DB, filter, page),
   ]);
-  const withProgress = await Promise.all(
-    rows.map(async (s) => ({ ...s, progress: await sends.deliveryRollup(c.env.DB, s.id) })),
-  );
-  return json({ sends: withProgress, page: listPage(total, page) });
+  // Every row already carries the denormalized c_* counters (SEND_LIST_COLS), so the
+  // list surfaces dispatch/delivery progress and the wedged signal straight off the row.
+  // The per-row `deliveryRollup` aggregate this once ran — an O(rows × audience) scan on
+  // every Sent-page load and every ~3s active-send poll — is exactly what the counters
+  // (migration 0006) make redundant, so it is gone (#166). `deliveries` stays the source
+  // of truth; the counters are its rebuildable cache (SPEC §8).
+  return json({ sends: rows, page: listPage(total, page) });
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -37,13 +40,17 @@ export async function get(c: RequestContext): Promise<Response> {
     throw notFound("send");
   }
   const post = await getPost(c.env.DB, send.post_id);
-  const [progress, outcomes] = await Promise.all([
-    sends.deliveryRollup(c.env.DB, send.id),
+  const [outcomes, hasRetries] = await Promise.all([
     sends.deliveryOutcomes(c.env.DB, send.id),
+    send.status === "sending" ? sends.hasActiveRetries(c.env.DB, send.id) : Promise.resolve(false),
   ]);
   // The archive serves a post's frozen record only once it's sent (drafts/scheduled
-  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the
-  // sent record view's breakdown (SPEC §8); `progress` is kept for existing callers.
+  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the sent
+  // record view's per-recipient delivery breakdown (SPEC §8). `progress` is the same
+  // single-row counter shape `/progress` reports (buildSendProgress) — consolidated onto
+  // the c_* counters so this detail read no longer runs the redundant deliveryRollup
+  // aggregate (#166); it decides nothing and mails no one (I3).
+  const progress = buildSendProgress(send, c.config.provider, hasRetries, Date.now());
   return json({
     send,
     progress,

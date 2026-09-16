@@ -922,6 +922,9 @@ export interface AcceptedAwaitingEvent {
   email: string;
   provider_id: string | null;
   updated_at: number;
+  /** The send's frozen recipient count, so the simulation can scale a per-send rate
+   *  (e.g. a small-list complaint floor) to the audience size. */
+  recipient_count: number;
 }
 
 /** Accepted-but-unconfirmed deliveries of in-flight or recently-sent sends, oldest
@@ -932,7 +935,7 @@ export async function acceptedAwaitingEvent(
 ): Promise<AcceptedAwaitingEvent[]> {
   const { results } = await db
     .prepare(
-      `SELECT d.send_id AS send_id, d.email AS email, d.provider_id AS provider_id, d.updated_at AS updated_at
+      `SELECT d.send_id AS send_id, d.email AS email, d.provider_id AS provider_id, d.updated_at AS updated_at, s.recipient_count AS recipient_count
          FROM deliveries d JOIN sends s ON s.id = d.send_id
         WHERE d.status = 'accepted' AND d.event IS NULL
           AND s.status IN ('sending', 'sent')

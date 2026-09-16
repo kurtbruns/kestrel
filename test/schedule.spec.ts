@@ -260,7 +260,13 @@ describe("schedule / send / cancel + soft-lock", () => {
     });
     const list = await readJson(await SELF.fetch(`${base}/sends`, { headers: AUTH }));
     expect(list.sends.length).toBeGreaterThanOrEqual(1);
-    expect(list.sends[0]).toHaveProperty("progress");
+    // The list row carries the denormalized progress counters (migration 0006) instead of
+    // the per-row deliveryRollup aggregate it once ran (#166) — the client derives the
+    // dispatch/delivery/wedged view straight off them.
+    expect(list.sends[0]).toHaveProperty("c_delivered");
+    expect(list.sends[0]).toHaveProperty("c_bounced");
+    expect(list.sends[0]).toHaveProperty("c_pending");
+    expect(list.sends[0]).not.toHaveProperty("progress");
 
     const noauth = await SELF.fetch(`${base}/sends`);
     expect(noauth.status).toBe(401);
