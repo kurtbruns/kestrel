@@ -70,7 +70,7 @@ A token means one thing, and a color has one job; a second token for a color tha
 | `--status-draft` · `--status-scheduled` · `--status-sending` · `--status-sent` | Lifecycle badge hues — gray · violet · blue · green | Facts, not warnings; distinct from the feedback scales. `--status-sending`'s blue is its own shade, **not** the action `--accent`. Full state→hue map below. |
 | `--fg` `--muted` `--line` `--line-soft` `--chip` `--bg` `--card` | Neutral surface set | Text, borders, page/card grounds, and the recessed layer. |
 | `--ring` | Focus | The one focus treatment. |
-| `--syntax-*` | Template-editor syntax highlight | Self-contained; out of scope for this contract. |
+| `--syntax-*` | Editor syntax highlight — the **template** editor (HTML/CSS, `.cx-*`) and the **post/Markdown** editor (`.cx-md-*`) | One palette both editors' token classes map onto. The post editor's scheme is deliberately minimal — the *mark* is colored (`#` crimson `--syntax-heading`, `*`/`**` pink `--syntax-emphasis`, `>`/bullets orange `--syntax-quote`), the *content* keeps `--syntax-fg` and carries only weight/slant. This palette is self-contained: new syntax hues live here with a light + dark value each, and are otherwise out of scope for this contract's one-color-per-role rule. |
 
 Every token has a light and a dark value; a color defined in only one theme is a bug.
 
