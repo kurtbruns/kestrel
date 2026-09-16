@@ -379,7 +379,8 @@ export async function listDeliveries(db: D1Database, sendId: string): Promise<De
 // rows to a mutually-exclusive outcome bucket (or the `issues` group / `all`), using
 // the SAME event-wins-over-status bucketing as `deliveryOutcomes` so a filtered list
 // reconciles to its tile. Since it isn't polled, this read can be heavier than
-// `/progress` — an aggregate + a page, plus a suppression join for the soft/hard split.
+// `/progress`. Every field is a fact of the send's own delivery rows (including the
+// frozen `bounce_kind`), so the record never drifts with global suppression state.
 
 /** The recognized `view` values: the three UI toggles (`issues` default / `delivered`
  *  / `all`) plus the individual outcome buckets, so a caller can filter to any one. */
@@ -411,9 +412,9 @@ export const DELIVERY_LIST_SPEC: ListSpec = {
 
 /** One recipient's row for the in-app record. Carries the two orthogonal facts (the
  *  send-loop `status` and the later webhook `event`, see `deliveryOutcomes`), the
- *  provider detail/error, and whether the address is now suppressed — the durable
- *  signal that splits a HARD bounce (suppressed on its own) from a SOFT one (counted,
- *  never suppressed), since the delivery row itself stores no soft/hard flag. */
+ *  provider detail/error, and — for a bounce — the frozen soft/hard `bounce_kind`
+ *  recorded when the event landed (SPEC §8). The split is a fact of THIS send, so it
+ *  never drifts with the global, clearable `suppressions` table. */
 export interface DeliveryRecordRow {
   email: string;
   status: string;
@@ -422,10 +423,10 @@ export interface DeliveryRecordRow {
   event_at: number | null;
   error: string | null;
   attempts: number;
-  /** 0/1 — whether the address is in `suppressions` (a hard bounce or a complaint). */
-  suppressed: number;
-  /** The suppression's reason (`bounce` | `complaint` | `manual`), or null if none. */
-  suppressed_reason: string | null;
+  /** For a bounced row: `hard` | `soft` as the provider reported it on this send, or
+   *  null when unknown (a pre-`bounce_kind` row, or a provider detail we couldn't
+   *  classify) — rendered then as a plain "Bounce". */
+  bounce_kind: string | null;
 }
 
 /** The WHERE fragment for one `view`, bucketed exactly as `deliveryOutcomes` (the
@@ -489,9 +490,8 @@ export async function listDeliveriesPage(
     .prepare(
       `SELECT d.email AS email, d.status AS status, d.event AS event, d.event_detail AS event_detail,
               d.event_at AS event_at, d.error AS error, d.attempts AS attempts,
-              (sup.email IS NOT NULL) AS suppressed, sup.reason AS suppressed_reason
+              d.bounce_kind AS bounce_kind
          FROM deliveries d
-         LEFT JOIN suppressions sup ON sup.email = d.email
          ${clause} ${order} LIMIT ? OFFSET ?`,
     )
     .bind(...binds, page.limit, page.offset)
@@ -843,6 +843,11 @@ export interface DeliveryEventUpdate {
   /** delivered | bounced | complained. */
   event: string;
   detail?: string | null;
+  /** For a `bounced` event: whether the provider reported it as a permanent (hard)
+   *  bounce. Recorded as the delivery row's frozen soft/hard fact for the record view
+   *  (SPEC §8), so the split never depends on the mutable, cross-send `suppressions`
+   *  table. Ignored for non-bounce events (they clear any prior kind). */
+  hard?: boolean;
   at: number;
 }
 
@@ -902,10 +907,15 @@ export async function markDeliveryEvent(
 
   const fromCol = bucketCol(row.status, row.event);
   const toCol = bucketCol(row.status, u.event);
+  // Freeze the soft/hard split as a fact of this send (SPEC §8): a bounce records the
+  // provider's hard/soft signal; any other event clears it (the row is no longer a bounce).
+  const bounceKind = u.event === "bounced" ? (u.hard ? "hard" : "soft") : null;
   const stmts: D1PreparedStatement[] = [
     db
-      .prepare("UPDATE deliveries SET event = ?, event_detail = ?, event_at = ? WHERE id = ?")
-      .bind(u.event, detail, u.at, row.id),
+      .prepare(
+        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?, bounce_kind = ? WHERE id = ?",
+      )
+      .bind(u.event, detail, u.at, bounceKind, row.id),
   ];
   if (fromCol !== toCol) {
     stmts.push(counterMove(db, row.send_id, fromCol, toCol, 1));

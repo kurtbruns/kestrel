@@ -1433,11 +1433,17 @@ th.num .th-sort {
   gap: 8px;
   flex-wrap: wrap;
 }
+/* Names the living layer of the record: the outcome tiles below keep moving as receipts
+   arrive, while the audience and published issue are frozen (SPEC §8). */
+.rec-tiles-cap {
+  margin: 16px 0 0;
+  font-size: 12.5px;
+}
 .rec-tiles {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 10px;
-  margin: 18px 0 4px;
+  margin: 10px 0 4px;
 }
 .rec-tile {
   background: var(--sunken);

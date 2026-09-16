@@ -2537,17 +2537,21 @@ function outcomeReconHtml(outcomes) {
 // The per-recipient record (#164): the outcome tiles summarize, this shows the actual
 // rows. A row's OUTCOME is derived from the same two facts the tiles bucket — the webhook
 // `event` winning over the send-loop `status` — so a row reads the same bucket (and reuses
-// the same swatch palette) as its tile. A bounce splits soft vs hard on the durable signal
-// the spec defines the split by: a hard bounce suppressed the address, a soft one didn't.
+// the same swatch palette) as its tile. A bounce splits soft vs hard on `bounce_kind` — the
+// provider's permanent/transient signal frozen onto the row when the event landed (SPEC §8),
+// a fact of THIS send, not a read of the current suppression list. Null = kind unknown.
 function deliveryOutcome(r) {
   if (r.event === "delivered") {
     return { label: "Delivered", sw: "ok" };
   }
   if (r.event === "bounced") {
-    const hard = r.suppressed && r.suppressed_reason === "bounce";
-    return hard
-      ? { label: "Hard bounce", sw: "warn", hint: "suppressed" }
-      : { label: "Soft bounce", sw: "warn", hint: "counted, not suppressed" };
+    if (r.bounce_kind === "hard") {
+      return { label: "Hard bounce", sw: "warn", hint: "permanent — suppressed the address" };
+    }
+    if (r.bounce_kind === "soft") {
+      return { label: "Soft bounce", sw: "warn", hint: "transient — counted, not suppressed" };
+    }
+    return { label: "Bounce", sw: "warn" };
   }
   if (r.event === "complained") {
     return { label: "Complained", sw: "danger", hint: "suppressed" };
@@ -2637,6 +2641,7 @@ function renderFrozenRecord(id, data) {
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
         <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
+      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published issue are fixed as sent.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
@@ -2656,7 +2661,7 @@ function renderFrozenRecord(id, data) {
         <div id="recRows" class="muted">Loading…</div>
         <div id="recPager"></div>
       </div>
-      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable. Delivery counts keep updating as receipts arrive.</p>
+      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable.</p>
     </div>`;
 
   const viewBtn = document.getElementById("viewPublished");

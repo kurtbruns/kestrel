@@ -67,6 +67,7 @@ interface SeedDelivery {
   email: string;
   status: string;
   event?: string | null;
+  bounce_kind?: string | null;
 }
 
 async function seedSentSend(subject: string, slug: string, deliveries: SeedDelivery[]) {
@@ -97,7 +98,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   let i = 0;
   for (const d of deliveries) {
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO deliveries (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
       .bind(
         `d-${sendId}-${i++}`,
@@ -111,6 +112,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
         d.event ?? null,
         null,
         d.event ? now : null,
+        d.bounce_kind ?? null,
       )
       .run();
   }
@@ -240,7 +242,8 @@ describe("sent record view — GET /sends/:id", () => {
 // #164: the record view shows the per-recipient rows in-app, not just as the CSV — a
 // paginated, filterable JSON endpoint read DIRECTLY off `deliveries` (the source of
 // truth), not the `c_*` counters. The default view is "issues" (bounced/complained/
-// failed), and a bounce splits soft vs hard by whether the address is now suppressed.
+// failed), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
+// ingest (SPEC §8) — a fact of this send, not a read of the global suppression list.
 describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   // Storage isn't isolated between tests in this file, and `suppressions.email` is a
   // global PK, so each record gets a unique address tag. The `fail/hard/soft/spam`
@@ -257,23 +260,18 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
       skip: `skip-${tag}@example.com`,
       wait: `wait-${tag}@example.com`,
     };
+    // The soft/hard split is carried on the delivery row itself (`bounce_kind`), the way
+    // the webhook ingest freezes it — not inferred from the mutable `suppressions` table.
     const { sendId } = await seedSentSend("Rows Test", `rows-${tag}`, [
       { email: e.d1, status: "accepted", event: "delivered" },
       { email: e.d2, status: "accepted", event: "delivered" },
-      { email: e.hard, status: "accepted", event: "bounced" },
-      { email: e.soft, status: "accepted", event: "bounced" },
+      { email: e.hard, status: "accepted", event: "bounced", bounce_kind: "hard" },
+      { email: e.soft, status: "accepted", event: "bounced", bounce_kind: "soft" },
       { email: e.spam, status: "accepted", event: "complained" },
       { email: e.fail, status: "failed" },
       { email: e.skip, status: "skipped" },
       { email: e.wait, status: "accepted" }, // accepted, no event yet
     ]);
-    // A hard bounce suppresses the address (I1); the soft one does not — so the join is
-    // what lets the record label the two apart, since the row itself stores no such flag.
-    await env.DB.prepare(
-      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'bounce', 'hard bounce', ?)",
-    )
-      .bind(e.hard, Date.now())
-      .run();
     return { sendId, e };
   }
 
@@ -288,22 +286,32 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     expect(body.page).toMatchObject({ total: 4, sort: "email", dir: "asc" });
   });
 
-  it("splits soft vs hard bounce by suppression", async () => {
+  it("splits soft vs hard bounce on the per-send frozen kind", async () => {
     const { sendId, e } = await seedRecord();
     const body = await readJson(
       await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
     const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
-    expect(byEmail[e.hard]).toMatchObject({
-      event: "bounced",
-      suppressed: 1,
-      suppressed_reason: "bounce",
-    });
-    expect(byEmail[e.soft]).toMatchObject({
-      event: "bounced",
-      suppressed: 0,
-      suppressed_reason: null,
-    });
+    expect(byEmail[e.hard]).toMatchObject({ event: "bounced", bounce_kind: "hard" });
+    expect(byEmail[e.soft]).toMatchObject({ event: "bounced", bounce_kind: "soft" });
+  });
+
+  it("keeps the soft/hard label frozen — a later global suppression can't rewrite it", async () => {
+    // The bug this replaces: reading the label from the global `suppressions` table let an
+    // unrelated later suppression of the same address flip this frozen record's outcome
+    // (SPEC §8). Suppress the soft-bounced address as another send would, then re-read: the
+    // record still reports the soft bounce it recorded, because the label is a fact of the row.
+    const { sendId, e } = await seedRecord();
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'bounce', 'hard bounce', ?)",
+    )
+      .bind(e.soft, Date.now())
+      .run();
+    const body = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+    );
+    const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
+    expect(byEmail[e.soft]).toMatchObject({ event: "bounced", bounce_kind: "soft" });
   });
 
   it("filters to delivered, and to a single bucket", async () => {
