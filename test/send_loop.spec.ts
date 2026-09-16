@@ -106,6 +106,23 @@ describe("send loop + sweep", () => {
     expect(countTo("o2@example.com")).toBe(1);
   });
 
+  it("does not fire a scheduled send whose fire time is still in the future (reschedule-vs-sweep race, I6)", async () => {
+    // The sweep snapshots due sends and then leases each one; a reschedule that moves a
+    // just-due send forward lands in that gap, leaving the row `scheduled` at a new,
+    // future fire_at. acquireLease re-checks fire_at (not just status), so runSend on a
+    // not-yet-due scheduled send is a no-op — the send is never fired at its old time
+    // after the API accepted the move. Without the guard this would lease, dispatch, and
+    // mail the audience.
+    await seedConfirmed("soon@example.com");
+    const send = await scheduledSend(Date.now() + 10 * 60 * 1000);
+
+    const result = await runSend(env, send.id);
+
+    expect(result.leased).toBe(false);
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("scheduled");
+    expect(fakeOutbox().length).toBe(0);
+  });
+
   it("skips a recipient who unsubscribed after audience resolution (I2)", async () => {
     await seedConfirmed("keep@example.com");
     await seedConfirmed("gone@example.com");

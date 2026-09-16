@@ -90,6 +90,33 @@ function isActiveSendConflict(err: unknown): boolean {
   return /UNIQUE constraint failed:\s*sends\.post_id/i.test(message);
 }
 
+/**
+ * Move a scheduled Send's fire time without re-freezing (I3) or resetting the review
+ * window (I6). Distinct from the unschedule → edit → re-schedule path (which is for
+ * *content* changes): this touches only `fire_at`, so the frozen render and the frozen
+ * audience are untouched and it stays the post's single active send throughout — only
+ * the moment it fires changes. A CAS on `scheduled` status is the guarantee: a send that
+ * has begun sending (or is sent/canceled/failed) is past the window and cannot be moved,
+ * even if it transitions between the read and the update. The reverse race — the sweep
+ * firing a send this call just moved forward — is closed on the sweep side, where
+ * `acquireLease` re-checks `fire_at` before leasing a `scheduled` send.
+ */
+export async function reschedule(env: AppEnv, sendId: string, fireAt: number): Promise<SendRow> {
+  const send = await getSend(env.DB, sendId);
+  if (!send) {
+    throw notFound("send");
+  }
+  const res = await env.DB.prepare(
+    "UPDATE sends SET fire_at = ? WHERE id = ? AND status = 'scheduled'",
+  )
+    .bind(fireAt, sendId)
+    .run();
+  if ((res.meta.changes ?? 0) === 0) {
+    throw conflict("send is not reschedulable (already sending, sent, or canceled)");
+  }
+  return unwrap(await getSend(env.DB, sendId), "send");
+}
+
 /** Cancel a pending Send and unlock its post. Only works while `scheduled`. */
 export async function cancel(env: AppEnv, sendId: string): Promise<SendRow> {
   const send = await getSend(env.DB, sendId);
