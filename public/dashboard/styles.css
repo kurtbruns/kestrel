@@ -76,6 +76,15 @@
   --syntax-punctuation: #a1a1aa;
   --syntax-variable: #2d47b8;
   --syntax-variable-bg: rgba(51, 85, 204, 0.11);
+  /* Post editor's minimal scheme (issue #138): marks get the color, content keeps --syntax-fg.
+     Heading # is crimson; the emphasis asterisks are a magenta-pink kept clear of the heading
+     crimson; block markers (>, list bullets, fence language) are a saturated, bright orange. */
+  --syntax-heading: #be123c;
+  --syntax-emphasis: #db2777;
+  --syntax-quote: #ea580c;
+  /* Code surface — inline `code` chip and the fenced-block band. A hair off the editor well
+     (--syntax-bg), lighter than the neutral --chip, so code reads as code without a heavy box. */
+  --syntax-code-bg: #f2f2f4;
   /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
      stronger line + a neutral chip fill, layered on the zinc neutrals above. */
   --sunken: #f6f6f7;
@@ -136,6 +145,12 @@
     --syntax-punctuation: #6a6a72;
     --syntax-variable: #a9bbf2;
     --syntax-variable-bg: rgba(120, 150, 240, 0.18);
+    /* Post editor minimal scheme (issue #138) — near-black/saturated hues lift to legible
+       tints on the dark well; the heading crimson becomes a rose, emphasis a lighter pink. */
+    --syntax-heading: #fb7185;
+    --syntax-emphasis: #f472b6;
+    --syntax-quote: #f0a86a;
+    --syntax-code-bg: #26262b;
     --sunken: #1b1b1f;
     --line-soft: #3a3a41;
     --chip: #2a2a30;
@@ -1965,6 +1980,18 @@ th.num .th-sort {
 }
 .md-hl code {
   font: inherit;
+  display: block;
+}
+/* One block row per source line (see highlightMarkdown): this is what lets a fenced code
+   region carry a single continuous background across its lines and keeps the row count — and
+   the caret's line position — locked to the textarea. min-height holds an empty row open to
+   exactly one line so a blank line in the source doesn't collapse and shift everything below. */
+.cx-md-ln {
+  display: block;
+  min-height: 1lh;
+}
+.cx-md-band {
+  background: var(--syntax-code-bg);
 }
 .composer-body textarea.editor {
   position: relative;
@@ -3884,35 +3911,38 @@ textarea.is-invalid {
   padding: 0 2px;
   font-weight: 600;
 }
-/* Markdown token colors (issue #138) — the post editor's highlight classes, mapped onto the
-   same --syntax-* palette (no new colors; DESIGN §3 keeps one color per job). Weight and slant
-   are what Markdown adds over the template's HTML/CSS tokens: strong/em carry the emphasis they
-   mark, headings read bold, and the structural marks (#, -, >, list numbers) are muted. */
-.cx-md-h {
-  color: var(--syntax-tag);
+/* Markdown token classes (issue #138) — the minimal scheme: the MARK carries the color, the
+   CONTENT keeps --syntax-fg and carries only weight/slant. So a bold word reads as weight, not
+   as a hue that competes with a heading. Heading text is bold with a crimson # mark; emphasis
+   asterisks are pink around plain weighted/slanted text; block markers (>, bullets, the fence
+   language) are orange; only a link's URL is treated; code sits on a --chip surface. */
+.cx-md-hmark {
+  color: var(--syntax-heading);
   font-weight: 700;
 }
+.cx-md-htext {
+  font-weight: 700;
+}
+.cx-md-mark {
+  color: var(--syntax-emphasis);
+}
 .cx-md-strong {
-  color: var(--syntax-fg);
   font-weight: 700;
 }
 .cx-md-em {
-  color: var(--syntax-fg);
   font-style: italic;
+}
+.cx-md-bmark {
+  color: var(--syntax-quote);
+}
+.cx-md-url {
+  color: var(--syntax-property);
+  text-decoration: underline;
 }
 .cx-md-code {
   color: var(--syntax-string);
-}
-.cx-md-link {
-  color: var(--syntax-property);
-}
-.cx-md-quote {
-  color: var(--syntax-selector);
-  font-style: italic;
-}
-.cx-md-marker {
-  color: var(--syntax-punctuation);
-  font-weight: 600;
+  background: var(--syntax-code-bg);
+  border-radius: 3px;
 }
 .set-tpl-hint {
   margin: 6px 0 0;

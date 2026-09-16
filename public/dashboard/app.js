@@ -1214,8 +1214,9 @@ async function renderEditor(id) {
     mdHl.scrollLeft = ta.scrollLeft;
   };
   const paintMarkdown = () => {
-    // Trailing newline so the final line renders and the overlay height tracks the textarea.
-    mdHlCode.innerHTML = `${highlightMarkdown(ta.value)}\n`;
+    // highlightMarkdown emits one block row per source line (split on "\n"), so the row count —
+    // and thus the overlay height — already tracks the textarea, including a trailing blank line.
+    mdHlCode.innerHTML = highlightMarkdown(ta.value);
     syncMdScroll();
   };
   ta.addEventListener("scroll", syncMdScroll);
@@ -3512,69 +3513,87 @@ function highlightTemplate(src) {
 // --- post (Markdown) syntax highlighting (issue #138) ---
 // highlightTemplate()'s counterpart for the post editor: the same transparent-textarea-
 // over-highlighted-<pre> overlay, tokenizing Markdown instead of HTML/CSS, in the same
-// framework-free, no-build spirit. It is a light, line-oriented pass — the marks an author
-// scans for (headings, emphasis, code, links, lists, quotes), not a full CommonMark parser
-// — and it reuses the shared --syntax-* palette through the .cx-md-* classes. Prose is left
-// uncolored on purpose: the color is a wayfinding aid, not a rendering of the email.
+// framework-free, no-build spirit. The scheme is deliberately minimal (Sublime-style): it
+// colors the *marks* an author scans for — the #, >, list bullets, the emphasis *asterisks*,
+// a link's URL — and leaves the CONTENT in the font color, carrying only weight/slant. So a
+// bold word reads as weight, not as a color that could be confused with a heading. It is a
+// light, line-oriented pass, not a full CommonMark parser, over the shared --syntax-* palette.
 
-// Inline constructs within one line of prose, in a single left-to-right pass. One alternation
-// consumes each construct whole so we never re-tokenize inside a span we just emitted (the
-// classic bug from chaining .replace() calls — an italic pass eating a bold marker). Order is
-// the priority at a given position: `code`, then [links]/images, then **strong** before *em*.
+// Inline constructs within one line, in a single left-to-right pass. One alternation consumes
+// each construct whole so we never re-tokenize inside a span we just emitted (the classic bug
+// from chaining .replace() calls — an italic pass eating a bold marker). Marks are colored, the
+// content plain: emphasis asterisks are pink and the word carries only weight/slant; a link's
+// text stays plain and only its URL is treated; inline `code` sits on a chip. Order at a given
+// position: `code`, then [links]/images, then **strong** before *em*.
 function hlMdInline(raw) {
   return esc(raw).replace(
-    /(`[^`\n]+`)|(!?\[[^\]\n]*\]\([^)\n]*\))|(\*\*[^\n]+?\*\*|__[^\n]+?__)|(\*[^*\n]+?\*|\b_[^_\n]+?_\b)/g,
-    (m, code, link, strong) => {
+    /(`[^`\n]+`)|(!?)(\[[^\]\n]*\])\(([^)\n]*)\)|(\*\*|__)([^\n]+?)\5|([*_])([^*_\n]+?)\7/g,
+    (m, code, bang, ltext, lurl, bd, btext, it, itext) => {
       if (code) {
-        return `<span class="cx-md-code">${m}</span>`;
+        return `<span class="cx-md-code">${code}</span>`;
       }
-      if (link) {
-        return `<span class="cx-md-link">${m}</span>`;
+      if (ltext !== undefined) {
+        // Link/image: text + brackets stay plain; only the URL is treated (blue, underlined).
+        return `${bang || ""}${ltext}(<span class="cx-md-url">${lurl}</span>)`;
       }
-      if (strong) {
-        return `<span class="cx-md-strong">${m}</span>`;
+      if (bd) {
+        return `<span class="cx-md-mark">${bd}</span><span class="cx-md-strong">${btext}</span><span class="cx-md-mark">${bd}</span>`;
       }
-      return `<span class="cx-md-em">${m}</span>`;
+      return `<span class="cx-md-mark">${it}</span><span class="cx-md-em">${itext}</span><span class="cx-md-mark">${it}</span>`;
     },
   );
+}
+// One line's block-level construct. Marks are colored and the text stays plain (still inline-
+// tokenized). Falls through to a plain inline pass for prose.
+function renderMdLine(line) {
+  // ATX heading: crimson # marks, heading text in the font color (bold for hierarchy).
+  const h = line.match(/^(\s{0,3}#{1,6})(\s.*)?$/);
+  if (h) {
+    return `<span class="cx-md-hmark">${esc(h[1])}</span><span class="cx-md-htext">${esc(h[2] || "")}</span>`;
+  }
+  // Thematic break: --- *** ___ (three or more of one mark), alone on the line.
+  if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
+    return `<span class="cx-md-bmark">${esc(line)}</span>`;
+  }
+  // Blockquote: > markers colored, the quoted text plain (still inline-tokenized).
+  const q = line.match(/^(\s{0,3})((?:>\s?)+)(.*)$/);
+  if (q) {
+    return `${esc(q[1])}<span class="cx-md-bmark">${esc(q[2])}</span>${hlMdInline(q[3])}`;
+  }
+  // List item: -, *, + (unordered) or 1. / 1) (ordered); colored marker, plain text.
+  const li = line.match(/^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/);
+  if (li) {
+    return `${li[1]}<span class="cx-md-bmark">${esc(li[2])}</span>${li[3]}${hlMdInline(li[4])}`;
+  }
+  return hlMdInline(line);
 }
 function highlightMarkdown(src) {
   let inFence = false;
   return String(src)
     .split("\n")
     .map((line) => {
-      // Fenced code block: a ``` or ~~~ line toggles the fence; every line within is code.
+      let html;
+      let band = false;
+      // Fenced code block: a ``` or ~~~ line toggles the fence. The backticks stay plain and
+      // only the language after them is colored. The fence lines themselves stay off the band —
+      // only the code between the fences carries the background.
       const fence = line.match(/^(\s*)(```+|~~~+)(.*)$/);
       if (fence) {
         inFence = !inFence;
-        return `${fence[1]}<span class="cx-md-code">${esc(fence[2] + fence[3])}</span>`;
+        const lang = fence[3] ? `<span class="cx-md-bmark">${esc(fence[3])}</span>` : "";
+        html = `${fence[1]}${esc(fence[2])}${lang}`;
+      } else if (inFence) {
+        band = true;
+        html = esc(line);
+      } else {
+        html = renderMdLine(line);
       }
-      if (inFence) {
-        return `<span class="cx-md-code">${esc(line)}</span>`;
-      }
-      // ATX heading (# … ######, a space or line-end after the hashes) — the whole line reads
-      // as a heading; inner emphasis is left plain to keep the line calm.
-      const h = line.match(/^\s{0,3}#{1,6}(?:\s.*)?$/);
-      if (h) {
-        return `<span class="cx-md-h">${esc(line)}</span>`;
-      }
-      // Thematic break: --- *** ___ (three or more of one mark), alone on the line.
-      if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
-        return `<span class="cx-md-marker">${esc(line)}</span>`;
-      }
-      // Blockquote: the > markers muted, the quoted text tinted and inline-tokenized.
-      const q = line.match(/^(\s{0,3}(?:>\s?)+)(.*)$/);
-      if (q) {
-        return `<span class="cx-md-quote"><span class="cx-md-marker">${esc(q[1])}</span>${hlMdInline(q[2])}</span>`;
-      }
-      // List item: -, *, + (unordered) or 1. / 1) (ordered); marker muted, rest inline.
-      const li = line.match(/^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/);
-      if (li) {
-        return `${li[1]}<span class="cx-md-marker">${esc(li[2])}</span>${li[3]}${hlMdInline(li[4])}`;
-      }
-      return hlMdInline(line);
+      // Each source line is its own block row, so the caret aligns line-for-line with the
+      // textarea and consecutive fenced rows' backgrounds abut into one continuous band. An
+      // empty row is held open to one line by .cx-md-ln's min-height (CSS), not a filler glyph.
+      return `<span class="cx-md-ln${band ? " cx-md-band" : ""}">${html}</span>`;
     })
-    .join("\n");
+    .join("");
 }
 
 async function renderTemplate() {
