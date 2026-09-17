@@ -156,6 +156,44 @@ describe("in-flight post routing (#162)", () => {
   });
 });
 
+describe("Sent list — delivery-issues filter (/sends?issues=only)", () => {
+  it("narrows to sends with any bounce, complaint, or send-time failure", async () => {
+    const marker = `issues-${uniq()}`;
+    const { sendId: clean } = await seedSentSend(`${marker} clean`, `${marker}-clean`, [
+      { email: "a@example.com", status: "accepted", event: "delivered" },
+      { email: "b@example.com", status: "accepted", event: "delivered" },
+    ]);
+    const { sendId: bounced } = await seedSentSend(`${marker} bounced`, `${marker}-bounced`, [
+      { email: "c@example.com", status: "accepted", event: "delivered" },
+      { email: "d@example.com", status: "accepted", event: "bounced", bounce_kind: "soft" },
+    ]);
+    // A send-time failure alone is a delivery issue too — it's the third counter in the sum.
+    const { sendId: failed } = await seedSentSend(`${marker} failed`, `${marker}-failed`, [
+      { email: "e@example.com", status: "accepted", event: "delivered" },
+      { email: "f@example.com", status: "failed" },
+    ]);
+
+    const all = await readJson(
+      await SELF.fetch(`${base}/sends?search=${marker}`, { headers: AUTH }),
+    );
+    expect(all.page.total).toBe(3);
+
+    const only = await readJson(
+      await SELF.fetch(`${base}/sends?search=${marker}&issues=only`, { headers: AUTH }),
+    );
+    expect(only.page.total).toBe(2);
+    const ids = only.sends.map((s: any) => s.id).sort();
+    expect(ids).toEqual([bounced, failed].sort());
+    expect(ids).not.toContain(clean);
+
+    // Any other value is ignored, not an error — the flag is `only` or absent.
+    const junk = await readJson(
+      await SELF.fetch(`${base}/sends?search=${marker}&issues=yes`, { headers: AUTH }),
+    );
+    expect(junk.page.total).toBe(3);
+  });
+});
+
 describe("sent record view — GET /sends/:id", () => {
   it("returns outcome buckets that reconcile to the frozen audience, plus published", async () => {
     const slug = `rec-${uniq()}`;

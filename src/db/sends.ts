@@ -212,10 +212,12 @@ export async function listPublishedIssues(db: D1Database, limit = 200): Promise<
   return results;
 }
 
-/** Narrow the send list by `status` and a subject contains-search. */
+/** Narrow the send list by `status`, a subject contains-search, and — `issues: "only"` —
+ *  to sends with any bounce, complaint, or send-time failure on their counters. */
 export interface SendFilter {
   status?: SendStatus;
   search?: string;
+  issues?: "only";
 }
 
 /** The sortable columns exposed by `GET /sends` (see `parseListParams`). */
@@ -247,6 +249,13 @@ function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   if (term) {
     where.push("LOWER(subject) LIKE ? ESCAPE '\\'");
     binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
+  }
+  // A filter rather than a sortable "delivery issues" column: the Sent list keeps its newest-first
+  // order, and no severity weighting is implied (a summed sort would rank 25 retried
+  // send-time failures above one spam complaint). Reads the denormalized counters, so it
+  // costs the same as any other WHERE (SPEC §8).
+  if (filter.issues === "only") {
+    where.push("(c_bounced + c_complained + c_failed) > 0");
   }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
 }

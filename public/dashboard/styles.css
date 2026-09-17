@@ -1223,6 +1223,20 @@ td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+/* A list's Delivered cell carries its delivery-issue note (complained / bounced / failed) as a
+   smaller line under the count, never inline: inline it either wraps a fixed-width
+   numeric column several lines deep or, in an auto-width table, widens the column at the
+   subject's expense. Stacked, a bad send adds one line to its row and the column stays a
+   number's width. Each kind is one unbreakable unit, so a wrap lands between kinds. */
+.delivered-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.delivered-kind {
+  white-space: nowrap;
+}
 tr:last-child td {
   border-bottom: 0;
 }
@@ -1355,6 +1369,10 @@ td a:hover {
    in place rather than resizing the column. */
 .list-table {
   table-layout: fixed;
+  /* A floor, inside the scrolling .table-wrap: without it, once the fixed columns
+     outgrow the viewport the one flexible text column absorbs the whole deficit,
+     computes to 0px, and `overflow-wrap: anywhere` breaks it one letter per line. */
+  min-width: 560px;
 }
 .list-table td,
 .list-table th {
@@ -1368,6 +1386,13 @@ td a:hover {
 }
 .list-table .c-num {
   width: 104px;
+}
+/* The Sent table's Delivered column: a number plus, on a bad send, its delivery-issue note
+   beneath (`.delivered-note`). Sized so the usual one- or two-kind note ("13 bounced,
+   12 failed") fits on one sub-line; only the rare three-kind note takes a second,
+   breaking between kinds. */
+.list-table .c-delivered {
+  width: 176px;
 }
 .list-table .c-act {
   width: 56px;
@@ -1795,10 +1820,10 @@ th.num .th-sort {
   background: var(--ok-fg);
   flex: none;
 }
-.whealth.has-trouble {
+.whealth.has-issues {
   color: var(--warn-fg);
 }
-.whealth.has-trouble .whealth-dot {
+.whealth.has-issues .whealth-dot {
   background: var(--warn-fg);
 }
 @media (max-width: 720px) {
@@ -4428,5 +4453,86 @@ body.has-savebar .content {
     transition: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: and every looping animation (e.g. the Saving… cue's pulsing dot) */
     animation: none !important;
+  }
+}
+
+/* Phones and the icon-rail range (≤720px): a list table can't fit its fixed columns
+   (Sent wants 428px, Drafts 480px; the rail leaves 412px at 540px), so a `.stacks` table
+   turns each row into a stacked entry — the lead cell (title / subject / email) on its own
+   line, then the rest as one muted meta line, then any delivery-issue note — on the same markup:
+   the cells are named and the labels are ::before/::after content, so the desktop table
+   and the phone list are one render. Headers go, and the sort buttons with them; the
+   default order is what a phone wants. A row's ⋯ menu pins to its top-right corner. */
+@media (max-width: 720px) {
+  .list-table.stacks,
+  .list-table.stacks tbody,
+  .list-table.stacks tr {
+    display: block;
+    min-width: 0;
+  }
+  .list-table.stacks colgroup,
+  .list-table.stacks thead {
+    display: none;
+  }
+  .list-table.stacks tr {
+    position: relative;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .list-table.stacks tr:last-child {
+    border-bottom: 0;
+  }
+  .list-table.stacks td {
+    display: inline;
+    padding: 0;
+    border: 0;
+    font-size: 13px;
+    text-align: left;
+  }
+  .list-table.stacks td:first-child {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+  .list-table.stacks.has-actions td:first-child {
+    padding-right: 36px;
+  }
+  .list-table.stacks td.act {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    width: auto; /* the desktop cell's 1% would clip the button once positioned */
+  }
+  .list-table.stacks td.num {
+    color: var(--muted);
+  }
+  /* A cell with nothing to say (a draft's empty "Scheduled") leaves the meta line. */
+  .list-table.stacks td.empty {
+    display: none;
+  }
+  /* Sent: when · N recipients · N delivered, then the delivery-issue note. */
+  .sent-table td.num::before {
+    content: " · ";
+  }
+  .sent-table td.recipients .n::after {
+    content: " recipients";
+  }
+  .sent-table td.delivered .n::after {
+    content: " delivered";
+  }
+  .sent-table .delivered-note {
+    margin-top: 5px;
+  }
+  /* Drafts: status pill · Sends <fire time> · edited <updated> — the schedule card's
+     and the dashboard's own words for those two dates. */
+  .posts-table td.when::before {
+    content: " · Sends ";
+  }
+  .posts-table td.updated::before {
+    content: " · edited ";
+  }
+  /* Subscribers: status pill · joined <date>. */
+  .subs-table td.joined::before {
+    content: " · joined ";
   }
 }

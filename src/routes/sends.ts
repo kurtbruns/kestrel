@@ -20,7 +20,9 @@ export async function list(c: RequestContext): Promise<Response> {
     ? (statusParam as sends.SendStatus)
     : undefined;
   const search = c.url.searchParams.get("search") ?? undefined;
-  const filter = { status, search } satisfies sends.SendFilter;
+  // "only" narrows to sends with a delivery issue (any bounce / complaint / failure).
+  const issues = c.url.searchParams.get("issues") === "only" ? "only" : undefined;
+  const filter = { status, search, issues } satisfies sends.SendFilter;
   const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
   const [total, rows] = await Promise.all([
     sends.countSends(c.env.DB, filter),
