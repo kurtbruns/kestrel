@@ -3974,12 +3974,17 @@ async function renderSettings() {
   const s = data.settings;
   const d = data.deployment;
   const p = s.publication || { name: "", tagline: "", logoUrl: "" };
-  const fromName = parseFromName(d.fromAddress) || "Your publication";
+  // The From display name as the email actually resolves it ("" for a bare address —
+  // see resolveBranding); fromName adds a visible placeholder for the inbox-row From.
+  const fromDisplay = parseFromName(d.fromAddress) || "";
+  const fromName = fromDisplay || "Your publication";
 
   // Live, in-memory state. The save bar tracks the PERSISTED identity fields (name,
   // tagline, address) + test recipients against the saved baseline. The logo is
   // immediate (its own endpoints); the email template has its own Save (it validates
   // and can warn), so it doesn't feed the bar.
+  const ce = s.confirmationEmail || {};
+  const ceDefault = s.confirmationEmailDefault || {};
   const state = {
     name: p.name || "",
     tagline: p.tagline || "",
@@ -3987,12 +3992,21 @@ async function renderSettings() {
     logoUrl: p.logoUrl || "",
     recipients: [...(s.testRecipients || [])],
     template: s.emailTemplate || "",
+    // The confirmation email's words (SPEC §7); the layout, masthead, and confirm link
+    // are Kestrel's.
+    confirmation: {
+      subject: ce.subject || "",
+      body: ce.body || "",
+      buttonLabel: ce.buttonLabel || "",
+      reassurance: ce.reassurance || "",
+    },
   };
   let baseline = {
     name: state.name,
     tagline: state.tagline,
     address: state.address,
     recipients: [...state.recipients],
+    confirmation: { ...state.confirmation },
   };
 
   const monogram = (v) => (String(v || fromName).trim()[0] || "K").toUpperCase();
@@ -4157,6 +4171,75 @@ async function renderSettings() {
       </div>
     </section>`;
 
+  // The double opt-in confirmation email (SPEC §7): a preview-first section with a
+  // Preview | Edit segmented toggle. Words only — Kestrel owns the layout and inserts
+  // the confirm link, so the fields can never break double opt-in. The rendered card
+  // is byte-honest to the single-theme transactional layout in src/emails/system.ts.
+  const confirmationSection = `
+    <section class="set-sec">
+      ${secHead("Confirmation email", chip("editable", "Editable"))}
+      <p class="set-lede">The email that asks a new subscriber to confirm. Edit the wording as you see fit. Kestrel adds the confirmation link.</p>
+      <div class="set-preview">
+        <div class="set-preview-bar set-ce-bar">
+          <div class="set-ce-modetog" role="group" aria-label="Confirmation email view">
+            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>Preview</button>
+            <button type="button" class="set-ce-modebtn" id="ceTabEdit" aria-pressed="false">${SET_ICON.editable}Edit</button>
+          </div>
+        </div>
+        <div id="cePreviewBody">
+          <div class="set-inbox">
+            <div class="set-inbox-avatar" id="cePvAvatar">${esc(monogram(state.name))}</div>
+            <div class="set-inbox-body">
+              <div class="set-inbox-top"><span class="set-inbox-from" id="cePvFrom">${esc(state.name || fromName)}</span><span class="set-inbox-time">now</span></div>
+              <div class="set-inbox-subj" id="cePvSubject"></div>
+            </div>
+          </div>
+          <div class="set-ce-stage">
+            <div class="set-ce-card">
+              <div class="set-ce-mast" id="cePvMast" hidden>
+                <div class="set-ce-mast-logo" id="cePvMastLogo"></div>
+                <div>
+                  <div class="set-ce-mast-name" id="cePvMastName"></div>
+                  <div class="set-ce-mast-tag" id="cePvMastTag"></div>
+                </div>
+              </div>
+              <p class="set-ce-msg" id="cePvBody"></p>
+              <p class="set-ce-btnrow"><a class="set-ce-btn" id="cePvButton" href="#" onclick="return false"></a></p>
+              <p class="set-ce-foot" id="cePvFoot"></p>
+            </div>
+          </div>
+        </div>
+        <div id="ceEditBody" hidden>
+          <div class="set-ce-edit">
+            <div class="set-field">
+              <label for="ceSubject">Subject line</label>
+              <input id="ceSubject" value="${esc(state.confirmation.subject)}" maxlength="200" autocomplete="off">
+            </div>
+            <div class="set-field">
+              <label for="ceMessage">Message</label>
+              <textarea id="ceMessage" rows="3" maxlength="1000">${esc(state.confirmation.body)}</textarea>
+              <p class="field-hint">The line above the confirm button. Keep it short — this is a one-click step, not a letter.</p>
+            </div>
+            <div class="set-field">
+              <label for="ceButton">Button label</label>
+              <input id="ceButton" value="${esc(state.confirmation.buttonLabel)}" maxlength="80" autocomplete="off">
+              <p class="field-hint set-ce-lock">${SET_ICON.readonly}<span>Kestrel fills in the confirmation link — you set the words, never the URL.</span></p>
+            </div>
+            <div class="set-field">
+              <label for="ceFooter">Reassurance line</label>
+              <input id="ceFooter" value="${esc(state.confirmation.reassurance)}" maxlength="400" autocomplete="off">
+              <p class="field-hint">The quiet footer for anyone who didn’t sign up. Leave blank to omit it.</p>
+            </div>
+          </div>
+          <div class="set-ce-editfoot">
+            <button type="button" class="ghost" id="ceReset">Reset to Kestrel default</button>
+            <span class="grow"></span>
+            <button type="button" class="ghost" id="ceToPreview">See preview →</button>
+          </div>
+        </div>
+      </div>
+    </section>`;
+
   const archiveBase = `${d.archiveOrigin || ""}${d.archiveBasePath || ""}`;
   const archiveIsDefault = d.archiveOrigin === d.appOrigin;
   const instanceSection = `
@@ -4180,6 +4263,7 @@ async function renderSettings() {
     senderSection +
     recipSection +
     subscribeSection +
+    confirmationSection +
     instanceSection;
 
   // Keep the cached config + sidebar brand in step after a save (the sidebar brand
@@ -4198,11 +4282,17 @@ async function renderSettings() {
   // --- dirty tracking: the persisted identity fields (name, tagline, address) +
   // recipients. The email template is edited on its own page, so it isn't tracked here.
   const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+  const sameCopy = (a, b) =>
+    a.subject === b.subject &&
+    a.body === b.body &&
+    a.buttonLabel === b.buttonLabel &&
+    a.reassurance === b.reassurance;
   const isDirty = () =>
     state.name !== baseline.name ||
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
-    !sameList(state.recipients, baseline.recipients);
+    !sameList(state.recipients, baseline.recipients) ||
+    !sameCopy(state.confirmation, baseline.confirmation);
   const refreshDirty = () => {
     bar.setDirty(isDirty());
   };
@@ -4338,6 +4428,7 @@ async function renderSettings() {
     state.address = addressEl.value.trim();
     templatePreview.repaint();
     rebuildEmbed();
+    repaintConfirmation(); // the confirmation preview shows the From name + monogram
     refreshDirty();
   };
   nameEl.addEventListener("input", onIdentityInput);
@@ -4401,6 +4492,99 @@ async function renderSettings() {
     b.onclick = () => copyText(b.dataset.copy);
   }
 
+  // --- confirmation email: Preview | Edit toggle + live preview. The fields carry
+  // only words; the preview resolves a blank required field to the built-in default
+  // (ceDefault, from the API) exactly as the send does, so it's never wordless.
+  const ceEls = {
+    subject: document.getElementById("ceSubject"),
+    message: document.getElementById("ceMessage"),
+    button: document.getElementById("ceButton"),
+    footer: document.getElementById("ceFooter"),
+  };
+  const cePv = {
+    avatar: document.getElementById("cePvAvatar"),
+    from: document.getElementById("cePvFrom"),
+    subject: document.getElementById("cePvSubject"),
+    body: document.getElementById("cePvBody"),
+    button: document.getElementById("cePvButton"),
+    foot: document.getElementById("cePvFoot"),
+    mast: document.getElementById("cePvMast"),
+    mastLogo: document.getElementById("cePvMastLogo"),
+    mastName: document.getElementById("cePvMastName"),
+    mastTag: document.getElementById("cePvMastTag"),
+  };
+  const repaintConfirmation = () => {
+    const c = state.confirmation;
+    const subject = c.subject.trim() || ceDefault.subject || "";
+    const bodyText = c.body.trim() || ceDefault.body || "";
+    const button = c.buttonLabel.trim() || ceDefault.buttonLabel || "Confirm";
+    const name = state.name || fromName;
+    cePv.avatar.textContent = monogram(state.name);
+    cePv.from.textContent = name;
+    cePv.subject.textContent = subject;
+    cePv.body.textContent = bodyText;
+    cePv.button.textContent = button;
+    cePv.foot.textContent = c.reassurance;
+    cePv.foot.hidden = !c.reassurance.trim();
+    // The publication masthead (logo + name + tagline) up top. Mirrors masthead() in
+    // src/emails/system.ts exactly: it uses the identity as the email resolves it (name
+    // = publication name or the From display name, "" if neither), omits the logo cell
+    // when there's no logo (rather than showing a monogram the email won't have), and
+    // degrades to nothing when there's neither a name nor a logo.
+    const mastName = state.name || fromDisplay;
+    const hasLogo = Boolean(state.logoUrl);
+    const showMast = hasLogo || Boolean(mastName);
+    cePv.mast.hidden = !showMast;
+    if (showMast) {
+      cePv.mastLogo.hidden = !hasLogo;
+      if (hasLogo) {
+        cePv.mastLogo.innerHTML = `<img src="${esc(state.logoUrl)}" alt="">`;
+      }
+      cePv.mastName.textContent = mastName;
+      cePv.mastName.hidden = !mastName;
+      cePv.mastTag.textContent = state.tagline;
+      cePv.mastTag.hidden = !state.tagline;
+    }
+  };
+  const onConfirmationInput = () => {
+    state.confirmation.subject = ceEls.subject.value;
+    state.confirmation.body = ceEls.message.value;
+    state.confirmation.buttonLabel = ceEls.button.value;
+    state.confirmation.reassurance = ceEls.footer.value;
+    repaintConfirmation();
+    refreshDirty();
+  };
+  for (const el of Object.values(ceEls)) {
+    el.addEventListener("input", onConfirmationInput);
+  }
+  const ceSetMode = (edit) => {
+    document.getElementById("ceEditBody").hidden = !edit;
+    document.getElementById("cePreviewBody").hidden = edit;
+    document.getElementById("ceTabEdit").setAttribute("aria-pressed", String(edit));
+    document.getElementById("ceTabPreview").setAttribute("aria-pressed", String(!edit));
+    if (edit) {
+      ceEls.subject.focus();
+    }
+  };
+  document.getElementById("ceTabPreview").onclick = () => ceSetMode(false);
+  document.getElementById("ceTabEdit").onclick = () => ceSetMode(true);
+  document.getElementById("ceToPreview").onclick = () => ceSetMode(false);
+  document.getElementById("ceReset").onclick = () => {
+    ceEls.subject.value = ceDefault.subject || "";
+    ceEls.message.value = ceDefault.body || "";
+    ceEls.button.value = ceDefault.buttonLabel || "";
+    ceEls.footer.value = ceDefault.reassurance || "";
+    onConfirmationInput();
+  };
+  // Keep the fields + preview in step with a save-adopted or discarded baseline.
+  const applyConfirmationFields = () => {
+    ceEls.subject.value = state.confirmation.subject;
+    ceEls.message.value = state.confirmation.body;
+    ceEls.button.value = state.confirmation.buttonLabel;
+    ceEls.footer.value = state.confirmation.reassurance;
+    repaintConfirmation();
+  };
+
   // --- save / discard. Wired into the shared save bar above; the controller runs
   // saveSettings inside busy() on its Save button, so these stay plain callbacks.
   async function saveSettings() {
@@ -4410,6 +4594,7 @@ async function renderSettings() {
         json: {
           publication: { name: state.name, tagline: state.tagline, address: state.address },
           testRecipients: state.recipients,
+          confirmationEmail: state.confirmation,
         },
       });
       // Adopt the server's normalized result (trim, lowercase, dedupe) as baseline.
@@ -4418,14 +4603,17 @@ async function renderSettings() {
       state.tagline = ns.publication.tagline;
       state.address = ns.publication.address;
       state.recipients = [...ns.testRecipients];
+      state.confirmation = { ...ns.confirmationEmail };
       nameEl.value = state.name;
       taglineEl.value = state.tagline;
       addressEl.value = state.address;
+      applyConfirmationFields();
       baseline = {
         name: state.name,
         tagline: state.tagline,
         address: state.address,
         recipients: [...state.recipients],
+        confirmation: { ...state.confirmation },
       };
       applySettings(ns);
       renderRecipChips();
@@ -4443,9 +4631,11 @@ async function renderSettings() {
     state.tagline = baseline.tagline;
     state.address = baseline.address;
     state.recipients = [...baseline.recipients];
+    state.confirmation = { ...baseline.confirmation };
     nameEl.value = state.name;
     taglineEl.value = state.tagline;
     addressEl.value = state.address;
+    applyConfirmationFields();
     renderRecipChips();
     rebuildEmbed();
     templatePreview.repaint();
@@ -4456,6 +4646,7 @@ async function renderSettings() {
   renderRecipChips();
   setEmbed("plain");
   templatePreview.repaint();
+  repaintConfirmation();
   refreshDirty();
 }
 
