@@ -18,7 +18,9 @@
 import {
   type AppSettings,
   BRANDING_LOGO_KEY,
+  DEFAULT_CONFIRMATION_EMAIL,
   getSettings,
+  resolveConfirmationEmail,
   type SettingsPatch,
   setPublicationLogo,
   updateSettings,
@@ -75,6 +77,10 @@ function settingsView(settings: AppSettings, cfg: Config) {
     // Reflect the RESOLVED template — a blank stored value means "the built-in
     // default", so a client always receives a concrete template to show and edit.
     emailTemplate: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
+    // The confirmation email: the resolved (effective) copy a client shows and edits,
+    // plus the built-in default so "Reset to default" needs no hardcoded copy client-side.
+    confirmationEmail: resolveConfirmationEmail(settings),
+    confirmationEmailDefault: DEFAULT_CONFIRMATION_EMAIL,
   };
 }
 
@@ -184,6 +190,21 @@ function readPatch(body: unknown): SettingsPatch {
       throw badRequest("emailTemplate must be a string");
     }
     patch.emailTemplate = o.emailTemplate;
+  }
+  if ("confirmationEmail" in o) {
+    const c = (
+      o.confirmationEmail && typeof o.confirmationEmail === "object" ? o.confirmationEmail : {}
+    ) as Record<string, unknown>;
+    const ce: NonNullable<SettingsPatch["confirmationEmail"]> = {};
+    for (const k of ["subject", "body", "buttonLabel", "reassurance"] as const) {
+      if (k in c) {
+        if (typeof c[k] !== "string") {
+          throw badRequest(`confirmationEmail.${k} must be a string`);
+        }
+        ce[k] = c[k] as string;
+      }
+    }
+    patch.confirmationEmail = ce;
   }
   return patch;
 }
