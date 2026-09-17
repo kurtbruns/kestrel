@@ -1,6 +1,6 @@
 # Kestrel — specification
 
-The high-level, abstract description of Kestrel, the newsletter app. It describes what the system is, what it guarantees, and how it's shaped — not its columns and routes. The concrete schema lives in `migrations/` and the routes in `src/app.ts`; read `src/` for the code's structure. This document does not restate them. When behavior and this document disagree, one of them is a bug.
+The high-level, abstract description of Kestrel, the newsletter app. It describes what the system is, what it guarantees, and how it's shaped — not its columns and routes. The concrete schema lives in `migrations/` and the routes in `src/app.ts`; read `src/` for the code's structure. This document does not restate them.
 
 ---
 
