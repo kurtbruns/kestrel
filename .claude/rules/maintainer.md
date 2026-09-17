@@ -8,11 +8,11 @@ paths:
 
 # Maintaining Kestrel's documents
 
-This rule governs the four documents above, and loads only when you open one of them. It is the maintainer's contract: what each document is for, what it must not contain, and when a change to one obligates a change to another. It shapes behavior; it does not enforce it. Anything that must hold every time belongs in code, a test, or a hook, not here.
+This is the maintainer's contract for Kestrel's four core documents. It says what each one is for, what it must not contain, and when a change to one obligates a change to another. It is guidance rather than a gate: anything that must hold every time belongs in code, a test, or a hook.
 
 ## The standard
 
-This project holds its documents to one bar: each fact sits at the right altitude, lives in one place, reads in plain and well-structured language, and never drifts from the behavior it describes. Prefer clarity over completeness. No em-dashes. State rationale inline; do not cite issues, PRs, or drafts.
+Each fact sits at the right altitude and lives in one place, and every document is kept in step with the behavior it describes. The prose stays plain and well-structured, and prefers clarity over completeness. No em-dashes. State each document's rationale in its own prose, so it stands on its own; the repository's git history and issues hold the record of how a decision was reached.
 
 ## The altitude ladder
 
@@ -34,7 +34,7 @@ Five documents. Each sits at a fixed altitude, and a fact belongs to the one who
 
 1. **Guarantees, not mechanism.** A spec section states what is guaranteed and how the system behaves, never the mechanism that implements it. It must not name endpoints, poll intervals, counter or column names, or storage details; those live in `.claude/CLAUDE.md` and the code.
 2. **One home, and the SPEC/DESIGN seam.** Behavior and guarantees live in SPEC; presentation (which control, which token, the layout) lives in DESIGN. A feature with both is split at that seam, and neither doc restates the other.
-3. **Self-contained, true rationale.** State the why inline and keep it accurate. Never justify a decision by pointing to an artifact a reader cannot see: a past draft, an issue, a PR.
+3. **Self-contained, true rationale.** State the why inline and keep it accurate. Do not rest a decision's justification on something a reader cannot see or check, the way citing a draft that no longer exists does.
 4. **One vocabulary, one example set.** The documents share a single glossary (operator versus author, post versus issue) and a single set of example names (hostnames and the like). A rename updates that source; a straggler is drift.
 
 Growth is a signal to re-level a section, not only to add to it. When a section keeps accreting, re-check its altitude rather than continuing to append.
