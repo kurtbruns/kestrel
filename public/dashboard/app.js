@@ -826,6 +826,9 @@ function listQuery(state) {
   if (state.suppressed) {
     p.set("suppressed", state.suppressed);
   }
+  if (state.issues) {
+    p.set("issues", state.issues);
+  }
   const term = (state.search || "").trim();
   if (term) {
     p.set("search", term);
@@ -848,6 +851,9 @@ function listQuery(state) {
 // filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
 // two draft-side statuses rather than reaching sent issues. Omit `cfg.statuses` for a
 // search-only toolbar (the Sent list is single-status, so it carries no status filter).
+// `cfg.issues` adds the Sent list's "With delivery issues" flag — a filter, not a sort: it keeps
+// the newest-first order the operator scans by and needs no severity weighting (a summed
+// sort would rank 25 retried failures above one spam complaint).
 function listToolbar(cfg) {
   const statusSel = cfg.statuses?.length
     ? `<select class="lt-status" aria-label="Filter by status">${[
@@ -859,9 +865,12 @@ function listToolbar(cfg) {
   const suppressed = cfg.suppressible
     ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
     : "";
+  const issues = cfg.issues
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-issues"><span>With delivery issues</span></label>'
+    : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters">${statusSel}${suppressed}</div>
+    <div class="lt-filters">${statusSel}${suppressed}${issues}</div>
   </div>`;
 }
 
@@ -872,6 +881,7 @@ function wireToolbar(root, state, reload) {
   const search = root.querySelector(".lt-search");
   const status = root.querySelector(".lt-status");
   const suppressed = root.querySelector(".lt-suppressed");
+  const issues = root.querySelector(".lt-issues");
   if (search) {
     search.value = state.search || "";
     let t = null;
@@ -896,6 +906,14 @@ function wireToolbar(root, state, reload) {
     suppressed.checked = state.suppressed === "only";
     suppressed.onchange = () => {
       state.suppressed = suppressed.checked ? "only" : "";
+      state.offset = 0;
+      reload();
+    };
+  }
+  if (issues) {
+    issues.checked = state.issues === "only";
+    issues.onchange = () => {
+      state.issues = issues.checked ? "only" : "";
       state.offset = 0;
       reload();
     };
@@ -997,13 +1015,15 @@ async function renderDrafts() {
         pagerEl.innerHTML = "";
         return;
       }
-      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
+      // Cells are named (when / updated) and an empty Scheduled cell is marked, so the
+      // ≤720px layout can stack a row and label its dates from CSS alone.
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table posts-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Title", "title", state)}${th("Status", null, state)}${th("Scheduled", "scheduled", state)}${th("Updated", "updated", state)}<th></th></tr></thead><tbody>${posts
         .map((p) => {
           // A post whose send is in flight is no longer an editable/cancelable draft —
           // show it as `sending` and route it to the live watch, not the editor (#162).
           const sending = p.active_send_status === "sending";
           const href = sending ? `#/sent/${p.active_send_id}` : `#/edit/${p.id}`;
-          return `<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions">⋯</button></td></tr>`;
+          return `<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions">⋯</button></td></tr>`;
         })
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, load);
@@ -2095,22 +2115,32 @@ function listRowCounts(s) {
 // TRUE delivered — webhook-confirmed `c_delivered`, not provider-`accepted` — so the Sent
 // list and dashboard recent-sends agree with the record view's "Delivered" for the same
 // send, and a bounced/complained recipient is never miscounted as delivered. Any bounce /
-// complaint / send-time-failure shows as a muted trouble suffix, so a bad send reads as
-// trouble at a glance instead of a clean number. `deliveries` stays the source of truth.
+// complaint / send-time-failure shows as a muted delivery-issue note, so a bad send reads
+// as one at a glance instead of a clean number. The note sits on its own line beneath
+// the count (`.delivered-note`), not inline: the Sent table's columns are fixed-width,
+// and a three-bucket note inline would wrap the numeric column four lines deep. The
+// kinds read worst first (complained, bounced, failed), as plain muted text — no
+// swatches; the record view's tiles carry the colors. A clean send prints nothing
+// (never "0 bounced"). `deliveries` stays the source of truth.
 function deliveredCell(s) {
   const delivered = s.c_delivered || 0;
-  const notes = [];
-  if (s.c_bounced) {
-    notes.push(`${(s.c_bounced || 0).toLocaleString()} bounced`);
-  }
+  const kinds = [];
   if (s.c_complained) {
-    notes.push(`${(s.c_complained || 0).toLocaleString()} complained`);
+    kinds.push(`${s.c_complained.toLocaleString()} complained`);
+  }
+  if (s.c_bounced) {
+    kinds.push(`${s.c_bounced.toLocaleString()} bounced`);
   }
   if (s.c_failed) {
-    notes.push(`${(s.c_failed || 0).toLocaleString()} failed`);
+    kinds.push(`${s.c_failed.toLocaleString()} failed`);
   }
-  const suffix = notes.length ? ` <span class="muted">(${notes.join(", ")})</span>` : "";
-  return `${delivered.toLocaleString()}${suffix}`;
+  // Each kind is one unbreakable unit, so a wrap lands between kinds, never inside one.
+  const note = kinds.length
+    ? `<span class="muted delivered-note">${kinds
+        .map((text) => `<span class="delivered-kind">${text}</span>`)
+        .join(", ")}</span>`
+    : "";
+  return `<span class="n">${delivered.toLocaleString()}</span>${note}`;
 }
 // One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
 // The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
@@ -2133,14 +2163,22 @@ async function renderSent() {
   // The dispatch side (#147): the still-cancelable Scheduled queue on top, then the
   // frozen Sent records. The table is sent-only, so it carries no status column or
   // filter; default sort = fire desc so the "When" header shows its arrow from the start.
-  const state = { status: "sent", search: "", sort: "fire", dir: "desc", offset: 0, limit: 50 };
+  const state = {
+    status: "sent",
+    search: "",
+    issues: "",
+    sort: "fire",
+    dir: "desc",
+    offset: 0,
+    limit: 50,
+  };
   app.innerHTML = `<h1>Sent</h1>
     ${noEmailProvider() ? `<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : ""}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>
     <h2>Sent issues</h2>
-    ${listToolbar({ searchPlaceholder: "Search subject…" })}
+    ${listToolbar({ searchPlaceholder: "Search subject…", issues: true })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
   const stuckEl = document.getElementById("stuck");
@@ -2286,15 +2324,21 @@ async function renderSent() {
       const sends = data.sends;
       if (!sends.length) {
         listEl.innerHTML = `<p class="muted">${
-          state.search ? "No sent issues match." : "No sent issues yet."
+          state.search
+            ? "No sent issues match."
+            : state.issues
+              ? "Every sent issue delivered cleanly."
+              : "No sent issues yet."
         }</p>`;
         pagerEl.innerHTML = "";
         return;
       }
-      listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-num"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
+      // Cells are named (subject / recipients / delivered) and the count is wrapped in
+      // `.n` so the ≤720px layout can stack a row and label its numbers from CSS alone.
+      listEl.innerHTML = `<div class="table-wrap"><table class="list-table sent-table stacks"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-delivered"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends
         .map(
           (s) =>
-            `<tr class="clickable" data-id="${s.id}"><td><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td></tr>`,
+            `<tr class="clickable" data-id="${s.id}"><td class="subject"><a href="#/sent/${s.id}">${esc(s.subject)}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.recipient_count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s)}</td></tr>`,
         )
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, loadList);
@@ -2460,7 +2504,7 @@ function watchBodyHtml(prog) {
           rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
         }`
       : "Dispatch complete.";
-  const trouble = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
+  const issueCount = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
     ? "No email provider configured — nothing is delivered"
     : `Provider: ${esc(prog.provider?.name || "—")}`;
@@ -2476,8 +2520,10 @@ function watchBodyHtml(prog) {
       )}
     </div>
     ${watchCountsHtml(c)}
-    <div class="whealth${trouble ? " has-trouble" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
-      trouble ? `${trouble.toLocaleString()} bounced / failed / complained` : "no delivery trouble"
+    <div class="whealth${issueCount ? " has-issues" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
+      issueCount
+        ? `${issueCount.toLocaleString()} bounced / failed / complained`
+        : "no delivery issues"
     }</span></div>`;
 }
 function watchMetaHtml(send, prog) {
@@ -2952,10 +2998,11 @@ function renderSubTable(listEl, rows, state, reload) {
     listEl.innerHTML = `<p class="muted">No subscribers match.</p>`;
     return;
   }
-  listEl.innerHTML = `<div class="table-wrap"><table class="list-table"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
+  // The joined cell is named so the ≤720px layout can stack a row and label it.
+  listEl.innerHTML = `<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows
     .map(
       (s) =>
-        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
+        `<tr data-id="${s.id}"><td>${esc(s.email)}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act">${s.status === "confirmed" ? `<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>` : ""}</td></tr>`,
     )
     .join("")}</tbody></table></div>`;
   wireSort(listEl, state, reload);
@@ -5120,7 +5167,7 @@ async function renderDashboard() {
           // A sent row opens its record view (#148); the subject is the keyboard target.
           const isSent = s.status === "sent";
           const subj = isSent ? `<a href="#/sent/${s.id}">${esc(s.subject)}</a>` : esc(s.subject);
-          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
+          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
             url && isSent
               ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
               : ""

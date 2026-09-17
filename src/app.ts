@@ -333,6 +333,11 @@ export function createRouter(archiveBasePath: string): Router {
         },
         { name: "search", description: "Subject contains-search." },
         {
+          name: "issues",
+          description:
+            "`only` narrows to sends with a delivery issue (any bounced, complained, or failed recipient).",
+        },
+        {
           name: "sort",
           description: "`fire` (default), `status`, `recipients`, or `subject`.",
         },
