@@ -56,13 +56,14 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 - `ARCHIVE_BASE_PATH` drives both the emitted URL and the route that serves it — `createRouter(basePath)` in `app.ts`, wired in `src/index.ts` — so the two can't drift.
 - `/` is the public archive index (`routes/archive.ts` → `lib/page.ts`), served to everyone and linking only to public pages — never a bounce into the Access-gated `/dashboard`.
 
-## Keep docs/SPEC.md in sync
+## Keep the contracts in sync
 
-Any change to sending, consent, the record, or the reader surface updates `docs/SPEC.md` in the same change — code and spec drifting apart is a bug. `README.md` is the user-facing subset; update it when a change is visible to whoever runs the app. Write the spec forward-looking, with no ephemeral references (issue/PR numbers) — state rationale inline; point to `docs/SPEC.md`, never a tracker.
+`docs/SPEC.md` (behavior) and `docs/DESIGN.md` (the admin UI's presentation) are contracts, not notes: a change lands in the same commit as its contract, or the two drift and that's a bug.
 
-## Keep docs/DESIGN.md in sync
+- Update **`docs/SPEC.md`** when you change sending, consent, the record, or the reader surface. `README.md` is its user-facing subset — update it when the change is visible to whoever runs the app.
+- Update **`docs/DESIGN.md`** when you change the admin UI's presentation: a button role, a notification's home, a token's meaning, the z-index ladder, a surface's save model, or the responsive layout.
 
-Any change to the admin UI's presentation — a button role, a notification home, a token's meaning, the z-index ladder, or a surface's save model — updates `docs/DESIGN.md` in the same change, exactly as behavior changes update `docs/SPEC.md`. `docs/DESIGN.md` is the UX contract, the presentation-layer sibling to the spec: a new button treatment, a new place a notification appears, or a second token for a color that already has one is a drift bug unless the contract moves with it. Write it forward-looking, with rationale inline and no ephemeral references.
+*How* to write in those files — the altitude to hold, the one-home-per-fact rule that keeps a contract from duplicating the code or its sibling, forward-looking with no ephemeral references — lives in `.claude/rules/contracts.md`, which loads when you open them.
 
 ## Conventions
 
