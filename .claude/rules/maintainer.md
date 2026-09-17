@@ -26,7 +26,7 @@ Five documents. Each sits at a fixed altitude, and a fact belongs to the one who
 
 ## The rules
 
-1. **Guarantees, not mechanism.** A spec section states what is guaranteed and how the system behaves, never the mechanism that implements it: no endpoints, poll intervals, counter or column names, or storage details, which live in `.claude/CLAUDE.md` and the code. The perspective behind the list: a sentence a fresh reimplementation of Kestrel would not need, one that changes when you swap the platform or rename a table, is written too low.
+1. **Guarantees, not mechanism.** A spec section states what is guaranteed and how the system behaves, never the mechanism that implements it: no endpoints, poll intervals, counter or column names, or storage details, which live in `.claude/CLAUDE.md` and the code.
 2. **One home, and the SPEC/DESIGN seam.** Behavior and guarantees live in SPEC; presentation (which control, which token, the layout) lives in DESIGN. A feature with both is split at that seam, and neither doc restates the other.
 3. **Self-contained, true rationale.** State the why inline and keep it accurate. Do not rest a decision's justification on something a reader cannot see or check, the way citing a draft that no longer exists does.
 4. **One vocabulary, one example set.** The documents share a single glossary (operator versus author, post versus issue) and a single set of example names (hostnames and the like). A rename updates that source; a straggler is drift.
