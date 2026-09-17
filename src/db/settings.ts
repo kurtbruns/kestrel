@@ -33,6 +33,31 @@ export interface PublicationSettings {
   logo: PublicationLogo | null;
 }
 
+/**
+ * The double opt-in confirmation email's editable copy (SPEC §7). Kestrel owns the
+ * layout, inserts the confirm link, and derives BOTH the HTML and plain-text bodies
+ * from these words — so editing copy can never remove the link that records consent
+ * (I1). A blank required field resolves to the built-in default at send time (see
+ * `resolveConfirmationEmail`), so the email is never wordless; the reassurance line
+ * may be blank, which simply drops it. Transactional, so it does not use the issue
+ * `emailTemplate` and carries no unsubscribe link.
+ *
+ * There is no layout choice: the email always leads with the publication masthead
+ * (logo + name + tagline) — a transactional first-touch opens with who it is before
+ * the ask — and that masthead degrades to nothing when no identity is set, so one
+ * built-in layout serves a branded and an unbranded publication alike.
+ */
+export interface ConfirmationEmailCopy {
+  /** The email subject. */
+  subject: string;
+  /** The message shown above the confirm button. */
+  body: string;
+  /** The confirm button's label (the link itself is app-generated, never authored). */
+  buttonLabel: string;
+  /** A quiet footer for anyone who didn't sign up; "" omits the line. */
+  reassurance: string;
+}
+
 /** Editable, non-secret preferences. Extend here (not the schema) to add one. */
 export interface AppSettings {
   /** Default recipients pre-filled into the Send-test flow. */
@@ -46,15 +71,29 @@ export interface AppSettings {
    * Stored as text (no schema), validated for the required variables by the route.
    */
   emailTemplate: string;
+  /** Editable wording of the double opt-in confirmation email (SPEC §7). */
+  confirmationEmail: ConfirmationEmailCopy;
 }
 
 /** The reserved R2 key the publication logo is stored under (served by /media). */
 export const BRANDING_LOGO_KEY = "branding/logo";
 
+/** The built-in confirmation copy — what ships until the operator edits it, and the
+ *  fallback each required field resolves to when left blank (`resolveConfirmationEmail`).
+ *  Kept as the single source of truth: the settings API reflects it so no client
+ *  hardcodes it. */
+export const DEFAULT_CONFIRMATION_EMAIL: ConfirmationEmailCopy = {
+  subject: "Confirm your subscription",
+  body: "Thanks for subscribing. Please confirm your email address to start receiving the newsletter.",
+  buttonLabel: "Confirm subscription",
+  reassurance: "If you didn't request this, you can safely ignore this email.",
+};
+
 export const DEFAULT_SETTINGS: AppSettings = {
   testRecipients: [],
   publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
+  confirmationEmail: DEFAULT_CONFIRMATION_EMAIL,
 };
 
 /** Caps so a mistake (or a compromised session) can't grow a field unboundedly. */
@@ -63,12 +102,17 @@ const MAX_NAME = 120;
 const MAX_TAGLINE = 200;
 const MAX_ADDRESS = 300;
 const MAX_TEMPLATE = 40_000;
+const MAX_CE_SUBJECT = 200;
+const MAX_CE_BODY = 1000;
+const MAX_CE_BUTTON = 80;
+const MAX_CE_REASSURANCE = 400;
 
 /** A patch the API accepts. Logo is set through the dedicated upload route, not here. */
 export interface SettingsPatch {
   testRecipients?: string[];
   publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "address">>;
   emailTemplate?: string;
+  confirmationEmail?: Partial<ConfirmationEmailCopy>;
 }
 
 function coercePublication(raw: unknown): PublicationSettings {
@@ -87,6 +131,19 @@ function coercePublication(raw: unknown): PublicationSettings {
   };
 }
 
+/** Coerce a stored (possibly partial / legacy) confirmation blob. Stores the raw
+ *  strings, blanks and all; `resolveConfirmationEmail` fills blanks at send time. */
+function coerceConfirmation(raw: unknown): ConfirmationEmailCopy {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" ? v : "");
+  return {
+    subject: str(o.subject).slice(0, MAX_CE_SUBJECT),
+    body: str(o.body).slice(0, MAX_CE_BODY),
+    buttonLabel: str(o.buttonLabel).slice(0, MAX_CE_BUTTON),
+    reassurance: str(o.reassurance).slice(0, MAX_CE_REASSURANCE),
+  };
+}
+
 /** Merge a stored (possibly partial / legacy) blob onto the defaults. */
 function coerce(raw: unknown): AppSettings {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -96,6 +153,31 @@ function coerce(raw: unknown): AppSettings {
     publication: coercePublication(o.publication),
     emailTemplate:
       typeof o.emailTemplate === "string" ? o.emailTemplate.slice(0, MAX_TEMPLATE) : "",
+    // A row that predates this feature has no `confirmationEmail` key at all — that's
+    // "never configured", so it gets the full built-in copy (reassurance included), NOT
+    // a blank-reassurance row. Only once the key exists (the operator saved copy) does a
+    // blank reassurance mean "deliberately omit the footer".
+    confirmationEmail:
+      "confirmationEmail" in o
+        ? coerceConfirmation(o.confirmationEmail)
+        : { ...DEFAULT_CONFIRMATION_EMAIL },
+  };
+}
+
+/**
+ * Resolve stored confirmation copy to what the email actually uses: a blank required
+ * field (subject, body, button) falls back to the built-in default so the message is
+ * never wordless; the reassurance line is used as stored (blank drops it). This is the
+ * confirmation analogue of a blank `emailTemplate` resolving to the built-in default.
+ */
+export function resolveConfirmationEmail(settings: AppSettings): ConfirmationEmailCopy {
+  const c = settings.confirmationEmail;
+  const d = DEFAULT_CONFIRMATION_EMAIL;
+  return {
+    subject: c.subject.trim() || d.subject,
+    body: c.body.trim() || d.body,
+    buttonLabel: c.buttonLabel.trim() || d.buttonLabel,
+    reassurance: c.reassurance,
   };
 }
 
@@ -128,7 +210,11 @@ async function persist(db: D1Database, next: AppSettings): Promise<void> {
  */
 export async function updateSettings(db: D1Database, patch: SettingsPatch): Promise<AppSettings> {
   const current = await getSettings(db);
-  const next: AppSettings = { ...current, publication: { ...current.publication } };
+  const next: AppSettings = {
+    ...current,
+    publication: { ...current.publication },
+    confirmationEmail: { ...current.confirmationEmail },
+  };
 
   if (patch.testRecipients !== undefined) {
     next.testRecipients = normalizeRecipients(patch.testRecipients);
@@ -155,6 +241,32 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
       throw new Error(`emailTemplate must be ${MAX_TEMPLATE} characters or fewer`);
     }
     next.emailTemplate = patch.emailTemplate;
+  }
+  if (patch.confirmationEmail !== undefined) {
+    // Words only: trim + cap each field. A blank stays blank here and resolves to the
+    // built-in default at send time (resolveConfirmationEmail), so there is no invalid
+    // value to reject — the confirm link and layout are never the operator's to break.
+    const c = patch.confirmationEmail;
+    if (c.subject !== undefined) {
+      next.confirmationEmail.subject = normalizeText(c.subject, "subject", MAX_CE_SUBJECT);
+    }
+    if (c.body !== undefined) {
+      next.confirmationEmail.body = normalizeText(c.body, "message", MAX_CE_BODY);
+    }
+    if (c.buttonLabel !== undefined) {
+      next.confirmationEmail.buttonLabel = normalizeText(
+        c.buttonLabel,
+        "button label",
+        MAX_CE_BUTTON,
+      );
+    }
+    if (c.reassurance !== undefined) {
+      next.confirmationEmail.reassurance = normalizeText(
+        c.reassurance,
+        "reassurance line",
+        MAX_CE_REASSURANCE,
+      );
+    }
   }
 
   await persist(db, next);
