@@ -126,13 +126,15 @@
     --status-sending-bg: #172554;
     --status-sending-fg: #60a5fa;
     --status-sending-line: #2563eb;
-    /* Brightened from a plain dark tint so Secondary text (--accent on the soft
-       fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
-       reached only ~4.4:1. Primary keeps huge contrast (dark --accent-on text
-       on this lighter fill). The soft fill tracks the same hue. */
-    --accent: #8fabff;
+    /* The action accent, dark — shared with the reader surface's dark --k-accent
+       (lib/page.ts) so the two surfaces' blue agrees. Its most demanding use is
+       Secondary text (--accent on the soft fill): because the text is a light blue, a
+       lighter fill *loses* contrast, so --accent-soft is a low-opacity (darker) tint,
+       holding Secondary at ~4.7:1 (WCAG AA). Primary keeps huge contrast (dark
+       --accent-on text on the accent fill). */
+    --accent: #7d9bff;
     --accent-on: #10131f;
-    --accent-soft: rgba(143, 171, 255, 0.18);
+    --accent-soft: rgba(125, 155, 255, 0.14);
     --syntax-bg: #1a1a1d;
     --syntax-fg: #cfcfd6;
     --syntax-gutter: #5a5a63;
@@ -409,7 +411,9 @@ body.nav-resizing .sidebar {
 .pub-cta a {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ring);
+  /* The one action hue (DESIGN §1) — same as the buttons, not the focus-ring blue.
+     `--ring` stays reserved for the focus outline it's named for. */
+  color: var(--accent);
   text-decoration: none;
 }
 .pub-cta a:hover {
@@ -441,7 +445,7 @@ body.nav-resizing .sidebar {
   gap: 6px;
 }
 .pub-note a {
-  color: var(--ring);
+  color: var(--accent);
   text-decoration: none;
 }
 .pub-note a:hover {
@@ -2659,7 +2663,7 @@ textarea.is-invalid {
   line-height: 1.65;
 }
 .doc a {
-  color: var(--ring);
+  color: var(--accent);
   text-decoration: underline;
 }
 .doc ul,
