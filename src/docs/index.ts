@@ -1,5 +1,5 @@
 /**
- * The in-app operator setup guide: the repo's `docs/setup/*.md`, bundled into
+ * The in-app setup guide: the repo's `docs/setup/*.md`, bundled into
  * the Worker as Text modules (the `rules` entry in wrangler.jsonc) and served
  * read-only through the authed docs API. The markdown in `docs/` is the single
  * source of truth — the pages are NOT editable in the app.
