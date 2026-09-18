@@ -87,7 +87,7 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     await publicSubscribe(email);
     await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
 
-    // The durable token that past issues embedded in their one-click unsubscribe link.
+    // The durable token that past posts embedded in their one-click unsubscribe link.
     const deliveredUnsubToken = await unsubTokenFor(email);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
 
@@ -99,7 +99,7 @@ describe("subscribers: double opt-in (I1) and unsubscribe (I2)", () => {
     await SELF.fetch(`${base}/confirm?token=${await tokenFor(email)}`);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
 
-    // The OLD issue's unsubscribe link (same durable token) still resolves and unsubscribes.
+    // The OLD post's unsubscribe link (same durable token) still resolves and unsubscribes.
     const late = await SELF.fetch(`${base}/unsubscribe?token=${deliveredUnsubToken}`, {
       method: "POST",
     });

@@ -165,7 +165,7 @@ async function main() {
   console.log("  view it:");
   console.log(`    admin editor: ${summary.urls.admin}`);
   for (const a of summary.urls.archive) {
-    console.log(`    archived issue: ${a}`);
+    console.log(`    archived post: ${a}`);
   }
 }
 

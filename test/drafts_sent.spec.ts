@@ -5,7 +5,7 @@ import { recomputeSendCounters } from "../src/db/sends";
 import { adminAuth } from "./support/auth";
 
 // PR1 (#147/#148): the Drafts view scopes /posts to draft+scheduled via a comma status
-// list, and a sent issue opens the read-only record view backed by GET /sends/:id
+// list, and a sent post opens the read-only record view backed by GET /sends/:id
 // (outcome breakdown + published flag) and its CSV export.
 
 const AUTH = await adminAuth();
@@ -129,7 +129,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
 describe("in-flight post routing (#162)", () => {
   it("surfaces a sending post as active and routes it to the watch, not the editor", async () => {
     const marker = `inflight-${uniq()}`;
-    const postId = await createDraft(`${marker} issue`);
+    const postId = await createDraft(`${marker} post`);
     const sched = await readJson(
       await SELF.fetch(`${base}/posts/${postId}/schedule`, {
         method: "POST",
@@ -158,7 +158,7 @@ describe("in-flight post routing (#162)", () => {
 
 describe("Sent list — delivery-failures filter (/sends?failures=only)", () => {
   it("narrows to sends with any bounce, complaint, or unsent recipient", async () => {
-    const marker = `issues-${uniq()}`;
+    const marker = `posts-${uniq()}`;
     const { sendId: clean } = await seedSentSend(`${marker} clean`, `${marker}-clean`, [
       { email: "a@example.com", status: "accepted", event: "delivered" },
       { email: "b@example.com", status: "accepted", event: "delivered" },
