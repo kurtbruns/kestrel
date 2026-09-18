@@ -11,7 +11,7 @@
  * `deployment` is a READ-ONLY reflection of the env-resolved Config — which
  * provider is live, the From address, the origins, whether Access is configured —
  * so the editor can show what was set at deploy time and link to the setup docs
- * for how to change it. It deliberately exposes NO secrets (SPEC §8/§10): the
+ * for how to change it. It deliberately exposes NO secrets (SPEC §9/§11): the
  * provider credentials, the Access AUD, and the dev secret never appear here.
  */
 

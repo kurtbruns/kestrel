@@ -1,6 +1,6 @@
 # Access — the admin gate
 
-In deployed environments the admin surface is gated by **Cloudflare Access** at the edge, and re-verified in-app as defense in depth (`src/auth/access.ts`). The reader surface stays public. Why the boundary is drawn this way — one host, two audiences, an explicit public allowlist and everything else admin — is `docs/SPEC.md` §10.
+In deployed environments the admin surface is gated by **Cloudflare Access** at the edge, and re-verified in-app as defense in depth (`src/auth/access.ts`). The reader surface stays public. Why the boundary is drawn this way — one host, two audiences, an explicit public allowlist and everything else admin — is `docs/SPEC.md` §11.
 
 There is no auth code to write. Your job is to configure one Access application correctly and set three vars.
 

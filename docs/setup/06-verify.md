@@ -1,6 +1,6 @@
 # Verify it works
 
-Email's real failure modes — DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client — only appear once deployed (`docs/SPEC.md` §10). Run this checklist on **staging** first (sending only to addresses you own), then again on production before the first real send.
+Email's real failure modes — DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client — only appear once deployed (`docs/SPEC.md` §11). Run this checklist on **staging** first (sending only to addresses you own), then again on production before the first real send.
 
 ## 1. Test send to yourself
 

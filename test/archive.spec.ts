@@ -150,12 +150,12 @@ describe("landing page (the public front door, §5)", () => {
     expect(body).toContain('href="http://localhost:8787/archive"');
   });
 
-  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
+  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§11)", async () => {
     await publish("A Post", 1_000);
     const body = await (await SELF.fetch(`${base}/`)).text();
     // The test env is dev-shaped (fake transport, no Access, dev secret set), so the
     // reader surface injects the local-developer editor shortcut. `/dashboard` here
-    // is dev-token-gated, not an Access wall, so this respects §10 — and the paired
+    // is dev-token-gated, not an Access wall, so this respects §11 — and the paired
     // page-level test below proves it is absent once deployed.
     expect(body).toContain('class="r-dev"');
     expect(body).toContain("http://localhost:8787/dashboard/");
@@ -189,7 +189,7 @@ describe("archive index (the full list, §5)", () => {
     expect(body.indexOf("The Newer One")).toBeLessThan(body.indexOf("The Older One"));
   });
 
-  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
+  it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§11)", async () => {
     await publish("A Post", 1_000);
     const body = await (await SELF.fetch(`${base}/archive`)).text();
     expect(body).toContain('class="r-dev"');
@@ -217,11 +217,11 @@ describe("archive index (the full list, §5)", () => {
   });
 });
 
-// The §10 guarantee, proven independent of the test env's dev shape: a deployed
+// The §11 guarantee, proven independent of the test env's dev shape: a deployed
 // instance passes no `devDashboardUrl`, so the reader shell renders no admin link
 // at all — the public front door never points at the Access-gated editor. The
 // SELF.fetch tests above cover the dev-shaped direction (the link IS shown).
-describe("reader surface — no admin link once deployed (§10)", () => {
+describe("reader surface — no admin link once deployed (§11)", () => {
   const identity = { name: "The Publication" };
 
   it("landing page omits the dashboard link when devDashboardUrl is unset", async () => {
@@ -265,8 +265,8 @@ describe("reader surface — no admin link once deployed (§10)", () => {
 // `config.devMode`. The Vitest env is always dev-shaped, so we drive the handlers
 // directly with a fabricated config to exercise BOTH branches — the deployed
 // (devMode:false) branch of `devDashboardUrl(config)` is otherwise never hit
-// end-to-end, and dropping that gate would break §10 without failing a test.
-describe("reader routes gate the pill on config.devMode (§10)", () => {
+// end-to-end, and dropping that gate would break §11 without failing a test.
+describe("reader routes gate the pill on config.devMode (§11)", () => {
   function ctxFor(devMode: boolean): RequestContext {
     return {
       req: new Request(`${base}/`),

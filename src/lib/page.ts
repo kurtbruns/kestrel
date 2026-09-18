@@ -59,7 +59,7 @@ export function htmlPage(title: string, bodyHtml: string, status = 200): Respons
    index at the archive base path. Both wear the publication's identity — a light
    masthead over an editorial serif — deliberately not the neutral zinc admin
    chrome. Indexable (no noindex) and linking only to public pages, never into the
-   Access-gated admin surface (§10). */
+   Access-gated admin surface (§11). */
 
 /** The reader ground — shared by the chrome pages here and injected onto the hosted
  *  post page (see `ARCHIVE_POST_HEAD`), so the whole publication sits on one
@@ -148,7 +148,7 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
-/* Dev-only affordance (SPEC §5/§10): a fixed corner pill that hops a local
+/* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
    over-the-page dev chrome — deliberately not the publication's own identity — so
    it reads as tooling, never as part of the reader surface. Absent once deployed.
@@ -217,7 +217,7 @@ export interface ReaderIdentity {
   logoUrl?: string;
 }
 
-/** The dev-only editor shortcut (SPEC §5/§10): a fixed corner pill linking a local
+/** The dev-only editor shortcut (SPEC §5/§11): a fixed corner pill linking a local
  *  developer straight into `/dashboard`. Rendered only when `url` is set — the
  *  callers pass it solely on a dev-shaped instance (`config.devMode`), where
  *  `/dashboard` carries no Access wall — so it is structurally absent once deployed
@@ -232,7 +232,7 @@ function devDashboardBadge(url?: string): string {
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
- *  `mainHtml`. Public + indexable; every link points only at public pages (§10). */
+ *  `mainHtml`. Public + indexable; every link points only at public pages (§11). */
 export function readerPage(opts: {
   identity: ReaderIdentity;
   homeUrl: string;
@@ -242,7 +242,7 @@ export function readerPage(opts: {
    *  subscribe pages themselves, where the CTA would point at the current page. */
   subscribeUrl?: string;
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
-   *  on a dev-shaped instance (§10); omitted — and so hidden — in any deployed env. */
+   *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
@@ -298,7 +298,7 @@ export function landingPage(opts: {
   featured?: ArchiveIndexPost;
   /** The next-most-recent posts, listed beneath the feature. */
   recent: ArchiveIndexPost[];
-  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
   let main: string;
@@ -334,7 +334,7 @@ export function archiveIndexPage(opts: {
   subscribeUrl: string;
   homeUrl: string;
   posts: ArchiveIndexPost[];
-  /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
+  /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
   const list = opts.posts.length

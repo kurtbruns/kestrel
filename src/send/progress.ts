@@ -1,5 +1,5 @@
 /**
- * Derive the in-flight reporting shape for `GET /sends/:id/progress` (SPEC §8, §11).
+ * Derive the in-flight reporting shape for `GET /sends/:id/progress` (SPEC §8, §12).
  *
  * Everything here is computed from the send row's denormalized counters (migration
  * 0006) plus one cheap retry probe — no aggregate over the audience — so a poll is a
@@ -22,7 +22,7 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
  *                       ticks (a rate-limit pause or retry backoff waiting for the next tick).
  *   - `needs-attention` wedged: nothing left to hand off, but recipients stuck in flight
- *                       whose fate a transport error left unknown (§11) — awaiting Resolve.
+ *                       whose fate a transport error left unknown (§12) — awaiting Resolve.
  *   - `settling`        dispatch complete; delivery receipts still arriving.
  *   - `complete`        dispatched and every accepted recipient has a delivery receipt.
  *   - `failed` / `canceled`  terminal, non-sent outcomes.
@@ -62,7 +62,7 @@ export interface SendProgress {
     percent_of_accepted: number;
   };
   provider: { name: string };
-  /** The loud conditions (§11) the watch surfaces — Resolve appears when `wedged`. */
+  /** The loud conditions (§12) the watch surfaces — Resolve appears when `wedged`. */
   attention: { wedged: boolean; wedged_count: number; stuck: boolean; missed: boolean };
 }
 
@@ -147,7 +147,7 @@ export function buildSendProgress(
   const deliveryPercent = acceptedTotal > 0 ? round((100 * confirmed) / acceptedTotal) : 0;
 
   // A wedged send is one the loop has GIVEN UP on this cycle — nothing left to hand off,
-  // rows stuck in flight, and the lease released (SPEC §11). The lease check is what keeps
+  // rows stuck in flight, and the lease released (SPEC §12). The lease check is what keeps
   // a normal send's final dispatched batch (pending 0, in flight > 0, lease still held while
   // the loop finishes it) from momentarily reading as "needs attention."
   const leaseHeld = send.locked_until != null && send.locked_until > now;

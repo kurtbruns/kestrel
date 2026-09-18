@@ -4,7 +4,7 @@
  * so every documented endpoint is a live endpoint and the tier shown is the tier
  * that gates it. Adding a route to the manifest makes it appear here with no
  * second doc to edit — the same principle as `ARCHIVE_BASE_PATH` driving both the
- * emitted URL and the route it serves (SPEC §10).
+ * emitted URL and the route it serves (SPEC §11).
  *
  * This is a Markdown-free, structured render — distinct from both the operator
  * docs (src/docs/, Markdown→web-page) and the single email render path (I5).

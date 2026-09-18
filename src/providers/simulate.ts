@@ -1,5 +1,5 @@
 /**
- * Dev-only seeded send simulation, behind the two-method provider seam (SPEC §9).
+ * Dev-only seeded send simulation, behind the two-method provider seam (SPEC §10).
  *
  * The plain `fake` transport accepts every batch instantly with no delivery events, so
  * a live dev send finishes in one sweep tick with nothing to watch. This simulation
@@ -21,13 +21,13 @@
  *      events for accepted recipients and feeds them through the REAL webhook ingest
  *      (`applyDeliveryEvents`). Bounces come in both flavors of the taxonomy every real
  *      provider shares — a PERMANENT (hard) bounce or a complaint suppresses on its own
- *      (I1), a TRANSIENT (soft) bounce is counted but never suppresses (SPEC §9). Receipt
+ *      (I1), a TRANSIENT (soft) bounce is counted but never suppresses (SPEC §10). Receipt
  *      lag is modeled per outcome so the counters settle in the realistic order —
  *      delivered first, bounces next, complaints (feedback loops) last.
  *
  * Provider-agnostic on purpose: this models a generic idempotent, batched provider, so it
  * deliberately does NOT reproduce SES's no-idempotency / ambiguous-transport-error →
- * wedged-send → Resolve path (SPEC §11) — that stays covered by the real SES adapter and
+ * wedged-send → Resolve path (SPEC §12) — that stays covered by the real SES adapter and
  * the resolve tests — nor reputation-threshold account state.
  */
 
@@ -71,7 +71,7 @@ const DRAIN_LIMIT = 400; // synthetic events fabricated per drain, to bound a bu
 //
 // Bounces split into the taxonomy every real provider shares (SES `bounceType`, Resend
 // `data.bounce.type`): a PERMANENT (hard) bounce suppresses the address (I1); a TRANSIENT
-// (soft) bounce is tolerated and counted but never suppresses (SPEC §9). The ingest already
+// (soft) bounce is tolerated and counted but never suppresses (SPEC §10). The ingest already
 // branches on `hard` — emitting soft bounces is what exercises the counted-not-suppressed path.
 const HARD_BOUNCE_RATE = 0.015; // permanent (nonexistent mailbox / blocked) → suppression (I1)
 const SOFT_BOUNCE_RATE = 0.008; // transient (mailbox full / temporarily unavailable) → counted only
@@ -334,7 +334,7 @@ export function simulationActive(config: Config): boolean {
  * Fabricate any now-due delayed delivery webhooks for accepted-but-unconfirmed
  * recipients and apply them through the REAL ingest, so delivery lags acceptance and
  * hard bounces / complaints suppress on their own (I1) while soft bounces are counted
- * without suppressing (SPEC §9). Deterministic per (send, recipient): the outcome and its
+ * without suppressing (SPEC §10). Deterministic per (send, recipient): the outcome and its
  * lag are drawn from the same seeded PRNG, so a given recipient always resolves the same
  * way and a re-drain never double-applies (an event clears `event IS NULL`). Because the
  * lag is longest for complaints and shortest for deliveries, receipts come due — and are

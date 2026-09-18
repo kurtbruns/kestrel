@@ -729,7 +729,7 @@ function route() {
   const hash = location.hash || "#/dashboard";
   const [, view, arg] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
-  // it hides the sidebar rather than living beside it (SPEC §10: admin-only chrome).
+  // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
   // The tool/help pages (Getting started, Docs, API) are about Kestrel itself, not
   // the publication, so they drop the publication sidebar for a slim tool bar.
@@ -2005,7 +2005,7 @@ function startCountdowns() {
 
 // A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending,
 // but one or more in-flight recipients whose fate a transport error left unknown
-// (SPEC §11). This is the state the sweep flags and the operator must adjudicate; it
+// (SPEC §12). This is the state the sweep flags and the operator must adjudicate; it
 // can't clear on its own without risking a double-mail (I4). Read straight off the row's
 // denormalized counters (c_pending / c_in_flight, migration 0006) — the same signals the
 // server's buildSendProgress derives `wedged` from, so the list and the watch agree.
@@ -2206,7 +2206,7 @@ async function renderSent() {
     refreshSending();
   }
 
-  // The in-flight set drives two sections — the wedged attention block (§11) and the
+  // The in-flight set drives two sections — the wedged attention block (§12) and the
   // in-progress active rows (#154) — so one fetch renders both. Tracking the set's
   // signature lets us tell a real transition (a send fired or finished) from a mere bar
   // advance: on a transition we also refresh the scheduled queue (it lost this send) and
@@ -2394,7 +2394,7 @@ async function renderSent() {
 // archived post. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
 // the lagging delivery), a derived phase, a counts grid, throughput, and a provider-
 // health strip — polling /progress until dispatch completes, after which the record keeps
-// absorbing delivery receipts as they settle (SPEC §6/§8/§11).
+// absorbing delivery receipts as they settle (SPEC §6/§8/§12).
 async function renderSentRecord(id) {
   app.innerHTML = `<p class="muted">Loading…</p>`;
   let data;
@@ -2557,7 +2557,7 @@ function watchHtml(send, prog) {
     </div>`;
 }
 
-// Wire the header's Resolve control (present only when the send is wedged, §11). It
+// Wire the header's Resolve control (present only when the send is wedged, §12). It
 // reuses the same modal the Sent page uses, shimming the shape it reads.
 function wireWatchHeader(id, send, prog) {
   const rb = document.getElementById("resolveBtn");
@@ -5019,14 +5019,14 @@ async function renderReference() {
 // scheduled, what went out, and what's still in progress.
 
 // SES puts a sender under review at a 5% bounce rate, so that danger-zone threshold is
-// what the health line treats as a "bounce spike" (SPEC §8/§11). It sits well above the
+// what the health line treats as a "bounce spike" (SPEC §8/§12). It sits well above the
 // dev send simulator's normal ~2% simulated bounce rate (src/providers/simulate.ts), so a
 // demo send never false-alarms. A small absolute floor keeps a tiny audience's inherently
 // noisy rate (one bad address out of a handful) from tripping it.
 const BOUNCE_SPIKE_RATE = 0.05;
 const BOUNCE_SPIKE_MIN = 3;
 
-// Health (SPEC §8 "is anything wrong", §11 loud failure): calm in the common case,
+// Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case,
 // loud only when something needs attention. Derived from GET /sends.
 function computeHealth(sends) {
   const now = Date.now();
@@ -5048,7 +5048,7 @@ function computeHealth(sends) {
   const sending = sends.filter((s) => s.status === "sending");
   // A send wedged on ambiguous in-flight rows needs a decision, not just patience —
   // flag it red and actionable, and keep it out of the generic in-progress lines
-  // below so it isn't reported twice (SPEC §11; resolve on the Sends page).
+  // below so it isn't reported twice (SPEC §12; resolve on the Sends page).
   const wedged = sending.filter(isWedged);
   if (wedged.length) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
@@ -5068,12 +5068,12 @@ function computeHealth(sends) {
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
   }
-  // Bounce spike (SPEC §8 "is anything wrong", §11): a recent send whose real bounce rate
+  // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
   // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
   // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
   // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
   // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
-  // from tripping it. Read-only reporting — it never throttles or halts a send (§11 leaves
+  // from tripping it. Read-only reporting — it never throttles or halts a send (§12 leaves
   // an automatic deliverability circuit-breaker deferred).
   const spiky = sends
     .filter((s) => s.status === "sent")
@@ -5135,7 +5135,7 @@ async function renderDashboard() {
   }
 
   // No news is good news: the health line appears only when something needs
-  // attention (SPEC §8 / §11 — the only thing that ever surfaces loudly).
+  // attention (SPEC §8 / §12 — the only thing that ever surfaces loudly).
   const health = computeHealth(sends);
   const level = health.some((i) => i.level === "red") ? "red" : "amber";
   const healthHtml = health.length

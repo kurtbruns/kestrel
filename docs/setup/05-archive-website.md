@@ -1,6 +1,6 @@
 # Wire the archive to a website
 
-Every post has a permanent archive URL — its "view in browser" link and every shared link (`docs/SPEC.md` §5, I3). Where that URL lives is a choice. The default requires nothing; anchoring it to your main domain is an optional enhancement. Why permanence favors your most durable name is `docs/SPEC.md` §10.
+Every post has a permanent archive URL — its "view in browser" link and every shared link (`docs/SPEC.md` §5, I3). Where that URL lives is a choice. The default requires nothing; anchoring it to your main domain is an optional enhancement. Why permanence favors your most durable name is `docs/SPEC.md` §11.
 
 ## The self-contained default — nothing to do
 

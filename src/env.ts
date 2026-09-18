@@ -32,7 +32,7 @@ export interface Secrets {
   RESEND_API_KEY?: string;
   RESEND_WEBHOOK_SECRET?: string;
   /**
-   * Dev-only opt-in for the seeded send simulation (SPEC §9). When truthy in a
+   * Dev-only opt-in for the seeded send simulation (SPEC §10). When truthy in a
    * dev-shaped env, the fake transport is swapped for the pacing/edge-state simulation
    * so an in-flight send is watchable; unset (the default) keeps the plain, instant
    * fake. Ships commented in `.dev.vars.example`; never set in a deployed env.
@@ -49,13 +49,13 @@ export interface Config {
   /** Origin the app is served from (API + reader routes). */
   appOrigin: string;
   /** Origin the public archive lives on. Defaults to `appOrigin` (self-contained);
-   *  set to the apex only as the opt-in Cloudflare enhancement (SPEC §10). */
+   *  set to the apex only as the opt-in Cloudflare enhancement (SPEC §11). */
   archiveOrigin: string;
   /** Base path for archive pages, e.g. `/archive`. Drives both the emitted
-   *  archive URL and the route that serves it (SPEC §10); defaults to `/archive`. */
+   *  archive URL and the route that serves it (SPEC §11); defaults to `/archive`. */
   archiveBasePath: string;
   /** Public base URL for R2-served images. Defaults to the Worker's own `/media`
-   *  route; a `media.` custom domain is the optional upgrade (SPEC §10). */
+   *  route; a `media.` custom domain is the optional upgrade (SPEC §11). */
   mediaPublicBase: string;
   /** Sending identity domain, e.g. `send.example.com`. */
   sendingDomain: string;
@@ -73,7 +73,7 @@ export interface Config {
    * Access, dev secret present) — the single case where `/dashboard` is reachable
    * without an Access wall, because the editor auto-mints a dev token on load. Gates
    * the dev-only "Open dashboard" link the public reader surface injects for a local
-   * developer (SPEC §5, §10); structurally false in any deployed env, so the reader
+   * developer (SPEC §5, §11); structurally false in any deployed env, so the reader
    * surface never links toward the Access gate there. Presentation only — the route
    * gate in `app.ts` is identical in every environment.
    */
@@ -86,7 +86,7 @@ export interface Config {
   devAuthSecret?: string;
   /**
    * Whether to run the dev-only seeded send simulation instead of the plain fake
-   * transport (SPEC §9). True only in a dev-shaped env with `SIMULATE_SENDS` set —
+   * transport (SPEC §10). True only in a dev-shaped env with `SIMULATE_SENDS` set —
    * structurally false once deployed (a real provider is configured there), so it can
    * never pace or fabricate events against a real inbox. Opt-in; the default is off.
    */
@@ -105,7 +105,7 @@ function normalizeBasePath(v: string | undefined): string {
 }
 
 /** Resolve the typed `Config` from raw bindings. Pure; no I/O.
- *  Self-contained by default (SPEC §10): the archive origin and media base fall
+ *  Self-contained by default (SPEC §11): the archive origin and media base fall
  *  back to the app's own origin, so a deployment that sets only `APP_ORIGIN`
  *  serves archives and images on its own hostname with no further assumptions. */
 export function getConfig(env: AppEnv): Config {

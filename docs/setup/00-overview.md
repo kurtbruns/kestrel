@@ -9,7 +9,7 @@ Everything here is **operator-run and out-of-band**: you run it once, by hand, a
 
 ## The shape of a deployment
 
-One deployed Worker answers on one hostname and does everything — the admin editor, the authoring API, the public reader surface (archive index, post pages, subscribe / confirm / unsubscribe), previews, and image bytes. It is **self-contained by default**: it needs no separate website to be complete (`docs/SPEC.md` §10).
+One deployed Worker answers on one hostname and does everything — the admin editor, the authoring API, the public reader surface (archive index, post pages, subscribe / confirm / unsubscribe), previews, and image bytes. It is **self-contained by default**: it needs no separate website to be complete (`docs/SPEC.md` §11).
 
 Two names earn their own DNS because they have genuinely different jobs — and the names are deliberately not near-synonyms, so the two can't get swapped:
 

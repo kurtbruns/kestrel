@@ -10,7 +10,7 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
   switch (config.provider) {
     case "fake":
       // Dev-only opt-in: the seeded send simulation stands in for the plain fake so an
-      // in-flight send is watchable (SPEC §9). `simulateSends` is only ever true in a
+      // in-flight send is watchable (SPEC §10). `simulateSends` is only ever true in a
       // dev-shaped env (getConfig), so a deployed env never reaches this branch.
       return config.simulateSends ? new SimProvider() : new FakeProvider();
     case "ses":

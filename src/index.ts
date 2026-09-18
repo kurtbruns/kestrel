@@ -1,7 +1,7 @@
 /**
  * Kestrel — Worker entry point.
  *
- * One Worker exposes both handlers (spec §6, §13):
+ * One Worker exposes both handlers (spec §6, §11):
  *   - fetch()     → HTTP API + public reader pages + archive + webhooks,
  *                   dispatched by the URLPattern router (see app.ts / router.ts)
  *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts)

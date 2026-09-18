@@ -324,7 +324,7 @@ export interface DeliveryOutcomes {
   skipped: number;
   /** Accepted by the provider, with no delivery event yet (a provider may emit none). */
   accepted: number;
-  /** Still pending or dispatched — nonzero only while sending or wedged (§11). */
+  /** Still pending or dispatched — nonzero only while sending or wedged (§12). */
   in_flight: number;
 }
 
@@ -804,7 +804,7 @@ export async function resetDispatchedToPending(
 }
 
 /**
- * Operator adjudication of a wedged send's ambiguous rows (SPEC §11). Moves every
+ * Operator adjudication of a wedged send's ambiguous rows (SPEC §12). Moves every
  * still-`dispatched` row of a send to a terminal state the operator chose —
  * `unsent` (assume the batch never left) or `accepted` (assume it did) — stamping
  * the reason into `error` as an inspectable audit trail. It touches ONLY

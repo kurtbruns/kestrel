@@ -66,14 +66,14 @@ function archiveHomeUrl(config: Config): string {
 
 /** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
  *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
- *  a deployed public page never points at the Access-gated editor (SPEC §5, §10). */
+ *  a deployed public page never points at the Access-gated editor (SPEC §5, §11). */
 function devDashboardUrl(config: Config): string | undefined {
   return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
 }
 
 /** The public front door (§5): a landing page featuring the latest post over a few
  *  recent ones, with the publication identity and a subscribe call to action. Never
- *  bounces a visitor toward an admin path (§10). */
+ *  bounces a visitor toward an admin path (§11). */
 export async function landing(c: RequestContext): Promise<Response> {
   const [posts, identity] = await Promise.all([
     listPublishedPosts(c.env.DB, 6),

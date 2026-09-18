@@ -92,7 +92,7 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
-      // Shows both optional enhancements (SPEC §10). Drop ARCHIVE_ORIGIN and
+      // Shows both optional enhancements (SPEC §11). Drop ARCHIVE_ORIGIN and
       // MEDIA_PUBLIC_BASE to stay self-contained like staging.
       //   ARCHIVE_ORIGIN: surface the archive on the website apex — only if that
       //     apex is a Cloudflare zone routing <APP_ORIGIN base path>/* to this Worker.

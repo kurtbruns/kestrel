@@ -80,7 +80,7 @@ describe("send loop + sweep", () => {
     expect(countTo("y@example.com")).toBe(1);
   });
 
-  it("flags a missed fire time loudly but still delivers (§14)", async () => {
+  it("flags a missed fire time loudly but still delivers (§12)", async () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     await seedConfirmed("late@example.com");
     const send = await scheduledSend(Date.now() - (MISSED_THRESHOLD_MS + 60_000));

@@ -7,7 +7,7 @@
  * its adapter). `createRouter` registers each def AND the same manifest drives the
  * generated `/api/reference` (see src/reference/), so the documented tier and the
  * enforced gate come from one field and cannot drift. No public entry point may
- * redirect or link into an admin path (SPEC §10).
+ * redirect or link into an admin path (SPEC §11).
  *
  * Order is significant: the router returns the first matching pattern, so the
  * archive `${archiveBasePath}/:slug`, `/media/:key(.*)`, and `/` routes keep their
@@ -34,7 +34,7 @@ import * as webhookRoutes from "./routes/webhooks";
 /**
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
  * `getConfig`) drives the archive route so it can't drift from the emitted
- * archive URL — see the archive route below and SPEC §10.
+ * archive URL — see the archive route below and SPEC §11.
  */
 export function createRouter(archiveBasePath: string): Router {
   const r = new Router();
@@ -73,7 +73,7 @@ export function createRouter(archiveBasePath: string): Router {
 
     // --- operator setup guide (authed; read-only, bundled from docs/) ---
     // Under /api so the same Access application that gates the authoring API
-    // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §10).
+    // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §11).
     {
       method: "GET",
       path: "/api/docs",
@@ -550,7 +550,7 @@ export function createRouter(archiveBasePath: string): Router {
 
     // --- public reader routes (token-scoped; no login) ---
     // The front door: a self-contained landing page, never a bounce to the
-    // Access-gated admin SPA at /dashboard (SPEC §10). Kept public here — the one
+    // Access-gated admin SPA at /dashboard (SPEC §11). Kept public here — the one
     // explicit non-admin surface.
     {
       method: "GET",
@@ -612,7 +612,7 @@ export function createRouter(archiveBasePath: string): Router {
     // --- archive / view-in-browser (public; serves the frozen record, I3) ---
     // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the post
     // pages, and the emitted archive URLs always share one source. Self-contained by
-    // default; an apex zone can additionally route <base>/* to this Worker (SPEC §10).
+    // default; an apex zone can additionally route <base>/* to this Worker (SPEC §11).
     // The index is registered before `:slug` so `/archive` resolves to the list, not
     // a slug lookup; the optional trailing slash (`{/}?`) means `/archive` and
     // `/archive/` both land on the index while `/archive/:slug` still serves posts.
