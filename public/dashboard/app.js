@@ -2657,7 +2657,16 @@ function outcomeReconHtml(outcomes) {
   if (residual) {
     parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
   }
-  return `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}. Bounces and complaints have already suppressed those addresses.`;
+  const reconciled = `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}.`;
+  // The suppression note is scoped to what actually suppresses: hard bounces and complaints,
+  // never soft bounces (counted, left on the list — SPEC §8). The aggregate counters don't
+  // split soft from hard, so gate on any bounce or complaint and state the rule rather than
+  // claim a count; a clean send says nothing about suppression at all.
+  const suppression =
+    outcomes.bounced || outcomes.complained
+      ? " Hard bounces and spam complaints are suppressed automatically, so those addresses won't be mailed again."
+      : "";
+  return `${reconciled}${suppression}`;
 }
 
 // The per-recipient record (#164): the outcome tiles summarize, this shows the actual
