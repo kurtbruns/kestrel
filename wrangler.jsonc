@@ -8,7 +8,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
 
-  // Bundle the operator setup guide (docs/setup/*.md) into the Worker as Text
+  // Bundle the setup guide (docs/setup/*.md) into the Worker as Text
   // modules, so the in-app Docs surface serves the repo markdown verbatim
   // (source of truth) without a separate build step. Applies to bundling under
   // wrangler dev/deploy AND the Vitest pool.

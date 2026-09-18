@@ -1,5 +1,5 @@
 /**
- * In-app operator setup guide, served read-only to the admin surface. Authed
+ * In-app setup guide, served read-only to the admin surface. Authed
  * exactly like the rest of the authoring API (mounted under `/api` in app.ts),
  * so the SPA's bearer/Access-JWT fetch reaches it in both dev and prod. The
  * content is bundled from docs/ (see src/docs/index.ts) — nothing is editable.

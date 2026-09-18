@@ -71,14 +71,14 @@ export function createRouter(archiveBasePath: string): Router {
       handler: devRoutes.token,
     },
 
-    // --- operator setup guide (authed; read-only, bundled from docs/) ---
+    // --- setup guide (authed; read-only, bundled from docs/) ---
     // Under /api so the same Access application that gates the authoring API
     // gates these too, and the SPA's authed fetch reaches them (SPEC §5, §11).
     {
       method: "GET",
       path: "/api/docs",
       access: "admin",
-      summary: "The operator setup guide as sanitized HTML fragments, in reading order (JSON).",
+      summary: "The setup guide as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
     },
 
