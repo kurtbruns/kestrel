@@ -9,7 +9,8 @@ Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You
 ## Prerequisites
 
 - Node 20+ and npm
-- A Cloudflare account (for deploying; not needed for local dev)
+- A Cloudflare account, to deploy (not needed for local dev)
+- An email provider account, **Amazon SES** or **Resend**, to actually send mail once deployed (local dev uses a fake transport that sends nothing)
 
 ## Local setup
 
@@ -25,19 +26,24 @@ Everything the editor does is on the HTTP API; the editor is just a client of it
 
 ### See it with data
 
-Two dev-only commands (dev server running, fake transport) choose what you see, and you can re-run either any time to reset to that state:
+A fresh install is empty: the **new-publisher first run**, an empty dashboard with the setup checklist, what someone sees the moment they stand up their own Kestrel. Two dev-only commands (dev server running) move between that and a populated demo, and you can re-run either any time.
+
+Load the **Windbreak** demo publication, a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state:
 
 ```bash
-npm run reset   # new-publisher first run
-npm run seed    # demo publication ("Windbreak")
+npm run seed
 ```
 
-`reset` wipes to an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel. `seed` loads **Windbreak**, a newsletter that's been running a while: a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
-
-To inspect the app at scale, re-run seed with a size:
+View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
 
 ```bash
-npm run seed -- --size 10k    # 100 / 1k / 10k / 100k, reproducible
+npm run seed -- --size 10k
+```
+
+Return to the empty out-of-the-box state:
+
+```bash
+npm run reset
 ```
 
 ## Auth
