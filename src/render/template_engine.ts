@@ -18,7 +18,7 @@
  *    strip/ignore `<style>` (Outlook especially); `@media` rules can't be inlined and
  *    are kept in a `<style>` block. Backed by css-inline (WASM), initialized once.
  *
- * The default template ships so a fresh install sends a sensible issue out of the box.
+ * The default template ships so a fresh install sends a sensible post out of the box.
  */
 
 import { initWasm, inline } from "@css-inline/css-inline-wasm";

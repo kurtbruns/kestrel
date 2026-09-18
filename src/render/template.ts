@@ -66,7 +66,7 @@ ${ARCHIVE_MASTHEAD_ANCHOR}${i.bodyHtml}
 }
 
 /** Browser-only masthead for the hosted archive page: the publication name
- *  (linked back to the issue index) and the publish date, sitting above the
+ *  (linked back to the post index) and the publish date, sitting above the
  *  frozen content. Never appears in an email — the archive route injects it in
  *  place of `ARCHIVE_MASTHEAD_ANCHOR`. Rendered only in a browser, so it can use
  *  ordinary CSS; `.k-mast` carries the dark-mode override. */

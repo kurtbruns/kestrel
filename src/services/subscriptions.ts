@@ -18,7 +18,7 @@ export async function requestSubscription(
     const provider = getProvider(c.config, c.env);
     const settings = await getSettings(c.env.DB);
     const copy = resolveConfirmationEmail(settings);
-    // The branded layout reuses the same publication identity the issue render does
+    // The branded layout reuses the same publication identity the post render does
     // (name falls back to the From display name), so the two never drift.
     const branding = resolveBranding(settings, c.config);
     const identity = { name: branding.name, tagline: branding.tagline, logoUrl: branding.logoUrl };

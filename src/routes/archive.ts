@@ -1,7 +1,7 @@
 /**
  * Public reader pages: the landing page at `/` (§5 front door — identity + a
  * subscribe CTA, never a bounce to admin), the archive index at the archive base
- * path (every sent issue), and each issue page — a sent Send's frozen rendered_html,
+ * path (every sent post), and each post page — a sent Send's frozen rendered_html,
  * the reviewed, delivered copy (I3), with edits that leave the content untouched and
  * only fill reserved anchors: the per-recipient unsubscribe sentinel becomes a generic
  * manage-subscription link (a public page has no single recipient), and the inert
@@ -10,7 +10,7 @@
  */
 
 import { getBySlug } from "../db/posts";
-import { latestSentSendForPost, listPublishedIssues } from "../db/sends";
+import { latestSentSendForPost, listPublishedPosts } from "../db/sends";
 import { BRANDING_LOGO_KEY, getSettings } from "../db/settings";
 import type { Config } from "../env";
 import {
@@ -59,7 +59,7 @@ function formatSentDate(ms: number): string {
 }
 
 /** The full archive URL (origin + base path) — the "Browse the full archive" target
- *  and the home of the issue list. Built from the same config the route registers at. */
+ *  and the home of the post list. Built from the same config the route registers at. */
 function archiveHomeUrl(config: Config): string {
   return `${config.archiveOrigin}${config.archiveBasePath}`;
 }
@@ -71,15 +71,15 @@ function devDashboardUrl(config: Config): string | undefined {
   return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
 }
 
-/** The public front door (§5): a landing page featuring the latest issue over a few
+/** The public front door (§5): a landing page featuring the latest post over a few
  *  recent ones, with the publication identity and a subscribe call to action. Never
  *  bounces a visitor toward an admin path (§10). */
 export async function landing(c: RequestContext): Promise<Response> {
-  const [issues, identity] = await Promise.all([
-    listPublishedIssues(c.env.DB, 6),
+  const [posts, identity] = await Promise.all([
+    listPublishedPosts(c.env.DB, 6),
     readerIdentity(c, c.config),
   ]);
-  const mapped = issues.map((i) => ({
+  const mapped = posts.map((i) => ({
     title: i.subject,
     url: archiveUrl(c.config, i.slug),
     dateLabel: formatSentDate(i.sent_at),
@@ -96,18 +96,18 @@ export async function landing(c: RequestContext): Promise<Response> {
   });
 }
 
-/** The full public archive index: every sent issue, newest first, linking to their
+/** The full public archive index: every sent post, newest first, linking to their
  *  permanent (canonical) archive URLs — the same address emails carry. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
-  const [issues, identity] = await Promise.all([
-    listPublishedIssues(c.env.DB),
+  const [posts, identity] = await Promise.all([
+    listPublishedPosts(c.env.DB),
     readerIdentity(c, c.config),
   ]);
   return archiveIndexPage({
     identity,
     subscribeUrl: `${c.config.appOrigin}/subscribe`,
     homeUrl: `${c.config.appOrigin}/`,
-    issues: issues.map((i) => ({
+    posts: posts.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
       dateLabel: formatSentDate(i.sent_at),
@@ -136,8 +136,8 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const masthead = archiveMasthead({
     name: identity.name,
     dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
-    // Back to the archive index the issue belongs to, on the same (archive) origin —
-    // so an apex-hosted issue stays on the apex instead of jumping to the app subdomain.
+    // Back to the archive index the post belongs to, on the same (archive) origin —
+    // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(c.config),
   });
   // Fill the delivery-phase tokens for a recipient-agnostic page: a generic unsubscribe

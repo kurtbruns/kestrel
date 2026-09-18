@@ -12,7 +12,7 @@
  *
  * This is the one place a human resolves that ambiguity, choosing the safe outcome:
  *   - "failed":   assume the batch never left. The addresses are simply picked up by
- *                 the NEXT issue (a future send resolves its audience fresh); they
+ *                 the NEXT post (a future send resolves its audience fresh); they
  *                 are never re-mailed within THIS send.
  *   - "accepted": assume it did (the operator confirmed in the provider console),
  *                 which lets the send complete.

@@ -317,7 +317,7 @@ function archiveUrlFor(deployment, slug) {
 // reflection the sidebar and Settings already consume (appConfig.deployment), fetched
 // once at boot. Dev-only by construction: deployed environments require SES/Resend, so
 // this is structurally absent in production. The user-facing copy avoids the internal
-// "fake transport" term (see docs/DESIGN.md §2); a later issue will make this notice
+// "fake transport" term (see docs/DESIGN.md §2); a later change will make this notice
 // environment-aware and link to the setup docs.
 function noEmailProvider() {
   return (appConfig?.deployment?.provider || "") === "fake";
@@ -849,7 +849,7 @@ function listQuery(state) {
 // status), never an option inside the status dropdown.
 // `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
 // filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
-// two draft-side statuses rather than reaching sent issues. Omit `cfg.statuses` for a
+// two draft-side statuses rather than reaching sent posts. Omit `cfg.statuses` for a
 // search-only toolbar (the Sent list is single-status, so it carries no status filter).
 // `cfg.problems` adds the Sent list's "With delivery problems" flag — a filter, not a sort: it keeps
 // the newest-first order the operator scans by and needs no severity weighting (a summed
@@ -982,7 +982,7 @@ function renderPager(el, state, page, reload) {
 }
 
 // ---- drafts list (draft + scheduled) ----
-// The writing side (#147): draft + scheduled only — a sent issue is a frozen record and
+// The writing side (#147): draft + scheduled only — a sent post is a frozen record and
 // lives in Sent. "All statuses" is scoped to those two, so it never reaches sent.
 const DRAFT_STATUSES = [
   { value: "draft", label: "Draft" },
@@ -1123,7 +1123,7 @@ async function renderEditor(id) {
     post = data.post;
     markdown = data.markdown;
     scheduled = data.scheduled;
-    // A sent issue is a frozen record, not editable (#147/#148): it opens the sent
+    // A sent post is a frozen record, not editable (#147/#148): it opens the sent
     // record view, never the editor. Redirect a stale #/edit link (or a post sent in
     // another tab / by Claude) there instead of a locked editor.
     if (post.status === "sent") {
@@ -2009,7 +2009,7 @@ function isWedged(s) {
 }
 
 // The one manual step for a wedged send: decide whether the ambiguous batch went out
-// or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
+// or not. Both outcomes are safe for I4 — neither re-mails this post — so the modal
 // explains the trade-off (record accuracy) rather than warning of a double-send.
 function openResolveModal(send, reload) {
   const n = send.c_in_flight || 0;
@@ -2199,7 +2199,7 @@ async function renderSent() {
   // in-progress active rows (#154) — so one fetch renders both. Tracking the set's
   // signature lets us tell a real transition (a send fired or finished) from a mere bar
   // advance: on a transition we also refresh the scheduled queue (it lost this send) and
-  // the sent list (it gained it), so a fired issue leaves the scheduled slot and lands in
+  // the sent list (it gained it), so a fired post leaves the scheduled slot and lands in
   // the records without a manual reload. Polled every 3s (matching the watch + dashboard).
   let sentActiveSig = "";
   function renderActive(sends) {
@@ -2283,7 +2283,7 @@ async function renderSent() {
           };
         }
       }
-      // The whole card opens the issue; the subject link handles keyboard/middle-click,
+      // The whole card opens the post; the subject link handles keyboard/middle-click,
       // and the schedule-management buttons (Reschedule, Cancel) opt out of navigation
       // (like the posts table's row-click guard).
       schedEl.querySelectorAll(".card.clickable").forEach((card) => {
@@ -2316,7 +2316,7 @@ async function renderSent() {
     }
   }
 
-  // The frozen Sent records — every completed issue, each opening its read-only record
+  // The frozen Sent records — every completed post, each opening its read-only record
   // view (#148). Sent-only, so no status column; the "When" is the send's completion.
   async function loadList() {
     try {
@@ -2378,9 +2378,9 @@ async function renderSent() {
 }
 
 // ---- sent record view (#148) + live in-flight watch (#154) ----
-// A sent issue is a frozen record (I3), not an editable object, so it opens this instead
+// A sent post is a frozen record (I3), not an editable object, so it opens this instead
 // of a locked editor: how the send went over the frozen audience, with a link to the
-// archived issue. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
+// archived post. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
 // the lagging delivery), a derived phase, a counts grid, throughput, and a provider-
 // health strip — polling /progress until dispatch completes, after which the record keeps
 // absorbing delivery receipts as they settle (SPEC §6/§8/§11).
@@ -3083,7 +3083,7 @@ const SET_ICON = {
 };
 
 // ---- settings: email template (mock) ----
-// The one layout each issue ships inside, authored as an HTML template with
+// The one layout each post ships inside, authored as an HTML template with
 // logic-less {{ }} placeholders over a fixed variable context. Logic-less means a
 // token is only ever swapped for its value — nothing executes — which is why this
 // is a template editor, not a WYSIWYG. This pass is a MOCK: edits repaint the
@@ -3400,7 +3400,7 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 };
 
 // Sample post body for the preview — representative prose inside a called-out slot,
-// so it's unmistakable where a real issue's rendered Markdown lands. Its typography
+// so it's unmistakable where a real post's rendered Markdown lands. Its typography
 // comes from the template's own .email rules (the callout frame + label are a
 // preview device, not part of the email). In a real send {{ post.body }} is the
 // rendered Markdown.
@@ -3517,7 +3517,7 @@ function templateVarsHtml() {
 }
 
 /**
- * The Email template page (top-level "Template" nav item). The one layout each issue
+ * The Email template page (top-level "Template" nav item). The one layout each post
  * is sent inside: a live sample-email preview over an HTML editor (with starter
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
@@ -3949,7 +3949,7 @@ async function renderTemplate() {
   };
 
   // --- send a test of the saved template (edit → test → iterate) ---
-  // A test renders a sample issue through the SAVED template — what will actually
+  // A test renders a sample post through the SAVED template — what will actually
   // ship (I5). So if the editor is dirty we save first (a "Save & send test" flow);
   // a rejected save (e.g. missing unsubscribe) stops the send, honestly. We never
   // render unsaved editor content, which would test something that won't ship.
@@ -5235,7 +5235,7 @@ async function renderDashboard() {
     </div>`;
 
   wireDashActions(root, renderDashboard);
-  // Row / card clicks open the issue (subject links + Cancel opt out — the same guard
+  // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
   root.querySelectorAll("tr[data-id]").forEach((tr) => {
     tr.onclick = (e) => {
@@ -5256,7 +5256,7 @@ async function renderDashboard() {
   wireDashScheduledCards();
   startCountdowns();
   // Keep the send sections live: advance the active-send widget's bar, and when a send
-  // starts or finishes, refresh the Scheduled queue so a fired issue clears out of it (its
+  // starts or finishes, refresh the Scheduled queue so a fired post clears out of it (its
   // home is now the In-progress widget, then the records). Cleared on navigation.
   scheduleDashActivePoll();
 }

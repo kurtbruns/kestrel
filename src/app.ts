@@ -123,7 +123,7 @@ export function createRouter(archiveBasePath: string): Router {
       handler: settingsRoutes.deleteLogo,
     },
     {
-      // Sends a SAMPLE issue through the SAVED template (the one render path, I5) so
+      // Sends a SAMPLE post through the SAVED template (the one render path, I5) so
       // the operator can see the template in a real inbox. It renders what will ship
       // — the stored template, never unsaved editor content — so the test is honest.
       method: "POST",
@@ -610,12 +610,12 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-    // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the issue
+    // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the post
     // pages, and the emitted archive URLs always share one source. Self-contained by
     // default; an apex zone can additionally route <base>/* to this Worker (SPEC §10).
     // The index is registered before `:slug` so `/archive` resolves to the list, not
     // a slug lookup; the optional trailing slash (`{/}?`) means `/archive` and
-    // `/archive/` both land on the index while `/archive/:slug` still serves issues.
+    // `/archive/` both land on the index while `/archive/:slug` still serves posts.
     {
       method: "GET",
       path: `${archiveBasePath}{/}?`,

@@ -3,7 +3,7 @@
  *   POST /posts/:id/preview        → { url, subject, warnings } (hosted view-in-browser)
  *   GET  /posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   POST /posts/:id/test           → send the real render to one address via the provider
- *   POST /api/settings/template/test → send a SAMPLE issue through the saved template
+ *   POST /api/settings/template/test → send a SAMPLE post through the saved template
  *   GET  /api/dev/outbox           → fake transport's outbox (fake provider only)
  *
  * Every path runs the one render() (I5).
@@ -103,7 +103,7 @@ export async function test(c: RequestContext): Promise<Response> {
 /** How many addresses one template test may fan out to (matches the settings cap). */
 const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
 
-// A synthetic issue that stands in for {{ post.body }} when testing the TEMPLATE
+// A synthetic post that stands in for {{ post.body }} when testing the TEMPLATE
 // itself — there's no real post to render, so this sample supplies one. It flows
 // through the same render() as a real send (I5); only the body's source differs.
 // The prose mirrors the on-page sample preview so the inbox test matches what the
@@ -120,7 +120,7 @@ const TEMPLATE_TEST_MARKDOWN = [
   "- The maples on Marsh Lane have finally turned.",
   "- Someone left a note in the little free library, addressed to no one.",
   "",
-  "This is a **sample issue** sent to preview your email template — [links](https://example.com) render like this. A real issue's Markdown fills this space.",
+  "This is a **sample post** sent to preview your email template — [links](https://example.com) render like this. A real post's Markdown fills this space.",
 ].join("\n");
 
 /** Build the synthetic render input for a template test — no post, no images. */
@@ -128,7 +128,7 @@ function sampleRenderInput(): RenderInput {
   const now = Date.now();
   const post: PostRow = {
     id: "sample",
-    slug: "sample-issue",
+    slug: "sample-post",
     subject: TEMPLATE_TEST_SUBJECT,
     status: "draft",
     current_revision: "sample-rev",
@@ -182,7 +182,7 @@ function resolveTestRecipients(body: unknown, defaults: string[]): string[] {
 }
 
 /**
- * Send a test of the EMAIL TEMPLATE: render a sample issue through the one render
+ * Send a test of the EMAIL TEMPLATE: render a sample post through the one render
  * path with the *saved* branding (template + identity) and deliver it via the
  * provider, so the operator sees the template in a real inbox (SPEC §5, I5). It
  * renders what will actually ship — the stored template, never unsaved editor

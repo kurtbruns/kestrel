@@ -1167,7 +1167,7 @@ label {
   padding: 16px;
   margin-bottom: 14px;
 }
-/* A card that opens on click (Sends → Scheduled → the issue). Mirrors
+/* A card that opens on click (Sends → Scheduled → the post). Mirrors
    tr.clickable; the subject link and the Cancel button opt out via the guard. */
 .card.clickable {
   cursor: pointer;
@@ -1519,7 +1519,7 @@ th.num .th-sort {
   flex-wrap: wrap;
 }
 /* Names the living layer of the record: the outcome tiles below keep moving as receipts
-   arrive, while the audience and published issue are frozen (SPEC §8). */
+   arrive, while the audience and published post are frozen (SPEC §8). */
 .rec-tiles-cap {
   margin: 16px 0 0;
   font-size: 12.5px;
@@ -1614,7 +1614,7 @@ th.num .th-sort {
   margin: 0;
   font-size: 15px;
 }
-/* The view toggle (Issues / Delivered / All) is a Control, not a button (DESIGN §1):
+/* The view toggle (Problems / Delivered / All) is a Control, not a button (DESIGN §1):
    the same segmented, aria-pressed pill group as the Template preview-width toggle, its
    active segment in the Secondary palette. It switches what you're looking at; it never
    commits an action. */

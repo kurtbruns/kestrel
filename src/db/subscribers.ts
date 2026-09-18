@@ -18,7 +18,7 @@ export interface SubscriberRow {
   /**
    * Durable per-subscriber token embedded in delivered mail's unsubscribe link.
    * Minted once and NEVER rotated — not even across an unsubscribe→resubscribe
-   * cycle — so one-click unsubscribe in already-sent issues never breaks (I2).
+   * cycle — so one-click unsubscribe in already-sent posts never breaks (I2).
    */
   unsub_token: string;
   created_at: number;
@@ -81,7 +81,7 @@ export function getByUnsubToken(db: D1Database, token: string): Promise<Subscrib
  *
  * Re-arming rotates ONLY the one-shot `confirm_token` (so a stale confirmation
  * link can't be replayed); `unsub_token` is deliberately left untouched so the
- * unsubscribe link already delivered in past issues keeps working (I2).
+ * unsubscribe link already delivered in past posts keeps working (I2).
  */
 export async function subscribe(
   db: D1Database,
