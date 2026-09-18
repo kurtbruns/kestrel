@@ -1651,14 +1651,15 @@ th.num .th-sort {
   font-weight: 500;
 }
 /* An outcome cell reuses the tile swatch palette (sw-ok / sw-warn / sw-danger /
-   sw-sending / sw-neutral) so a row reads the same bucket as its tile above. */
+   sw-sending / sw-neutral) so a row reads the same bucket as its tile above. The
+   swatch + label hold one line — nowrap so the label never breaks mid-word in the
+   fixed-width column; the consequence rides in the cell's `title` tooltip and the
+   reconciliation line above, not inline, so the row stays a clean one-liner. */
 .rec-out {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-}
-.rec-out-hint {
-  font-size: 11.5px;
+  white-space: nowrap;
 }
 .rec-people-empty {
   margin: 14px 0 0;
