@@ -1175,7 +1175,7 @@ async function renderEditor(id) {
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
-            ${infoTip("The web address of this issue's archive page.")}
+            ${infoTip("The web address of this post's archive page.")}
           </div>
           <input id="f-slug" value="${esc(post.slug)}" ${dis}>
           ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
@@ -1193,7 +1193,7 @@ async function renderEditor(id) {
         </div>
         <div class="composer-body" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor" placeholder="Type your issue in Markdown…" ${dis}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${dis}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
         <div class="composer-foot" id="dropFoot" ${locked ? "hidden" : ""}>${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>
@@ -1899,7 +1899,7 @@ async function renderEditor(id) {
       const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
       const scheduleView =
-        `<h3 id="schHead">Schedule this issue</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
+        `<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
         `<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>` +
         `<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
@@ -2016,8 +2016,8 @@ function openResolveModal(send, reload) {
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
     `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
-      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this issue.</p>` +
-      `<p class="hint"><strong>Assume not sent</strong> — recorded as failed; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next issue.</p>` +
+      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this post.</p>` +
+      `<p class="hint"><strong>Assume not sent</strong> — recorded as failed; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>` +
       `<p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>` +
       `<div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rFailed">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
   );
@@ -2050,7 +2050,7 @@ function openRescheduleModal(sendId, currentFireAt, onDone) {
   const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
   const cur = toLocalInput(new Date(currentFireAt));
   const m = modal(
-    `<h3 id="rsHead">Reschedule this issue</h3>` +
+    `<h3 id="rsHead">Reschedule this post</h3>` +
       `<p class="hint">Move when it sends (at least 5 minutes out). The content stays frozen and the cancelable window is kept — only the time changes.</p>` +
       `<label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">` +
       `<div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
@@ -2177,7 +2177,7 @@ async function renderSent() {
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>
-    <h2>Sent issues</h2>
+    <h2>Sent posts</h2>
     ${listToolbar({ searchPlaceholder: "Search subject…", issues: true })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
@@ -2325,10 +2325,10 @@ async function renderSent() {
       if (!sends.length) {
         listEl.innerHTML = `<p class="muted">${
           state.search
-            ? "No sent issues match."
+            ? "No sent posts match."
             : state.issues
-              ? "Every sent issue delivered cleanly."
-              : "No sent issues yet."
+              ? "Every sent post delivered cleanly."
+              : "No sent posts yet."
         }</p>`;
         pagerEl.innerHTML = "";
         return;
@@ -2771,14 +2771,14 @@ function renderFrozenRecord(id, data) {
   app.innerHTML = `
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
-      ${published && archive_url ? `<button type="button" class="primary" id="viewPublished">View published issue&nbsp;↗</button>` : ""}
+      ${published && archive_url ? `<button type="button" class="primary" id="viewPublished">View published post&nbsp;↗</button>` : ""}
     </div>
     <div class="card rec-card">
       <div class="rec-head">
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
         <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
-      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published issue are fixed as sent.</p>
+      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published post are fixed as sent.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
@@ -2798,7 +2798,7 @@ function renderFrozenRecord(id, data) {
         <div id="recRows" class="muted">Loading…</div>
         <div id="recPager"></div>
       </div>
-      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable.</p>
+      <p class="rec-note muted">This is the record of what went out — the published post is the exact frozen copy readers received, and nothing here is editable.</p>
     </div>`;
 
   const viewBtn = document.getElementById("viewPublished");
@@ -3031,7 +3031,7 @@ function renderSubTable(listEl, rows, state, reload) {
 // Add subscriber → the normal double opt-in (never an auto-confirm).
 function addSubscriberModal(onDone) {
   const m = modal(
-    `<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive issues until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
+    `<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
   );
   const input = m.el.querySelector("#addEmail");
   input.focus();
@@ -3098,9 +3098,9 @@ const EMAIL_TEMPLATE_VARS = [
     vars: [
       {
         token: "{{ post.body }}",
-        desc: "Your issue's Markdown, rendered to HTML — the body slot.",
+        desc: "Your post's Markdown, rendered to HTML — the body slot.",
       },
-      { token: "{{ post.subject }}", desc: "The issue's subject line." },
+      { token: "{{ post.subject }}", desc: "The post's subject line." },
     ],
   },
   {
@@ -3120,7 +3120,7 @@ const EMAIL_TEMPLATE_VARS = [
     vars: [
       { token: "{{ email.sentTo }}", desc: "The recipient's address (filled per send)." },
       { token: "{{ email.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
+      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived post's permanent URL." },
     ],
   },
 ];
@@ -3697,7 +3697,7 @@ async function renderTemplate() {
       <div class="set-email-stage" id="tplStage">
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the post sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -3803,7 +3803,7 @@ async function renderTemplate() {
     tplTestLbl.textContent = isDirty() ? "Save & send test" : "Send test email";
     tplTestEl.title = isDirty()
       ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
-      : "Sends a sample issue through the saved template so you can see it in a real inbox.";
+      : "Sends a sample post through the saved template so you can see it in a real inbox.";
   }
   // Advisory warnings for the template that was just saved; blocking errors go to the
   // save bar instead (bar.showError), so the bar owns the blocking state and this owns
@@ -3956,7 +3956,7 @@ async function renderTemplate() {
   tplTestEl.onclick = () => {
     const dirty = isDirty();
     const m = modal(
-      `<h3>Send a test email</h3><p class="hint">Delivers a sample issue rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
+      `<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
         dirty
           ? `<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
           : ""
@@ -4020,7 +4020,7 @@ async function renderTemplate() {
 }
 
 async function renderSettings() {
-  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each issue is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -4171,7 +4171,7 @@ async function renderSettings() {
           <div class="set-inbox-avatar">${esc(monogram(fromName))}</div>
           <div class="set-inbox-body">
             <div class="set-inbox-top"><span class="set-inbox-from">${esc(fromName)}</span><span class="set-inbox-time">9:02 AM</span></div>
-            <div class="set-inbox-subj">Your latest issue — a sample subject line</div>
+            <div class="set-inbox-subj">Your latest post — a sample subject line</div>
             <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
             <div class="set-inbox-addr">${esc(bareAddress(d.fromAddress))}</div>
           </div>
@@ -4189,7 +4189,7 @@ async function renderSettings() {
       ${secHead("Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
-          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
           <div class="set-chips" id="recipChips"></div>
           <div class="set-recip-add">
             <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">
@@ -5115,7 +5115,7 @@ async function renderDashboard() {
     root.innerHTML =
       `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
         pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
-      }<p class="muted">Let's get your first issue out the door.</p></div></div>` +
+      }<p class="muted">Let's get your first post out the door.</p></div></div>` +
       setupChecklistHtml(pub, deployment) +
       `<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`;
     wireDashActions(root, renderDashboard);
@@ -5394,7 +5394,7 @@ function apiConnectCard(connected) {
   </div>`;
   }
   return `<div class="card pub-card">
-    <p class="pub-note">Let Claude draft, proofread, and schedule your issues.</p>
+    <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
     <p class="pub-cta"><a href="#/docs/connect-claude">Connect Claude →</a></p>
     <p class="pub-foot"><a href="#/reference">API reference →</a></p>
   </div>`;
@@ -5406,7 +5406,7 @@ function setupChecklistHtml(pub, deployment) {
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
-      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
     </ol>
@@ -5422,7 +5422,7 @@ function howItWorksHtml() {
     ["Write", "Draft in Markdown and preview exactly what the email will look like."],
     ["Schedule", "Schedule ahead — the send waits in a visible, cancelable review window."],
     ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
-    ["Archive", "Every issue is preserved as a permanent page — the record of what went out."],
+    ["Archive", "Every post is preserved as a permanent page — the record of what went out."],
   ];
   return `<section class="dash-section" id="ov-how"><h2>How Kestrel works</h2><ol class="how-steps">${steps
     .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
@@ -5436,7 +5436,7 @@ const WHY_KESTREL = [
   ],
   [
     "Safe to send unattended",
-    "Scheduling freezes the rendered email and locks the issue behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
+    "Scheduling freezes the rendered email and locks the post behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
   ],
   [
     "A test you can trust",
@@ -5444,7 +5444,7 @@ const WHY_KESTREL = [
   ],
   [
     "Yours to keep",
-    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every issue live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
+    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every post live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
   ],
   [
     "Cheap by construction",

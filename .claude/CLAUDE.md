@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Kestrel is a self-contained newsletter app: write an issue in Markdown, preview it exactly as the email, schedule it behind a cancelable review window, and send it to a double-opt-in list — the app owns the list, the consent, the delivery record, and a permanent per-issue archive. One HTTP API with two clients (a web editor and Claude); neither reaches past the API.
+Kestrel is a self-contained newsletter app: write a post in Markdown, preview it exactly as the email, schedule it behind a cancelable review window, and send it to a double-opt-in list — the app owns the list, the consent, the delivery record, and a permanent per-post archive. One HTTP API with two clients (a web editor and Claude); neither reaches past the API.
 
 It runs on a **Cloudflare Worker** over **D1** (database) and **R2** (images), with a **Cron Trigger** driving the send sweep, and a swappable email provider behind a two-method seam (a `fake` in-memory transport for local dev and tests; SES and Resend adapters are still to come). TypeScript under `strict`; runtime deps are `marked`, `jose`, and `aws4fetch`.
 

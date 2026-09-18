@@ -1,6 +1,6 @@
 # Wire the archive to a website
 
-Every issue has a permanent archive URL — its "view in browser" link and every shared link (`docs/SPEC.md` §5, I3). Where that URL lives is a choice. The default requires nothing; anchoring it to your main domain is an optional enhancement. Why permanence favors your most durable name is `docs/SPEC.md` §10.
+Every post has a permanent archive URL — its "view in browser" link and every shared link (`docs/SPEC.md` §5, I3). Where that URL lives is a choice. The default requires nothing; anchoring it to your main domain is an optional enhancement. Why permanence favors your most durable name is `docs/SPEC.md` §10.
 
 ## The self-contained default — nothing to do
 
@@ -23,7 +23,7 @@ This is a routing concern on the apex zone, not a second app:
 
 3. **Pick a base path that doesn't collide.** `ARCHIVE_BASE_PATH` drives *both* the emitted URL and the route the Worker serves (`createRouter(basePath)` in `src/app.ts`), so the two can never drift. Choose a prefix your site does not already use for a real page — `/archive` (the default), `/newsletter`, `/issues` — and set the same value in the Worker route in step 1.
 
-> **Pages-vs-Worker-route precedence caveat.** If the apex is served by Cloudflare **Pages**, a Worker route and the Pages project can both match a path. A Worker route takes precedence over Pages for the paths it matches, but confirm it: after adding the route, load `https://example.com/archive/<a-sent-slug>` and check it serves the issue (the Worker), not a Pages 404. Make sure the base path does not shadow a real page or a Pages Function you depend on.
+> **Pages-vs-Worker-route precedence caveat.** If the apex is served by Cloudflare **Pages**, a Worker route and the Pages project can both match a path. A Worker route takes precedence over Pages for the paths it matches, but confirm it: after adding the route, load `https://example.com/archive/<a-sent-slug>` and check it serves the post (the Worker), not a Pages 404. Make sure the base path does not shadow a real page or a Pages Function you depend on.
 
 The app origin itself stays on `newsletter.example.com` — only the *archive URL* moves to the apex. The admin editor, the API, and the public subscribe/confirm/unsubscribe pages remain on the app's own hostname.
 

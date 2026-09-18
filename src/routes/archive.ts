@@ -123,7 +123,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   if (!post || !send) {
     return htmlPage(
       "Not found",
-      `<h1 style="margin-top:0;">Not found</h1><p>This issue isn't available.</p>`,
+      `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
       404,
     );
   }

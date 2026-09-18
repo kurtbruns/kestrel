@@ -130,7 +130,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/api/settings/template/test",
       access: "admin",
       summary:
-        "Send a sample issue through the saved email template, to `to` or the default recipients (I5).",
+        "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
       example: {
         request: { to: "you@example.com" },
         response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
@@ -145,9 +145,9 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Create a draft post.",
       example: {
-        request: { subject: "Issue #1: Hello", markdown: "# Hello\n\nWelcome." },
+        request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
-          post: { id: "p_abc123", status: "draft", slug: "issue-1-hello" },
+          post: { id: "p_abc123", status: "draft", slug: "hello-world" },
           revision_id: "r_1",
         },
       },
@@ -194,8 +194,8 @@ export function createRouter(archiveBasePath: string): Router {
         "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
       example: {
         request: {
-          subject: "Issue #1: Hello",
-          slug: "issue-1-hello",
+          subject: "Hello, world",
+          slug: "hello-world",
           markdown: "# Hello\n\nEdited.",
           base_revision: "r_1",
         },
@@ -456,7 +456,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'failed'|'accepted'}.",
       description:
-        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'failed' (assume not sent; the address is picked up by the next issue) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
+        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'failed' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
       example: {
         request: { resolution: "failed" },
         response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },
@@ -557,7 +557,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/",
       access: "public",
       summary:
-        "The newsletter's public landing page: identity, the latest issue, and a subscribe call to action.",
+        "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
     },
     {
@@ -620,14 +620,14 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: `${archiveBasePath}{/}?`,
       access: "public",
-      summary: "The public archive index: every sent issue, newest first.",
+      summary: "The public archive index: every sent post, newest first.",
       handler: archiveRoutes.archiveIndex,
     },
     {
       method: "GET",
       path: `${archiveBasePath}/:slug`,
       access: "public",
-      summary: "A frozen issue's archive page / view-in-browser (I3).",
+      summary: "A frozen post's archive page / view-in-browser (I3).",
       handler: archiveRoutes.archivePage,
     },
 

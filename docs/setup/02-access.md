@@ -19,7 +19,7 @@ Gate exactly these path prefixes (each match includes all subpaths):
 | `/suppressions` | the suppression list |
 | `/api` | `whoami`, the in-app docs (`/api/docs`) |
 
-Leave everything else public — the reader surface and webhooks: `/` (landing page), `/subscribe`, `/confirm`, `/unsubscribe`, `ARCHIVE_BASE_PATH` (e.g. `/archive/*`, the archive index and issue pages), `/media/*`, `/webhooks/*`, `/health`.
+Leave everything else public — the reader surface and webhooks: `/` (landing page), `/subscribe`, `/confirm`, `/unsubscribe`, `ARCHIVE_BASE_PATH` (e.g. `/archive/*`, the archive index and post pages), `/media/*`, `/webhooks/*`, `/health`.
 
 > `/dashboard` is load-bearing: the editor SPA lives there, so if it isn't in this application the editor ships ungated. Every authenticated route lives under one of the six prefixes above, so a new authoring endpoint added under `/api` (as the in-app docs are) is gated by the same application automatically. The one public `/api` route, `/api/dev/token`, exists only in a dev-shaped env and 404s once deployed, so gating `/api` wholesale is safe in production. Verify this against `src/app.ts` if the routes ever change.
 

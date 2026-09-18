@@ -4,7 +4,7 @@ Email's real failure modes — DKIM alignment, inbox rendering, the bounce webho
 
 ## 1. Test send to yourself
 
-In the editor (`/dashboard/`), open a draft and use **Send test email** to deliver the rendered issue to an address you control. A test goes through the *same* render path as a real send (I5), so a clean test is a real guarantee, not a lookalike.
+In the editor (`/dashboard/`), open a draft and use **Send test email** to deliver the rendered post to an address you control. A test goes through the *same* render path as a real send (I5), so a clean test is a real guarantee, not a lookalike.
 
 - [ ] The test arrives in the inbox.
 - [ ] It renders correctly (images load, layout holds, links work).

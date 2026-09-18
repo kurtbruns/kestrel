@@ -132,7 +132,7 @@ describe("landing page (the public front door, §5)", () => {
     const body = await res.text();
 
     // The newest is the feature; the older sits in the recent list. Both link out.
-    expect(body).toContain("Latest issue");
+    expect(body).toContain("Latest post");
     expect(body).toContain("The Newer One");
     expect(body).toContain("The Older One");
     expect(body).toContain(`http://localhost:8787/archive/${newer.slug}`);
@@ -166,7 +166,7 @@ describe("landing page (the public front door, §5)", () => {
     const res = await SELF.fetch(`${base}/`);
     const body = await res.text();
     expect(res.status).toBe(200);
-    expect(body).toContain("No issues yet");
+    expect(body).toContain("No posts yet");
     expect(body).not.toContain("Just A Draft");
   });
 });
@@ -201,7 +201,7 @@ describe("archive index (the full list, §5)", () => {
     const res = await SELF.fetch(`${base}/archive`);
     const body = await res.text();
     expect(res.status).toBe(200);
-    expect(body).toContain("No issues yet.");
+    expect(body).toContain("No posts yet.");
     expect(body).not.toContain("Just A Draft");
   });
 

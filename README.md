@@ -1,6 +1,6 @@
 # Kestrel
 
-Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You write a post in Markdown, preview exactly what the email will look like, schedule it behind a cancelable review window, and send it to a double-opt-in list. Kestrel holds the list, the consent, the delivery record, and a permanent per-issue archive, so you own your audience and your history instead of renting them from a platform.
+Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You write a post in Markdown, preview exactly what the email will look like, schedule it behind a cancelable review window, and send it to a double-opt-in list. Kestrel holds the list, the consent, the delivery record, and a permanent per-post archive, so you own your audience and your history instead of renting them from a platform.
 
 **Works with Claude.** Kestrel is one HTTP API with two clients: a web editor you drive by hand, and Claude, which drafts, edits, and helps orchestrate scheduling. Neither reaches past the API, so the two never drift out of sync.
 
@@ -32,7 +32,7 @@ Out of the box the app loads empty, the way a new publisher first sees it. To ex
 npm run seed
 ```
 
-This loads a sample publication called **Windbreak** with example data to show how the application looks in practice. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
+This loads a sample publication called **Windbreak** with example data to show how the application looks in practice. View it at `/dashboard/` and at an archived post like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
 
 ```bash
 npm run seed -- --size 10k

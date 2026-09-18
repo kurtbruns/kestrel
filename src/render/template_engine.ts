@@ -184,7 +184,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
     );
   }
   if (!tokens.has("email.viewInBrowserUrl")) {
-    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.");
+    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the post in a browser.");
   }
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {

@@ -291,11 +291,11 @@ export function landingPage(opts: {
 }): Response {
   let main: string;
   if (!opts.featured) {
-    main = `<p class="r-empty">No issues yet — subscribe to get the first one.</p>`;
+    main = `<p class="r-empty">No posts yet — subscribe to get the first one.</p>`;
   } else {
     const f = opts.featured;
     const feature =
-      `<p class="r-ey">Latest issue</p>` +
+      `<p class="r-ey">Latest post</p>` +
       `<article class="r-feat"><p class="r-k">${escapeHtml(f.dateLabel)}</p>` +
       `<h2><a href="${escapeHtmlAttr(f.url)}">${escapeHtml(f.title)}</a></h2>` +
       `<a class="r-link" href="${escapeHtmlAttr(f.url)}">Read here &rarr;</a></article>`;
@@ -327,7 +327,7 @@ export function archiveIndexPage(opts: {
 }): Response {
   const list = opts.issues.length
     ? `<ul class="r-list">${opts.issues.map(issueRow).join("")}</ul>`
-    : `<p class="r-empty">No issues yet.</p>`;
+    : `<p class="r-empty">No posts yet.</p>`;
   return readerPage({
     identity: opts.identity,
     subscribeUrl: opts.subscribeUrl,
