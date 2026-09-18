@@ -324,6 +324,20 @@ describe("confirmation email masthead (SPEC §7)", () => {
     expect(r.html).toContain("Wetland field notes");
   });
 
+  it("ships light+dark support like the newsletter shell", () => {
+    const r = confirmationEmail(link, DEFAULT_CONFIRMATION_EMAIL, {
+      name: "Heron Digest",
+      tagline: "Wetland field notes",
+      logoUrl: "",
+    });
+    // color-scheme opts the email into client dark handling…
+    expect(r.html).toContain('content="light dark"');
+    // …and a dark @media block darkens the frame + ink (it can't be inlined here anyway).
+    expect(r.html).toContain("prefers-color-scheme: dark");
+    expect(r.html).toContain("#ededed"); // ink in dark mode
+    expect(r.html).toContain("#232327"); // card surface in dark mode
+  });
+
   it("escapes operator copy and identity into the HTML (no injection)", () => {
     const r = confirmationEmail(
       link,
