@@ -27,8 +27,8 @@ Everything the editor does is on the HTTP API; the editor is just a client of it
 
 Two dev-only commands (dev server running, fake transport) choose what you see:
 
-- **`npm run reset`** — the **new-publisher first run**: an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel.
-- **`npm run seed`** — a **demo publication**: **"Field Notes,"** a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
+- **`npm run reset`** gives you the **new-publisher first run**: an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel.
+- **`npm run seed`** gives you a **demo publication**: **"Field Notes,"** a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
 
 Re-run either any time to reset to that state. To inspect the app at scale, `npm run seed -- --size 10k` builds a reproducible list of that size (`100` / `1k` / `10k` / `100k`).
 
@@ -50,4 +50,4 @@ Deployed, the gate is Cloudflare Access instead; that setup is in the [setup gui
 - **Deploy a real instance:** the setup guide under [`docs/setup/`](docs/setup/), also served read-only in the editor's Docs tab.
 - **Understand the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves.
 - **What Kestrel guarantees, and how the admin UI is built:** [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
-- **All scripts:** `package.json` — the ones you need for local dev are above.
+- **All scripts:** `package.json` (the ones you need for local dev are above).
