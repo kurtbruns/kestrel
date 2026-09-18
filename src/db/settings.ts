@@ -14,12 +14,13 @@
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
 /**
- * The publication's web-reader + dashboard identity. It themes the reader surface
- * and the admin — never the email (whose identity is the `From:` header) and never
- * a frozen record (I3). The logo *bytes* live in R2 under `BRANDING_LOGO_KEY`,
- * served by the public media route; here we keep only its version (a cache-buster,
- * a timestamp bumped on each upload) and content type. A blank `name` falls back to
- * the `From:` display name at render time.
+ * The publication's identity. It themes the reader surface and the admin, and rides
+ * *inside* the email as its masthead/branding (the post template and the confirmation
+ * email) — but it is never the email's authenticated *sender* (that is the `From:`
+ * header, deploy-time), and never a frozen record (I3). The logo *bytes* live in R2
+ * under `BRANDING_LOGO_KEY`, served by the public media route; here we keep only its
+ * version (a cache-buster, a timestamp bumped on each upload) and content type. A blank
+ * `name` falls back to the `From:` display name at render time.
  */
 export interface PublicationLogo {
   version: number;
