@@ -60,7 +60,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further send reaches that person. It is honored on the next send with no window in which they still get one, and it is never silently reversed.
 
-**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived issue carries fills reserved placeholders in that frozen copy — the same mechanism as the per-recipient unsubscribe link — and never rewrites the reviewed content.
+**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived issue carries never rewrites the reviewed content.
 
 **I4 — A post is sent at most once per send, to each person at most once.** Triggering a send is idempotent. A retry, a double-click, or a resumed send never mails anyone twice.
 
@@ -93,7 +93,7 @@ This gives you a full edit history, the ability to see what changed between two 
 
 One post has two clients that can write it at once — two browser tabs, and Claude editing through the same API — so the authoring API is **optimistically concurrent**, and the rule is *notify, don't clobber.*
 
-Because each save advances `current_revision`, that id is the post's version token. A save may carry the revision it was based on — as an `If-Match` header (the app also emits the current revision as an `ETag`) or a `base_revision` body field. If that base no longer matches the post's current revision, another writer got there first, and the save is rejected with **409** carrying the newer `{ current_revision, updated_at, author }` — the stale write never lands. A save that omits a base is unchecked (last-write-wins), so a client that doesn't participate still works.
+Because each save advances the post's current revision, that revision id is its version token. A save may carry the revision it was based on; if that base no longer matches the post's current revision, another writer got there first, and the save is rejected rather than landed, returning the newer revision and who wrote it. A save that omits a base is unchecked (last-write-wins), so a client that doesn't participate still works.
 
 The editor participates on both ends. It sends the base on every save, so a stale save surfaces an **out-of-date notice** instead of overwriting: *Reload* discards the local edits and loads the other version, *Keep editing* keeps the local copy so the next save writes on top of the other. It also lightly polls the current revision while open — covering another browser and Claude alike, which a same-browser signal would miss — so the writer is warned *before* investing more effort, not only when they save. The notice names who changed it (the revision's author; Claude's saves show as "Claude") and re-arms only when a genuinely newer revision appears.
 
