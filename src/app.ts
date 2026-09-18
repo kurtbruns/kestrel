@@ -333,9 +333,9 @@ export function createRouter(archiveBasePath: string): Router {
         },
         { name: "search", description: "Subject contains-search." },
         {
-          name: "problems",
+          name: "failures",
           description:
-            "`only` narrows to sends with a delivery problem (any bounced, complained, or failed recipient).",
+            "`only` narrows to sends with a delivery failure (any bounced, complained, or unsent recipient).",
         },
         {
           name: "sort",
@@ -374,7 +374,7 @@ export function createRouter(archiveBasePath: string): Router {
             bounced: 3,
             complained: 1,
             skipped: 1,
-            failed: 0,
+            unsent: 0,
           },
           dispatch: { done: 460, percent: 38, rate_per_min: 920, eta_ms: 48000 },
           delivery: { confirmed: 304, percent_of_accepted: 40 },
@@ -394,7 +394,7 @@ export function createRouter(archiveBasePath: string): Router {
         {
           name: "view",
           description:
-            "`problems` (default: bounced/complained/failed), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `failed`, `skipped`, `accepted`, `in_flight`).",
+            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `in_flight`).",
         },
         { name: "search", description: "Email contains-search." },
         { name: "sort", description: "`email` (default), `status`, `event`, or `updated`." },
@@ -416,7 +416,7 @@ export function createRouter(archiveBasePath: string): Router {
               bounce_kind: "hard",
             },
           ],
-          view: "problems",
+          view: "failures",
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
         },
       },
@@ -454,11 +454,11 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/sends/:id/resolve",
       access: "admin",
       summary:
-        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'failed'|'accepted'}.",
+        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
-        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'failed' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
+        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
       example: {
-        request: { resolution: "failed" },
+        request: { resolution: "unsent" },
         response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },
       },
       handler: sendRoutes.resolve,

@@ -5,7 +5,7 @@
  * `dispatched` — genuinely ambiguous — and the loop refuses to blind-retry them
  * (I4), so the send can never clear its completion gate and stays `sending`
  * forever. These tests cover the manual resolution that unwedges it: a lone
- * `dispatched` row can be driven to completion via the action, "failed" vs
+ * `dispatched` row can be driven to completion via the action, "unsent" vs
  * "accepted" behave correctly, and an already-`accepted` recipient is never
  * touched (I4).
  */
@@ -86,11 +86,11 @@ afterEach(() => {
 });
 
 describe("resolve a wedged send", () => {
-  it("drives a lone dispatched row to completion, marked failed (assumed not sent)", async () => {
+  it("drives a lone dispatched row to completion, marked unsent (assumed not sent)", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "amb@example.com", "dispatched");
 
-    const res = await resolveStuckSend(env, send.id, "failed", "tester@example.com");
+    const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
 
     expect(res.resolved).toBe(1);
     expect(res.completed).toBe(true);
@@ -98,7 +98,7 @@ describe("resolve a wedged send", () => {
     // The send finished and the post closed, exactly as a clean send would.
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("sent");
-    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ failed: 1 });
+    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ unsent: 1 });
     // Nothing was mailed by the resolution itself.
     expect(fakeOutbox().length).toBe(0);
   });
@@ -121,13 +121,13 @@ describe("resolve a wedged send", () => {
     await insertDelivery(send.id, "done@example.com", "accepted", "ses-msg-done");
     await insertDelivery(send.id, "amb@example.com", "dispatched");
 
-    const res = await resolveStuckSend(env, send.id, "failed", "tester@example.com");
+    const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
 
     expect(res.resolved).toBe(1); // only the dispatched row
     expect(res.completed).toBe(true);
     // The accepted recipient is untouched — same status, same provider id, no re-mail.
     const rollup = await sends.deliveryRollup(env.DB, send.id);
-    expect(rollup).toMatchObject({ accepted: 1, failed: 1 });
+    expect(rollup).toMatchObject({ accepted: 1, unsent: 1 });
     const done = await env.DB.prepare(
       "SELECT status, provider_id FROM deliveries WHERE email = 'done@example.com'",
     ).first<{ status: string; provider_id: string }>();
@@ -139,7 +139,7 @@ describe("resolve a wedged send", () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "amb@example.com", "dispatched");
 
-    await resolveStuckSend(env, send.id, "failed", "tester@example.com");
+    await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
 
     const row = await env.DB.prepare(
       "SELECT error FROM deliveries WHERE email = 'amb@example.com'",
@@ -153,7 +153,7 @@ describe("resolve a wedged send", () => {
     await insertDelivery(send.id, "amb@example.com", "dispatched");
     await insertDelivery(send.id, "todo@example.com", "pending");
 
-    const res = await resolveStuckSend(env, send.id, "failed", "tester@example.com");
+    const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
 
     expect(res.resolved).toBe(1);
     expect(res.completed).toBe(false);
@@ -167,18 +167,18 @@ describe("resolve a wedged send", () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "ok@example.com", "accepted", "ses-msg-ok");
 
-    await expect(resolveStuckSend(env, send.id, "failed", "t")).rejects.toThrow(/no ambiguous/);
+    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toThrow(/no ambiguous/);
   });
 
   it("rejects resolving a send that is not sending", async () => {
     const { post } = await posts.createPost(env.DB, { subject: "S", markdown: "# H\n\nb" }, "t");
     const send = await freeze(env, config(), post, Date.now() + 3_600_000); // still scheduled
 
-    await expect(resolveStuckSend(env, send.id, "failed", "t")).rejects.toThrow(/only a send/);
+    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toThrow(/only a send/);
   });
 
   it("rejects resolving a missing send", async () => {
-    await expect(resolveStuckSend(env, "nope", "failed", "t")).rejects.toThrow();
+    await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toThrow();
   });
 });
 
@@ -205,9 +205,9 @@ describe("a real SES transport error wedges the send, and resolve unwedges it", 
     expect(await sends.countDeliveries(env.DB, send.id, "dispatched")).toBe(1);
 
     // The operator adjudicates: assume it never left; the send completes.
-    const res = await resolveStuckSend(sesEnv(), send.id, "failed", "tester@example.com");
+    const res = await resolveStuckSend(sesEnv(), send.id, "unsent", "tester@example.com");
     expect(res.completed).toBe(true);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ failed: 1 });
+    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ unsent: 1 });
   });
 });

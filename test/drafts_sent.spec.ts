@@ -106,7 +106,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
         d.email,
         d.status,
         d.status === "accepted" ? `pid-${i}` : null,
-        d.status === "failed" ? "550 mailbox unavailable" : null,
+        d.status === "unsent" ? "550 mailbox unavailable" : null,
         1,
         now,
         d.event ?? null,
@@ -156,8 +156,8 @@ describe("in-flight post routing (#162)", () => {
   });
 });
 
-describe("Sent list — delivery-problems filter (/sends?problems=only)", () => {
-  it("narrows to sends with any bounce, complaint, or send-time failure", async () => {
+describe("Sent list — delivery-failures filter (/sends?failures=only)", () => {
+  it("narrows to sends with any bounce, complaint, or unsent recipient", async () => {
     const marker = `issues-${uniq()}`;
     const { sendId: clean } = await seedSentSend(`${marker} clean`, `${marker}-clean`, [
       { email: "a@example.com", status: "accepted", event: "delivered" },
@@ -167,10 +167,10 @@ describe("Sent list — delivery-problems filter (/sends?problems=only)", () => 
       { email: "c@example.com", status: "accepted", event: "delivered" },
       { email: "d@example.com", status: "accepted", event: "bounced", bounce_kind: "soft" },
     ]);
-    // A send-time failure alone is a delivery issue too — it's the third counter in the sum.
-    const { sendId: failed } = await seedSentSend(`${marker} failed`, `${marker}-failed`, [
+    // An unsent recipient alone is a delivery failure too — it's the third counter in the sum.
+    const { sendId: unsent } = await seedSentSend(`${marker} unsent`, `${marker}-unsent`, [
       { email: "e@example.com", status: "accepted", event: "delivered" },
-      { email: "f@example.com", status: "failed" },
+      { email: "f@example.com", status: "unsent" },
     ]);
 
     const all = await readJson(
@@ -179,16 +179,16 @@ describe("Sent list — delivery-problems filter (/sends?problems=only)", () => 
     expect(all.page.total).toBe(3);
 
     const only = await readJson(
-      await SELF.fetch(`${base}/sends?search=${marker}&problems=only`, { headers: AUTH }),
+      await SELF.fetch(`${base}/sends?search=${marker}&failures=only`, { headers: AUTH }),
     );
     expect(only.page.total).toBe(2);
     const ids = only.sends.map((s: any) => s.id).sort();
-    expect(ids).toEqual([bounced, failed].sort());
+    expect(ids).toEqual([bounced, unsent].sort());
     expect(ids).not.toContain(clean);
 
     // Any other value is ignored, not an error — the flag is `only` or absent.
     const junk = await readJson(
-      await SELF.fetch(`${base}/sends?search=${marker}&problems=yes`, { headers: AUTH }),
+      await SELF.fetch(`${base}/sends?search=${marker}&failures=yes`, { headers: AUTH }),
     );
     expect(junk.page.total).toBe(3);
   });
@@ -205,7 +205,7 @@ describe("sent record view — GET /sends/:id", () => {
       })),
       { email: "bounce@example.com", status: "accepted", event: "bounced" },
       { email: "spam@example.com", status: "accepted", event: "complained" },
-      { email: "fail@example.com", status: "failed" },
+      { email: "fail@example.com", status: "unsent" },
       { email: "skip@example.com", status: "skipped" },
       { email: "pending@example.com", status: "accepted" }, // accepted, no event yet
     ];
@@ -218,14 +218,14 @@ describe("sent record view — GET /sends/:id", () => {
       delivered: 5,
       bounced: 1,
       complained: 1,
-      failed: 1,
+      unsent: 1,
       skipped: 1,
       accepted: 1,
       in_flight: 0,
     });
     // Every recipient lands in exactly one bucket — the buckets sum to the audience.
     const sum =
-      o.delivered + o.bounced + o.complained + o.failed + o.skipped + o.accepted + o.in_flight;
+      o.delivered + o.bounced + o.complained + o.unsent + o.skipped + o.accepted + o.in_flight;
     expect(sum).toBe(o.recipients);
 
     // `progress` is now the single-row buildSendProgress shape (off the c_* counters),
@@ -239,7 +239,7 @@ describe("sent record view — GET /sends/:id", () => {
       delivered: o.delivered,
       bounced: o.bounced,
       complained: o.complained,
-      failed: o.failed,
+      unsent: o.unsent,
       skipped: o.skipped,
       accepted: o.accepted,
     });
@@ -256,7 +256,7 @@ describe("sent record view — GET /sends/:id", () => {
     const { sendId } = await seedSentSend("CSV Test", slug, [
       { email: "a@example.com", status: "accepted", event: "delivered" },
       { email: "b@example.com", status: "accepted", event: "bounced" },
-      { email: "c@example.com", status: "failed" },
+      { email: "c@example.com", status: "unsent" },
     ]);
 
     const res = await SELF.fetch(`${base}/sends/${sendId}/deliveries.csv`, { headers: AUTH });
@@ -269,7 +269,7 @@ describe("sent record view — GET /sends/:id", () => {
     expect(lines[0]).toBe("email,status,event,event_at,error");
     expect(lines).toHaveLength(4); // header + 3 recipients
     expect(text).toContain("b@example.com,accepted,bounced,");
-    expect(text).toContain("c@example.com,failed,,");
+    expect(text).toContain("c@example.com,unsent,,");
   });
 
   it("requires auth", async () => {
@@ -279,8 +279,8 @@ describe("sent record view — GET /sends/:id", () => {
 
 // #164: the record view shows the per-recipient rows in-app, not just as the CSV — a
 // paginated, filterable JSON endpoint read DIRECTLY off `deliveries` (the source of
-// truth), not the `c_*` counters. The default view is "problems" (bounced/complained/
-// failed), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
+// truth), not the `c_*` counters. The default view is "failures" (bounced/complained/
+// unsent), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
 // ingest (SPEC §8) — a fact of this send, not a read of the global suppression list.
 describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   // Storage isn't isolated between tests in this file, and `suppressions.email` is a
@@ -306,19 +306,19 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
       { email: e.hard, status: "accepted", event: "bounced", bounce_kind: "hard" },
       { email: e.soft, status: "accepted", event: "bounced", bounce_kind: "soft" },
       { email: e.spam, status: "accepted", event: "complained" },
-      { email: e.fail, status: "failed" },
+      { email: e.fail, status: "unsent" },
       { email: e.skip, status: "skipped" },
       { email: e.wait, status: "accepted" }, // accepted, no event yet
     ]);
     return { sendId, e };
   }
 
-  it("defaults to the problems view (bounced/complained/failed), email-sorted", async () => {
+  it("defaults to the failures view (bounced/complained/unsent), email-sorted", async () => {
     const { sendId, e } = await seedRecord();
     const body = await readJson(
       await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
-    expect(body.view).toBe("problems");
+    expect(body.view).toBe("failures");
     // Only the rows that went wrong, and in the default email-asc order (matches the CSV).
     expect(body.deliveries.map((d: any) => d.email)).toEqual([e.fail, e.hard, e.soft, e.spam]);
     expect(body.page).toMatchObject({ total: 4, sort: "email", dir: "asc" });
@@ -360,10 +360,10 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     expect(del.deliveries.map((d: any) => d.email)).toEqual([e.d1, e.d2]);
     expect(del.deliveries.every((d: any) => d.event === "delivered")).toBe(true);
 
-    const failed = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=failed`, { headers: AUTH }),
+    const unsent = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=unsent`, { headers: AUTH }),
     );
-    expect(failed.deliveries.map((d: any) => d.email)).toEqual([e.fail]);
+    expect(unsent.deliveries.map((d: any) => d.email)).toEqual([e.fail]);
   });
 
   it("shows all recipients and paginates", async () => {
@@ -389,7 +389,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     expect(p3.deliveries).toHaveLength(2); // the tail page: 8 − 6
   });
 
-  it("searches by address and falls back to problems on an unknown view", async () => {
+  it("searches by address and falls back to failures on an unknown view", async () => {
     const { sendId, e } = await seedRecord();
     const hit = await readJson(
       await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&search=HARD-`, {
@@ -401,7 +401,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     const bogus = await readJson(
       await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, { headers: AUTH }),
     );
-    expect(bogus.view).toBe("problems");
+    expect(bogus.view).toBe("failures");
   });
 
   it("404s for an unknown send and requires auth", async () => {

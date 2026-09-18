@@ -11,7 +11,7 @@
  * AMBIGUOUS_DELIVERY — with, until now, no way to act on the flag but raw SQL.
  *
  * This is the one place a human resolves that ambiguity, choosing the safe outcome:
- *   - "failed":   assume the batch never left. The addresses are simply picked up by
+ *   - "unsent":   assume the batch never left. The addresses are simply picked up by
  *                 the NEXT post (a future send resolves its audience fresh); they
  *                 are never re-mailed within THIS send.
  *   - "accepted": assume it did (the operator confirmed in the provider console),
@@ -28,7 +28,7 @@ import type { AppEnv } from "../env";
 import { conflict, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 
-export type StuckResolution = "failed" | "accepted";
+export type StuckResolution = "unsent" | "accepted";
 
 export interface ResolveResult {
   send: SendRow;
@@ -59,7 +59,7 @@ export async function resolveStuckSend(
 
   const now = Date.now();
   const note =
-    outcome === "failed"
+    outcome === "unsent"
       ? `operator adjudication: assumed NOT delivered (${actor})`
       : `operator adjudication: assumed delivered (${actor})`;
   const resolved = await sends.resolveDispatched(env.DB, sendId, outcome, note, now);

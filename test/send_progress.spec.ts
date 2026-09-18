@@ -52,7 +52,7 @@ async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {
   expect(send.c_delivered).toBe(outcomes.delivered);
   expect(send.c_bounced).toBe(outcomes.bounced);
   expect(send.c_complained).toBe(outcomes.complained);
-  expect(send.c_failed).toBe(outcomes.failed);
+  expect(send.c_unsent).toBe(outcomes.unsent);
   expect(send.c_skipped).toBe(outcomes.skipped);
   expect(send.c_accepted).toBe(outcomes.accepted);
   // deliveryOutcomes folds pending + dispatched into one `in_flight`; the counters split them.
@@ -66,7 +66,7 @@ async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {
     send.c_bounced +
     send.c_complained +
     send.c_skipped +
-    send.c_failed;
+    send.c_unsent;
   expect(sum).toBe(outcomes.recipients);
   return send;
 }
@@ -219,7 +219,7 @@ describe("buildSendProgress — derived phase", () => {
       c_bounced: 0,
       c_complained: 0,
       c_skipped: 0,
-      c_failed: 0,
+      c_unsent: 0,
       ...over,
     };
   }
@@ -287,10 +287,10 @@ describe("resolve keeps counters consistent", () => {
     await sends.recomputeSendCounters(env.DB, send.id); // baseline the cache to the manufactured state
     expect((await sends.getSend(env.DB, send.id))!.c_in_flight).toBe(1);
 
-    await resolveStuckSend(env, send.id, "failed", "tester@example.com");
+    await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
     const row = await expectCountersMatchAggregate(send.id);
     expect(row.status).toBe("sent");
-    expect(row.c_failed).toBe(1);
+    expect(row.c_unsent).toBe(1);
     expect(row.c_in_flight).toBe(0);
   });
 });

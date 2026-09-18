@@ -15,7 +15,7 @@ export const LEASE_TTL_MS = 5 * 60 * 1000;
 export const MISSED_THRESHOLD_MS = 5 * 60 * 1000;
 /** A send stuck in `sending` longer than this is flagged STUCK_SEND. */
 export const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
-/** Per-recipient retry cap before a delivery is marked failed so the send can complete. */
+/** Per-recipient retry cap before a delivery is marked unsent so the send can complete. */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
 export const now = (): number => Date.now();

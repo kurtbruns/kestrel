@@ -675,8 +675,8 @@ function drawDistinct(rand: () => number, count: number, n: number): number[] {
 }
 
 /** Per-send transport failures as audience indices — about `failureRate` of the frozen
- *  audience, at least one, PRNG-placed so the failures fall on different rows each send. */
-function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
+ *  audience, at least one, PRNG-placed so the unsent rows fall on different rows each send. */
+function drawUnsentSlots(rand: () => number, audienceLen: number): Set<number> {
   if (audienceLen === 0) {
     return new Set();
   }
@@ -870,18 +870,18 @@ interface DeliveryEvent {
  * Synthesize the per-recipient delivery record for one completed send. The audience is
  * the list frozen at send time, so the row count and `recipient_count` are that moment's
  * numbers, not today's. Most recipients are accepted and later marked delivered; the
- * recipients at `failedSlots` (audience indices the caller picks — fixed for the curated
- * demo, drawn from the seeded PRNG for a scaled list) fail at the transport level (a
- * send-loop failure, which does NOT itself suppress — only the webhook events below do);
- * and the addresses in `events` carry the bounce/complaint that produced this send's
- * suppressions.
+ * recipients at `unsentSlots` (audience indices the caller picks — fixed for the curated
+ * demo, drawn from the seeded PRNG for a scaled list) are left unsent at the transport
+ * level (a send-loop failure, which does NOT itself suppress — only the webhook events
+ * below do); and the addresses in `events` carry the bounce/complaint that produced this
+ * send's suppressions.
  */
 function buildDeliveries(
   sendId: string,
   audience: string[],
   sentAt: number,
   events: Map<string, DeliveryEvent>,
-  failedSlots: Set<number>,
+  unsentSlots: Set<number>,
 ): SeedDelivery[] {
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
@@ -905,10 +905,10 @@ function buildDeliveries(
       const bounce_kind = ev.event === "bounced" ? "hard" : null;
       return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at, bounce_kind };
     }
-    if (failedSlots.has(i)) {
+    if (unsentSlots.has(i)) {
       return {
         ...base,
-        status: "failed",
+        status: "unsent",
         provider_id: null,
         error: "SMTP 550 mailbox unavailable",
         attempts: 5,
@@ -1130,9 +1130,9 @@ export async function seedDatabase(
     const events: Map<string, DeliveryEvent> = sentIndex === 1 ? built.sendTwoEvents : new Map();
     // Transport failures: the curated list's two fixed slots, or a PRNG-drawn set scaled
     // to the frozen audience when a size was requested.
-    const failedSlots =
-      size != null ? drawFailedSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
-    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, failedSlots);
+    const unsentSlots =
+      size != null ? drawUnsentSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
+    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, unsentSlots);
     await insertDeliveries(db, deliveries);
     // The seed writes delivery rows directly (fixture data the normal path never
     // produces), so bring the denormalized counters (migration 0006) in line with them.
