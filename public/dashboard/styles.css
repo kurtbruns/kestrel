@@ -1384,9 +1384,8 @@ td a:hover {
   table-layout: fixed;
   /* These full-page data tables sit directly on the card-colored page ground, where the
      base `table` --line hairline is nearly the same color as the ground (most visibly in
-     dark) and reads as no container at all. Take the stronger --line-soft — the same
-     border the dashboard's Drafts/Sent summaries take (.dash-section table) — so the
-     table reads as one bounded surface rather than loose rows. */
+     dark) and reads as no container at all. Take the stronger --line-soft so the table
+     reads as one bounded surface rather than loose rows. */
   border-color: var(--line-soft);
   /* A floor, inside the scrolling .table-wrap: without it, once the fixed columns
      outgrow the viewport the one flexible text column absorbs the whole deficit,
@@ -1416,10 +1415,9 @@ td a:hover {
 .list-table .c-act {
   width: 56px;
 }
-/* The dashboard's summary tables (Drafts / Sent) take a stronger border than the
-   default hairline, which nearly disappears against the off-white dashboard ground. */
+
 .dash-section table {
-  border-color: var(--line-soft);
+  border-color: var(--line);
 }
 
 /* sortable column headers: the label is a borderless button that fills the cell */
