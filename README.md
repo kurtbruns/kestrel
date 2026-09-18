@@ -1,14 +1,10 @@
 # Kestrel
 
-A small newsletter app: write an issue in Markdown, preview exactly what the email
-will look like, schedule it with a cancelable review window, and send it to a
-double-opt-in subscriber list — while owning the list, the consent record, the
-delivery record, and a permanent per-issue archive.
+Kestrel is a self-hosted newsletter app for publishers. You write an issue in Markdown, preview exactly what the email will look like, schedule it behind a cancelable review window, and send it to a double-opt-in list. Kestrel holds the list, the consent, the delivery record, and a permanent per-issue archive, so you own your audience and your history instead of renting them from a platform.
 
-One interface (an HTTP API) with two clients: a **web editor** and **Claude**.
-Runs on a **Cloudflare Worker** over **D1** (database) and **R2** (images), with a
-**Cron Trigger** driving the send sweep, and a swappable email provider (SES or
-Resend; a fake in-memory transport for local dev and tests).
+**Works with Claude.** Kestrel is one HTTP API with two clients: a web editor you drive by hand, and Claude, which drafts, edits, and helps orchestrate scheduling. Neither reaches past the API, so the two never drift out of sync.
+
+**Self-hosts on Cloudflare.** A Cloudflare Worker over D1 (the database) and R2 (images), with a Cron Trigger driving the send sweep, behind a swappable email provider (SES or Resend, plus a fake in-memory transport for local dev and tests).
 
 ## Prerequisites
 
@@ -19,110 +15,35 @@ Resend; a fake in-memory transport for local dev and tests).
 
 ```bash
 npm install
-cp .dev.vars.example .dev.vars      # then edit (see "Auth" below)
-npm run migrate:local               # apply the schema to the local D1 (optional; see below)
+cp .dev.vars.example .dev.vars      # ships a working dev setup; no edits needed
 npm run dev                         # wrangler dev on http://localhost:8787
 ```
 
-`npm run dev` goes through `scripts/dev.mjs`, a thin launcher around `wrangler dev`.
-It applies the D1 migrations automatically the first time a local shadow is empty, so
-the `migrate:local` step above is optional. It also honors a `PORT` handed to it by
-Claude Code's preview (`.claude/launch.json` has `autoPort`), so parallel worktrees
-each get a free port instead of colliding on 8787; a plain terminal `npm run dev`
-still binds 8787. It records the port it bound in `.wrangler/dev-port` (gitignored,
-per-worktree), so `npm run seed` and `npm run reset` (below) target that same server
-automatically — no `PORT` needed even when the worktree isn't on 8787. Pass wrangler
-flags through with `--`, e.g. `npm run dev -- --remote`.
+`npm run dev` applies the D1 migrations automatically on a fresh local database, so there's no separate migrate step. Open the editor at **http://localhost:8787/dashboard/**. There's nothing to sign in with locally: the editor mints its own dev token and shows a **Local dev** chip, and the preview (which opens at `/`) carries an **Open dashboard** shortcut, so you're one click from the editor.
 
-Open the editor at **http://localhost:8787/dashboard/**. Locally there's nothing to
-sign in with — the editor mints its own dev token on load and shows a **Local dev**
-chip. You don't have to type that path: on a local dev instance the public pages
-(the landing page at `/` and the archive index) carry a small **Open dashboard**
-shortcut in the corner, so the preview — which opens at `/` — is one click from the
-editor. That link is dev-only; a deployed public page never links into the editor.
-Everything the editor does is also available on the HTTP API — the editor is just a
-client of it.
+Everything the editor does is on the HTTP API; the editor is just a client of it. Because a draft can be open in two tabs or edited by Claude at once, a stale save is rejected rather than clobbering the newer one (see `docs/SPEC.md` §4).
 
-Because a draft can be open in another tab or edited by Claude at the same time, the
-editor warns you when a draft changed underneath you rather than silently overwriting
-the other version: you can reload to take that version, or keep editing to save over
-it. On the API, `PUT /posts/:id` is optimistically concurrent — send the revision you
-loaded (an `If-Match` header, matching the `ETag` returned on `GET`, or a
-`base_revision` body field) and a stale save is rejected with `409` instead of
-clobbering the newer one. See `docs/SPEC.md` §4.
+### See it with data
 
-### Load demo data
+Two dev-only commands (dev server running, fake transport) choose what you see:
 
-A fresh database is empty. With the dev server running, load the local
-**"Field Notes"** sample newsletter:
+- **`npm run reset`** — the **new-publisher first run**: an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel.
+- **`npm run seed`** — a **demo publication**: **"Field Notes,"** a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
 
-```bash
-npm run seed
-```
+Re-run either any time to reset to that state. To inspect the app at scale, `npm run seed -- --size 10k` builds a reproducible list of that size (`100` / `1k` / `10k` / `100k`).
 
-This resets the local database and loads a realistic dataset modeled as a
-publication that's been running a while: a back-catalog of sent issues whose
-audience grew and churned between sends (so each issue's recipient count differs and
-reflects the list as it was at that moment), one scheduled issue with a live
-countdown, a couple of drafts, and a subscriber list covering every state — plus
-suppressions produced by a hard bounce and a spam complaint. So the editor and
-archive look populated. It's a thin wrapper around a dev-only `POST /api/dev/seed`
-route that is available **only under the fake transport**, so it can never touch a
-deployed database. Re-run it any time to reset to a known state.
+## Auth
 
-By default the seed builds a small, story-shaped list (~155 subscribers). To load and
-inspect the app at scale — the Sends page, the delivery record, the subscriber roster —
-pass an approximate size with `--size` (`100` / `1k` / `10k` / `100k`); a seeded PRNG
-keeps the outcomes realistic and makes a given size reproducible, and `--seed` pins it:
+The admin surface (the editor and the authoring API) is protected; the reader routes (the landing page, the archive, subscribe/confirm/unsubscribe, and media) are public, gated by unguessable per-subscriber tokens. There is **one identity contract**: the Worker verifies a signed token and resolves a `Principal` (a `human` with an email, or a `service`). What issues that token differs by environment; the app logic is the same either way.
 
-```bash
-npm run seed -- --size 10k
-```
+### Local
 
-The sample cover photo lives at `scripts/seed-assets/kestrel.jpg`; if it's missing,
-the seed still runs (that one image just 404s until you drop the file in and re-seed).
-View the result at `/dashboard/` and at the archived issues, e.g.
-**http://localhost:8787/archive/the-hovering-hunter**.
-
-To go the other way — wipe the local database back to a fresh install (no posts,
-subscribers, or settings) and see the first-run dashboard + setup checklist — run
-`npm run reset` (also dev-server-up, fake-transport-only).
-
-> **Note:** the local D1 tracks which migrations it has applied by filename. If the
-> migrations ever change, reset the local database — delete this checkout's
-> `.wrangler/state` (or run `npm run dev` in a fresh clone) and re-migrate.
-
-## Auth — one contract, different credentials per environment
-
-The admin/authoring surface (the editor, `/posts`, `/sends`, `/subscribers`,
-`/suppressions`, `/api/settings`, `/api/docs`, schedule/send) is protected. The
-reader routes (`/` landing page, `/archive` + `/archive/*` archive index and
-issue pages, `/subscribe`, `/confirm`, `/unsubscribe`, `/media/*`) are public and
-gated only by unguessable per-subscriber tokens.
-
-There's **one identity contract** — the Worker verifies a signed token and resolves a
-`Principal` (`human` with an email, or `service`). What issues that token differs by
-environment; the app logic, the `Principal`, and the tests are the same either way.
-
-### Local: a dev-signed token
-
-There's no Cloudflare Access edge in local dev, so the app verifies a JWT signed with
-`DEV_AUTH_SECRET` instead (`src/auth/dev_token.ts`). It ships in `.dev.vars.example`, so
-the `cp .dev.vars.example .dev.vars` step above is all the setup there is: the editor
-calls `/api/dev/token` on load, stores the minted token, and sends it as
-`Authorization: Bearer <jwt>`. (It's kept out of `wrangler.jsonc` on purpose — a
-deployed env never gets this value, so the dev auth path stays fail-closed.) To drive
-the API yourself, mint one the same way (a token with no `email` is a `service`
-principal, mirroring Claude in prod):
+There's no sign-in edge locally, so the editor mints its own dev token (signed with `DEV_AUTH_SECRET`, which ships in `.dev.vars.example`, so the `cp` step above is all the setup). To call the API yourself, mint one (no `email` makes it a `service` principal, like Claude in production):
 
 ```bash
 TOKEN=$(curl -s http://localhost:8787/api/dev/token?kind=service | jq -r .token)
 curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/posts
 ```
-
-`DEV_AUTH_SECRET` is honored **only** in a dev-shaped env (fake transport and no Access
-configured); `getConfig` drops it otherwise, and `/api/dev/token` 404s once deployed —
-so the dev credential is structurally inert in staging/production.
 
 ### Deployed (staging/production): Cloudflare Access
 
