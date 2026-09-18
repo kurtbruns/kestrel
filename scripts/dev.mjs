@@ -9,9 +9,15 @@
  * the PORT env var. Its preflight also refuses to auto-assign when it sees a `--port`
  * flag on the launch command, so we can't just put `--port $PORT` in package.json.
  * Wrangler, in turn, ignores PORT and only accepts a `--port` flag. This launcher
- * reconciles the two: it reads PORT (falling back to wrangler's usual 8787 for a plain
- * `npm run dev`) and forwards it as `--port`, while presenting a flagless command to
- * the harness.
+ * reconciles the two: it reads PORT and forwards it as `--port`, while presenting a
+ * flagless command to the harness.
+ *
+ * When PORT is unset — a plain terminal `npm run dev` with no harness to assign one —
+ * the launcher mimics autoPort itself: it binds 8787 when that port is free, and
+ * otherwise probes for a free ephemeral port, so a bare `npm run dev` survives a busy
+ * 8787 (a second worktree already serving) instead of failing to bind. Set PORT
+ * explicitly to pin a port. Either way the resolved port drives the origin overrides
+ * below, so the absolute reader URLs always match the server we actually bind.
  *
  * DB bootstrap: each git worktree gets its own empty `.wrangler/state`, so the first
  * `npm run dev` in a fresh worktree 500s on every D1 route ("no such table: posts")
@@ -21,11 +27,39 @@
  * the preview or production DB. (Kestrel has no dev seed, so there's nothing to seed.)
  */
 import { spawn, spawnSync } from "node:child_process";
+import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clearDevPort, writeDevPort } from "./dev-port.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+// The port a plain `npm run dev` prefers, matching wrangler's own default.
+const PREFERRED_PORT = 8787;
+
+// Whether a TCP port can be bound on loopback right now. A momentary check, so what it
+// reports can go stale before wrangler binds — acceptable, and the same check-then-bind
+// race the harness's autoPort lives with.
+function isPortFree(port) {
+  return new Promise((resolve) => {
+    const server = createServer();
+    server.once("error", () => resolve(false));
+    server.once("listening", () => server.close(() => resolve(true)));
+    server.listen(port, "127.0.0.1");
+  });
+}
+
+// Ask the OS for a free ephemeral port by binding :0 and reading back the assignment.
+function findFreePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
 
 // Fingerprint the admin static assets so index.html points at content-hashed URLs
 // (public/_headers then caches them immutably). Runs on every startup; a no-op when
@@ -37,10 +71,21 @@ if (stamp.status !== 0) {
   console.warn("[dev] admin asset fingerprinting failed (continuing)");
 }
 
-const port = process.env.PORT || "8787";
 // Extra args after `npm run dev --` (e.g. `--remote`), forwarded to wrangler dev.
 const passthrough = process.argv.slice(2);
 const isRemote = passthrough.includes("--remote");
+
+// Refuse a passthrough `--port`. We forward our own resolved `--port` to wrangler and pin the
+// origin overrides below to it; a second `--port` here would rebind wrangler while the origins
+// kept pointing at the resolved port, so absolute reader URLs would silently 404. PORT is the
+// supported knob — it drives the bound port and the origins in lockstep.
+if (passthrough.some((a) => a === "--port" || a === "-p" || a.startsWith("--port="))) {
+  console.error(
+    "[dev] set the port via the PORT env var, not --port: `PORT=9000 npm run dev`\n" +
+      "      (PORT also reconciles APP_ORIGIN / ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE to match).",
+  );
+  process.exit(1);
+}
 
 // Bootstrap the local D1 shadow when its `posts` table is genuinely missing. We match
 // wrangler's "no such table" error text rather than treating any non-zero exit as
@@ -65,6 +110,21 @@ if (!isRemote) {
       console.warn("[dev] migration bootstrap failed (continuing); run `npm run migrate:local`");
     }
   }
+}
+
+// Resolve the port to bind. An explicit PORT (the harness's autoPort, or set by hand)
+// always wins. Otherwise mimic autoPort ourselves: prefer 8787, but fall back to a free
+// ephemeral port when it's taken — a second worktree already serving — so a plain
+// `npm run dev` still starts. Resolved here, as late as possible before the spawn, to
+// keep the check-then-bind window small.
+let port;
+if (process.env.PORT) {
+  port = process.env.PORT;
+} else if (await isPortFree(PREFERRED_PORT)) {
+  port = String(PREFERRED_PORT);
+} else {
+  port = String(await findFreePort());
+  console.log(`[dev] port ${PREFERRED_PORT} is busy — using ${port}`);
 }
 
 // Local dev can bind a port other than 8787 (autoPort picks a free one when 8787
