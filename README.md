@@ -1,10 +1,10 @@
 # Kestrel
 
-Kestrel is a self-hosted newsletter app for publishers. You write an issue in Markdown, preview exactly what the email will look like, schedule it behind a cancelable review window, and send it to a double-opt-in list. Kestrel holds the list, the consent, the delivery record, and a permanent per-issue archive, so you own your audience and your history instead of renting them from a platform.
+Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You write a post in Markdown, preview exactly what the email will look like, schedule it behind a cancelable review window, and send it to a double-opt-in list. Kestrel holds the list, the consent, the delivery record, and a permanent per-issue archive, so you own your audience and your history instead of renting them from a platform.
 
 **Works with Claude.** Kestrel is one HTTP API with two clients: a web editor you drive by hand, and Claude, which drafts, edits, and helps orchestrate scheduling. Neither reaches past the API, so the two never drift out of sync.
 
-**Self-hosts on Cloudflare.** A Cloudflare Worker over D1 (the database) and R2 (images), with a Cron Trigger driving the send sweep, behind a swappable email provider (SES or Resend, plus a fake in-memory transport for local dev and tests).
+**Runs on Cloudflare.** A Cloudflare Worker over D1 (the database) and R2 (images), with a Cron Trigger driving the send sweep, behind a swappable email provider (SES or Resend, plus a fake in-memory transport for local dev and tests).
 
 ## Prerequisites
 
@@ -25,12 +25,20 @@ Everything the editor does is on the HTTP API; the editor is just a client of it
 
 ### See it with data
 
-Two dev-only commands (dev server running, fake transport) choose what you see:
+Two dev-only commands (dev server running, fake transport) choose what you see, and you can re-run either any time to reset to that state:
 
-- **`npm run reset`** gives you the **new-publisher first run**: an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel.
-- **`npm run seed`** gives you a **demo publication**: **"Field Notes,"** a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
+```bash
+npm run reset   # new-publisher first run
+npm run seed    # demo publication ("Windbreak")
+```
 
-Re-run either any time to reset to that state. To inspect the app at scale, `npm run seed -- --size 10k` builds a reproducible list of that size (`100` / `1k` / `10k` / `100k`).
+`reset` wipes to an empty install with the setup checklist, what someone sees the moment they stand up their own Kestrel. `seed` loads **Windbreak**, a newsletter that's been running a while: a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**.
+
+To inspect the app at scale, re-run seed with a size:
+
+```bash
+npm run seed -- --size 10k    # 100 / 1k / 10k / 100k, reproducible
+```
 
 ## Auth
 
@@ -47,7 +55,7 @@ Deployed, the gate is Cloudflare Access instead; that setup is in the [setup gui
 
 ## Going further
 
-- **Deploy a real instance:** the setup guide under [`docs/setup/`](docs/setup/), also served read-only in the editor's Docs tab.
+- **Deploy a real instance:** start with [`docs/setup/00-overview.md`](docs/setup/00-overview.md); the whole guide is also served read-only in the editor's Docs tab.
 - **Understand the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves.
 - **What Kestrel guarantees, and how the admin UI is built:** [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
-- **All scripts:** `package.json` (the ones you need for local dev are above).
+- **All scripts:** `package.json`.
