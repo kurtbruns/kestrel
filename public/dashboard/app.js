@@ -284,6 +284,34 @@ function renderSidebarBrand() {
   }
 }
 
+// ---- build stamp (sidebar footer) ----
+// The running build, from the read-only deployment reflection (appConfig.deployment.build,
+// resolved at build in src/build.ts): "v{version} · {sha}", version linked to its tag and
+// the sha to its commit — both on the repo, never getkestrel.dev — with the full build
+// time in the tooltip. Falls back to plain text with no links when there's no repo or the
+// sha is "dev" (a local build), so a dev instance never shows a dead link. Hidden until a
+// build is known, and folded away in the collapsed rail by CSS.
+function renderBuildStamp() {
+  const el = document.getElementById("buildStamp");
+  if (!el) {
+    return;
+  }
+  const b = appConfig?.deployment?.build;
+  if (!b?.version) {
+    el.hidden = true;
+    return;
+  }
+  el.hidden = false;
+  const version = b.tagUrl
+    ? `<a href="${esc(b.tagUrl)}" target="_blank" rel="noopener">v${esc(b.version)}</a>`
+    : `v${esc(b.version)}`;
+  const sha = b.commitUrl
+    ? `<a href="${esc(b.commitUrl)}" target="_blank" rel="noopener">${esc(b.sha)}</a>`
+    : esc(b.sha);
+  el.innerHTML = `${version} <span aria-hidden="true">·</span> ${sha}`;
+  el.title = b.buildTime ? `Built ${b.buildTime}` : "";
+}
+
 // Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
 // and the setup checklist so the "New post" affordance behaves identically everywhere.
 function createNewPost(btn) {
@@ -5604,6 +5632,7 @@ async function boot() {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
+    renderBuildStamp();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

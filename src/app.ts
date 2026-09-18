@@ -14,6 +14,7 @@
  * relative positions. Keep new routes grouped with their tier.
  */
 
+import { buildInfo } from "./build";
 import { json } from "./lib/errors";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
@@ -60,6 +61,27 @@ export function createRouter(archiveBasePath: string): Router {
           principal: c.principal,
           auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
         }),
+    },
+    {
+      // The running build (SPEC §9), so an API client (Claude, curl) can self-identify a
+      // bug report without opening the editor. Admin like the rest of /api/*; the same
+      // stamp also rides the settings `deployment` reflection for the editor footer. Not
+      // deploy config or a secret — resolved at build (src/build.ts), never from env.
+      method: "GET",
+      path: "/api/version",
+      access: "admin",
+      summary: "The running build: version, short SHA, build time, and repo links.",
+      example: {
+        response: {
+          version: "0.1.0",
+          sha: "a1b2c3d",
+          buildTime: "2026-01-15T09:00:00.000Z",
+          repoUrl: "https://github.com/kurtbruns/kestrel",
+          commitUrl: "https://github.com/kurtbruns/kestrel/commit/a1b2c3d",
+          tagUrl: "https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0",
+        },
+      },
+      handler: () => json(buildInfo()),
     },
     {
       // Dev-only bootstrap that hands out the local admin token, so it must be public

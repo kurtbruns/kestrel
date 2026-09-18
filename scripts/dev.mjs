@@ -71,6 +71,19 @@ if (stamp.status !== 0) {
   console.warn("[dev] admin asset fingerprinting failed (continuing)");
 }
 
+// Resolve the build stamp (version/sha/build-time/repo) into src/generated/version.ts,
+// which the Worker imports and reflects (SPEC §9). Done here, ONCE, before wrangler starts
+// — deliberately NOT a wrangler `build.command`: wrangler dev watches src/, and the
+// stamp's build time changes on every run, so a build command would rebuild-loop forever.
+// `wrangler deploy` gets the stamp via the predeploy npm hook; the Vitest pool via
+// pretest; a fresh checkout via postinstall. Best-effort — a stale stamp is harmless.
+const version = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-version.mjs")], {
+  stdio: "inherit",
+});
+if (version.status !== 0) {
+  console.warn("[dev] build-version stamp failed (continuing)");
+}
+
 // Extra args after `npm run dev --` (e.g. `--remote`), forwarded to wrangler dev.
 const passthrough = process.argv.slice(2);
 const isRemote = passthrough.includes("--remote");

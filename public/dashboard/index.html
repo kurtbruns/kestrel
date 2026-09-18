@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=78ae747f">
+<link rel="stylesheet" href="./styles.css?v=4627ac1d">
 <script>
 // Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
 // sidebar renders in its final width with no flash. The collapse toggle's override is
@@ -92,6 +92,10 @@
           <svg class="nav-collapse-icon" aria-hidden="true"><use href="#i-chevron"/></svg>
         </button>
       </div>
+      <!-- The running build (SPEC §9), filled by renderBuildStamp() from the read-only
+           deployment reflection: v{version} · {sha}, version→tag, sha→commit, build time
+           in the tooltip. Hidden in the collapsed rail. Empty until then. -->
+      <div class="build" id="buildStamp"></div>
     </div>
     </div>
   </aside>
@@ -114,6 +118,6 @@
 </section>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=d7eb87ee"></script>
+<script src="./app.js?v=a6046f11"></script>
 </body>
 </html>

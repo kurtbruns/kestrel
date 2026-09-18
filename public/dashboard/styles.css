@@ -680,6 +680,24 @@ body.nav-resizing .sidebar {
   font-weight: 600;
 }
 
+/* Build stamp: the running version, at the very bottom of the sidebar footer. Muted and
+   small; its links inherit that color and brighten on hover like the other footer links.
+   Hidden in the collapsed rail (see the rail block). */
+.build {
+  padding: 0 0 4px 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.build a {
+  color: inherit;
+  text-decoration: none;
+}
+.build a:hover {
+  color: var(--fg);
+  text-decoration: underline;
+}
+
 /* Collapse ↔ expand chevron, pushed to the right end of the footer row (opposite the
    Kestrel mark). Icon-only; overrides the base button chrome. Hidden on phones (the
    overlay is always full) — see the phone block. */
@@ -872,6 +890,10 @@ body.tool-mode .content {
     display: none;
   }
   [data-nav="rail"] .nav-tools {
+    display: none;
+  }
+  /* No room for a version line in the icon rail; it returns when the sidebar expands. */
+  [data-nav="rail"] .build {
     display: none;
   }
   [data-nav="rail"] .nav-collapse {
