@@ -1,32 +1,38 @@
-# Kestrel — specification
+# Kestrel Specification
 
-The high-level, abstract description of Kestrel, the newsletter app. It describes what the system is, what it guarantees, and how it's shaped — not its columns and routes. The concrete schema lives in `migrations/` and the routes in `src/app.ts`; read `src/` for the code's structure. This document does not restate them.
+The high-level, abstract description of Kestrel, the newsletter app. It describes what the system is, what it guarantees, and how it's shaped, not how it's built. The concrete schema lives in `migrations/`, the routes in `src/app.ts`, and the code's structure in `src/`; this document does not restate them.
 
 ---
 
 ## 1. What this is
 
-An application for writing a newsletter and sending it to subscribers. You write a post in Markdown, see exactly what the email will look like, schedule it for a time — usually days out — and let it go out on its own after you and Claude have reviewed it. It keeps your subscriber list, remembers what it sent, and preserves each post as a permanent page.
+An application for writing a newsletter and sending it to subscribers. You write a post in Markdown, see exactly what the email will look like, and schedule it for a future date and time. Once you've reviewed it, it goes out on its own. It keeps your subscriber list, remembers what it sent, and preserves each post as a permanent page.
 
-It has one interface — an HTTP API — and two clients that use it: a **web editor** you drive by hand, and **Claude**, which drafts, edits, and helps orchestrate scheduling. There is no second way in. The editor doesn't reach past the API, and Claude doesn't do anything you couldn't do in the editor. One representation, one door, two clients — so the two can never drift out of sync, because there's only one copy of anything.
+The foundation that makes all of this work is a single HTTP API. Everything reaches Kestrel through it, and only two clients do: a **web editor** you drive by hand, and **Claude**, working the same API on your behalf. Both do the same work through it, so Claude does nothing you couldn't do in the editor yourself, and neither reaches past what the API exposes. One API over one copy of the data keeps the two from ever drifting apart.
+
+```mermaid
+flowchart LR
+    editor[Web editor] --> api[HTTP API]
+    claude[Claude] --> api
+    api --> storage[(Database + object storage)]
+    storage --> email[Email]
+```
 
 Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; you never touch an upload URL. Every send freezes the rendered email, and that frozen copy *is* both the reader's "view in browser" page and the permanent record of what went out.
 
-This is a content-management application, and that's the right shape for the job. Email is not like posting a link to social — there's no platform between you and the reader, so you hold the list, the consent, the delivery, and the archive yourself. This app exists to hold exactly those things, and nothing else.
-
 ### What it isn't
 
-- **Not your website.** It serves the newsletter's own reader surface — an archive index and the per-post pages that are the record of what it sent — and nothing more. It doesn't manage your blog and isn't a general CMS for arbitrary pages.
-- **Not multi-channel.** Email only. Cross-posting the same writing to a site, RSS, Bluesky, or Mastodon is a separate concern and out of scope here. Email is complicated enough on its own to deserve a system that does just this.
-- **Not a marketing automation suite.** No drip sequences, no funnels, no A/B campaigns. One post, reviewed, sent to your subscribers.
+- **Not a general CMS.** It serves the newsletter's own reader surface (a landing page, the archive index, and the per-post pages), and only that. It doesn't author arbitrary pages or replace your main website or blog.
+- **Not multi-channel.** Email only. Cross-posting to a website, RSS, or social is out of scope.
+- **Not a marketing automation suite.** No drip sequences, funnels, or A/B campaigns. One post, reviewed, sent to your subscribers.
 
 ---
 
 ## 2. The model
 
-Six nouns. The first three are content, the last three are the audience and the record.
+Six nouns make up the whole domain: the first three are content, the last three are the audience and the record.
 
-**Post** — one piece the publisher writes and sends: a Markdown body plus its metadata. It's editable while a draft, frozen once scheduled, and closed once sent. The metadata is **subject** (the email's subject line, and what names the post in the list and seeds its slug) and **slug** (the archive path). The inbox **preheader** (preview text) is derived from the start of the body at render time, not a field you set. Subject is the one field you must set to send.
+**Post** — one piece the publisher writes and sends: a Markdown body plus its metadata, editable while a draft, frozen once scheduled, and closed once sent. Its metadata is a **subject** and a **slug**. The subject is the email's subject line, and it also names the post in the list and seeds the slug. The slug is the post's path in the archive. The subject is the one field you must set to send.
 
 **Revision** — a saved version of a post's Markdown and metadata. Every save writes one. This is the versioning that files would have given you for free, handed back deliberately.
 
@@ -34,21 +40,20 @@ Six nouns. The first three are content, the last three are the audience and the 
 
 **Subscriber** — an email address with a consent state: pending, confirmed, or unsubscribed. Only confirmed subscribers receive sends.
 
-**Send** — the record of one post going out. It's created the moment a post is scheduled — holding the frozen render, the fire time, and, after delivery, who it reached and how it went. It exists before any mail leaves, which is what makes the review window possible (§6). Never rewritten once sent.
+**Send** — one dispatch of a post, created the moment the post is scheduled, not when it fires. It holds the frozen render, the fire time, and after firing, who it reached and how it went. Never rewritten once sent.
 
 **Suppression** — an address that hard-bounced or complained and must not be mailed again until you clear it deliberately.
 
-These six nouns are the whole domain. Their concrete tables live in `migrations/` and the routes that manipulate them in `src/app.ts` — this spec describes what they mean and guarantee, not their columns.
+### The lifecycle
 
-### One door, two clients
+A post moves through a short lifecycle, and a **Send** is what carries it from scheduled onward:
 
-```
-   web editor ─┐
-               ├─▶  HTTP API  ─▶  database + object storage  ─▶  email
-   Claude ─────┘
-```
+- **Draft** — a post being written: editable, with no Send.
+- **Scheduled** — the render is frozen onto a Send and the post is locked. The Send is pending and cancelable, which is the review window (§6).
+- **Sending** — the Send has fired and is delivering.
+- **Sent** — the Send is complete and stands as the permanent record of what went out.
 
-Everything below is a consequence of this picture. The editor is a client. Claude is a client. The API is the system. There is no file to edit behind its back and no admin panel that writes directly to the tables. The one authenticated authoring surface is what both the editor and Claude use; a separate set of public, token-scoped routes serves readers (subscribe, confirm, unsubscribe, the archive), and the provider's bounce and complaint webhooks come in signature-verified.
+A scheduled post is a post together with its pending Send, and it stays scheduled through *sending*: the Send's state advances while the post's holds.
 
 ---
 
