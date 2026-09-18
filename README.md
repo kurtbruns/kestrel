@@ -24,23 +24,21 @@ npm run dev                         # wrangler dev on http://localhost:8787
 
 Everything the editor does is on the HTTP API; the editor is just a client of it. Because a draft can be open in two tabs or edited by Claude at once, a stale save is rejected rather than clobbering the newer one (see `docs/SPEC.md` §4).
 
-### See it with data
+### Demo data
 
-A fresh install is empty: the **new-publisher first run**, an empty dashboard with the setup checklist, what someone sees the moment they stand up their own Kestrel. Two dev-only commands (dev server running) move between that and a populated demo, and you can re-run either any time.
-
-Load the **Windbreak** demo publication, a newsletter that's been running a while, with a back-catalog of sent issues, one scheduled issue counting down, a few drafts, and a subscriber list covering every state:
+Out of the box the app loads empty, the way a new publisher first sees it. To explore it with realistic content, load the demo:
 
 ```bash
 npm run seed
 ```
 
-View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
+This loads a sample publication called **Windbreak** with example data to show how the application looks in practice. View it at `/dashboard/` and at an archived issue like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
 
 ```bash
 npm run seed -- --size 10k
 ```
 
-Return to the empty out-of-the-box state:
+Return to the empty first-run state anytime:
 
 ```bash
 npm run reset
