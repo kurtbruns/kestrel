@@ -1,10 +1,14 @@
 {
   "name": "kestrel",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Newsletter app: write in Markdown, preview, schedule with a review window, and send to a double opt-in list. Cloudflare Worker + D1 + R2 + SES/Resend.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kurtbruns/kestrel.git"
+  },
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "seed": "node scripts/seed.mjs",

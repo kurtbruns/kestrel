@@ -62,6 +62,7 @@ Deployed, the gate is Cloudflare Access instead; that setup is in the [setup gui
 - **Deploy a real instance:** start with [`docs/setup/00-overview.md`](docs/setup/00-overview.md); the whole guide is also served read-only in the editor's Docs tab.
 - **Understand the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves.
 - **What Kestrel guarantees, and how the admin UI is built:** [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
+- **Release history:** [`CHANGELOG.md`](CHANGELOG.md). A deployed instance shows its own version in the editor footer and at `GET /api/version`.
 - **All scripts:** `package.json`.
 
 ## License
