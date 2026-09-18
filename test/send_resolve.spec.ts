@@ -1,5 +1,5 @@
 /**
- * Operator adjudication of a wedged send (SPEC §11, issue #71).
+ * Operator adjudication of a wedged send (SPEC §12, issue #71).
  *
  * On a non-idempotent provider a mid-batch transport error leaves recipients
  * `dispatched` — genuinely ambiguous — and the loop refuses to blind-retry them

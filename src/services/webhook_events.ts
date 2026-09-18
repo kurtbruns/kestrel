@@ -5,7 +5,7 @@
  * transport-agnostic `DeliveryEvent[]`; this service is the ONLY thing that
  * mutates state from those events, so the rule lives in one place:
  *   - every event is recorded on the matching `deliveries` row (observability);
- *   - a HARD bounce or ANY complaint also adds a suppression (spec §6, §12), so
+ *   - a HARD bounce or ANY complaint also adds a suppression (spec §6, §10), so
  *     the address is dropped from every future audience (I1/I2).
  * Soft (transient) bounces are recorded but never suppress.
  */

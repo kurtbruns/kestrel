@@ -68,7 +68,7 @@ export async function get(c: RequestContext): Promise<Response> {
  * The cheap poll target for the live in-flight watch (SPEC §8). A single-row read off
  * the denormalized counters (migration 0006) — no aggregate over the audience — plus
  * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
- * the loud attention flags (§11). `deliveries` stays the source of truth; this is its
+ * the loud attention flags (§12). `deliveries` stays the source of truth; this is its
  * rebuildable cache. Both the watch view and the dashboard active-send widget poll it.
  */
 export async function progress(c: RequestContext): Promise<Response> {
@@ -102,7 +102,7 @@ function parseDeliveryView(raw: string | null): sends.DeliveryView {
 }
 
 /**
- * The sent record's per-recipient rows as paginated JSON (SPEC §8, §11 "always
+ * The sent record's per-recipient rows as paginated JSON (SPEC §8, §12 "always
  * inspectable"). Reads the `deliveries` rows DIRECTLY — the source of truth — not the
  * `c_*` progress counters, so it is heavier than `/progress` and deliberately NOT the
  * poll target. Filter by `view` (failures / delivered / all / a single bucket) and an
@@ -131,7 +131,7 @@ function csvCell(value: string | number | null): string {
 }
 
 /**
- * The sent record's per-recipient delivery data as CSV (SPEC §8, §11 "always
+ * The sent record's per-recipient delivery data as CSV (SPEC §8, §12 "always
  * inspectable"). Read-only over the frozen record (I3) — one row per recipient of
  * the frozen audience, with the send-loop status and the later webhook event.
  */
@@ -191,7 +191,7 @@ export async function reschedule(c: RequestContext): Promise<Response> {
 
 /**
  * Adjudicate a send wedged on ambiguous (`dispatched`) deliveries — the one manual
- * step for the stuck state the sweep flags but can't clear on its own (SPEC §11).
+ * step for the stuck state the sweep flags but can't clear on its own (SPEC §12).
  */
 export async function resolve(c: RequestContext): Promise<Response> {
   let body: { resolution?: unknown };

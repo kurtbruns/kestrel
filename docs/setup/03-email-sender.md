@@ -1,6 +1,6 @@
 # Connect an email sender
 
-Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §9). Two adapters ship: **SES** (the default) and **Resend**. Pick one per environment with the `PROVIDER` var and set that provider's credentials as Worker secrets.
+Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §10). Two adapters ship: **SES** (the default) and **Resend**. Pick one per environment with the `PROVIDER` var and set that provider's credentials as Worker secrets.
 
 The webhook is what closes the loop: a hard bounce or a complaint arrives from the provider and suppresses the address on its own. Set it up — a sender without a working bounce/complaint webhook degrades its own deliverability.
 

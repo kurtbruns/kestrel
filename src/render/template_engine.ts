@@ -1,6 +1,6 @@
 /**
  * The email template engine: a publisher-authored HTML layout with a `<style>` block
- * and logic-less `{{ variables }}`, filled and CSS-inlined at render time (SPEC §8).
+ * and logic-less `{{ variables }}`, filled and CSS-inlined at render time (SPEC §9).
  *
  * One token registry (`TOKENS`) is the single source of truth for every variable — the
  * pass that fills it (`render` vs `delivery`) and how its value is escaped. Two resolvers
@@ -13,7 +13,7 @@
  *    later phase, instead of a separate side-channel.
  *  - `validateEmailTemplate` reports errors (which the route rejects) and warnings —
  *    above all, every email MUST keep an unsubscribe link, so a template without one
- *    is an error (§7/§9, I2).
+ *    is an error (§7/§10, I2).
  *  - `inlineEmailCss` inlines the `<style>` rules onto elements, because mail clients
  *    strip/ignore `<style>` (Outlook especially); `@media` rules can't be inlined and
  *    are kept in a `<style>` block. Backed by css-inline (WASM), initialized once.
@@ -163,7 +163,7 @@ export interface TemplateValidation {
 /** Check a template for the variables an email can't do without (errors) and for
  *  likely mistakes (warnings). Errors block the send; warnings are surfaced but
  *  allowed. The unsubscribe error is load-bearing: no email may ship without a way
- *  to leave (I2, §9). */
+ *  to leave (I2, §10). */
 export function validateEmailTemplate(html: string): TemplateValidation {
   const errors: string[] = [];
   const warnings: string[] = [];

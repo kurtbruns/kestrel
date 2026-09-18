@@ -1,5 +1,5 @@
 /**
- * App-level runtime settings: a singleton row holding a JSON blob (SPEC §8).
+ * App-level runtime settings: a singleton row holding a JSON blob (SPEC §9).
  *
  * This is the ONLY mutable, in-app configuration. It holds runtime preferences
  * the operator sets from the editor — never secrets or deploy-time infrastructure
@@ -66,7 +66,7 @@ export interface AppSettings {
   publication: PublicationSettings;
   /**
    * The email layout each post is sent inside — HTML with a `<style>` block and
-   * `{{ variables }}` the render path fills (SPEC §8). "" means "use the built-in
+   * `{{ variables }}` the render path fills (SPEC §9). "" means "use the built-in
    * default"; the API reflects the resolved template so a client always sees one.
    * Stored as text (no schema), validated for the required variables by the route.
    */

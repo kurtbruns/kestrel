@@ -99,7 +99,7 @@ export async function render(
   const subject = hasSubject ? meta.subject : "(no subject)";
   const viewInBrowserUrl = archiveUrl(config, meta.slug);
 
-  // The publisher's template is the email's presentation (SPEC §8). It's validated
+  // The publisher's template is the email's presentation (SPEC §9). It's validated
   // when it's set; here we surface its warnings on preview/test and, as defense in
   // depth, fall back to the built-in default if the active template is somehow
   // invalid — a broken or unsubscribe-less email must never ship (I2).

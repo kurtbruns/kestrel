@@ -1,4 +1,4 @@
-// Self-contained-by-default config (SPEC §10): the archive origin and media base
+// Self-contained-by-default config (SPEC §11): the archive origin and media base
 // fall back to the app's own origin, and ARCHIVE_BASE_PATH drives both the emitted
 // archive URL and the route registered to serve it.
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
@@ -51,7 +51,7 @@ describe("getConfig — self-contained defaults", () => {
 });
 
 // `devMode` gates the dev-only "Open dashboard" link the reader surface injects
-// (SPEC §5/§10). It must be on ONLY where the dev credential path is live — the one
+// (SPEC §5/§11). It must be on ONLY where the dev credential path is live — the one
 // case `/dashboard` is reachable without an Access wall — and structurally off in
 // any deployed env, so a public page never links toward the Access gate there.
 describe("getConfig — the dev-mode reader-surface gate", () => {

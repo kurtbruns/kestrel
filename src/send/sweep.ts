@@ -5,7 +5,7 @@
  *   3. flag anomalies (stuck sends, ambiguous in-flight deliveries).
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
- * timeliness problem, not a correctness one — but it is never silent (§14).
+ * timeliness problem, not a correctness one — but it is never silent (§12).
  */
 
 import * as sends from "../db/sends";

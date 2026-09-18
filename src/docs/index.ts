@@ -10,7 +10,7 @@
  * with a scroll-spy contents rail (no iframe). The content is trusted (the repo's
  * own markdown, hygiene-passed), so injecting the fragments is safe. This is a
  * Markdown→web-page path, deliberately separate from the single Markdown→email
- * render path (I5, see render/render.ts). See docs/SPEC.md §5 / §10.
+ * render path (I5, see render/render.ts). See docs/SPEC.md §5 / §11.
  */
 import overview from "../../docs/setup/00-overview.md";
 import provision from "../../docs/setup/01-provision.md";

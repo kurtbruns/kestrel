@@ -8,7 +8,7 @@ import type { RenderedEmail } from "../src/providers/types";
 // #156/#163: the dev-only seeded send simulation behind the provider seam. The valuable,
 // honest surface to test is the delayed-webhook drain — it runs through the REAL ingest
 // (applyDeliveryEvents), so delivery lags acceptance, hard bounces/complaints suppress on
-// their own (I1), and soft bounces are counted without suppressing (SPEC §9) — plus that
+// their own (I1), and soft bounces are counted without suppressing (SPEC §10) — plus that
 // the plain fake stays untouched (the simulation is strictly opt-in and dev-shaped).
 
 const HOUR = 60 * 60 * 1000;
@@ -79,7 +79,7 @@ describe("simulationActive gating", () => {
 describe("drainSimulatedWebhooks (delayed synthetic receipts through the real ingest)", () => {
   const simConfig = () => ({ ...getConfig(env), simulateSends: true });
 
-  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §9)", async () => {
+  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §10)", async () => {
     await seedAccepted("s-drain", 300, 2 * HOUR); // long-past accepts → all lags elapsed (< the drain cap)
 
     const applied = await drainSimulatedWebhooks(env, simConfig());
@@ -127,7 +127,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     expect(sup!.n).toBe(hard + row!.c_complained);
   });
 
-  it("counts a soft (transient) bounce without suppressing it (SPEC §9)", async () => {
+  it("counts a soft (transient) bounce without suppressing it (SPEC §10)", async () => {
     // Soft bounces land both from the ~0.8% rate and, if none did, the guaranteed floor — either
     // way at least one is present to exercise the counted-not-suppressed branch.
     await seedAccepted("s-soft", 380, 2 * HOUR);

@@ -1,5 +1,5 @@
 /**
- * Operator adjudication of a wedged send (SPEC §11).
+ * Operator adjudication of a wedged send (SPEC §12).
  *
  * On a non-idempotent provider (e.g. SES) a mid-batch transport error — the
  * request left but no response came back — leaves its recipients `dispatched`:
