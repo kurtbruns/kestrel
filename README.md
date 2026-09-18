@@ -126,30 +126,7 @@ so the dev credential is structurally inert in staging/production.
 
 ### Deployed (staging/production): Cloudflare Access
 
-In deployed environments the gate is **Cloudflare Access**, enforced at the edge
-before the Worker runs — the same pattern used across our other Cloudflare projects.
-Deployed envs don't declare `DEV_AUTH_SECRET`, so the dev path is off and Access is the
-only way in. The editor needs no token here: the browser's Access session cookie
-authenticates every same-origin call, and the sidebar shows your identity plus a
-**Sign out** link (`/cdn-cgi/access/logout`).
-
-- **You (human):** an Access **Allow** policy (Google / GitHub / one-time PIN).
-  Optionally set `ACCESS_ALLOWED_EMAILS` (CSV) to allowlist specific admin emails.
-- **Claude / automation:** an Access **Service Auth** policy with a **service token**
-  (`CF-Access-Client-Id` / `CF-Access-Client-Secret`) — service tokens don't consume
-  Zero Trust seats and don't require a browser handshake. This is the credential a
-  Claude Desktop connector carries. (An agent-native alternative, Cloudflare Managed
-  OAuth for Access, is tracked for later — see `docs/SPEC.md` §10.)
-- **Terminal access** to Access-gated endpoints: use `cloudflared`
-  (`cloudflared access curl …` / `cloudflared access token …`) rather than a bearer.
-
-The Worker re-verifies the `Cf-Access-Jwt-Assertion` JWT itself (`src/auth/access.ts`,
-via `jose` — checks issuer, the app's `ACCESS_AUD`, and the optional email allowlist)
-as defense-in-depth, so a misconfigured Access policy can't silently expose admin
-routes. Set `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` (and optionally
-`ACCESS_ALLOWED_EMAILS`) as Worker vars/secrets. The Access application's path scope
-must cover **both** the editor SPA (`/dashboard/*`) and the authoring API paths, so
-the editor's same-origin API calls carry the Access JWT.
+Deployed, the gate is **Cloudflare Access** at the edge (the `DEV_AUTH_SECRET` path is off), re-verified inside the Worker (`src/auth/access.ts`) as defense in depth. A human signs in through an Access policy; Claude uses an Access **service token** (the credential a Claude Desktop connector carries). The concrete setup — the Access application, its policies, the service token, and the `ACCESS_*` vars — is in the [setup guide](docs/setup/).
 
 ## Deploying and operating
 
@@ -163,17 +140,7 @@ The editor's **Settings** tab holds the app's runtime preferences (via the authe
 
 ## Scripts
 
-| Command | Does |
-| --- | --- |
-| `npm run dev` | launcher around `wrangler dev` (local Worker on :8787; auto-migrates a fresh local DB, honors preview `PORT`) |
-| `npm run seed` | load the local "Field Notes" demo dataset (needs `npm run dev` running; fake transport only) |
-| `npm run reset` | wipe the local database back to a fresh install — the reverse of `seed` (needs `npm run dev`; fake transport only) |
-| `npm test` | Vitest suite (runs inside `workerd`) |
-| `npm run typecheck` | `wrangler types` + `tsc --noEmit` |
-| `npm run check` | Biome: format + organize imports + lint, applying safe fixes (`npm run lint` / `npm run format` for report-only / format-only) |
-| `npm run assets:build` | fingerprint the admin assets — stamp a content hash onto the `styles.css` / `app.js` refs in `public/dashboard/index.html` (`assets:check` verifies, and runs before `npm test`) |
-| `npm run migrate:local` / `migrate:remote` | apply D1 migrations |
-| `npm run deploy` | `wrangler deploy` |
+Every script is in `package.json`. For local dev you need `npm run dev`, `npm run seed`, and `npm run reset` (all above); the quality gate before finishing is `npm test`, `npm run typecheck`, and `npm run check`.
 
 ## Environments
 
@@ -192,32 +159,12 @@ locally (seeded from `.dev.vars.example`) and in Worker secrets when deployed.
 
 ## Project layout
 
-```
-src/
-  index.ts        Worker entry: fetch (router) + scheduled (send sweep)
-  router.ts       minimal URLPattern router + middleware
-  auth/           Cloudflare Access JWT + dev-signed token (local) → one Principal
-  routes/         posts, images, render actions, subscribers, suppressions,
-                  public (subscribe/confirm/unsubscribe), sends, archive,
-                  settings, docs
-  render/         the single render path (markdown → email HTML + text)
-  send/           freeze/schedule/cancel, the idempotent send loop, the sweep
-  providers/      the email provider seam + fake / SES / Resend adapters
-  docs/           the in-app setup guide (bundled from docs/setup/*.md)
-  db/             D1 query modules
-public/dashboard/ the editor SPA (static assets)
-docs/setup/       the setup guide (source of truth; also served in-app)
-migrations/       D1 schema
-```
+How the code is organized — the module boundaries and the rules that aren't obvious from the tree — is in [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves. This README doesn't restate it.
 
 ## The theme
 
 The editor and reader pages adapt automatically to the viewer's light/dark
 preference (`prefers-color-scheme`); no toggle, nothing to configure.
-
-## Admin asset caching
-
-The editor's two static assets (`public/dashboard/styles.css`, `app.js`) are fingerprinted: `scripts/stamp-admin-assets.mjs` stamps a content hash onto their `?v=` in `index.html`, and `public/_headers` caches those hashed URLs immutably. A changed asset gets a new hash — hence a new URL — so it's fetched fresh with no manual version bump. The stamp runs on `npm run dev` startup; `npm test` runs `assets:check` first, so an unstamped commit fails the gate. After editing an asset outside a running dev server, run `npm run assets:build`.
 
 ## Status
 
