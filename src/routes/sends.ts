@@ -20,9 +20,9 @@ export async function list(c: RequestContext): Promise<Response> {
     ? (statusParam as sends.SendStatus)
     : undefined;
   const search = c.url.searchParams.get("search") ?? undefined;
-  // "only" narrows to sends with a delivery issue (any bounce / complaint / failure).
-  const issues = c.url.searchParams.get("issues") === "only" ? "only" : undefined;
-  const filter = { status, search, issues } satisfies sends.SendFilter;
+  // "only" narrows to sends with a delivery problem (any bounce / complaint / failure).
+  const problems = c.url.searchParams.get("problems") === "only" ? "only" : undefined;
+  const filter = { status, search, problems } satisfies sends.SendFilter;
   const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
   const [total, rows] = await Promise.all([
     sends.countSends(c.env.DB, filter),
@@ -93,19 +93,19 @@ export async function progress(c: RequestContext): Promise<Response> {
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
-/** Validate the `view` query param against the recognized set, defaulting to `issues`
+/** Validate the `view` query param against the recognized set, defaulting to `problems`
  *  (the record view opens on the rows that went wrong). */
 function parseDeliveryView(raw: string | null): sends.DeliveryView {
   return sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)
     ? (raw as sends.DeliveryView)
-    : "issues";
+    : "problems";
 }
 
 /**
  * The sent record's per-recipient rows as paginated JSON (SPEC §8, §11 "always
  * inspectable"). Reads the `deliveries` rows DIRECTLY — the source of truth — not the
  * `c_*` progress counters, so it is heavier than `/progress` and deliberately NOT the
- * poll target. Filter by `view` (issues / delivered / all / a single bucket) and an
+ * poll target. Filter by `view` (problems / delivered / all / a single bucket) and an
  * optional email search; sort and paginate via the shared list convention. Read-only
  * over the frozen record (I3) — it decides nothing and mails no one.
  */

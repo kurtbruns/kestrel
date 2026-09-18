@@ -826,8 +826,8 @@ function listQuery(state) {
   if (state.suppressed) {
     p.set("suppressed", state.suppressed);
   }
-  if (state.issues) {
-    p.set("issues", state.issues);
+  if (state.problems) {
+    p.set("problems", state.problems);
   }
   const term = (state.search || "").trim();
   if (term) {
@@ -851,7 +851,7 @@ function listQuery(state) {
 // filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
 // two draft-side statuses rather than reaching sent issues. Omit `cfg.statuses` for a
 // search-only toolbar (the Sent list is single-status, so it carries no status filter).
-// `cfg.issues` adds the Sent list's "With delivery issues" flag — a filter, not a sort: it keeps
+// `cfg.problems` adds the Sent list's "With delivery problems" flag — a filter, not a sort: it keeps
 // the newest-first order the operator scans by and needs no severity weighting (a summed
 // sort would rank 25 retried failures above one spam complaint).
 function listToolbar(cfg) {
@@ -865,12 +865,12 @@ function listToolbar(cfg) {
   const suppressed = cfg.suppressible
     ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
     : "";
-  const issues = cfg.issues
-    ? '<label class="lt-toggle"><input type="checkbox" class="lt-issues"><span>With delivery issues</span></label>'
+  const problems = cfg.problems
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-problems"><span>With delivery problems</span></label>'
     : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters">${statusSel}${suppressed}${issues}</div>
+    <div class="lt-filters">${statusSel}${suppressed}${problems}</div>
   </div>`;
 }
 
@@ -881,7 +881,7 @@ function wireToolbar(root, state, reload) {
   const search = root.querySelector(".lt-search");
   const status = root.querySelector(".lt-status");
   const suppressed = root.querySelector(".lt-suppressed");
-  const issues = root.querySelector(".lt-issues");
+  const problems = root.querySelector(".lt-problems");
   if (search) {
     search.value = state.search || "";
     let t = null;
@@ -910,10 +910,10 @@ function wireToolbar(root, state, reload) {
       reload();
     };
   }
-  if (issues) {
-    issues.checked = state.issues === "only";
-    issues.onchange = () => {
-      state.issues = issues.checked ? "only" : "";
+  if (problems) {
+    problems.checked = state.problems === "only";
+    problems.onchange = () => {
+      state.problems = problems.checked ? "only" : "";
       state.offset = 0;
       reload();
     };
@@ -2115,7 +2115,7 @@ function listRowCounts(s) {
 // TRUE delivered — webhook-confirmed `c_delivered`, not provider-`accepted` — so the Sent
 // list and dashboard recent-sends agree with the record view's "Delivered" for the same
 // send, and a bounced/complained recipient is never miscounted as delivered. Any bounce /
-// complaint / send-time-failure shows as a muted delivery-issue note, so a bad send reads
+// complaint / send-time-failure shows as a muted delivery-problem note, so a bad send reads
 // as one at a glance instead of a clean number. The note sits on its own line beneath
 // the count (`.delivered-note`), not inline: the Sent table's columns are fixed-width,
 // and a three-bucket note inline would wrap the numeric column four lines deep. The
@@ -2166,7 +2166,7 @@ async function renderSent() {
   const state = {
     status: "sent",
     search: "",
-    issues: "",
+    problems: "",
     sort: "fire",
     dir: "desc",
     offset: 0,
@@ -2178,7 +2178,7 @@ async function renderSent() {
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>
     <h2>Sent posts</h2>
-    ${listToolbar({ searchPlaceholder: "Search subject…", issues: true })}
+    ${listToolbar({ searchPlaceholder: "Search subject…", problems: true })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
   const stuckEl = document.getElementById("stuck");
@@ -2326,7 +2326,7 @@ async function renderSent() {
         listEl.innerHTML = `<p class="muted">${
           state.search
             ? "No sent posts match."
-            : state.issues
+            : state.problems
               ? "Every sent post delivered cleanly."
               : "No sent posts yet."
         }</p>`;
@@ -2504,7 +2504,7 @@ function watchBodyHtml(prog) {
           rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
         }`
       : "Dispatch complete.";
-  const issueCount = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
+  const problemCount = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
     ? "No email provider configured — nothing is delivered"
     : `Provider: ${esc(prog.provider?.name || "—")}`;
@@ -2520,10 +2520,10 @@ function watchBodyHtml(prog) {
       )}
     </div>
     ${watchCountsHtml(c)}
-    <div class="whealth${issueCount ? " has-issues" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
-      issueCount
-        ? `${issueCount.toLocaleString()} bounced / failed / complained`
-        : "no delivery issues"
+    <div class="whealth${problemCount ? " has-problems" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
+      problemCount
+        ? `${problemCount.toLocaleString()} bounced / failed / complained`
+        : "no delivery problems"
     }</span></div>`;
 }
 function watchMetaHtml(send, prog) {
@@ -2703,20 +2703,20 @@ function deliveryOutcome(r) {
   }
 }
 
-// The three view tabs the record opens on — issues first (the rows that went wrong).
+// The three view tabs the record opens on — problems first (the rows that went wrong).
 const DELIVERY_VIEWS = [
-  { v: "issues", label: "Issues" },
+  { v: "problems", label: "Problems" },
   { v: "delivered", label: "Delivered" },
   { v: "all", label: "All" },
 ];
 
-// A positive/neutral empty state per view — an empty "issues" list is good news, not a gap.
+// A positive/neutral empty state per view — an empty "problems" list is good news, not a gap.
 function deliveryEmpty(dstate) {
   if (dstate.search) {
     return "No recipients match that address.";
   }
-  if (dstate.view === "issues") {
-    return "No delivery issues — every recipient was accepted or delivered.";
+  if (dstate.view === "problems") {
+    return "No delivery problems — every recipient was accepted or delivered.";
   }
   if (dstate.view === "delivered") {
     return "No delivery receipts confirmed yet.";
@@ -2807,10 +2807,10 @@ function renderFrozenRecord(id, data) {
   }
 
   // The per-recipient record, its own paged/filtered state (independent of the tiles).
-  // Default view is "issues" so the rows that went wrong lead; default sort mirrors the
+  // Default view is "problems" so the rows that went wrong lead; default sort mirrors the
   // CSV (email asc). The tiles above stay the live summary as receipts settle; this list
   // reloads on interaction (a view/search/sort/page change, or re-clicking the view).
-  const dstate = { view: "issues", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
+  const dstate = { view: "problems", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
   const rowsEl = document.getElementById("recRows");
   const recPagerEl = document.getElementById("recPager");
   const loadDeliveries = async () => {
@@ -5019,17 +5019,17 @@ const BOUNCE_SPIKE_MIN = 3;
 // loud only when something needs attention. Derived from GET /sends.
 function computeHealth(sends) {
   const now = Date.now();
-  const issues = [];
+  const alerts = [];
   const failed = sends.filter((s) => s.status === "failed");
   if (failed.length) {
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
     });
   }
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
   if (missed.length) {
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${missed.length} scheduled send${missed.length === 1 ? "" : "s"} passed the fire time without going out.`,
     });
@@ -5041,7 +5041,7 @@ function computeHealth(sends) {
   const wedged = sending.filter(isWedged);
   if (wedged.length) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
     });
@@ -5052,7 +5052,7 @@ function computeHealth(sends) {
   const active = sending.filter((s) => !isWedged(s));
   const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
-    issues.push({
+    alerts.push({
       level: "amber",
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
@@ -5077,12 +5077,12 @@ function computeHealth(sends) {
     });
   if (spiky) {
     const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
-    issues.push({
+    alerts.push({
       level: "amber",
       text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
     });
   }
-  return issues;
+  return alerts;
 }
 
 async function renderDashboard() {

@@ -212,12 +212,12 @@ export async function listPublishedIssues(db: D1Database, limit = 200): Promise<
   return results;
 }
 
-/** Narrow the send list by `status`, a subject contains-search, and — `issues: "only"` —
+/** Narrow the send list by `status`, a subject contains-search, and — `problems: "only"` —
  *  to sends with any bounce, complaint, or send-time failure on their counters. */
 export interface SendFilter {
   status?: SendStatus;
   search?: string;
-  issues?: "only";
+  problems?: "only";
 }
 
 /** The sortable columns exposed by `GET /sends` (see `parseListParams`). */
@@ -250,11 +250,11 @@ function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
     where.push("LOWER(subject) LIKE ? ESCAPE '\\'");
     binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
   }
-  // A filter rather than a sortable "delivery issues" column: the Sent list keeps its newest-first
+  // A filter rather than a sortable "delivery problems" column: the Sent list keeps its newest-first
   // order, and no severity weighting is implied (a summed sort would rank 25 retried
   // send-time failures above one spam complaint). Reads the denormalized counters, so it
   // costs the same as any other WHERE (SPEC §8).
-  if (filter.issues === "only") {
+  if (filter.problems === "only") {
     where.push("(c_bounced + c_complained + c_failed) > 0");
   }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
@@ -385,16 +385,16 @@ export async function listDeliveries(db: D1Database, sendId: string): Promise<De
 // The record view (SPEC §8) shows the delivery rows inside the app, not just as the
 // CSV export. It reads `deliveries` DIRECTLY — the source of truth — never the `c_*`
 // counters (those are the aggregate cache for the cheap poll). A `view` narrows the
-// rows to a mutually-exclusive outcome bucket (or the `issues` group / `all`), using
+// rows to a mutually-exclusive outcome bucket (or the `problems` group / `all`), using
 // the SAME event-wins-over-status bucketing as `deliveryOutcomes` so a filtered list
 // reconciles to its tile. Since it isn't polled, this read can be heavier than
 // `/progress`. Every field is a fact of the send's own delivery rows (including the
 // frozen `bounce_kind`), so the record never drifts with global suppression state.
 
-/** The recognized `view` values: the three UI toggles (`issues` default / `delivered`
+/** The recognized `view` values: the three UI toggles (`problems` default / `delivered`
  *  / `all`) plus the individual outcome buckets, so a caller can filter to any one. */
 export const DELIVERY_VIEWS = [
-  "issues",
+  "problems",
   "delivered",
   "all",
   "bounced",
@@ -456,7 +456,7 @@ function deliveryViewClause(view: DeliveryView): string {
       return "d.event IS NULL AND d.status = 'accepted'";
     case "in_flight":
       return "d.event IS NULL AND d.status IN ('pending', 'dispatched')";
-    case "issues":
+    case "problems":
       // Bounced / complained / failed — the rows that went wrong, front-and-center.
       return "(d.event IN ('bounced', 'complained')) OR (d.event IS NULL AND d.status = 'failed')";
     default:

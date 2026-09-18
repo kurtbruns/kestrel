@@ -1223,7 +1223,7 @@ td.num {
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
-/* A list's Delivered cell carries its delivery-issue note (complained / bounced / failed) as a
+/* A list's Delivered cell carries its delivery-problem note (complained / bounced / failed) as a
    smaller line under the count, never inline: inline it either wraps a fixed-width
    numeric column several lines deep or, in an auto-width table, widens the column at the
    subject's expense. Stacked, a bad send adds one line to its row and the column stays a
@@ -1387,7 +1387,7 @@ td a:hover {
 .list-table .c-num {
   width: 104px;
 }
-/* The Sent table's Delivered column: a number plus, on a bad send, its delivery-issue note
+/* The Sent table's Delivered column: a number plus, on a bad send, its delivery-problem note
    beneath (`.delivered-note`). Sized so the usual one- or two-kind note ("13 bounced,
    12 failed") fits on one sub-line; only the rare three-kind note takes a second,
    breaking between kinds. */
@@ -1821,10 +1821,10 @@ th.num .th-sort {
   background: var(--ok-fg);
   flex: none;
 }
-.whealth.has-issues {
+.whealth.has-problems {
   color: var(--warn-fg);
 }
-.whealth.has-issues .whealth-dot {
+.whealth.has-problems .whealth-dot {
   background: var(--warn-fg);
 }
 @media (max-width: 720px) {
@@ -4635,7 +4635,7 @@ body.has-savebar .content {
 /* Phones and the icon-rail range (≤720px): a list table can't fit its fixed columns
    (Sent wants 428px, Drafts 480px; the rail leaves 412px at 540px), so a `.stacks` table
    turns each row into a stacked entry — the lead cell (title / subject / email) on its own
-   line, then the rest as one muted meta line, then any delivery-issue note — on the same markup:
+   line, then the rest as one muted meta line, then any delivery-problem note — on the same markup:
    the cells are named and the labels are ::before/::after content, so the desktop table
    and the phone list are one render. Headers go, and the sort buttons with them; the
    default order is what a phone wants. A row's ⋯ menu pins to its top-right corner. */
@@ -4686,7 +4686,7 @@ body.has-savebar .content {
   .list-table.stacks td.empty {
     display: none;
   }
-  /* Sent: when · N recipients · N delivered, then the delivery-issue note. */
+  /* Sent: when · N recipients · N delivered, then the delivery-problem note. */
   .sent-table td.num::before {
     content: " · ";
   }

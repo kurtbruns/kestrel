@@ -333,9 +333,9 @@ export function createRouter(archiveBasePath: string): Router {
         },
         { name: "search", description: "Subject contains-search." },
         {
-          name: "issues",
+          name: "problems",
           description:
-            "`only` narrows to sends with a delivery issue (any bounced, complained, or failed recipient).",
+            "`only` narrows to sends with a delivery problem (any bounced, complained, or failed recipient).",
         },
         {
           name: "sort",
@@ -394,7 +394,7 @@ export function createRouter(archiveBasePath: string): Router {
         {
           name: "view",
           description:
-            "`issues` (default: bounced/complained/failed), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `failed`, `skipped`, `accepted`, `in_flight`).",
+            "`problems` (default: bounced/complained/failed), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `failed`, `skipped`, `accepted`, `in_flight`).",
         },
         { name: "search", description: "Email contains-search." },
         { name: "sort", description: "`email` (default), `status`, `event`, or `updated`." },
@@ -416,7 +416,7 @@ export function createRouter(archiveBasePath: string): Router {
               bounce_kind: "hard",
             },
           ],
-          view: "issues",
+          view: "problems",
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
         },
       },
