@@ -333,6 +333,11 @@ function withNoProviderNote(msg) {
 // only recovery is a fresh document load that re-triggers the Access login. In dev
 // this shouldn't happen, but a reload re-mints, so the same affordance is safe.
 function showReauth() {
+  // A dead token means every background poll (and a pending editor autosave) now 401s —
+  // which is what routed us here. Stop them so a walled tab goes quiet instead of re-hitting
+  // the API on its timers until reload.
+  stopPollers();
+  clearAutosaveTimers();
   // No identity yet — hide the publication chrome so the wall stands alone.
   document.body.classList.add("signed-out");
   app.innerHTML =
@@ -689,8 +694,12 @@ function openMenu(anchor, items) {
   m.style.left = `${r.right + window.scrollX - m.offsetWidth}px`;
 }
 
-// ---- router ----
-function route() {
+// Stop every background poller and invalidate any poll whose fetch is already in flight.
+// Shared by route() (on every navigation) and showReauth() — a walled tab must go quiet
+// instead of hammering the API on a dead token every few seconds. Clearing a timer only
+// stops the pending tick, not a poll already mid-await, so bumping navGeneration makes that
+// callback bail instead of rescheduling (see navGeneration).
+function stopPollers() {
   if (statusTimer) {
     clearInterval(statusTimer);
     statusTimer = null;
@@ -703,10 +712,12 @@ function route() {
     clearInterval(progressTimer);
     progressTimer = null;
   }
-  // Invalidate any poll whose fetch is already in flight: clearing progressTimer only stops
-  // the pending tick, not one mid-await, so a stale callback would resolve into the view we're
-  // about to mount. Bumping the generation makes that callback bail (see navGeneration).
   navGeneration++;
+}
+
+// ---- router ----
+function route() {
+  stopPollers();
   clearAutosaveTimers();
   isEditorDirty = false;
   editorSaveFailed = false;
