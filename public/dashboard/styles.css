@@ -126,13 +126,15 @@
     --status-sending-bg: #172554;
     --status-sending-fg: #60a5fa;
     --status-sending-line: #2563eb;
-    /* Brightened from a plain dark tint so Secondary text (--accent on the soft
-       fill) clears WCAG AA 4.5:1 in dark mode — its most demanding use; a dimmer blue
-       reached only ~4.4:1. Primary keeps huge contrast (dark --accent-on text
-       on this lighter fill). The soft fill tracks the same hue. */
-    --accent: #8fabff;
+    /* The action accent, dark — shared with the reader surface's dark --k-accent
+       (lib/page.ts) so the two surfaces' blue agrees. Its most demanding use is
+       Secondary text (--accent on the soft fill): because the text is a light blue, a
+       lighter fill *loses* contrast, so --accent-soft is a low-opacity (darker) tint,
+       holding Secondary at ~4.7:1 (WCAG AA). Primary keeps huge contrast (dark
+       --accent-on text on the accent fill). */
+    --accent: #7d9bff;
     --accent-on: #10131f;
-    --accent-soft: rgba(143, 171, 255, 0.18);
+    --accent-soft: rgba(125, 155, 255, 0.14);
     --syntax-bg: #1a1a1d;
     --syntax-fg: #cfcfd6;
     --syntax-gutter: #5a5a63;
@@ -409,7 +411,9 @@ body.nav-resizing .sidebar {
 .pub-cta a {
   font-size: 14px;
   font-weight: 600;
-  color: var(--ring);
+  /* The one action hue (DESIGN §1) — same as the buttons, not the focus-ring blue.
+     `--ring` stays reserved for the focus outline it's named for. */
+  color: var(--accent);
   text-decoration: none;
 }
 .pub-cta a:hover {
@@ -441,7 +445,7 @@ body.nav-resizing .sidebar {
   gap: 6px;
 }
 .pub-note a {
-  color: var(--ring);
+  color: var(--accent);
   text-decoration: none;
 }
 .pub-note a:hover {
@@ -1000,6 +1004,7 @@ button.primary {
   background: var(--accent);
   color: var(--accent-on);
   border-color: var(--accent);
+  font-weight: 500;
 }
 button.primary:hover {
   filter: brightness(1.08);
@@ -1018,7 +1023,7 @@ button.secondary {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 30%, var(--line-soft));
   font-size: 12.5px;
-  font-weight: 550;
+  font-weight: 500;
   padding: 7px 12px;
   border-radius: 7px;
 }
@@ -1201,7 +1206,15 @@ label {
 }
 table {
   width: 100%;
-  border-collapse: collapse;
+  /* Separate (not collapse) is load-bearing: this rule is a card — an outer border,
+     a 10px radius, and `overflow:hidden` to clip the corners. Under `border-collapse:
+     collapse` the browser silently drops BOTH the radius and the outer border (the
+     collapsed border is clipped away by overflow:hidden), so every table renders
+     borderless with square corners. `border-spacing:0` keeps the cells flush; row
+     rules are carried by each cell's `border-bottom` below. A real cell grid that
+     needs collapse opts out explicitly — see `.doc table`. */
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -1369,6 +1382,12 @@ td a:hover {
    in place rather than resizing the column. */
 .list-table {
   table-layout: fixed;
+  /* These full-page data tables sit directly on the card-colored page ground, where the
+     base `table` --line hairline is nearly the same color as the ground (most visibly in
+     dark) and reads as no container at all. Take the stronger --line-soft — the same
+     border the dashboard's Drafts/Sent summaries take (.dash-section table) — so the
+     table reads as one bounded surface rather than loose rows. */
+  border-color: var(--line-soft);
   /* A floor, inside the scrolling .table-wrap: without it, once the fixed columns
      outgrow the viewport the one flexible text column absorbs the whole deficit,
      computes to 0px, and `overflow-wrap: anywhere` breaks it one letter per line. */
@@ -2644,7 +2663,7 @@ textarea.is-invalid {
   line-height: 1.65;
 }
 .doc a {
-  color: var(--ring);
+  color: var(--accent);
   text-decoration: underline;
 }
 .doc ul,
@@ -2792,6 +2811,13 @@ textarea.is-invalid {
   text-align: left;
   font-size: 14px;
   vertical-align: top;
+}
+/* Re-close the grid's bottom edge. The global `tr:last-child td` rule drops the last
+   row's bottom border — right for a card table, which has its own outer border to close
+   it, but a prose grid has none, so that leak leaves the bottom open. Outranks the
+   global rule (extra `.doc`), restoring the cell border the grid draws itself from. */
+.doc tr:last-child td {
+  border-bottom: 1px solid var(--line);
 }
 .doc th {
   background: var(--bg);

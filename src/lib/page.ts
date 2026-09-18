@@ -123,7 +123,10 @@ img { max-width:100%; }
 .r-link:hover { text-decoration:underline; }
 ul.r-list { list-style:none; margin:0; padding:0; }
 li.r-item { display:flex; gap:18px; align-items:baseline; padding:16px 0; border-top:1px solid var(--r-line); }
-li.r-item .r-d { font-size:12.5px; color:var(--r-mut); width:104px; flex:none; white-space:nowrap; }
+/* Fixed date column so the titles line up. Sized to hold the widest en-US long date
+   ("September 30, 2026" ≈ 122px) — a narrower column lets a long month overflow its
+   box (flex:none + nowrap don't clip) and butt against the title. */
+li.r-item .r-d { font-size:12.5px; color:var(--r-mut); width:128px; flex:none; white-space:nowrap; }
 a.r-t { font-family:var(--r-serif); font-size:18px; font-weight:600; text-decoration:none; }
 a.r-t:hover { text-decoration:underline; }
 .r-empty { color:var(--r-mut); padding:20px 0; }
@@ -182,14 +185,23 @@ export const FRAUNCES_FONT_LINKS =
   `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..600&display=swap">`;
 
 /** Everything the archive route injects into a hosted issue page's <head> at the
- *  reserved anchor: the display-serif links, plus a background override that lands
- *  the frozen email render on the same ground as the reader chrome. The selectors
- *  outrank the email layout's own `.k-bg` / `.k-card` rules (higher specificity +
- *  !important), so the match holds in light and dark whatever the source order. */
+ *  reserved anchor: the display-serif links, the frozen render's background, and the
+ *  browser-only masthead's colors (`.k-mast`, see `archiveMasthead`) — both themed
+ *  light/dark here so the whole page turns together.
+ *
+ *  Two kinds of rule live here, and the difference is deliberate. The background
+ *  targets `.k-bg` / `.k-card`, which are real email content the layout sets *inline*
+ *  (an email needs inline styles); overriding an inline style takes `!important` (plus
+ *  the `body …` prefix for specificity). The masthead is browser-only and carries no
+ *  inline color, so it's a plain rule — light value, then a dark `@media` override,
+ *  no `!important` needed. Its text is the email's muted zinc, lifted in dark to
+ *  `#a1a1aa` (~7:1 on the reader ground; the light `#71717a` was ~3.9:1 there). */
 export const ARCHIVE_POST_HEAD =
   FRAUNCES_FONT_LINKS +
   `<style>body.k-bg,body .k-bg,body .k-card{background:${READER_BG_LIGHT}!important}` +
-  `@media(prefers-color-scheme:dark){body.k-bg,body .k-bg,body .k-card{background:${READER_BG_DARK}!important}}</style>`;
+  `.k-mast{color:#71717a;border-bottom:1px solid #e4e4e7}` +
+  `@media(prefers-color-scheme:dark){body.k-bg,body .k-bg,body .k-card{background:${READER_BG_DARK}!important}` +
+  `.k-mast{color:#a1a1aa;border-bottom-color:#2e2e33}}</style>`;
 
 /** One issue as the reader surface lists it: its title, its archive URL, and a display date. */
 export interface ArchiveIndexIssue {
