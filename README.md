@@ -63,3 +63,7 @@ Deployed, the gate is Cloudflare Access instead; that setup is in the [setup gui
 - **Understand the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves.
 - **What Kestrel guarantees, and how the admin UI is built:** [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
 - **All scripts:** `package.json`.
+
+## License
+
+Kestrel is open source under the [MIT License](LICENSE). Copyright (c) 2026 Kurt Bruns.
