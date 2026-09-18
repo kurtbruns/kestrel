@@ -3661,9 +3661,10 @@ textarea.is-invalid {
 }
 
 /* --- confirmation email: the rendered card + the words-only edit body ---
-   The card colors are LITERALS matching src/emails/system.ts: the confirmation email
-   ships single-theme light, so the preview stays light in either dashboard theme and
-   is byte-honest about what the inbox receives. */
+   The card colors are LITERALS matching src/emails/system.ts, which now ships light+dark
+   (its `prefers-color-scheme` block). The light literals are here; a dark @media block
+   below overrides them with the email's dark palette, so the preview tracks the dashboard
+   theme and stays byte-honest about what a light- or dark-mode inbox receives. */
 .set-ce-stage {
   background: #f4f4f5;
   padding: 22px 18px;
@@ -3681,8 +3682,9 @@ textarea.is-invalid {
 .set-ce-msg {
   margin: 0 0 20px;
 }
-/* Publication masthead inside the preview card — light literals, matching masthead()
-   in src/emails/system.ts (logo beside name + tagline, over a hairline rule). */
+/* Publication masthead inside the preview card, matching masthead() in
+   src/emails/system.ts (logo beside name + tagline, over a hairline rule). Light
+   literals here; the dark @media block below carries the dark overrides. */
 .set-ce-mast {
   display: flex;
   align-items: center;
@@ -3801,6 +3803,36 @@ textarea.is-invalid {
 }
 .set-ce-editfoot .grow {
   flex: 1;
+}
+/* Dark rendering of the preview card — the email's dark palette (the reader card pages'
+   tokens: page #18181b, card #232327, ink #ededed, muted #a1a1aa, rule #2e2e33, accent
+   button #e5e7eb/#18181b), matching the `prefers-color-scheme` block in
+   src/emails/system.ts. Overrides only the card literals; the edit body + chrome around
+   it already theme via the --* tokens. */
+@media (prefers-color-scheme: dark) {
+  .set-ce-stage {
+    background: #18181b;
+  }
+  .set-ce-card {
+    background: #232327;
+    color: #ededed;
+  }
+  .set-ce-mast {
+    border-bottom-color: #2e2e33;
+  }
+  .set-ce-mast-name {
+    color: #ededed;
+  }
+  .set-ce-mast-tag {
+    color: #a1a1aa;
+  }
+  .set-ce-btn {
+    background: #e5e7eb;
+    color: #18181b;
+  }
+  .set-ce-foot {
+    color: #a1a1aa;
+  }
 }
 
 /* --- default test recipients: removable chips + add row --- */

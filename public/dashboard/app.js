@@ -4232,7 +4232,8 @@ async function renderSettings() {
   // The double opt-in confirmation email (SPEC §7): a preview-first section with a
   // Preview | Edit segmented toggle. Words only — Kestrel owns the layout and inserts
   // the confirm link, so the fields can never break double opt-in. The rendered card
-  // is byte-honest to the single-theme transactional layout in src/emails/system.ts.
+  // is byte-honest to the transactional layout in src/emails/system.ts, in both themes
+  // (the card's dark palette lives in styles.css, tracking the dashboard theme).
   const confirmationSection = `
     <section class="set-sec">
       ${secHead("Confirmation email", chip("editable", "Editable"))}
