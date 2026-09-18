@@ -20,9 +20,9 @@ export async function list(c: RequestContext): Promise<Response> {
     ? (statusParam as sends.SendStatus)
     : undefined;
   const search = c.url.searchParams.get("search") ?? undefined;
-  // "only" narrows to sends with a delivery issue (any bounce / complaint / failure).
-  const issues = c.url.searchParams.get("issues") === "only" ? "only" : undefined;
-  const filter = { status, search, issues } satisfies sends.SendFilter;
+  // "only" narrows to sends with a delivery failure (any bounce / complaint / unsent).
+  const failures = c.url.searchParams.get("failures") === "only" ? "only" : undefined;
+  const filter = { status, search, failures } satisfies sends.SendFilter;
   const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
   const [total, rows] = await Promise.all([
     sends.countSends(c.env.DB, filter),
@@ -93,19 +93,19 @@ export async function progress(c: RequestContext): Promise<Response> {
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
-/** Validate the `view` query param against the recognized set, defaulting to `issues`
+/** Validate the `view` query param against the recognized set, defaulting to `failures`
  *  (the record view opens on the rows that went wrong). */
 function parseDeliveryView(raw: string | null): sends.DeliveryView {
   return sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)
     ? (raw as sends.DeliveryView)
-    : "issues";
+    : "failures";
 }
 
 /**
  * The sent record's per-recipient rows as paginated JSON (SPEC §8, §11 "always
  * inspectable"). Reads the `deliveries` rows DIRECTLY — the source of truth — not the
  * `c_*` progress counters, so it is heavier than `/progress` and deliberately NOT the
- * poll target. Filter by `view` (issues / delivered / all / a single bucket) and an
+ * poll target. Filter by `view` (failures / delivered / all / a single bucket) and an
  * optional email search; sort and paginate via the shared list convention. Read-only
  * over the frozen record (I3) — it decides nothing and mails no one.
  */
@@ -198,11 +198,11 @@ export async function resolve(c: RequestContext): Promise<Response> {
   try {
     body = (await c.req.json()) as { resolution?: unknown };
   } catch {
-    throw badRequest("JSON body with 'resolution' ('failed' | 'accepted') is required");
+    throw badRequest("JSON body with 'resolution' ('unsent' | 'accepted') is required");
   }
   const outcome = body.resolution;
-  if (outcome !== "failed" && outcome !== "accepted") {
-    throw badRequest("resolution must be 'failed' or 'accepted'");
+  if (outcome !== "unsent" && outcome !== "accepted") {
+    throw badRequest("resolution must be 'unsent' or 'accepted'");
   }
   const actor = c.principal?.email ?? "service";
   const result = await resolveStuckSend(c.env, param(c, "id"), outcome, actor);

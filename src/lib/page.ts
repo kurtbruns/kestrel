@@ -62,7 +62,7 @@ export function htmlPage(title: string, bodyHtml: string, status = 200): Respons
    Access-gated admin surface (§10). */
 
 /** The reader ground — shared by the chrome pages here and injected onto the hosted
- *  issue page (see `ARCHIVE_POST_HEAD`), so the whole publication sits on one
+ *  post page (see `ARCHIVE_POST_HEAD`), so the whole publication sits on one
  *  background in each theme. The sent email keeps its own white; this is web-only. */
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
@@ -177,14 +177,14 @@ a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offse
 `;
 
 /** Stylesheet links for the publication's display serif (Fraunces), loaded on the
- *  hosted reader pages and injected into the archive issue page's <head> (browser-
+ *  hosted reader pages and injected into the archive post page's <head> (browser-
  *  only chrome, never the email). Only the allowed Google Fonts hosts are used. */
 export const FRAUNCES_FONT_LINKS =
   `<link rel="preconnect" href="https://fonts.googleapis.com">` +
   `<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>` +
   `<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..600;1,9..144,400..600&display=swap">`;
 
-/** Everything the archive route injects into a hosted issue page's <head> at the
+/** Everything the archive route injects into a hosted post page's <head> at the
  *  reserved anchor: the display-serif links, the frozen render's background, and the
  *  browser-only masthead's colors (`.k-mast`, see `archiveMasthead`) — both themed
  *  light/dark here so the whole page turns together.
@@ -203,8 +203,8 @@ export const ARCHIVE_POST_HEAD =
   `@media(prefers-color-scheme:dark){body.k-bg,body .k-bg,body .k-card{background:${READER_BG_DARK}!important}` +
   `.k-mast{color:#a1a1aa;border-bottom-color:#2e2e33}}</style>`;
 
-/** One issue as the reader surface lists it: its title, its archive URL, and a display date. */
-export interface ArchiveIndexIssue {
+/** One post as the reader surface lists it: its title, its archive URL, and a display date. */
+export interface ArchiveIndexPost {
   title: string;
   url: string;
   dateLabel: string;
@@ -280,39 +280,39 @@ ${devDashboardBadge(opts.devDashboardUrl)}
   });
 }
 
-function issueRow(i: ArchiveIndexIssue): string {
+function postRow(i: ArchiveIndexPost): string {
   return (
     `<li class="r-item"><span class="r-d">${escapeHtml(i.dateLabel)}</span>` +
     `<a class="r-t" href="${escapeHtmlAttr(i.url)}">${escapeHtml(i.title)}</a></li>`
   );
 }
 
-/** The public front door (§5): a landing page that features the latest issue, lists
+/** The public front door (§5): a landing page that features the latest post, lists
  *  a few recent ones, and links into the full archive — never into the admin. */
 export function landingPage(opts: {
   identity: ReaderIdentity;
   subscribeUrl: string;
   homeUrl: string;
   archiveUrl: string;
-  /** The most recent issue, featured; absent when nothing has been sent. */
-  featured?: ArchiveIndexIssue;
-  /** The next-most-recent issues, listed beneath the feature. */
-  recent: ArchiveIndexIssue[];
+  /** The most recent post, featured; absent when nothing has been sent. */
+  featured?: ArchiveIndexPost;
+  /** The next-most-recent posts, listed beneath the feature. */
+  recent: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
   let main: string;
   if (!opts.featured) {
-    main = `<p class="r-empty">No issues yet — subscribe to get the first one.</p>`;
+    main = `<p class="r-empty">No posts yet — subscribe to get the first one.</p>`;
   } else {
     const f = opts.featured;
     const feature =
-      `<p class="r-ey">Latest issue</p>` +
+      `<p class="r-ey">Latest post</p>` +
       `<article class="r-feat"><p class="r-k">${escapeHtml(f.dateLabel)}</p>` +
       `<h2><a href="${escapeHtmlAttr(f.url)}">${escapeHtml(f.title)}</a></h2>` +
       `<a class="r-link" href="${escapeHtmlAttr(f.url)}">Read here &rarr;</a></article>`;
     const list = opts.recent.length
-      ? `<ul class="r-list">${opts.recent.map(issueRow).join("")}</ul>`
+      ? `<ul class="r-list">${opts.recent.map(postRow).join("")}</ul>`
       : "";
     const archive = `<a class="r-arch" href="${escapeHtmlAttr(opts.archiveUrl)}">Browse the full archive &rarr;</a>`;
     main = feature + list + archive;
@@ -327,19 +327,19 @@ export function landingPage(opts: {
   });
 }
 
-/** The full public archive: every sent issue, newest first (§5). Reached from the
+/** The full public archive: every sent post, newest first (§5). Reached from the
  *  landing page's "Browse the full archive" link; served at the archive base path. */
 export function archiveIndexPage(opts: {
   identity: ReaderIdentity;
   subscribeUrl: string;
   homeUrl: string;
-  issues: ArchiveIndexIssue[];
+  posts: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§10); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
 }): Response {
-  const list = opts.issues.length
-    ? `<ul class="r-list">${opts.issues.map(issueRow).join("")}</ul>`
-    : `<p class="r-empty">No issues yet.</p>`;
+  const list = opts.posts.length
+    ? `<ul class="r-list">${opts.posts.map(postRow).join("")}</ul>`
+    : `<p class="r-empty">No posts yet.</p>`;
   return readerPage({
     identity: opts.identity,
     subscribeUrl: opts.subscribeUrl,

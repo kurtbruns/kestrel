@@ -3,7 +3,7 @@
  *
  * `deliveries` is both the work queue and the idempotency ledger. A recipient is
  * only ever selected while `pending`; we flip it to `dispatched` BEFORE the
- * network call and to `accepted`/`failed` after, so a crash can never re-mail an
+ * network call and to `accepted`/`unsent` after, so a crash can never re-mail an
  * accepted recipient. Each invocation attempts each recipient at most once;
  * retryables go back to `pending` and wait for the next sweep tick (the backoff).
  */
@@ -21,7 +21,7 @@ export interface SendLoopResult {
   leased: boolean;
   accepted: number;
   skipped: number;
-  failed: number;
+  unsent: number;
   requeued: number;
   finished: boolean;
 }
@@ -40,7 +40,7 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
     leased: false,
     accepted: 0,
     skipped: 0,
-    failed: 0,
+    unsent: 0,
     requeued: 0,
     finished: false,
   };
@@ -85,8 +85,8 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
         await sends.setDeliverySkipped(env.DB, sendId, d.id, t);
         result.skipped += 1;
       } else if (d.attempts >= MAX_DELIVERY_ATTEMPTS) {
-        await sends.setDeliveryFailed(env.DB, sendId, d.id, "max attempts exceeded", t, "pending");
-        result.failed += 1;
+        await sends.setDeliveryUnsent(env.DB, sendId, d.id, "max attempts exceeded", t, "pending");
+        result.unsent += 1;
       } else {
         live.push({ id: d.id, email: d.email, unsubToken: d.unsub_token });
       }
@@ -150,8 +150,8 @@ export async function runSend(env: AppEnv, sendId: string): Promise<SendLoopResu
         await sends.requeueDelivery(env.DB, sendId, id, r.error, t3);
         result.requeued += 1;
       } else {
-        await sends.setDeliveryFailed(env.DB, sendId, id, r.error, t3, "dispatched");
-        result.failed += 1;
+        await sends.setDeliveryUnsent(env.DB, sendId, id, r.error, t3, "dispatched");
+        result.unsent += 1;
       }
     }
   }

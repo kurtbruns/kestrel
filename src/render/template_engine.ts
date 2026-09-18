@@ -18,7 +18,7 @@
  *    strip/ignore `<style>` (Outlook especially); `@media` rules can't be inlined and
  *    are kept in a `<style>` block. Backed by css-inline (WASM), initialized once.
  *
- * The default template ships so a fresh install sends a sensible issue out of the box.
+ * The default template ships so a fresh install sends a sensible post out of the box.
  */
 
 import { initWasm, inline } from "@css-inline/css-inline-wasm";
@@ -184,7 +184,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
     );
   }
   if (!tokens.has("email.viewInBrowserUrl")) {
-    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the issue in a browser.");
+    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the post in a browser.");
   }
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {

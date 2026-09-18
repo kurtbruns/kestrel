@@ -13,7 +13,7 @@
  * reproducible:
  *   1. `SimProvider.sendBatch` paces acceptance with per-batch latency (watchable
  *      dispatch), injects transient errors (→ retry/backoff, phase `retrying`), a RARE
- *      permanent transport failure (→ `failed`; most bad addresses are accepted here and
+ *      permanent transport failure (→ `unsent`; most bad addresses are accepted here and
  *      bounce asynchronously below, as they do in reality), and — on a large send — a
  *      wall-clock budget that pauses the run between sweep ticks (phase `backing-off`),
  *      exercising resume.

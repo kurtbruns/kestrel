@@ -100,7 +100,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("renders a sample issue through the one render path and delivers it (I5)", async () => {
+  it("renders a sample post through the one render path and delivers it (I5)", async () => {
     const to = "template-probe@example.com";
     const res = await SELF.fetch(`${base}/api/settings/template/test`, {
       method: "POST",
@@ -120,7 +120,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     // substituted, the test unsubscribe link present.
     expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
     expect(msg.html).toContain("/unsubscribe?test=1");
-    // The sample subject line proves it rendered the synthetic issue.
+    // The sample subject line proves it rendered the synthetic post.
     expect(msg.subject).toContain("Template test");
   });
 

@@ -28,7 +28,7 @@ export interface SendRow {
   c_bounced: number;
   c_complained: number;
   c_skipped: number;
-  c_failed: number;
+  c_unsent: number;
 }
 
 /** The eight denormalized progress counters on a `sends` row. */
@@ -40,7 +40,7 @@ export interface SendCounts {
   bounced: number;
   complained: number;
   skipped: number;
-  failed: number;
+  unsent: number;
 }
 
 /** Read the counter columns off a send row into the API-facing `SendCounts` shape. */
@@ -53,7 +53,7 @@ export function countsOf(send: SendRow): SendCounts {
     bounced: send.c_bounced,
     complained: send.c_complained,
     skipped: send.c_skipped,
-    failed: send.c_failed,
+    unsent: send.c_unsent,
   };
 }
 
@@ -74,7 +74,7 @@ const COUNTER_COLS = [
   "c_bounced",
   "c_complained",
   "c_skipped",
-  "c_failed",
+  "c_unsent",
 ] as const;
 type CounterCol = (typeof COUNTER_COLS)[number];
 
@@ -97,8 +97,8 @@ function bucketCol(status: string, event: string | null): CounterCol {
       return "c_accepted";
     case "skipped":
       return "c_skipped";
-    case "failed":
-      return "c_failed";
+    case "unsent":
+      return "c_unsent";
     default:
       return "c_pending";
   }
@@ -135,7 +135,7 @@ export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1Pre
          c_bounced    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'bounced'),
          c_complained = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'complained'),
          c_skipped    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'skipped'),
-         c_failed     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'failed')
+         c_unsent     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'unsent')
        WHERE id = ?`,
     )
     .bind(sendId);
@@ -186,18 +186,18 @@ export function latestSentSendForPost(db: D1Database, postId: string): Promise<S
     .first<SendRow>();
 }
 
-/** One published issue for the public archive index (§5): the frozen subject and
+/** One published post for the public archive index (§5): the frozen subject and
  *  the slug that addresses its archive page. */
-export interface PublishedIssue {
+export interface PublishedPost {
   slug: string;
   subject: string;
   sent_at: number;
 }
 
-/** Sent issues for the public archive index, newest first — one row per post
+/** Sent posts for the public archive index, newest first — one row per post
  *  (a re-send collapses to its latest). SQLite carries the bare `subject`/`slug`
  *  from the MAX(completed_at) row of each group. */
-export async function listPublishedIssues(db: D1Database, limit = 200): Promise<PublishedIssue[]> {
+export async function listPublishedPosts(db: D1Database, limit = 200): Promise<PublishedPost[]> {
   const { results } = await db
     .prepare(
       `SELECT p.slug AS slug, s.subject AS subject, MAX(s.completed_at) AS sent_at
@@ -208,16 +208,16 @@ export async function listPublishedIssues(db: D1Database, limit = 200): Promise<
          LIMIT ?`,
     )
     .bind(Math.min(limit, 1000))
-    .all<PublishedIssue>();
+    .all<PublishedPost>();
   return results;
 }
 
-/** Narrow the send list by `status`, a subject contains-search, and — `issues: "only"` —
- *  to sends with any bounce, complaint, or send-time failure on their counters. */
+/** Narrow the send list by `status`, a subject contains-search, and — `failures: "only"` —
+ *  to sends with any bounce, complaint, or unsent recipient on their counters. */
 export interface SendFilter {
   status?: SendStatus;
   search?: string;
-  issues?: "only";
+  failures?: "only";
 }
 
 /** The sortable columns exposed by `GET /sends` (see `parseListParams`). */
@@ -236,7 +236,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_failed";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -250,12 +250,12 @@ function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
     where.push("LOWER(subject) LIKE ? ESCAPE '\\'");
     binds.push(`%${term.replace(/[\\%_]/g, (ch) => `\\${ch}`)}%`);
   }
-  // A filter rather than a sortable "delivery issues" column: the Sent list keeps its newest-first
+  // A filter rather than a sortable "delivery failures" column: the Sent list keeps its newest-first
   // order, and no severity weighting is implied (a summed sort would rank 25 retried
-  // send-time failures above one spam complaint). Reads the denormalized counters, so it
+  // unsent recipients above one spam complaint). Reads the denormalized counters, so it
   // costs the same as any other WHERE (SPEC §8).
-  if (filter.issues === "only") {
-    where.push("(c_bounced + c_complained + c_failed) > 0");
+  if (filter.failures === "only") {
+    where.push("(c_bounced + c_complained + c_unsent) > 0");
   }
   return { clause: where.length ? `WHERE ${where.join(" AND ")}` : "", binds };
 }
@@ -318,8 +318,8 @@ export interface DeliveryOutcomes {
   delivered: number;
   bounced: number;
   complained: number;
-  /** Transport-level send failure (never left; does not itself suppress). */
-  failed: number;
+  /** Never accepted by the provider (transport-level; does not itself suppress). */
+  unsent: number;
   /** Excluded at send time (unsubscribed or suppressed after the audience froze). */
   skipped: number;
   /** Accepted by the provider, with no delivery event yet (a provider may emit none). */
@@ -336,7 +336,7 @@ export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<
          COALESCE(SUM(event = 'delivered'), 0) AS delivered,
          COALESCE(SUM(event = 'bounced'), 0) AS bounced,
          COALESCE(SUM(event = 'complained'), 0) AS complained,
-         COALESCE(SUM(event IS NULL AND status = 'failed'), 0) AS failed,
+         COALESCE(SUM(event IS NULL AND status = 'unsent'), 0) AS unsent,
          COALESCE(SUM(event IS NULL AND status = 'skipped'), 0) AS skipped,
          COALESCE(SUM(event IS NULL AND status = 'accepted'), 0) AS accepted,
          COALESCE(SUM(event IS NULL AND status IN ('pending', 'dispatched')), 0) AS in_flight
@@ -350,7 +350,7 @@ export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<
       delivered: 0,
       bounced: 0,
       complained: 0,
-      failed: 0,
+      unsent: 0,
       skipped: 0,
       accepted: 0,
       in_flight: 0,
@@ -385,21 +385,21 @@ export async function listDeliveries(db: D1Database, sendId: string): Promise<De
 // The record view (SPEC §8) shows the delivery rows inside the app, not just as the
 // CSV export. It reads `deliveries` DIRECTLY — the source of truth — never the `c_*`
 // counters (those are the aggregate cache for the cheap poll). A `view` narrows the
-// rows to a mutually-exclusive outcome bucket (or the `issues` group / `all`), using
+// rows to a mutually-exclusive outcome bucket (or the `failures` group / `all`), using
 // the SAME event-wins-over-status bucketing as `deliveryOutcomes` so a filtered list
 // reconciles to its tile. Since it isn't polled, this read can be heavier than
 // `/progress`. Every field is a fact of the send's own delivery rows (including the
 // frozen `bounce_kind`), so the record never drifts with global suppression state.
 
-/** The recognized `view` values: the three UI toggles (`issues` default / `delivered`
+/** The recognized `view` values: the three UI toggles (`failures` default / `delivered`
  *  / `all`) plus the individual outcome buckets, so a caller can filter to any one. */
 export const DELIVERY_VIEWS = [
-  "issues",
+  "failures",
   "delivered",
   "all",
   "bounced",
   "complained",
-  "failed",
+  "unsent",
   "skipped",
   "accepted",
   "in_flight",
@@ -448,17 +448,17 @@ function deliveryViewClause(view: DeliveryView): string {
       return "d.event = 'bounced'";
     case "complained":
       return "d.event = 'complained'";
-    case "failed":
-      return "d.event IS NULL AND d.status = 'failed'";
+    case "unsent":
+      return "d.event IS NULL AND d.status = 'unsent'";
     case "skipped":
       return "d.event IS NULL AND d.status = 'skipped'";
     case "accepted":
       return "d.event IS NULL AND d.status = 'accepted'";
     case "in_flight":
       return "d.event IS NULL AND d.status IN ('pending', 'dispatched')";
-    case "issues":
-      // Bounced / complained / failed — the rows that went wrong, front-and-center.
-      return "(d.event IN ('bounced', 'complained')) OR (d.event IS NULL AND d.status = 'failed')";
+    case "failures":
+      // Bounced / complained / unsent — the rows that went wrong, front-and-center.
+      return "(d.event IN ('bounced', 'complained')) OR (d.event IS NULL AND d.status = 'unsent')";
     default:
       return "";
   }
@@ -731,11 +731,11 @@ export async function setDeliveryAccepted(
 }
 
 /**
- * Mark a recipient failed. `from` names the bucket it is leaving — `pending` for a
- * recipient failed before dispatch (max-attempts / suppressed at claim), `dispatched`
+ * Mark a recipient unsent. `from` names the bucket it is leaving — `pending` for a
+ * recipient unsent before dispatch (max-attempts / suppressed at claim), `dispatched`
  * for a non-retryable rejection after the network call — so the counter move is exact.
  */
-export async function setDeliveryFailed(
+export async function setDeliveryUnsent(
   db: D1Database,
   sendId: string,
   id: string,
@@ -745,9 +745,9 @@ export async function setDeliveryFailed(
 ): Promise<void> {
   await db.batch([
     db
-      .prepare("UPDATE deliveries SET status = 'failed', error = ?, updated_at = ? WHERE id = ?")
+      .prepare("UPDATE deliveries SET status = 'unsent', error = ?, updated_at = ? WHERE id = ?")
       .bind(error, now, id),
-    counterMove(db, sendId, from === "pending" ? "c_pending" : "c_in_flight", "c_failed", 1),
+    counterMove(db, sendId, from === "pending" ? "c_pending" : "c_in_flight", "c_unsent", 1),
   ]);
 }
 
@@ -806,7 +806,7 @@ export async function resetDispatchedToPending(
 /**
  * Operator adjudication of a wedged send's ambiguous rows (SPEC §11). Moves every
  * still-`dispatched` row of a send to a terminal state the operator chose —
- * `failed` (assume the batch never left) or `accepted` (assume it did) — stamping
+ * `unsent` (assume the batch never left) or `accepted` (assume it did) — stamping
  * the reason into `error` as an inspectable audit trail. It touches ONLY
  * `dispatched` rows, so an already-`accepted` recipient is never disturbed, and it
  * never re-mails anyone (nothing here calls the provider). Returns rows resolved.
@@ -814,7 +814,7 @@ export async function resetDispatchedToPending(
 export async function resolveDispatched(
   db: D1Database,
   sendId: string,
-  outcome: "failed" | "accepted",
+  outcome: "unsent" | "accepted",
   note: string,
   now: number,
 ): Promise<number> {
@@ -832,7 +832,7 @@ export async function resolveDispatched(
       db,
       sendId,
       "c_in_flight",
-      outcome === "failed" ? "c_failed" : "c_accepted",
+      outcome === "unsent" ? "c_unsent" : "c_accepted",
       n,
     ).run();
   }

@@ -1,6 +1,6 @@
 # Connect Claude to the API
 
-This page covers connecting Claude Code to a deployed Kestrel instance. Once connected, Claude can draft, edit, and proofread your issues, and schedule them to send. It works the same way you would in the editor, through the same API. A scheduled issue waits in a cancelable window before it goes out, so you can review it or call it off before it reaches anyone.
+This page covers connecting Claude Code to a deployed Kestrel instance. Once connected, Claude can draft, edit, and proofread your posts, and schedule them to send. It works the same way you would in the editor, through the same API. A scheduled post waits in a cancelable window before it goes out, so you can review it or call it off before it reaches anyone.
 
 ## Claude is a `service` principal
 

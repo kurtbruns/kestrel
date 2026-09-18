@@ -89,7 +89,7 @@ export async function subscribeForm(c: RequestContext): Promise<Response> {
   const identity = await readerIdentity(c, c.config);
   const lede = identity.tagline
     ? escapeHtml(identity.tagline)
-    : "Get the next issue delivered to your inbox.";
+    : "Get the next post delivered to your inbox.";
   const main =
     `<p class="r-ey">Newsletter</p>` +
     `<h1 class="r-h1">Subscribe to ${escapeHtml(identity.name)}</h1>` +

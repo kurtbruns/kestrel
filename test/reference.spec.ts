@@ -109,6 +109,6 @@ describe("/api/reference is served like the rest of the authed admin surface", (
     expect(routes.some((r) => r.path === "/webhooks/ses" && r.access === "webhook")).toBe(true);
     expect(routes.some((r) => r.method === "POST")).toBe(true);
     // A hand-authored example made it through (the create-post request body).
-    expect(JSON.stringify(body)).toContain("Issue #1: Hello");
+    expect(JSON.stringify(body)).toContain("Hello, world");
   });
 });

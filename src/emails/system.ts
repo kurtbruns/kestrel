@@ -51,8 +51,8 @@ export interface ConfirmationIdentity {
 
 /** The publication masthead: the logo (if any) beside the name + tagline, over a
  *  hairline rule — the identity up top, before the ask. A confirmation email is a
- *  transactional first-touch (not content with a closing sign-off, like an issue), so
- *  it leads with the identity. Same identity typography as the issue sign-off, table-
+ *  transactional first-touch (not content with a closing sign-off, like a post), so
+ *  it leads with the identity. Same identity typography as the post sign-off, table-
  *  based + inline styles so it survives mail clients. Returns "" when there is neither
  *  a name nor a logo, so the email degrades to plain. */
 function masthead(identity: ConfirmationIdentity): string {

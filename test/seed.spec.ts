@@ -70,7 +70,7 @@ describe("dev seed (Windbreak dataset)", () => {
     const sends = await listSends(env.DB);
     expect(sends.filter((s) => s.status === "sent")).toHaveLength(3);
     expect(sends.filter((s) => s.status === "scheduled")).toHaveLength(1);
-    // The scheduled issue fires in the future — a visible, cancelable window (I6) — and
+    // The scheduled post fires in the future — a visible, cancelable window (I6) — and
     // targets today's list, distinct from the frozen historical audiences below.
     const scheduled = sends.find((s) => s.status === "scheduled")!;
     expect(scheduled.fire_at).toBeGreaterThan(Date.now());
@@ -116,7 +116,7 @@ describe("dev seed (Windbreak dataset)", () => {
       expect(nowMailable.has(r.email)).toBe(false);
     }
 
-    // Unsubscribes trickle in after each issue rather than firing at a few shared
+    // Unsubscribes trickle in after each post rather than firing at a few shared
     // instants: the churn timestamps are dispersed, not batched into three moments.
     const { results: unsubbed } = await env.DB.prepare(
       "SELECT unsubscribed_at FROM subscribers WHERE status = 'unsubscribed'",
@@ -155,7 +155,7 @@ describe("dev seed (Windbreak dataset)", () => {
     expect(after.settings.publication.name).toBe("");
   });
 
-  it("serves a seeded sent issue's frozen render at its archive URL, cover ref intact", async () => {
+  it("serves a seeded sent post's frozen render at its archive URL, cover ref intact", async () => {
     await seedDatabase(env, config());
     const res = await SELF.fetch(`${base}/archive/the-hovering-hunter`);
     expect(res.status).toBe(200);
@@ -166,7 +166,7 @@ describe("dev seed (Windbreak dataset)", () => {
     expect(body).not.toContain("%%UNSUBSCRIBE_URL%%");
   });
 
-  it("keeps drafts and the scheduled issue out of the public archive", async () => {
+  it("keeps drafts and the scheduled post out of the public archive", async () => {
     await seedDatabase(env, config());
     for (const slug of ["the-secret-life-of-robins", "waxwings-and-fieldfares"]) {
       const res = await SELF.fetch(`${base}/archive/${slug}`);

@@ -61,7 +61,7 @@ describe("archive / view-in-browser", () => {
     expect(body).not.toContain(UNSUB_SENTINEL);
     expect(body).toContain("/unsubscribe");
     // The browser-only masthead replaces its inert anchor and links back to the archive
-    // index (same origin as the issue), not the app landing page.
+    // index (same origin as the post), not the app landing page.
     expect(body).not.toContain(ARCHIVE_MASTHEAD_ANCHOR);
     expect(body).toContain('class="k-mast"');
     expect(body).toContain('href="http://localhost:8787/archive"');
@@ -122,7 +122,7 @@ async function publish(subject: string, completedAt: number): Promise<posts.Post
 }
 
 describe("landing page (the public front door, §5)", () => {
-  it("features the latest issue over the recent ones, linking to canonical archive URLs", async () => {
+  it("features the latest post over the recent ones, linking to canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);
     const newer = await publish("The Newer One", 2_000);
 
@@ -132,7 +132,7 @@ describe("landing page (the public front door, §5)", () => {
     const body = await res.text();
 
     // The newest is the feature; the older sits in the recent list. Both link out.
-    expect(body).toContain("Latest issue");
+    expect(body).toContain("Latest post");
     expect(body).toContain("The Newer One");
     expect(body).toContain("The Older One");
     expect(body).toContain(`http://localhost:8787/archive/${newer.slug}`);
@@ -142,7 +142,7 @@ describe("landing page (the public front door, §5)", () => {
   });
 
   it("offers a subscribe call to action and a link into the full archive", async () => {
-    await publish("An Issue", 1_000);
+    await publish("A Post", 1_000);
     const body = await (await SELF.fetch(`${base}/`)).text();
     expect(body).toContain("Subscribe here");
     expect(body).toContain('href="http://localhost:8787/subscribe"');
@@ -151,7 +151,7 @@ describe("landing page (the public front door, §5)", () => {
   });
 
   it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
-    await publish("An Issue", 1_000);
+    await publish("A Post", 1_000);
     const body = await (await SELF.fetch(`${base}/`)).text();
     // The test env is dev-shaped (fake transport, no Access, dev secret set), so the
     // reader surface injects the local-developer editor shortcut. `/dashboard` here
@@ -166,13 +166,13 @@ describe("landing page (the public front door, §5)", () => {
     const res = await SELF.fetch(`${base}/`);
     const body = await res.text();
     expect(res.status).toBe(200);
-    expect(body).toContain("No issues yet");
+    expect(body).toContain("No posts yet");
     expect(body).not.toContain("Just A Draft");
   });
 });
 
 describe("archive index (the full list, §5)", () => {
-  it("lists every sent issue newest-first, linking to their canonical archive URLs", async () => {
+  it("lists every sent post newest-first, linking to their canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);
     const newer = await publish("The Newer One", 2_000);
 
@@ -190,7 +190,7 @@ describe("archive index (the full list, §5)", () => {
   });
 
   it("shows the dev-only dashboard shortcut on a dev-shaped instance (SPEC §5/§10)", async () => {
-    await publish("An Issue", 1_000);
+    await publish("A Post", 1_000);
     const body = await (await SELF.fetch(`${base}/archive`)).text();
     expect(body).toContain('class="r-dev"');
     expect(body).toContain("http://localhost:8787/dashboard/");
@@ -201,17 +201,17 @@ describe("archive index (the full list, §5)", () => {
     const res = await SELF.fetch(`${base}/archive`);
     const body = await res.text();
     expect(res.status).toBe(200);
-    expect(body).toContain("No issues yet.");
+    expect(body).toContain("No posts yet.");
     expect(body).not.toContain("Just A Draft");
   });
 
   it("serves the index at both `/archive` and `/archive/` (optional trailing slash)", async () => {
-    const post = await publish("An Issue", 1_000);
+    const post = await publish("A Post", 1_000);
     for (const path of ["/archive", "/archive/"]) {
       const res = await SELF.fetch(`${base}${path}`);
       expect(res.status).toBe(200);
       const body = await res.text();
-      expect(body).toContain("An Issue");
+      expect(body).toContain("A Post");
       expect(body).toContain(`http://localhost:8787/archive/${post.slug}`);
     }
   });
@@ -253,7 +253,7 @@ describe("reader surface — no admin link once deployed (§10)", () => {
       identity,
       subscribeUrl: "https://app.example/subscribe",
       homeUrl: "https://app.example/",
-      issues: [],
+      posts: [],
     }).text();
     expect(deployed).not.toContain("/dashboard");
     expect(deployed).not.toContain('class="r-dev"');
@@ -279,7 +279,7 @@ describe("reader routes gate the pill on config.devMode (§10)", () => {
   }
 
   it("landing renders the pill only when devMode is true", async () => {
-    await publish("An Issue", 1_000);
+    await publish("A Post", 1_000);
     const on = await (await landing(ctxFor(true))).text();
     const off = await (await landing(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');
@@ -288,7 +288,7 @@ describe("reader routes gate the pill on config.devMode (§10)", () => {
   });
 
   it("archive index renders the pill only when devMode is true", async () => {
-    await publish("An Issue", 1_000);
+    await publish("A Post", 1_000);
     const on = await (await archiveIndex(ctxFor(true))).text();
     const off = await (await archiveIndex(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');

@@ -3,13 +3,13 @@
 Static files used by the local demo seed (`npm run seed`). `scripts/seed.mjs`
 uploads each through the running dev server, which stores it in local R2.
 
-- **`kestrel.<ext>`** — the cover photo for the "The hovering hunter" sample issue.
+- **`kestrel.<ext>`** — the cover photo for the "The hovering hunter" sample post.
   `scripts/seed.mjs` looks for `kestrel.webp`, `.jpg`, `.jpeg`, `.png`, or `.gif`
   (in that order), uploads the first it finds, and the worker records the matching
   `images` row. WebP, PNG, GIF and JPEG all work — browsers render them all. If no
-  `kestrel.*` is present the seed still runs; the issue references the image, so
+  `kestrel.*` is present the seed still runs; the post references the image, so
   dropping the file in and re-running `npm run seed` fills it in — but until then
-  that one image 404s in the rendered issue.
+  that one image 404s in the rendered post.
 - **`windbreak-logo.svg`** — the publication logo for the demo. Uploaded as the
   branding asset; the worker writes it to R2 and records the logo metadata, so the
   reader masthead and dashboard sidebar show it in place of the initial-letter tile.

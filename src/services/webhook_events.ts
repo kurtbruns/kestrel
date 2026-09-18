@@ -43,7 +43,7 @@ export async function applyDeliveryEvents(
     // Prefer the event's own address; fall back to the matched delivery row's
     // address when the event carried only a `provider_id`, so an id-keyed hard
     // bounce or complaint still suppresses (I1) rather than silently slipping
-    // through and letting the address be mailed again next issue.
+    // through and letting the address be mailed again next post.
     const email = e.email ?? matched.email ?? undefined;
     if (email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
       const reason = e.type === "bounced" ? "bounce" : "complaint";

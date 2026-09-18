@@ -47,7 +47,7 @@ export interface SendProgress {
   counts: SendCounts;
   /** Provider hand-off: how far the send loop has gotten. */
   dispatch: {
-    /** Recipients the loop has finished with (accepted, failed, or skipped). */
+    /** Recipients the loop has finished with (accepted, unsent, or skipped). */
     done: number;
     percent: number;
     /** Recipients accepted per minute since the send started (null when not sending). */
@@ -122,7 +122,7 @@ export function buildSendProgress(
     counts.bounced +
     counts.complained +
     counts.skipped +
-    counts.failed;
+    counts.unsent;
   const total = summed > 0 ? summed : send.recipient_count;
 
   const done = Math.max(0, total - counts.pending - counts.in_flight);

@@ -39,7 +39,7 @@ export interface PublicationSettings {
  * from these words — so editing copy can never remove the link that records consent
  * (I1). A blank required field resolves to the built-in default at send time (see
  * `resolveConfirmationEmail`), so the email is never wordless; the reassurance line
- * may be blank, which simply drops it. Transactional, so it does not use the issue
+ * may be blank, which simply drops it. Transactional, so it does not use the post
  * `emailTemplate` and carries no unsubscribe link.
  *
  * There is no layout choice: the email always leads with the publication masthead
@@ -65,7 +65,7 @@ export interface AppSettings {
   /** Publication identity for the reader surface + admin. */
   publication: PublicationSettings;
   /**
-   * The email layout each issue is sent inside — HTML with a `<style>` block and
+   * The email layout each post is sent inside — HTML with a `<style>` block and
    * `{{ variables }}` the render path fills (SPEC §8). "" means "use the built-in
    * default"; the API reflects the resolved template so a client always sees one.
    * Stored as text (no schema), validated for the required variables by the route.

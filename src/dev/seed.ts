@@ -3,17 +3,17 @@
  * as a publication that has been running for a few months — not a thin static snapshot.
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
- * an initial import of already-confirmed subscribers backdated before the first issue,
+ * an initial import of already-confirmed subscribers backdated before the first post,
  * three completed sends spread over time, and — in between — new confirmations (the
  * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
  * complaint that become suppressions. The upshot is that every completed send freezes
- * the audience AS IT WAS at that moment: someone who unsubscribes after issue #2 is
- * still recorded as mailed by issues #1–#2, and a later suppression shadows the current
+ * the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
+ * still recorded as mailed by posts #1–#2, and a later suppression shadows the current
  * audience (confirmed − suppressed = mailable, I1) without rewriting any past send.
  *
  * Two rules it must not break:
- *  - A sent issue's archived HTML is exactly what a real send would produce (I3/I5),
- *    so every issue's frozen bytes come from the SAME `render()` the app uses — never
+ *  - A sent post's archived HTML is exactly what a real send would produce (I3/I5),
+ *    so every post's frozen bytes come from the SAME `render()` the app uses — never
  *    hand-written HTML.
  *  - It is deterministic: names, emails, timestamps and per-recipient outcomes are all
  *    derived from position on the timeline (no `Math.random()`), so a re-seed reproduces
@@ -54,38 +54,38 @@ const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
 const HOUR = 60 * 60 * 1000;
 
-/** The kestrel issue's post id is fixed so the cover image's storage key is stable
+/** The kestrel post's post id is fixed so the cover image's storage key is stable
  *  across re-seeds. The cover filename follows whatever file is supplied (jpg, webp,
  *  png, …); when none is, it falls back to this default and the reference 404s until
  *  a file is dropped in. */
 const KESTREL_POST_ID = "5eed0001-0000-4000-8000-000000000001";
 const DEFAULT_COVER_FILENAME = "kestrel.jpg";
 
-type IssueKind = "sent" | "scheduled" | "draft";
+type SeedPostKind = "sent" | "scheduled" | "draft";
 
-interface Issue {
+interface SeedPost {
   id: string;
   slug: string;
   subject: string;
   markdown: string;
-  kind: IssueKind;
-  /** Sent issues only: which completed send on the timeline this is (0 = oldest).
+  kind: SeedPostKind;
+  /** Sent posts only: which completed send on the timeline this is (0 = oldest).
    *  The send time and the frozen audience both come from that timeline slot. */
   sentIndex?: number;
-  /** Draft issues only: how long ago the draft was last touched. */
+  /** Draft posts only: how long ago the draft was last touched. */
   daysAgo?: number;
   hasCover?: boolean;
 }
 
-// --- the issues -------------------------------------------------------------
+// --- the posts --------------------------------------------------------------
 
-const ISSUES: Issue[] = [
+const SEED_POSTS: SeedPost[] = [
   {
     id: "5eed0004-0000-4000-8000-000000000004",
     slug: "welcome-to-windbreak",
     subject: "Welcome to Windbreak",
     kind: "sent",
-    sentIndex: 0, // the launch issue — the oldest in the archive
+    sentIndex: 0, // the launch post — the oldest in the archive
     markdown: `# Welcome to the hedgerow
 
 Thanks for being here. **Windbreak** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
@@ -203,18 +203,18 @@ TODO:
 // --- the timeline -----------------------------------------------------------
 
 /** Absolute epoch-ms anchors for the seeded lifecycle, all relative to `now` so a
- *  re-seed keeps the same shape and the scheduled issue always fires in the future.
+ *  re-seed keeps the same shape and the scheduled post always fires in the future.
  *
- *  Read as a story from the top: the list is imported, issue #1 goes out, the list
- *  grows and sheds a few readers, issue #2 goes out (and draws a bounce and a
- *  complaint just after), it grows again, then issue #3 goes out. */
+ *  Read as a story from the top: the list is imported, post #1 goes out, the list
+ *  grows and sheds a few readers, post #2 goes out (and draws a bounce and a
+ *  complaint just after), it grows again, then post #3 goes out. */
 interface Timeline {
   now: number;
   importAt: number;
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   scheduledFireAt: number;
-  /** The three completed sends, oldest first — indexed by `Issue.sentIndex`. Each also
+  /** The three completed sends, oldest first — indexed by `SeedPost.sentIndex`. Each also
    *  anchors the churn wave it prompts and bounds the growth cohort confirmed after it: the
    *  gaps between these are where sign-ups and unsubscribes are dispersed. */
   sentAt: [number, number, number];
@@ -232,11 +232,11 @@ export function buildTimeline(now: number): Timeline {
   };
 }
 
-/** When a reader in a churn wave unsubscribes: a spike just after the issue that
+/** When a reader in a churn wave unsubscribes: a spike just after the post that
  *  prompted them, tapering off over the following days. The quadratic step front-loads
  *  the wave (member 0 leaves within hours, later members trickle out over ~1–2 weeks)
  *  while keeping every offset inside the gap before the next send — so the wave stays
- *  attributed to the issue it followed and the frozen per-send audiences don't shift. */
+ *  attributed to the post it followed and the frozen per-send audiences don't shift. */
 function unsubscribedAfter(sentAt: number, indexInWave: number): number {
   return sentAt + 6 * HOUR + indexInWave * indexInWave * 8 * HOUR;
 }
@@ -499,7 +499,7 @@ function mailableAt(subs: SeedSubscriber[], sups: SeedSuppression[], t: number):
 /**
  * Build the whole audience as a lifecycle: an imported core, a continuous stream of later
  * confirmations (the list keeps growing to today), three churn waves that each unsubscribe in
- * the days after an issue lands, a few still-pending sign-ups biased toward the recent past,
+ * the days after a post lands, a few still-pending sign-ups biased toward the recent past,
  * and two suppressions (a bounce and a complaint) drawn from the core so they visibly shadow
  * the current audience. The counts are chosen so the mailable audience genuinely fluctuates
  * from send to send (140 → 147 → 151) and settles at 155 today (157 confirmed − 2 suppressed).
@@ -528,10 +528,10 @@ function buildAudience(t: Timeline): BuiltAudience {
     return email;
   };
 
-  // Initial import: already-confirmed addresses migrated in before issue #1 (a real list
+  // Initial import: already-confirmed addresses migrated in before post #1 (a real list
   // starts as a bulk import, not one opt-in at a time). Three waves of them later churn out
-  // — each wave leaving in the days after the last issue it received, so its members are
-  // still mailed by that issue but not the next; the rest are the core that stays.
+  // — each wave leaving in the days after the last post it received, so its members are
+  // still mailed by that post but not the next; the rest are the core that stays.
   //
   // The churners are scattered THROUGH the import window, not appended after the core, so a
   // subscriber's signup date carries no hint of whether they later leave — the roster reads
@@ -573,7 +573,7 @@ function buildAudience(t: Timeline): BuiltAudience {
   }
 
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
-  // first issue right up to today — the list is still growing, it doesn't stop at the last
+  // first post right up to today — the list is still growing, it doesn't stop at the last
   // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
   // most), and the stream spans all three sends, so every completed send freezes a different,
   // growing slice while the newest confirmations sit near "now".
@@ -596,7 +596,7 @@ function buildAudience(t: Timeline): BuiltAudience {
     make("pending", Math.round(t.now - u * u * u * (14 * DAY)), null, null);
   }
 
-  // Two core subscribers draw a hard bounce and a spam complaint just after issue #2.
+  // Two core subscribers draw a hard bounce and a spam complaint just after post #2.
   // Both stay confirmed (suppression is orthogonal to consent, §7) but are suppressed
   // from then on, so they were mailed by #1 and #2 yet shadowed out of #3 and today.
   const bounceEmail = unwrap(coreEmails[3], "core subscriber");
@@ -621,7 +621,7 @@ function buildAudience(t: Timeline): BuiltAudience {
     string[],
     string[],
   ];
-  // The bounce and complaint were reported just after issue #2, so their delivery events
+  // The bounce and complaint were reported just after post #2, so their delivery events
   // belong to that send alone (see the loop in seedDatabase).
   const sendTwoEvents = new Map<string, DeliveryEvent>([
     [
@@ -650,12 +650,12 @@ export { DEFAULT_SEED, makePrng };
 /** Cohort proportions and low outcome rates for a scaled list, expressed as fractions of
  *  the approximate confirmed-now `size`. Chosen so the scaled dataset keeps the curated
  *  list's story shape — an imported core, two growth cohorts, a churn wave after each
- *  issue, a small pending tail, and a few suppressions — with realistic percentages at
+ *  post, a small pending tail, and a few suppressions — with realistic percentages at
  *  every size (low bounce/complaint/failure rates). */
 const SCALE = {
   growthA: 0.11, // confirmed between #1 and #2
   growthB: 0.09, // confirmed between #2 and #3
-  churn: 0.06, // total unsubscribes, split across three post-issue waves
+  churn: 0.06, // total unsubscribes, split across three waves, one after each post
   pending: 0.012, // small still-unconfirmed backlog — most sign-ups confirm
   bounceRate: 0.004, // hard bounces (drawn from the core) → suppressions
   complaintRate: 0.001, // spam complaints (drawn from the core) → suppressions
@@ -675,8 +675,8 @@ function drawDistinct(rand: () => number, count: number, n: number): number[] {
 }
 
 /** Per-send transport failures as audience indices — about `failureRate` of the frozen
- *  audience, at least one, PRNG-placed so the failures fall on different rows each send. */
-function drawFailedSlots(rand: () => number, audienceLen: number): Set<number> {
+ *  audience, at least one, PRNG-placed so the unsent rows fall on different rows each send. */
+function drawUnsentSlots(rand: () => number, audienceLen: number): Set<number> {
   if (audienceLen === 0) {
     return new Set();
   }
@@ -728,16 +728,16 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     return email;
   };
 
-  // A churn member leaves at a PRNG-dispersed moment after its issue but before the next
-  // send, front-loaded (r² pushes most leaves soon after the issue) — so it's still mailed
-  // by the issue it followed, and the frozen per-send audiences stay clean.
+  // A churn member leaves at a PRNG-dispersed moment after its post but before the next
+  // send, front-loaded (r² pushes most leaves soon after the post) — so it's still mailed
+  // by the post it followed, and the frozen per-send audiences stay clean.
   const churnAt = (sentAt: number, nextAt: number): number => {
     const window = Math.max(HOUR, nextAt - sentAt - 12 * HOUR);
     const r = rand();
     return Math.round(sentAt + 6 * HOUR + r * r * window);
   };
 
-  // Import: a core that stays plus three churn waves that each leave after an issue (wave 0
+  // Import: a core that stays plus three churn waves that each leave after a post (wave 0
   // after #1, 1 after #2, 2 after #3) — imported already-confirmed, like a real bulk
   // migration, and dispersed over the ~10 days before send #1. The churners are drawn at
   // RANDOM positions across the whole cohort (not appended after the core), so a subscriber's
@@ -771,7 +771,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   }
 
   // Organic growth: one continuous stream of confirmed sign-ups from just after the first
-  // issue right up to today (the list is still growing, not frozen at the last historical
+  // post right up to today (the list is still growing, not frozen at the last historical
   // send), PRNG-dispersed so it reads as steady week-over-week growth. Each confirms shortly
   // after signing up. `growthA`/`growthB` only size the stream (and the core above); the two
   // are now one rolling cohort, so the newest confirmations sit near "now".
@@ -870,18 +870,18 @@ interface DeliveryEvent {
  * Synthesize the per-recipient delivery record for one completed send. The audience is
  * the list frozen at send time, so the row count and `recipient_count` are that moment's
  * numbers, not today's. Most recipients are accepted and later marked delivered; the
- * recipients at `failedSlots` (audience indices the caller picks — fixed for the curated
- * demo, drawn from the seeded PRNG for a scaled list) fail at the transport level (a
- * send-loop failure, which does NOT itself suppress — only the webhook events below do);
- * and the addresses in `events` carry the bounce/complaint that produced this send's
- * suppressions.
+ * recipients at `unsentSlots` (audience indices the caller picks — fixed for the curated
+ * demo, drawn from the seeded PRNG for a scaled list) are left unsent at the transport
+ * level (a send-loop failure, which does NOT itself suppress — only the webhook events
+ * below do); and the addresses in `events` carry the bounce/complaint that produced this
+ * send's suppressions.
  */
 function buildDeliveries(
   sendId: string,
   audience: string[],
   sentAt: number,
   events: Map<string, DeliveryEvent>,
-  failedSlots: Set<number>,
+  unsentSlots: Set<number>,
 ): SeedDelivery[] {
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
@@ -905,10 +905,10 @@ function buildDeliveries(
       const bounce_kind = ev.event === "bounced" ? "hard" : null;
       return { ...base, event: ev.event, event_detail: ev.detail, event_at: ev.at, bounce_kind };
     }
-    if (failedSlots.has(i)) {
+    if (unsentSlots.has(i)) {
       return {
         ...base,
-        status: "failed",
+        status: "unsent",
         provider_id: null,
         error: "SMTP 550 mailbox unavailable",
         attempts: 5,
@@ -923,24 +923,25 @@ function buildDeliveries(
 // --- render helpers ---------------------------------------------------------
 
 function renderInputFor(
-  issue: Issue,
+  seedPost: SeedPost,
   at: number,
   markdown: string,
 ): { post: PostRow; revision: RevisionRow } {
   const post: PostRow = {
-    id: issue.id,
-    slug: issue.slug,
-    subject: issue.subject,
-    status: issue.kind === "draft" ? "draft" : issue.kind === "scheduled" ? "scheduled" : "sent",
-    current_revision: `${issue.id}-rev`,
+    id: seedPost.id,
+    slug: seedPost.slug,
+    subject: seedPost.subject,
+    status:
+      seedPost.kind === "draft" ? "draft" : seedPost.kind === "scheduled" ? "scheduled" : "sent",
+    current_revision: `${seedPost.id}-rev`,
     created_at: at,
     updated_at: at,
   };
   const revision: RevisionRow = {
-    id: `${issue.id}-rev`,
-    post_id: issue.id,
+    id: `${seedPost.id}-rev`,
+    post_id: seedPost.id,
     markdown,
-    metadata: JSON.stringify({ subject: issue.subject, slug: issue.slug }),
+    metadata: JSON.stringify({ subject: seedPost.subject, slug: seedPost.slug }),
     author: "seed",
     created_at: at,
   };
@@ -961,9 +962,9 @@ export interface SeedSummary {
 
 /**
  * Reset the database and load the Windbreak demo dataset. `kestrelFile` and
- * `logoFile`, when provided, are written to R2 (the issue cover, and the publication
+ * `logoFile`, when provided, are written to R2 (the post cover, and the publication
  * logo) — both are supplied by `scripts/seed.mjs` from `scripts/seed-assets/`, so
- * the seed carries no bundled bytes. The cover is referenced by the issue either
+ * the seed carries no bundled bytes. The cover is referenced by the post either
  * way (dropping the file in and re-seeding fills it), so it 404s until present; the
  * logo just falls back to the initial-letter tile when absent.
  */
@@ -980,7 +981,7 @@ export async function seedDatabase(
 
   await resetAll(db);
 
-  // Give the demo a real identity so the reader surface, subscribe form, and issue
+  // Give the demo a real identity so the reader surface, subscribe form, and post
   // pages are branded out of the box as the mock publication, "Windbreak". The default
   // test recipients are the publisher's own proofing inboxes (they bypass the
   // subscribe/consent flow, §7), so "Send test email" pre-fills them out of the box and
@@ -1023,7 +1024,7 @@ export async function seedDatabase(
   const audience = await audienceEmails(db); // the authoritative confirmed-minus-suppressed list
 
   // Cover image: use the supplied file's own name (so a .webp stays a .webp), write
-  // the bytes if given, and record the row either way so the rendered issue resolves
+  // the bytes if given, and record the row either way so the rendered post resolves
   // the reference. R2 serves back whatever content type we store — browsers render
   // webp, png, gif and jpeg alike, so any of them works for the cover.
   const coverFilename = kestrelFile?.filename || DEFAULT_COVER_FILENAME;
@@ -1060,29 +1061,29 @@ export async function seedDatabase(
   // publication's branding (identity + default template) resolved above.
   const branding = resolveBranding(await getSettings(db), config);
 
-  for (const issue of ISSUES) {
-    const images = issue.hasCover ? coverImages : [];
+  for (const seedPost of SEED_POSTS) {
+    const images = seedPost.hasCover ? coverImages : [];
     // Point the cover reference at the actual cover filename (e.g. kestrel.webp).
-    const markdown = issue.hasCover
-      ? issue.markdown.replace("kestrel.jpg", coverFilename)
-      : issue.markdown;
+    const markdown = seedPost.hasCover
+      ? seedPost.markdown.replace("kestrel.jpg", coverFilename)
+      : seedPost.markdown;
 
-    if (issue.kind === "draft") {
-      const at = now - (issue.daysAgo ?? 2) * DAY;
-      const { post, revision } = renderInputFor(issue, at, markdown);
+    if (seedPost.kind === "draft") {
+      const at = now - (seedPost.daysAgo ?? 2) * DAY;
+      const { post, revision } = renderInputFor(seedPost, at, markdown);
       await insertPost(db, post, revision);
       counts.draft++;
       continue;
     }
 
-    if (issue.kind === "scheduled") {
+    if (seedPost.kind === "scheduled") {
       const at = now;
-      const { post, revision } = renderInputFor(issue, at, markdown);
+      const { post, revision } = renderInputFor(seedPost, at, markdown);
       const result = await render({ post, revision, images }, config, branding);
       await insertPost(db, post, revision);
       await insertSend(db, {
         id: newId(),
-        post_id: issue.id,
+        post_id: seedPost.id,
         status: "scheduled",
         fire_at: timeline.scheduledFireAt,
         rendered_html: result.html,
@@ -1099,21 +1100,21 @@ export async function seedDatabase(
 
     // sent — its send time and frozen audience come from its timeline slot, so the
     // recipient count and delivery rows reflect the list AS IT WAS then (not today).
-    const sentIndex = issue.sentIndex ?? 0;
+    const sentIndex = seedPost.sentIndex ?? 0;
     const completedAt = unwrap(timeline.sentAt[sentIndex], "send timeline slot");
     const sentAudience = unwrap(built.sentAudiences[sentIndex], "frozen send audience");
     const fireAt = completedAt - 30 * 1000; // fired, then completed half a minute later
     const scheduledAt = fireAt - DAY; // scheduled a day ahead of the send
-    const { post, revision } = renderInputFor(issue, completedAt, markdown);
+    const { post, revision } = renderInputFor(seedPost, completedAt, markdown);
     const result = await render({ post, revision, images }, config, branding);
     await insertPost(db, post, revision);
-    if (issue.hasCover) {
+    if (seedPost.hasCover) {
       await insertImage(db, coverRow);
     }
     const sendId = newId();
     await insertSend(db, {
       id: sendId,
-      post_id: issue.id,
+      post_id: seedPost.id,
       status: "sent",
       fire_at: fireAt,
       rendered_html: result.html,
@@ -1124,21 +1125,21 @@ export async function seedDatabase(
       started_at: fireAt,
       completed_at: completedAt,
     });
-    // The bounce and the complaint were reported just after issue #2, so their events
+    // The bounce and the complaint were reported just after post #2, so their events
     // (and the suppressions they produced) belong to that send alone.
     const events: Map<string, DeliveryEvent> = sentIndex === 1 ? built.sendTwoEvents : new Map();
     // Transport failures: the curated list's two fixed slots, or a PRNG-drawn set scaled
     // to the frozen audience when a size was requested.
-    const failedSlots =
-      size != null ? drawFailedSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
-    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, failedSlots);
+    const unsentSlots =
+      size != null ? drawUnsentSlots(rand, sentAudience.length) : new Set<number>([7, 53]);
+    const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, unsentSlots);
     await insertDeliveries(db, deliveries);
     // The seed writes delivery rows directly (fixture data the normal path never
     // produces), so bring the denormalized counters (migration 0006) in line with them.
     await recomputeSendCounters(db, sendId);
     counts.sent++;
     counts.deliveries += deliveries.length;
-    archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${issue.slug}`);
+    archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${seedPost.slug}`);
   }
 
   const bucket = (status: SeedSubscriber["status"]) =>

@@ -199,7 +199,7 @@ describe("posts + revisions", () => {
   // A draft that was scheduled then canceled still has the canceled send (and any
   // deliveries) referencing it; deleting the post must cascade to them, not fault
   // on the FK. Scheduling only leaves a draft behind by way of cancel, so the
-  // send here is always a canceled one — a sent issue's record can't reach delete.
+  // send here is always a canceled one — a sent post's record can't reach delete.
   it("deletes a draft that had a canceled send, cascading its sends + deliveries", async () => {
     const created = await readJson(
       await createPost({ subject: "Was Scheduled", markdown: "body" }),

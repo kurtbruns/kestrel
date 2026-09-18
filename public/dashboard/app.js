@@ -317,7 +317,7 @@ function archiveUrlFor(deployment, slug) {
 // reflection the sidebar and Settings already consume (appConfig.deployment), fetched
 // once at boot. Dev-only by construction: deployed environments require SES/Resend, so
 // this is structurally absent in production. The user-facing copy avoids the internal
-// "fake transport" term (see docs/DESIGN.md §2); a later issue will make this notice
+// "fake transport" term (see docs/DESIGN.md §2); a later change will make this notice
 // environment-aware and link to the setup docs.
 function noEmailProvider() {
   return (appConfig?.deployment?.provider || "") === "fake";
@@ -826,8 +826,8 @@ function listQuery(state) {
   if (state.suppressed) {
     p.set("suppressed", state.suppressed);
   }
-  if (state.issues) {
-    p.set("issues", state.issues);
+  if (state.failures) {
+    p.set("failures", state.failures);
   }
   const term = (state.search || "").trim();
   if (term) {
@@ -849,11 +849,11 @@ function listQuery(state) {
 // status), never an option inside the status dropdown.
 // `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
 // filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
-// two draft-side statuses rather than reaching sent issues. Omit `cfg.statuses` for a
+// two draft-side statuses rather than reaching sent posts. Omit `cfg.statuses` for a
 // search-only toolbar (the Sent list is single-status, so it carries no status filter).
-// `cfg.issues` adds the Sent list's "With delivery issues" flag — a filter, not a sort: it keeps
+// `cfg.failures` adds the Sent list's "With delivery failures" flag — a filter, not a sort: it keeps
 // the newest-first order the operator scans by and needs no severity weighting (a summed
-// sort would rank 25 retried failures above one spam complaint).
+// sort would rank 25 retried unsent recipients above one spam complaint).
 function listToolbar(cfg) {
   const statusSel = cfg.statuses?.length
     ? `<select class="lt-status" aria-label="Filter by status">${[
@@ -865,12 +865,12 @@ function listToolbar(cfg) {
   const suppressed = cfg.suppressible
     ? '<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>'
     : "";
-  const issues = cfg.issues
-    ? '<label class="lt-toggle"><input type="checkbox" class="lt-issues"><span>With delivery issues</span></label>'
+  const failures = cfg.failures
+    ? '<label class="lt-toggle"><input type="checkbox" class="lt-failures"><span>With delivery failures</span></label>'
     : "";
   return `<div class="list-toolbar">
     <input class="lt-search" type="search" placeholder="${esc(cfg.searchPlaceholder || "Search…")}" aria-label="Search" autocomplete="off">
-    <div class="lt-filters">${statusSel}${suppressed}${issues}</div>
+    <div class="lt-filters">${statusSel}${suppressed}${failures}</div>
   </div>`;
 }
 
@@ -881,7 +881,7 @@ function wireToolbar(root, state, reload) {
   const search = root.querySelector(".lt-search");
   const status = root.querySelector(".lt-status");
   const suppressed = root.querySelector(".lt-suppressed");
-  const issues = root.querySelector(".lt-issues");
+  const failures = root.querySelector(".lt-failures");
   if (search) {
     search.value = state.search || "";
     let t = null;
@@ -910,10 +910,10 @@ function wireToolbar(root, state, reload) {
       reload();
     };
   }
-  if (issues) {
-    issues.checked = state.issues === "only";
-    issues.onchange = () => {
-      state.issues = issues.checked ? "only" : "";
+  if (failures) {
+    failures.checked = state.failures === "only";
+    failures.onchange = () => {
+      state.failures = failures.checked ? "only" : "";
       state.offset = 0;
       reload();
     };
@@ -982,7 +982,7 @@ function renderPager(el, state, page, reload) {
 }
 
 // ---- drafts list (draft + scheduled) ----
-// The writing side (#147): draft + scheduled only — a sent issue is a frozen record and
+// The writing side (#147): draft + scheduled only — a sent post is a frozen record and
 // lives in Sent. "All statuses" is scoped to those two, so it never reaches sent.
 const DRAFT_STATUSES = [
   { value: "draft", label: "Draft" },
@@ -1123,7 +1123,7 @@ async function renderEditor(id) {
     post = data.post;
     markdown = data.markdown;
     scheduled = data.scheduled;
-    // A sent issue is a frozen record, not editable (#147/#148): it opens the sent
+    // A sent post is a frozen record, not editable (#147/#148): it opens the sent
     // record view, never the editor. Redirect a stale #/edit link (or a post sent in
     // another tab / by Claude) there instead of a locked editor.
     if (post.status === "sent") {
@@ -1175,7 +1175,7 @@ async function renderEditor(id) {
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
-            ${infoTip("The web address of this issue's archive page.")}
+            ${infoTip("The web address of this post's archive page.")}
           </div>
           <input id="f-slug" value="${esc(post.slug)}" ${dis}>
           ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
@@ -1193,7 +1193,7 @@ async function renderEditor(id) {
         </div>
         <div class="composer-body" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor" placeholder="Type your issue in Markdown…" ${dis}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${dis}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
         <div class="composer-foot" id="dropFoot" ${locked ? "hidden" : ""}>${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>
@@ -1899,7 +1899,7 @@ async function renderEditor(id) {
       const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
       const scheduleView =
-        `<h3 id="schHead">Schedule this issue</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
+        `<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
         `<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>` +
         `<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
@@ -2009,17 +2009,17 @@ function isWedged(s) {
 }
 
 // The one manual step for a wedged send: decide whether the ambiguous batch went out
-// or not. Both outcomes are safe for I4 — neither re-mails this issue — so the modal
+// or not. Both outcomes are safe for I4 — neither re-mails this post — so the modal
 // explains the trade-off (record accuracy) rather than warning of a double-send.
 function openResolveModal(send, reload) {
   const n = send.c_in_flight || 0;
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
     `<h3>Resolve ${n} ambiguous ${noun}</h3>` +
-      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this issue.</p>` +
-      `<p class="hint"><strong>Assume not sent</strong> — recorded as failed; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next issue.</p>` +
+      `<p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this post.</p>` +
+      `<p class="hint"><strong>Assume not sent</strong> — recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>` +
       `<p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>` +
-      `<div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rFailed">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
+      `<div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rUnsent">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
   );
   m.el.querySelector("#rCancel").onclick = m.close;
   const doResolve = (btn, resolution, verb) =>
@@ -2036,7 +2036,7 @@ function openResolveModal(send, reload) {
         toast(e.message);
       }
     });
-  m.el.querySelector("#rFailed").onclick = (e) => doResolve(e.target, "failed", "not sent");
+  m.el.querySelector("#rUnsent").onclick = (e) => doResolve(e.target, "unsent", "not sent");
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
@@ -2050,7 +2050,7 @@ function openRescheduleModal(sendId, currentFireAt, onDone) {
   const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
   const cur = toLocalInput(new Date(currentFireAt));
   const m = modal(
-    `<h3 id="rsHead">Reschedule this issue</h3>` +
+    `<h3 id="rsHead">Reschedule this post</h3>` +
       `<p class="hint">Move when it sends (at least 5 minutes out). The content stays frozen and the cancelable window is kept — only the time changes.</p>` +
       `<label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">` +
       `<div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
@@ -2093,7 +2093,7 @@ function listRowCounts(s) {
     (s.c_bounced || 0) +
     (s.c_complained || 0) +
     (s.c_skipped || 0) +
-    (s.c_failed || 0);
+    (s.c_unsent || 0);
   const t = total > 0 ? total : s.recipient_count || 0;
   const done =
     (s.c_accepted || 0) + (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
@@ -2115,11 +2115,11 @@ function listRowCounts(s) {
 // TRUE delivered — webhook-confirmed `c_delivered`, not provider-`accepted` — so the Sent
 // list and dashboard recent-sends agree with the record view's "Delivered" for the same
 // send, and a bounced/complained recipient is never miscounted as delivered. Any bounce /
-// complaint / send-time-failure shows as a muted delivery-issue note, so a bad send reads
+// complaint / unsent shows as a muted delivery-failure note, so a bad send reads
 // as one at a glance instead of a clean number. The note sits on its own line beneath
 // the count (`.delivered-note`), not inline: the Sent table's columns are fixed-width,
 // and a three-bucket note inline would wrap the numeric column four lines deep. The
-// kinds read worst first (complained, bounced, failed), as plain muted text — no
+// kinds read worst first (complained, bounced, unsent), as plain muted text — no
 // swatches; the record view's tiles carry the colors. A clean send prints nothing
 // (never "0 bounced"). `deliveries` stays the source of truth.
 function deliveredCell(s) {
@@ -2131,8 +2131,8 @@ function deliveredCell(s) {
   if (s.c_bounced) {
     kinds.push(`${s.c_bounced.toLocaleString()} bounced`);
   }
-  if (s.c_failed) {
-    kinds.push(`${s.c_failed.toLocaleString()} failed`);
+  if (s.c_unsent) {
+    kinds.push(`${s.c_unsent.toLocaleString()} unsent`);
   }
   // Each kind is one unbreakable unit, so a wrap lands between kinds, never inside one.
   const note = kinds.length
@@ -2166,7 +2166,7 @@ async function renderSent() {
   const state = {
     status: "sent",
     search: "",
-    issues: "",
+    failures: "",
     sort: "fire",
     dir: "desc",
     offset: 0,
@@ -2177,8 +2177,8 @@ async function renderSent() {
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>
-    <h2>Sent issues</h2>
-    ${listToolbar({ searchPlaceholder: "Search subject…", issues: true })}
+    <h2>Sent posts</h2>
+    ${listToolbar({ searchPlaceholder: "Search subject…", failures: true })}
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`;
   const stuckEl = document.getElementById("stuck");
@@ -2199,7 +2199,7 @@ async function renderSent() {
   // in-progress active rows (#154) — so one fetch renders both. Tracking the set's
   // signature lets us tell a real transition (a send fired or finished) from a mere bar
   // advance: on a transition we also refresh the scheduled queue (it lost this send) and
-  // the sent list (it gained it), so a fired issue leaves the scheduled slot and lands in
+  // the sent list (it gained it), so a fired post leaves the scheduled slot and lands in
   // the records without a manual reload. Polled every 3s (matching the watch + dashboard).
   let sentActiveSig = "";
   function renderActive(sends) {
@@ -2283,7 +2283,7 @@ async function renderSent() {
           };
         }
       }
-      // The whole card opens the issue; the subject link handles keyboard/middle-click,
+      // The whole card opens the post; the subject link handles keyboard/middle-click,
       // and the schedule-management buttons (Reschedule, Cancel) opt out of navigation
       // (like the posts table's row-click guard).
       schedEl.querySelectorAll(".card.clickable").forEach((card) => {
@@ -2316,7 +2316,7 @@ async function renderSent() {
     }
   }
 
-  // The frozen Sent records — every completed issue, each opening its read-only record
+  // The frozen Sent records — every completed post, each opening its read-only record
   // view (#148). Sent-only, so no status column; the "When" is the send's completion.
   async function loadList() {
     try {
@@ -2325,10 +2325,10 @@ async function renderSent() {
       if (!sends.length) {
         listEl.innerHTML = `<p class="muted">${
           state.search
-            ? "No sent issues match."
-            : state.issues
-              ? "Every sent issue delivered cleanly."
-              : "No sent issues yet."
+            ? "No sent posts match."
+            : state.failures
+              ? "Every sent post delivered cleanly."
+              : "No sent posts yet."
         }</p>`;
         pagerEl.innerHTML = "";
         return;
@@ -2378,9 +2378,9 @@ async function renderSent() {
 }
 
 // ---- sent record view (#148) + live in-flight watch (#154) ----
-// A sent issue is a frozen record (I3), not an editable object, so it opens this instead
+// A sent post is a frozen record (I3), not an editable object, so it opens this instead
 // of a locked editor: how the send went over the frozen audience, with a link to the
-// archived issue. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
+// archived post. A send still IN FLIGHT opens the live watch — two bars (dispatch, and
 // the lagging delivery), a derived phase, a counts grid, throughput, and a provider-
 // health strip — polling /progress until dispatch completes, after which the record keeps
 // absorbing delivery receipts as they settle (SPEC §6/§8/§11).
@@ -2483,7 +2483,7 @@ const WATCH_COUNTS = [
   { key: "delivered", label: "Delivered", sw: "ok" },
   { key: "bounced", label: "Bounced", sw: "warn" },
   { key: "complained", label: "Complained", sw: "danger" },
-  { key: "failed", label: "Failed", sw: "neutral" },
+  { key: "unsent", label: "Unsent", sw: "neutral" },
   { key: "skipped", label: "Skipped", sw: "neutral" },
 ];
 function watchCountsHtml(counts) {
@@ -2504,7 +2504,7 @@ function watchBodyHtml(prog) {
           rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
         }`
       : "Dispatch complete.";
-  const issueCount = (c.failed || 0) + (c.bounced || 0) + (c.complained || 0);
+  const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
     ? "No email provider configured — nothing is delivered"
     : `Provider: ${esc(prog.provider?.name || "—")}`;
@@ -2520,10 +2520,10 @@ function watchBodyHtml(prog) {
       )}
     </div>
     ${watchCountsHtml(c)}
-    <div class="whealth${issueCount ? " has-issues" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
-      issueCount
-        ? `${issueCount.toLocaleString()} bounced / failed / complained`
-        : "no delivery issues"
+    <div class="whealth${failureCount ? " has-failures" : ""}"><span class="whealth-dot"></span><span>${providerText} · ${
+      failureCount
+        ? `${failureCount.toLocaleString()} bounced / unsent / complained`
+        : "no delivery failures"
     }</span></div>`;
 }
 function watchMetaHtml(send, prog) {
@@ -2632,7 +2632,7 @@ function outcomeTilesHtml(outcomes) {
     { n: outcomes.delivered, label: "Delivered", cls: "ok", sw: "ok" },
     { n: outcomes.bounced, label: "Bounced", cls: "warn", sw: "warn" },
     { n: outcomes.complained, label: "Complained", cls: "danger", sw: "danger" },
-    { n: outcomes.failed, label: "Failed", cls: "", sw: "neutral" },
+    { n: outcomes.unsent, label: "Unsent", cls: "", sw: "neutral" },
   ];
   return tiles
     .map(
@@ -2651,8 +2651,8 @@ function outcomeReconHtml(outcomes) {
   if (outcomes.complained) {
     parts.push(`${outcomes.complained.toLocaleString()} complained`);
   }
-  if (outcomes.failed) {
-    parts.push(`${outcomes.failed.toLocaleString()} failed`);
+  if (outcomes.unsent) {
+    parts.push(`${outcomes.unsent.toLocaleString()} unsent`);
   }
   if (residual) {
     parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
@@ -2692,8 +2692,8 @@ function deliveryOutcome(r) {
     return { label: "Complained", sw: "danger", hint: "suppressed" };
   }
   switch (r.status) {
-    case "failed":
-      return { label: "Failed", sw: "neutral" };
+    case "unsent":
+      return { label: "Unsent", sw: "neutral" };
     case "skipped":
       return { label: "Skipped", sw: "neutral" };
     case "accepted":
@@ -2703,20 +2703,20 @@ function deliveryOutcome(r) {
   }
 }
 
-// The three view tabs the record opens on — issues first (the rows that went wrong).
+// The three view tabs the record opens on — failures first (the rows that went wrong).
 const DELIVERY_VIEWS = [
-  { v: "issues", label: "Issues" },
+  { v: "failures", label: "Failures" },
   { v: "delivered", label: "Delivered" },
   { v: "all", label: "All" },
 ];
 
-// A positive/neutral empty state per view — an empty "issues" list is good news, not a gap.
+// A positive/neutral empty state per view — an empty "failures" list is good news, not a gap.
 function deliveryEmpty(dstate) {
   if (dstate.search) {
     return "No recipients match that address.";
   }
-  if (dstate.view === "issues") {
-    return "No delivery issues — every recipient was accepted or delivered.";
+  if (dstate.view === "failures") {
+    return "No delivery failures — every recipient was accepted or delivered.";
   }
   if (dstate.view === "delivered") {
     return "No delivery receipts confirmed yet.";
@@ -2771,14 +2771,14 @@ function renderFrozenRecord(id, data) {
   app.innerHTML = `
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
-      ${published && archive_url ? `<button type="button" class="primary" id="viewPublished">View published issue&nbsp;↗</button>` : ""}
+      ${published && archive_url ? `<button type="button" class="primary" id="viewPublished">View published post&nbsp;↗</button>` : ""}
     </div>
     <div class="card rec-card">
       <div class="rec-head">
         <h1>${esc(send.subject) || "<em>untitled</em>"}</h1>
         <div class="rec-meta">Sent ${esc(fmt(sentAt))} · ${total.toLocaleString()} recipients</div>
       </div>
-      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published issue are fixed as sent.</p>
+      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published post are fixed as sent.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
@@ -2798,7 +2798,7 @@ function renderFrozenRecord(id, data) {
         <div id="recRows" class="muted">Loading…</div>
         <div id="recPager"></div>
       </div>
-      <p class="rec-note muted">This is the record of what went out — the published issue is the exact frozen copy readers received, and nothing here is editable.</p>
+      <p class="rec-note muted">This is the record of what went out — the published post is the exact frozen copy readers received, and nothing here is editable.</p>
     </div>`;
 
   const viewBtn = document.getElementById("viewPublished");
@@ -2807,10 +2807,10 @@ function renderFrozenRecord(id, data) {
   }
 
   // The per-recipient record, its own paged/filtered state (independent of the tiles).
-  // Default view is "issues" so the rows that went wrong lead; default sort mirrors the
+  // Default view is "failures" so the rows that went wrong lead; default sort mirrors the
   // CSV (email asc). The tiles above stay the live summary as receipts settle; this list
   // reloads on interaction (a view/search/sort/page change, or re-clicking the view).
-  const dstate = { view: "issues", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
+  const dstate = { view: "failures", search: "", sort: "email", dir: "asc", offset: 0, limit: 50 };
   const rowsEl = document.getElementById("recRows");
   const recPagerEl = document.getElementById("recPager");
   const loadDeliveries = async () => {
@@ -3031,7 +3031,7 @@ function renderSubTable(listEl, rows, state, reload) {
 // Add subscriber → the normal double opt-in (never an auto-confirm).
 function addSubscriberModal(onDone) {
   const m = modal(
-    `<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive issues until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
+    `<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
   );
   const input = m.el.querySelector("#addEmail");
   input.focus();
@@ -3083,7 +3083,7 @@ const SET_ICON = {
 };
 
 // ---- settings: email template (mock) ----
-// The one layout each issue ships inside, authored as an HTML template with
+// The one layout each post ships inside, authored as an HTML template with
 // logic-less {{ }} placeholders over a fixed variable context. Logic-less means a
 // token is only ever swapped for its value — nothing executes — which is why this
 // is a template editor, not a WYSIWYG. This pass is a MOCK: edits repaint the
@@ -3098,9 +3098,9 @@ const EMAIL_TEMPLATE_VARS = [
     vars: [
       {
         token: "{{ post.body }}",
-        desc: "Your issue's Markdown, rendered to HTML — the body slot.",
+        desc: "Your post's Markdown, rendered to HTML — the body slot.",
       },
-      { token: "{{ post.subject }}", desc: "The issue's subject line." },
+      { token: "{{ post.subject }}", desc: "The post's subject line." },
     ],
   },
   {
@@ -3120,7 +3120,7 @@ const EMAIL_TEMPLATE_VARS = [
     vars: [
       { token: "{{ email.sentTo }}", desc: "The recipient's address (filled per send)." },
       { token: "{{ email.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived issue's permanent URL." },
+      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived post's permanent URL." },
     ],
   },
 ];
@@ -3400,7 +3400,7 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 };
 
 // Sample post body for the preview — representative prose inside a called-out slot,
-// so it's unmistakable where a real issue's rendered Markdown lands. Its typography
+// so it's unmistakable where a real post's rendered Markdown lands. Its typography
 // comes from the template's own .email rules (the callout frame + label are a
 // preview device, not part of the email). In a real send {{ post.body }} is the
 // rendered Markdown.
@@ -3517,7 +3517,7 @@ function templateVarsHtml() {
 }
 
 /**
- * The Email template page (top-level "Template" nav item). The one layout each issue
+ * The Email template page (top-level "Template" nav item). The one layout each post
  * is sent inside: a live sample-email preview over an HTML editor (with starter
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
@@ -3697,7 +3697,7 @@ async function renderTemplate() {
       <div class="set-email-stage" id="tplStage">
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the issue sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the post sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -3803,7 +3803,7 @@ async function renderTemplate() {
     tplTestLbl.textContent = isDirty() ? "Save & send test" : "Send test email";
     tplTestEl.title = isDirty()
       ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
-      : "Sends a sample issue through the saved template so you can see it in a real inbox.";
+      : "Sends a sample post through the saved template so you can see it in a real inbox.";
   }
   // Advisory warnings for the template that was just saved; blocking errors go to the
   // save bar instead (bar.showError), so the bar owns the blocking state and this owns
@@ -3949,14 +3949,14 @@ async function renderTemplate() {
   };
 
   // --- send a test of the saved template (edit → test → iterate) ---
-  // A test renders a sample issue through the SAVED template — what will actually
+  // A test renders a sample post through the SAVED template — what will actually
   // ship (I5). So if the editor is dirty we save first (a "Save & send test" flow);
   // a rejected save (e.g. missing unsubscribe) stops the send, honestly. We never
   // render unsaved editor content, which would test something that won't ship.
   tplTestEl.onclick = () => {
     const dirty = isDirty();
     const m = modal(
-      `<h3>Send a test email</h3><p class="hint">Delivers a sample issue rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
+      `<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
         dirty
           ? `<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
           : ""
@@ -4020,7 +4020,7 @@ async function renderTemplate() {
 }
 
 async function renderSettings() {
-  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each issue is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
   const body = document.getElementById("settingsBody");
   let data;
   try {
@@ -4171,7 +4171,7 @@ async function renderSettings() {
           <div class="set-inbox-avatar">${esc(monogram(fromName))}</div>
           <div class="set-inbox-body">
             <div class="set-inbox-top"><span class="set-inbox-from">${esc(fromName)}</span><span class="set-inbox-time">9:02 AM</span></div>
-            <div class="set-inbox-subj">Your latest issue — a sample subject line</div>
+            <div class="set-inbox-subj">Your latest post — a sample subject line</div>
             <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
             <div class="set-inbox-addr">${esc(bareAddress(d.fromAddress))}</div>
           </div>
@@ -4189,7 +4189,7 @@ async function renderSettings() {
       ${secHead("Default test recipients", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-recip">
-          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof an issue against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
+          <p class="field-hint" style="margin:0">Pre-filled into <strong>Send test email</strong> so you can proof a post against your own inboxes before scheduling. These are your addresses, and they don’t go through the subscribe/consent flow.</p>
           <div class="set-chips" id="recipChips"></div>
           <div class="set-recip-add">
             <input type="email" id="recipInput" placeholder="you@example.com" autocomplete="off">
@@ -5019,17 +5019,17 @@ const BOUNCE_SPIKE_MIN = 3;
 // loud only when something needs attention. Derived from GET /sends.
 function computeHealth(sends) {
   const now = Date.now();
-  const issues = [];
+  const alerts = [];
   const failed = sends.filter((s) => s.status === "failed");
   if (failed.length) {
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
     });
   }
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
   if (missed.length) {
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${missed.length} scheduled send${missed.length === 1 ? "" : "s"} passed the fire time without going out.`,
     });
@@ -5041,7 +5041,7 @@ function computeHealth(sends) {
   const wedged = sending.filter(isWedged);
   if (wedged.length) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
-    issues.push({
+    alerts.push({
       level: "red",
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
     });
@@ -5052,7 +5052,7 @@ function computeHealth(sends) {
   const active = sending.filter((s) => !isWedged(s));
   const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
-    issues.push({
+    alerts.push({
       level: "amber",
       text: "A send has been in progress over 10 minutes — it may be retrying.",
     });
@@ -5060,7 +5060,7 @@ function computeHealth(sends) {
   // Bounce spike (SPEC §8 "is anything wrong", §11): a recent send whose real bounce rate
   // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
   // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
-  // send-time-`failed` proxy, which couldn't see asynchronous bounce events at all. The
+  // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
   // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
   // from tripping it. Read-only reporting — it never throttles or halts a send (§11 leaves
   // an automatic deliverability circuit-breaker deferred).
@@ -5077,12 +5077,12 @@ function computeHealth(sends) {
     });
   if (spiky) {
     const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
-    issues.push({
+    alerts.push({
       level: "amber",
       text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
     });
   }
-  return issues;
+  return alerts;
 }
 
 async function renderDashboard() {
@@ -5116,7 +5116,7 @@ async function renderDashboard() {
     root.innerHTML =
       `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
         pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
-      }<p class="muted">Let's get your first issue out the door.</p></div></div>` +
+      }<p class="muted">Let's get your first post out the door.</p></div></div>` +
       setupChecklistHtml(pub, deployment) +
       `<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`;
     wireDashActions(root, renderDashboard);
@@ -5235,7 +5235,7 @@ async function renderDashboard() {
     </div>`;
 
   wireDashActions(root, renderDashboard);
-  // Row / card clicks open the issue (subject links + Cancel opt out — the same guard
+  // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
   root.querySelectorAll("tr[data-id]").forEach((tr) => {
     tr.onclick = (e) => {
@@ -5256,7 +5256,7 @@ async function renderDashboard() {
   wireDashScheduledCards();
   startCountdowns();
   // Keep the send sections live: advance the active-send widget's bar, and when a send
-  // starts or finishes, refresh the Scheduled queue so a fired issue clears out of it (its
+  // starts or finishes, refresh the Scheduled queue so a fired post clears out of it (its
   // home is now the In-progress widget, then the records). Cleared on navigation.
   scheduleDashActivePoll();
 }
@@ -5395,7 +5395,7 @@ function apiConnectCard(connected) {
   </div>`;
   }
   return `<div class="card pub-card">
-    <p class="pub-note">Let Claude draft, proofread, and schedule your issues.</p>
+    <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
     <p class="pub-cta"><a href="#/docs/connect-claude">Connect Claude →</a></p>
     <p class="pub-foot"><a href="#/reference">API reference →</a></p>
   </div>`;
@@ -5407,7 +5407,7 @@ function setupChecklistHtml(pub, deployment) {
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
-      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft an issue in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
     </ol>
@@ -5423,7 +5423,7 @@ function howItWorksHtml() {
     ["Write", "Draft in Markdown and preview exactly what the email will look like."],
     ["Schedule", "Schedule ahead — the send waits in a visible, cancelable review window."],
     ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
-    ["Archive", "Every issue is preserved as a permanent page — the record of what went out."],
+    ["Archive", "Every post is preserved as a permanent page — the record of what went out."],
   ];
   return `<section class="dash-section" id="ov-how"><h2>How Kestrel works</h2><ol class="how-steps">${steps
     .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
@@ -5437,7 +5437,7 @@ const WHY_KESTREL = [
   ],
   [
     "Safe to send unattended",
-    "Scheduling freezes the rendered email and locks the issue behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
+    "Scheduling freezes the rendered email and locks the post behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
   ],
   [
     "A test you can trust",
@@ -5445,7 +5445,7 @@ const WHY_KESTREL = [
   ],
   [
     "Yours to keep",
-    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every issue live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
+    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every post live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
   ],
   [
     "Cheap by construction",

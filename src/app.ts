@@ -123,14 +123,14 @@ export function createRouter(archiveBasePath: string): Router {
       handler: settingsRoutes.deleteLogo,
     },
     {
-      // Sends a SAMPLE issue through the SAVED template (the one render path, I5) so
+      // Sends a SAMPLE post through the SAVED template (the one render path, I5) so
       // the operator can see the template in a real inbox. It renders what will ship
       // — the stored template, never unsaved editor content — so the test is honest.
       method: "POST",
       path: "/api/settings/template/test",
       access: "admin",
       summary:
-        "Send a sample issue through the saved email template, to `to` or the default recipients (I5).",
+        "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
       example: {
         request: { to: "you@example.com" },
         response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
@@ -145,9 +145,9 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Create a draft post.",
       example: {
-        request: { subject: "Issue #1: Hello", markdown: "# Hello\n\nWelcome." },
+        request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
-          post: { id: "p_abc123", status: "draft", slug: "issue-1-hello" },
+          post: { id: "p_abc123", status: "draft", slug: "hello-world" },
           revision_id: "r_1",
         },
       },
@@ -194,8 +194,8 @@ export function createRouter(archiveBasePath: string): Router {
         "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
       example: {
         request: {
-          subject: "Issue #1: Hello",
-          slug: "issue-1-hello",
+          subject: "Hello, world",
+          slug: "hello-world",
           markdown: "# Hello\n\nEdited.",
           base_revision: "r_1",
         },
@@ -333,9 +333,9 @@ export function createRouter(archiveBasePath: string): Router {
         },
         { name: "search", description: "Subject contains-search." },
         {
-          name: "issues",
+          name: "failures",
           description:
-            "`only` narrows to sends with a delivery issue (any bounced, complained, or failed recipient).",
+            "`only` narrows to sends with a delivery failure (any bounced, complained, or unsent recipient).",
         },
         {
           name: "sort",
@@ -374,7 +374,7 @@ export function createRouter(archiveBasePath: string): Router {
             bounced: 3,
             complained: 1,
             skipped: 1,
-            failed: 0,
+            unsent: 0,
           },
           dispatch: { done: 460, percent: 38, rate_per_min: 920, eta_ms: 48000 },
           delivery: { confirmed: 304, percent_of_accepted: 40 },
@@ -394,7 +394,7 @@ export function createRouter(archiveBasePath: string): Router {
         {
           name: "view",
           description:
-            "`issues` (default: bounced/complained/failed), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `failed`, `skipped`, `accepted`, `in_flight`).",
+            "`failures` (default: bounced/complained/unsent), `delivered`, `all`, or a single bucket (`bounced`, `complained`, `unsent`, `skipped`, `accepted`, `in_flight`).",
         },
         { name: "search", description: "Email contains-search." },
         { name: "sort", description: "`email` (default), `status`, `event`, or `updated`." },
@@ -416,7 +416,7 @@ export function createRouter(archiveBasePath: string): Router {
               bounce_kind: "hard",
             },
           ],
-          view: "issues",
+          view: "failures",
           page: { total: 1, limit: 50, offset: 0, sort: "email", dir: "asc" },
         },
       },
@@ -454,11 +454,11 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/sends/:id/resolve",
       access: "admin",
       summary:
-        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'failed'|'accepted'}.",
+        "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
-        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'failed' (assume not sent; the address is picked up by the next issue) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
+        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
       example: {
-        request: { resolution: "failed" },
+        request: { resolution: "unsent" },
         response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },
       },
       handler: sendRoutes.resolve,
@@ -557,7 +557,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/",
       access: "public",
       summary:
-        "The newsletter's public landing page: identity, the latest issue, and a subscribe call to action.",
+        "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
     },
     {
@@ -610,24 +610,24 @@ export function createRouter(archiveBasePath: string): Router {
     },
 
     // --- archive / view-in-browser (public; serves the frozen record, I3) ---
-    // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the issue
+    // Registered at ARCHIVE_BASE_PATH (default /archive) so the index, the post
     // pages, and the emitted archive URLs always share one source. Self-contained by
     // default; an apex zone can additionally route <base>/* to this Worker (SPEC §10).
     // The index is registered before `:slug` so `/archive` resolves to the list, not
     // a slug lookup; the optional trailing slash (`{/}?`) means `/archive` and
-    // `/archive/` both land on the index while `/archive/:slug` still serves issues.
+    // `/archive/` both land on the index while `/archive/:slug` still serves posts.
     {
       method: "GET",
       path: `${archiveBasePath}{/}?`,
       access: "public",
-      summary: "The public archive index: every sent issue, newest first.",
+      summary: "The public archive index: every sent post, newest first.",
       handler: archiveRoutes.archiveIndex,
     },
     {
       method: "GET",
       path: `${archiveBasePath}/:slug`,
       access: "public",
-      summary: "A frozen issue's archive page / view-in-browser (I3).",
+      summary: "A frozen post's archive page / view-in-browser (I3).",
       handler: archiveRoutes.archivePage,
     },
 
