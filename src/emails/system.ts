@@ -6,15 +6,33 @@ import type { RenderedEmail } from "../render/render";
 
 const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 
+// Dark-mode overrides for the confirmation email, mirroring the newsletter shell's
+// light+dark support (render/template.ts). Unlike the newsletter render path this email
+// carries no CSS-inlining pass — it is authored inline — so these class rules use
+// `!important` to beat the inline light styles (the standard email dark-mode technique).
+// The palette is the reader card pages' (lib/page.ts `--*` tokens: page #f4f4f5→#18181b,
+// card #fff→#232327, ink #18181b→#ededed, muted #71717a/#52525b→#a1a1aa, rule
+// #e4e4e7→#2e2e33, accent button #18181b/#fff → #e5e7eb/#18181b) so a confirmation and
+// the confirm/unsubscribe page it links to agree in both schemes.
+const DARK_STYLE = `<style>@media (prefers-color-scheme: dark) {
+  .k-sys-bg { background:#18181b !important; }
+  .k-sys-card { background:#232327 !important; }
+  .k-sys-body, .k-sys-name { color:#ededed !important; }
+  .k-sys-tagline, .k-sys-muted { color:#a1a1aa !important; }
+  .k-sys-rule { border-color:#2e2e33 !important; }
+  .k-sys-btn { background:#e5e7eb !important; color:#18181b !important; }
+}</style>`;
+
 function systemEmailLayout(subject: string, innerHtml: string): string {
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(
-    subject,
-  )}</title></head>
-<body style="margin:0;padding:0;background:#f4f4f5;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">
-<table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;">
-<tr><td style="padding:32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>${escapeHtml(subject)}</title>
+${DARK_STYLE}</head>
+<body class="k-sys-bg" style="margin:0;padding:0;background:#f4f4f5;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" class="k-sys-bg" style="background:#f4f4f5;"><tr><td align="center" style="padding:24px 12px;">
+<table role="presentation" width="600" cellpadding="0" cellspacing="0" class="k-sys-card" style="max-width:600px;width:100%;background:#ffffff;border-radius:8px;">
+<tr><td class="k-sys-body" style="padding:32px;font-family:${FONT};font-size:16px;line-height:1.6;color:#18181b;">
 ${innerHtml}
 </td></tr>
 </table>
@@ -51,17 +69,17 @@ function masthead(identity: ConfirmationIdentity): string {
       )}" style="display:block;border-radius:9px;"></td>`
     : "";
   const name = hasName
-    ? `<div style="font:600 17px/1.2 Georgia,'Times New Roman',serif;color:#18181b;">${escapeHtml(
+    ? `<div class="k-sys-name" style="font:600 17px/1.2 Georgia,'Times New Roman',serif;color:#18181b;">${escapeHtml(
         identity.name,
       )}</div>`
     : "";
   const tagline = identity.tagline
-    ? `<div style="font-size:13px;color:#52525b;margin-top:2px;">${escapeHtml(
+    ? `<div class="k-sys-tagline" style="font-size:13px;color:#52525b;margin-top:2px;">${escapeHtml(
         identity.tagline,
       )}</div>`
     : "";
   return `<table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;"><tr>${logoCell}<td style="vertical-align:middle;">${name}${tagline}</td></tr></table>
-<hr style="border:0;border-top:1px solid #e4e4e7;margin:16px 0 22px;">
+<hr class="k-sys-rule" style="border:0;border-top:1px solid #e4e4e7;margin:16px 0 22px;">
 `;
 }
 
@@ -80,12 +98,12 @@ export function confirmationEmail(
 ): RenderedEmail {
   const subject = copy.subject;
   const reassuranceHtml = copy.reassurance
-    ? `\n<p style="color:#71717a;font-size:13px;">${escapeHtml(copy.reassurance)}</p>`
+    ? `\n<p class="k-sys-muted" style="color:#71717a;font-size:13px;">${escapeHtml(copy.reassurance)}</p>`
     : "";
   const html = systemEmailLayout(
     subject,
     `${masthead(identity)}<p>${escapeHtml(copy.body)}</p>
-<p><a href="${escapeHtmlAttr(
+<p><a class="k-sys-btn" href="${escapeHtmlAttr(
       confirmUrl,
     )}" style="display:inline-block;padding:12px 20px;background:#18181b;color:#ffffff;border-radius:6px;text-decoration:none;">${escapeHtml(
       copy.buttonLabel,
