@@ -2735,9 +2735,11 @@ function deliveryRowsHtml(rows, dstate) {
   const body = rows
     .map((r) => {
       const o = deliveryOutcome(r);
-      const outcome = `<span class="rec-out"><span class="rec-sw sw-${o.sw}"></span>${esc(o.label)}${
-        o.hint ? ` <span class="rec-out-hint muted">${esc(o.hint)}</span>` : ""
-      }</span>`;
+      // The label names the bucket; its consequence (suppressed or not, awaiting a receipt)
+      // is taught once in prose by the reconciliation line above and kept on the row only as
+      // a hover tooltip — so a row stays a clean one-liner instead of restating the taxonomy
+      // on every line.
+      const outcome = `<span class="rec-out"${o.hint ? ` title="${esc(o.hint)}"` : ""}><span class="rec-sw sw-${o.sw}"></span>${esc(o.label)}</span>`;
       const detail = r.error || r.event_detail || "";
       const when = r.event_at ? fmt(r.event_at) : "";
       return `<tr><td class="rec-email">${esc(r.email)}</td><td>${outcome}</td><td class="muted">${
