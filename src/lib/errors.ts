@@ -31,7 +31,7 @@ export function json(data: unknown, status = 200, headers?: HeadersInit): Respon
 /** Turn any thrown value into a JSON error response. */
 export function toErrorResponse(err: unknown): Response {
   if (err instanceof HttpError) {
-    return json({ error: err.code, message: err.message, ...err.details }, err.status);
+    return json({ ...err.details, error: err.code, message: err.message }, err.status);
   }
   console.error("unhandled error", err);
   return json({ error: "internal_error" }, 500);

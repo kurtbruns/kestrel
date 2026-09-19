@@ -112,7 +112,6 @@ export async function previewPage(c: RequestContext): Promise<Response> {
  * template, and the current identity, through the one render path (I5).
  */
 export async function test(c: RequestContext): Promise<Response> {
-  const { input, email, warnings, frozen } = await loadPostEmail(c);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -125,6 +124,7 @@ export async function test(c: RequestContext): Promise<Response> {
     throw badRequest("'to' must be an email address");
   }
 
+  const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
