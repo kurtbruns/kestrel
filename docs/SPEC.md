@@ -161,35 +161,35 @@ Sending is built around a review window, because the window is what makes it saf
 
 ### Scheduling a post
 
-Scheduling a post for a future time does three things at once: it **freezes the render** into a new send (the one copy that is the review artifact, what will fire, and the archive, I3), it **soft-locks the post** so it can't drift from what was reviewed, and it **records the fire time**. From then until it fires the send is **visible and cancelable** (I6): the publisher and Claude review it, test emails go to real inboxes, and if anything is wrong the publisher cancels it.
+Scheduling a post for a future time does three things at once: it **freezes the render** into a new send (the one copy that is the review artifact, what will fire, and the archive, I3), it **soft-locks the post** so it can't drift from what was reviewed, and it **records the fire time**. The fire time must be at least the **minimum lead** out, a fixed, app-wide interval measured in minutes rather than seconds; the freeze rejects anything closer, so every send, however requested, spends at least that long visible and cancelable (I6). From then until it fires the send is **visible and cancelable** (I6): the publisher and Claude review it, test emails go to real inboxes, and if anything is wrong the publisher cancels it.
 
-A post **must have a non-empty subject** to schedule or send. The subject is what the reader sees in their inbox and a send is irreversible (I4), so the freeze rejects an empty or whitespace-only subject before anything is frozen, the same guard for both clients; the editor won't offer Schedule or Send now without one, but the freeze is the authority. An empty body is warned about, not blocked.
+A post **must have a non-empty subject** to schedule or send. The subject is what the reader sees in their inbox and a send is irreversible (I4), so the freeze rejects an empty or whitespace-only subject before anything is frozen, the same guard for both clients; the editor won't offer Schedule or Send now without one, but the freeze is the authority. An empty body draws a warning from the editor and is not blocked.
 
 ### The soft-lock
 
-A scheduled post is frozen from casual edits. To change it the publisher **cancels** the scheduled send, which unlocks the post, then edits, re-tests, and re-schedules. Editing stays easy but becomes deliberate, and it resets the review.
+A scheduled post is locked: the API refuses every write to it (body, metadata, images) until its send is canceled, so the lock is enforced, not merely shown. To change it the publisher **cancels** the scheduled send, which unlocks the post, then edits, re-tests, and schedules it again. Editing stays easy but becomes deliberate, and it resets the review.
 
-The guarantee: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the send immune to app deploys during the window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
+The guarantee: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to cancel it and schedule it anew. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the send immune to app deploys during the window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
 
-A post has **at most one active (scheduled or sending) send** at a time, and this holds even across concurrent requests, so a second schedule can never slip through. Finished and canceled sends don't count, so re-scheduling is unaffected. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
+A post has **at most one active (scheduled or sending) send** at a time, and this holds even across concurrent requests: a second schedule request is refused rather than slipping through, and a second send-now finds the existing send and returns it. Finished and canceled sends don't count, so scheduling again is unaffected. I4 and I6 rest on this: cancel, the status surface (§8), and the sweep (below) each assume a single, unambiguous active send.
 
 ### Moving the fire time
 
-Changing *when* a scheduled send fires is not a content change, so it doesn't go through cancel → edit → re-schedule. The fire time is **moved directly** on the scheduled send: the same send, still the post's one active send, still visible and cancelable, now aimed at a new time. The frozen render is untouched (I3) and the review window is preserved rather than reset (I6). Two guards: the new time must be at least the minimum lead out (below), and only a send that has not yet fired can be moved; once it has begun sending it is past the window.
+Changing *when* a scheduled send fires is not a content change, so it doesn't go through cancel → edit → schedule again. The fire time is **moved directly** on the scheduled send (the one-call *reschedule*, §8): the same send, still the post's one active send, still visible and cancelable, now aimed at a new time. The frozen render is untouched (I3) and the review window is preserved rather than reset (I6). Two guards: the new time must be at least the minimum lead out, and only a send that has not yet fired can be moved; once it has begun sending it is past the window.
 
 ### Sending now
 
-Sending immediately is the same machinery with the fire time set to now plus the **minimum lead**: a fixed, app-wide interval, minutes rather than seconds, that is the least time any send spends visible and cancelable before it can fire (I6). It's for the case the publisher has reviewed out of band and wants it gone; most sends should carry a real window.
+Sending immediately is the same machinery with the fire time set to now plus the minimum lead, so even an "immediate" send is a visible, cancelable send for those minutes (I6). It's for the case the publisher has reviewed out of band and wants it gone; most sends should carry a real window.
 
 ### The timer
 
-The driver is a periodic **sweep**: a scheduled task on a fixed, short cadence that finds sends whose fire time has passed and that haven't gone out, and delivers them. A sweep rather than a per-send alarm for one decisive reason: the same loop that fires due sends also notices sends that *should* have fired and didn't, and raises them loudly (§12). One reconciling loop is simpler and safer than precise timers plus a watchdog, and it tolerates an occasional slow tick by design.
+The driver is a periodic **sweep**: a scheduled task on a fixed, short cadence that finds sends whose fire time has passed and that haven't gone out, and delivers them. A send the sweep finds late is still delivered: the window closed at the fire time, so lateness is a delay, not a new decision. A sweep rather than a per-send alarm for one decisive reason: the same loop that fires due sends also notices a fire time that has slipped past without delivery, and raises it loudly (§12). One reconciling loop is simpler and safer than precise timers plus a watchdog, and it tolerates an occasional slow tick by design.
 
 ### What a send does when it fires
 
 Because the body is already frozen, firing is just delivery. The send loop:
 
-1. **Reads the send**, which already holds the frozen email. A second trigger for the same post finds this record and resumes rather than restarting (I4).
+1. **Reads the send**, which already holds the frozen email. A second trigger, whether a later sweep tick or a repeated request, finds this record and resumes rather than restarting (I4).
 2. **Resolves the audience at that moment**: confirmed subscribers minus suppressed addresses. The audience is not fixed at schedule time, so a reader who confirms after the post was scheduled is included, and the subscriber count shown while a send is scheduled is a snapshot, not a promise.
 3. **Delivers in batches**, checking each recipient's consent and suppression again at hand-off (I2), filling in their unsubscribe link and address where the frozen body left placeholders, and marking each one as the provider accepts them. Progress is durable, so an interrupted send resumes from where it stopped and no one is mailed twice (I4).
 4. **Records outcomes as they arrive** (accepted, delivered, bounced, complained) against each recipient.
@@ -203,7 +203,7 @@ A send is **"sent" when dispatch completes**, every recipient handed off or term
 
 ### Recovery
 
-Everything after the fire time is recovery, and §12 holds the posture: retries with backoff, resumption after an interruption, suppression fed by the provider's webhooks, and a loud flag for the few things a person must see. The one rule none of it bends: no automatic behavior ever widens the audience or skips the window.
+Everything that goes wrong after the fire time is recovery, and §12 holds the posture: retries with backoff, resumption after an interruption, suppression fed by the provider's webhooks, and a loud flag for the few things a person must see. The one rule none of it bends: no automatic behavior ever widens the audience or skips the window.
 
 ---
 
@@ -370,7 +370,7 @@ The posture is: recover quietly, escalate rarely, always be inspectable. The fro
 
 ### Recover quietly
 
-Send-time transient errors (a rate limit, a brief provider hiccup) retry with backoff inside the send, per batch, and an interrupted send resumes from its durable progress, mailing only those not yet accepted (I4; the mechanism is §10's). A provider outage keeps the send open and retrying, and surfaces on the status view only once it has clearly stopped being transient. Bounces and complaints arrive by webhook after the send and update the delivery and suppression records on their own (§10).
+Send-time transient errors (a rate limit, a brief provider hiccup) retry with backoff inside the send, per batch, and an interrupted send resumes from its durable progress, mailing only those not yet accepted (I4; the mechanism is §10's). A provider outage keeps the send open and retrying, and surfaces on the status surface (§8) only once it has clearly stopped being transient. Bounces and complaints arrive by webhook after the send and update the delivery and suppression records on their own (§10).
 
 Everything automatic here is about delivering reliably or not delivering to the wrong people. The in-flight surface is **observe-only** but for one control, Resolve (below): the app never pauses, throttles, or auto-halts a reviewed send, and no automatic decision widens the audience, skips the window, or stops a send the publisher approved. Automation over a reviewed send (pause/resume, a circuit-breaker) is deferred, not forgotten (appendix).
 
