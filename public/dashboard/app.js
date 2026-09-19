@@ -165,37 +165,47 @@ const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
 // The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
-// the Kestrel mark, the surface switch, and the running build) over a two-column grid
-// whose left column — the contents rail — lines up exactly under "← Dashboard".
-// Pass railHtml = null for a surface with no contents rail (the docs index).
+// the Kestrel mark, the surface switch) over a two-column grid whose left column — the
+// contents rail — lines up exactly under "← Dashboard". Pass railHtml = null for a
+// surface with no contents rail.
+//
+// On a phone (≤720px, styles.css) the same markup collapses to one --bar-h row — a square
+// back arrow, the mark, the tabs — so the bar never grows past the height the in-page
+// anchors and the sticky rail are calibrated for; the ✕ drops there (← is the one way
+// back). The body stacks, and each rail decides its own phone shape (a folded "On this
+// page", or a chip row — see the surfaces below).
 function roomShell(active, railHtml, mainHtml) {
   const tab = (view, label) =>
     `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  // The running build (SPEC §9) as quiet metadata — version → release, sha → commit —
+  // pinned to the rail's bottom-left corner on every surface, so the bar stays identity +
+  // nav. On a phone the rail is no longer a column, so the same stamp is the room's foot
+  // instead (styles.css shows one or the other). "" until a build is known; the build time
+  // rides the tooltip. Build info lives in the app's own room (and at GET /api/version),
+  // never in the publisher-facing dashboard.
+  const parts = buildRefParts();
+  const bt = appConfig?.deployment?.build?.buildTime;
+  const built = bt
+    ? ` title="Built ${esc(new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}"`
+    : "";
+  const stamp = parts ? `${parts.version} <span aria-hidden="true">·</span> ${parts.sha}` : "";
+  const railFoot = stamp ? `<div class="rail-foot"${built}>${stamp}</div>` : "";
+  const foot = stamp ? `<footer class="room-foot"${built}>${stamp}</footer>` : "";
   const body =
     railHtml == null
       ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
-      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}</div></nav><div class="room-main">${mainHtml}</div></div>`;
-  // The running build (SPEC §9) as quiet metadata in the bar, right after the tabs —
-  // version → tag, sha → commit. Links out to the repo, so it reads distinct from the
-  // Docs/API view-switch tabs, not like a third tab. "" until a build is known; build
-  // time rides the tooltip. Build info lives in the app's own room (and at
-  // GET /api/version), never in the publisher-facing dashboard.
-  const parts = buildRefParts();
-  const bt = appConfig?.deployment?.build?.buildTime;
-  const build = parts
-    ? `<span class="room-build"${bt ? ` title="Built ${esc(bt)}"` : ""}>${parts.version} <span aria-hidden="true">·</span> ${parts.sha}</span>`
-    : "";
+      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}${railFoot}</div></nav><div class="room-main">${mainHtml}</div></div>`;
   return `<div class="room">
     <header class="room-bar">
-      <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
+      <a class="room-back" href="#/dashboard" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span class="room-back-label">Dashboard</span></a>
       <div class="room-nav">
         <a class="room-brand" href="#/docs">${kestrelMark()}<span>Kestrel</span></a>
         <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("reference", "API")}</nav>
-        ${build}
         <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>
     ${body}
+    ${foot}
   </div>`;
 }
 
@@ -290,12 +300,13 @@ function renderSidebarBrand() {
 
 // ---- build reference (the running build, as two link fragments) ----
 // { version, sha } from the read-only deployment reflection (appConfig.deployment.build,
-// resolved at build in src/build.ts): version → its tag, sha → its commit, both on the repo
-// and never getkestrel.dev. Each degrades to plain text (no dead link) when there's no repo
-// or the sha is "dev" (a local build). null until a build is known. Build metadata is quiet,
-// secondary info: it does NOT go in the room's top bar (identity + nav only) — the reference
-// room lays these two out at its bottom-left corner (roomShell), and it's also at
-// GET /api/version, where a bug report is filed. Never in the publisher-facing dashboard.
+// resolved at build in src/build.ts): version → its release (only when this build IS that
+// tagged release), sha → its commit, both on the repo and never getkestrel.dev. Each
+// degrades to plain text (no dead link) when there's no repo, the build isn't a release, or
+// the sha is "dev" (a local build). null until a build is known. Build metadata is quiet,
+// secondary info: roomShell pins it to the rail's bottom-left corner (and, on a phone, sets
+// it as the room's foot); it's also at GET /api/version, where a bug report is filed. Never
+// in the publisher-facing dashboard.
 function buildRefParts() {
   const b = appConfig?.deployment?.build;
   if (!b?.version) {
@@ -4757,9 +4768,16 @@ let docsCache = null;
 function docDescription(doc) {
   const tmp = document.createElement("div");
   tmp.innerHTML = doc.html || "";
-  const text = (tmp.querySelector("p")?.textContent || "").trim().replace(/\s+/g, " ");
+  const raw = (tmp.querySelector("p")?.textContent || "").trim().replace(/\s+/g, " ");
+  // A paragraph that leads into a list ends in ":" — on a card that reads as a cut-off
+  // sentence, so it ends in an ellipsis like a truncated blurb does.
+  const leadsIn = /[:;,]$/.test(raw);
+  const text = raw.replace(/[\s:;,]+$/, "");
   const MAX = 150;
-  return text.length > MAX ? `${text.slice(0, MAX).replace(/[\s.,;:]+\S*$/, "")}…` : text;
+  if (text.length > MAX) {
+    return `${text.slice(0, MAX).replace(/[\s.,;:]+\S*$/, "")}…`;
+  }
+  return leadsIn ? `${text}…` : text;
 }
 
 async function renderDocs(slug) {
@@ -4769,10 +4787,19 @@ async function renderDocs(slug) {
     `<div class="docs-index"><p class="muted">Loading…</p></div>`,
   );
   if (!docsCache) {
+    // The first visit fetches; everything below rewrites the whole view, so if the route
+    // moved on while the request was in flight (a tap on API, or a different doc), this
+    // render is stale and must not paint over the one that replaced it.
+    const wanted = location.hash;
     try {
       ({ docs: docsCache } = await api("/api/docs"));
     } catch (e) {
-      renderError(document.querySelector(".room-main"), e.message, () => renderDocs(slug));
+      if (location.hash === wanted) {
+        renderError(document.querySelector(".room-main"), e.message, () => renderDocs(slug));
+      }
+      return;
+    }
+    if (location.hash !== wanted) {
       return;
     }
   }
@@ -4816,27 +4843,36 @@ function renderDocsIndex(docs) {
     `<p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p>` +
     `<ol class="doc-cards">${cards}</ol>` +
     `</div>`;
-  // The repo URL is the deploy's own (package.json → build stamp); getkestrel.dev is the
-  // project's home, the same for every instance, so it's a constant.
+  // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
+  // label + tiers, so a phone can give both the same chip row. getkestrel.dev is the
+  // project's home, the same for every instance, so it's a constant; the source and
+  // license links are the deploy's own repo (package.json → build stamp), so they're
+  // absent when no repo is known.
+  // Each link carries a short form for the phone chip row (styles.css swaps which span
+  // shows); the full label stays the accessible name at every width.
   const repoUrl = appConfig?.deployment?.build?.repoUrl || "";
+  const out = (href, label, short = label) =>
+    `<a class="rail-link" href="${esc(href)}" target="_blank" rel="noopener" aria-label="${esc(label)}">` +
+    `<span class="rail-link-full">${esc(label)}</span><span class="rail-link-short" aria-hidden="true">${esc(short)}</span>` +
+    ` <span aria-hidden="true">↗</span></a>`;
   const rail =
     `<div class="toc-label">Kestrel</div>` +
-    `<a class="rail-link" href="https://getkestrel.dev" target="_blank" rel="noopener">Project site <span aria-hidden="true">↗</span></a>` +
+    out("https://getkestrel.dev", "Project site", "Project") +
     (repoUrl
-      ? `<a class="rail-link" href="${esc(repoUrl)}" target="_blank" rel="noopener">Source on GitHub <span aria-hidden="true">↗</span></a>`
-      : "") +
-    `<p class="rail-legal">© ${new Date().getFullYear()} Kurt Bruns · ${
-      repoUrl
-        ? `<a href="${esc(repoUrl)}/blob/main/LICENSE" target="_blank" rel="noopener">MIT</a>`
-        : "MIT"
-    }</p>`;
+      ? out(repoUrl, "Source on GitHub", "Source") + out(`${repoUrl}/blob/main/LICENSE`, "License")
+      : "");
   app.innerHTML = roomShell("docs", rail, main);
   window.scrollTo(0, 0);
 }
 
 // One doc, deep-linked by slug. The rail is this doc's "On this page" (scroll-spy-tracked)
-// — never a list of the other docs. Sequential Prev/Next lives in the bar's top-right
-// (compact) and at the foot of the article (with titles), not in the rail.
+// — never a list of the other docs. Sequential Prev/Next sits on the title line (compact)
+// and at the foot of the article (with titles), not in the rail.
+//
+// The rail folds on a phone: "On this page" is a <details> that defaults open on desktop
+// (where the summary is inert — it just looks like the label) and closed on a phone, where
+// it is one tappable row above the article and closes again once a section is picked.
+const PHONE = "(max-width: 720px)";
 function renderDocPage(docs, slug) {
   const at = docs.findIndex((d) => d.slug === slug);
   if (at === -1) {
@@ -4849,19 +4885,27 @@ function renderDocPage(docs, slug) {
   const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
-  // Compact Prev/Next at the top-right of the reader column — no titles (the foot pager
-  // carries those). A sibling above the <article> (not inside .doc, so it clears the
-  // `.doc a` in-content link style); right-aligned to the content's right edge.
+  // Compact Prev/Next on the title line, right of the H1 — no titles (the foot pager
+  // carries those; each link's aria-label names its target). On a phone the words drop
+  // and the arrows alone remain, so the row still fits beside a wrapping title.
+  const topLink = (doc, dir) =>
+    `<a href="#/docs/${esc(doc.slug)}" aria-label="${esc(`${dir}: ${doc.title}`)}">` +
+    (dir === "Previous"
+      ? `<span aria-hidden="true">←</span><span class="doc-topnav-word">Previous</span>`
+      : `<span class="doc-topnav-word">Next</span><span aria-hidden="true">→</span>`) +
+    `</a>`;
   const topNav =
     prev || next
-      ? `<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? `<a href="#/docs/${esc(prev.slug)}">← Previous</a>` : ""}${next ? `<a href="#/docs/${esc(next.slug)}">Next →</a>` : ""}</nav>`
+      ? `<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? topLink(prev, "Previous") : ""}${next ? topLink(next, "Next") : ""}</nav>`
       : "";
+  // The rail gets a slot, filled once the sections are known (below) — the slot, not the
+  // whole rail, so the build stamp roomShell set under it stays.
   app.innerHTML = roomShell(
     "docs",
-    `<p class="muted">Loading…</p>`,
-    `${topNav}<article class="doc" id="docsMain"></article>`,
+    `<div id="docToc"></div>`,
+    `<article class="doc" id="docsMain"></article>`,
   );
-  const navEl = app.querySelector(".rail-inner");
+  const navEl = document.getElementById("docToc");
   const mainEl = document.getElementById("docsMain");
   mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
 
@@ -4873,6 +4917,19 @@ function renderDocPage(docs, slug) {
   if (h1) {
     h1.id = `part-${cur.slug}`;
     sections.push({ id: h1.id, title: h1.textContent || cur.title });
+  }
+  // Put the H1 and the compact pager on one line: wrap the fragment's own H1 in a title
+  // row and set the pager beside it (the H1 stays the doc's H1 — same node, same id).
+  if (topNav) {
+    const head = document.createElement("div");
+    head.className = "doc-head";
+    if (h1) {
+      h1.before(head);
+      head.append(h1);
+    } else {
+      sec.prepend(head);
+    }
+    head.insertAdjacentHTML("beforeend", topNav);
   }
   sec.querySelectorAll("h2").forEach((h2, i) => {
     const id = `sec-${cur.slug}-${i + 1}`;
@@ -4893,18 +4950,22 @@ function renderDocPage(docs, slug) {
   mainEl.appendChild(pager);
 
   // Rail: this doc's "On this page" only (scroll-spy-tracked). No back-link (the "Docs" tab
-  // returns to the index) and no rail pager (Prev/Next is the top bar + the article foot).
+  // returns to the index) and no rail pager (Prev/Next is the title line + the article
+  // foot). A <details>, open unless this is a phone (the header comment says why).
   const onPage = sections
     .map(
       (s) =>
         `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
     )
     .join("");
+  const phone = matchMedia(PHONE).matches;
   navEl.innerHTML = sections.length
-    ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${onPage}</div>`
+    ? `<details class="toc-onpage" id="tocOnPage"${phone ? "" : " open"}><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
 
-  // "On this page" links smooth-scroll within the current doc and highlight at once.
+  // "On this page" links smooth-scroll within the current doc and highlight at once. On a
+  // phone the fold closes first, so the page height above the target is settled before
+  // the scroll is measured.
   const onPageEl = document.getElementById("tocOnPage");
   const markActive = (id) => {
     if (!onPageEl) {
@@ -4921,6 +4982,9 @@ function renderDocPage(docs, slug) {
     }
     ev.preventDefault();
     markActive(a.dataset.target);
+    if (onPageEl && matchMedia(PHONE).matches) {
+      onPageEl.open = false;
+    }
     document
       .getElementById(a.dataset.target)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
@@ -4953,7 +5017,12 @@ function renderDocPage(docs, slug) {
   // highlights. One document.onscroll slot, self-cleared once this doc leaves the DOM.
   if (onPageEl && sections.length) {
     const ids = sections.map((s) => s.id);
-    const line = 80;
+    // Just under the sticky bar (its height is the room's --bar-h token, one row at every
+    // width — see roomShell), read once per render so CSS and JS can't drift.
+    const barH =
+      parseFloat(getComputedStyle(document.querySelector(".room")).getPropertyValue("--bar-h")) ||
+      54;
+    const line = barH + 26;
     const spy = () => {
       if (!document.getElementById(ids[0])) {
         document.onscroll = null;

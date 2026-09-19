@@ -20,15 +20,15 @@ npm run dev                         # wrangler dev on http://localhost:8787 (edi
 
 npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
 npm run test:watch                  # watch mode
-npm run typecheck                   # wrangler types && tsc --noEmit
+npm run typecheck                   # stamps the build (if changed), wrangler types && tsc --noEmit
 npm run check                       # biome check --write . (format + organize imports + lint, applies safe fixes)
 npm run lint                        # biome lint .          (report only, no writes)
 npm run format                      # biome format --write .
-npm run deploy                      # wrangler deploy   (add --env staging | --env production for those)
+npm run deploy                      # stamps the build, then wrangler deploy (add --env staging | --env production for those)
 npm run migrate:remote              # apply D1 migrations to the remote database
 ```
 
-Quality gate before finishing: `npm test`, `npm run typecheck`, and `npm run check`. Biome (`biome.json`) is the formatter + linter — the same config as the sibling Worker projects. There is no CI in the repo — the gate is run by hand, and `wrangler deploy` deploys by hand, per environment. `wrangler types` regenerates `worker-configuration.d.ts` (gitignored), so run `typecheck` after touching `wrangler.jsonc`.
+Quality gate before finishing: `npm test`, `npm run typecheck`, and `npm run check`. Biome (`biome.json`) is the formatter + linter — the same config as the sibling Worker projects. There is no CI in the repo — the gate is run by hand, and `npm run deploy` deploys by hand, per environment (through npm, not a bare `wrangler deploy`, so the build stamp below is fresh). `wrangler types` regenerates `worker-configuration.d.ts` (gitignored), so run `typecheck` after touching `wrangler.jsonc`.
 
 The `recommended` preset is enforced at `error` everywhere; the tree is lint-clean. Two deliberate carve-outs: an `overrides` block turns off `noNonNullAssertion` + `noExplicitAny` for `test/**` only (tests legitimately assert known fixture shapes and type parsed JSON as `any` — both stay enforced in `src/`), and four intentional exceptions in `public/dashboard/styles.css` carry inline `biome-ignore` notes (the two deliberate `!important` rules and two descending-specificity selectors, where the cascade is decided by specificity, not source order). Reach for `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!` for a row read back right after writing it — it fails loud with a name.
 
@@ -47,6 +47,7 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 - **`db/` holds all SQL, and nowhere else does.** `migrations/` is append-only — never edit a shipped migration, add a new one.
 - **Config splits along one hard line (SPEC §9).** Deploy-time infrastructure — the provider, its credentials, Access, the origins — lives in env/secrets (`getConfig`, documented in `docs/setup/`) and is NEVER readable or writable through the API. Runtime *preferences* (e.g. default test recipients) live in a singleton settings row (`db/settings.ts`, a JSON blob so a new preference is a code change, not a migration) behind the authed `/api/settings`. The settings surface may *reflect* deploy config read-only, but must never accept or expose a secret.
 - **The admin static assets are fingerprinted, not hand-versioned.** `scripts/stamp-admin-assets.mjs` writes a content hash onto the `?v=` of `styles.css`/`app.js` in `public/dashboard/index.html`, and `public/_headers` caches those hashed URLs immutably. It runs on `npm run dev` startup and, as `assets:check`, in `pretest` (so the gate catches an unstamped commit). Never hand-edit the `?v=`; after editing an admin asset, `npm run assets:build` (or restart dev) re-stamps.
+- **The build stamp is generated, never committed.** `scripts/stamp-version.mjs` resolves the version (`package.json`), short git SHA, the release tag when HEAD sits exactly on one, build time, and repo URL into the gitignored `src/generated/version.ts`; `src/build.ts` adds the commit link, and the release link only for a build that is its own version's tag (so no build ever links to a release it isn't), and is the one source for `GET /api/version` and the settings `deployment.build` reflection (SPEC §9). It runs at every entry point that is a build (`postinstall`, `npm run dev` startup, `predeploy`) and, with `--if-changed`, in `pretest` and `typecheck` so a test run beside a live `wrangler dev` doesn't rewrite a watched file and reload it. Deliberately not a wrangler `build.command`: the build time changes on every run, so under `wrangler dev` that would rebuild-loop. Build metadata only, so it never passes through `getConfig` or settings.
 
 ## The public / admin split
 

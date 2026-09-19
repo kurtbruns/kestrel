@@ -70,11 +70,13 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/version",
       access: "admin",
-      summary: "The running build: version, short SHA, build time, and repo links.",
+      summary:
+        "The running build: version, short SHA, release tag (if this build is one), build time, and repo links.",
       example: {
         response: {
           version: "0.1.0",
           sha: "a1b2c3d",
+          tag: "v0.1.0",
           buildTime: "2026-01-15T09:00:00.000Z",
           repoUrl: "https://github.com/kurtbruns/kestrel",
           commitUrl: "https://github.com/kurtbruns/kestrel/commit/a1b2c3d",
