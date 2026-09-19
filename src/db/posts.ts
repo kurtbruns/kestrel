@@ -47,6 +47,9 @@ export interface PostListRow extends PostRow {
   fire_at: number | null;
   active_send_id: string | null;
   active_send_status: "scheduled" | "sending" | null;
+  /** The template revision the active send was made with (SPEC §9), so a list can mark
+   *  a scheduled post whose send keeps an older template than the current one. */
+  active_send_template_revision: string | null;
   /** The current revision's author ("Claude" surfaces as `service`; SPEC §4). Lets the
    *  dashboard tell whether the agent has edited here without a per-post revision fetch. */
   author: string | null;
@@ -111,7 +114,7 @@ export async function listPosts(
   // is 1:1). The scheduled-first default sort keys on that fire time.
   const { results } = await db
     .prepare(
-      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status, cr.author AS author
+      `SELECT p.*, s.fire_at AS fire_at, s.id AS active_send_id, s.status AS active_send_status, s.template_revision AS active_send_template_revision, cr.author AS author
          FROM posts p
          LEFT JOIN sends s ON s.post_id = p.id AND s.status IN ('scheduled', 'sending')
          LEFT JOIN post_revisions cr ON cr.id = p.current_revision
@@ -278,6 +281,20 @@ export async function updatePost(
  * `canceled` ones a cancel leaves behind — a sent post's record is never
  * deleted. R2 image objects are deleted by the caller.
  */
+/** The soft-lock transition (SPEC §6) as a statement, so the freeze can batch it with
+ *  the send it locks the post for: the CAS on `from` makes a lost race a no-op. */
+export function setPostStatusStmt(
+  db: D1Database,
+  id: string,
+  from: PostStatus,
+  to: PostStatus,
+  now: number,
+): D1PreparedStatement {
+  return db
+    .prepare("UPDATE posts SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
+    .bind(to, now, id, from);
+}
+
 export async function deletePost(db: D1Database, id: string): Promise<void> {
   await db.batch([
     db

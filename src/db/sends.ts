@@ -14,6 +14,9 @@ export interface SendRow {
   rendered_text: string;
   subject: string;
   recipient_count: number;
+  /** The template revision the render was frozen with (SPEC §9). Null only for a send
+   *  made before the template had a history; see migrations/0002. */
+  template_revision: string | null;
   locked_until: number | null;
   scheduled_at: number;
   started_at: number | null;
@@ -176,6 +179,16 @@ export function getActiveSendForPost(db: D1Database, postId: string): Promise<Se
     .first<SendRow>();
 }
 
+/** The post's most recent send of any status — what the post was last *made* with
+ *  (SPEC §6): the active send while scheduled or sending, the record once sent, and the
+ *  canceled send after a cancel. Null for a post never scheduled. */
+export function latestSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
+  return db
+    .prepare("SELECT * FROM sends WHERE post_id = ? ORDER BY scheduled_at DESC, id DESC LIMIT 1")
+    .bind(postId)
+    .first<SendRow>();
+}
+
 /** The most recent successfully-sent Send for a post (backs the archive page). */
 export function latestSentSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
   return db
@@ -236,7 +249,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, template_revision, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -526,6 +539,98 @@ export async function countDeliveriesFiltered(
 // --- send-loop / sweep (M6) -------------------------------------------------
 
 /** Scheduled sends whose fire time has arrived. */
+/** One scheduled send that keeps a template revision other than the current one, as
+ *  the template save reports it (SPEC §9). */
+export interface SendKept {
+  post_id: string;
+  send_id: string;
+  fire_at: number;
+  template_revision: string | null;
+}
+
+/** The scheduled sends NOT made with `currentRevision` — the ones a template save leaves
+ *  on the revision they had, soonest first. A send with no recorded revision (from
+ *  before the history existed) counts as kept: its template is unknown, so it is
+ *  reported rather than assumed current. */
+export async function scheduledSendsNotOn(
+  db: D1Database,
+  currentRevision: string,
+): Promise<SendKept[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT post_id, id AS send_id, fire_at, template_revision
+         FROM sends
+         WHERE status = 'scheduled' AND (template_revision IS NULL OR template_revision <> ?)
+         ORDER BY fire_at ASC, id ASC`,
+    )
+    .bind(currentRevision)
+    .all<SendKept>();
+  return results;
+}
+
+/** The frozen parts a freeze writes: the render and the template revision it used. */
+export interface FrozenRender {
+  rendered_html: string;
+  rendered_text: string;
+  subject: string;
+  template_revision: string;
+}
+
+/** The INSERT of a new scheduled send, as a statement so the freeze can batch it with
+ *  the post's soft-lock (SPEC §6): the two land together or not at all. */
+export function insertScheduledSendStmt(
+  db: D1Database,
+  send: FrozenRender & { id: string; post_id: string; fire_at: number; recipient_count: number },
+  now: number,
+): D1PreparedStatement {
+  return db
+    .prepare(
+      "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, template_revision, scheduled_at) VALUES (?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(
+      send.id,
+      send.post_id,
+      send.fire_at,
+      send.rendered_html,
+      send.rendered_text,
+      send.subject,
+      send.recipient_count,
+      send.template_revision,
+      now,
+    );
+}
+
+/**
+ * Freeze a scheduled send's render again in place — the template update (SPEC §9):
+ * the same row, the same fire time, a new render and revision. A CAS on `scheduled`
+ * plus the minimum lead: a send that has fired (or is sent or canceled) is past the
+ * window, and one about to fire is refused rather than re-frozen under the sweep, the
+ * same guard a move obeys. Returns false when the guard refused.
+ */
+export async function refreezeSend(
+  db: D1Database,
+  sendId: string,
+  render: FrozenRender,
+  minFireAt: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      `UPDATE sends
+         SET rendered_html = ?, rendered_text = ?, subject = ?, template_revision = ?
+         WHERE id = ? AND status = 'scheduled' AND fire_at >= ?`,
+    )
+    .bind(
+      render.rendered_html,
+      render.rendered_text,
+      render.subject,
+      render.template_revision,
+      sendId,
+      minFireAt,
+    )
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
 export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> {
   const { results } = await db
     .prepare("SELECT * FROM sends WHERE status = 'scheduled' AND fire_at <= ? ORDER BY fire_at ASC")

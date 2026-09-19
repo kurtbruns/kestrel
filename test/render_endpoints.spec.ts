@@ -79,6 +79,92 @@ describe("preview + test endpoints", () => {
     expect(msg.html).toContain("/unsubscribe?test=1");
   });
 
+  // A scheduled post's instruments show the frozen copy (SPEC §5): once scheduled, a
+  // template change made afterwards reaches neither the test nor the preview page, so
+  // the two never disagree about what is going out. A draft stays live.
+  const tpl = (marker: string) =>
+    `<div class="${marker}">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
+  async function putTemplate(html: string) {
+    const res = await SELF.fetch(`${base}/api/settings`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ emailTemplate: html }),
+    });
+    expect(res.status).toBe(200);
+  }
+  async function outboxFor(to: string) {
+    const outbox = await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }));
+    return outbox.messages.find((m: any) => m.to === to);
+  }
+
+  it("POST /test on a scheduled post sends the frozen copy, even after the template changes", async () => {
+    await putTemplate(tpl("frozen-look"));
+    const id = await draftWithImage("Frozen Test");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() }),
+      }),
+    );
+    expect(scheduled.send.rendered_html).toContain('class="frozen-look"');
+    // The template (and the identity) change after scheduling.
+    await putTemplate(tpl("monday-look"));
+
+    const to = `frozen-${id}@example.com`;
+    const res = await SELF.fetch(`${base}/posts/${id}/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    expect(res.status).toBe(200);
+    const body = await readJson(res);
+    expect(body.sent).toBe(true);
+    expect(body.frozen).toBe(true);
+    expect(body.send_id).toBe(scheduled.send.id);
+
+    const msg = await outboxFor(to);
+    expect(msg).toBeTruthy();
+    // The send's frozen bytes, with the per-recipient placeholders filled exactly as the
+    // fire path fills them — never a live render of the current template.
+    expect(msg.html).toContain('class="frozen-look"');
+    expect(msg.html).not.toContain('class="monday-look"');
+    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).toContain("/unsubscribe?test=1");
+    expect(msg.html).toContain(`/media/posts/${id}/cat.png`);
+
+    // The preview page agrees with the test: the same frozen copy.
+    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    expect(page).toContain('class="frozen-look"');
+    expect(page).not.toContain('class="monday-look"');
+    const info = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+    );
+    expect(info.frozen).toBe(true);
+  });
+
+  it("POST /test on a draft sends the live render: the current template", async () => {
+    await putTemplate(tpl("live-look"));
+    const id = await draftWithImage("Live Test");
+    await putTemplate(tpl("newer-look"));
+
+    const to = `live-${id}@example.com`;
+    const body = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      }),
+    );
+    expect(body.frozen).toBe(false);
+    expect(body.send_id).toBeNull();
+    const msg = await outboxFor(to);
+    expect(msg.html).toContain('class="newer-look"');
+    expect(msg.html).not.toContain('class="live-look"');
+    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    expect(page).toContain('class="newer-look"');
+  });
+
   it("POST /test rejects a missing/invalid address (400)", async () => {
     const id = await draftWithImage("Bad Address");
     const res = await SELF.fetch(`${base}/posts/${id}/test`, {

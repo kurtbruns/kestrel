@@ -1,13 +1,19 @@
 /**
- * App settings surface (authed admin). Three parts:
+ * App settings surface (authed admin). Four parts:
  *
- *   GET    /api/settings      → { settings, deployment }
- *   PUT    /api/settings      → update editable settings (merge), returns { settings }
+ *   GET    /api/settings      → { settings, deployment, template }
+ *   PUT    /api/settings      → update editable settings (merge), returns { settings, template,
+ *                               warnings, scheduled_posts_kept } (the last two on a template save)
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
+ *   GET    /api/settings/template/revisions             → the template's history
+ *   POST   /api/settings/template/revisions/:id/restore → make a past revision current, as a new one
  *
  * `settings` are the mutable, in-app preferences (src/db/settings.ts) — including
- * the publication identity: name, tagline, brand color, and logo.
+ * the publication identity: name, tagline, and logo. `template` is the current
+ * template revision (SPEC §9): a template save writes a revision, and a send pins
+ * the one it was made with, so the save reports which scheduled sends keep the
+ * previous revision (`scheduled_posts_kept`) rather than changing them silently.
  * `deployment` is a READ-ONLY reflection of the env-resolved Config — which
  * provider is live, the From address, the origins, whether Access is configured —
  * so the editor can show what was set at deploy time and link to the setup docs
@@ -15,20 +21,29 @@
  * provider credentials, the Access AUD, and the dev secret never appear here.
  */
 
+import { scheduledSendsNotOn } from "../db/sends";
 import {
   type AppSettings,
   BRANDING_LOGO_KEY,
   DEFAULT_CONFIRMATION_EMAIL,
   getSettings,
+  MAX_TEMPLATE,
   resolveConfirmationEmail,
   type SettingsPatch,
   setPublicationLogo,
   updateSettings,
 } from "../db/settings";
+import { listTemplateRevisions, templateRevisionRef } from "../db/template_revisions";
 import type { Config } from "../env";
-import { badRequest, json } from "../lib/errors";
+import { badRequest, json, notFound } from "../lib/errors";
 import { DEFAULT_EMAIL_TEMPLATE, validateEmailTemplate } from "../render/template_engine";
 import type { RequestContext } from "../router";
+import { param } from "../router";
+import {
+  currentTemplateRevision,
+  restoreTemplateRevision,
+  saveTemplate,
+} from "../services/template_history";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
 const MAX_LOGO_BYTES = 512 * 1024;
@@ -84,9 +99,20 @@ function settingsView(settings: AppSettings, cfg: Config) {
   };
 }
 
+function author(c: RequestContext): string | null {
+  return c.principal?.email ?? c.principal?.kind ?? null;
+}
+
 export async function get(c: RequestContext): Promise<Response> {
+  // Reading the current revision records the template as revision one on a database
+  // from before the history existed, so the surface always has a revision to show.
+  const template = templateRevisionRef(await currentTemplateRevision(c.env.DB));
   const settings = await getSettings(c.env.DB);
-  return json({ settings: settingsView(settings, c.config), deployment: deploymentView(c.config) });
+  return json({
+    settings: settingsView(settings, c.config),
+    deployment: deploymentView(c.config),
+    template,
+  });
 }
 
 export async function update(c: RequestContext): Promise<Response> {
@@ -96,7 +122,7 @@ export async function update(c: RequestContext): Promise<Response> {
   } catch {
     throw badRequest("a JSON body is required");
   }
-  const patch = readPatch(body);
+  const { patch, emailTemplate } = readPatch(body);
   // Structural template validation: a missing unsubscribe (or body) is an error and
   // rejects the write — no email may ship without a way to leave (I2). Other issues
   // are warnings, returned so the client can surface them without blocking. An empty
@@ -105,20 +131,76 @@ export async function update(c: RequestContext): Promise<Response> {
   // silently resetting to the default. (A never-set template still resolves to the
   // built-in default on read — see settingsView / resolveBranding.)
   let warnings: string[] = [];
-  if (patch.emailTemplate !== undefined) {
-    const v = validateEmailTemplate(patch.emailTemplate);
+  if (emailTemplate !== undefined) {
+    if (emailTemplate.length > MAX_TEMPLATE) {
+      throw badRequest(`emailTemplate must be ${MAX_TEMPLATE} characters or fewer`);
+    }
+    const v = validateEmailTemplate(emailTemplate);
     if (v.errors.length > 0) {
       throw badRequest(v.errors.join(" "));
     }
     warnings = v.warnings;
   }
   try {
-    const settings = await updateSettings(c.env.DB, patch);
-    return json({ settings: settingsView(settings, c.config), warnings });
+    // The preferences first: their validation throws before anything is written, so
+    // an invalid field never leaves a template revision behind.
+    let settings = await updateSettings(c.env.DB, patch);
+    let template = templateRevisionRef(await currentTemplateRevision(c.env.DB));
+    if (emailTemplate === undefined) {
+      return json({ settings: settingsView(settings, c.config), template, warnings });
+    }
+    // A template save writes a revision and reports the scheduled sends it does NOT
+    // change (SPEC §9): each keeps the revision it was made with until updated.
+    const saved = await saveTemplate(c.env.DB, emailTemplate, author(c));
+    settings = await getSettings(c.env.DB);
+    template = templateRevisionRef(saved.revision);
+    const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
+    return json({
+      settings: settingsView(settings, c.config),
+      template,
+      warnings,
+      scheduled_posts_kept,
+    });
   } catch (e) {
-    // updateSettings throws plain Errors for invalid input (bad address/color, too many).
+    // updateSettings / saveTemplate throw plain Errors for invalid input (a bad
+    // address, too many recipients, an oversized template).
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
+}
+
+/** The template's history, newest first, each marked whether it is the current one. */
+export async function listRevisions(c: RequestContext): Promise<Response> {
+  const current = await currentTemplateRevision(c.env.DB);
+  const rows = await listTemplateRevisions(c.env.DB);
+  return json({
+    revisions: rows.map((r) => ({
+      id: r.id,
+      saved_at: r.saved_at,
+      author: r.author,
+      is_current: r.id === current.id,
+    })),
+    current: templateRevisionRef(current),
+  });
+}
+
+/**
+ * Restore a past revision (SPEC §9): a new revision equal to it becomes current; the
+ * history is never rewritten. Like a save, it reports the scheduled sends it leaves on
+ * the revision they had.
+ */
+export async function restoreRevision(c: RequestContext): Promise<Response> {
+  const saved = await restoreTemplateRevision(c.env.DB, param(c, "id"), author(c));
+  if (!saved) {
+    throw notFound("template revision");
+  }
+  const settings = await getSettings(c.env.DB);
+  const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
+  return json({
+    settings: settingsView(settings, c.config),
+    template: templateRevisionRef(saved.revision),
+    restored_from: param(c, "id"),
+    scheduled_posts_kept,
+  });
 }
 
 /** Store the uploaded logo bytes under the reserved R2 key, then bump its version. */
@@ -158,10 +240,12 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
   return json({ settings: settingsView(settings, c.config) });
 }
 
-/** Pick only the known editable keys off the request body. */
-function readPatch(body: unknown): SettingsPatch {
+/** Pick only the known editable keys off the request body. The template rides beside
+ *  the patch, not in it: it is saved through its history, not merged like a preference. */
+function readPatch(body: unknown): { patch: SettingsPatch; emailTemplate?: string } {
   const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
   const patch: SettingsPatch = {};
+  let emailTemplate: string | undefined;
   if ("testRecipients" in o) {
     if (!Array.isArray(o.testRecipients)) {
       throw badRequest("testRecipients must be a list");
@@ -189,7 +273,7 @@ function readPatch(body: unknown): SettingsPatch {
     if (typeof o.emailTemplate !== "string") {
       throw badRequest("emailTemplate must be a string");
     }
-    patch.emailTemplate = o.emailTemplate;
+    emailTemplate = o.emailTemplate;
   }
   if ("confirmationEmail" in o) {
     const c = (
@@ -206,5 +290,5 @@ function readPatch(body: unknown): SettingsPatch {
     }
     patch.confirmationEmail = ce;
   }
-  return patch;
+  return { patch, emailTemplate };
 }

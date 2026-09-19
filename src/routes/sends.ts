@@ -1,4 +1,4 @@
-/** Send status surface: list, detail, cancel. Authed. */
+/** Send status surface: list, detail, cancel, reschedule, template update. Authed. */
 
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
@@ -10,7 +10,12 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
-import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
+import {
+  cancel as cancelSend,
+  reschedule as rescheduleSend,
+  updateTemplate as updateSendTemplate,
+} from "../send/schedule";
+import { currentTemplateRevision } from "../services/template_history";
 import { parseFutureFireAt } from "./schedule";
 
 export async function list(c: RequestContext): Promise<Response> {
@@ -34,7 +39,18 @@ export async function list(c: RequestContext): Promise<Response> {
   // every Sent-page load and every ~3s active-send poll — is exactly what the counters
   // (`sends.c_*`) make redundant, so it is gone (#166). `deliveries` stays the source
   // of truth; the counters are its rebuildable cache (SPEC §8).
-  return json({ sends: rows, page: listPage(total, page) });
+  //
+  // A scheduled send made with an older template than the current one says so wherever
+  // it is shown (SPEC §8), so each scheduled row is marked `template_outdated`. The
+  // current revision is read only when a row needs it — the sending list is polled.
+  const current = rows.some((s) => s.status === "scheduled")
+    ? (await currentTemplateRevision(c.env.DB)).id
+    : null;
+  const marked = rows.map((s) => ({
+    ...s,
+    template_outdated: s.status === "scheduled" && s.template_revision !== current,
+  }));
+  return json({ sends: marked, page: listPage(total, page) });
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -186,6 +202,17 @@ export async function reschedule(c: RequestContext): Promise<Response> {
   }
   const fireAt = parseFutureFireAt(body.fire_at);
   const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
+  return json({ send });
+}
+
+/**
+ * Update a scheduled send to the current template (SPEC §9): the same send, re-frozen
+ * from the same content with the current template and identity at the same fire time.
+ * `scheduled`-status only and never inside the minimum lead — the state machine holds
+ * both guards (`updateTemplate`).
+ */
+export async function updateTemplate(c: RequestContext): Promise<Response> {
+  const send = await updateSendTemplate(c.env, c.config, param(c, "id"));
   return json({ send });
 }
 

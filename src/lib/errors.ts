@@ -1,10 +1,16 @@
 /** Small HTTP error + JSON helpers used across routes. */
 
 export class HttpError extends Error {
+  /**
+   * `details` are extra top-level fields for the JSON body, for a refusal that must
+   * hand the client what it needs to act (the template choice, SPEC §6) rather than a
+   * bare code. They sit beside `error` and `message`, never in place of them.
+   */
   constructor(
     readonly status: number,
     readonly code: string,
     message?: string,
+    readonly details?: Record<string, unknown>,
   ) {
     super(message ?? code);
     this.name = "HttpError";
@@ -25,7 +31,7 @@ export function json(data: unknown, status = 200, headers?: HeadersInit): Respon
 /** Turn any thrown value into a JSON error response. */
 export function toErrorResponse(err: unknown): Response {
   if (err instanceof HttpError) {
-    return json({ error: err.code, message: err.message }, err.status);
+    return json({ ...err.details, error: err.code, message: err.message }, err.status);
   }
   console.error("unhandled error", err);
   return json({ error: "internal_error" }, 500);

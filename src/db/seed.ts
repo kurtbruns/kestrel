@@ -67,6 +67,9 @@ export interface SeedSend {
   rendered_text: string;
   subject: string;
   recipient_count: number;
+  /** The template revision the demo render was frozen with, so the demo's scheduled
+   *  send is recorded like a real one (and never reads as outdated on first open). */
+  template_revision: string | null;
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
@@ -116,6 +119,7 @@ export async function resetAll(db: D1Database): Promise<void> {
     db.prepare("DELETE FROM suppressions"),
     db.prepare("DELETE FROM subscribers"),
     db.prepare("DELETE FROM settings"),
+    db.prepare("DELETE FROM template_revisions"), // the settings pointer went with the row above
   ]);
 }
 
@@ -212,8 +216,8 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
   await db
     .prepare(
       `INSERT INTO sends
-         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, template_revision, locked_until, scheduled_at, started_at, completed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
     )
     .bind(
       row.id,
@@ -224,6 +228,7 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
       row.rendered_text,
       row.subject,
       row.recipient_count,
+      row.template_revision,
       row.scheduled_at,
       row.started_at,
       row.completed_at,

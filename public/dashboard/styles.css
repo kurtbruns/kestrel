@@ -1327,6 +1327,21 @@ td a:hover {
   color: var(--danger-fg);
   border-color: var(--danger-line);
 }
+/* A scheduled send made with an older template than the current one (SPEC §8) rides
+   the amber `warn` scale: it awaits the publisher's decision — keep it, or Update it —
+   the same "attention, not error" reading as a pending subscriber (DESIGN §3). Shown as
+   a row-flag wherever the send is listed, always beside the Update action, never alone. */
+.badge.tpl-older {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  border-color: var(--warn-line);
+}
+/* In the Drafts table's narrow Status column it sits under the lifecycle badge, flush. */
+.posts-table td .badge.tpl-older {
+  display: block;
+  width: max-content;
+  margin: 4px 0 0;
+}
 /* Suppression is an overlay on the address, not a consent status, so it rides next to
    the email rather than in the Status column — sized down to read as secondary. */
 .row-flag {
@@ -2117,6 +2132,20 @@ th.num .th-sort {
   font-size: 13px;
   color: var(--muted);
 }
+/* The test action of a scheduled post, with the one line beside it that says the test
+   is the frozen copy (SPEC §5) — stacked under the button so the row stays one row. */
+.test-row {
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.test-note {
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+  max-width: 34em;
+  line-height: 1.4;
+}
 /* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
    dot). The dot is a reinforcement, never the whole signal — the text label carries
@@ -2259,6 +2288,57 @@ th.num .th-sort {
   padding-top: 0;
   border-top: 0;
   justify-content: flex-start;
+}
+/* The template choice a schedule / send-now dialog asks when the template changed since
+   the post was last made (SPEC §6, DESIGN §7): a radio pair rendered as two option cards,
+   each with its revision's save date, and neither checked — a pre-selected default would
+   be the silent choice by another name. The native radio keeps it keyboard-reachable. */
+.modal .tpl-choice {
+  margin: 14px 0 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.modal .tpl-choice legend {
+  padding: 0;
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.45;
+}
+.modal .tpl-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 6px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 400;
+}
+.modal .tpl-option:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* The base `input` rule stretches form fields to the modal's width; a radio is a dot. */
+.modal .tpl-option input {
+  width: auto;
+  flex: 0 0 auto;
+  margin: 3px 0 0;
+  accent-color: var(--accent);
+}
+.modal .tpl-option-text {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  font-size: 13px;
+  color: var(--fg);
+}
+.modal .tpl-option-text .muted {
+  font-size: 12px;
 }
 /* Link — a text-link-styled action (DESIGN §1), not one of the button roles. Reserved
    for a deliberately subordinate choice, like the in-modal Send now that sits below
@@ -4192,6 +4272,79 @@ textarea.is-invalid {
   background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
   border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-soft));
   color: var(--warn-fg);
+}
+/* The post-save notice (DESIGN §2, home ⑥): the scheduled posts a template save left on
+   the template they were made with, each with Update, plus Update all. The banner
+   component's info variant, stacked (head, then the list) rather than the banner's one
+   row, because it carries a list. */
+.tpl-kept {
+  display: block;
+  margin: 12px 0 0;
+}
+.tpl-kept-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.tpl-kept-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.tpl-kept-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.tpl-kept-list li a {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg);
+  font-weight: 600;
+}
+.tpl-kept-list li .muted {
+  flex: 0 0 auto;
+  font-size: 12px;
+}
+/* The template's history: one row per revision, newest first; the current one is
+   labelled, every other carries Restore. Fixed-width date and action columns so the
+   author column takes the slack. */
+.tpl-history {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tpl-history td {
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+.tpl-history td.when {
+  width: 160px;
+  white-space: nowrap;
+}
+.tpl-history td.who {
+  overflow-wrap: anywhere;
+}
+.tpl-history td.act {
+  width: 96px;
+  text-align: right;
+}
+.tpl-history tr.is-current td {
+  color: var(--fg);
+  font-weight: 600;
+}
+.tpl-history tr.is-current td.who {
+  font-weight: 400;
 }
 /* Variable reference — a native <details> disclosure. Logic-less: a token is only
    ever replaced by its value, so there's nothing to execute. */

@@ -70,8 +70,20 @@ export interface AppSettings {
    * `{{ variables }}` the render path fills (SPEC §9). "" means "use the built-in
    * default"; the API reflects the resolved template so a client always sees one.
    * Stored as text (no schema), validated for the required variables by the route.
+   *
+   * This is a mirror of the CURRENT template revision's html: the template has a
+   * history (`template_revisions`, SPEC §9), and the one writer that changes this
+   * field (services/template_history.ts) writes the revision row and this blob in
+   * the same batch, so the render path can keep reading the html from here while a
+   * send pins the revision by id. Not writable through `updateSettings`.
    */
   emailTemplate: string;
+  /**
+   * The id of the current template revision (`template_revisions.id`), the one
+   * `emailTemplate` mirrors. Null until the first template save or the first-run
+   * backfill that records the template as it stands (services/template_history.ts).
+   */
+  emailTemplateRevision: string | null;
   /** Editable wording of the double opt-in confirmation email (SPEC §7). */
   confirmationEmail: ConfirmationEmailCopy;
 }
@@ -94,6 +106,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   testRecipients: [],
   publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
+  emailTemplateRevision: null,
   confirmationEmail: DEFAULT_CONFIRMATION_EMAIL,
 };
 
@@ -102,17 +115,18 @@ const MAX_TEST_RECIPIENTS = 20;
 const MAX_NAME = 120;
 const MAX_TAGLINE = 200;
 const MAX_ADDRESS = 300;
-const MAX_TEMPLATE = 40_000;
+/** The template's storage cap; enforced by the template save (services/template_history.ts). */
+export const MAX_TEMPLATE = 40_000;
 const MAX_CE_SUBJECT = 200;
 const MAX_CE_BODY = 1000;
 const MAX_CE_BUTTON = 80;
 const MAX_CE_REASSURANCE = 400;
 
-/** A patch the API accepts. Logo is set through the dedicated upload route, not here. */
+/** A patch the API accepts. The logo is set through the dedicated upload route and
+ *  the email template through its history (services/template_history.ts), not here. */
 export interface SettingsPatch {
   testRecipients?: string[];
   publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "address">>;
-  emailTemplate?: string;
   confirmationEmail?: Partial<ConfirmationEmailCopy>;
 }
 
@@ -154,6 +168,10 @@ function coerce(raw: unknown): AppSettings {
     publication: coercePublication(o.publication),
     emailTemplate:
       typeof o.emailTemplate === "string" ? o.emailTemplate.slice(0, MAX_TEMPLATE) : "",
+    emailTemplateRevision:
+      typeof o.emailTemplateRevision === "string" && o.emailTemplateRevision
+        ? o.emailTemplateRevision
+        : null,
     // A row that predates this feature has no `confirmationEmail` key at all — that's
     // "never configured", so it gets the full built-in copy (reassurance included), NOT
     // a blank-reassurance row. Only once the key exists (the operator saved copy) does a
@@ -194,14 +212,19 @@ export async function getSettings(db: D1Database): Promise<AppSettings> {
   }
 }
 
-async function persist(db: D1Database, next: AppSettings): Promise<void> {
-  await db
+/** The upsert of the whole blob, as a statement so a caller can batch it with a write
+ *  it must land together with (the template save pairs it with its revision row). */
+export function persistSettingsStmt(db: D1Database, next: AppSettings): D1PreparedStatement {
+  return db
     .prepare(
       `INSERT INTO settings (id, data, updated_at) VALUES (1, ?1, ?2)
        ON CONFLICT (id) DO UPDATE SET data = ?1, updated_at = ?2`,
     )
-    .bind(JSON.stringify(next), Date.now())
-    .run();
+    .bind(JSON.stringify(next), Date.now());
+}
+
+async function persist(db: D1Database, next: AppSettings): Promise<void> {
+  await persistSettingsStmt(db, next).run();
 }
 
 /**
@@ -231,17 +254,6 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
     if (p.address !== undefined) {
       next.publication.address = normalizeText(p.address, "address", MAX_ADDRESS);
     }
-  }
-  if (patch.emailTemplate !== undefined) {
-    // Structural validation (required variables, warnings) is the route's job; here
-    // we only enforce the type + storage cap. "" resets to the built-in default.
-    if (typeof patch.emailTemplate !== "string") {
-      throw new Error("emailTemplate must be a string");
-    }
-    if (patch.emailTemplate.length > MAX_TEMPLATE) {
-      throw new Error(`emailTemplate must be ${MAX_TEMPLATE} characters or fewer`);
-    }
-    next.emailTemplate = patch.emailTemplate;
   }
   if (patch.confirmationEmail !== undefined) {
     // Words only: trim + cap each field. A blank stays blank here and resolves to the

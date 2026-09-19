@@ -3,10 +3,13 @@
 import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import { getTemplateRevision, templateRevisionRef } from "../db/template_revisions";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { postTemplateFacts } from "../send/schedule";
+import { currentTemplateRevision } from "../services/template_history";
 
 function author(c: RequestContext): string | null {
   return c.principal?.email ?? c.principal?.kind ?? null;
@@ -99,7 +102,18 @@ export async function listPosts(c: RequestContext): Promise<Response> {
     posts.countPosts(c.env.DB, filter),
     posts.listPosts(c.env.DB, filter, page),
   ]);
-  return json({ posts: rows, page: listPage(total, page) });
+  // A scheduled post's send may keep an older template than the current one (SPEC §8);
+  // the list marks it so the mark and the Update action are never apart. Read the
+  // current revision only when a row needs it — the list is polled.
+  const current = rows.some((p) => p.active_send_status === "scheduled")
+    ? (await currentTemplateRevision(c.env.DB)).id
+    : null;
+  const marked = rows.map((p) => ({
+    ...p,
+    template_outdated:
+      p.active_send_status === "scheduled" && p.active_send_template_revision !== current,
+  }));
+  return json({ posts: marked, page: listPage(total, page) });
 }
 
 export async function getPost(c: RequestContext): Promise<Response> {
@@ -116,15 +130,31 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // A sent post no longer opens the editor (#147): the editor uses this send id to
   // redirect to the sent record view (#/sent/:id).
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
+  // The template facts (SPEC §6, §9): what is current, what the post was last made
+  // with, and whether they differ — the dialog and the API read the same three facts,
+  // so neither has to derive the choice.
+  const { facts } = await postTemplateFacts(c.env.DB, post.id);
+  // The revision the active send was made with; null when it predates the history.
+  const scheduledTemplate =
+    active?.status === "scheduled" && active.template_revision
+      ? await getTemplateRevision(c.env.DB, active.template_revision)
+      : null;
   return json(
     {
       post,
       markdown: revision?.markdown ?? "",
       author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
       scheduled:
-        active && active.status === "scheduled" ? { id: active.id, fire_at: active.fire_at } : null,
+        active && active.status === "scheduled"
+          ? {
+              id: active.id,
+              fire_at: active.fire_at,
+              template: scheduledTemplate ? templateRevisionRef(scheduledTemplate) : null,
+            }
+          : null,
       sending: active && active.status === "sending" ? { id: active.id } : null,
       sent: sent ? { id: sent.id } : null,
+      template: facts,
     },
     200,
     revisionHeaders(post),

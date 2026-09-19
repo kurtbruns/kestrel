@@ -3,6 +3,7 @@
  *   POST /posts/:id/preview        → { url, subject, warnings } (hosted view-in-browser)
  *   GET  /posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   POST /posts/:id/test           → send the real render to one address via the provider
+ *                                    (a scheduled post's frozen copy; a draft's live render)
  *   POST /api/settings/template/test → send a SAMPLE post through the saved template
  *   GET  /api/dev/outbox           → fake transport's outbox (fake provider only)
  *
@@ -12,12 +13,18 @@
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
+import { getActiveSendForPost } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
-import { type RenderInput, render, substituteRecipient } from "../render/render";
+import {
+  type RenderedEmail,
+  type RenderInput,
+  render,
+  substituteRecipient,
+} from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -45,20 +52,48 @@ async function loadBranding(c: RequestContext): Promise<EmailBranding> {
   return resolveBranding(await getSettings(c.env.DB), c.config);
 }
 
-export async function preview(c: RequestContext): Promise<Response> {
+/** The email a post's publisher-facing instruments show or send (SPEC §5): once the
+ *  post is scheduled, the send's frozen copy, exactly what will fire; before that, a
+ *  live render of the current draft through the one render path (I5). One reader for
+ *  the preview page, the preview action, and the post test, so the three instruments
+ *  can never disagree about what is going out. */
+interface PostEmail {
+  input: RenderInput;
+  email: RenderedEmail;
+  warnings: string[];
+  /** The scheduled send whose frozen copy this is; null for a draft's live render. */
+  frozen: { id: string } | null;
+}
+
+async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
   const input = await loadRenderInput(c);
+  const active =
+    input.post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, input.post.id) : null;
+  if (active?.status === "scheduled") {
+    return {
+      input,
+      email: { subject: active.subject, html: active.rendered_html, text: active.rendered_text },
+      warnings: [],
+      frozen: { id: active.id },
+    };
+  }
   const result = await render(input, c.config, await loadBranding(c));
+  return { input, email: result, warnings: result.warnings, frozen: null };
+}
+
+export async function preview(c: RequestContext): Promise<Response> {
+  const { input, email, warnings, frozen } = await loadPostEmail(c);
   return json({
     url: `${c.config.appOrigin}/posts/${input.post.id}/preview`,
-    subject: result.subject,
-    warnings: result.warnings,
+    subject: email.subject,
+    warnings,
+    frozen: frozen !== null,
   });
 }
 
 export async function previewPage(c: RequestContext): Promise<Response> {
-  const input = await loadRenderInput(c);
-  const result = await render(input, c.config, await loadBranding(c));
-  const html = substituteRecipient(result, {
+  const { email } = await loadPostEmail(c);
+  const html = substituteRecipient(email, {
     "email.unsubscribeUrl": genericUnsubscribeUrl(c),
     "email.sentTo": "",
   }).html;
@@ -67,8 +102,16 @@ export async function previewPage(c: RequestContext): Promise<Response> {
   });
 }
 
+/**
+ * Send a post test to one address. Once the post is scheduled, the test is its
+ * FROZEN copy (SPEC §5): the send's `rendered_html`/`rendered_text`, handed to the
+ * provider exactly as the fire path hands them, with the per-recipient placeholders
+ * filled for the test address — so a template or identity change made after
+ * scheduling can never make the test disagree with what will go out (or with the
+ * view-in-browser page). A draft keeps the live render: its content, the current
+ * template, and the current identity, through the one render path (I5).
+ */
 export async function test(c: RequestContext): Promise<Response> {
-  const input = await loadRenderInput(c);
   let body: unknown;
   try {
     body = await c.req.json();
@@ -81,11 +124,11 @@ export async function test(c: RequestContext): Promise<Response> {
     throw badRequest("'to' must be an email address");
   }
 
-  const result = await render(input, c.config, await loadBranding(c));
+  const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
-  const [res] = await provider.sendBatch(result, [{ email: to, unsubscribeUrl }], {
+  const [res] = await provider.sendBatch(email, [{ email: to, unsubscribeUrl }], {
     idempotencyKeyPrefix: `test-${input.post.id}`,
   });
 
@@ -93,8 +136,12 @@ export async function test(c: RequestContext): Promise<Response> {
     sent: res?.accepted === true,
     provider: provider.name,
     to,
-    subject: result.subject,
-    warnings: result.warnings,
+    subject: email.subject,
+    warnings,
+    // Which copy went: the scheduled send's frozen render (and which send), or the
+    // draft's live render.
+    frozen: frozen !== null,
+    send_id: frozen?.id ?? null,
   });
 }
 
