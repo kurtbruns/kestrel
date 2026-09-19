@@ -329,7 +329,7 @@ export function createRouter(archiveBasePath: string): Router {
       query: [
         {
           name: "status",
-          description: "Filter by status: `scheduled`, `sending`, `sent`, `canceled`, or `failed`.",
+          description: "Filter by status: `scheduled`, `sending`, `sent`, or `canceled`.",
         },
         { name: "search", description: "Subject contains-search." },
         {

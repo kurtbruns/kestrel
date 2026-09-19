@@ -2429,7 +2429,6 @@ const PHASE_META = {
   "needs-attention": { label: "Needs attention", tone: "danger" },
   settling: { label: "Settling", tone: "sending" },
   complete: { label: "Complete", tone: "ok" },
-  failed: { label: "Failed", tone: "danger" },
   canceled: { label: "Canceled", tone: "muted" },
 };
 const PHASE_BLURB = {
@@ -5031,13 +5030,6 @@ const BOUNCE_SPIKE_MIN = 3;
 function computeHealth(sends) {
   const now = Date.now();
   const alerts = [];
-  const failed = sends.filter((s) => s.status === "failed");
-  if (failed.length) {
-    alerts.push({
-      level: "red",
-      text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
-    });
-  }
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
   if (missed.length) {
     alerts.push({
@@ -5179,9 +5171,7 @@ async function renderDashboard() {
   const nextUpHtml = dashScheduledHtml(scheduled);
 
   const slugById = new Map(posts.map((p) => [p.id, p.slug]));
-  const recent = sends
-    .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
-    .slice(0, 5);
+  const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
   const recentHtml = recent.length
     ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent
         .map((s) => {

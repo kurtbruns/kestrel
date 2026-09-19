@@ -86,7 +86,6 @@ describe("schema (0001_init)", () => {
     // Terminal states fall outside the predicate — many are allowed to coexist,
     // and once the active send leaves the active set a re-schedule is unblocked.
     await insertSend("sd4", "canceled");
-    await insertSend("sd5", "failed");
     await env.DB.prepare("UPDATE sends SET status = 'sent' WHERE id = 'sd1'").run();
     await insertSend("sd6", "scheduled"); // the post is active-send-free again
   });

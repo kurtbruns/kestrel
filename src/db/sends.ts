@@ -3,7 +3,10 @@
 
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 
-export type SendStatus = "scheduled" | "sending" | "sent" | "canceled" | "failed";
+// The `0001` CHECK constraint still admits a fifth value, `failed`, that nothing writes: a
+// Send never fails, it keeps retrying and hands the one ambiguous case to a human (SPEC
+// §12). Migrations are append-only, so the constraint stays wider than this type.
+export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
 
 export interface SendRow {
   id: string;
