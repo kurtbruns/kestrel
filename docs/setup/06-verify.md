@@ -46,4 +46,4 @@ Then check:
 
 When every box is checked on production, the instance is ready for a real send to your confirmed subscribers.
 
-> These steps are **operator-run and cannot be performed from inside the app or from a development session** — they need your live Cloudflare account, real DNS, a provider out of the sandbox, and real inboxes. Treat them as the acceptance test you run by hand.
+> These steps are **run by hand and cannot be performed from inside the app or from a development session** — they need your live Cloudflare account, real DNS, a provider out of the sandbox, and real inboxes. Treat them as the acceptance test you run by hand.

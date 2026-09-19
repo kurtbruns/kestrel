@@ -4201,7 +4201,7 @@ async function renderSettings() {
     <section class="set-sec">
       ${secHead("Email sender", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${SET_ICON.readonly}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">operator setup guide</a>, then redeploy. Credentials are never shown.</span></div>
+        <div class="set-ro-note">${SET_ICON.readonly}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
         <div class="set-preview-bar" style="background:transparent">
           <span class="set-preview-lbl">Inbox preview</span>
           <span class="set-preview-dot">How readers see the sender</span>
@@ -4344,7 +4344,7 @@ async function renderSettings() {
     <section class="set-sec">
       ${secHead("Instance", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${SET_ICON.info}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs">operator setup guide</a> to change them.</span></div>
+        <div class="set-ro-note">${SET_ICON.info}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs">setup guide</a> to change them.</span></div>
         <div class="set-kv">
           <div class="set-kv-k">App origin</div><div class="set-kv-v"><span class="mono">${esc(d.appOrigin)}</span></div>
           <div class="set-kv-k">Archive URL base</div><div class="set-kv-v"><span class="mono">${esc(archiveBase)}</span>${archiveIsDefault ? '<span class="set-pill">default: app origin</span>' : ""}</div>
@@ -4749,7 +4749,7 @@ async function renderSettings() {
 }
 
 // ---- docs ----
-// The operator setup guide, authored in docs/setup/*.md and served read-only by the
+// The setup guide, authored in docs/setup/*.md and served read-only by the
 // authed GET /api/docs route as sanitized HTML fragments. The guide is
 // paginated — one part per page — with a "Contents" list of every part and an "On
 // this page" of the current part's sections in the rail, plus Previous/Next at the
@@ -5447,7 +5447,7 @@ function setupChecklistHtml(pub, deployment) {
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
-      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the operator setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
+      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
     </ol>
   </div>`;
