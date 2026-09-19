@@ -173,7 +173,7 @@ A scheduled post is frozen from casual edits. To change it the publisher **cance
 
 The guarantee that falls out: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again, and scheduling re-freezes the render. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the Send immune to app deploys during the multi-day window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
 
-A post has **at most one active (scheduled or sending) Send** at a time — the thing that keeps a post from being scheduled, and sent, twice. This holds even across concurrent requests, so a second schedule can never slip through. Re-scheduling after a Send finishes, is canceled, or fails is unaffected — only active Sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
+A post has **at most one active (scheduled or sending) Send** at a time — the thing that keeps a post from being scheduled, and sent, twice. This holds even across concurrent requests, so a second schedule can never slip through. Re-scheduling after a Send finishes or is canceled is unaffected — only active Sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
 
 ### Moving the fire time
 
