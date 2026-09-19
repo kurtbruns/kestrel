@@ -758,9 +758,8 @@ function route() {
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
-  // drops the publication sidebar for a slim tool bar. `start` is the retired Overview
-  // route, redirected to the docs index below — kept here so the redirect renders in-room.
-  const toolMode = view === "start" || view === "docs" || view === "reference";
+  // drops the publication sidebar for a slim tool bar.
+  const toolMode = view === "docs" || view === "reference";
   document.body.classList.toggle("tool-mode", toolMode);
   // Mark the active nav item across both sidebar navs (primary + tools) so the
   // reader can see where they are (aria-current also styles it).
@@ -797,11 +796,6 @@ function route() {
   }
   if (view === "docs") {
     return renderDocs(arg);
-  }
-  if (view === "start") {
-    // The Overview folded into the docs index; keep old #/start links working.
-    history.replaceState(history.state, "", "#/docs");
-    return renderDocs(undefined);
   }
   return renderDashboard();
 }
@@ -4797,8 +4791,10 @@ async function renderDocs(slug) {
   }
 }
 
-// The index: an intro over a numbered list of every doc, in reading order. No rail — the
-// index IS the navigation; the "On this page" rail is a per-doc thing (renderDocPage).
+// The index: an intro over a numbered list of every doc, in reading order. It keeps the
+// room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
+// holds the project's external links — the reference room is about Kestrel itself, so this
+// is where getkestrel.dev and the source live.
 function renderDocsIndex(docs) {
   const cards = docs
     .map((d, i) => {
@@ -4820,7 +4816,16 @@ function renderDocsIndex(docs) {
     `<p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p>` +
     `<ol class="doc-cards">${cards}</ol>` +
     `</div>`;
-  app.innerHTML = roomShell("docs", null, main);
+  // The repo URL is the deploy's own (package.json → build stamp); getkestrel.dev is the
+  // project's home, the same for every instance, so it's a constant.
+  const repoUrl = appConfig?.deployment?.build?.repoUrl || "";
+  const rail =
+    `<div class="toc-label">Kestrel</div>` +
+    `<a class="rail-link" href="https://getkestrel.dev" target="_blank" rel="noopener">Project site <span aria-hidden="true">↗</span></a>` +
+    (repoUrl
+      ? `<a class="rail-link" href="${esc(repoUrl)}" target="_blank" rel="noopener">Source on GitHub <span aria-hidden="true">↗</span></a>`
+      : "");
+  app.innerHTML = roomShell("docs", rail, main);
   window.scrollTo(0, 0);
 }
 

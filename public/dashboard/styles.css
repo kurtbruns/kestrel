@@ -483,6 +483,18 @@ body.nav-resizing .sidebar {
 .docs-back:hover {
   color: var(--fg);
 }
+/* External project links in the docs-index rail (getkestrel.dev, the source repo). Muted,
+   one per line, brightening on hover — the same quiet weight as the on-this-page links. */
+.rail-link {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  padding: 4px 0;
+}
+.rail-link:hover {
+  color: var(--fg);
+}
 .pub-note {
   font-size: 13px;
   color: var(--muted);
