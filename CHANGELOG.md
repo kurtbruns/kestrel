@@ -19,7 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The template editor states the rule plainly: a saved change applies to posts scheduled from now on, a post already scheduled keeps the template it was made with until updated, and a sent post never changes. Wherever a scheduled send is listed, one made with an older template than the current one is marked, with Update beside Reschedule and Cancel.
 - The post editor ends in a send card: for a scheduled post, the copy that will send (the template it was made with, Update when that is older than the current one, Send test), with the scheduled banner back to the fire time, Reschedule, and Cancel; for a draft, what scheduling will make from it and, when a template choice is coming, that it is coming.
 - Saving the template while posts are scheduled shows which of them keep the previous template, with Update and Update all.
-- Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page. A scheduled post keeps its formatting toolbar in view, greyed, with "Cancel the schedule to edit" beside it, and the Write and Preview tabs carry icons.
+- Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page. A scheduled post opens on Preview; its Edit tab shows the text greyed with "Cancel the schedule to edit" over it and the formatting toolbar disabled. The composer's tabs are now Edit and Preview, with icons.
 
 ### Fixed
 
