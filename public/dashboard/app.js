@@ -1195,7 +1195,8 @@ async function renderEditor(id) {
   // means scheduled — signaled by the scheduled banner, not a status pill (#147).
   const locked = post.status !== "draft";
   // A scheduled send made with an older template than the current one says so wherever
-  // it is shown, and offers Update beside Reschedule and Cancel (SPEC §8, DESIGN §7).
+  // it is shown (SPEC §8). On this page that is the send card below the body, which
+  // also carries Update (DESIGN §7); the banner stays about the fire time and the window.
   const tplOutdated = Boolean(locked && scheduled?.template_outdated);
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
@@ -1221,15 +1222,7 @@ async function renderEditor(id) {
     </div>
     ${
       locked && scheduled
-        ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.${
-            tplOutdated
-              ? ` ${olderTemplateMark()} Made with an older template than the current one; Update makes it again with the current template.`
-              : ""
-          }</span><span class="row">${
-            tplOutdated
-              ? `<button type="button" class="ghost" id="updateTemplate">Update</button>`
-              : ""
-          }<button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>`
+        ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>`
         : ""
     }
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
@@ -1265,21 +1258,21 @@ async function renderEditor(id) {
       </div>
       <div id="warnings"></div>
 
-      <div class="actions-bar">
-        ${
-          locked
-            ? `<span class="locked-note">Locked while scheduled — cancel the schedule to edit.</span>
-               <div class="row test-row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button><span class="test-note">A test sends the frozen copy that will fire; its “view in browser” link works once the send fires.</span></div>`
-            : `<div class="row">
+      ${sendCardHtml({ locked, scheduled, facts: templateFacts, outdated: tplOutdated })}
+      ${
+        locked
+          ? ""
+          : `<div class="actions-bar">
+               <div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>
                </div>
                <div class="row">
                  <button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button>
                  <button type="button" class="primary" id="scheduleBtn">Schedule</button>
-               </div>`
-        }
-      </div>
+               </div>
+             </div>`
+      }
     </div>`;
 
   const ta = document.getElementById("f-markdown");
@@ -1813,7 +1806,7 @@ async function renderEditor(id) {
       }
     });
 
-  // --- update (from the scheduled banner): make the send again with the current template ---
+  // --- update (from the send card): make the send again with the current template ---
   const updateTemplateBtn = document.getElementById("updateTemplate");
   if (updateTemplateBtn && scheduled) {
     updateTemplateBtn.onclick = () =>
@@ -2234,6 +2227,42 @@ function openResolveModal(send, reload) {
     });
   m.el.querySelector("#rUnsent").onclick = (e) => doResolve(e.target, "unsent", "not sent");
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
+}
+
+// The send card at the foot of the editor (DESIGN §7): the model, drawn. Scheduling
+// makes the email from three inputs as they stand (SPEC §6), so a scheduled post shows
+// the copy that will send, with the template it was made with, Update when that is an
+// older template than the current one, and Send test, since a test sends that copy. A
+// draft shows what scheduling will make from it, and says ahead of the dialog when a
+// template choice is coming (SPEC §6, "The soft-lock"). The identity is shown only for
+// a draft: it is not versioned, so what a frozen copy carries cannot be read back.
+function sendCardHtml({ locked, scheduled, facts, outdated }) {
+  const current = facts?.current;
+  const pub = derivePublication(appConfig);
+  if (locked && scheduled) {
+    const made = scheduled.template
+      ? `Saved ${esc(fmt(scheduled.template.saved_at))}`
+      : "Unrecorded";
+    const templateRow = outdated
+      ? `${made} ${olderTemplateMark()} <span class="muted">The current template was saved ${esc(fmt(current.saved_at))}. Update makes this copy again with it.</span>`
+      : `${made}<span class="muted">, the current template.</span>`;
+    return `<div class="send-card" id="sendCard">
+      <div class="send-card-head"><h3 class="send-card-title">The copy that will send</h3><div class="row">${
+        outdated ? `<button type="button" class="ghost" id="updateTemplate">Update</button>` : ""
+      }<button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div></div>
+      <dl class="send-card-rows"><dt>Template</dt><dd>${templateRow}</dd></dl>
+      <p class="send-card-cap">Scheduling made this email and locked the post, so it can’t drift from what was reviewed. A test sends this copy exactly as it will go out; its “view in browser” link works once the send fires. To change the post, cancel the send, then edit and schedule it again.</p>
+    </div>`;
+  }
+  const choiceComing = Boolean(facts?.changed_since_last_made && facts.last_made_with);
+  const templateRow = choiceComing
+    ? `Last scheduled with the template saved ${esc(fmt(facts.last_made_with.saved_at))}. The current one was saved ${esc(fmt(current.saved_at))}; you’ll choose which to use when you schedule.`
+    : `The current template${current ? `, saved ${esc(fmt(current.saved_at))}` : ""}. <a href="#/template">Edit template</a>`;
+  return `<div class="send-card" id="sendCard">
+    <div class="send-card-head"><h3 class="send-card-title">When you schedule</h3></div>
+    <dl class="send-card-rows"><dt>Template</dt><dd>${templateRow}</dd><dt>Identity</dt><dd>${esc(pub.name)}${pub.tagline ? `<span class="muted"> · ${esc(pub.tagline)}</span>` : ""}</dd></dl>
+    <p class="send-card-cap">Scheduling makes the email from this post, the template, and the identity as they stand, and locks the post until the send fires or is canceled.</p>
+  </div>`;
 }
 
 // The mark a scheduled send carries wherever it is shown when it was made with an older

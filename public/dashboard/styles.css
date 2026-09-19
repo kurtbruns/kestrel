@@ -2270,26 +2270,52 @@ th.num .th-sort {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-/* Left-hand note in the actions bar of a locked (scheduled) post, where there is no
-   Primary and nothing to autosave — it stands in for the Save draft + cue that a
-   draft shows, explaining why the row is quiet. */
-.locked-note {
+/* The send card at the foot of the editor (DESIGN §7): a receipt, not a panel. For a
+   scheduled post it replaces the actions bar (Send test and Update live in its head);
+   for a draft it sits above the bar and says what scheduling will make. Rows are a
+   label/value grid; the caption carries the rule in the spec's words. */
+.send-card {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px 13px;
+}
+.send-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.send-card-title {
+  margin: 0;
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--ink);
+}
+.send-card-rows {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 14px;
+  margin: 10px 0 0;
   font-size: 13px;
+}
+.send-card-rows dt {
   color: var(--muted);
 }
-/* The test action of a scheduled post, with the one line beside it that says the test
-   is the frozen copy (SPEC §5) — stacked under the button so the row stays one row. */
-.test-row {
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
+.send-card-rows dd {
+  margin: 0;
+  color: var(--fg);
 }
-.test-note {
-  font-size: 12px;
+.send-card-rows .badge {
+  margin: 0 2px;
+}
+.send-card-cap {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
   color: var(--muted);
-  text-align: right;
-  max-width: 34em;
-  line-height: 1.4;
+  max-width: 70em;
 }
 /* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
