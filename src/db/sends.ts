@@ -546,20 +546,25 @@ export interface SendKept {
   template_revision: string;
 }
 
-/** The scheduled sends NOT made with `currentRevision` — the ones a template save leaves
- *  on the revision they had, soonest first. */
+/** The scheduled sends NOT made with the current template — the ones a template save
+ *  leaves on the revision they had, soonest first. "Not made with" is by content: a send
+ *  whose revision holds the same html as the current one is on the current template
+ *  whatever its id (a restore writes old bytes under a new id). A revision id with no
+ *  row counts as not current. */
 export async function scheduledSendsNotOn(
   db: D1Database,
-  currentRevision: string,
+  current: { id: string; html: string },
 ): Promise<SendKept[]> {
   const { results } = await db
     .prepare(
       `SELECT post_id, id AS send_id, fire_at, template_revision
          FROM sends
-         WHERE status = 'scheduled' AND template_revision <> ?
+         WHERE status = 'scheduled'
+           AND template_revision <> ?1
+           AND (SELECT html FROM template_revisions r WHERE r.id = sends.template_revision) IS NOT ?2
          ORDER BY fire_at ASC, id ASC`,
     )
-    .bind(currentRevision)
+    .bind(current.id, current.html)
     .all<SendKept>();
   return results;
 }

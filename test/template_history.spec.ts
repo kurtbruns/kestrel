@@ -1,14 +1,19 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { getSettings } from "../src/db/settings";
+import { getSettings, updateSettings } from "../src/db/settings";
 import {
   getTemplateRevision,
   insertTemplateRevisionStmt,
   listTemplateRevisions,
 } from "../src/db/template_revisions";
 import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
-import { currentTemplateRevision } from "../src/services/template_history";
+import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
+import { sweep } from "../src/send/sweep";
+import {
+  currentTemplateRevision,
+  saveTemplate as saveTemplateDirect,
+} from "../src/services/template_history";
 import { adminAuth } from "./support/auth";
 
 // One template, with history, pinned per send (SPEC §2, §6, §8, §9): every save writes a
@@ -137,6 +142,21 @@ describe("the template has a history", () => {
       rows.map(async (r) => (await getTemplateRevision(env.DB, r.id))!.html),
     );
     expect(htmls.filter((h) => h === tpl("same"))).toHaveLength(1);
+  });
+
+  it("a template save and a preference save at the same moment both land", async () => {
+    // Two writers on the one settings row: the template writer's revision must end up
+    // current AND the preference must survive, whichever committed first.
+    const marker = `race-${Date.now()}`;
+    const [pref, saved] = await Promise.all([
+      updateSettings(env.DB, { publication: { tagline: marker } }),
+      saveTemplateDirect(env.DB, tpl(marker), "tester@example.com"),
+    ]);
+    expect(pref.publication.tagline).toBe(marker);
+    const s = await getSettings(env.DB);
+    expect(s.publication.tagline).toBe(marker);
+    expect(s.emailTemplateRevision).toBe(saved.revision.id);
+    expect(s.emailTemplate).toBe(tpl(marker));
   });
 
   it("a save with other preferences alongside an invalid template writes neither", async () => {
@@ -281,6 +301,67 @@ describe("making a post again after the template changed needs an explicit choic
     expect(malformed.status).toBe(400);
   });
 
+  it("refuses to keep a revision that no longer passes validation (409), pinning nothing", async () => {
+    // The post's last send was made with a revision saved under looser rules than
+    // today's (inserted directly; a save through the API could never write it). The
+    // render path would fall back to the built-in default for it, so the freeze must
+    // refuse rather than pin a revision it did not render.
+    const stale = {
+      id: `stale-${Date.now()}`,
+      html: "<div>{{ post.body }}</div>",
+      saved_at: 1,
+      author: null,
+    };
+    await insertTemplateRevisionStmt(env.DB, stale).run();
+    await saveTemplate(tpl("valid"));
+    const id = await makeDraft();
+    const first = (await readJson(await schedule(id))).send;
+    await cancel(first.id);
+    await env.DB.prepare("UPDATE sends SET template_revision = ? WHERE id = ?")
+      .bind(stale.id, first.id)
+      .run();
+    const current = await saveTemplate(tpl("valid-2"));
+    expect((await getPost(id)).template.last_made_with.revision).toBe(stale.id);
+
+    const keep = await schedule(id, { template_revision: stale.id });
+    expect(keep.status).toBe(409);
+    expect((await readJson(keep)).message).toMatch(/no longer passes validation/);
+    expect((await getPost(id)).post.status).toBe("draft");
+    // The current one still works.
+    const use = await schedule(id, { template_revision: current.template.revision });
+    expect(use.status).toBe(201);
+  });
+
+  it("a restore that brings the same bytes back is not a change: no mark, no report, no choice", async () => {
+    const one = await saveTemplate(tpl("same-bytes"));
+    const id = await makeDraft();
+    const send = (await readJson(await schedule(id))).send;
+    expect(send.template_revision).toBe(one.template.revision);
+    await saveTemplate(tpl("other-bytes"));
+    // Back to the first template, as a new revision with the same html.
+    const restored = await readJson(
+      await SELF.fetch(`${base}/api/settings/template/revisions/${one.template.revision}/restore`, {
+        method: "POST",
+        headers: AUTH,
+      }),
+    );
+    expect(restored.template.revision).not.toBe(one.template.revision);
+    // The send is on the current template by content, so nothing flags it...
+    expect(restored.scheduled_posts_kept.filter((k: any) => k.send_id === send.id)).toEqual([]);
+    const post = await getPost(id);
+    expect(post.scheduled.template_outdated).toBe(false);
+    expect(post.template.changed_since_last_made).toBe(false);
+    const sends = await readJson(
+      await SELF.fetch(`${base}/sends?status=scheduled`, { headers: AUTH }),
+    );
+    expect(sends.sends.find((s: any) => s.id === send.id).template_outdated).toBe(false);
+    // ...and scheduling it again after a cancel asks no choice.
+    await cancel(send.id);
+    const again = await schedule(id);
+    expect(again.status).toBe(201);
+    expect((await readJson(again)).send.template_revision).toBe(restored.template.revision);
+  });
+
   it("when nothing changed since the post was last made, no choice is asked", async () => {
     await saveTemplate(tpl("steady"));
     const id = await makeDraft();
@@ -343,10 +424,11 @@ describe("a template save reports the scheduled posts it leaves alone", () => {
       await SELF.fetch(`${base}/posts?status=scheduled`, { headers: AUTH }),
     );
     expect(posts.posts.find((p: any) => p.id === a).template_outdated).toBe(true);
-    // A save that changes nothing reports nothing new: the same sends, on the same revision.
-    expect((await saveTemplate(tpl("changed"))).scheduled_posts_kept).toEqual(
-      saved.scheduled_posts_kept,
-    );
+    // A save that changes nothing left nothing on an older revision: it says so.
+    const same = await saveTemplate(tpl("changed"));
+    expect(same.changed).toBe(false);
+    expect(same.scheduled_posts_kept).toEqual([]);
+    expect(saved.changed).toBe(true);
   });
 });
 
@@ -384,6 +466,70 @@ describe("updating a scheduled send to the current template", () => {
     );
     expect(sends.sends.find((s: any) => s.id === send.id).template_outdated).toBe(false);
     await cancel(send.id);
+  });
+
+  it("is accepted on a send already on the current template, and picks up the identity", async () => {
+    // The identity is not versioned (SPEC §6): a freeze always uses the current one, so
+    // an update is how a scheduled send picks up a rename without a cancel.
+    await saveTemplate(
+      `<div class="named">{{ publication.name }}{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`,
+    );
+    await updateSettings(env.DB, { publication: { name: "Old Name" } });
+    const id = await makeDraft();
+    const send = (await readJson(await schedule(id))).send;
+    expect(send.rendered_html).toContain("Old Name");
+    await updateSettings(env.DB, { publication: { name: "New Name" } });
+    // Neither the frozen copy nor the test sees the rename.
+    const to = `identity-${id}@example.com`;
+    await SELF.fetch(`${base}/posts/${id}/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    const tested = fakeOutbox().find((m) => m.to === to);
+    expect(tested!.html).toContain("Old Name");
+    expect(tested!.html).not.toContain("New Name");
+    expect((await getPost(id)).scheduled.template_outdated).toBe(false);
+
+    const res = await SELF.fetch(`${base}/sends/${send.id}/update-template`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(200);
+    const updated = (await readJson(res)).send;
+    expect(updated.id).toBe(send.id);
+    expect(updated.template_revision).toBe(send.template_revision); // same template...
+    expect(updated.rendered_html).toContain("New Name"); // ...current identity
+  });
+
+  it("what fires after an update is the re-frozen copy", async () => {
+    clearFakeOutbox();
+    const email = `reader-${Date.now()}@example.com`;
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
+    )
+      .bind(`sub-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
+      .run();
+    await saveTemplate(tpl("first-look"));
+    const id = await makeDraft();
+    const send = (await readJson(await schedule(id))).send;
+    await saveTemplate(tpl("updated-look"));
+    const updated = await SELF.fetch(`${base}/sends/${send.id}/update-template`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(updated.status).toBe(200);
+    // Bring the fire time into the past and let the sweep deliver it.
+    await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+      .bind(now - 1000, send.id)
+      .run();
+    await sweep(env);
+    const delivered = fakeOutbox().find((m) => m.to === email);
+    expect(delivered).toBeTruthy();
+    expect(delivered!.html).toContain('class="updated-look"');
+    expect(delivered!.html).not.toContain('class="first-look"');
+    expect((await getSend(send.id)).send.status).toBe("sent");
   });
 
   it("is refused once the send is sending (409)", async () => {

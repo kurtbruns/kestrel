@@ -175,6 +175,41 @@ describe("preview + test endpoints", () => {
     expect(page).toContain('class="firing-look"');
   });
 
+  it("POST /test and the preview on a SENT post are the record's frozen copy", async () => {
+    await putTemplate(tpl("sent-look"));
+    const id = await draftWithImage("Sent Test");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() }),
+      }),
+    );
+    // Mark it sent the way the loop does, then change the template.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE sends SET status = 'sent', completed_at = ? WHERE id = ?").bind(
+        Date.now(),
+        scheduled.send.id,
+      ),
+      env.DB.prepare("UPDATE posts SET status = 'sent' WHERE id = ?").bind(id),
+    ]);
+    await putTemplate(tpl("after-sent-look"));
+    const to = `sent-${id}@example.com`;
+    const body = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      }),
+    );
+    expect(body.frozen).toBe(true);
+    expect(body.send_id).toBe(scheduled.send.id);
+    expect((await outboxFor(to)).html).toContain('class="sent-look"');
+    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    expect(page).toContain('class="sent-look"');
+    expect(page).not.toContain('class="after-sent-look"');
+  });
+
   it("POST /test on a draft sends the live render: the current template", async () => {
     await putTemplate(tpl("live-look"));
     const id = await draftWithImage("Live Test");

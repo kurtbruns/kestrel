@@ -168,10 +168,16 @@ export async function update(c: RequestContext): Promise<Response> {
   // change (SPEC §9): each keeps the revision it was made with until updated.
   const saved = await saveTemplate(c.env.DB, emailTemplate, author(c));
   settings = await getSettings(c.env.DB);
-  const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
+  // What this save left on the revision it had. A save that changed nothing left
+  // nothing: it reports `changed: false` and an empty list, so a client re-PUTting the
+  // template it read is not told its scheduled posts "keep" a template that never moved.
+  const scheduled_posts_kept = saved.changed
+    ? await scheduledSendsNotOn(c.env.DB, saved.revision)
+    : [];
   return json({
     settings: settingsView(settings, c.config),
     template: templateRevisionRef(saved.revision),
+    changed: saved.changed,
     warnings,
     scheduled_posts_kept,
   });
@@ -213,11 +219,14 @@ export async function restoreRevision(c: RequestContext): Promise<Response> {
   }
   const saved = unwrap(await restoreTemplateRevision(c.env.DB, id, author(c)), "template revision");
   const settings = await getSettings(c.env.DB);
-  const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
+  const scheduled_posts_kept = saved.changed
+    ? await scheduledSendsNotOn(c.env.DB, saved.revision)
+    : [];
   return json({
     settings: settingsView(settings, c.config),
     template: templateRevisionRef(saved.revision),
     restored_from: id,
+    changed: saved.changed,
     warnings: v.warnings,
     scheduled_posts_kept,
   });

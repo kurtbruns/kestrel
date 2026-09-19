@@ -13,7 +13,7 @@
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
-import { getActiveSendForPost } from "../db/sends";
+import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
@@ -54,28 +54,33 @@ async function loadBranding(c: RequestContext): Promise<EmailBranding> {
 
 /** The email a post's publisher-facing instruments show or send (SPEC §5): once the
  *  post is scheduled, the active send's frozen copy — exactly what will fire, or is
- *  firing (a send in flight is still the frozen copy readers are receiving); before
- *  that, a live render of the current draft through the one render path (I5). One
- *  reader for the preview page, the preview action, and the post test, so the three
- *  instruments can never disagree about what is going out. */
+ *  firing (a send in flight is still the frozen copy readers are receiving); once it is
+ *  sent, the record's frozen copy, the same bytes the archive page serves (I3); before
+ *  any of that, a live render of the current draft through the one render path (I5).
+ *  One reader for the preview page, the preview action, and the post test, so the
+ *  three instruments can never disagree about what went, or is going, out. */
 interface PostEmail {
   input: RenderInput;
   email: RenderedEmail;
   warnings: string[];
-  /** The active send whose frozen copy this is; null for a draft's live render. */
+  /** The send whose frozen copy this is; null for a draft's live render. */
   frozen: { id: string } | null;
 }
 
 async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
   const input = await loadRenderInput(c);
-  const active =
-    input.post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, input.post.id) : null;
-  if (active) {
+  const send =
+    input.post.status === "scheduled"
+      ? await getActiveSendForPost(c.env.DB, input.post.id)
+      : input.post.status === "sent"
+        ? await latestSentSendForPost(c.env.DB, input.post.id)
+        : null;
+  if (send) {
     return {
       input,
-      email: { subject: active.subject, html: active.rendered_html, text: active.rendered_text },
+      email: { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
       warnings: [],
-      frozen: { id: active.id },
+      frozen: { id: send.id },
     };
   }
   const result = await render(input, c.config, await loadBranding(c));

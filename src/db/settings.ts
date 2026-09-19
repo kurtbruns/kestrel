@@ -200,31 +200,82 @@ export function resolveConfirmationEmail(settings: AppSettings): ConfirmationEma
   };
 }
 
-export async function getSettings(db: D1Database): Promise<AppSettings> {
-  const row = await db.prepare("SELECT data FROM settings WHERE id = 1").first<{ data: string }>();
+/**
+ * The blob plus its version: the row's `updated_at`, or null when no row exists yet.
+ * Every write is a read-merge-write of the whole blob (two writers — the dashboard's
+ * settings save and a template save from Claude — can overlap), so a writer hands the
+ * version it read back to `persistSettingsStmt`, which writes only if the row is still
+ * at that version; a lost update becomes a retry instead of a silently dropped field.
+ */
+export interface SettingsSnapshot {
+  settings: AppSettings;
+  version: number | null;
+}
+
+export async function readSettings(db: D1Database): Promise<SettingsSnapshot> {
+  const row = await db
+    .prepare("SELECT data, updated_at FROM settings WHERE id = 1")
+    .first<{ data: string; updated_at: number }>();
   if (!row) {
-    return structuredClone(DEFAULT_SETTINGS);
+    return { settings: structuredClone(DEFAULT_SETTINGS), version: null };
   }
   try {
-    return coerce(JSON.parse(row.data));
+    return { settings: coerce(JSON.parse(row.data)), version: row.updated_at };
   } catch {
-    return structuredClone(DEFAULT_SETTINGS);
+    return { settings: structuredClone(DEFAULT_SETTINGS), version: row.updated_at };
   }
 }
 
-/** The upsert of the whole blob, as a statement so a caller can batch it with a write
- *  it must land together with (the template save pairs it with its revision row). */
-export function persistSettingsStmt(db: D1Database, next: AppSettings): D1PreparedStatement {
+export async function getSettings(db: D1Database): Promise<AppSettings> {
+  return (await readSettings(db)).settings;
+}
+
+/**
+ * The compare-and-swap upsert of the whole blob, as a statement so a caller can batch
+ * it with a write it must land together with (the template save pairs it with its
+ * revision row). `expected` is the version the caller read (`readSettings`): the update
+ * applies only while the row is still at it, and a fresh insert only while no row
+ * exists, so `meta.changes === 0` means another writer got there first. The new
+ * version is strictly greater than the old one even within one millisecond, so a
+ * version never repeats.
+ */
+export function persistSettingsStmt(
+  db: D1Database,
+  next: AppSettings,
+  expected: number | null,
+): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO settings (id, data, updated_at) VALUES (1, ?1, ?2)
-       ON CONFLICT (id) DO UPDATE SET data = ?1, updated_at = ?2`,
+       ON CONFLICT (id) DO UPDATE SET data = ?1, updated_at = MAX(?2, settings.updated_at + 1)
+       WHERE settings.updated_at IS ?3`,
     )
-    .bind(JSON.stringify(next), Date.now());
+    .bind(JSON.stringify(next), Date.now(), expected);
 }
 
-async function persist(db: D1Database, next: AppSettings): Promise<void> {
-  await persistSettingsStmt(db, next).run();
+/** How many times a writer re-reads and retries when another writer wins the CAS.
+ *  Contention is two clients on one row; a handful of retries settles it. */
+const WRITE_RETRIES = 5;
+
+/**
+ * Read the blob, derive the next one, and persist it under the CAS; on a lost race,
+ * re-read and derive again. `derive` must be pure over its input (it runs once per
+ * attempt). Throws after the retries are spent, which in practice means a writer is
+ * hammering the row.
+ */
+export async function updateSettingsWith(
+  db: D1Database,
+  derive: (current: AppSettings) => AppSettings,
+): Promise<AppSettings> {
+  for (let attempt = 0; attempt < WRITE_RETRIES; attempt++) {
+    const { settings, version } = await readSettings(db);
+    const next = derive(settings);
+    const res = await persistSettingsStmt(db, next, version).run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return next;
+    }
+  }
+  throw new Error("settings changed concurrently; try again");
 }
 
 /**
@@ -233,7 +284,11 @@ async function persist(db: D1Database, next: AppSettings): Promise<void> {
  * input, which the route maps to a 400.
  */
 export async function updateSettings(db: D1Database, patch: SettingsPatch): Promise<AppSettings> {
-  const current = await getSettings(db);
+  return updateSettingsWith(db, (current) => applyPatch(current, patch));
+}
+
+/** Merge a validated patch onto the current settings (pure; throws on invalid input). */
+function applyPatch(current: AppSettings, patch: SettingsPatch): AppSettings {
   const next: AppSettings = {
     ...current,
     publication: { ...current.publication },
@@ -282,7 +337,6 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
     }
   }
 
-  await persist(db, next);
   return next;
 }
 
@@ -291,10 +345,10 @@ export async function setPublicationLogo(
   db: D1Database,
   logo: PublicationLogo | null,
 ): Promise<AppSettings> {
-  const current = await getSettings(db);
-  const next: AppSettings = { ...current, publication: { ...current.publication, logo } };
-  await persist(db, next);
-  return next;
+  return updateSettingsWith(db, (current) => ({
+    ...current,
+    publication: { ...current.publication, logo },
+  }));
 }
 
 function normalizeText(v: unknown, what: string, max: number): string {

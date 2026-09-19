@@ -15,7 +15,7 @@ import {
   reschedule as rescheduleSend,
   updateTemplate as updateSendTemplate,
 } from "../send/schedule";
-import { currentTemplateRevision } from "../services/template_history";
+import { outdatedTemplateRevisions } from "../services/template_history";
 import { parseFutureFireAt } from "./schedule";
 
 export async function list(c: RequestContext): Promise<Response> {
@@ -41,14 +41,17 @@ export async function list(c: RequestContext): Promise<Response> {
   // of truth; the counters are its rebuildable cache (SPEC §8).
   //
   // A scheduled send made with an older template than the current one says so wherever
-  // it is shown (SPEC §8), so each scheduled row is marked `template_outdated`. The
-  // current revision is read only when a row needs it — the sending list is polled.
-  const current = rows.some((s) => s.status === "scheduled")
-    ? (await currentTemplateRevision(c.env.DB)).id
-    : null;
+  // it is shown (SPEC §8), so each scheduled row is marked `template_outdated` (by
+  // content). The comparison runs only when a row needs it — the sending list is polled.
+  const scheduledRevisions = rows.flatMap((s) =>
+    s.status === "scheduled" ? [s.template_revision] : [],
+  );
+  const { outdated } = scheduledRevisions.length
+    ? await outdatedTemplateRevisions(c.env.DB, scheduledRevisions)
+    : { outdated: new Set<string>() };
   const marked = rows.map((s) => ({
     ...s,
-    template_outdated: s.status === "scheduled" && s.template_revision !== current,
+    template_outdated: s.status === "scheduled" && outdated.has(s.template_revision),
   }));
   return json({ sends: marked, page: listPage(total, page) });
 }

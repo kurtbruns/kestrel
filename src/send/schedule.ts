@@ -33,14 +33,16 @@ import { newId } from "../lib/ids";
 import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
-import { resolveBranding } from "../render/template_engine";
+import { resolveBranding, validateEmailTemplate } from "../render/template_engine";
 import { currentTemplateRevision } from "../services/template_history";
 
 /**
  * The template facts about a post (SPEC §6, §9): the current revision, the revision
  * the post was last made with (that of its most recent send; null for a post never
- * scheduled), and whether the two differ — the one condition under which making the
- * post again needs a choice.
+ * scheduled), and whether the two differ in content — the one condition under which
+ * making the post again needs a choice. By content, not id: a restore brings old
+ * bytes back under a new id, and a choice between two identical templates would be
+ * no choice.
  */
 export interface PostTemplateFacts {
   current: TemplateRevisionRef;
@@ -68,7 +70,7 @@ export async function postTemplateFacts(
     facts: {
       current: templateRevisionRef(current),
       last_made_with: lastRef,
-      changed_since_last_made: lastRef !== null && lastRef.revision !== current.id,
+      changed_since_last_made: last !== null && last.html !== current.html,
     },
   };
 }
@@ -112,13 +114,24 @@ async function chooseTemplateRevision(
 }
 
 /** The one render a freeze performs: the post's current content and images through
- *  the single render path (I5), inside `template` and the current identity. */
+ *  the single render path (I5), inside `template` and the current identity. The
+ *  revision is validated first: the render path falls back to the built-in default
+ *  for a template that fails validation (I2), and a freeze must never pin a revision
+ *  whose bytes it did not render — so a revision that no longer meets today's rules
+ *  (a "keep" of an old one, or a current one saved before the rules tightened) is
+ *  refused, never substituted. */
 async function renderFrozen(
   env: AppEnv,
   config: Config,
   post: PostRow,
   template: TemplateRevisionRow,
 ): Promise<FrozenRender> {
+  const validation = validateEmailTemplate(template.html);
+  if (validation.errors.length > 0) {
+    throw conflict(
+      `template revision ${template.id} no longer passes validation (${validation.errors.join(" ")}); save a valid template and use the current one`,
+    );
+  }
   const revision = await getCurrentRevision(env.DB, post);
   if (!revision) {
     throw badRequest("post has no content to send");

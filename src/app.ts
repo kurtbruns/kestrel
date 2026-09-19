@@ -133,7 +133,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Update runtime preferences (test recipients, the publication identity, the confirmation email, the email template).",
       description:
-        "A template save writes a new template revision and makes it current; posts scheduled from then on use it, and the response's `scheduled_posts_kept` lists every scheduled send that keeps the revision it was made with (update one with POST /sends/:id/update-template). A save identical to the current template records nothing.",
+        "A template save writes a new template revision and makes it current; posts scheduled from then on use it, and the response's `scheduled_posts_kept` lists every scheduled send that keeps the revision it was made with (update one with POST /sends/:id/update-template). A save identical to the current template records nothing: `changed: false`, and no kept list.",
       example: {
         request: {
           emailTemplate: "<style>…</style><div>{{ post.body }} … {{ email.unsubscribeUrl }}</div>",
@@ -245,7 +245,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "One post with its current markdown, any active schedule, and its template facts.",
       description:
-        "`template` names the current template revision, the revision the post was last made with (null if never scheduled), and `changed_since_last_made` — when true, scheduling or sending the post again must name `template_revision`. `scheduled.template` is the revision the active send was made with.",
+        '`template` names the current template revision, the revision the post was last made with (null if never scheduled), and `changed_since_last_made` — when true, scheduling or sending the post again must name `template_revision`. "Changed" is by content, so a restore that brings the same bytes back under a new revision is not a change. `scheduled.template` is the revision the active send was made with and `scheduled.template_outdated` whether that is an older template than the current one.',
       example: {
         response: {
           post: { id: "p_abc123", status: "draft" },
@@ -329,7 +329,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/posts/:id/preview",
       access: "admin",
       summary:
-        "The email's preview URL, subject, and warnings: a scheduled post's frozen copy, a draft's live render.",
+        "The email's preview URL, subject, and warnings: a scheduled or sent post's frozen copy, a draft's live render.",
       handler: renderRoutes.preview,
     },
     {
@@ -337,7 +337,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/posts/:id/preview",
       access: "admin",
       summary:
-        "The email as a standalone HTML page (editor preview / open-in-browser): a scheduled post's frozen copy, a draft's live render.",
+        "The email as a standalone HTML page (editor preview / open-in-browser): a scheduled or sent post's frozen copy, a draft's live render.",
       handler: renderRoutes.previewPage,
     },
     {
@@ -345,9 +345,9 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/posts/:id/test",
       access: "admin",
       summary:
-        "Send a test to one address through the same per-recipient path as a real send (I5): a scheduled post's frozen copy, a draft's live render.",
+        "Send a test to one address through the same per-recipient path as a real send (I5): a scheduled or sent post's frozen copy, a draft's live render.",
       description:
-        "Once the post is scheduled (and while its send is in flight), the test is the send's frozen render exactly as it will fire — a template or identity change made after scheduling does not reach it (update the send to pick one up). A draft tests live: its current content, the current template, and the current identity. The response says which (`frozen`, `send_id`). The email's view-in-browser link resolves once the send fires.",
+        "Once the post is scheduled (and while its send is in flight, and after it is sent), the test is the send's frozen render exactly as it fires — a template or identity change made after scheduling does not reach it (update the send to pick one up). A draft tests live: its current content, the current template, and the current identity. The response says which (`frozen`, `send_id`). The email's view-in-browser link resolves once the send fires.",
       example: {
         request: { to: "you@example.com" },
         response: { sent: true, provider: "fake", frozen: true, send_id: "s_xyz789" },
@@ -557,7 +557,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Update a scheduled send to the current template: the same send, re-frozen from the same content with the current template and identity at the same fire time (SPEC §9).",
       description:
-        "An update is a freeze, so it obeys the freeze's guards: only a still-`scheduled` send, and never inside the minimum lead (409 either way; reschedule further out first). The send keeps its id and fire time, stays cancelable, and its `template_revision` becomes the current one; the sign-off resets, so test it again. Sends that need this are listed by a template save's `scheduled_posts_kept` and marked `template_outdated` in GET /sends.",
+        "An update is a freeze, so it obeys the freeze's guards: only a still-`scheduled` send, and never inside the minimum lead (409 either way; reschedule further out first). The send keeps its id and fire time, stays cancelable, and its `template_revision` becomes the current one; the sign-off resets, so test it again. Sends that need this are listed by a template save's `scheduled_posts_kept` and marked `template_outdated` in GET /sends. A send already on the current template is accepted too: every freeze uses the current publication identity (which is not versioned), so an update is also how a scheduled send picks up an identity change without a cancel.",
       example: {
         response: {
           send: {
