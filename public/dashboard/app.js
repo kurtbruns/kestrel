@@ -1195,18 +1195,16 @@ async function renderEditor(id) {
   // (409) rather than clobbers a newer save from another tab or from Claude.
   let baseRevision = post.current_revision;
   let warnedRevision = null; // newest revision we've surfaced, so we re-arm only on a genuinely newer one
-  // A scheduled post keeps its formatting toolbar in view, greyed, with the way out
-  // beside it: the lock is shown where editing would happen (DESIGN §7).
-  const toolbarHtml =
-    (locked ? `<span class="toolbar-lock">Cancel the schedule to edit</span>` : "") +
-    TOOLBAR.map((group) =>
-      group
-        .map(
-          ([kind, label]) =>
-            `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? " disabled" : ""}>${icon(kind)}</button>`,
-        )
-        .join(""),
-    ).join(`<span class="sep"></span>`);
+  // A scheduled post keeps its formatting toolbar in view, greyed; the way out is said
+  // on the greyed Edit tab itself (DESIGN §7).
+  const toolbarHtml = TOOLBAR.map((group) =>
+    group
+      .map(
+        ([kind, label]) =>
+          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? " disabled" : ""}>${icon(kind)}</button>`,
+      )
+      .join(""),
+  ).join(`<span class="sep"></span>`);
   const dis = locked ? "disabled" : "";
 
   app.innerHTML = `
@@ -1235,13 +1233,14 @@ async function renderEditor(id) {
       <div class="composer">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
-            <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true"><span class="ctab-label">${SET_ICON.editable}Write</span></button>
+            <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${SET_ICON.editable}Edit</span></button>
             <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${SET_ICON.preview}Preview</span></button>
           </div>
           <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
-        <div class="composer-body" id="composerBody">
+        <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
+          ${locked ? `<div class="composer-lock" id="composerLock" role="note"><span class="composer-lock-msg">Cancel the schedule to edit</span></div>` : ""}
           <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${dis}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
@@ -1397,11 +1396,15 @@ async function renderEditor(id) {
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
-    ta.hidden = name !== "write";
-    mdHl.hidden = name !== "write"; // the highlight layer travels with the textarea
+    ta.hidden = name !== "edit";
+    mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
+    const lock = document.getElementById("composerLock");
+    if (lock) {
+      lock.hidden = name !== "edit"; // and so does a scheduled post's lock message
+    }
     previewFrame.hidden = name !== "preview";
-    toolbarEl.classList.toggle("off", name !== "write");
-    if (name === "write") {
+    toolbarEl.classList.toggle("off", name !== "edit");
+    if (name === "edit") {
       syncMdScroll();
     }
   }
@@ -1422,8 +1425,14 @@ async function renderEditor(id) {
     }
   }
   tabs.forEach((t) => {
-    t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("write"));
+    t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("edit"));
   });
+  // A scheduled post opens on Preview: the preview is the copy that will send, and the
+  // Edit tab is read-only, so it is somewhere the publisher goes deliberately and finds
+  // the way out written on it (DESIGN §7).
+  if (locked) {
+    showPreview();
+  }
 
   // --- formatting toolbar ---
   function wrapSel(before, after, placeholder) {
@@ -1452,7 +1461,7 @@ async function renderEditor(id) {
     if (locked) {
       return;
     }
-    showTab("write");
+    showTab("edit");
     if (kind === "bold") {
       wrapSel("**", "**", "bold text");
     } else if (kind === "italic") {
@@ -1844,7 +1853,7 @@ async function renderEditor(id) {
     body.addEventListener("drop", (e) => {
       e.preventDefault();
       body.classList.remove("dragover");
-      showTab("write");
+      showTab("edit");
       for (const f of e.dataTransfer.files) {
         uploadAndInsert(f);
       }

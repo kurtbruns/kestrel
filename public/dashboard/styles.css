@@ -2122,14 +2122,8 @@ th.num .th-sort {
   background: var(--line);
   margin: 0 6px;
 }
-/* A scheduled post's toolbar stays in view with its buttons disabled; this label
-   beside the greyed icons says the way out, where the editing would have happened. */
-.toolbar-lock {
-  font-size: 12px;
-  color: var(--muted);
-  margin-right: 10px;
-  white-space: nowrap;
-}
+/* A scheduled post's toolbar stays in view with its buttons disabled (`.tb:disabled`);
+   the way out is written on the Edit tab itself (`.composer-lock`). */
 .tb {
   display: inline-flex;
   align-items: center;
@@ -2234,6 +2228,31 @@ th.num .th-sort {
   border: 0;
   background: #fff;
   display: block;
+}
+/* A scheduled post's Edit tab (DESIGN §7): the text greys (the highlight layer carries
+   the visible text) and one message sits over it with the way out. The post opens on
+   Preview, so this is what the publisher meets when they come to edit. Pointer-events
+   pass through; the textarea beneath is disabled anyway. */
+.composer-body.locked .md-hl {
+  opacity: 0.45;
+}
+.composer-lock {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.composer-lock-msg {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
 }
 .composer-body.dragover::after {
   content: "Drop images to upload";
