@@ -14,12 +14,15 @@ import {
   MAX_TEMPLATE,
   persistSettingsStmt,
   readSettings,
+  SettingsContention,
   type SettingsSnapshot,
   updateSettingsWith,
+  WRITE_RETRIES,
 } from "../db/settings";
 import {
   getTemplateRevision,
   insertTemplateRevisionStmt,
+  revisionsWithHtml,
   type TemplateRevisionRow,
 } from "../db/template_revisions";
 import { newId } from "../lib/ids";
@@ -29,7 +32,7 @@ import { DEFAULT_EMAIL_TEMPLATE } from "../render/template_engine";
 /** The id of the first-use record. Fixed, not random, so two isolates recording it
  *  at once collide on the primary key instead of writing two "revision ones": the
  *  loser's batch fails whole (the row and the pointer land together or not at all)
- *  and it reads the winner's row back. */
+ *  and it settles on whatever is current by then. */
 export const INITIAL_TEMPLATE_REVISION_ID = "initial";
 
 /**
@@ -38,43 +41,89 @@ export const INITIAL_TEMPLATE_REVISION_ID = "initial";
  * call writes that template, as it stands, as revision one and points settings at it,
  * so every send pins a revision that exists. Idempotent: every later call is two reads,
  * and two first calls at once still record one row.
+ *
+ * The first-use record never overrides a pointer someone else set: its only intent is
+ * "some revision is current". So on a lost race (the row already there, or the settings
+ * CAS missed) it re-reads and takes whatever the pointer names, and points at `initial`
+ * only when nothing valid is pointed at. A save's intent is different (see
+ * `writeRevision`): a save does re-point after a lost CAS.
  */
 export async function currentTemplateRevision(db: D1Database): Promise<TemplateRevisionRow> {
   const snapshot = await readSettings(db);
-  const { settings } = snapshot;
-  if (settings.emailTemplateRevision) {
-    const row = await getTemplateRevision(db, settings.emailTemplateRevision);
-    if (row) {
-      return row;
-    }
+  const pointed = await pointedRevision(db, snapshot.settings);
+  if (pointed) {
+    return pointed;
   }
   // "" means the built-in default; record its bytes, since a revision is a concrete
   // template and a later change to the built-in must not silently move this one.
   // (Settings keeps mirroring the html from here on, so "" never recurs.)
+  const { settings } = snapshot;
   const html = settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE;
+  const row: TemplateRevisionRow = {
+    id: INITIAL_TEMPLATE_REVISION_ID,
+    html,
+    saved_at: Date.now(),
+    author: null,
+  };
   try {
-    return await writeRevision(db, snapshot, html, null, INITIAL_TEMPLATE_REVISION_ID);
+    const [, persisted] = await db.batch([
+      insertTemplateRevisionStmt(db, row),
+      persistSettingsStmt(db, pointAt(settings, row), snapshot.version),
+    ]);
+    if ((persisted?.meta.changes ?? 0) > 0) {
+      return row;
+    }
   } catch (err) {
     if (!isDuplicateRevision(err)) {
       throw err;
     }
-    // Lost the race: the other isolate's batch committed the row and the pointer.
-    const row = unwrap(
+  }
+  return settleInitial(db);
+}
+
+/** The row the settings pointer names, or null when it is unset or names no row. */
+async function pointedRevision(
+  db: D1Database,
+  settings: SettingsSnapshot["settings"],
+): Promise<TemplateRevisionRow | null> {
+  return settings.emailTemplateRevision
+    ? getTemplateRevision(db, settings.emailTemplateRevision)
+    : null;
+}
+
+/** After a lost first-use race: whatever is current now wins (the other isolate's
+ *  `initial`, or a save that landed since); only an unset or dangling pointer is
+ *  pointed at `initial`, under the CAS, so a concurrent save is never undone.
+ *  Exported for the test that pins that guarantee; not part of the module's API. */
+export async function settleInitial(db: D1Database): Promise<TemplateRevisionRow> {
+  for (let attempt = 0; attempt < WRITE_RETRIES; attempt++) {
+    const snapshot = await readSettings(db);
+    const pointed = await pointedRevision(db, snapshot.settings);
+    if (pointed) {
+      return pointed;
+    }
+    const initial = unwrap(
       await getTemplateRevision(db, INITIAL_TEMPLATE_REVISION_ID),
       "template revision",
     );
-    if ((await readSettings(db)).settings.emailTemplateRevision !== row.id) {
-      // The row was there but nothing points at it (a pointer at a row that is gone,
-      // which only a hand-edited database produces): point at it so this path is not
-      // taken on every read.
-      await updateSettingsWith(db, (s) => ({
-        ...s,
-        emailTemplate: row.html,
-        emailTemplateRevision: row.id,
-      }));
+    const res = await persistSettingsStmt(
+      db,
+      pointAt(snapshot.settings, initial),
+      snapshot.version,
+    ).run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return initial;
     }
-    return row;
   }
+  throw new SettingsContention();
+}
+
+/** The settings blob pointing at `row`, its html mirrored. */
+function pointAt(
+  settings: SettingsSnapshot["settings"],
+  row: TemplateRevisionRow,
+): SettingsSnapshot["settings"] {
+  return { ...settings, emailTemplate: row.html, emailTemplateRevision: row.id };
 }
 
 /** True for the SQLite primary-key violation on `template_revisions`. */
@@ -88,25 +137,17 @@ function isDuplicateRevision(err: unknown): boolean {
  * revision whose html equals the current revision's is not outdated even if its id
  * differs, so a restore (a new revision with old bytes) never flags the sends made
  * with those bytes, and a "changed since" is a change a reader could see (SPEC §6, §9).
- * A revision id with no row counts as outdated. One read per distinct id; the lists
- * that call this have one or two.
+ * A revision id with no row counts as outdated. One query for all the ids, since the
+ * lists that call this are polled.
  */
 export async function outdatedTemplateRevisions(
   db: D1Database,
   revisionIds: Iterable<string>,
 ): Promise<{ current: TemplateRevisionRow; outdated: Set<string> }> {
   const current = await currentTemplateRevision(db);
-  const outdated = new Set<string>();
-  for (const id of new Set(revisionIds)) {
-    if (id === current.id) {
-      continue;
-    }
-    const row = await getTemplateRevision(db, id);
-    if (!row || row.html !== current.html) {
-      outdated.add(id);
-    }
-  }
-  return { current, outdated };
+  const others = [...new Set(revisionIds)].filter((id) => id !== current.id);
+  const same = others.length ? await revisionsWithHtml(db, others, current.html) : new Set();
+  return { current, outdated: new Set(others.filter((id) => !same.has(id))) };
 }
 
 /** The outcome of a template save: the revision now current, and whether this save
@@ -156,31 +197,27 @@ export async function restoreTemplateRevision(
 }
 
 /**
- * Insert the revision and point settings at it (mirroring the html) in one batch, under
- * the settings CAS. If another writer moved the blob between the read and the batch,
- * the batch still commits the row (it is append-only history either way) but leaves
- * the pointer untouched; the pointer is then re-applied on a fresh read, so a
- * concurrent preference save can never un-point a revision that was just written.
+ * A save: insert the revision and point settings at it (mirroring the html) in one
+ * batch, under the settings CAS. If another writer moved the blob between the read and
+ * the batch, the batch still commits the row (it is append-only history either way)
+ * but leaves the pointer untouched; the pointer is then re-applied on a fresh read, so
+ * a concurrent preference save can never un-point a revision that was just written.
+ * Two saves at once both keep their rows and the later re-point wins, as two saves in
+ * sequence would.
  */
 async function writeRevision(
   db: D1Database,
   snapshot: SettingsSnapshot,
   html: string,
   author: string | null,
-  id = newId(),
 ): Promise<TemplateRevisionRow> {
-  const row: TemplateRevisionRow = { id, html, saved_at: Date.now(), author };
-  const point = (s: SettingsSnapshot["settings"]) => ({
-    ...s,
-    emailTemplate: html,
-    emailTemplateRevision: row.id,
-  });
+  const row: TemplateRevisionRow = { id: newId(), html, saved_at: Date.now(), author };
   const [, pointed] = await db.batch([
     insertTemplateRevisionStmt(db, row),
-    persistSettingsStmt(db, point(snapshot.settings), snapshot.version),
+    persistSettingsStmt(db, pointAt(snapshot.settings, row), snapshot.version),
   ]);
   if ((pointed?.meta.changes ?? 0) === 0) {
-    await updateSettingsWith(db, point);
+    await updateSettingsWith(db, (s) => pointAt(s, row));
   }
   return row;
 }

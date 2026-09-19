@@ -4075,9 +4075,12 @@ async function renderTemplate() {
     preview.repaint();
     refreshDirty(); // clean now — slides the bar away
     // A save writes a revision (the history grows) and leaves every scheduled send on
-    // the revision it was made with; the notice below says which (SPEC §9).
-    loadHistory();
-    showKept(Array.isArray(r.scheduled_posts_kept) ? r.scheduled_posts_kept : []);
+    // the revision it was made with; the notice below says which (SPEC §9). A save that
+    // changed nothing wrote nothing and says nothing — a notice already showing stays.
+    if (r.changed !== false) {
+      loadHistory();
+      showKept(Array.isArray(r.scheduled_posts_kept) ? r.scheduled_posts_kept : []);
+    }
     return Array.isArray(r.warnings) ? r.warnings : [];
   }
   // The shared save bar's Save button (run inside busy() by the controller). Persists,

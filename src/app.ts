@@ -140,6 +140,7 @@ export function createRouter(archiveBasePath: string): Router {
         },
         response: {
           template: { revision: "t_2", saved_at: 1768467600000 },
+          changed: true,
           warnings: [],
           scheduled_posts_kept: [
             {
@@ -386,7 +387,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Freeze the render and schedule the send for a future time (≥5 min out). `template_revision` is required only when the post was made before and the template has changed since.",
       description:
-        "Scheduling makes the email: it freezes the draft's content, the template, and the identity as they stand onto a send row, soft-locks the post, and is cancelable until it fires. A post never scheduled before, or last made with the template that is still current, takes the current template with no `template_revision`. When the template has changed since the post was last made (`GET /posts/:id` → `template.changed_since_last_made`), the request must name `template_revision` — the revision it had (`template.last_made_with.revision`) or the current one (`template.current.revision`) — and is otherwise refused with `409 { error: \"template_choice_required\", template: { last_made_with, current } }`; any other id is refused the same way. The response's `send.template_revision` is the revision used.",
+        "Scheduling makes the email: it freezes the draft's content, the template, and the identity as they stand onto a send row, soft-locks the post, and is cancelable until it fires. A post never scheduled before, or last made with the template that is still current, takes the current template with no `template_revision`. When the template has changed since the post was last made (`GET /posts/:id` → `template.changed_since_last_made`), the request must name `template_revision` — the revision it had (`template.last_made_with.revision`) or the current one (`template.current.revision`) — and is otherwise refused with `409 { error: \"template_choice_required\", template: { last_made_with, current } }`; any other id is refused the same way. A revision that no longer passes today's template validation is refused too (409), never silently replaced by the built-in default. The response's `send.template_revision` is the revision used.",
       example: {
         request: { fire_at: "2026-01-15T09:00:00Z", template_revision: "t_2" },
         response: {
@@ -407,7 +408,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post. `template_revision` is required only when the post was made before and the template has changed since.",
       description:
-        "The same freeze as scheduling, with the fire time set to now plus the minimum lead, so even an immediate send is a visible, cancelable send for those minutes. The optional JSON body carries `template_revision` under the same rule as scheduling: required when the post was made before and the template has changed since, refused with `409 template_choice_required` (naming `last_made_with` and `current`) until it names one of the two. A post that already has an active send gets that send back (`idempotent: true`).",
+        "The same freeze as scheduling, with the fire time set to now plus the minimum lead, so even an immediate send is a visible, cancelable send for those minutes. The optional JSON body carries `template_revision` under the same rule as scheduling: required when the post was made before and the template has changed since, refused with `409 template_choice_required` (naming `last_made_with` and `current`) until it names one of the two, and refused (409) if the named revision no longer passes validation. A post that already has an active send gets that send back (`idempotent: true`).",
       example: {
         request: { template_revision: "t_2" },
         response: {
@@ -557,7 +558,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Update a scheduled send to the current template: the same send, re-frozen from the same content with the current template and identity at the same fire time (SPEC §9).",
       description:
-        "An update is a freeze, so it obeys the freeze's guards: only a still-`scheduled` send, and never inside the minimum lead (409 either way; reschedule further out first). The send keeps its id and fire time, stays cancelable, and its `template_revision` becomes the current one; the sign-off resets, so test it again. Sends that need this are listed by a template save's `scheduled_posts_kept` and marked `template_outdated` in GET /sends. A send already on the current template is accepted too: every freeze uses the current publication identity (which is not versioned), so an update is also how a scheduled send picks up an identity change without a cancel.",
+        "An update is a freeze, so it obeys the freeze's guards: only a still-`scheduled` send, never inside the minimum lead, and only a current template that passes validation (409 for each; reschedule further out, or save a valid template, first). The send keeps its id and fire time, stays cancelable, and its `template_revision` becomes the current one; the sign-off resets, so test it again. Sends that need this are listed by a template save's `scheduled_posts_kept` and marked `template_outdated` in GET /sends. A send already on the current template is accepted too: every freeze uses the current publication identity (which is not versioned), so an update is also how a scheduled send picks up an identity change without a cancel.",
       example: {
         response: {
           send: {

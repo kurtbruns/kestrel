@@ -11,6 +11,7 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
+import { HttpError } from "../lib/errors";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
 /**
@@ -255,7 +256,16 @@ export function persistSettingsStmt(
 
 /** How many times a writer re-reads and retries when another writer wins the CAS.
  *  Contention is two clients on one row; a handful of retries settles it. */
-const WRITE_RETRIES = 5;
+export const WRITE_RETRIES = 5;
+
+/** The retries are spent: another writer is hammering the row. A 409, so the client
+ *  retries the write rather than reading it as its own bad input (400) or a server
+ *  fault (500). */
+export class SettingsContention extends HttpError {
+  constructor() {
+    super(409, "conflict", "settings changed concurrently; try again");
+  }
+}
 
 /**
  * Read the blob, derive the next one, and persist it under the CAS; on a lost race,
@@ -275,7 +285,7 @@ export async function updateSettingsWith(
       return next;
     }
   }
-  throw new Error("settings changed concurrently; try again");
+  throw new SettingsContention();
 }
 
 /**

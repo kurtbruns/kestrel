@@ -122,6 +122,25 @@ if (!isRemote) {
     if (step.status !== 0) {
       console.warn("[dev] migration bootstrap failed (continuing); run `npm run migrate:local`");
     }
+  } else {
+    // Until the first deployment the baseline is edited in place (CLAUDE.md), and
+    // wrangler tracks applied migrations by filename — so a shadow built from an
+    // older baseline has `posts` but lacks a newer table, and `migrate:local` would
+    // see nothing to apply. Probe the newest baseline table and say what to do,
+    // rather than let every request 500 on "no such table".
+    const newest = spawnSync(
+      "wrangler",
+      ["d1", "execute", "DB", "--local", "--command", "SELECT 1 FROM template_revisions LIMIT 1"],
+      { encoding: "utf8" },
+    );
+    const stale =
+      newest.status !== 0 &&
+      `${newest.stdout ?? ""}${newest.stderr ?? ""}`.includes("no such table");
+    if (stale) {
+      console.warn(
+        "[dev] the local D1 shadow predates the current schema baseline — rebuild it: delete .wrangler/state/v3/d1 and run `npm run migrate:local` (continuing; expect 500s until then)",
+      );
+    }
   }
 }
 

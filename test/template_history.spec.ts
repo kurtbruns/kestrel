@@ -12,7 +12,9 @@ import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import {
   currentTemplateRevision,
+  INITIAL_TEMPLATE_REVISION_ID,
   saveTemplate as saveTemplateDirect,
+  settleInitial,
 } from "../src/services/template_history";
 import { adminAuth } from "./support/auth";
 
@@ -106,6 +108,30 @@ describe("the template has a history", () => {
     expect(a.id).toBe(b.id);
     expect(await listTemplateRevisions(env.DB)).toHaveLength(1);
     expect((await getSettings(env.DB)).emailTemplateRevision).toBe(a.id);
+  });
+
+  it("a first use that lost its race never overrides a save that landed meanwhile", async () => {
+    // The interleaving: isolate A reads an empty pointer and stalls; B records the
+    // initial revision; the publisher saves R1 (pointer -> R1); A resumes, its record
+    // collides, and it settles. Settling must take R1, not put `initial` back.
+    const initial = await currentTemplateRevision(env.DB);
+    expect(initial.id).toBe(INITIAL_TEMPLATE_REVISION_ID);
+    const r1 = await saveTemplateDirect(env.DB, tpl("landed-meanwhile"), "tester@example.com");
+    expect(r1.changed).toBe(true);
+    const settled = await settleInitial(env.DB);
+    expect(settled.id).toBe(r1.revision.id);
+    const s = await getSettings(env.DB);
+    expect(s.emailTemplateRevision).toBe(r1.revision.id);
+    expect(s.emailTemplate).toBe(tpl("landed-meanwhile"));
+    // Only an unset pointer is pointed at the initial record.
+    await env.DB.prepare("DELETE FROM settings").run();
+    expect((await settleInitial(env.DB)).id).toBe(INITIAL_TEMPLATE_REVISION_ID);
+    expect((await getSettings(env.DB)).emailTemplateRevision).toBe(INITIAL_TEMPLATE_REVISION_ID);
+    // Leave the history empty for the tests below, which count it.
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM template_revisions"),
+      env.DB.prepare("DELETE FROM settings"),
+    ]);
   });
 
   it("a save writes a template revision and makes it current", async () => {

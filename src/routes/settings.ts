@@ -40,7 +40,7 @@ import {
   templateRevisionRef,
 } from "../db/template_revisions";
 import type { Config } from "../env";
-import { badRequest, json, notFound } from "../lib/errors";
+import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 import { DEFAULT_EMAIL_TEMPLATE, validateEmailTemplate } from "../render/template_engine";
 import type { RequestContext } from "../router";
@@ -158,6 +158,9 @@ export async function update(c: RequestContext): Promise<Response> {
   try {
     settings = await updateSettings(c.env.DB, patch);
   } catch (e) {
+    if (e instanceof HttpError) {
+      throw e; // contention on the settings row is a 409, not the client's bad input
+    }
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
   if (emailTemplate === undefined) {

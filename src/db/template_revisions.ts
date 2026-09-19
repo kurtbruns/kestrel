@@ -55,6 +55,31 @@ export async function listTemplateRevisions(
   return results;
 }
 
+/** Of `ids`, the revisions that exist and hold exactly `html` — one query, no html
+ *  transferred, so a polled list can ask about every scheduled send's revision at once.
+ *  An id absent from the result either differs or has no row. Chunked to stay under
+ *  D1's bind limit. */
+export async function revisionsWithHtml(
+  db: D1Database,
+  ids: string[],
+  html: string,
+): Promise<Set<string>> {
+  const matching = new Set<string>();
+  const distinct = [...new Set(ids)];
+  for (let i = 0; i < distinct.length; i += 50) {
+    const chunk = distinct.slice(i, i + 50);
+    const marks = chunk.map(() => "?").join(", ");
+    const { results } = await db
+      .prepare(`SELECT id FROM template_revisions WHERE html = ? AND id IN (${marks})`)
+      .bind(html, ...chunk)
+      .all<{ id: string }>();
+    for (const r of results) {
+      matching.add(r.id);
+    }
+  }
+  return matching;
+}
+
 /** The INSERT for one revision, as a statement so the caller can batch it with the
  *  settings write that points at it — the two must land together or not at all. */
 export function insertTemplateRevisionStmt(
