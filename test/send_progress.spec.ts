@@ -208,6 +208,7 @@ describe("buildSendProgress — derived phase", () => {
       rendered_text: "",
       subject: "s",
       recipient_count: 0,
+      template_revision: null,
       locked_until: null,
       scheduled_at: Date.now(),
       started_at: Date.now() - 60_000,

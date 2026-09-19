@@ -4,8 +4,11 @@ import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
 import { getSettings, updateSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
+import { listTemplateRevisions } from "../src/db/template_revisions";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
+import { DEFAULT_EMAIL_TEMPLATE } from "../src/render/template_engine";
+import { saveTemplate } from "../src/services/template_history";
 import { adminAuth } from "./support/auth";
 
 const base = "https://kestrel.test";
@@ -192,14 +195,21 @@ describe("dev seed (Windbreak dataset)", () => {
     // An operator whose saved template predates the email.* token migration (it still
     // uses footer.*), plus a custom identity. resetAll clears settings, and the seed
     // re-populates only the demo's own — so a re-seed can't carry the stale row forward.
-    await updateSettings(env.DB, {
-      publication: { name: "Old Name" },
-      emailTemplate:
-        '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
-    });
+    await updateSettings(env.DB, { publication: { name: "Old Name" } });
+    await saveTemplate(
+      env.DB,
+      '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
+      null,
+    );
     await seedDatabase(env, config());
     const s = await getSettings(env.DB);
-    expect(s.emailTemplate).toBe(""); // back to the built-in email.* default
+    // Back to the built-in email.* default, recorded as the history's first revision
+    // (the seed pins its sends to it), with the stale template's history gone too.
+    expect(s.emailTemplate).toBe(DEFAULT_EMAIL_TEMPLATE);
+    expect(s.emailTemplate).not.toContain("footer.");
+    const revisions = await listTemplateRevisions(env.DB);
+    expect(revisions).toHaveLength(1);
+    expect(revisions[0]!.id).toBe(s.emailTemplateRevision);
     expect(s.publication.name).toBe("Windbreak"); // the demo's identity, not the old one
   });
 });

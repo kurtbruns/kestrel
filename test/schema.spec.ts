@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-describe("schema (0001_init)", () => {
-  it("creates all seven tables", async () => {
+describe("schema (0001_init + 0002_template_revisions)", () => {
+  it("creates all eight tables", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     ).all<{ name: string }>();
@@ -15,9 +15,20 @@ describe("schema (0001_init)", () => {
       "suppressions",
       "sends",
       "deliveries",
+      "template_revisions",
     ]) {
       expect(names).toContain(t);
     }
+  });
+
+  it("sends carry the template revision they were made with (nullable for the baseline's sake)", async () => {
+    const { results } = await env.DB.prepare("PRAGMA table_info(sends)").all<{
+      name: string;
+      notnull: number;
+    }>();
+    const col = results.find((c) => c.name === "template_revision");
+    expect(col).toBeTruthy();
+    expect(col!.notnull).toBe(0);
   });
 
   it("enforces the subscribers.email unique constraint", async () => {
