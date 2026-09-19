@@ -165,11 +165,10 @@ const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
 // The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
-// the Kestrel mark, the surface switch, the running build, and an optional top-right slot)
-// over a two-column grid whose left column — the contents rail — lines up exactly under
-// "← Dashboard". Pass railHtml = null for a surface with no contents rail (the docs index);
-// topNav fills the bar's top-right (a doc page passes its Prev/Next there).
-function roomShell(active, railHtml, mainHtml, topNav = "") {
+// the Kestrel mark, the surface switch, and the running build) over a two-column grid
+// whose left column — the contents rail — lines up exactly under "← Dashboard".
+// Pass railHtml = null for a surface with no contents rail (the docs index).
+function roomShell(active, railHtml, mainHtml) {
   const tab = (view, label) =>
     `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
   const body =
@@ -193,7 +192,6 @@ function roomShell(active, railHtml, mainHtml, topNav = "") {
         <a class="room-brand" href="#/docs">${kestrelMark()}<span>Kestrel</span></a>
         <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("reference", "API")}</nav>
         ${build}
-        ${topNav}
         <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>
@@ -4851,16 +4849,17 @@ function renderDocPage(docs, slug) {
   const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
-  // Compact Prev/Next in the bar's top-right — no titles (the foot pager carries those).
+  // Compact Prev/Next at the top-right of the reader column — no titles (the foot pager
+  // carries those). A sibling above the <article> (not inside .doc, so it clears the
+  // `.doc a` in-content link style); right-aligned to the content's right edge.
   const topNav =
     prev || next
-      ? `<nav class="room-pager" aria-label="Adjacent docs">${prev ? `<a href="#/docs/${esc(prev.slug)}">← Previous</a>` : ""}${next ? `<a href="#/docs/${esc(next.slug)}">Next →</a>` : ""}</nav>`
+      ? `<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? `<a href="#/docs/${esc(prev.slug)}">← Previous</a>` : ""}${next ? `<a href="#/docs/${esc(next.slug)}">Next →</a>` : ""}</nav>`
       : "";
   app.innerHTML = roomShell(
     "docs",
     `<p class="muted">Loading…</p>`,
-    `<article class="doc" id="docsMain"></article>`,
-    topNav,
+    `${topNav}<article class="doc" id="docsMain"></article>`,
   );
   const navEl = app.querySelector(".rail-inner");
   const mainEl = document.getElementById("docsMain");

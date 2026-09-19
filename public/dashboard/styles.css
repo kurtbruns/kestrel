@@ -469,21 +469,22 @@ body.nav-resizing .sidebar {
   line-height: 1.5;
 }
 /* Back-to-index link at the top of a doc page's rail, hairline under it. */
-/* Compact Previous / Next in the room bar's top-right (a doc page only) — the quick
-   sequential step, kept out of the rail. Plain muted links, brightening on hover. */
-.room-pager {
-  margin-left: auto;
+/* Compact Previous / Next at the top-right of the reader column (a doc page) — the quick
+   sequential step, sitting above the article, aligned to the content's right edge. Plain
+   muted links; the titled pager lives at the article foot. */
+.doc-topnav {
   display: flex;
-  align-items: center;
-  gap: 14px;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 4px;
 }
-.room-pager a {
+.doc-topnav a {
   color: var(--muted);
   text-decoration: none;
   font-size: 14px;
   white-space: nowrap;
 }
-.room-pager a:hover {
+.doc-topnav a:hover {
   color: var(--fg);
 }
 /* External project links in the docs-index rail (getkestrel.dev, the source repo). One per
