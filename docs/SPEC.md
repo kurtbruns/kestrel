@@ -387,22 +387,33 @@ What the watch (§8) reports is a **derived phase**, computed live from the send
 
 ## Decided
 
-Each entry names the alternative it was chosen over and points to the section that carries the reasoning. This list is the index of what was ruled out, not a second copy of the why.
+An index of what was decided and the alternative each choice was made over, in the order the document meets them. The reasoning lives in the section named; this list only points.
 
-- **Content lives in the app's database**, over Markdown files in a repo (§2, §4). Files would have given `git` versioning for free but cost the build-free live preview, uploaded images, and the one API; the revision table hands the versioning back.
-- **One API and no side door**, over a file-editing path beside it (§1). Removes the whole class of "did the file and the record disagree" bugs, and is what makes Claude-in-production safe: the same API, with the same review window in front of every send.
-- **Self-contained by default, apex-optional**, over requiring the website's domain (§11). Requiring it would have welded a finished newsletter to the website's infrastructure and turned "hook it up to your site" into a wall for anyone whose site is hosted elsewhere.
-- **Subject is the primary post field**, over a separate title (§4). A title would only be a second field to keep in sync; the preheader is derived from the body for the same reason.
-- **Scheduling is core**, over deferring it to a later version (§6). The review window is the safety model against any bad send, a person's as much as an agent's; send-now is the narrow exception and still carries the minimum lead.
-- **Soft-lock at schedule**, over "fire the current version" (which could send something untested) and "fire the scheduled version but allow edits" (which breaks the guarantee) (§6).
-- **Scheduling makes the email; one template, with history, pinned per send**, over applying the template at fire time (§6, §9). Applying at fire would let a broken template save reach every scheduled post unattended and would send something other than what was tested. Pinning keeps a re-make from silently changing the look; the history is what makes "keep", "update", and "restore" possible without a second template.
-- **A reconciling sweep**, over per-post alarms (§6). Alarms would add precision a newsletter doesn't need and still require a sweep to catch a timer that never fired.
-- **Full-text revisions**, over delta chains (§4).
-- **The archive page is the record**, over a separate email archive (§5).
 - **Email only**, over multi-channel (§1).
-- **Two providers out of the box behind one seam**, over a single hard-wired transport (§10): Resend for the simplest setup, Amazon SES for cost at scale.
-- **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§7). A provider's account-level suppression list may sit underneath as a redundant safety net, but the consent record and the unsubscribe flow are the app's.
-- **Archive pages carry light public chrome**, over a bare frozen render (§5). It fills reserved anchors, so the reviewed content is never rewritten (I3).
+- **One API and no side door**, over a file-editing path beside it (§1).
+- **Content lives in the app's database**, over Markdown files in a repo (§2, §4).
+- **Full-text revisions**, over delta chains (§4).
+- **Subject is the primary post field**, over a separate title (§4).
+- **Notify, don't clobber**, over last-write-wins for concurrent edits (§4).
+- **Images belong to the post and are referenced by name**, over an upload that returns a URL to paste (§4).
+- **The archive page is the record**, over a separate email archive (§5).
+- **Archive pages carry light public chrome** filled into reserved anchors, over a bare frozen render (§5).
+- **Scheduling is core**, over deferring it to a later version (§6).
+- **Scheduling makes the email; one template, with history, pinned per send**, over applying the template at fire time (§6, §9).
+- **Soft-lock at schedule**, over "fire the current version" and "fire the scheduled version but allow edits" (§6).
+- **The audience is resolved when the send fires**, over fixing it at schedule (§6).
+- **"Sent" means dispatch complete**, over waiting for every delivery receipt (§6).
+- **A reconciling sweep**, over per-post alarms (§6).
+- **Double opt-in**, accepted as a deliberate cost, over single opt-in (§7).
+- **Two subscriber tokens, one per job**, over one token doing both (§7).
+- **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§7).
+- **Preferences in the app, never secrets**, over one settings surface for both (§9).
+- **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
+- **Self-contained by default, apex-optional**, over requiring the website's domain (§11).
+- **`send.` for the sending identity, never the apex**, over `mail.` or the bare domain (§11).
+- **An edge access layer with a service principal for Claude**, over auth code in the app (§11).
+- **A generated API reference**, over an endpoint table in this document (§11).
+- **The reported phase is derived, never stored**, over a second copy of the send's state (§12).
 
 ## Deferred
 
