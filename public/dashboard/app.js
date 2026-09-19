@@ -2012,7 +2012,8 @@ async function renderEditor(id) {
       let view = "schedule";
 
       // A refusal for want of the template choice: adopt the server's two revisions and
-      // re-ask in place, keeping whatever was already picked or typed.
+      // re-ask in place (unchecked again — the choice is against THESE revisions), keeping
+      // the time already typed.
       const reask = (err) => {
         if (err.status !== 409 || err.data?.error !== "template_choice_required") {
           return false;
