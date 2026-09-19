@@ -8,6 +8,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Added
+
+- The email template keeps a history: every save is a revision, any past revision can be restored (as a new save, never by rewriting history), and every scheduled send records the revision it was made with. Saving the template reports which scheduled posts keep the template they were made with, and each can be updated to the current template in one step, keeping its place in the queue (SPEC §9).
+- Scheduling or sending a post again after the template has changed asks which template to use, the one it had or the current one, and refuses until told; nothing about a post's look is decided silently (SPEC §6).
+- The API carries the same facts and choices: a post reports its template facts, schedule and send accept `template_revision`, a scheduled send can be updated to the current template, and the template's history can be listed and restored.
+
+### Changed
+
+- The template editor states the rule plainly: a saved change applies to posts scheduled from now on, a post already scheduled keeps the template it was made with until updated, and a sent post never changes. Wherever a scheduled send is listed, one made with an older template than the current one is marked, with Update beside Reschedule and Cancel.
+- Saving the template while posts are scheduled shows which of them keep the previous template, with Update and Update all.
+
+### Fixed
+
+- A scheduled post's test email and preview are its frozen copy, exactly what will fire, so a template or identity change made after scheduling can no longer make the test disagree with what goes out (SPEC §5). A sent post's preview and test are the record's frozen copy.
+
 ### Changed
 
 - The migration history is squashed into a single baseline, `0001_init.sql`; no deployed database had run the old chain. A local database created before the squash keeps working; to rebuild one from the baseline, delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
