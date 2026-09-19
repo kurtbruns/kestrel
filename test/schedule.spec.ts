@@ -304,7 +304,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(second.send.id).toBe(first.send.id);
   });
 
-  it("yields exactly one active send when two schedules race the same post (0004)", async () => {
+  it("yields exactly one active send when two schedules race the same post", async () => {
     const id = await makeDraft();
     const fire = JSON.stringify({ fire_at: future(10 * 60 * 1000) });
     const call = () =>
@@ -359,7 +359,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     });
     const list = await readJson(await SELF.fetch(`${base}/sends`, { headers: AUTH }));
     expect(list.sends.length).toBeGreaterThanOrEqual(1);
-    // The list row carries the denormalized progress counters (migration 0006) instead of
+    // The list row carries the denormalized progress counters (`sends.c_*`) instead of
     // the per-row deliveryRollup aggregate it once ran (#166) — the client derives the
     // dispatch/delivery/wedged view straight off them.
     expect(list.sends[0]).toHaveProperty("c_delivered");

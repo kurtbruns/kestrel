@@ -84,7 +84,7 @@ beforeEach(async () => {
   clearFakeOutbox();
 });
 
-describe("send counters (migration 0006)", () => {
+describe("send counters (sends.c_*)", () => {
   it("track the deliveries aggregate across a full send", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");

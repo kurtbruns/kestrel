@@ -3,9 +3,6 @@
 
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 
-// The `0001` CHECK constraint still admits a fifth value, `failed`, that nothing writes: a
-// Send never fails, it keeps retrying and hands the one ambiguous case to a human (SPEC
-// §12). Migrations are append-only, so the constraint stays wider than this type.
 export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
 
 export interface SendRow {
@@ -21,7 +18,7 @@ export interface SendRow {
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
-  // Denormalized progress counters (migration 0006). A rebuildable cache of the
+  // Denormalized progress counters (the `c_*` columns on `sends`). A rebuildable cache of the
   // `deliveries` bucketing, maintained in the same transactions as each recipient
   // transition so `GET /sends/:id/progress` is a single-row read (SPEC §8).
   c_pending: number;
@@ -60,7 +57,7 @@ export function countsOf(send: SendRow): SendCounts {
   };
 }
 
-// --- denormalized counter maintenance (migration 0006) ----------------------
+// --- denormalized counter maintenance (`sends.c_*`) --------------------------
 //
 // The counters mirror `deliveryOutcomes`: each recipient falls in exactly one of
 // eight mutually-exclusive buckets, the webhook `event` winning over the send-loop
@@ -124,7 +121,7 @@ function counterMove(
 /**
  * Rebuild the eight counters from `deliveries` (the source of truth) for one send,
  * bucketed exactly as `deliveryOutcomes`. The counters are a cache, so this both
- * backfills (migration 0006) and runs as the exactness pass when a send completes,
+ * backfills the counters and runs as the exactness pass when a send completes,
  * guaranteeing the permanent record's numbers equal the aggregate.
  */
 export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1PreparedStatement {

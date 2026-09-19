@@ -1135,7 +1135,7 @@ export async function seedDatabase(
     const deliveries = buildDeliveries(sendId, sentAudience, completedAt, events, unsentSlots);
     await insertDeliveries(db, deliveries);
     // The seed writes delivery rows directly (fixture data the normal path never
-    // produces), so bring the denormalized counters (migration 0006) in line with them.
+    // produces), so bring the denormalized counters (`sends.c_*`) in line with them.
     await recomputeSendCounters(db, sendId);
     counts.sent++;
     counts.deliveries += deliveries.length;
