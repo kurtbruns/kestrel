@@ -67,15 +67,23 @@ function resolveTag() {
   return git(["describe", "--tags", "--exact-match", "HEAD"]) ?? "";
 }
 
-/** Normalize package.json `repository` to a browsable https URL, or "" when absent. */
+/**
+ * Normalize package.json `repository` to a browsable https URL, or "" when absent or not
+ * something a browser can open. Accepts the forms npm does: an https / git+https URL, an
+ * ssh URL, the `github:owner/repo` and bare `owner/repo` shorthands.
+ */
 function resolveRepoUrl() {
-  const raw = typeof pkg.repository === "string" ? pkg.repository : (pkg.repository?.url ?? "");
-  return raw
+  const raw = (
+    typeof pkg.repository === "string" ? pkg.repository : (pkg.repository?.url ?? "")
+  ).trim();
+  const url = raw
     .replace(/^git\+/, "")
     .replace(/^git@github\.com:/, "https://github.com/")
     .replace(/^ssh:\/\/git@/, "https://")
-    .replace(/\.git$/, "")
-    .trim();
+    .replace(/^github:/, "https://github.com/")
+    .replace(/^([\w.-]+\/[\w.-]+)$/, "https://github.com/$1")
+    .replace(/\.git$/, "");
+  return /^https?:\/\//.test(url) ? url : "";
 }
 
 const info = {

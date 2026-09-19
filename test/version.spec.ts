@@ -37,9 +37,9 @@ describe("GET /api/version", () => {
     }
     expect(body.version).toMatch(/^\d+\.\d+\.\d+/); // semver-shaped
     expect(body.buildTime).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO 8601
-    // A browsable https URL — the shape, not this repo's owner, so a fork's suite stays
-    // green once it points package.json `repository` at itself.
-    expect(body.repoUrl).toMatch(/^https:\/\/[^/\s]+\/\S+[^/]$/);
+    // A browsable https URL (or "" when package.json names no repository) — the shape,
+    // not this repo's owner, so a fork's suite stays green whatever it points at.
+    expect(body.repoUrl === "" || /^https:\/\/[^/\s]+\/\S+[^/]$/.test(body.repoUrl)).toBe(true);
 
     // Derived links (src/build.ts) are built from the same fields, so assert the
     // relationship rather than a frozen string — stable across version/sha bumps. The

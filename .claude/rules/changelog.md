@@ -30,6 +30,6 @@ A release is cut by the maintainer, by hand, on `main` after the change has merg
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - <date>` and add a fresh, empty `## [Unreleased]` above it.
 2. Bump `version` in `package.json` to `X.Y.Z`.
 3. Update the link references at the bottom of `CHANGELOG.md` (`[Unreleased]` compare, new `[X.Y.Z]` tag).
-4. Commit, then `git tag -a vX.Y.Z -m "kestrel vX.Y.Z"` and `git push --tags`.
+4. Commit, then `git tag -a vX.Y.Z -m "kestrel vX.Y.Z"` and `git push origin vX.Y.Z` (that tag alone, not `--tags`, which would push every local tag).
 
 Pick the number by semver against the last tag: a `Breaking` entry forces a major bump; new features are a minor bump; fixes alone are a patch.

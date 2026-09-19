@@ -615,8 +615,7 @@ body.nav-resizing .sidebar {
 
 /* Reserve the width of the active (600-weight) label so toggling weight never
    reflows a horizontal nav (the same trick the old top bar used). */
-.room-switch a::after,
-.nav-tools a::after {
+.room-switch a::after {
   content: attr(data-text);
   height: 0;
   font-weight: 600;
@@ -2966,9 +2965,9 @@ textarea.is-invalid {
   color: var(--fg);
   background: var(--hover);
 }
+/* Colour + tint, never weight, so the active chip keeps its width (see .toc-sub.on). */
 .api-nav a.active {
   color: var(--fg);
-  font-weight: 600;
   background: var(--hover);
 }
 .api-nav-count {

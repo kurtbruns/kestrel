@@ -5,9 +5,12 @@
  * Kestrel keeps its CHANGELOG.md current as part of the workflow (see
  * .claude/rules/changelog.md). This hook is the reliability net for that: at the end of
  * a turn it looks at what the branch changed and, if code shipped without a CHANGELOG.md
- * entry, surfaces a one-line reminder to add one. It is a NON-BLOCKING nudge — it never
- * exits non-zero and never blocks the stop, so it can't halt a turn or reject a change.
- * The maintainer/agent judges whether the change is actually user-facing.
+ * entry, surfaces a one-line reminder to add one. A Stop hook's `systemMessage` is shown
+ * to the person in the transcript, not fed back to the model (only a blocking decision
+ * would be, and this never blocks), so the reminder reaches the maintainer, who relays it
+ * or acts on it. It is a NON-BLOCKING nudge — it never exits non-zero and never blocks the
+ * stop, so it can't halt a turn or reject a change. Whoever reads it judges whether the
+ * change is actually user-facing.
  *
  * "Code" is src/, public/dashboard/ (the admin UI, which sits outside src/), and
  * migrations/ (schema). Tests and build tooling live outside those prefixes, so a
@@ -60,9 +63,11 @@ function workingTreeFiles() {
       continue;
     }
     // Porcelain v1: "XY <path>" (or "XY <old> -> <new>" for renames). The path starts
-    // at column 3; take the destination for a rename.
+    // at column 3; take the destination for a rename. Git wraps a path with a space or a
+    // non-ASCII byte in double quotes; strip them so such a path still matches a prefix.
     const path = line.slice(3);
-    files.push(path.includes(" -> ") ? path.split(" -> ")[1] : path);
+    const dest = path.includes(" -> ") ? path.split(" -> ")[1] : path;
+    files.push(dest.replace(/^"(.*)"$/, "$1"));
   }
   return files;
 }

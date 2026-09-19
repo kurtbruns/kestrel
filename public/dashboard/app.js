@@ -4859,7 +4859,7 @@ function renderDocsIndex(docs) {
     `<div class="toc-label">Kestrel</div>` +
     out("https://getkestrel.dev", "Project site", "Project") +
     (repoUrl
-      ? out(repoUrl, "Source on GitHub", "Source") + out(`${repoUrl}/blob/main/LICENSE`, "License")
+      ? out(repoUrl, "Source on GitHub", "Source") + out(`${repoUrl}/blob/HEAD/LICENSE`, "License")
       : "");
   app.innerHTML = roomShell("docs", rail, main);
   window.scrollTo(0, 0);
@@ -4869,10 +4869,24 @@ function renderDocsIndex(docs) {
 // — never a list of the other docs. Sequential Prev/Next sits on the title line (compact)
 // and at the foot of the article (with titles), not in the rail.
 //
-// The rail folds on a phone: "On this page" is a <details> that defaults open on desktop
-// (where the summary is inert — it just looks like the label) and closed on a phone, where
-// it is one tappable row above the article and closes again once a section is picked.
-const PHONE = "(max-width: 720px)";
+// The rail folds on a phone: "On this page" is a <details> that is open on desktop (where
+// the summary is inert — it just looks like the label) and closed on a phone, where it is
+// one tappable row above the article and closes again once a section is picked. The state
+// follows the layout, not the width at render time: crossing 720px (a rotation, a resized
+// window) re-opens it on desktop — where nothing else could, the summary being inert —
+// and takes the summary out of the tab order there, so a keyboard user can't collapse a
+// list no pointer can reopen. One listener for the app's lifetime; it finds the fold that
+// is in the DOM, if any.
+const phoneMq = matchMedia("(max-width: 720px)");
+function syncFold(fold) {
+  if (!fold) {
+    return;
+  }
+  const phone = phoneMq.matches;
+  fold.open = !phone;
+  fold.querySelector("summary").tabIndex = phone ? 0 : -1;
+}
+phoneMq.addEventListener("change", () => syncFold(document.getElementById("tocOnPage")));
 function renderDocPage(docs, slug) {
   const at = docs.findIndex((d) => d.slug === slug);
   if (at === -1) {
@@ -4958,15 +4972,15 @@ function renderDocPage(docs, slug) {
         `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
     )
     .join("");
-  const phone = matchMedia(PHONE).matches;
   navEl.innerHTML = sections.length
-    ? `<details class="toc-onpage" id="tocOnPage"${phone ? "" : " open"}><summary class="toc-label">On this page</summary>${onPage}</details>`
+    ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
 
   // "On this page" links smooth-scroll within the current doc and highlight at once. On a
   // phone the fold closes first, so the page height above the target is settled before
   // the scroll is measured.
   const onPageEl = document.getElementById("tocOnPage");
+  syncFold(onPageEl); // open + inert on desktop, closed + tappable on a phone (before paint)
   const markActive = (id) => {
     if (!onPageEl) {
       return;
@@ -4982,7 +4996,7 @@ function renderDocPage(docs, slug) {
     }
     ev.preventDefault();
     markActive(a.dataset.target);
-    if (onPageEl && matchMedia(PHONE).matches) {
+    if (onPageEl && phoneMq.matches) {
       onPageEl.open = false;
     }
     document
@@ -5017,11 +5031,9 @@ function renderDocPage(docs, slug) {
   // highlights. One document.onscroll slot, self-cleared once this doc leaves the DOM.
   if (onPageEl && sections.length) {
     const ids = sections.map((s) => s.id);
-    // Just under the sticky bar (its height is the room's --bar-h token, one row at every
-    // width — see roomShell), read once per render so CSS and JS can't drift.
-    const barH =
-      parseFloat(getComputedStyle(document.querySelector(".room")).getPropertyValue("--bar-h")) ||
-      54;
+    // Just under the sticky bar. Measured, not assumed: the bar is --bar-h at every width
+    // (see roomShell), but large-text zoom can push it taller, and the spy should follow.
+    const barH = document.querySelector(".room-bar")?.getBoundingClientRect().height || 54;
     const line = barH + 26;
     const spy = () => {
       if (!document.getElementById(ids[0])) {
@@ -5161,6 +5173,8 @@ async function renderReference() {
       navEl._obs.observe(el);
     }
   }
+  // Its own page — start at the top, not wherever the last doc was scrolled to.
+  window.scrollTo(0, 0);
 }
 
 // ---- dashboard (home) ----
