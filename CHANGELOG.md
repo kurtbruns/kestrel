@@ -12,6 +12,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 - The migration history is squashed into a single baseline, `0001_init.sql`; no deployed database had run the old chain. A local database created before the squash keeps working; to rebuild one from the baseline, delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
 - The send list's status filter no longer accepts `failed`: a send never fails, it keeps retrying and hands the one ambiguous case to you (SPEC §12). The dashboard alert for it, which could never fire, is gone.
+- Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page; the confirmation names the fire time.
+- A scheduled post keeps its formatting toolbar in view, greyed, with "Cancel the schedule to edit" beside it, and the Write and Preview tabs carry icons.
 
 ## [0.1.0] - 2026-09-19
 

@@ -2072,10 +2072,23 @@ th.num .th-sort {
   flex-direction: column;
   align-items: center;
 }
-/* Reserve the width of the active (600) label so toggling weight never reflows the tab. */
+/* The label row: an icon beside the word, the same pairing the settings toggles use. */
+.ctab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ctab-label svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+/* Reserve the width of the active (600) label so toggling weight never reflows the tab;
+   the margin stands in for the icon and its gap. */
 .ctab::after {
   content: attr(data-text);
   height: 0;
+  margin-left: 21px;
   font-weight: 600;
   overflow: hidden;
   visibility: hidden;
@@ -2108,6 +2121,14 @@ th.num .th-sort {
   height: 20px;
   background: var(--line);
   margin: 0 6px;
+}
+/* A scheduled post's toolbar stays in view with its buttons disabled; this label
+   beside the greyed icons says the way out, where the editing would have happened. */
+.toolbar-lock {
+  font-size: 12px;
+  color: var(--muted);
+  margin-right: 10px;
+  white-space: nowrap;
 }
 .tb {
   display: inline-flex;
@@ -2255,12 +2276,11 @@ th.num .th-sort {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-/* Left-hand note in the actions bar of a locked (scheduled) post, where there is no
-   Primary and nothing to autosave — it stands in for the Save draft + cue that a
-   draft shows, explaining why the row is quiet. */
-.locked-note {
-  font-size: 13px;
-  color: var(--muted);
+/* A locked (scheduled) post's actions bar holds Send test email alone: no Primary,
+   nothing to autosave, and the lock is said where editing would happen, on the
+   composer. The lone row keeps to the right, where the draft's send actions sit. */
+.actions-bar > .row:only-child {
+  margin-left: auto;
 }
 /* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok

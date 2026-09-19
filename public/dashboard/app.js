@@ -1195,14 +1195,18 @@ async function renderEditor(id) {
   // (409) rather than clobbers a newer save from another tab or from Claude.
   let baseRevision = post.current_revision;
   let warnedRevision = null; // newest revision we've surfaced, so we re-arm only on a genuinely newer one
-  const toolbarHtml = TOOLBAR.map((group) =>
-    group
-      .map(
-        ([kind, label]) =>
-          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}">${icon(kind)}</button>`,
-      )
-      .join(""),
-  ).join(`<span class="sep"></span>`);
+  // A scheduled post keeps its formatting toolbar in view, greyed, with the way out
+  // beside it: the lock is shown where editing would happen (DESIGN §7).
+  const toolbarHtml =
+    (locked ? `<span class="toolbar-lock">Cancel the schedule to edit</span>` : "") +
+    TOOLBAR.map((group) =>
+      group
+        .map(
+          ([kind, label]) =>
+            `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? " disabled" : ""}>${icon(kind)}</button>`,
+        )
+        .join(""),
+    ).join(`<span class="sep"></span>`);
   const dis = locked ? "disabled" : "";
 
   app.innerHTML = `
@@ -1212,7 +1216,7 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1231,10 +1235,10 @@ async function renderEditor(id) {
       <div class="composer">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
-            <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true">Write</button>
-            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false">Preview</button>
+            <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true"><span class="ctab-label">${SET_ICON.editable}Write</span></button>
+            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${SET_ICON.preview}Preview</span></button>
           </div>
-          <div class="toolbar" role="toolbar" aria-label="Formatting"${locked ? " hidden" : ""}>${toolbarHtml}</div>
+          <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
         <div class="composer-body" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
@@ -1249,8 +1253,7 @@ async function renderEditor(id) {
       <div class="actions-bar">
         ${
           locked
-            ? `<span class="locked-note">Locked while scheduled — cancel the schedule to edit.</span>
-               <div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
+            ? `<div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
             : `<div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>
@@ -1965,8 +1968,10 @@ async function renderEditor(id) {
               json: { fire_at: new Date(t).toISOString() },
             });
             m.close();
-            toast(withNoProviderNote("Scheduled"));
-            location.hash = "#/sent";
+            // Stay on the post, re-rendered in its scheduled state: the window is the
+            // review and this page is the review surface (SPEC §6, DESIGN §7).
+            toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
+            renderEditor(id);
           } catch (e) {
             toast(e.message);
           }
@@ -1978,8 +1983,8 @@ async function renderEditor(id) {
             await saveDraft(true);
             await api(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withNoProviderNote("Queued — cancelable for 5 minutes"));
-            location.hash = "#/sent";
+            toast(withNoProviderNote("Sends in 5 minutes, cancelable until then."));
+            renderEditor(id);
           } catch (e) {
             toast(e.message);
           }
@@ -3109,6 +3114,8 @@ const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resen
 
 // Small inline icons for the intent chips, read-only notes, and controls.
 const SET_ICON = {
+  preview:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   editable:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   readonly:
@@ -4285,7 +4292,7 @@ async function renderSettings() {
       <div class="set-preview">
         <div class="set-preview-bar set-ce-bar">
           <div class="set-ce-modetog" role="group" aria-label="Confirmation email view">
-            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>Preview</button>
+            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true">${SET_ICON.preview}Preview</button>
             <button type="button" class="set-ce-modebtn" id="ceTabEdit" aria-pressed="false">${SET_ICON.editable}Edit</button>
           </div>
         </div>
