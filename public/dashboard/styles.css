@@ -470,9 +470,12 @@ body.nav-resizing .sidebar {
 }
 /* Back-to-index link at the top of a doc page's rail, hairline under it. */
 /* Compact Previous / Next at the top-right of the reader column (a doc page) — the quick
-   sequential step, sitting above the article, aligned to the content's right edge. Plain
-   muted links; the titled pager lives at the article foot. */
+   sequential step, sitting above the article. Shares the article's 720px reading measure
+   (both are left-aligned children of room-main) so its right edge tracks the content's,
+   not room-main's far edge on a wide viewport. Plain muted links; the titled pager lives
+   at the article foot. */
 .doc-topnav {
+  max-width: 720px;
   display: flex;
   justify-content: flex-end;
   gap: 16px;
