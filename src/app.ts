@@ -304,14 +304,16 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/preview",
       access: "admin",
-      summary: "Render current markdown to the email HTML (returns HTML + warnings).",
+      summary:
+        "The email's preview URL, subject, and warnings: a scheduled post's frozen copy, a draft's live render.",
       handler: renderRoutes.preview,
     },
     {
       method: "GET",
       path: "/posts/:id/preview",
       access: "admin",
-      summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      summary:
+        "The email as a standalone HTML page (editor preview / open-in-browser): a scheduled post's frozen copy, a draft's live render.",
       handler: renderRoutes.previewPage,
     },
     {
@@ -319,7 +321,13 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/posts/:id/test",
       access: "admin",
       summary:
-        "Send a test to one address through the same per-recipient path as a real send (I5).",
+        "Send a test to one address through the same per-recipient path as a real send (I5): a scheduled post's frozen copy, a draft's live render.",
+      description:
+        "Once the post is scheduled, the test is the send's frozen render exactly as it will fire — a template or identity change made after scheduling does not reach it (update the send to pick one up). A draft tests live: its current content, the current template, and the current identity. The response says which (`frozen`, `send_id`). The email's view-in-browser link resolves once the send fires.",
+      example: {
+        request: { to: "you@example.com" },
+        response: { sent: true, provider: "fake", frozen: true, send_id: "s_xyz789" },
+      },
       handler: renderRoutes.test,
     },
     {
