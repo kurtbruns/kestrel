@@ -25,7 +25,7 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
  *                       whose fate a transport error left unknown (§12) — awaiting Resolve.
  *   - `settling`        dispatch complete; delivery receipts still arriving.
  *   - `complete`        dispatched and every accepted recipient has a delivery receipt.
- *   - `failed` / `canceled`  terminal, non-sent outcomes.
+ *   - `canceled`        terminal, non-sent outcome.
  */
 export type SendPhase =
   | "scheduled"
@@ -35,7 +35,6 @@ export type SendPhase =
   | "needs-attention"
   | "settling"
   | "complete"
-  | "failed"
   | "canceled";
 
 export interface SendProgress {
@@ -77,8 +76,6 @@ function derivePhase(
       return "scheduled";
     case "canceled":
       return "canceled";
-    case "failed":
-      return "failed";
     case "sent":
       // Still absorbing receipts if any recipient is accepted-but-unconfirmed.
       return counts.accepted > 0 ? "settling" : "complete";

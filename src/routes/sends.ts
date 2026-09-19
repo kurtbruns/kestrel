@@ -15,7 +15,7 @@ import { parseFutureFireAt } from "./schedule";
 
 export async function list(c: RequestContext): Promise<Response> {
   const statusParam = c.url.searchParams.get("status") ?? undefined;
-  const valid: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled", "failed"];
+  const valid: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled"];
   const status = valid.includes(statusParam as sends.SendStatus)
     ? (statusParam as sends.SendStatus)
     : undefined;
