@@ -6,7 +6,7 @@ The high-level, abstract description of Kestrel, the newsletter app. It describe
 
 **Status.** A living document that tracks `main`. The rule for keeping it in step with the code is `.claude/rules/maintainer.md`.
 
-**How to read it.** §1 to §3 are the contract: what the app is, the six nouns, and the six invariants. §4 to §12 walk each area of the system. The appendices record what was decided, with the alternative each choice was made over, and what was deliberately deferred.
+**How to read it.** §1 to §3 are the contract: what the app is, the six nouns, and the six invariants. §4 to §12 walk each area of the system. The appendix records what was decided, with the alternative each choice was made over, and what was deliberately deferred.
 
 ---
 
@@ -209,11 +209,9 @@ The driver is a periodic **sweep**: a scheduled task on a fixed, short cadence t
 
 A sweep, rather than a per-post timer set for the exact moment, for one decisive reason: the same loop that fires due Sends also detects Sends that *should* have fired and didn't. A fire time that slips past with no delivery is caught on the next sweep and raised loudly — a dropped Send is as bad as an accidental one (§12). A precise per-object alarm would give you precision a newsletter doesn't need and no built-in way to notice a timer that silently never fired; you'd end up adding a sweep anyway as a backstop. One reconciling loop is simpler and safer than precise timers plus a watchdog, and it tolerates an occasional slow tick by design.
 
-### Automatic recovery
+### Recovery
 
-The goal is quiet, sensible recovery, not cleverness the publisher has to babysit. Transient failures retry automatically, with backoff, until they clear. Hard bounces and complaints suppress the address on their own, from the provider's webhooks, so a bad address fixes itself for next time. A Send that can't finish keeps trying and tells you only once it's genuinely stuck — a provider outage, not a blip; silence means it's working. A scheduled Send that fails to fire is loud, not silent (§12). And you can always see exactly what's going out, because the render is frozen and the per-recipient state is recorded — confidence comes from being able to look, not from hoping.
-
-The one thing the app will not do quietly is send to someone it shouldn't, or send something no one saw. Every automatic behavior above is about delivering reliably or not delivering to the wrong people; none of it ever widens the audience or skips the window on its own.
+Everything after the fire time is recovery, and §12 holds the posture: retries with backoff, resumption after an interruption, suppression fed by the provider's webhooks, and a loud flag for the few things a person must see. The one rule none of it bends: no automatic behavior ever widens the audience or skips the window.
 
 ---
 
@@ -342,7 +340,7 @@ Two names still earn their own DNS, because they have genuinely different jobs �
 
 The archive can additionally be presented under the main domain, `example.com/archive/*`, so links carry the primary domain's trust, rank with the rest of the site, and never read as an unfamiliar host in an email footer. Archive URLs are permanent (I3); anchoring them to the most durable name, rather than the app's operational subdomain, is the real prize.
 
-This is a routing concern on the apex domain, not a second app: the edge that serves the website forwards the archive path to the *same* app (the deployment appendix says how), and the archive origin is set to the apex so emitted links use it. Because the archive base path drives both URL generation and the route that serves it, the developer can pick a path that doesn't collide with an existing page on the site.
+This is a routing concern on the apex domain, not a second app: the edge that serves the website forwards the archive path to the *same* app (the setup guide says how), and the archive origin is set to the apex so emitted links use it. Because the archive base path drives both URL generation and the route that serves it, the developer can pick a path that doesn't collide with an existing page on the site.
 
 If the website's edge cannot route to the app, the honest options are a **reverse proxy** from the site's host that forwards `/archive/*` to the app, or a **redirect**: trivial to set up, but one that sends the reader's address bar back to the app host and so forfeits the apex benefit. When neither fits, stay self-contained: the archive on `newsletter.example.com` is a first-class home, not a fallback.
 
@@ -350,15 +348,13 @@ If the website's edge cannot route to the app, the honest options are a **revers
 
 Self-containment puts two audiences on one name, so the access boundary is the product's spine. **Admin** — the editor and the authoring API — sits behind real authentication (an edge access layer, so you write no auth code). **Public** — the landing page, archive index, post pages, subscribe / confirm / unsubscribe, and media — is deliberately open, protected where it must be by unguessable per-subscriber tokens, because a reader clicking unsubscribe from their inbox has no account to log in with.
 
-The admin surface also carries the **setup guide** — the deploy-and-operate documentation, rendered read-only inside the editor from its Markdown source in the repository (which stays the single source of truth; the pages are not editable in the app). It is a Markdown→web-page view, distinct from the single Markdown→email render path (I5), and it is fetched by the editor and gated with the rest of admin — never a top-level navigation, which would carry no credential.
-
-It also carries an **API reference**, generated from the route registration itself. Claude is a first-class client of this API, so a reference that is always current is part of keeping the API self-describing. Because the reference and the running routes come from one registration, the documented access tier and the enforced gate cannot disagree, and a new route appears in the reference with nothing else to edit. This is *why* this spec carries no endpoint table: a static list here would only drift from that generated reference. Like the setup guide, it is a read-only, same-origin authed fetch shown inside the editor — never a top-level navigation.
+The admin surface also carries the **setup guide**, the deploy-and-operate documentation rendered read-only from its Markdown source in the repository, and an **API reference** generated from the route registration itself. Because the reference and the running routes come from one registration, the documented access tier and the enforced gate cannot disagree, and a new route appears in the reference with nothing else to edit. That is why this spec carries no endpoint table: a static list here would only drift from the generated one.
 
 One rule falls out and is easy to get wrong: **no public entry point may redirect or link into an access-gated path.** The public front door, `/`, is the landing page, served to everyone; it must never bounce a visitor to the admin editor, which sits behind the access layer's login wall. Express the public surface as one explicit allowlist of path prefixes; everything else is admin. The single, deliberate exception is the dev-only "Open dashboard" shortcut described in §5 — a presentation-only link the reader surface shows solely on a local dev instance, where the editor carries no access wall; it leaves this allowlist, and the route gate it draws, untouched, and is structurally absent once deployed.
 
 The access layer must also admit a non-interactive principal — a service credential for Claude, distinct from the interactive human login — without weakening the human gate. That such a credential exists is the requirement; how it's issued is the implementor's call. As defense in depth the app also re-verifies the access assertion itself, so a misconfigured edge policy can't silently expose admin routes.
 
-There is **one identity contract**: the app verifies a signed token and resolves a principal, either a **human** (who carries an email) or a **service** (Claude or automation, with no email). Everything upstream normalizes to this. In deployed environments the access layer issues the token for both principals: a human SSO login, and a **service token** for Claude, which is Claude's API credential (carried by a Claude Desktop connector, for instance) with no separate token system needed. In local development there is no edge, so the app verifies a token signed with a dev secret instead, the same contract with a different key, enabled only in a dev-shaped environment (fake transport, no access layer configured) and structurally inert once deployed. The interactive client (the editor) reflects the resolved identity and offers a sign-out; it never prompts for a credential in a deployed environment. An agent-native alternative, where Claude authenticates *as the publisher* rather than through a service principal, is deferred (appendix) and would slot into this same contract.
+There is **one identity contract**: the app verifies a signed token and resolves a principal, either a **human** (who carries an email) or a **service** (Claude or automation, with no email). Everything upstream normalizes to this. In deployed environments the access layer issues the token for both principals: a human SSO login, and a **service token** for Claude, which is Claude's API credential (carried by a Claude Desktop connector, for instance) with no separate token system needed. In local development there is no edge, so a dev-only stand-in issues the token under the same contract; it is structurally inert once deployed. The interactive client (the editor) reflects the resolved identity and offers a sign-out; it never prompts for a credential in a deployed environment. An agent-native alternative, where Claude authenticates *as the publisher* rather than through a service principal, is deferred (appendix) and would slot into this same contract.
 
 ### Environments
 
@@ -372,7 +368,7 @@ Three environments, each with its own database, its own storage, and — the loa
 
 Staging exists because email's real failure modes — DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client — only appear once deployed, and a real test send to yourself is the only way to prove them before a real send to subscribers.
 
-The app is allowed to be a living application — that was the whole point of separating it from any static site — so it can hold state, run its sweep, and retry work. The intent is to keep it small and well-defined, not elaborate. The concrete instantiation of these roles for this project is in the *deployment appendix*.
+The platform these roles run on, and the concrete deploy-and-operate steps (provisioning, the access application, connecting a provider and its webhook, sending-domain DNS, wiring the archive to a website, the verify checklist), are the setup guide under `docs/setup/`, which the admin surface also serves. This spec holds the *why*; that guide holds the *how*.
 
 ---
 
@@ -431,17 +427,3 @@ Each entry names the alternative it was chosen over and points to the section th
 ## Open
 
 Nothing at present. A question that is raised and not yet decided goes here, and moves to *Decided* with the alternative it was chosen over.
-
----
-
-# Appendix — deployment
-
-§11 above, instantiated for this project: the platform, the provider, and the concrete wiring. This is the one platform-specific section; the rest of the spec names neither a platform nor, beyond the two shipped adapters, a provider.
-
-- **Its own repo and deployment**, separate from the static site, so deploy cadence, uptime, and blast radius are independent — a newsletter fix doesn't rebuild the whole site, and a site-build break doesn't block a send-retry deploy.
-- **Cloudflare Worker** over **D1** (the database) and **R2** (images), with a **Cron Trigger** driving the send sweep. Cron granularity is one minute, which is the §6 sweep's cadence; a Durable Object alarm is the alternative, but the reconciling-sweep choice maps directly onto Cron. The app's own subdomain is the one unavoidable platform dependency, because the app *is* a Worker.
-- **SES is this project's transport**, warmed and out of the sandbox behind the current Sendy install; this app **replaces Sendy**. Reuse or add a sending identity for the `send.` role (§11) on that SES account. Bounce and complaint events arrive via SNS. (Resend is the other shipped adapter, §10; it is not used here.)
-- **Archive self-contained by default.** The archive origin defaults to the app's own origin, so `newsletter.example.com/archive/{slug}` is the archive URL out of the box, and the public landing page at `/` is served by the same Worker. The editor is static assets under `/dashboard/`.
-- **Optional apex archive.** If the apex is on Cloudflare, add `example.com/archive/*` as a route to the newsletter Worker on the apex zone (the most-specific route wins) and point the archive origin at the apex, while the static site keeps everything else. A Worker route can't be attached to a zone Cloudflare doesn't control, so a site hosted elsewhere falls back to §11's reverse proxy or redirect. This is the enhancement, not the default.
-- **Access.** Admin/authoring sits behind **Cloudflare Access**, which issues the token for both of §11's principals: a human SSO login, and a service token for Claude; the reader routes — the landing page, archive index, post pages, subscribe, confirm, unsubscribe, media — are public, guarded by unguessable per-subscriber tokens. The public landing page is the front door at `/`; it is served to everyone and never redirects into the Access-gated admin surface.
-- **The concrete deploy-and-operate steps** — provisioning, the one Access application, connecting SES/Resend and its webhook, sending-domain DNS, wiring the archive to a website, and the verify checklist — are the setup guide under `docs/setup/`, which is also the in-app admin docs surface (§11). This spec holds the *why*; that guide holds the *how*.
