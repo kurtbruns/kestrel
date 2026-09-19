@@ -73,7 +73,7 @@ export async function freeze(
     ]);
   } catch (err) {
     // The pre-check above is UX, not the guarantee: a concurrent freeze() for the
-    // same post can pass it and reach here. The partial unique index (migration 0004)
+    // same post can pass it and reach here. The partial unique index (`idx_sends_one_active_per_post`)
     // is the real backstop — it fails the loser's insert, which we map to the same
     // friendly conflict so the DB, not check-then-act, enforces one active send (I4, I6).
     if (isActiveSendConflict(err)) {

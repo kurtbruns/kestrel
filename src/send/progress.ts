@@ -1,8 +1,8 @@
 /**
  * Derive the in-flight reporting shape for `GET /sends/:id/progress` (SPEC §8, §12).
  *
- * Everything here is computed from the send row's denormalized counters (migration
- * 0006) plus one cheap retry probe — no aggregate over the audience — so a poll is a
+ * Everything here is computed from the send row's denormalized counters (`sends.c_*`)
+ * plus one cheap retry probe — no aggregate over the audience — so a poll is a
  * single-row read however large the send. The reported **phase** is derived live, not
  * stored: it is the vocabulary the watch view reports, distinct from the persisted
  * send `state`. Two numbers are reported side by side because delivery lags dispatch
