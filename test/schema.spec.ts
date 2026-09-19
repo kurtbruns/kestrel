@@ -64,7 +64,7 @@ describe("schema (0001_init)", () => {
     expect(res.meta.changes).toBe(0);
   });
 
-  it("enforces one active send per post via the partial unique index (0004)", async () => {
+  it("enforces one active send per post via the partial unique index", async () => {
     const now = Date.now();
     await env.DB.prepare(
       "INSERT INTO posts (id, slug, status, created_at, updated_at) VALUES ('p2','p-2','scheduled',?,?)",
