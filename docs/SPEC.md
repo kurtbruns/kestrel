@@ -103,29 +103,29 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 ## 4. Authoring
 
-You write in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post needs only a **subject** and a body to start; the **slug** (auto-derived from the subject) rounds out the metadata, and the inbox **preheader** is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
+The publisher writes in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post is a **subject** and a body; the **slug** (derived from the subject) rounds out the metadata, and the inbox **preheader** is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
 
-Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug — one field carrying the weight rather than a separate "title" you'd have to keep in sync with it.
+Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug: one field carrying the weight rather than a separate "title" that would have to be kept in sync with it.
 
 ### Revisions
 
-Every save writes a new revision holding that version's Markdown and metadata. The post points at its current revision; the history is the list behind it. Markdown is small and diffs cleanly, so each revision stores the whole body rather than a delta — simpler, and there's no reconstruction step to get wrong.
+Every save writes a new revision holding that version's Markdown and metadata. The post points at its current revision; the history is the list behind it. Markdown is small and diffs cleanly, so each revision stores the whole body rather than a delta: simpler, and there's no reconstruction step to get wrong.
 
-This gives you a full edit history, the ability to see what changed between two versions, and — because a scheduled post's content is frozen into its send anyway (I3) — a clear separation between "the post as it is now" and "the post as it was sent."
+This gives a full edit history, the ability to see what changed between two versions, and, because a scheduled post's content is frozen into its send anyway (I3), a clear separation between "the post as it is now" and "the post as it was sent."
 
 ### Concurrent edits
 
-One post has two clients that can write it at once — two browser tabs, and Claude editing through the same API — so the authoring API is **optimistically concurrent**, and the rule is *notify, don't clobber.*
+One post has two clients that can write it at once (two browser tabs, and Claude editing through the same API), so the authoring API is **optimistically concurrent**, and the rule is *notify, don't clobber.*
 
 Because each save advances the post's current revision, that revision id is its version token. A save may carry the revision it was based on; if that base no longer matches the post's current revision, another writer got there first, and the save is rejected rather than landed, returning the newer revision and who wrote it. A save that omits a base is unchecked (last-write-wins), so a client that doesn't participate still works.
 
-The editor participates on both ends. It sends the base on every save, so a stale save surfaces an **out-of-date notice** instead of overwriting: *Reload* discards the local edits and loads the other version, *Keep editing* keeps the local copy so the next save writes on top of the other. It also watches for a newer revision while open, covering another browser and Claude alike, which a same-browser signal would miss, so the writer is warned *before* investing more effort, not only when they save. The notice names who changed it (the revision's author; Claude's saves show as "Claude") and re-arms only when a genuinely newer revision appears.
+The editor participates on both ends. It sends the base on every save, so a stale save surfaces a notice instead of overwriting, and the writer chooses between taking the other version and keeping their own. It also watches for a newer revision while the post is open, covering another browser and Claude alike, so the writer is warned *before* investing more effort, not only when they save. The notice names who changed it (the revision's author; Claude's saves show as "Claude") and re-arms only when a genuinely newer revision appears.
 
 ### Images
 
-Adding an image is uploading it *to a post* and referencing it by name — you upload the file `cover.jpg` to the post, then write `![A stack of paperbacks on a windowsill](cover.jpg)` in the Markdown. That's the whole workflow. No endpoint hands you a URL to paste back in; the reference is just the filename, the same way you'd write it if the image sat in a folder next to the post. At render time the app resolves `cover.jpg` to the stored file's absolute URL and the right size for email. The alt text lives inside the reference, so it's never a separate step and is easy to require.
+Adding an image is uploading it *to a post* and referencing it by name: the publisher uploads the file `cover.jpg` to the post, then writes `![A stack of paperbacks on a windowsill](cover.jpg)` in the Markdown. That's the whole workflow. No endpoint hands back a URL to paste in; the reference is just the filename, the same way it would be written if the image sat in a folder next to the post. At render time the app resolves `cover.jpg` to the stored file's absolute URL and the right size for email. The alt text lives inside the reference, so it's never a separate step and is easy to require.
 
-This is deliberately the one thing many systems get wrong — GitHub included, where text is API-addressable but an image is a side upload that returns an opaque URL you have to bridge yourself. Here the author manages one thing, the post, and the image is part of it.
+This is deliberately unlike the systems where text is addressable but an image is a side upload that returns an opaque URL the author has to bridge. Here the author manages one thing, the post, and the image is part of it.
 
 ---
 
@@ -133,25 +133,23 @@ This is deliberately the one thing many systems get wrong — GitHub included, w
 
 Preview means two concrete things, and both are the same render aimed differently.
 
-**View in browser** — a hosted page showing the post rendered as the email. Before scheduling it's a live render of the current draft; the link is how you eyeball layout without leaving your desk. Once scheduled, it shows the frozen copy that will fire.
+**View in browser** — a hosted page showing the post rendered as the email. Before scheduling it's a live render of the current draft, the quick way to check layout. Once scheduled, it shows the frozen copy that will fire and, afterward, the permanent archive of what was mailed.
 
-**Send test** — the real email, rendered and delivered to an address you name, so you can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific post to a named address; a **template test**, from the email-template surface, sends a synthetic sample post so the publisher can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template — the one that will ship — not unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. Once a post is scheduled, a post test sends its **frozen copy**, exactly as the fire path will, so the test and the view-in-browser page never disagree about what is going out. The default recipients (§9) pre-fill both.
+**Send test** — the real email, rendered and delivered to an address the publisher names, so they can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific post to a named address; a **template test**, from the email-template surface, sends a synthetic sample post so the publisher can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template, the one that will ship, never unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. Once a post is scheduled, a post test sends its **frozen copy**, exactly as the fire path will, so the test and the view-in-browser page never disagree about what is going out. The default recipients (§9) pre-fill both.
 
-There is exactly **one render path**. It turns a post into the email, and the preview, the test, and the real send all call it. That's what makes I5 hold: if the test looks right, the send is right, because they're the same code producing the same output. Email rendering is client-dependent enough that a faithful web preview isn't sufficient on its own — so the test send is the thing you trust before scheduling, and the view-in-browser page is the convenient first look.
-
-When a post is scheduled, its render freezes (I3) and the view-in-browser page stops being a live draft render and becomes the exact copy that will fire and, afterward, the permanent archive of what was mailed.
+There is exactly **one render path**. It turns a post into the email, and the preview, the test, and the real send all call it. That's what makes I5 hold: if the test looks right, the send is right, because they're the same code producing the same output. Email rendering is client-dependent enough that a faithful web preview isn't sufficient on its own, so the test is the thing the publisher trusts before scheduling, and the view-in-browser page is the convenient first look.
 
 ### The public reader surface
 
-Because the app is self-contained (§11), it serves its own reader-facing pages, not only per-post archives. It carries the newsletter's identity — the publication name, tagline, and logo (§9) theme these pages, so the reader surface reads as *the publication*, not the tool. Three public pages, all indexable and none ever bouncing a visitor toward an admin path (§11):
+Because the app is self-contained (§11), it serves its own reader-facing pages, not only per-post archives, and the publication identity (name, tagline, and logo, §9) themes them, so the reader surface reads as *the publication*, not the tool. Three public pages, all indexable and none ever bouncing a visitor toward an admin path (§11):
 
-The **landing page** is the front door at `/` — the one page a reader reaches by typing the bare domain. It carries the identity and a subscribe call to action, features the latest post, lists recent ones, and links into the full archive. Because it is the bare-domain page, it must be public and must never link into the access-gated admin surface.
+The **landing page** is the front door at `/`, the one page a reader reaches by typing the bare domain. It carries the identity and a subscribe call to action, features the latest post, lists recent ones, and links into the full archive.
 
-The **archive index** lists every sent post, newest first, each linking to its post page. It lives at the archive base path (§11) — the same prefix the post pages sit under, so the list and the posts it links to share one origin and one configured path. It carries the same identity and subscribe call to action as the landing page.
+The **archive index** lists every sent post, newest first, each linking to its post page. It lives at the archive base path (§11), the same prefix the post pages sit under, so the list and the posts it links to share one origin and one configured path. It carries the same identity and subscribe call to action as the landing page.
 
-A **post page** serves that post's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may add light public chrome — a masthead with the newsletter name and the publish date, a link back to the index, a subscribe prompt, and the publication's display font and background, so its headings share the editorial voice of the reader surface and it sits on the same ground — so a shared post reads as part of a publication and not a raw forwarded email. That chrome fills reserved anchors the render leaves in the frozen copy — the same idea as the unsubscribe placeholder — so it appears only in the browser, never in a sent email (a web font can't load in an inbox anyway), and the reviewed content is served unchanged (I3). The archive URL an email carries — its "view in browser" and every shared link — is built from the configured archive origin and base path (§11), so the same render is reachable at a stable, public address forever.
+A **post page** serves that post's frozen render (I3). When the archive lives on the app's own origin rather than inside a surrounding website, the page may add light public chrome (a masthead with the newsletter name and the publish date, a link back to the index, a subscribe prompt, and the publication's display font and background), so a shared post reads as part of a publication and not a raw forwarded email. That chrome fills reserved anchors the render leaves in the frozen copy, the same idea as the unsubscribe placeholder, so it appears only in the browser, never in a sent email, and the reviewed content is served unchanged (I3). The archive URL an email carries, its "view in browser" and every shared link, is built from the configured archive origin and base path (§11), so the same render is reachable at a stable, public address forever.
 
-On a local dev instance only, the reader surface also carries a small, clearly-marked "Open dashboard" shortcut into the editor (on the landing page and archive index) — a developer convenience, structurally absent once deployed. It is the one deliberate exception to never linking toward admin, allowed because a local instance has no access wall in front of the editor; §11 states the rule and the carve-out.
+On a local dev instance only, the landing page and archive index also carry a small, clearly marked shortcut into the editor, a developer convenience that is structurally absent once deployed. It is the one deliberate exception to never linking toward admin, allowed because a local instance has no access wall in front of the editor; §11 states the rule and the carve-out.
 
 ---
 
@@ -408,7 +406,7 @@ Each entry names the alternative it was chosen over and points to the section th
 - **Email only**, over multi-channel (§1).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10): Resend for the simplest setup, Amazon SES for cost at scale. The list, consent, and record stay in the app's database, which is what makes a provider change a swap and not a migration.
 - **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§7). A provider's account-level suppression list may sit underneath as a redundant safety net, but the consent record and the unsubscribe flow are the app's.
-- **Archive pages carry light public chrome**, over a bare frozen render (§5): a masthead, a link back to the index, and a subscribe prompt, filled into reserved anchors so the reviewed content is never rewritten (I3).
+- **Archive pages carry light public chrome**, over a bare frozen render (§5). It fills reserved anchors, so the reviewed content is never rewritten (I3).
 
 ## Deferred
 
