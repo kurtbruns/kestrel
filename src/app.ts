@@ -442,7 +442,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a still-`scheduled` send: the frozen render and audience are untouched and the review window is preserved. Distinct from unschedule → edit → re-schedule, which is for content changes. Same minimum lead as scheduling.",
+        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved. Distinct from cancel → edit → re-schedule, which is for content changes. Same minimum lead as scheduling.",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768554000000 } },
