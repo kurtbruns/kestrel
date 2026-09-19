@@ -32,7 +32,8 @@ export interface ReferenceGroup {
   routes: ReferenceEntry[];
 }
 
-/** Tier order + copy for the reference. Mirrors the public/admin/webhook split app.ts draws. */
+/** Tier order + copy for the reference. Mirrors the public/admin/webhook split app.ts draws;
+ * the titles are the tiers' own names, short enough to sit as a chip row on a phone. */
 const TIERS: { access: Access; title: string; blurb: string }[] = [
   {
     access: "admin",
@@ -42,13 +43,13 @@ const TIERS: { access: Access; title: string; blurb: string }[] = [
   },
   {
     access: "public",
-    title: "Public reader",
+    title: "Public",
     blurb:
       "Served to everyone, no login: the archive, subscribe/confirm/unsubscribe, and media. Protected where needed by unguessable per-subscriber tokens.",
   },
   {
     access: "webhook",
-    title: "Provider webhooks",
+    title: "Webhooks",
     blurb:
       "Delivery callbacks from the email provider. They carry no auth middleware; each request is signature-verified inside its adapter.",
   },

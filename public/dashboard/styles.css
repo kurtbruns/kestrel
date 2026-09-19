@@ -3161,15 +3161,18 @@ textarea.is-invalid {
     font-size: 14px;
     padding: 9px 10px;
   }
-  /* API tiers and the docs index's out-links: the label and the chips share one wrapping
-     row. */
+  /* Chip rows: the API tiers and the docs index's out-links. The index's three short
+     chips share the label's line; the API's three carry counts and don't fit beside
+     "API" at 375px, so that label sits on its own line over the row. */
   .rail-inner:has(.api-nav),
+  .rail-inner:has(.rail-link) {
+    gap: 6px 10px;
+    padding: 10px 12px;
+  }
   .rail-inner:has(.rail-link) {
     flex-direction: row;
     align-items: center;
     flex-wrap: wrap;
-    gap: 6px 10px;
-    padding: 10px 12px;
   }
   .rail-inner:has(.api-nav) .toc-label,
   .rail-inner:has(.rail-link) .toc-label {
