@@ -49,6 +49,7 @@ import { DEFAULT_SEED, makePrng } from "../lib/prng";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
+import { currentTemplateRevision } from "../services/template_history";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
@@ -1058,8 +1059,11 @@ export async function seedDatabase(
   const archiveUrls: string[] = [];
 
   // Freeze each demo send through the same render path the app uses, with the demo
-  // publication's branding (identity + default template) resolved above.
+  // publication's branding (identity + default template) resolved above, and pin each
+  // to the current template revision as a real freeze would (SPEC §9) — recording the
+  // default as revision one on the way, since the reset cleared the history.
   const branding = resolveBranding(await getSettings(db), config);
+  const templateRevision = (await currentTemplateRevision(db)).id;
 
   for (const seedPost of SEED_POSTS) {
     const images = seedPost.hasCover ? coverImages : [];
@@ -1090,6 +1094,7 @@ export async function seedDatabase(
         rendered_text: result.text,
         subject: result.subject,
         recipient_count: audience.length,
+        template_revision: templateRevision,
         scheduled_at: at,
         started_at: null,
         completed_at: null,
@@ -1121,6 +1126,7 @@ export async function seedDatabase(
       rendered_text: result.text,
       subject: result.subject,
       recipient_count: sentAudience.length,
+      template_revision: templateRevision,
       scheduled_at: scheduledAt,
       started_at: fireAt,
       completed_at: completedAt,

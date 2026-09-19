@@ -43,20 +43,33 @@ export function parseFutureFireAt(input: unknown, immediateHint = false): number
   return fireAt;
 }
 
+/** The optional `template_revision` a schedule or send-now names (SPEC §6): a revision
+ *  id, or absent. The freeze decides whether one was needed; this only checks the shape. */
+function parseTemplateRevision(body: { template_revision?: unknown }): string | null {
+  const v = body.template_revision;
+  if (v === undefined || v === null) {
+    return null;
+  }
+  if (typeof v !== "string" || !v.trim()) {
+    throw badRequest("template_revision must be a template revision id");
+  }
+  return v;
+}
+
 export async function schedule(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
   }
 
-  let body: { fire_at?: unknown };
+  let body: { fire_at?: unknown; template_revision?: unknown };
   try {
-    body = (await c.req.json()) as { fire_at?: unknown };
+    body = (await c.req.json()) as typeof body;
   } catch {
     throw badRequest("JSON body with 'fire_at' is required");
   }
   const fireAt = parseFutureFireAt(body.fire_at, true);
-  const send = await freeze(c.env, c.config, post, fireAt);
+  const send = await freeze(c.env, c.config, post, fireAt, parseTemplateRevision(body));
   return json({ send }, 201);
 }
 
@@ -72,6 +85,20 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     return json({ send: active, idempotent: true });
   }
 
-  const send = await freeze(c.env, c.config, post, Date.now() + SEND_NOW_BUFFER_MS);
+  // The body is optional (send-now has no required field); it may carry the template
+  // choice when the post was made before and the template has changed since.
+  let body: { template_revision?: unknown } = {};
+  try {
+    body = ((await c.req.json()) ?? {}) as typeof body;
+  } catch {
+    /* no body — no choice named */
+  }
+  const send = await freeze(
+    c.env,
+    c.config,
+    post,
+    Date.now() + SEND_NOW_BUFFER_MS,
+    parseTemplateRevision(body),
+  );
   return json({ send }, 201);
 }
