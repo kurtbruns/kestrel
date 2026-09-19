@@ -1068,7 +1068,7 @@ async function renderDrafts() {
           // show it as `sending` and route it to the live watch, not the editor (#162).
           const sending = p.active_send_status === "sending";
           const href = sending ? `#/sent/${p.active_send_id}` : `#/edit/${p.id}`;
-          return `<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${sending ? badge("sending") : badge(p.status)}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions">⋯</button></td></tr>`;
+          return `<tr class="clickable" data-id="${p.id}" data-target="${href}"><td><a href="${href}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td>${sending ? badge("sending") : badge(p.status)}${p.template_outdated ? olderTemplateMark() : ""}</td><td class="muted when${p.fire_at ? "" : " empty"}">${p.fire_at ? fmt(p.fire_at) : "—"}</td><td class="muted updated">${fmt(p.updated_at)}</td><td class="act"><button class="icon" data-menu="${p.id}" data-status="${sending ? "sending" : p.status}" data-target="${href}" aria-label="Post actions">⋯</button></td></tr>`;
         })
         .join("")}</tbody></table></div>`;
       wireSort(listEl, state, load);
@@ -1162,12 +1162,16 @@ async function renderEditor(id) {
   editorLeaveFlush = null;
   editorManualSave = null;
   app.innerHTML = `<p class="muted">Loading…</p>`;
-  let post, markdown, scheduled;
+  let post, markdown, scheduled, templateFacts;
   try {
     const data = await api(`/posts/${id}`);
     post = data.post;
     markdown = data.markdown;
     scheduled = data.scheduled;
+    // The template facts (SPEC §6, §9): the current revision, the one the post was last
+    // made with, and whether they differ — the schedule/send-now dialogs ask the Keep /
+    // Use current choice only when they do. Refreshed by the freshness poll below.
+    templateFacts = data.template;
     // A sent post is a frozen record, not editable (#147/#148): it opens the sent
     // record view, never the editor. Redirect a stale #/edit link (or a post sent in
     // another tab / by Claude) there instead of a locked editor.
@@ -1190,6 +1194,14 @@ async function renderEditor(id) {
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
   // means scheduled — signaled by the scheduled banner, not a status pill (#147).
   const locked = post.status !== "draft";
+  // A scheduled send made with an older template than the current one says so wherever
+  // it is shown, and offers Update beside Reschedule and Cancel (SPEC §8, DESIGN §7). A
+  // send with no recorded revision (from before the template had a history) counts.
+  const tplOutdated = Boolean(
+    locked &&
+      scheduled &&
+      (!scheduled.template || scheduled.template.revision !== templateFacts.current.revision),
+  );
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
   // (409) rather than clobbers a newer save from another tab or from Claude.
@@ -1212,7 +1224,19 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    ${
+      locked && scheduled
+        ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.${
+            tplOutdated
+              ? ` ${olderTemplateMark()} Made with an older template than the current one; Update makes it again with the current template.`
+              : ""
+          }</span><span class="row">${
+            tplOutdated
+              ? `<button type="button" class="ghost" id="updateTemplate">Update</button>`
+              : ""
+          }<button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>`
+        : ""
+    }
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1250,7 +1274,7 @@ async function renderEditor(id) {
         ${
           locked
             ? `<span class="locked-note">Locked while scheduled — cancel the schedule to edit.</span>
-               <div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
+               <div class="row test-row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button><span class="test-note">A test sends the frozen copy that will fire; its “view in browser” link works once the send fires.</span></div>`
             : `<div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>
@@ -1739,6 +1763,7 @@ async function renderEditor(id) {
         if (rev && rev !== baseRevision && rev !== warnedRevision) {
           showConflict({ current_revision: rev, author: data.author });
         }
+        templateFacts = data.template; // the template may be saved (by Claude, or in another tab) while this draft is open
       } catch (_) {
         /* transient — try again next tick */
       }
@@ -1759,6 +1784,17 @@ async function renderEditor(id) {
           location.hash = `#/sent/${data.sending.id}`;
         } else if (data.post.status === "sent") {
           location.hash = data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+        } else if (data.scheduled) {
+          // A template save elsewhere (or an update / cancel of this send elsewhere)
+          // changes what the banner must say; the read-only editor is cheap to re-mount.
+          const nowOutdated =
+            !data.scheduled.template ||
+            data.scheduled.template.revision !== data.template.current.revision;
+          if (nowOutdated !== tplOutdated || data.scheduled.id !== scheduled.id) {
+            renderEditor(id);
+          }
+        } else if (data.post.status === "draft") {
+          renderEditor(id); // canceled elsewhere: back to an editable draft
         }
       } catch (_) {
         /* transient — try again next tick */
@@ -1783,6 +1819,13 @@ async function renderEditor(id) {
         toast(e.message);
       }
     });
+
+  // --- update (from the scheduled banner): make the send again with the current template ---
+  const updateTemplateBtn = document.getElementById("updateTemplate");
+  if (updateTemplateBtn && scheduled) {
+    updateTemplateBtn.onclick = () =>
+      updateSendTemplate(updateTemplateBtn, scheduled.id, () => renderEditor(id));
+  }
 
   // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
   const rescheduleBtn = document.getElementById("rescheduleSchedule");
@@ -1878,7 +1921,11 @@ async function renderEditor(id) {
   // per-recipient path as a real send (I5).
   document.getElementById("testBtn").onclick = () => {
     const m = modal(
-      `<h3>Send a test</h3><p class="hint">Delivers the rendered email to real inboxes so you can check it in a client. One address per line.</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      `<h3>Send a test</h3><p class="hint">${
+        locked
+          ? "Delivers the frozen copy that will fire — exactly what the send goes out as — to real inboxes so you can check it in a client. Its “view in browser” link works once the send fires."
+          : "Delivers the rendered email to real inboxes so you can check it in a client."
+      } One address per line.</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
     );
     const to = m.el.querySelector("#testTo");
     to.focus();
@@ -1935,6 +1982,13 @@ async function renderEditor(id) {
   // sending immediately is the deliberate sub-choice. Both server flows are unchanged
   // (/schedule, /send) — this is one modal with two views, so the safer path is what
   // the Primary opens and the louder one is a step down.
+  //
+  // When the template has changed since this post was last made, both views carry the
+  // Keep / Use current choice with nothing pre-selected (a pre-selected default would be
+  // the silent choice by another name), and send the chosen revision id (SPEC §6, §9).
+  // The facts come from the post read (refreshed by the freshness poll); if they went
+  // stale in between, the server's `template_choice_required` refusal hands back the
+  // two revisions and the view re-asks with those.
   const scheduleBtn = document.getElementById("scheduleBtn");
   if (scheduleBtn) {
     scheduleBtn.onclick = () => {
@@ -1942,13 +1996,43 @@ async function renderEditor(id) {
         return; // empty subject: the field-level error is now showing; don't open the modal
       }
       const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
-      const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const scheduleView =
-        `<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">` +
+      let whenValue = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
+      const scheduleView = () =>
+        `<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${whenValue}">` +
+        templateChoiceHtml(templateFacts) +
         `<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>` +
         `<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
-      const m = modal(scheduleView);
+      const sendNowView = () =>
+        `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
+        `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
+        templateChoiceHtml(templateFacts) +
+        `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
+      const m = modal(scheduleView());
       const box = m.el.querySelector(".modal");
+      let view = "schedule";
+
+      // A refusal for want of the template choice: adopt the server's two revisions and
+      // re-ask in place, keeping whatever was already picked or typed.
+      const reask = (err) => {
+        if (err.status !== 409 || err.data?.error !== "template_choice_required") {
+          return false;
+        }
+        templateFacts = {
+          current: err.data.template.current,
+          last_made_with: err.data.template.last_made_with,
+          changed_since_last_made: true,
+        };
+        if (view === "schedule") {
+          whenValue = box.querySelector("#schWhen")?.value || whenValue;
+          box.innerHTML = scheduleView();
+          wireSchedule();
+        } else {
+          box.innerHTML = sendNowView();
+          wireSendNow();
+        }
+        toast("The email template changed since this post was last made — choose which to use");
+        return true;
+      };
 
       const doSchedule = () =>
         busy(box.querySelector("#schGo"), "Scheduling…", async () => {
@@ -1958,53 +2042,71 @@ async function renderEditor(id) {
             toast("Pick a valid date & time");
             return;
           }
+          const choice = readTemplateChoice(box);
+          if (choice === undefined) {
+            return; // the choice is asked and unanswered: the inline error is showing
+          }
           try {
             await saveDraft(true);
             await api(`/posts/${id}/schedule`, {
               method: "POST",
-              json: { fire_at: new Date(t).toISOString() },
+              json: {
+                fire_at: new Date(t).toISOString(),
+                ...(choice ? { template_revision: choice } : {}),
+              },
             });
             m.close();
             toast(withNoProviderNote("Scheduled"));
             location.hash = "#/sent";
           } catch (e) {
-            toast(e.message);
+            if (!reask(e)) {
+              toast(e.message);
+            }
           }
         });
 
       const doSendNow = () =>
         busy(box.querySelector("#snGo"), "Queuing…", async () => {
+          const choice = readTemplateChoice(box);
+          if (choice === undefined) {
+            return;
+          }
           try {
             await saveDraft(true);
-            await api(`/posts/${id}/send`, { method: "POST" });
+            await api(`/posts/${id}/send`, {
+              method: "POST",
+              json: choice ? { template_revision: choice } : {},
+            });
             m.close();
             toast(withNoProviderNote("Queued — cancelable for 5 minutes"));
             location.hash = "#/sent";
           } catch (e) {
-            toast(e.message);
+            if (!reask(e)) {
+              toast(e.message);
+            }
           }
         });
 
       function wireSchedule() {
+        view = "schedule";
         box.setAttribute("aria-labelledby", "schHead");
         box.querySelector("#schCancel").onclick = m.close;
         box.querySelector("#schGo").onclick = doSchedule;
         box.querySelector("#toSendNow").onclick = showSendNow;
+        wireTemplateChoice(box);
         box.querySelector("#schWhen").focus();
       }
 
-      async function showSendNow() {
-        box.innerHTML =
-          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
-          `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
-          `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
+      async function wireSendNow() {
+        view = "send-now";
         box.setAttribute("aria-labelledby", "snHead");
         box.querySelector("#snCancel").onclick = m.close;
         box.querySelector("#snGo").onclick = doSendNow;
         box.querySelector("#toSchedule").onclick = () => {
-          box.innerHTML = scheduleView;
+          box.innerHTML = scheduleView();
           wireSchedule();
         };
+        wireTemplateChoice(box);
         box.querySelector("#snGo").focus();
         // Fill the real confirmed-subscriber count once known; the copy reads sensibly until then.
         try {
@@ -2017,9 +2119,64 @@ async function renderEditor(id) {
         } catch (_) {}
       }
 
+      function showSendNow() {
+        whenValue = box.querySelector("#schWhen")?.value || whenValue;
+        box.innerHTML = sendNowView();
+        wireSendNow();
+      }
+
       wireSchedule();
     };
   }
+}
+
+// The Keep / Use current choice a schedule or send-now dialog carries when the template
+// has changed since the post was last made (SPEC §6, §9; DESIGN §7): a two-option radio
+// pair rendered as option cards, each with its revision's save date, and NEITHER checked —
+// the publisher must pick. Empty when no choice is needed (a first schedule, or nothing
+// changed), so the dialog reads exactly as before.
+function templateChoiceHtml(facts) {
+  if (!facts?.changed_since_last_made || !facts.last_made_with) {
+    return "";
+  }
+  const option = (value, title, savedAt) =>
+    `<label class="tpl-option"><input type="radio" name="tplChoice" value="${esc(value)}"><span class="tpl-option-text"><strong>${title}</strong><span class="muted">Saved ${esc(fmt(savedAt))}</span></span></label>`;
+  return (
+    `<fieldset class="tpl-choice" id="tplChoice"><legend>The email template changed since this post was last made. Which should it use?</legend>` +
+    option(
+      facts.last_made_with.revision,
+      "Keep the template it had",
+      facts.last_made_with.saved_at,
+    ) +
+    option(facts.current.revision, "Use the current template", facts.current.saved_at) +
+    `<div class="field-error" id="tplChoiceError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Choose which template to use.</span></div></fieldset>`
+  );
+}
+// Clear the inline error the moment an option is picked.
+function wireTemplateChoice(box) {
+  for (const r of box.querySelectorAll("input[name='tplChoice']")) {
+    r.onchange = () => {
+      const err = box.querySelector("#tplChoiceError");
+      if (err) {
+        err.hidden = true;
+      }
+    };
+  }
+}
+// The chosen revision id; null when the dialog asks no choice; undefined (after showing
+// the inline error) when it asks one and none is picked — the caller then stops.
+function readTemplateChoice(box) {
+  if (!box.querySelector("#tplChoice")) {
+    return null;
+  }
+  const picked = box.querySelector("input[name='tplChoice']:checked");
+  if (picked) {
+    return picked.value;
+  }
+  const err = box.querySelector("#tplChoiceError");
+  err.hidden = false;
+  box.querySelector("input[name='tplChoice']").focus();
+  return undefined;
 }
 
 // ---- sends ----
@@ -2085,7 +2242,32 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
-// Move a scheduled send's fire time without unscheduling or re-editing: the content stays
+// The mark a scheduled send carries wherever it is shown when it was made with an older
+// template than the current one (SPEC §8, DESIGN §3, §7): the amber `warn` pill, because
+// the send awaits the publisher's decision — keep it, or Update it — the same reading as
+// a pending subscriber. Never the whole signal: the Update action sits beside it.
+function olderTemplateMark() {
+  return `<span class="badge row-flag tpl-older" title="Made with an older template than the current one">Older template</span>`;
+}
+
+// Update a scheduled send to the current template: the same send made again with the same
+// content and fire time, still scheduled and cancelable, via POST /sends/:id/update-template
+// (SPEC §9). An update is a freeze, so the sign-off resets — the toast says to test again.
+// Shared by the editor's scheduled banner, the Sent page's scheduled card, and the Template
+// page's post-save notice, so `onDone` re-renders whichever surface pressed it.
+function updateSendTemplate(btn, sendId, onDone) {
+  return busy(btn, "Updating…", async () => {
+    try {
+      await api(`/sends/${sendId}/update-template`, { method: "POST" });
+      toast("Updated to the current template — send yourself a test");
+      onDone();
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+}
+
+// Move a scheduled send's fire time without canceling or re-editing: the content stays
 // frozen (I3) and the cancelable review window is preserved (I6) — only fire_at moves, via
 // POST /sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule modal,
 // prefilled with the current fire time and floored at the minimum lead. Shared by the
@@ -2303,8 +2485,10 @@ async function renderSent() {
   async function loadScheduled() {
     try {
       const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
+      // A send made with an older template than the current one is marked and offers
+      // Update beside Reschedule and Cancel, equal-weight Ghost (SPEC §8, DESIGN §7).
       const schedCard = (s) =>
-        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
+        `<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients${s.template_outdated ? ` · ${olderTemplateMark()}` : ""}</div></div><div class="row">${s.template_outdated ? `<button class="ghost" data-update-template="${s.id}">Update</button>` : ""}<button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
       if (!sends.length) {
         schedEl.innerHTML = `<p class="muted">Nothing scheduled.</p>`;
       } else {
@@ -2329,14 +2513,17 @@ async function renderSent() {
         }
       }
       // The whole card opens the post; the subject link handles keyboard/middle-click,
-      // and the schedule-management buttons (Reschedule, Cancel) opt out of navigation
-      // (like the posts table's row-click guard).
+      // and the schedule-management buttons (Update, Reschedule, Cancel) opt out of
+      // navigation (like the posts table's row-click guard).
       schedEl.querySelectorAll(".card.clickable").forEach((card) => {
         card.onclick = (e) => {
           if (e.target.tagName !== "A" && !e.target.closest("button")) {
             location.hash = `#/edit/${card.dataset.post}`;
           }
         };
+      });
+      schedEl.querySelectorAll("[data-update-template]").forEach((b) => {
+        b.onclick = () => updateSendTemplate(b, b.dataset.updateTemplate, reloadAll);
       });
       schedEl.querySelectorAll("[data-reschedule]").forEach((b) => {
         const s = sends.find((x) => x.id === b.dataset.reschedule);
@@ -3772,9 +3959,10 @@ async function renderTemplate() {
             <textarea id="tplEditor" class="set-tpl-editor" spellcheck="false" wrap="off" aria-label="Email template HTML"></textarea>
           </div>
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
+          <div class="banner banner-info tpl-kept" id="tplKept" hidden></div>
         </div>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template, starting from a sensible default, when you send an email. Each sent email is archived exactly as it went out, so editing the template changes future emails and never ones already sent. Save and Discard are in the bar at the bottom of the page.</span></div>
+      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template, starting from a sensible default, when you send an email. A saved change applies to posts scheduled from now on. A post already scheduled keeps the template it was made with — cancel and schedule it again, or press Update on it, to pick up the new one — and a sent post never changes. Save and Discard are in the bar at the bottom of the page.</span></div>
     </div>
 
     <div class="set-card set-tpl-varcard">
@@ -3784,6 +3972,16 @@ async function renderTemplate() {
           <p class="field-hint">Kestrel replaces these variables with real values when you send an email. Type a variable exactly as shown, or it renders as empty. Double-click a variable to select it, then copy.</p>
         </div>
         <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
+      </div>
+    </div>
+
+    <div class="set-card set-tpl-history">
+      <div class="set-card-pad">
+        <div class="set-tpl-varhead">
+          <h3 class="set-tpl-vartitle">History</h3>
+          <p class="field-hint">Every save is kept. Restore makes an earlier template current again, as a new save — nothing is rewritten. A post already scheduled keeps the template it was made with either way.</p>
+        </div>
+        <div id="tplHistory" class="muted">Loading…</div>
       </div>
     </div>`;
 
@@ -3882,6 +4080,10 @@ async function renderTemplate() {
     appConfig = { ...(appConfig || {}), settings: r.settings };
     preview.repaint();
     refreshDirty(); // clean now — slides the bar away
+    // A save writes a revision (the history grows) and leaves every scheduled send on
+    // the revision it was made with; the notice below says which (SPEC §9).
+    loadHistory();
+    showKept(Array.isArray(r.scheduled_posts_kept) ? r.scheduled_posts_kept : []);
     return Array.isArray(r.warnings) ? r.warnings : [];
   }
   // The shared save bar's Save button (run inside busy() by the controller). Persists,
@@ -3897,6 +4099,139 @@ async function renderTemplate() {
       bar.showError(err.message);
     }
   }
+
+  // --- the post-save notice: the scheduled posts a save left on their own template ---
+  // A persistent, in-flow notice under the editor (DESIGN §2, home ⑥): "N scheduled
+  // posts keep the template they were made with", each with Update, and Update all. It
+  // lives until every post is updated or the page is left — never a toast, since it
+  // carries an action; never the save bar, since the save succeeded.
+  const keptEl = document.getElementById("tplKept");
+  async function showKept(kept) {
+    if (!kept.length) {
+      keptEl.hidden = true;
+      keptEl.innerHTML = "";
+      return;
+    }
+    // The report names sends; the scheduled list has their subjects.
+    let subjects = new Map();
+    try {
+      const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
+      subjects = new Map(sends.map((x) => [x.id, x.subject]));
+    } catch (_) {
+      /* the notice still lists them by time */
+    }
+    paintKept(kept, subjects);
+  }
+  // Repainted from what remains after each Update, so the count stays true.
+  function paintKept(kept, subjects) {
+    if (!kept.length) {
+      showKept([]);
+      return;
+    }
+    const n = kept.length;
+    keptEl.hidden = false;
+    keptEl.innerHTML =
+      `<div class="tpl-kept-head"><span><strong>${n} scheduled post${n === 1 ? "" : "s"}</strong> keep${n === 1 ? "s" : ""} the template ${n === 1 ? "it was" : "they were"} made with. Update makes one again with the saved template — same content, same time, still cancelable — then send yourself a test.</span>` +
+      (n > 1 ? `<button type="button" class="ghost" id="tplUpdateAll">Update all</button>` : "") +
+      `</div><ul class="tpl-kept-list">${kept
+        .map(
+          (k) =>
+            `<li data-send="${k.send_id}"><a href="#/edit/${k.post_id}">${esc(subjects.get(k.send_id) || "Scheduled post")}</a><span class="muted">${esc(fmt(k.fire_at))}</span><button type="button" class="ghost" data-update-send="${k.send_id}">Update</button></li>`,
+        )
+        .join("")}</ul>`;
+    const drop = (sendId) =>
+      paintKept(
+        kept.filter((k) => k.send_id !== sendId),
+        subjects,
+      );
+    for (const b of keptEl.querySelectorAll("[data-update-send]")) {
+      b.onclick = () =>
+        updateSendTemplate(b, b.dataset.updateSend, () => drop(b.dataset.updateSend));
+    }
+    const all = keptEl.querySelector("#tplUpdateAll");
+    if (all) {
+      // "Update all" is the client looping — one call per send, in fire order, stopping
+      // at the first refusal (a send about to fire, say) so its message is read.
+      all.onclick = () =>
+        busy(all, "Updating…", async () => {
+          let left = kept;
+          for (const k of kept) {
+            try {
+              await api(`/sends/${k.send_id}/update-template`, { method: "POST" });
+              left = left.filter((x) => x.send_id !== k.send_id);
+            } catch (e) {
+              toast(e.message);
+              paintKept(left, subjects);
+              return;
+            }
+          }
+          toast("Updated to the current template — send yourself a test");
+          paintKept(left, subjects);
+        });
+    }
+  }
+
+  // --- history: every revision, newest first, with Restore on the ones not current ---
+  const historyEl = document.getElementById("tplHistory");
+  async function loadHistory() {
+    let data;
+    try {
+      data = await api("/api/settings/template/revisions");
+    } catch (e) {
+      renderError(historyEl, e.message, loadHistory);
+      return;
+    }
+    const who = (a) => (a === "service" ? "Claude" : a || "Kestrel");
+    historyEl.className = "";
+    historyEl.innerHTML = `<table class="tpl-history"><tbody>${data.revisions
+      .map(
+        (r) =>
+          `<tr${r.is_current ? ' class="is-current"' : ""}><td class="when">${esc(fmt(r.saved_at))}</td><td class="muted who">${esc(who(r.author))}</td><td class="act">${
+            r.is_current
+              ? `<span class="muted">Current</span>`
+              : `<button type="button" class="ghost" data-restore="${r.id}">Restore</button>`
+          }</td></tr>`,
+      )
+      .join("")}</tbody></table>`;
+    for (const b of historyEl.querySelectorAll("[data-restore]")) {
+      b.onclick = () => confirmRestore(b.dataset.restore);
+    }
+  }
+  // Restore is a save (a new revision equal to the old one), so it needs the same
+  // deliberateness as one: confirm, and say when unsaved edits would be dropped.
+  function confirmRestore(revisionId) {
+    const dirty = isDirty();
+    const m = modal(
+      `<h3 id="rstHead">Restore this template?</h3><p class="hint">It becomes the current template again, saved as a new revision — the history keeps every version. Posts scheduled from now on use it; a post already scheduled keeps the template it was made with.${
+        dirty ? " <strong>Your unsaved edits in the editor will be discarded.</strong>" : ""
+      }</p><div class="actions"><button type="button" id="rstCancel">Cancel</button><button type="button" class="primary" id="rstGo">Restore</button></div>`,
+    );
+    const box = m.el.querySelector(".modal");
+    box.setAttribute("aria-labelledby", "rstHead");
+    box.querySelector("#rstCancel").onclick = m.close;
+    box.querySelector("#rstGo").onclick = () =>
+      busy(box.querySelector("#rstGo"), "Restoring…", async () => {
+        try {
+          const r = await api(`/api/settings/template/revisions/${revisionId}/restore`, {
+            method: "POST",
+          });
+          m.close();
+          templateBaseline = r.settings.emailTemplate;
+          tplEditor.value = templateBaseline;
+          appConfig = { ...(appConfig || {}), settings: r.settings };
+          showWarnings([]);
+          preview.repaint();
+          refreshDirty();
+          loadHistory();
+          showKept(Array.isArray(r.scheduled_posts_kept) ? r.scheduled_posts_kept : []);
+          toast("Template restored");
+        } catch (e) {
+          toast(e.message);
+        }
+      });
+    box.querySelector("#rstGo").focus();
+  }
+  loadHistory();
 
   const loadExample = (key) => {
     const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
@@ -5430,7 +5765,8 @@ async function renderDashboard() {
 
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
- *  the review window needs (SPEC §8). */
+ *  the review window needs (SPEC §8). A send made with an older template than the current
+ *  one still carries its mark here — the mark travels everywhere the send is shown. */
 function dashScheduledHtml(scheduled) {
   if (!scheduled.length) {
     return `<p class="muted">Nothing scheduled.</p>`;
@@ -5438,7 +5774,7 @@ function dashScheduledHtml(scheduled) {
   return scheduled
     .map(
       (s) =>
-        `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
+        `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients${s.template_outdated ? ` · ${olderTemplateMark()}` : ""}</div></div></div>`,
     )
     .join("");
 }
