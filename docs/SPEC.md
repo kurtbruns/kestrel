@@ -34,7 +34,7 @@ flowchart LR
     provider -. bounces, complaints .-> api
 ```
 
-Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; the publisher never touches an upload URL. Every Send freezes the rendered email, and that frozen copy *is* both the reader's "view in browser" page and the permanent record of what went out.
+Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; the publisher never touches an upload URL. Every send freezes the rendered email, and that frozen copy *is* both the reader's "view in browser" page and the permanent record of what went out.
 
 ### What it isn't
 
@@ -56,23 +56,23 @@ Six nouns make up the whole domain: the first three are content, the last three 
 
 **Subscriber** — an email address with a consent state: pending, confirmed, or unsubscribed. Only confirmed subscribers receive sends.
 
-**Send** — one dispatch of a post, created the moment the post is scheduled, not when it fires. It holds the frozen render, the fire time, and after firing, who it reached and how it went. Never rewritten once sent. Of the six nouns this is the one that collides with a verb, so this document writes the noun capitalized: a *Send* is always this record, and lowercase *send* is only ever the act.
+**Send** — one dispatch of a post, created the moment the post is scheduled, not when it fires. It holds the frozen render, the fire time, and after firing, who it reached and how it went. Never rewritten once sent. The word is both the verb and, like *build* or *deploy*, the noun for one instance of it; the article tells them apart, and *a send* always means this record.
 
 **Suppression** — an address that hard-bounced or complained and must not be mailed again until you clear it deliberately.
 
 ### The lifecycle
 
-A post has three states and a Send has four, and the two advance on different clocks: the post's state says whether it can be edited, the Send's says how far the dispatch has gone.
+A post has three states and a send has four, and the two advance on different clocks: the post's state says whether it can be edited, the send's says how far the dispatch has gone.
 
 | Post | Send | What it means |
 | --- | --- | --- |
 | **draft** | none | Being written. Editable. |
-| **scheduled** | **scheduled** | The render is frozen onto a Send and the post is locked. The Send is visible and cancelable until it fires: this is the review window (§6). |
-| **scheduled** | **sending** | The Send has fired and is delivering. The post's state holds, but it is past the window: it can no longer be edited or canceled. |
-| **sent** | **sent** | Dispatch is complete. The Send is the permanent record of what went out, and the post is closed. |
-| **draft** | **canceled** | The publisher canceled the Send during its window. The post is unlocked and editable again; the canceled Send stays as a record but is no longer active. |
+| **scheduled** | **scheduled** | The render is frozen onto a send and the post is locked. The send is visible and cancelable until it fires: this is the review window (§6). |
+| **scheduled** | **sending** | The send has fired and is delivering. The post's state holds, but it is past the window: it can no longer be edited or canceled. |
+| **sent** | **sent** | Dispatch is complete. The send is the permanent record of what went out, and the post is closed. |
+| **draft** | **canceled** | The publisher canceled the send during its window. The post is unlocked and editable again; the canceled send stays as a record but is no longer active. |
 
-Only one Send per post can be active (scheduled or sending) at a time (§6), so the pair above is always unambiguous. Scheduling a draft again after a cancel creates a new Send; the old one is history.
+Only one send per post can be active (scheduled or sending) at a time (§6), so the pair above is always unambiguous. Scheduling a draft again after a cancel creates a new send; the old one is history.
 
 ---
 
@@ -82,22 +82,22 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I1 — Nothing is sent without recorded consent.** Only confirmed subscribers receive a send. Confirmation is double opt-in and timestamped, so for every delivery there is a record of when that person asked to be on the list.
 
-**I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further mail reaches that person: a Send already in flight skips them if they have not yet been handed off to the provider, and no later Send includes them. There is no window in which they still get one, and it is never silently reversed.
+**I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further mail reaches that person: a send already in flight skips them if they have not yet been handed off to the provider, and no later send includes them. There is no window in which they still get one, and it is never silently reversed.
 
-**I3 — What went out is preserved exactly.** Every Send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived post carries never rewrites the reviewed content.
+**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy — not a re-render, which could differ. Any public chrome an archived post carries never rewrites the reviewed content.
 
-**I4 — A post is sent at most once per Send, to each person at most once.** Triggering a Send is idempotent. A retry, a double-click, or a resumed Send never mails anyone twice.
+**I4 — A post is sent at most once per send, to each person at most once.** Triggering a send is idempotent. A retry, a double-click, or a resumed send never mails anyone twice.
 
 **I5 — A test is a real test.** The email you send yourself to check is produced by the same render path as the email that goes to the list. A clean test is a guarantee, not a lookalike.
 
-**I6 — Nothing is delivered without a window to stop it.** Every send becomes a visible, cancelable Send before any mail leaves, for as long as the publisher scheduled and never less than the **minimum lead** (§6). Nothing fires the instant it's requested. This window is the review gate.
+**I6 — Nothing is delivered without a window to stop it.** Every send becomes a visible, cancelable send before any mail leaves, for as long as the publisher scheduled and never less than the **minimum lead** (§6). Nothing fires the instant it's requested. This window is the review gate.
 
 ### What follows
 
-- **The schedule is the safety.** Because a send exists as a cancelable Send before it fires, a person and Claude can prepare one unattended and still have a window to catch a mistake (I6). This is the newsletter's place where something irreversible is visible before it happens.
+- **The schedule is the safety.** Because a send exists as a cancelable send before it fires, a person and Claude can prepare one unattended and still have a window to catch a mistake (I6). This is the newsletter's place where something irreversible is visible before it happens.
 - **The archive is the record.** There is no separate "what did the email look like" store to build later (I3). The page a reader opens is the artifact, and it's the very copy that was reviewed.
 - **Consent is data you own, and can prove.** Not a setting on a provider you'd have to trust and can't export (I1).
-- **You can always resend safely.** Because a Send tracks who it reached, a failed or interrupted Send resumes instead of starting over (I4).
+- **You can always resend safely.** Because a send tracks who it reached, a failed or interrupted send resumes instead of starting over (I4).
 
 ---
 
@@ -111,7 +111,7 @@ Subject is deliberately the primary field. For an email that is what the reader 
 
 Every save writes a new revision holding that version's Markdown and metadata. The post points at its current revision; the history is the list behind it. Markdown is small and diffs cleanly, so each revision stores the whole body rather than a delta — simpler, and there's no reconstruction step to get wrong.
 
-This gives you a full edit history, the ability to see what changed between two versions, and — because a scheduled post's content is frozen into its Send anyway (I3) — a clear separation between "the post as it is now" and "the post as it was sent."
+This gives you a full edit history, the ability to see what changed between two versions, and — because a scheduled post's content is frozen into its send anyway (I3) — a clear separation between "the post as it is now" and "the post as it was sent."
 
 ### Concurrent edits
 
@@ -157,57 +157,57 @@ On a local dev instance only, the reader surface also carries a small, clearly-m
 
 ## 6. Scheduling and sending
 
-Sending is built around a review window, because the window is what makes it safe to prepare a Send days ahead — by hand or with Claude — and let it go out unattended. **Scheduling is the main path; sending immediately is the deliberate exception.**
+Sending is built around a review window, because the window is what makes it safe to prepare a send days ahead — by hand or with Claude — and let it go out unattended. **Scheduling is the main path; sending immediately is the deliberate exception.**
 
 ### Scheduling a post
 
-Scheduling a post for a future time does three things at once: it **freezes the render** into a new Send in `scheduled` state (this frozen copy is the review artifact, exactly what will fire, and the eventual archive — one object doing all three, I3 and I6); it **soft-locks the post**, so it can't drift away from what was reviewed; and it **records the fire time**.
+Scheduling a post for a future time does three things at once: it **freezes the render** into a new send in `scheduled` state (this frozen copy is the review artifact, exactly what will fire, and the eventual archive — one object doing all three, I3 and I6); it **soft-locks the post**, so it can't drift away from what was reviewed; and it **records the fire time**.
 
 A post **must have a non-empty subject** to schedule or send. The subject is the one field the reader sees in their inbox, and a send is irreversible (I4), so the freeze that both scheduling and sending-now go through rejects an empty (or whitespace-only) subject before anything is frozen, the same guard for both clients. An empty body is only warned about, not blocked. The editor also flags an empty subject as a render warning and disables its Schedule / Send-now buttons, but the freeze is the authority.
 
-From then until it fires, the scheduled Send is **visible and cancelable** (I6). This window is the review gate. The publisher and Claude review it, test emails go to real inboxes, and if anything's wrong the publisher cancels it. The intended rhythm is to schedule days ahead, so the window is generous.
+From then until it fires, the scheduled send is **visible and cancelable** (I6). This window is the review gate. The publisher and Claude review it, test emails go to real inboxes, and if anything's wrong the publisher cancels it. The intended rhythm is to schedule days ahead, so the window is generous.
 
 ### The soft-lock
 
-A scheduled post is frozen from casual edits. To change it the publisher **cancels** the scheduled Send, which unlocks the post, then edits, re-tests, and re-schedules. Editing stays easy but becomes deliberate, and it resets the review.
+A scheduled post is frozen from casual edits. To change it the publisher **cancels** the scheduled send, which unlocks the post, then edits, re-tests, and re-schedules. Editing stays easy but becomes deliberate, and it resets the review.
 
-The guarantee that falls out: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again, and scheduling re-freezes the render. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the Send immune to app deploys during the multi-day window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
+The guarantee that falls out: *what fires is exactly what was last reviewed and tested*, because the only way to change a scheduled post is to schedule it again, and scheduling re-freezes the render. Since no one is at the keyboard at fire time, that last approving test is the sign-off, and the lock is what stops the post drifting from it. Freezing at schedule time also makes the send immune to app deploys during the multi-day window: the render was captured up front, so a change to the renderer in between can't alter what goes out.
 
-A post has **at most one active (scheduled or sending) Send** at a time — the thing that keeps a post from being scheduled, and sent, twice. This holds even across concurrent requests, so a second schedule can never slip through. Re-scheduling after a Send finishes or is canceled is unaffected — only active Sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
+A post has **at most one active (scheduled or sending) send** at a time — the thing that keeps a post from being scheduled, and sent, twice. This holds even across concurrent requests, so a second schedule can never slip through. Re-scheduling after a send finishes or is canceled is unaffected — only active sends are constrained. I4 and I6 rest on this: cancel, the status view, and the sweep each assume a single, unambiguous active send.
 
 ### Moving the fire time
 
-Changing *when* a scheduled Send fires is not a content change, so it does not go through the cancel → edit → re-schedule path. The fire time can be **moved directly** on the scheduled Send: it stays the same Send, still the post's one active Send, still visible and cancelable, now aimed at a new time. The frozen render is left exactly as it was (I3) and the review window is preserved rather than reset (I6); only the moment it fires changes. This is deliberately distinct from editing the *content*, which still requires a cancel, because re-scheduling is what re-freezes the render and re-arms the review: the soft-lock above holds. The one guard is the same minimum lead as scheduling: the new time must be at least that far out, and only a Send that has not yet fired can be moved. Once it has begun sending it is past the window, so the move is refused.
+Changing *when* a scheduled send fires is not a content change, so it does not go through the cancel → edit → re-schedule path. The fire time can be **moved directly** on the scheduled send: it stays the same send, still the post's one active send, still visible and cancelable, now aimed at a new time. The frozen render is left exactly as it was (I3) and the review window is preserved rather than reset (I6); only the moment it fires changes. This is deliberately distinct from editing the *content*, which still requires a cancel, because re-scheduling is what re-freezes the render and re-arms the review: the soft-lock above holds. The one guard is the same minimum lead as scheduling: the new time must be at least that far out, and only a send that has not yet fired can be moved. Once it has begun sending it is past the window, so the move is refused.
 
 ### Firing
 
-A periodic sweep (below) delivers scheduled Sends whose time has come. Because the body is already frozen, firing is just delivery: it fans out to confirmed subscribers, filling in each recipient's per-recipient values (their unsubscribe link and the address the post was sent to) where the frozen body left placeholders. Batching, retries, and per-recipient tracking are exactly as for an immediate send.
+A periodic sweep (below) delivers scheduled sends whose time has come. Because the body is already frozen, firing is just delivery: it fans out to confirmed subscribers, filling in each recipient's per-recipient values (their unsubscribe link and the address the post was sent to) where the frozen body left placeholders. Batching, retries, and per-recipient tracking are exactly as for an immediate send.
 
 ### Sending now
 
-Sending immediately is the same machinery with the fire time set to now plus the **minimum lead**: a fixed, app-wide interval, minutes rather than seconds, that is the least time any Send spends visible and cancelable before it can fire (I6). It's the exception, not the default: most Sends should carry a real review window, and send-now is for the rare case the publisher has reviewed out-of-band and wants it gone.
+Sending immediately is the same machinery with the fire time set to now plus the **minimum lead**: a fixed, app-wide interval, minutes rather than seconds, that is the least time any send spends visible and cancelable before it can fire (I6). It's the exception, not the default: most sends should carry a real review window, and send-now is for the rare case the publisher has reviewed out-of-band and wants it gone.
 
-### What a Send does when it fires
+### What a send does when it fires
 
-When a Send fires, the send loop:
+When a send fires, the send loop:
 
-1. **Reads the Send**, which already holds the frozen email. A second trigger for the same post finds this record and resumes rather than restarting (I4).
-2. **Resolves the audience at that moment**: confirmed subscribers minus suppressed addresses. The audience is not fixed at schedule time, so a reader who confirms after the post was scheduled is included, and the subscriber count shown while a Send is scheduled is a snapshot, not a promise.
-3. **Delivers in batches**, checking each recipient's consent and suppression again at hand-off (I2) and marking each one as the provider accepts them. Progress is durable, so an interrupted Send resumes from where it stopped and no one is mailed twice (I4).
+1. **Reads the send**, which already holds the frozen email. A second trigger for the same post finds this record and resumes rather than restarting (I4).
+2. **Resolves the audience at that moment**: confirmed subscribers minus suppressed addresses. The audience is not fixed at schedule time, so a reader who confirms after the post was scheduled is included, and the subscriber count shown while a send is scheduled is a snapshot, not a promise.
+3. **Delivers in batches**, checking each recipient's consent and suppression again at hand-off (I2) and marking each one as the provider accepts them. Progress is durable, so an interrupted send resumes from where it stopped and no one is mailed twice (I4).
 4. **Records outcomes as they arrive** (accepted, delivered, bounced, complained) against each recipient.
-5. **Closes the Send** as complete, or leaves it open and retrying if the provider is unavailable.
+5. **Closes the send** as complete, or leaves it open and retrying if the provider is unavailable.
 
 ### Two phases: accepted, then settled
 
-Delivery is not one event but two, separated in time. First the Send **hands off** each recipient to the provider and records whether it was **accepted** — this is dispatch, and it finishes in seconds to minutes. Only later do the provider's webhooks report what actually happened to each accepted message — **delivered, bounced, or complained** — and those receipts lag acceptance by anything from seconds to days. So a Send reports two numbers, never conflated: *provider-accepted* (how far the hand-off has gotten) and *delivery-confirmed* (how many receipts have come back).
+Delivery is not one event but two, separated in time. First the send **hands off** each recipient to the provider and records whether it was **accepted** — this is dispatch, and it finishes in seconds to minutes. Only later do the provider's webhooks report what actually happened to each accepted message — **delivered, bounced, or complained** — and those receipts lag acceptance by anything from seconds to days. So a send reports two numbers, never conflated: *provider-accepted* (how far the hand-off has gotten) and *delivery-confirmed* (how many receipts have come back).
 
-A Send is **"sent" when dispatch completes** — every recipient handed off or terminal. There is no separate "settled" state and no reconciling sweep that waits for the last receipt: the record simply keeps absorbing webhook events after it is sent, so its delivery and bounce and complaint counts stay live and a recent Send is shown as still settling while receipts trickle in. This is the only honest notion of "done" for a batched transport with lagging webhooks — waiting for every receipt would mean a Send never finishes, because some accepted messages are never confirmed at all.
+A send is **"sent" when dispatch completes** — every recipient handed off or terminal. There is no separate "settled" state and no reconciling sweep that waits for the last receipt: the record simply keeps absorbing webhook events after it is sent, so its delivery and bounce and complaint counts stay live and a recent send is shown as still settling while receipts trickle in. This is the only honest notion of "done" for a batched transport with lagging webhooks — waiting for every receipt would mean a send never finishes, because some accepted messages are never confirmed at all.
 
 ### The timer
 
-The driver is a periodic **sweep**: a scheduled task on a fixed, short cadence that finds Sends whose fire time has passed and that haven't gone out, and delivers them.
+The driver is a periodic **sweep**: a scheduled task on a fixed, short cadence that finds sends whose fire time has passed and that haven't gone out, and delivers them.
 
-A sweep, rather than a per-post timer set for the exact moment, for one decisive reason: the same loop that fires due Sends also detects Sends that *should* have fired and didn't. A fire time that slips past with no delivery is caught on the next sweep and raised loudly — a dropped Send is as bad as an accidental one (§12). A precise per-object alarm would give you precision a newsletter doesn't need and no built-in way to notice a timer that silently never fired; you'd end up adding a sweep anyway as a backstop. One reconciling loop is simpler and safer than precise timers plus a watchdog, and it tolerates an occasional slow tick by design.
+A sweep, rather than a per-post timer set for the exact moment, for one decisive reason: the same loop that fires due sends also detects sends that *should* have fired and didn't. A fire time that slips past with no delivery is caught on the next sweep and raised loudly — a dropped send is as bad as an accidental one (§12). A precise per-object alarm would give you precision a newsletter doesn't need and no built-in way to notice a timer that silently never fired; you'd end up adding a sweep anyway as a backstop. One reconciling loop is simpler and safer than precise timers plus a watchdog, and it tolerates an occasional slow tick by design.
 
 ### Recovery
 
@@ -219,13 +219,13 @@ Everything after the fire time is recovery, and §12 holds the posture: retries 
 
 A subscriber is an email address with a **consent state**, plus an orthogonal **suppression** flag for deliverability. The consent state is the whole story of whether someone has asked to be on the list; suppression is a separate "this address can't or shouldn't be delivered to" mark.
 
-| State | Meaning | In the Send's audience? |
+| State | Meaning | In the send's audience? |
 | --- | --- | --- |
 | **Pending** | Subscribed but hasn't clicked the confirmation link yet | No |
 | **Confirmed** | Completed double opt-in; consent is recorded and timestamped | Yes — unless suppressed |
 | **Unsubscribed** | Left the list (their own unsubscribe, or the publisher on their behalf) | No |
 
-**Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every Send whatever its consent state. That exclusion is a deliverability rule (§10), separate from the consent rule (I1). So a subscriber can be *confirmed and suppressed* at once: consented, but still never mailed. The audience for any Send is exactly *confirmed minus suppressed*.
+**Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state. That exclusion is a deliverability rule (§10), separate from the consent rule (I1). So a subscriber can be *confirmed and suppressed* at once: consented, but still never mailed. The audience for any send is exactly *confirmed minus suppressed*.
 
 ### Joining
 
@@ -250,7 +250,7 @@ Consent withdrawn (unsubscribe) and undeliverable (suppression) are different st
 
 ### Deferred: topics and segmentation
 
-Topics and segmentation — letting people subscribe to some kinds of post and not others — are a real feature and a deliberate v2. They add a preference center and turn "the audience" into "the audience matching this post's topics." The model is built so this slots in as a filter applied when a Send resolves its audience, plus a few columns on the subscriber, without disturbing anything above.
+Topics and segmentation — letting people subscribe to some kinds of post and not others — are a real feature and a deliberate v2. They add a preference center and turn "the audience" into "the audience matching this post's topics." The model is built so this slots in as a filter applied when a send resolves its audience, plus a few columns on the subscriber, without disturbing anything above.
 
 ---
 
@@ -260,29 +260,29 @@ A small status surface, readable in the editor and through the API, answers the 
 
 ### What's scheduled, and when does it fire?
 
-The pending Sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window you can't see into or act on isn't one, I6), each carries the two actions that manage a pending Send without editing its content: a **one-call cancel**, and a **one-call reschedule** of the fire time (§6, which moves it without re-freezing). Wherever a scheduled Send is shown, those two actions travel with it.
+The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window you can't see into or act on isn't one, I6), each carries the two actions that manage a pending send without editing its content: a **one-call cancel**, and a **one-call reschedule** of the fire time (§6, which moves it without re-freezing). Wherever a scheduled send is shown, those two actions travel with it.
 
 ### What have I sent, and how did it do?
 
-Each sent post is a read-only delivery record, not an editable draft — so it opens a **record view** rather than a locked editor. That view answers *how the Send went*: the audience as resolved when the Send fired, and the delivery-outcome breakdown over it — delivered, bounced, complained, and unsent — read from the per-recipient delivery rows, not just a summary count, and reconciling to the frozen audience. The record is the source of truth for "did it go," because the app is the only thing that knows what actually happened at delivery time.
+Each sent post is a read-only delivery record, not an editable draft — so it opens a **record view** rather than a locked editor. That view answers *how the send went*: the audience as resolved when the send fired, and the delivery-outcome breakdown over it — delivered, bounced, complained, and unsent — read from the per-recipient delivery rows, not just a summary count, and reconciling to the frozen audience. The record is the source of truth for "did it go," because the app is the only thing that knows what actually happened at delivery time.
 
-The record keeps two layers on different clocks: the render (frozen at schedule, I3) and the audience (resolved at fire) are **fixed**, while the **delivery outcomes go on settling** as *this Send's own* webhook events arrive — bounces and complaints land after completion (§12), so the breakdown is the current truth about this one Send, never rewritten by another Send or a later cleared suppression.
+The record keeps two layers on different clocks: the render (frozen at schedule, I3) and the audience (resolved at fire) are **fixed**, while the **delivery outcomes go on settling** as *this send's own* webhook events arrive — bounces and complaints land after completion (§12), so the breakdown is the current truth about this one send, never rewritten by another send or a later cleared suppression.
 
-Beneath that breakdown are the **per-recipient rows themselves**, so "who bounced" is a look, not a download. They open on the rows that went wrong (bounced, complained, unsent), and you can find any address or widen to the delivered rows; each row carries the provider's error or detail and splits a **hard** bounce (permanent; it suppressed the address) from a **soft** one (transient; counted, never suppressed) on the kind recorded for this Send when the event landed. That kind is a frozen fact of the record, not a read of the current, clearable suppression list, so the split can't drift after the fact. The rows are the record itself, the source of truth. The view links to the archived post (the exact frozen copy readers received, I3), and the whole per-recipient record can be exported, because a record is only inspectable if you can get at it (§12).
+Beneath that breakdown are the **per-recipient rows themselves**, so "who bounced" is a look, not a download. They open on the rows that went wrong (bounced, complained, unsent), and you can find any address or widen to the delivered rows; each row carries the provider's error or detail and splits a **hard** bounce (permanent; it suppressed the address) from a **soft** one (transient; counted, never suppressed) on the kind recorded for this send when the event landed. That kind is a frozen fact of the record, not a read of the current, clearable suppression list, so the split can't drift after the fact. The rows are the record itself, the source of truth. The view links to the archived post (the exact frozen copy readers received, I3), and the whole per-recipient record can be exported, because a record is only inspectable if you can get at it (§12).
 
-Wherever that record is compressed to a single glanceable number, that number is **confirmed delivered**, with any complaints, bounces, or send-time failures called out beside it, each by kind. The number is drawn from the same per-recipient outcomes as the record, so a Send never reads as cleanly "delivered" in a list while its own record shows it bounced. The list can be narrowed to just the Sends with a delivery failure, without reordering it, so newest-first stays and no severity ranking is implied. "Delivered" everywhere means webhook-confirmed, never merely provider-accepted.
+Wherever that record is compressed to a single glanceable number, that number is **confirmed delivered**, with any complaints, bounces, or send-time failures called out beside it, each by kind. The number is drawn from the same per-recipient outcomes as the record, so a send never reads as cleanly "delivered" in a list while its own record shows it bounced. The list can be narrowed to just the sends with a delivery failure, without reordering it, so newest-first stays and no severity ranking is implied. "Delivered" everywhere means webhook-confirmed, never merely provider-accepted.
 
 ### Writing side, dispatch side
 
-The lifecycle (§2) splits what the publisher sees in two. The still-changeable **draft and scheduled** posts are the writing side; a **sent** post is a closed record on the dispatch side. A scheduled post shows on both, as the cancelable draft it still is and as the pending Send it has become. Once its Send *fires*, the post crosses fully to the dispatch side: while it is **sending** it is surfaced as an active Send that opens the live watch (below), never as an editable, cancelable draft. The writing side never offers to edit or cancel a post that is already going out, and opening one leads to the watch rather than a locked editor. The Send's state, not the post's, decides this: the post's own state still reads "scheduled" until the Send completes (§2).
+The lifecycle (§2) splits what the publisher sees in two. The still-changeable **draft and scheduled** posts are the writing side; a **sent** post is a closed record on the dispatch side. A scheduled post shows on both, as the cancelable draft it still is and as the pending send it has become. Once its send *fires*, the post crosses fully to the dispatch side: while it is **sending** it is surfaced as an active send that opens the live watch (below), never as an editable, cancelable draft. The writing side never offers to edit or cancel a post that is already going out, and opening one leads to the watch rather than a locked editor. The send's state, not the post's, decides this: the post's own state still reads "scheduled" until the send completes (§2).
 
-### Is a Send happening right now?
+### Is a send happening right now?
 
-A Send in flight has a **live watch**: the same record page in its in-flight state, so one page is the whole life of a Send from first hand-off to settled archive. It shows the two phases. **Dispatch** (provider-accepted over the audience) comes first, and **delivery** (webhook-confirmed over accepted) fills in behind it as receipts arrive, so delivery always reads as lagging dispatch. Alongside them are a derived **phase** (below), a breakdown of the counts, and rough throughput and time-to-finish. It updates live while the Send is in flight and eases off once it is only settling. An active Send is visible at a glance, and its watch is one click away.
+A send in flight has a **live watch**: the same record page in its in-flight state, so one page is the whole life of a send from first hand-off to settled archive. It shows the two phases. **Dispatch** (provider-accepted over the audience) comes first, and **delivery** (webhook-confirmed over accepted) fills in behind it as receipts arrive, so delivery always reads as lagging dispatch. Alongside them are a derived **phase** (below), a breakdown of the counts, and rough throughput and time-to-finish. It updates live while the send is in flight and eases off once it is only settling. An active send is visible at a glance, and its watch is one click away.
 
 ### Is anything wrong right now?
 
-A Send still retrying, a scheduled Send that missed its fire time, a bounce spike, a provider problem. This is the only thing that ever needs your attention, so it's the only thing that surfaces loudly. The **bounce spike** is a real signal, not an approximation: it reads a recent Send's confirmed bounce count over its frozen audience and fires when that rate reaches the provider's danger zone (about 5%, the rate at which a sender is put under review), so it stays quiet through the ordinary trickle of bad addresses and speaks up only when deliverability is genuinely at risk. It is read-only reporting: it warns, it never throttles or halts a reviewed Send (an automatic circuit-breaker is deliberately deferred; see the appendix). One of these conditions carries an action rather than just an alarm: a Send wedged on an ambiguous in-flight delivery (§12) shows its count *and* the control to resolve it, because a stuck Send whose only remedy is raw SQL isn't really inspectable.
+A send still retrying, a scheduled send that missed its fire time, a bounce spike, a provider problem. This is the only thing that ever needs your attention, so it's the only thing that surfaces loudly. The **bounce spike** is a real signal, not an approximation: it reads a recent send's confirmed bounce count over its frozen audience and fires when that rate reaches the provider's danger zone (about 5%, the rate at which a sender is put under review), so it stays quiet through the ordinary trickle of bad addresses and speaks up only when deliverability is genuinely at risk. It is read-only reporting: it warns, it never throttles or halts a reviewed send (an automatic circuit-breaker is deliberately deferred; see the appendix). One of these conditions carries an action rather than just an alarm: a send wedged on an ambiguous in-flight delivery (§12) shows its count *and* the control to resolve it, because a stuck send whose only remedy is raw SQL isn't really inspectable.
 
 ### Who's on the list?
 
@@ -320,7 +320,7 @@ Email asks for things the other channels never would, and this is what the syste
 
 **A plain-text alternative.** Every HTML email ships a text part.
 
-**Batching and idempotency.** Provider send endpoints take tens to a hundred recipients per call, so delivering a Send is a loop of batches. No one is mailed twice on a retry because the app records each recipient the instant the provider accepts them, and a resumed or retried batch simply skips those already accepted (I4). A provider-native idempotency key, where it exists, is an extra guard — never the thing the guarantee rests on.
+**Batching and idempotency.** Provider send endpoints take tens to a hundred recipients per call, so delivering a send is a loop of batches. No one is mailed twice on a retry because the app records each recipient the instant the provider accepts them, and a resumed or retried batch simply skips those already accepted (I4). A provider-native idempotency key, where it exists, is an extra guard — never the thing the guarantee rests on.
 
 **Bounce and complaint handling.** Provider webhooks feed suppression: soft bounces are tolerated and counted; a hard bounce or a complaint suppresses the address on its own. Events are matched to a delivery by the provider's message id, so a hard bounce or complaint suppresses the address recovered from that matched row even if the event itself carries no recipient address, so the suppression rule never rests on the provider echoing the recipient back.
 
@@ -378,21 +378,21 @@ The platform these roles run on, and the concrete deploy-and-operate steps (prov
 
 The posture is: recover quietly, escalate rarely, always be inspectable.
 
-Send-time transient errors — a rate limit, a brief provider hiccup — retry with backoff inside the Send, per batch. The retry is safe because it is scoped by what the delivery record already marks as accepted: a recipient marked accepted is never re-sent, so idempotency comes from durable per-recipient state, not from the provider. An interrupted Send — the service restarts mid-send — resumes from that same progress, mailing only those not yet accepted (I4). A provider outage keeps the Send open and retrying, and surfaces on the status view only once it has clearly stopped being transient. Bounces and complaints arrive by webhook after the Send and update the delivery and suppression records on their own.
+Send-time transient errors — a rate limit, a brief provider hiccup — retry with backoff inside the send, per batch. The retry is safe because it is scoped by what the delivery record already marks as accepted: a recipient marked accepted is never re-sent, so idempotency comes from durable per-recipient state, not from the provider. An interrupted send — the service restarts mid-send — resumes from that same progress, mailing only those not yet accepted (I4). A provider outage keeps the send open and retrying, and surfaces on the status view only once it has clearly stopped being transient. Bounces and complaints arrive by webhook after the send and update the delivery and suppression records on their own.
 
 ### The reported phase
 
-What the watch (§8) reports is a **derived phase**, computed live from the Send's current signals and never stored — deliberately distinct from the stored send state, which is only the coarse lifecycle (scheduled → sending → sent). The phase is the finer story of *how* a Send in flight is faring: **progressing** (handing off cleanly), **retrying** (some recipients hit a transient error and are being retried), **backing-off** (work remains but nothing is in flight — paused between sweep ticks after a rate limit or a batch failure), or **needs-attention** (the wedged case below). A Send that is sent but still absorbing receipts reports as **settling**, then **complete** once every accepted recipient is confirmed. Because it is derived, the phase can never disagree with the record; it is a reading of the same durable state, not a second copy of it.
+What the watch (§8) reports is a **derived phase**, computed live from the send's current signals and never stored — deliberately distinct from the stored send state, which is only the coarse lifecycle (scheduled → sending → sent). The phase is the finer story of *how* a send in flight is faring: **progressing** (handing off cleanly), **retrying** (some recipients hit a transient error and are being retried), **backing-off** (work remains but nothing is in flight — paused between sweep ticks after a rate limit or a batch failure), or **needs-attention** (the wedged case below). A send that is sent but still absorbing receipts reports as **settling**, then **complete** once every accepted recipient is confirmed. Because it is derived, the phase can never disagree with the record; it is a reading of the same durable state, not a second copy of it.
 
-The in-flight surface is **observe-only** but for one control: the watch reports, and the only action it offers is Resolve (below). It never pauses, throttles, or auto-halts a reviewed Send — no automatic decision widens the audience, skips the window, or stops a Send the publisher approved. A bounce spike is *reported* loudly (§8) but never *acted on*: the report is observation, not automation. Publisher pause/resume and an automatic circuit-breaker are deferred (appendix): both are new automation over a reviewed Send, and the loud bounce-spike report is the seam a circuit-breaker would later hook into.
+The in-flight surface is **observe-only** but for one control: the watch reports, and the only action it offers is Resolve (below). It never pauses, throttles, or auto-halts a reviewed send — no automatic decision widens the audience, skips the window, or stops a send the publisher approved. A bounce spike is *reported* loudly (§8) but never *acted on*: the report is observation, not automation. Publisher pause/resume and an automatic circuit-breaker are deferred (appendix): both are new automation over a reviewed send, and the loud bounce-spike report is the seam a circuit-breaker would later hook into.
 
 ### The one ambiguity a human resolves
 
-There is a single delivery outcome the app cannot resolve on its own: a **transport error mid-send on a provider with no idempotency key** — the request left but no response came back, so whether the provider accepted that recipient is genuinely unknown. Blind-retrying it would risk mailing the person twice (I4), so the send loop deliberately does *not* retry it: it leaves that recipient in flight and moves on. The safe refusal has a cost — an in-flight recipient with an unknown fate keeps the Send from ever completing, so it stays open, and the sweep flags it loudly (a stuck Send, an aging in-flight delivery). Detecting it is not enough on its own; "always be inspectable" has to mean actionable in the UI, not a note in the logs whose only remedy is raw SQL.
+There is a single delivery outcome the app cannot resolve on its own: a **transport error mid-send on a provider with no idempotency key** — the request left but no response came back, so whether the provider accepted that recipient is genuinely unknown. Blind-retrying it would risk mailing the person twice (I4), so the send loop deliberately does *not* retry it: it leaves that recipient in flight and moves on. The safe refusal has a cost — an in-flight recipient with an unknown fate keeps the send from ever completing, so it stays open, and the sweep flags it loudly (a stuck send, an aging in-flight delivery). Detecting it is not enough on its own; "always be inspectable" has to mean actionable in the UI, not a note in the logs whose only remedy is raw SQL.
 
-So the status surface carries the one manual control in the whole send path: **the publisher adjudicates the ambiguous in-flight recipients of a stuck Send**, choosing the safe outcome — *assume not sent* (recorded unsent; the address is simply picked up by the next post, and is never re-mailed within this Send) or *assume sent* (recorded delivered, for when they have confirmed it in the provider's console). Either choice lets the Send reach its normal completion gate and finish. This control touches only the ambiguous, still-in-flight rows — it can **never** re-mail a recipient the record already marks accepted (I4) — and it is the *only* place a human overrides an automatic delivery decision. It is a resolution of an existing ambiguity, not a new way to send: it never widens the audience and never mails anyone.
+So the status surface carries the one manual control in the whole send path: **the publisher adjudicates the ambiguous in-flight recipients of a stuck send**, choosing the safe outcome — *assume not sent* (recorded unsent; the address is simply picked up by the next post, and is never re-mailed within this send) or *assume sent* (recorded delivered, for when they have confirmed it in the provider's console). Either choice lets the send reach its normal completion gate and finish. This control touches only the ambiguous, still-in-flight rows — it can **never** re-mail a recipient the record already marks accepted (I4) — and it is the *only* place a human overrides an automatic delivery decision. It is a resolution of an existing ambiguity, not a new way to send: it never widens the audience and never mails anyone.
 
-The one failure that is raised loudly rather than absorbed is a scheduled Send that misses its fire time. A Send that should have happened and didn't is as bad as one that shouldn't have and did — precisely because nothing happened and no one was watching — so the sweep that fires due Sends also catches missed ones and escalates. The schedule lives as durable rows, so a restart or redeploy can't lose it; the sweep simply re-reads and continues.
+The one failure that is raised loudly rather than absorbed is a scheduled send that misses its fire time. A send that should have happened and didn't is as bad as one that shouldn't have and did — precisely because nothing happened and no one was watching — so the sweep that fires due sends also catches missed ones and escalates. The schedule lives as durable rows, so a restart or redeploy can't lose it; the sweep simply re-reads and continues.
 
 Nothing here retries in a way that could re-mail a person, because every retry is scoped by what the delivery record already marks as accepted. And nothing is hidden: the frozen render plus per-recipient state means "what happened" is always a query, never a guess. That inspectability is what gives you confidence things are working — the goal set for this app — without making you watch it.
 
@@ -405,7 +405,7 @@ Nothing here retries in a way that could re-mail a person, because every retry i
 Each entry names the alternative it was chosen over and points to the section that carries the reasoning. This list is the index of what was ruled out, not a second copy of the why.
 
 - **Content lives in the app's database**, over Markdown files in a repo (§2, §4). Files would have given `git` versioning for free but cost the build-free live preview, uploaded images, and the one API; the revision table hands the versioning back.
-- **One API and no side door**, over a file-editing path beside it (§1). Removes the whole class of "did the file and the record disagree" bugs, and is what makes Claude-in-production safe: the same API, with the same review window in front of every Send.
+- **One API and no side door**, over a file-editing path beside it (§1). Removes the whole class of "did the file and the record disagree" bugs, and is what makes Claude-in-production safe: the same API, with the same review window in front of every send.
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11). Requiring it would have welded a finished newsletter to the website's infrastructure and turned "hook it up to your site" into a wall for anyone whose site is hosted elsewhere.
 - **Subject is the primary post field**, over a separate title (§4). A title would only be a second field to keep in sync; the preheader is derived from the body for the same reason.
 - **Scheduling is core**, over deferring it to a later version (§6). The review window is the safety model against any bad send, a person's as much as an agent's; send-now is the narrow exception and still carries the minimum lead.
@@ -423,7 +423,7 @@ Each entry names the alternative it was chosen over and points to the section th
 - **Topics and segmentation.** A preference center and an audience filter; the model is built so it slots in (§7).
 - **Open/click analytics.** The delivery record can carry it; not needed to send well.
 - **A `git` mirror of content.** If edit-in-my-own-editor is ever missed, the database can export Markdown to a repo for versioning and offline editing, without moving the source of truth back out of the app.
-- **Publisher pause/resume and an automatic deliverability circuit-breaker.** Both are new automation over a reviewed Send; the bounce-spike report (§8) is the seam a circuit-breaker would hook into (§12).
+- **Publisher pause/resume and an automatic deliverability circuit-breaker.** Both are new automation over a reviewed send; the bounce-spike report (§8) is the seam a circuit-breaker would hook into (§12).
 - **Claude authenticating as the publisher.** An agent-native login through the platform's managed OAuth, in place of the distinct service principal; it slots into the one identity contract (§11).
 
 ## Open
