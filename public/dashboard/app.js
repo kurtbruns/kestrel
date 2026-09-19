@@ -208,6 +208,12 @@ function roomShell(active, railHtml, mainHtml) {
     ${foot}
   </div>`;
 }
+// The one scroll behavior for in-page moves: smooth, so the motion itself says "same page,
+// moved" (a cross-page click lands instantly on a new page), unless the reader has asked
+// for reduced motion. The CSS reduced-motion block can't reach a JS scroll, so it's
+// checked here.
+const scrollBehavior = () =>
+  matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 // A room-bar link to the page you're already on (the active tab, or the wordmark on the
 // docs index) sets the hash to what it already is, so no hashchange fires and nothing
 // re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
@@ -219,7 +225,7 @@ app.addEventListener("click", (ev) => {
     return;
   }
   ev.preventDefault();
-  window.scrollTo({ top: 0, behavior: "smooth" });
+  window.scrollTo({ top: 0, behavior: scrollBehavior() });
 });
 
 // ---- auth ----
@@ -5014,7 +5020,7 @@ function renderDocPage(docs, slug) {
     }
     document
       .getElementById(a.dataset.target)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+      ?.scrollIntoView({ block: "start", behavior: scrollBehavior() });
   });
 
   // Copy buttons on the guide's shell / DNS code blocks.
