@@ -213,8 +213,8 @@ h2 {
    the full page height (it owns the background + right border), and the inner wrapper
    is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
-  flex: 0 0 260px;
-  /* Hold the 260px basis: without this a flex item's min-width:auto floor lets a
+  flex: 0 0 240px;
+  /* Hold the 240px basis: without this a flex item's min-width:auto floor lets a
      long brand name/tagline push the column wider than its basis (the ellipsis on
      .brand-name/.brand-tagline can't engage until the column itself stops growing). */
   min-width: 0;
@@ -240,19 +240,26 @@ body.tool-mode .sidebar {
   display: none;
 }
 /* While the window is being resized, kill the sidebar's own transitions so crossing a
-   breakpoint (e.g. rail → phone drawer) snaps instead of animating the slide — app.js
+   breakpoint (e.g. rail → mobile drawer) snaps instead of animating the slide — app.js
    adds this class during a resize and drops it once it settles. The drawer's open/close
    animation is unaffected because that never happens mid-resize. */
 body.nav-resizing .sidebar {
   transition: none;
 }
 
-/* Reference room: the "learn / set up / integrate" area (Overview · Docs · API).
+/* Reference room: the "learn / set up / integrate" area (Docs · API).
    In tool mode the publication sidebar is hidden and #app goes full-width; the room
    renders its own top bar + two-column grid, so the "← Dashboard" block is exactly
-   the sidebar's width and sits directly above the contents rail. */
+   the sidebar's width and sits directly above the contents rail. On mobile the whole
+   thing collapses to one bar row over a stacked body — see the ≤720px block below. */
 .room {
-  --rail: 260px;
+  /* Matches the publication sidebar's width, so the room's "← Dashboard" block and its
+     contents rail line up exactly where the sidebar was. Keep the two in step. */
+  --rail: 240px;
+  /* The bar's height (border included), at every width. Everything that has to clear the
+     sticky bar — the pinned rail, the body's minimum height, the doc/API anchors'
+     scroll-margin and the scroll-spy line in app.js — is sized from this one number. */
+  --bar-h: 54px;
 }
 .room-bar {
   position: sticky;
@@ -261,6 +268,7 @@ body.nav-resizing .sidebar {
   display: grid;
   grid-template-columns: var(--rail) 1fr;
   align-items: stretch;
+  min-height: var(--bar-h);
   background: var(--bg);
   border-bottom: 1px solid var(--line);
 }
@@ -284,6 +292,8 @@ body.nav-resizing .sidebar {
   padding: 0 16px 0 32px;
   min-width: 0;
 }
+/* The wordmark is the way into the room's home (the docs index), so it's a link — but it
+   reads as identity, not a nav item: full-strength --fg, no underline. */
 .room-brand {
   display: inline-flex;
   align-items: center;
@@ -292,6 +302,7 @@ body.nav-resizing .sidebar {
   font-weight: 600;
   font-size: 15px;
   flex: none;
+  text-decoration: none;
 }
 .room-brand svg {
   width: 18px;
@@ -348,7 +359,7 @@ body.nav-resizing .sidebar {
   align-items: stretch;
   /* The rail runs the full height of the content (and at least the viewport), so its
      divider never stops partway down. */
-  min-height: calc(100vh - 54px);
+  min-height: calc(100vh - var(--bar-h));
 }
 .room-body.norail {
   grid-template-columns: 1fr;
@@ -356,11 +367,14 @@ body.nav-resizing .sidebar {
 .room-rail {
   border-right: 1px solid var(--line);
 }
-/* The contents themselves stay pinned in view while the rail column is full height. */
+/* The contents themselves stay pinned in view while the rail column is full height. Exactly
+   viewport-tall (min = max), so the build stamp can hang at its bottom-left corner; a
+   contents list taller than that scrolls inside, stamp last. */
 .rail-inner {
   position: sticky;
-  top: 54px;
-  max-height: calc(100vh - 54px);
+  top: var(--bar-h);
+  min-height: calc(100vh - var(--bar-h));
+  max-height: calc(100vh - var(--bar-h));
   overflow-y: auto;
   padding: 20px 12px;
   display: flex;
@@ -371,31 +385,171 @@ body.nav-resizing .sidebar {
   min-width: 0;
   padding: 28px 32px 80px;
 }
-/* Overview: same reading measure as Docs and the API reference. */
-.room-overview {
+/* The running build (SPEC §9), quiet metadata in the rail's bottom-left corner on every
+   surface — version → release, sha → commit (its links inherit this muted color; see
+   .build-link). margin-top: auto floats it to the foot of the viewport-tall rail, clear of
+   whatever the rail holds, with no rule of its own. */
+.rail-foot {
+  margin-top: auto;
+  padding: 24px 10px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+/* The same stamp as the room's foot — mobile only, where the rail isn't a column any more
+   (roomShell renders both from one source; the ≤720px block swaps which one shows). */
+.room-foot {
+  display: none;
+  padding: 14px 16px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+/* The first link's separator padding would indent the stamp 4px past the text edge. */
+.rail-foot .build-link:first-child,
+.room-foot .build-link:first-child {
+  padding-left: 0;
+}
+
+/* The docs index (#/docs): an intro over a numbered list of every doc. Single reading
+   column, the same measure as a doc page and the API reference. */
+.docs-index {
   max-width: 720px;
 }
-/* "Why Kestrel" feature blocks. */
-.why-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 24px;
-}
-.why-item h3 {
-  font-size: 15px;
-  font-weight: 650;
-  margin: 0 0 4px;
-}
-.why-item p {
-  font-size: 14px;
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   color: var(--muted);
-  line-height: 1.55;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.docs-index > h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+.docs-index-intro {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 62ch;
+}
+/* One row per doc: a zero-padded number, the title with a → that nudges on hover, and the
+   doc's own first-paragraph blurb. Hairline rules, no cards. */
+.doc-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.doc-cards li {
   margin: 0;
 }
-@media (max-width: 720px) {
-  .why-grid {
-    grid-template-columns: 1fr;
-  }
+.doc-card {
+  display: flex;
+  gap: 18px;
+  padding: 18px 6px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--fg);
+}
+.doc-card:hover {
+  background: var(--hover);
+}
+.doc-card-n {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+}
+.doc-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.doc-card-t {
+  font-size: 16px;
+  font-weight: 650;
+}
+.doc-card-go {
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.12s ease;
+}
+.doc-card:hover .doc-card-go {
+  transform: translateX(3px);
+  color: var(--fg);
+}
+.doc-card-d {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* A doc page's title row: the fragment's own H1 with the compact Previous / Next set on
+   the same line, hanging off its right edge (renderDocPage wraps the two). The pager is
+   centred on the H1's first line box — not its baseline, which would drop the small links
+   toward the bottom of the big line — so a title that wraps keeps the links up by its
+   first line. Plain muted links; the titled pager lives at the article foot. */
+.doc-head {
+  /* The H1's line box (its --h1-size at this line-height). The pager takes the same height
+     so the two centre together. */
+  --title-line: calc(var(--h1-size) * 1.2);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 0 10px;
+}
+.doc-head h1 {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  line-height: 1.2;
+}
+.doc-topnav {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: var(--title-line);
+  gap: 16px;
+}
+/* Inside .doc, so scope past the in-content `.doc a` style (blue + underline). */
+.doc .doc-topnav a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.doc .doc-topnav a:hover {
+  color: var(--fg);
+}
+/* The docs-index rail's out-links (the project site, the source repo, its license). One
+   per line, muted, brightening on hover. The 10px left padding lines their left edge up
+   with the "KESTREL" label above them (.toc-label). */
+.rail-link {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 5px 10px;
+}
+.rail-link:hover {
+  color: var(--fg);
+}
+/* The short label is for the mobile chip row only. */
+.rail-link-short {
+  display: none;
 }
 .pub-note {
   font-size: 13px;
@@ -461,8 +615,7 @@ body.nav-resizing .sidebar {
 
 /* Reserve the width of the active (600-weight) label so toggling weight never
    reflows a horizontal nav (the same trick the old top bar used). */
-.room-switch a::after,
-.nav-tools a::after {
+.room-switch a::after {
   content: attr(data-text);
   height: 0;
   font-weight: 600;
@@ -659,30 +812,25 @@ body.nav-resizing .sidebar {
   display: block;
   flex: 0 0 auto;
 }
-.nav-tools {
-  display: flex;
-  gap: 14px;
-  padding: 0;
-}
-.nav-tools a {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
+
+/* The version → tag and sha → commit links in the build stamp take the surrounding muted
+   color and only brighten + underline on hover, so they read as metadata, not calls to
+   action. (The stamp itself sits under the rail's contents — see .rail-foot.) */
+.build-link {
+  color: inherit;
   text-decoration: none;
-  color: var(--muted);
-  font-size: 14px;
+  /* A little breathing room on each side so the version and sha aren't cramped against
+     their · separator. */
+  padding: 0 4px;
 }
-.nav-tools a:hover {
+.build-link:hover {
   color: var(--fg);
-}
-.nav-tools a[aria-current="page"] {
-  color: var(--fg);
-  font-weight: 600;
+  text-decoration: underline;
 }
 
 /* Collapse ↔ expand chevron, pushed to the right end of the footer row (opposite the
-   Kestrel mark). Icon-only; overrides the base button chrome. Hidden on phones (the
-   overlay is always full) — see the phone block. */
+   Kestrel mark). Icon-only; overrides the base button chrome. Hidden on mobile (the
+   overlay is always full) — see the mobile block. */
 .nav-collapse {
   margin-left: auto;
   flex: 0 0 auto;
@@ -745,7 +893,7 @@ body.tool-mode .content {
    default across the tablet range and small desktops; the nav keeps its one-click
    reach, labels move to hover/focus tooltips, and the secondary chrome (brand text,
    account, tool footer) folds down to its marks. The whole block is gated at ≥540 so a
-   stray data-nav can never fight the phone drawer (<540) mid-resize — below that the
+   stray data-nav can never fight the mobile drawer (<540) mid-resize — below that the
    overlay rules take over. --- */
 @media (min-width: 540px) {
   [data-nav="rail"] .sidebar {
@@ -871,9 +1019,6 @@ body.tool-mode .content {
   [data-nav="rail"] .powered > span {
     display: none;
   }
-  [data-nav="rail"] .nav-tools {
-    display: none;
-  }
   [data-nav="rail"] .nav-collapse {
     margin-left: 0;
   }
@@ -882,7 +1027,7 @@ body.tool-mode .content {
   }
 }
 
-/* Phones (<540px): the icon rail gives way — the sidebar leaves the flow and becomes
+/* Mobile (<540px): the icon rail gives way — the sidebar leaves the flow and becomes
    an off-canvas drawer opened by the hamburger, carrying the full brand + labels. */
 @media (max-width: 539px) {
   /* The publication sidebar becomes an off-canvas drawer opened by the hamburger
@@ -2538,10 +2683,9 @@ textarea.is-invalid {
   }
 }
 
-/* Docs: the operator guide rendered natively (no iframe, #86) as one scrollable
-   article in the reference room's main column, beside a two-level scroll-spy
-   contents rail in the room rail — the parts, the active one expanded to its
-   sections. Same reading model as the API reference. */
+/* Docs: the operator guide rendered natively (no iframe) — one doc per page in the
+   reference room's main column, beside that doc's scroll-spy "On this page" in the room
+   rail. Same reading model as the API reference. */
 .toc-label {
   font-size: 11px;
   letter-spacing: 0.05em;
@@ -2551,53 +2695,24 @@ textarea.is-invalid {
   padding: 0 10px;
   margin-bottom: 8px;
 }
-.doc-parts {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.toc-h {
-  display: flex;
-  align-items: flex-start;
-  gap: 7px;
-  text-decoration: none;
-  color: var(--muted);
-  font-size: 13.5px;
-  padding: 6px 10px;
-  border-radius: 6px;
-}
-/* The article glyph inherits the row color, so it reads muted until its doc is open. */
-.toc-h-mark {
-  flex: none;
-  display: block;
-  width: 15px;
-  height: 15px;
-  margin-top: 1px;
-  fill: currentColor;
-}
-.toc-h:hover {
-  color: var(--fg);
-}
-/* The open doc: the row goes to fg (brightening its article icon) and the title is
-   underlined — a lighter, different cue from the plain bold the "On this page"
-   section links use, and no background block. */
-.toc-h.on {
-  color: var(--fg);
-}
-.toc-h.on span {
-  text-decoration: underline;
-  text-underline-offset: 3px;
-}
-/* "On this page": the current doc's sections, a separate block below the doc list. */
+/* "On this page": a <details> whose summary is the label. On desktop it is always open and
+   the summary is inert (no marker, no pointer), so it reads as a plain label over the list;
+   the ≤720px block turns it into a real fold. Flush at the top of the rail — it's the only
+   thing there. */
 .toc-onpage {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
+  display: block;
 }
+.toc-onpage > summary {
+  list-style: none;
+  pointer-events: none;
+}
+.toc-onpage > summary::-webkit-details-marker {
+  display: none;
+}
+/* Block links (a <details> lays its children out as flow, not flex), 1px apart. */
 .toc-sub {
+  display: block;
+  margin-bottom: 1px;
   text-decoration: none;
   color: var(--muted);
   font-size: 12.5px;
@@ -2608,9 +2723,11 @@ textarea.is-invalid {
   color: var(--fg);
   background: var(--hover);
 }
+/* The active section: color + the hover tint, never weight — a bolder link can wrap where
+   the regular one didn't, and the whole list would jump each time the spy moves. */
 .toc-sub.on {
   color: var(--fg);
-  font-weight: 600;
+  background: var(--hover);
 }
 
 /* Long-form prose, styled with the app's own tokens (no re-declared design system,
@@ -2634,12 +2751,15 @@ textarea.is-invalid {
   color: var(--fg);
   text-transform: none;
 }
+.doc {
+  --h1-size: 26px;
+}
 .doc h1 {
-  font-size: 26px;
+  font-size: var(--h1-size);
   font-weight: 650;
   letter-spacing: -0.02em;
   margin: 0 0 10px;
-  scroll-margin-top: 64px;
+  scroll-margin-top: calc(var(--bar-h) + 10px);
 }
 .doc h2 {
   font-size: 19px;
@@ -2648,7 +2768,7 @@ textarea.is-invalid {
   margin: 30px 0 8px;
   padding-top: 16px;
   border-top: 1px solid var(--line);
-  scroll-margin-top: 64px;
+  scroll-margin-top: calc(var(--bar-h) + 10px);
 }
 .doc h3 {
   font-size: 15px;
@@ -2737,9 +2857,8 @@ textarea.is-invalid {
     opacity: 1;
   }
 }
-/* Previous / Next pager at the foot of a doc — one doc per page, so this is how you
-   move between them. Two slots; a missing neighbour keeps its side empty so the lone
-   button stays put (prev left, next right). */
+/* Previous / Next pager at the foot of a doc — the sequential path, with titles. Two
+   bordered cards; a missing neighbour keeps its side empty so the lone card stays put. */
 .doc-pager {
   display: flex;
   justify-content: space-between;
@@ -2748,8 +2867,8 @@ textarea.is-invalid {
   padding-top: 24px;
   border-top: 1px solid var(--line);
 }
-/* The `.doc a` link style (blue + underline) out-specifies a bare `.doc-pager-btn`,
-   so scope the reset to `.doc a.doc-pager-btn` to keep these bordered cards plain. */
+/* The `.doc a` link style (blue + underline) out-specifies a bare `.doc-pager-btn`, so
+   scope the reset to `.doc a.doc-pager-btn` to keep these bordered cards plain. */
 .doc a.doc-pager-btn {
   display: flex;
   flex-direction: column;
@@ -2849,9 +2968,9 @@ textarea.is-invalid {
   color: var(--fg);
   background: var(--hover);
 }
+/* Colour + tint, never weight, so the active chip keeps its width (see .toc-sub.on). */
 .api-nav a.active {
   color: var(--fg);
-  font-weight: 600;
   background: var(--hover);
 }
 .api-nav-count {
@@ -2874,7 +2993,7 @@ textarea.is-invalid {
   font-size: 22px;
 }
 .api-section {
-  scroll-margin-top: 56px;
+  scroll-margin-top: calc(var(--bar-h) + 2px);
   margin: 0 0 28px;
 }
 .api-section h2 {
@@ -2961,42 +3080,157 @@ textarea.is-invalid {
   padding: 10px 12px;
   font: 12.5px / 1.5 var(--mono);
 }
-/* Reference room on a phone: the bar and body stack; the contents rail becomes a
-   scrollable strip above the content. */
+/* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
+   the in-page anchors (scroll-margin-top) and the scroll-spy line keep clearing it: the back
+   link is a --bar-h square holding its arrow, the wordmark and the two tabs follow, and the
+   ✕ drops (← is the way back). The body stacks, rail over content, and each rail takes the
+   shape its role wants: a doc's "On this page" folds to one tappable row; the API tiers and
+   the docs index's out-links become a chip row. The build stamp leaves the rail for the
+   room's foot, so it stays the last thing on the page rather than the first. */
 @media (max-width: 720px) {
   .room-bar {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
   }
+  /* A --bar-h square: the arrow centred, the label gone. */
   .room-back {
-    border-right: 0;
-    border-bottom: 1px solid var(--line);
-    padding: 11px 16px;
+    width: var(--bar-h);
+    justify-content: center;
+    padding: 0;
+    font-size: 16px;
+  }
+  .room-back-label {
+    display: none;
   }
   .room-nav {
-    padding: 9px 16px;
-    flex-wrap: wrap;
+    padding: 0 12px;
+    gap: 14px;
+  }
+  .room-close,
+  .rail-foot {
+    display: none;
+  }
+  .room-foot {
+    display: block;
   }
   .room-body {
     grid-template-columns: 1fr;
   }
   .room-rail {
-    position: static;
-    max-height: none;
-    overflow: visible;
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+  /* The rail is in the flow now, not pinned beside the article. */
+  .rail-inner {
+    position: static;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
+    padding: 12px 6px; /* + the 10px on each link = the 16px content edge */
+  }
   .room-main {
-    padding: 20px 16px 64px;
+    padding: 20px 16px 48px;
+  }
+  /* "On this page" as a real fold: the summary is the one row you see (label + chevron,
+     a 44px target), the section list opens under it. renderDocPage leaves it closed on
+     mobile and closes it again after a pick. */
+  .toc-onpage > summary {
+    pointer-events: auto;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 44px;
+    margin: 0;
+    padding: 0 10px;
+  }
+  .toc-onpage > summary::after {
+    content: "";
+    width: 7px;
+    height: 7px;
+    margin-right: 4px;
+    border-right: 2px solid var(--muted);
+    border-bottom: 2px solid var(--muted);
+    transform: rotate(45deg) translateY(-2px);
+    transition: transform 0.15s;
+  }
+  .toc-onpage[open] > summary::after {
+    transform: rotate(-135deg) translateY(-2px);
+  }
+  .toc-onpage[open] > summary {
+    margin-bottom: 4px;
+  }
+  .toc-sub {
+    font-size: 14px;
+    padding: 9px 10px;
+  }
+  /* Chip rows: the API tiers and the docs index's out-links. The index's three short
+     chips share the label's line; the API's three carry counts and don't fit beside
+     "API" at 375px, so that label sits on its own line over the row. */
+  .rail-inner:has(.api-nav),
+  .rail-inner:has(.rail-link) {
+    gap: 6px 10px;
+    padding: 10px 12px;
+  }
+  .rail-inner:has(.rail-link) {
+    flex-direction: row;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .rail-inner:has(.api-nav) .toc-label,
+  .rail-inner:has(.rail-link) .toc-label {
+    margin: 0;
+    padding: 0;
   }
   .api-nav {
     flex-flow: row wrap;
+    gap: 6px;
   }
-  /* Pager buttons stack full-width and read left-to-right on a phone. */
+  .api-nav a,
+  .rail-link {
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    min-height: 32px;
+    padding: 0 10px 0 12px;
+    font-size: 13px;
+  }
+  /* inline-flex centres the chip's text in its 32px; the gap stands in for the space
+     between the label and its ↗ that flex drops. */
+  .rail-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  /* Chips take the short labels ("Project", "Source") so the row fits one line. */
+  .rail-link-full {
+    display: none;
+  }
+  .rail-link-short {
+    display: inline;
+  }
+  /* The title-line pager keeps just its arrows, as two 44px-tall targets centred on the
+     31px title line (the overhang is hit area, not paint). */
+  .doc-topnav {
+    gap: 4px;
+  }
+  .doc .doc-topnav a {
+    width: 40px;
+    height: 44px;
+    margin-block: calc((var(--title-line) - 44px) / 2);
+    justify-content: center;
+    border-radius: 6px;
+    font-size: 16px;
+  }
+  .doc .doc-topnav a:hover {
+    background: var(--hover);
+  }
+  .doc-topnav-word {
+    display: none;
+  }
+  /* Pager cards stack full-width and read left-to-right on mobile. */
   .doc-pager {
     flex-direction: column;
   }
-  .doc-pager-btn {
+  .doc a.doc-pager-btn {
     max-width: none;
   }
   .doc-pager-btn.next {
@@ -3023,12 +3257,9 @@ textarea.is-invalid {
   margin: 0 0 22px;
   /* A grid item defaults to min-width:auto, which refuses to shrink below its
      content — that let the pub cards' URLs and the tables push the page wider than
-     a phone. min-width:0 lets the column shrink so the inner overflow-x / wrapping
+     a mobile screen. min-width:0 lets the column shrink so the inner overflow-x / wrapping
      takes over. */
   min-width: 0;
-}
-.room-overview .dash-section {
-  scroll-margin-top: 66px;
 }
 .dash-cols {
   display: grid;
@@ -3261,57 +3492,6 @@ textarea.is-invalid {
   font: 12.5px var(--mono);
   color: var(--muted);
   word-break: break-all;
-}
-
-/* "How Kestrel works" — Write → Schedule → Send → Archive. */
-.how-steps {
-  list-style: none;
-  counter-reset: how;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-@media (max-width: 720px) {
-  .how-steps {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 460px) {
-  .how-steps {
-    grid-template-columns: 1fr;
-  }
-}
-.how-steps li {
-  counter-increment: how;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--card);
-}
-.how-steps li::before {
-  content: counter(how);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--muted);
-}
-.how-steps strong {
-  font-size: 14px;
-}
-.how-steps .muted {
-  font-size: 12.5px;
-  line-height: 1.4;
 }
 
 /* ============================================================
@@ -4515,15 +4695,15 @@ textarea.is-invalid {
    with an explicit save + a revertible baseline (Settings and the Template page).
    It slides up only while there are unsaved changes, carries Save + Discard, and
    doubles as the home for a rejected save's error (the bar stays up and says why).
-   The left offset tracks the sidebar — clearing the 260px full column or the 64px
+   The left offset tracks the sidebar — clearing the 240px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
-   phone drawer. The post editor keeps its own autosave + conflict model, so it does
+   mobile drawer. The post editor keeps its own autosave + conflict model, so it does
    NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
    (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
-  /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
-  left: 260px;
+  /* Clears the full 240px sidebar; narrowed to the rail / drawer in the rules below. */
+  left: 240px;
   right: 0;
   bottom: 0;
   z-index: var(--z-bar);
@@ -4594,7 +4774,7 @@ body.has-savebar .content {
   .savebar {
     left: 0;
   }
-  /* Stack on phones: the message on its own row, the actions right-aligned below,
+  /* Stack on mobile: the message on its own row, the actions right-aligned below,
      rather than cramming a message and two buttons onto one narrow line. */
   .savebar-inner {
     padding: 0 16px;
@@ -4656,13 +4836,13 @@ body.has-savebar .content {
   }
 }
 
-/* Phones and the icon-rail range (≤720px): a list table can't fit its fixed columns
+/* Mobile and the icon-rail range (≤720px): a list table can't fit its fixed columns
    (Sent wants 428px, Drafts 480px; the rail leaves 412px at 540px), so a `.stacks` table
    turns each row into a stacked entry — the lead cell (title / subject / email) on its own
    line, then the rest as one muted meta line, then any delivery-failure note — on the same markup:
    the cells are named and the labels are ::before/::after content, so the desktop table
-   and the phone list are one render. Headers go, and the sort buttons with them; the
-   default order is what a phone wants. A row's ⋯ menu pins to its top-right corner. */
+   and the mobile list are one render. Headers go, and the sort buttons with them; the
+   default order is what a mobile screen wants. A row's ⋯ menu pins to its top-right corner. */
 @media (max-width: 720px) {
   .list-table.stacks,
   .list-table.stacks tbody,

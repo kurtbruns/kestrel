@@ -13,6 +13,9 @@ node_modules/
 .wrangler/
 worker-configuration.d.ts
 
+# generated at build (scripts/stamp-version.mjs); regenerated at every entry point
+src/generated/
+
 # build output
 dist/
 

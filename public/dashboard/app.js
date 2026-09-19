@@ -116,9 +116,9 @@ navCollapse?.addEventListener("click", () => {
   applyNavMode();
 });
 // Track the responsive default as the window resizes (rAF-coalesced). A session
-// override still wins at 540 and up; below it, the phone overlay takes over. The
+// override still wins at 540 and up; below it, the mobile overlay takes over. The
 // nav-resizing class suppresses the sidebar's own transitions for the duration, so a
-// breakpoint cross (rail → phone drawer) snaps instead of animating a stray slide.
+// breakpoint cross (rail → mobile drawer) snaps instead of animating a stray slide.
 let navResizeRaf = 0;
 let navResizeSettle = 0;
 window.addEventListener("resize", () => {
@@ -164,34 +164,48 @@ const KESTREL_PATH =
 const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
-// Every entry in the reference room's Docs list carries the same Material "article"
-// glyph — it inherits the row color, so it reads muted until a doc is the open one
-// (then it and its underlined title go to the active fg). The icon marks these as
-// docs, distinct from the icon-less "On this page" section links below them.
-const ARTICLE_ICON =
-  '<svg class="toc-h-mark" viewBox="0 -960 960 960" aria-hidden="true"><path d="M280-280h280v-80H280v80Zm0-160h400v-80H280v80Zm0-160h400v-80H280v80Zm-80 480q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h560q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560H200v560Zm0-560v560-560Z"/></svg>';
-
-// The reference room shell shared by Overview / Docs / API: a top bar (a rail-width
-// "← Dashboard", the Kestrel mark, and the surface switch) over a two-column grid
-// whose left column — the contents rail — lines up exactly under "← Dashboard".
-// Pass railHtml = null for a surface with no contents rail (Overview).
+// The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
+// the Kestrel mark, the surface switch) over a two-column grid whose left column — the
+// contents rail — lines up exactly under "← Dashboard". Pass railHtml = null for a
+// surface with no contents rail.
+//
+// On mobile (≤720px, styles.css) the same markup collapses to one --bar-h row — a square
+// back arrow, the mark, the tabs — so the bar never grows past the height the in-page
+// anchors and the sticky rail are calibrated for; the ✕ drops there (← is the one way
+// back). The body stacks, and each rail decides its own mobile shape (a folded "On this
+// page", or a chip row — see the surfaces below).
 function roomShell(active, railHtml, mainHtml) {
   const tab = (view, label) =>
     `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
+  // The running build (SPEC §9) as quiet metadata — version → release, sha → commit —
+  // pinned to the rail's bottom-left corner on every surface, so the bar stays identity +
+  // nav. On mobile the rail is no longer a column, so the same stamp is the room's foot
+  // instead (styles.css shows one or the other). "" until a build is known; the build time
+  // rides the tooltip. Build info lives in the app's own room (and at GET /api/version),
+  // never in the publisher-facing dashboard.
+  const parts = buildRefParts();
+  const bt = appConfig?.deployment?.build?.buildTime;
+  const built = bt
+    ? ` title="Built ${esc(new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}"`
+    : "";
+  const stamp = parts ? `${parts.version} <span aria-hidden="true">·</span> ${parts.sha}` : "";
+  const railFoot = stamp ? `<div class="rail-foot"${built}>${stamp}</div>` : "";
+  const foot = stamp ? `<footer class="room-foot"${built}>${stamp}</footer>` : "";
   const body =
     railHtml == null
       ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
-      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}</div></nav><div class="room-main">${mainHtml}</div></div>`;
+      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}${railFoot}</div></nav><div class="room-main">${mainHtml}</div></div>`;
   return `<div class="room">
     <header class="room-bar">
-      <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
+      <a class="room-back" href="#/dashboard" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span class="room-back-label">Dashboard</span></a>
       <div class="room-nav">
-        <span class="room-brand">${kestrelMark()}<span>Kestrel</span></span>
-        <nav class="room-switch" aria-label="Reference">${tab("start", "Overview")}${tab("docs", "Docs")}${tab("reference", "API")}</nav>
+        <a class="room-brand" href="#/docs">${kestrelMark()}<span>Kestrel</span></a>
+        <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("reference", "API")}</nav>
         <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>
     ${body}
+    ${foot}
   </div>`;
 }
 
@@ -282,6 +296,29 @@ function renderSidebarBrand() {
       logoEl.classList.add("brand-logo-placeholder");
     }
   }
+}
+
+// ---- build reference (the running build, as two link fragments) ----
+// { version, sha } from the read-only deployment reflection (appConfig.deployment.build,
+// resolved at build in src/build.ts): version → its release (only when this build IS that
+// tagged release), sha → its commit, both on the repo and never getkestrel.dev. Each
+// degrades to plain text (no dead link) when there's no repo, the build isn't a release, or
+// the sha is "dev" (a local build). null until a build is known. Build metadata is quiet,
+// secondary info: roomShell pins it to the rail's bottom-left corner (and, on mobile, sets
+// it as the room's foot); it's also at GET /api/version, where a bug report is filed. Never
+// in the publisher-facing dashboard.
+function buildRefParts() {
+  const b = appConfig?.deployment?.build;
+  if (!b?.version) {
+    return null;
+  }
+  const version = b.tagUrl
+    ? `<a class="build-link" href="${esc(b.tagUrl)}" target="_blank" rel="noopener">v${esc(b.version)}</a>`
+    : `v${esc(b.version)}`;
+  const sha = b.commitUrl
+    ? `<a class="build-link" href="${esc(b.commitUrl)}" target="_blank" rel="noopener">${esc(b.sha)}</a>`
+    : esc(b.sha);
+  return { version, sha };
 }
 
 // Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
@@ -731,9 +768,9 @@ function route() {
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
-  // The tool/help pages (Getting started, Docs, API) are about Kestrel itself, not
-  // the publication, so they drop the publication sidebar for a slim tool bar.
-  const toolMode = view === "start" || view === "docs" || view === "reference";
+  // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
+  // drops the publication sidebar for a slim tool bar.
+  const toolMode = view === "docs" || view === "reference";
   document.body.classList.toggle("tool-mode", toolMode);
   // Mark the active nav item across both sidebar navs (primary + tools) so the
   // reader can see where they are (aria-current also styles it).
@@ -770,9 +807,6 @@ function route() {
   }
   if (view === "docs") {
     return renderDocs(arg);
-  }
-  if (view === "start") {
-    return renderStart();
   }
   return renderDashboard();
 }
@@ -4721,54 +4755,176 @@ async function renderSettings() {
 }
 
 // ---- docs ----
-// The setup guide, authored in docs/setup/*.md and served read-only by the
-// authed GET /api/docs route as sanitized HTML fragments. The guide is
-// paginated — one part per page — with a "Contents" list of every part and an "On
-// this page" of the current part's sections in the rail, plus Previous/Next at the
-// foot; so scrolling reaches the end of the current doc and moving between docs is a
-// deliberate step. No iframe: the content is trusted (repo markdown, hygiene-passed),
-// so injecting the fragments into the DOM is safe. Fetched once and cached (the
-// bundle never changes at runtime), so paging between parts is instant.
+// The setup guide, authored in docs/setup/*.md and served read-only by the authed
+// GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over a
+// numbered list of every doc; `#/docs/:slug` is one doc, its rail a back-link to the index
+// plus that doc's "On this page" (never a tree of all docs). No iframe: the content is
+// trusted (repo markdown, hygiene-passed), so injecting the fragments is safe. Fetched once
+// and cached (the bundle never changes at runtime), so paging is instant.
 let docsCache = null;
+
+// A doc card's blurb on the index: the doc's own first paragraph, condensed. Derived here
+// (docs carry no front-matter description) so it stays in sync with the doc itself.
+function docDescription(doc) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = doc.html || "";
+  const raw = (tmp.querySelector("p")?.textContent || "").trim().replace(/\s+/g, " ");
+  // A paragraph that leads into a list ends in ":" — on a card that reads as a cut-off
+  // sentence, so it ends in an ellipsis like a truncated blurb does.
+  const leadsIn = /[:;,]$/.test(raw);
+  const text = raw.replace(/[\s:;,]+$/, "");
+  const MAX = 150;
+  if (text.length > MAX) {
+    return `${text.slice(0, MAX).replace(/[\s.,;:]+\S*$/, "")}…`;
+  }
+  return leadsIn ? `${text}…` : text;
+}
+
 async function renderDocs(slug) {
   app.innerHTML = roomShell(
     "docs",
-    `<p class="muted">Loading…</p>`,
-    `<article class="doc" id="docsMain"><p class="muted">Loading…</p></article>`,
+    null,
+    `<div class="docs-index"><p class="muted">Loading…</p></div>`,
   );
-  const navEl = app.querySelector(".rail-inner");
-  const mainEl = document.getElementById("docsMain");
   if (!docsCache) {
+    // The first visit fetches; everything below rewrites the whole view, so if the route
+    // moved on while the request was in flight (a tap on API, or a different doc), this
+    // render is stale and must not paint over the one that replaced it.
+    const wanted = location.hash;
     try {
       ({ docs: docsCache } = await api("/api/docs"));
     } catch (e) {
-      renderError(mainEl, e.message, () => renderDocs(slug));
+      if (location.hash === wanted) {
+        renderError(document.querySelector(".room-main"), e.message, () => renderDocs(slug));
+      }
+      return;
+    }
+    if (location.hash !== wanted) {
       return;
     }
   }
   const docs = docsCache;
   if (!docs?.length) {
-    mainEl.innerHTML = `<p class="muted">No documentation.</p>`;
+    const el = document.querySelector(".room-main");
+    if (el) {
+      el.innerHTML = `<p class="muted">No documentation.</p>`;
+    }
     return;
   }
-
-  // Show one part per page — the deep-linked slug, or the first. An unknown slug (a
-  // stale or renamed deep link) shouldn't silently masquerade as the first doc: say
-  // so and heal the URL back to the canonical guide (replaceState, so no reload).
-  const found = docs.findIndex((d) => d.slug === slug);
-  if (slug && found === -1) {
-    toast(`No doc named “${slug}” — showing the guide.`);
-    history.replaceState(history.state, "", "#/docs");
+  if (slug) {
+    renderDocPage(docs, slug);
+  } else {
+    renderDocsIndex(docs);
   }
-  const at = Math.max(0, found);
+}
+
+// The index: an intro over a numbered list of every doc, in reading order. It keeps the
+// room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
+// holds the project's external links — the reference room is about Kestrel itself, so this
+// is where getkestrel.dev and the source live.
+function renderDocsIndex(docs) {
+  const cards = docs
+    .map((d, i) => {
+      const desc = docDescription(d);
+      return (
+        `<li><a class="doc-card" href="#/docs/${esc(d.slug)}">` +
+        `<span class="doc-card-n">${String(i + 1).padStart(2, "0")}</span>` +
+        `<span class="doc-card-main">` +
+        `<span class="doc-card-t">${esc(d.title)} <span class="doc-card-go" aria-hidden="true">→</span></span>` +
+        (desc ? `<span class="doc-card-d">${esc(desc)}</span>` : "") +
+        `</span></a></li>`
+      );
+    })
+    .join("");
+  const main =
+    `<div class="docs-index">` +
+    `<p class="eyebrow">Documentation</p>` +
+    `<h1>Set up &amp; operate Kestrel</h1>` +
+    `<p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p>` +
+    `<ol class="doc-cards">${cards}</ol>` +
+    `</div>`;
+  // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
+  // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
+  // project's home, the same for every instance, so it's a constant; the source and
+  // license links are the deploy's own repo (package.json → build stamp), so they're
+  // absent when no repo is known.
+  // Each link carries a short form for the mobile chip row (styles.css swaps which span
+  // shows); the full label stays the accessible name at every width.
+  const repoUrl = appConfig?.deployment?.build?.repoUrl || "";
+  const out = (href, label, short = label) =>
+    `<a class="rail-link" href="${esc(href)}" target="_blank" rel="noopener" aria-label="${esc(label)}">` +
+    `<span class="rail-link-full">${esc(label)}</span><span class="rail-link-short" aria-hidden="true">${esc(short)}</span>` +
+    ` <span aria-hidden="true">↗</span></a>`;
+  const rail =
+    `<div class="toc-label">Kestrel</div>` +
+    out("https://getkestrel.dev", "Project site", "Project") +
+    (repoUrl
+      ? out(repoUrl, "Source on GitHub", "Source") + out(`${repoUrl}/blob/HEAD/LICENSE`, "License")
+      : "");
+  app.innerHTML = roomShell("docs", rail, main);
+  window.scrollTo(0, 0);
+}
+
+// One doc, deep-linked by slug. The rail is this doc's "On this page" (scroll-spy-tracked)
+// — never a list of the other docs. Sequential Prev/Next sits on the title line (compact)
+// and at the foot of the article (with titles), not in the rail.
+//
+// The rail folds on mobile: "On this page" is a <details> that is open on desktop (where
+// the summary is inert — it just looks like the label) and closed on mobile, where it is
+// one tappable row above the article and closes again once a section is picked. The state
+// follows the layout, not the width at render time: crossing 720px (a rotation, a resized
+// window) re-opens it on desktop — where nothing else could, the summary being inert —
+// and takes the summary out of the tab order there, so a keyboard user can't collapse a
+// list no pointer can reopen. One listener for the app's lifetime; it finds the fold that
+// is in the DOM, if any.
+const mobileMq = matchMedia("(max-width: 720px)");
+function syncFold(fold) {
+  if (!fold) {
+    return;
+  }
+  const mobile = mobileMq.matches;
+  fold.open = !mobile;
+  fold.querySelector("summary").tabIndex = mobile ? 0 : -1;
+}
+mobileMq.addEventListener("change", () => syncFold(document.getElementById("tocOnPage")));
+function renderDocPage(docs, slug) {
+  const at = docs.findIndex((d) => d.slug === slug);
+  if (at === -1) {
+    // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
+    toast(`No doc named “${slug}” — showing the index.`);
+    history.replaceState(history.state, "", "#/docs");
+    renderDocsIndex(docs);
+    return;
+  }
   const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
+  // Compact Prev/Next on the title line, right of the H1 — no titles (the foot pager
+  // carries those; each link's aria-label names its target). On mobile the words drop
+  // and the arrows alone remain, so the row still fits beside a wrapping title.
+  const topLink = (doc, dir) =>
+    `<a href="#/docs/${esc(doc.slug)}" aria-label="${esc(`${dir}: ${doc.title}`)}">` +
+    (dir === "Previous"
+      ? `<span aria-hidden="true">←</span><span class="doc-topnav-word">Previous</span>`
+      : `<span class="doc-topnav-word">Next</span><span aria-hidden="true">→</span>`) +
+    `</a>`;
+  const topNav =
+    prev || next
+      ? `<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? topLink(prev, "Previous") : ""}${next ? topLink(next, "Next") : ""}</nav>`
+      : "";
+  // The rail gets a slot, filled once the sections are known (below) — the slot, not the
+  // whole rail, so the build stamp roomShell set under it stays.
+  app.innerHTML = roomShell(
+    "docs",
+    `<div id="docToc"></div>`,
+    `<article class="doc" id="docsMain"></article>`,
+  );
+  const navEl = document.getElementById("docToc");
+  const mainEl = document.getElementById("docsMain");
   mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
 
-  // The fragment carries no ids — assign them to the current part's H1 and its H2s,
-  // and collect the sections for the "On this page" rail. The H1 leads the list so
-  // there's a way back to the top / the intro that sits above the first H2.
+  // The fragment carries no ids — assign them to the current part's H1 and its H2s, and
+  // collect the sections for "On this page". The H1 leads so there's a way back to the top.
   const sec = mainEl.querySelector("section.doc-part");
   const h1 = sec.querySelector("h1");
   const sections = [];
@@ -4776,14 +4932,26 @@ async function renderDocs(slug) {
     h1.id = `part-${cur.slug}`;
     sections.push({ id: h1.id, title: h1.textContent || cur.title });
   }
+  // Put the H1 and the compact pager on one line: wrap the fragment's own H1 in a title
+  // row and set the pager beside it (the H1 stays the doc's H1 — same node, same id).
+  if (topNav) {
+    const head = document.createElement("div");
+    head.className = "doc-head";
+    if (h1) {
+      h1.before(head);
+      head.append(h1);
+    } else {
+      sec.prepend(head);
+    }
+    head.insertAdjacentHTML("beforeend", topNav);
+  }
   sec.querySelectorAll("h2").forEach((h2, i) => {
     const id = `sec-${cur.slug}-${i + 1}`;
     h2.id = id;
     sections.push({ id, title: h2.textContent || "" });
   });
 
-  // Previous / Next at the foot — the scroll ends with the current doc, so moving
-  // between docs is a deliberate step (router links, one doc per page).
+  // Previous / Next at the foot — with titles, the sequential path through the guide.
   const pager = document.createElement("nav");
   pager.className = "doc-pager";
   pager.innerHTML =
@@ -4795,30 +4963,24 @@ async function renderDocs(slug) {
       : `<span></span>`);
   mainEl.appendChild(pager);
 
-  // The rail: a "Docs" list of every doc (router links, current one marked) and,
-  // below it, an "On this page" of the current doc's sections that scroll-spy tracks.
-  const onPage = sections.length
-    ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${sections
-        .map(
-          (s) =>
-            `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
-        )
-        .join("")}</div>`
+  // Rail: this doc's "On this page" only (scroll-spy-tracked). No back-link (the "Docs" tab
+  // returns to the index) and no rail pager (Prev/Next is the title line + the article
+  // foot). A <details>, open unless this is mobile (the header comment says why).
+  const onPage = sections
+    .map(
+      (s) =>
+        `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
+    )
+    .join("");
+  navEl.innerHTML = sections.length
+    ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
-  navEl.innerHTML =
-    `<div class="toc-label">Docs</div>` +
-    `<nav class="doc-parts">${docs
-      .map(
-        (d) =>
-          `<a class="toc-h${d.slug === cur.slug ? " on" : ""}" href="#/docs/${esc(d.slug)}">${ARTICLE_ICON}<span>${esc(d.title)}</span></a>`,
-      )
-      .join("")}</nav>` +
-    onPage;
 
-  // "On this page" links smooth-scroll within the current doc (and highlight at once,
-  // so a short final section that can't scroll to the top still lights up); the Docs
-  // links carry no data-target and fall through to the SPA router (a new doc page).
+  // "On this page" links smooth-scroll within the current doc and highlight at once. On
+  // mobile the fold closes first, so the page height above the target is settled before
+  // the scroll is measured.
   const onPageEl = document.getElementById("tocOnPage");
+  syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
   const markActive = (id) => {
     if (!onPageEl) {
       return;
@@ -4834,12 +4996,15 @@ async function renderDocs(slug) {
     }
     ev.preventDefault();
     markActive(a.dataset.target);
+    if (onPageEl && mobileMq.matches) {
+      onPageEl.open = false;
+    }
     document
       .getElementById(a.dataset.target)
       ?.scrollIntoView({ block: "start", behavior: "smooth" });
   });
 
-  // Copy buttons on the guide's many shell / DNS code blocks.
+  // Copy buttons on the guide's shell / DNS code blocks.
   for (const pre of mainEl.querySelectorAll("pre")) {
     pre.classList.add("has-copy");
     const btn = document.createElement("button");
@@ -4861,19 +5026,18 @@ async function renderDocs(slug) {
     pre.appendChild(btn);
   }
 
-  // Scroll-spy: the active section is the last heading scrolled above a line just
-  // under the sticky room bar; at the very bottom the last heading wins even if the
-  // page can't scroll it that high, so a short final section still highlights (the
-  // .doc bottom runway makes most reach the line on their own). One document.onscroll
-  // slot, self-cleared once this doc leaves the DOM — no leak across SPA navigations.
-  // (Same position-based shape as ~/Git/svg-tutorial, not an IntersectionObserver,
-  // which pauses when the tab isn't being composited.)
+  // Scroll-spy: the active section is the last heading scrolled above a line just under the
+  // sticky room bar; at the bottom the last heading wins so a short final section still
+  // highlights. One document.onscroll slot, self-cleared once this doc leaves the DOM.
   if (onPageEl && sections.length) {
     const ids = sections.map((s) => s.id);
-    const line = 80; // clears the 54px room bar
+    // Just under the sticky bar. Measured, not assumed: the bar is --bar-h at every width
+    // (see roomShell), but large-text zoom can push it taller, and the spy should follow.
+    const barH = document.querySelector(".room-bar")?.getBoundingClientRect().height || 54;
+    const line = barH + 26;
     const spy = () => {
       if (!document.getElementById(ids[0])) {
-        document.onscroll = null; // this doc is gone — unhook
+        document.onscroll = null;
         return;
       }
       let active = ids[0];
@@ -5009,6 +5173,8 @@ async function renderReference() {
       navEl._obs.observe(el);
     }
   }
+  // Its own page — start at the top, not wherever the last doc was scrolled to.
+  window.scrollTo(0, 0);
 }
 
 // ---- dashboard (home) ----
@@ -5423,109 +5589,6 @@ function setupChecklistHtml(pub, deployment) {
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
     </ol>
   </div>`;
-}
-
-// ---- Overview (the reference room's home) ----
-// The permanent home for onboarding (the footer Kestrel link → here): a short "how
-// Kestrel works", the "why" in plain language, and the setup checklist.
-// It reserves the room rail like Docs/API, with an "on this page" scroll-spy.
-function howItWorksHtml() {
-  const steps = [
-    ["Write", "Draft in Markdown and preview exactly what the email will look like."],
-    ["Schedule", "Schedule ahead — the send waits in a visible, cancelable review window."],
-    ["Send", "It fires on its own to your confirmed subscribers; nothing goes out unseen."],
-    ["Archive", "Every post is preserved as a permanent page — the record of what went out."],
-  ];
-  return `<section class="dash-section" id="ov-how"><h2>How Kestrel works</h2><ol class="how-steps">${steps
-    .map(([t, d]) => `<li><strong>${esc(t)}</strong><span class="muted">${esc(d)}</span></li>`)
-    .join("")}</ol></section>`;
-}
-// The "why", in clear language — competitor-neutral, no funnel copy.
-const WHY_KESTREL = [
-  [
-    "One door, two clients",
-    "You drive Kestrel through a single API, and the web editor and Claude are equal clients of it. Nothing reaches past that door, so the two can't fall out of sync — and an agent is a first-class author, able to do anything you can, not a bolt-on integration.",
-  ],
-  [
-    "Safe to send unattended",
-    "Scheduling freezes the rendered email and locks the post behind a visible, cancelable review window. What goes out is exactly what was last reviewed — never a later edit no one checked — so you can prepare a send days ahead and let it fire on its own.",
-  ],
-  [
-    "A test you can trust",
-    "The preview, the test send, and the real send all run through one render path. A test to your own inbox is the same code producing the same result, so if the test looks right, the send is right.",
-  ],
-  [
-    "Yours to keep",
-    "The subscriber list, the double-opt-in consent record, the delivery history, and a permanent page for every post live in your own database — exportable and independent of any provider. The page a reader opens is the same copy that was sent.",
-  ],
-  [
-    "Cheap by construction",
-    "Kestrel is one small serverless app over a database, object storage, and a wholesale email transport. There's no server to keep alive and no charge for the size of your list — you pay for what you send, and you can host it yourself.",
-  ],
-  [
-    "Does one thing completely",
-    "Email, done properly: consent, scheduling, the review window, delivery, suppression, and the archive. No drip funnels, no multi-channel sprawl — the focus is the point.",
-  ],
-];
-async function renderStart() {
-  // The checklist needs the deployment origins; boot usually has them cached.
-  if (!appConfig) {
-    try {
-      appConfig = await api("/api/settings");
-    } catch {
-      /* fall back to location.origin in the checklist */
-    }
-  }
-  const pub = derivePublication(appConfig);
-  const deployment = appConfig?.deployment || {};
-  // Overview's rail is only an "On this page" — use the section style (.toc-sub), not
-  // the doc-list style (.toc-h, which carries the open-book "which doc" marker).
-  const rail =
-    `<div class="toc-label">On this page</div>` +
-    `<a class="toc-sub" href="#ov-how" data-target="ov-how">How Kestrel works</a>` +
-    `<a class="toc-sub" href="#ov-why" data-target="ov-why">Why Kestrel</a>` +
-    `<a class="toc-sub" href="#ov-setup" data-target="ov-setup">Set up your publication</a>`;
-  const whyHtml = WHY_KESTREL.map(
-    ([t, d]) => `<div class="why-item"><h3>${esc(t)}</h3><p>${esc(d)}</p></div>`,
-  ).join("");
-  const main = `<div class="dash room-overview" id="start">
-    <div class="dash-head"><div><h1>Welcome to Kestrel</h1><p class="muted">A newsletter you own from end to end — write in Markdown, review behind a cancelable window, send it, and keep a permanent archive.</p></div></div>
-    ${howItWorksHtml()}
-    <section class="dash-section" id="ov-why"><h2>Why Kestrel</h2><div class="why-grid">${whyHtml}</div></section>
-    <section class="dash-section" id="ov-setup">${setupChecklistHtml(pub, deployment)}</section>
-  </div>`;
-  app.innerHTML = roomShell("start", rail, main);
-  const root = document.getElementById("start");
-  wireDashActions(root, renderStart);
-
-  // "On this page" scroll-spy over the three sections (same idea as Docs/API).
-  const railEl = app.querySelector(".rail-inner");
-  const sections = ["ov-how", "ov-why", "ov-setup"]
-    .map((id) => document.getElementById(id))
-    .filter(Boolean);
-  railEl._obs = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (e.isIntersecting) {
-          for (const a of railEl.querySelectorAll("a[data-target]")) {
-            a.classList.toggle("on", a.dataset.target === e.target.id);
-          }
-        }
-      }
-    },
-    { rootMargin: "-66px 0px -72% 0px", threshold: 0 },
-  );
-  for (const s of sections) {
-    railEl._obs.observe(s);
-  }
-  railEl.addEventListener("click", (ev) => {
-    const a = ev.target.closest("a[data-target]");
-    if (!a) {
-      return;
-    }
-    ev.preventDefault();
-    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
-  });
 }
 
 function confirmUnsubscribe(sub, onDone) {
