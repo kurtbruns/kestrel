@@ -213,8 +213,8 @@ h2 {
    the full page height (it owns the background + right border), and the inner wrapper
    is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
-  flex: 0 0 260px;
-  /* Hold the 260px basis: without this a flex item's min-width:auto floor lets a
+  flex: 0 0 240px;
+  /* Hold the 240px basis: without this a flex item's min-width:auto floor lets a
      long brand name/tagline push the column wider than its basis (the ellipsis on
      .brand-name/.brand-tagline can't engage until the column itself stops growing). */
   min-width: 0;
@@ -252,7 +252,9 @@ body.nav-resizing .sidebar {
    renders its own top bar + two-column grid, so the "← Dashboard" block is exactly
    the sidebar's width and sits directly above the contents rail. */
 .room {
-  --rail: 260px;
+  /* Matches the publication sidebar's width, so the room's "← Dashboard" block and its
+     contents rail line up exactly where the sidebar was. Keep the two in step. */
+  --rail: 240px;
 }
 .room-bar {
   position: sticky;
@@ -284,6 +286,8 @@ body.nav-resizing .sidebar {
   padding: 0 16px 0 32px;
   min-width: 0;
 }
+/* The wordmark is the way into the room's home (the docs index), so it's a link — but it
+   reads as identity, not a nav item: full-strength --fg, no underline. */
 .room-brand {
   display: inline-flex;
   align-items: center;
@@ -292,6 +296,7 @@ body.nav-resizing .sidebar {
   font-weight: 600;
   font-size: 15px;
   flex: none;
+  text-decoration: none;
 }
 .room-brand svg {
   width: 18px;
@@ -371,31 +376,148 @@ body.nav-resizing .sidebar {
   min-width: 0;
   padding: 28px 32px 80px;
 }
-/* Overview: same reading measure as Docs and the API reference. */
-.room-overview {
+/* The running build (SPEC §9), quiet metadata after the tabs in the room bar — version →
+   tag, sha → commit (its links inherit this muted color; see .build-link). Deliberately not
+   tab-styled: it's an out-link to the repo, not a view-switch, so it stays muted and small
+   rather than reading as a third tab. */
+.room-build {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding-left: 4px;
+}
+
+/* The docs index (#/docs): an intro over a numbered list of every doc. Single reading
+   column, the same measure as a doc page and the API reference. */
+.docs-index {
   max-width: 720px;
 }
-/* "Why Kestrel" feature blocks. */
-.why-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 24px;
-}
-.why-item h3 {
-  font-size: 15px;
-  font-weight: 650;
-  margin: 0 0 4px;
-}
-.why-item p {
-  font-size: 14px;
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   color: var(--muted);
-  line-height: 1.55;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.docs-index > h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+.docs-index-intro {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 62ch;
+}
+/* One row per doc: a zero-padded number, the title with a → that nudges on hover, and the
+   doc's own first-paragraph blurb. Hairline rules, no cards. */
+.doc-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.doc-cards li {
   margin: 0;
 }
-@media (max-width: 720px) {
-  .why-grid {
-    grid-template-columns: 1fr;
-  }
+.doc-card {
+  display: flex;
+  gap: 18px;
+  padding: 18px 6px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--fg);
+}
+.doc-card:hover {
+  background: var(--hover);
+}
+.doc-card-n {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+}
+.doc-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.doc-card-t {
+  font-size: 16px;
+  font-weight: 650;
+}
+.doc-card-go {
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.12s ease;
+}
+.doc-card:hover .doc-card-go {
+  transform: translateX(3px);
+  color: var(--fg);
+}
+.doc-card-d {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Back-to-index link at the top of a doc page's rail, hairline under it. */
+/* Compact Previous / Next at the top-right of the reader column (a doc page) — the quick
+   sequential step, sitting above the article. Shares the article's 720px reading measure
+   (both are left-aligned children of room-main) so its right edge tracks the content's,
+   not room-main's far edge on a wide viewport. Plain muted links; the titled pager lives
+   at the article foot. */
+.doc-topnav {
+  max-width: 720px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 4px;
+}
+.doc-topnav a {
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.doc-topnav a:hover {
+  color: var(--fg);
+}
+/* External project links in the docs-index rail (getkestrel.dev, the source repo). One per
+   line, muted, brightening on hover. The 10px left padding lines their left edge up with
+   the "KESTREL" label above them (.toc-label). */
+.rail-link {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 14px;
+  padding: 5px 10px;
+}
+.rail-link:hover {
+  color: var(--fg);
+}
+/* A quiet copyright / license line at the foot of the index rail, aligned with the links. */
+.rail-legal {
+  margin: 16px 0 0;
+  padding: 0 10px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.rail-legal a {
+  color: inherit;
+  text-decoration: none;
+}
+.rail-legal a:hover {
+  color: var(--fg);
+  text-decoration: underline;
 }
 .pub-note {
   font-size: 13px;
@@ -659,25 +781,20 @@ body.nav-resizing .sidebar {
   display: block;
   flex: 0 0 auto;
 }
-.nav-tools {
-  display: flex;
-  gap: 14px;
-  padding: 0;
-}
-.nav-tools a {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
+
+/* The version → tag and sha → commit links in the build stamp take the surrounding muted
+   color and only brighten + underline on hover, so they read as metadata, not calls to
+   action. (The stamp itself lives in the room bar — see .room-build.) */
+.build-link {
+  color: inherit;
   text-decoration: none;
-  color: var(--muted);
-  font-size: 14px;
+  /* A little breathing room on each side so the version and sha aren't cramped against
+     their · separator. */
+  padding: 0 4px;
 }
-.nav-tools a:hover {
+.build-link:hover {
   color: var(--fg);
-}
-.nav-tools a[aria-current="page"] {
-  color: var(--fg);
-  font-weight: 600;
+  text-decoration: underline;
 }
 
 /* Collapse ↔ expand chevron, pushed to the right end of the footer row (opposite the
@@ -869,9 +986,6 @@ body.tool-mode .content {
     padding: 4px;
   }
   [data-nav="rail"] .powered > span {
-    display: none;
-  }
-  [data-nav="rail"] .nav-tools {
     display: none;
   }
   [data-nav="rail"] .nav-collapse {
@@ -2589,10 +2703,9 @@ textarea.is-invalid {
   text-underline-offset: 3px;
 }
 /* "On this page": the current doc's sections, a separate block below the doc list. */
+/* "On this page" is the only thing in a doc rail now, so it sits flush at the top — no
+   divider or gap above it (that separated it from the removed all-docs list). */
 .toc-onpage {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -2737,9 +2850,8 @@ textarea.is-invalid {
     opacity: 1;
   }
 }
-/* Previous / Next pager at the foot of a doc — one doc per page, so this is how you
-   move between them. Two slots; a missing neighbour keeps its side empty so the lone
-   button stays put (prev left, next right). */
+/* Previous / Next pager at the foot of a doc — the sequential path, with titles. Two
+   bordered cards; a missing neighbour keeps its side empty so the lone card stays put. */
 .doc-pager {
   display: flex;
   justify-content: space-between;
@@ -2748,8 +2860,8 @@ textarea.is-invalid {
   padding-top: 24px;
   border-top: 1px solid var(--line);
 }
-/* The `.doc a` link style (blue + underline) out-specifies a bare `.doc-pager-btn`,
-   so scope the reset to `.doc a.doc-pager-btn` to keep these bordered cards plain. */
+/* The `.doc a` link style (blue + underline) out-specifies a bare `.doc-pager-btn`, so
+   scope the reset to `.doc a.doc-pager-btn` to keep these bordered cards plain. */
 .doc a.doc-pager-btn {
   display: flex;
   flex-direction: column;
@@ -2992,11 +3104,11 @@ textarea.is-invalid {
   .api-nav {
     flex-flow: row wrap;
   }
-  /* Pager buttons stack full-width and read left-to-right on a phone. */
+  /* Pager cards stack full-width and read left-to-right on a phone. */
   .doc-pager {
     flex-direction: column;
   }
-  .doc-pager-btn {
+  .doc a.doc-pager-btn {
     max-width: none;
   }
   .doc-pager-btn.next {
@@ -3026,9 +3138,6 @@ textarea.is-invalid {
      a phone. min-width:0 lets the column shrink so the inner overflow-x / wrapping
      takes over. */
   min-width: 0;
-}
-.room-overview .dash-section {
-  scroll-margin-top: 66px;
 }
 .dash-cols {
   display: grid;
@@ -3261,57 +3370,6 @@ textarea.is-invalid {
   font: 12.5px var(--mono);
   color: var(--muted);
   word-break: break-all;
-}
-
-/* "How Kestrel works" — Write → Schedule → Send → Archive. */
-.how-steps {
-  list-style: none;
-  counter-reset: how;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-@media (max-width: 720px) {
-  .how-steps {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 460px) {
-  .how-steps {
-    grid-template-columns: 1fr;
-  }
-}
-.how-steps li {
-  counter-increment: how;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--card);
-}
-.how-steps li::before {
-  content: counter(how);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--muted);
-}
-.how-steps strong {
-  font-size: 14px;
-}
-.how-steps .muted {
-  font-size: 12.5px;
-  line-height: 1.4;
 }
 
 /* ============================================================
@@ -4515,15 +4573,15 @@ textarea.is-invalid {
    with an explicit save + a revertible baseline (Settings and the Template page).
    It slides up only while there are unsaved changes, carries Save + Discard, and
    doubles as the home for a rejected save's error (the bar stays up and says why).
-   The left offset tracks the sidebar — clearing the 260px full column or the 64px
+   The left offset tracks the sidebar — clearing the 240px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    phone drawer. The post editor keeps its own autosave + conflict model, so it does
    NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
    (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
-  /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
-  left: 260px;
+  /* Clears the full 240px sidebar; narrowed to the rail / drawer in the rules below. */
+  left: 240px;
   right: 0;
   bottom: 0;
   z-index: var(--z-bar);

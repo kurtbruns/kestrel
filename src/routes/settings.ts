@@ -15,6 +15,7 @@
  * provider credentials, the Access AUD, and the dev secret never appear here.
  */
 
+import { buildInfo } from "../build";
 import {
   type AppSettings,
   BRANDING_LOGO_KEY,
@@ -54,6 +55,9 @@ function deploymentView(cfg: Config) {
     // Booleans only — never the values.
     accessConfigured: Boolean(cfg.accessTeamDomain && cfg.accessAud),
     authMode: cfg.accessTeamDomain ? "access" : "dev",
+    // The running build (SPEC §9), so the editor can show/link it. Build metadata,
+    // resolved at build (src/build.ts) — not deploy config, and never a secret.
+    build: buildInfo(),
   };
 }
 

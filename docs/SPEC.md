@@ -266,6 +266,8 @@ Two identities meet here, kept distinct. The **sender** — the `From:` header a
 
 All of it is read and written through the same authenticated API as everything else (one door, two clients), so Claude and the editor configure the app the same way. Configuration splits along one hard line: this surface holds **preferences and never secrets**. The provider choice, its credentials, the access configuration, and the origins are deploy-time infrastructure that lives in the environment and its secrets (documented in the setup guide), never in the database and never readable or writable through the admin API — so a compromised admin session can change a preference but can never reach a credential. For orientation the surface *shows* the deploy-time configuration read-only, next to a link to the guide that explains how to change it.
 
+Every instance can also report its own **build** — the version, commit, and build time it is running — read-only through the admin surface and its API, so a bug report or support question can name the exact build a live instance is on. It is build metadata, fixed when the instance was built: neither a secret, nor deploy configuration, nor a preference, and independent of the database's schema version. Like the rest of this surface it is shown, never set.
+
 ---
 
 ## 10. What email demands

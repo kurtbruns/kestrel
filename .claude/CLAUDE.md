@@ -60,6 +60,8 @@ One Worker (`src/index.ts`): `fetch()` dispatches through a small URLPattern rou
 
 Changing what the system does, or how the admin UI presents it, means changing the governing document in the same commit: behavior and guarantees in `docs/SPEC.md`, admin-UI presentation in `docs/DESIGN.md`, and `README.md` when the change is visible to whoever runs the app. Code and its docs drifting apart is a bug. The maintainer's rule at `.claude/rules/maintainer.md` says how to write those changes (their altitude, one home per fact, self-contained rationale); it loads whenever you open one of those files.
 
+A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` entry under `[Unreleased]`, in the same commit — the same in-sync discipline. `.claude/rules/changelog.md` says which section to use and how to cut a tagged release; a non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.claude/settings.json` — the repo's only hook) reminds you when code changed without a changelog line, but it is a nudge, never a gate: it can't block a turn, and an internal-only change correctly gets no entry.
+
 ## Conventions
 
 - **TypeScript, `strict`.** Prefer real types over `any`. Run `npm run typecheck` before finishing.

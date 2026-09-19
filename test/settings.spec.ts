@@ -109,6 +109,9 @@ describe("settings surface", () => {
     expect(body.deployment.provider).toBe("fake");
     expect(typeof body.deployment.fromAddress).toBe("string");
     expect(body.deployment.accessConfigured).toBe(false);
+    // The build stamp rides the same reflection (SPEC §9): present, and no secret.
+    const build = body.deployment.build as { version?: unknown } | undefined;
+    expect(typeof build?.version).toBe("string");
     // …but never leaks a secret or credential.
     const keys = Object.keys(body.deployment);
     for (const leaked of [
