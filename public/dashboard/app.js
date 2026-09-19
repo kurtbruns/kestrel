@@ -165,10 +165,11 @@ const kestrelMark = () =>
   `<svg viewBox="0 0 360 360" aria-hidden="true"><path d="${KESTREL_PATH}"/></svg>`;
 
 // The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
-// the Kestrel mark, the surface switch, and the running build) over a two-column grid
-// whose left column — the contents rail — lines up exactly under "← Dashboard".
-// Pass railHtml = null for a surface with no contents rail (the docs index).
-function roomShell(active, railHtml, mainHtml) {
+// the Kestrel mark, the surface switch, the running build, and an optional top-right slot)
+// over a two-column grid whose left column — the contents rail — lines up exactly under
+// "← Dashboard". Pass railHtml = null for a surface with no contents rail (the docs index);
+// topNav fills the bar's top-right (a doc page passes its Prev/Next there).
+function roomShell(active, railHtml, mainHtml, topNav = "") {
   const tab = (view, label) =>
     `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
   const body =
@@ -192,6 +193,7 @@ function roomShell(active, railHtml, mainHtml) {
         <a class="room-brand" href="#/docs">${kestrelMark()}<span>Kestrel</span></a>
         <nav class="room-switch" aria-label="Reference">${tab("docs", "Docs")}${tab("reference", "API")}</nav>
         ${build}
+        ${topNav}
         <a class="room-close" href="#/dashboard" title="Back to publication" aria-label="Back to publication"><span aria-hidden="true">✕</span></a>
       </div>
     </header>
@@ -4835,7 +4837,8 @@ function renderDocsIndex(docs) {
 }
 
 // One doc, deep-linked by slug. The rail is this doc's "On this page" (scroll-spy-tracked)
-// plus a Previous/Next pager — never a list of the other docs.
+// — never a list of the other docs. Sequential Prev/Next lives in the bar's top-right
+// (compact) and at the foot of the article (with titles), not in the rail.
 function renderDocPage(docs, slug) {
   const at = docs.findIndex((d) => d.slug === slug);
   if (at === -1) {
@@ -4848,10 +4851,16 @@ function renderDocPage(docs, slug) {
   const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
+  // Compact Prev/Next in the bar's top-right — no titles (the foot pager carries those).
+  const topNav =
+    prev || next
+      ? `<nav class="room-pager" aria-label="Adjacent docs">${prev ? `<a href="#/docs/${esc(prev.slug)}">← Previous</a>` : ""}${next ? `<a href="#/docs/${esc(next.slug)}">Next →</a>` : ""}</nav>`
+      : "";
   app.innerHTML = roomShell(
     "docs",
     `<p class="muted">Loading…</p>`,
     `<article class="doc" id="docsMain"></article>`,
+    topNav,
   );
   const navEl = app.querySelector(".rail-inner");
   const mainEl = document.getElementById("docsMain");
@@ -4872,26 +4881,29 @@ function renderDocPage(docs, slug) {
     sections.push({ id, title: h2.textContent || "" });
   });
 
-  // Rail: this doc's "On this page" + a Previous/Next pager. No back-link — the "Docs" tab
-  // already returns to the index, so a "Documentation" link here would just duplicate it.
-  // Prev/Next lives in the sticky rail (not at the foot of the article) so it's always in
-  // reach without scrolling to the bottom of a long doc.
+  // Previous / Next at the foot — with titles, the sequential path through the guide.
+  const pager = document.createElement("nav");
+  pager.className = "doc-pager";
+  pager.innerHTML =
+    (prev
+      ? `<a class="doc-pager-btn prev" href="#/docs/${esc(prev.slug)}"><span class="doc-pager-dir">← Previous</span><span class="doc-pager-title">${esc(prev.title)}</span></a>`
+      : `<span></span>`) +
+    (next
+      ? `<a class="doc-pager-btn next" href="#/docs/${esc(next.slug)}"><span class="doc-pager-dir">Next →</span><span class="doc-pager-title">${esc(next.title)}</span></a>`
+      : `<span></span>`);
+  mainEl.appendChild(pager);
+
+  // Rail: this doc's "On this page" only (scroll-spy-tracked). No back-link (the "Docs" tab
+  // returns to the index) and no rail pager (Prev/Next is the top bar + the article foot).
   const onPage = sections
     .map(
       (s) =>
         `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
     )
     .join("");
-  const pagerLink = (d, dir) =>
-    `<a class="rail-pager-link" href="#/docs/${esc(d.slug)}"><span class="rail-pager-dir">${dir}</span><span class="rail-pager-title">${esc(d.title)}</span></a>`;
-  const railPager =
-    prev || next
-      ? `<nav class="rail-pager">${prev ? pagerLink(prev, "← Previous") : ""}${next ? pagerLink(next, "Next →") : ""}</nav>`
-      : "";
-  navEl.innerHTML =
-    (sections.length
-      ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${onPage}</div>`
-      : "") + railPager;
+  navEl.innerHTML = sections.length
+    ? `<div class="toc-onpage" id="tocOnPage"><div class="toc-label">On this page</div>${onPage}</div>`
+    : "";
 
   // "On this page" links smooth-scroll within the current doc and highlight at once.
   const onPageEl = document.getElementById("tocOnPage");

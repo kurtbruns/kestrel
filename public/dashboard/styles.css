@@ -469,33 +469,21 @@ body.nav-resizing .sidebar {
   line-height: 1.5;
 }
 /* Back-to-index link at the top of a doc page's rail, hairline under it. */
-/* Previous / Next docs at the foot of a doc page's rail — the sequential path, in the
-   sticky rail so it's always in reach (the "Docs" tab already returns to the index, so the
-   rail carries no separate back-link). Muted direction label over the doc title. */
-.rail-pager {
+/* Compact Previous / Next in the room bar's top-right (a doc page only) — the quick
+   sequential step, kept out of the rail. Plain muted links, brightening on hover. */
+.room-pager {
+  margin-left: auto;
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 14px;
-  margin-top: 22px;
 }
-.rail-pager-link {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.room-pager a {
+  color: var(--muted);
   text-decoration: none;
-  padding: 0 10px;
+  font-size: 14px;
+  white-space: nowrap;
 }
-.rail-pager-dir {
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-.rail-pager-title {
-  font-size: 13px;
-  color: var(--muted);
-}
-.rail-pager-link:hover .rail-pager-title {
+.room-pager a:hover {
   color: var(--fg);
 }
 /* External project links in the docs-index rail (getkestrel.dev, the source repo). One per
@@ -2711,10 +2699,9 @@ textarea.is-invalid {
   text-underline-offset: 3px;
 }
 /* "On this page": the current doc's sections, a separate block below the doc list. */
+/* "On this page" is the only thing in a doc rail now, so it sits flush at the top — no
+   divider or gap above it (that separated it from the removed all-docs list). */
 .toc-onpage {
-  margin-top: 18px;
-  padding-top: 14px;
-  border-top: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -2858,6 +2845,46 @@ textarea.is-invalid {
   .code-copy {
     opacity: 1;
   }
+}
+/* Previous / Next pager at the foot of a doc — the sequential path, with titles. Two
+   bordered cards; a missing neighbour keeps its side empty so the lone card stays put. */
+.doc-pager {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+}
+/* The `.doc a` link style (blue + underline) out-specifies a bare `.doc-pager-btn`, so
+   scope the reset to `.doc a.doc-pager-btn` to keep these bordered cards plain. */
+.doc a.doc-pager-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-width: 47%;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+.doc-pager-btn.next {
+  text-align: right;
+  align-items: flex-end;
+}
+.doc-pager-btn:hover {
+  background: var(--hover);
+  border-color: var(--muted);
+}
+.doc-pager-dir {
+  font-size: 12px;
+  color: var(--muted);
+}
+.doc-pager-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
 }
 .doc blockquote {
   margin: 16px 0;
@@ -3072,6 +3099,17 @@ textarea.is-invalid {
   }
   .api-nav {
     flex-flow: row wrap;
+  }
+  /* Pager cards stack full-width and read left-to-right on a phone. */
+  .doc-pager {
+    flex-direction: column;
+  }
+  .doc a.doc-pager-btn {
+    max-width: none;
+  }
+  .doc-pager-btn.next {
+    text-align: left;
+    align-items: flex-start;
   }
 }
 
