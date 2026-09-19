@@ -499,9 +499,9 @@ body.nav-resizing .sidebar {
    toward the bottom of the big line — so a title that wraps keeps the links up by its
    first line. Plain muted links; the titled pager lives at the article foot. */
 .doc-head {
-  /* The H1's line box: its 26px (.doc h1) at this line-height. The pager takes the same
-     height so the two centre together. */
-  --title-line: calc(26px * 1.2);
+  /* The H1's line box (its --h1-size at this line-height). The pager takes the same height
+     so the two centre together. */
+  --title-line: calc(var(--h1-size) * 1.2);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -2751,8 +2751,11 @@ textarea.is-invalid {
   color: var(--fg);
   text-transform: none;
 }
+.doc {
+  --h1-size: 26px;
+}
 .doc h1 {
-  font-size: 26px;
+  font-size: var(--h1-size);
   font-weight: 650;
   letter-spacing: -0.02em;
   margin: 0 0 10px;
@@ -3186,8 +3189,16 @@ textarea.is-invalid {
   .rail-link {
     border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 5px 10px 5px 12px;
+    min-height: 32px;
+    padding: 0 10px 0 12px;
     font-size: 13px;
+  }
+  /* inline-flex centres the chip's text in its 32px; the gap stands in for the space
+     between the label and its ↗ that flex drops. */
+  .rail-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
   }
   /* Chips take the short labels ("Project", "Source") so the row fits one line. */
   .rail-link-full {
@@ -3196,14 +3207,15 @@ textarea.is-invalid {
   .rail-link-short {
     display: inline;
   }
-  /* The title-line pager keeps just its arrows, as two targets the height of the title
-     line. */
+  /* The title-line pager keeps just its arrows, as two 44px-tall targets centred on the
+     31px title line (the overhang is hit area, not paint). */
   .doc-topnav {
     gap: 4px;
   }
   .doc .doc-topnav a {
-    width: 36px;
-    height: 100%;
+    width: 40px;
+    height: 44px;
+    margin-block: calc((var(--title-line) - 44px) / 2);
     justify-content: center;
     border-radius: 6px;
     font-size: 16px;
