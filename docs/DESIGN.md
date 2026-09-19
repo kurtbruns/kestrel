@@ -131,3 +131,15 @@ The record view's **in-flight watch** state (the same page while a send is still
 ## 6. Narrow viewports — one layout per list
 
 The admin UI gets opened on a phone — often just to check that a post went out — so every surface holds at any width, and a list never makes you scroll sideways to read its lead column. Below 720px a list table takes `.stacks`: each row collapses to its lead cell (title, subject, email) on its own line, then the rest as one muted meta line, with the row's ⋯ menu at top-right; the column headers and their sort controls drop, while search and the toolbar filters stay. It is the desktop table's own markup restyled — not a second render — so the two can't drift, and a new list opts in with the class rather than a layout of its own. (The record's per-recipient table is the one holdout: it scrolls sideways instead of stacking.)
+
+---
+
+## 7. Send surfaces — one question per view
+
+The status surfaces present SPEC §8. Each view answers one of its questions and nothing else, so the subscriber list never carries send health and the send list never carries the roster; a surface that starts answering two questions is the drift this section exists to catch.
+
+- **A scheduled send carries its actions wherever it is listed** (the dashboard, Drafts, and the editor's `scheduled` banner, §1): Cancel, Reschedule, and, only when the template has changed since the send was made, Update, as equal-weight Ghost. A send made with an older template than the current one is marked as such in every place it appears, so the mark and the action are never apart.
+- **The record view opens on what went wrong.** Bounced, complained, and unsent rows are the default view; the delivered rows are one filter away, and any address is findable. The send list's failure filter narrows without reordering: newest-first is kept and no severity ranking is implied, because a ranking would read as a judgment the record does not make.
+- **The watch is the record page in its in-flight state**, not a second page, so one page is the whole life of a send from first hand-off to settled archive. It refreshes live while the send is `sending` and eases off once the send is only settling (SPEC §12), since nothing the publisher can act on changes during settling.
+- **A sent post opens the record, never a locked editor; a sending post opens the watch.** The writing-side lists (Drafts, the editor) never offer Edit or Cancel on a post that is already going out (SPEC §8); opening one leads to the watch.
+- **Schedule and Send now are withheld until the post has a subject**, and the empty subject shows as a render warning. The editor's gate is a courtesy; the freeze is the authority (SPEC §6), so the gate never needs to be exact.
