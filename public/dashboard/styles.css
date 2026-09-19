@@ -286,6 +286,8 @@ body.nav-resizing .sidebar {
   padding: 0 16px 0 32px;
   min-width: 0;
 }
+/* The wordmark is the way into the room's home (the docs index), so it's a link — but it
+   reads as identity, not a nav item: full-strength --fg, no underline. */
 .room-brand {
   display: inline-flex;
   align-items: center;
@@ -294,6 +296,7 @@ body.nav-resizing .sidebar {
   font-weight: 600;
   font-size: 15px;
   flex: none;
+  text-decoration: none;
 }
 .room-brand svg {
   width: 18px;
@@ -364,9 +367,7 @@ body.nav-resizing .sidebar {
   top: 54px;
   max-height: calc(100vh - 54px);
   overflow-y: auto;
-  /* Extra bottom padding clears the build stamp fixed in the rail's bottom-left corner
-     (.room-buildmark), so the last contents-rail item is never hidden behind it. */
-  padding: 20px 12px 62px;
+  padding: 20px 12px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -375,56 +376,112 @@ body.nav-resizing .sidebar {
   min-width: 0;
   padding: 28px 32px 80px;
 }
-/* The running build (SPEC §9), pinned to the room's bottom-left corner — aligned to the
-   contents rail and matching its borders, so it reads as the rail's quiet footer while
-   staying put across Overview / Docs / API. In tool mode the room spans the full viewport,
-   so left:0 is the true corner. Hidden on a phone, where the rail collapses inline. */
-.room-buildmark {
-  position: fixed;
-  left: 0;
-  bottom: 0;
-  width: var(--rail);
-  box-sizing: border-box;
-  /* Version and sha at opposite ends of the rail width, one reading left, one right. */
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  /* Roomy bottom padding lifts the text clear of the browser's own bottom-left overlay
-     (Chrome's link-hover status bar / download shelf), which occasionally sits here. */
-  padding: 12px 14px 22px;
-  border-top: 1px solid var(--line);
-  border-right: 1px solid var(--line);
-  background: var(--bg);
+/* The running build (SPEC §9), quiet metadata after the tabs in the room bar — version →
+   tag, sha → commit (its links inherit this muted color; see .build-link). Deliberately not
+   tab-styled: it's an out-link to the repo, not a view-switch, so it stays muted and small
+   rather than reading as a third tab. */
+.room-build {
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   font-variant-numeric: tabular-nums;
-  z-index: var(--z-header);
+  white-space: nowrap;
+  padding-left: 4px;
 }
-/* Overview: same reading measure as Docs and the API reference. */
-.room-overview {
+
+/* The docs index (#/docs): an intro over a numbered list of every doc. Single reading
+   column, the same measure as a doc page and the API reference. */
+.docs-index {
   max-width: 720px;
 }
-/* "Why Kestrel" feature blocks. */
-.why-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 18px 24px;
-}
-.why-item h3 {
-  font-size: 15px;
-  font-weight: 650;
-  margin: 0 0 4px;
-}
-.why-item p {
-  font-size: 14px;
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
   color: var(--muted);
-  line-height: 1.55;
+  font-weight: 600;
+  margin: 0 0 10px;
+}
+.docs-index > h1 {
+  font-size: 28px;
+  line-height: 1.15;
+  margin: 0 0 12px;
+}
+.docs-index-intro {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  margin: 0 0 24px;
+  max-width: 62ch;
+}
+/* One row per doc: a zero-padded number, the title with a → that nudges on hover, and the
+   doc's own first-paragraph blurb. Hairline rules, no cards. */
+.doc-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+.doc-cards li {
   margin: 0;
 }
-@media (max-width: 720px) {
-  .why-grid {
-    grid-template-columns: 1fr;
-  }
+.doc-card {
+  display: flex;
+  gap: 18px;
+  padding: 18px 6px;
+  border-bottom: 1px solid var(--line);
+  text-decoration: none;
+  color: var(--fg);
+}
+.doc-card:hover {
+  background: var(--hover);
+}
+.doc-card-n {
+  flex: 0 0 auto;
+  min-width: 22px;
+  padding-top: 2px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--muted);
+}
+.doc-card-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.doc-card-t {
+  font-size: 16px;
+  font-weight: 650;
+}
+.doc-card-go {
+  display: inline-block;
+  color: var(--muted);
+  transition: transform 0.12s ease;
+}
+.doc-card:hover .doc-card-go {
+  transform: translateX(3px);
+  color: var(--fg);
+}
+.doc-card-d {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+/* Back-to-index link at the top of a doc page's rail, hairline under it. */
+.docs-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 13px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+.docs-back:hover {
+  color: var(--fg);
 }
 .pub-note {
   font-size: 13px;
@@ -691,7 +748,7 @@ body.nav-resizing .sidebar {
 
 /* The version → tag and sha → commit links in the build stamp take the surrounding muted
    color and only brighten + underline on hover, so they read as metadata, not calls to
-   action. (The stamp itself lives in the reference room — see .room-buildmark.) */
+   action. (The stamp itself lives in the room bar — see .room-build.) */
 .build-link {
   color: inherit;
   text-decoration: none;
@@ -3004,11 +3061,6 @@ textarea.is-invalid {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
-  /* The rail collapses inline on a phone, so there's no bottom-left corner to pin to; the
-     build is still readable at GET /api/version. */
-  .room-buildmark {
-    display: none;
-  }
   .room-main {
     padding: 20px 16px 64px;
   }
@@ -3049,9 +3101,6 @@ textarea.is-invalid {
      a phone. min-width:0 lets the column shrink so the inner overflow-x / wrapping
      takes over. */
   min-width: 0;
-}
-.room-overview .dash-section {
-  scroll-margin-top: 66px;
 }
 .dash-cols {
   display: grid;
@@ -3284,57 +3333,6 @@ textarea.is-invalid {
   font: 12.5px var(--mono);
   color: var(--muted);
   word-break: break-all;
-}
-
-/* "How Kestrel works" — Write → Schedule → Send → Archive. */
-.how-steps {
-  list-style: none;
-  counter-reset: how;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-}
-@media (max-width: 720px) {
-  .how-steps {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-@media (max-width: 460px) {
-  .how-steps {
-    grid-template-columns: 1fr;
-  }
-}
-.how-steps li {
-  counter-increment: how;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  background: var(--card);
-}
-.how-steps li::before {
-  content: counter(how);
-  width: 22px;
-  height: 22px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  font-size: 12px;
-  color: var(--muted);
-}
-.how-steps strong {
-  font-size: 14px;
-}
-.how-steps .muted {
-  font-size: 12.5px;
-  line-height: 1.4;
 }
 
 /* ============================================================
