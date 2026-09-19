@@ -17,14 +17,14 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - Markdown authoring with a single render path shared by preview, test, schedule, and send, so a clean test proves exactly what ships.
 - Scheduling behind a cancelable review window: the render is frozen and the post soft-locked when scheduled, and stays cancelable until it fires. "Send now" runs the same path after a short cancelable buffer.
 - Batched, idempotent delivery: a retry or restart never re-mails a recipient the provider already accepted.
-- A double opt-in subscriber list the app owns end to end — consent, one-click unsubscribe, and suppression from bounces and complaints via provider webhooks.
+- A double opt-in subscriber list the app owns end to end: consent, one-click unsubscribe, and suppression from bounces and complaints via provider webhooks.
 - A permanent per-post public archive (view-in-browser), self-contained on the app's own origin, with an optional archive-on-your-apex enhancement.
 - A public reader surface: landing page, archive index, and subscribe / confirm / unsubscribe.
 - An admin editor and authoring API behind Cloudflare Access (human SSO plus a service token for Claude), with a local dev token for local-only development.
-- Configurable publication identity (name, tagline, logo), email template, and confirmation-email wording, plus default test recipients — preferences only, never secrets.
+- Configurable publication identity (name, tagline, logo), email template, and confirmation-email wording, plus default test recipients. Preferences only, never secrets.
 - A swappable email-provider seam with a fake in-memory transport for local dev and tests, alongside SES and Resend adapters.
 - An in-app reference room: the setup guide and the API reference, served read-only inside the editor.
-- A build-version stamp: every instance reports its version, commit, and build time — read-only in the editor and at `GET /api/version`.
+- A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
 [Unreleased]: https://github.com/kurtbruns/kestrel/compare/v0.1.0...HEAD

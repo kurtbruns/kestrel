@@ -240,7 +240,7 @@ body.tool-mode .sidebar {
   display: none;
 }
 /* While the window is being resized, kill the sidebar's own transitions so crossing a
-   breakpoint (e.g. rail → phone drawer) snaps instead of animating the slide — app.js
+   breakpoint (e.g. rail → mobile drawer) snaps instead of animating the slide — app.js
    adds this class during a resize and drops it once it settles. The drawer's open/close
    animation is unaffected because that never happens mid-resize. */
 body.nav-resizing .sidebar {
@@ -250,7 +250,7 @@ body.nav-resizing .sidebar {
 /* Reference room: the "learn / set up / integrate" area (Docs · API).
    In tool mode the publication sidebar is hidden and #app goes full-width; the room
    renders its own top bar + two-column grid, so the "← Dashboard" block is exactly
-   the sidebar's width and sits directly above the contents rail. On a phone the whole
+   the sidebar's width and sits directly above the contents rail. On mobile the whole
    thing collapses to one bar row over a stacked body — see the ≤720px block below. */
 .room {
   /* Matches the publication sidebar's width, so the room's "← Dashboard" block and its
@@ -397,7 +397,7 @@ body.nav-resizing .sidebar {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-/* The same stamp as the room's foot — phone only, where the rail isn't a column any more
+/* The same stamp as the room's foot — mobile only, where the rail isn't a column any more
    (roomShell renders both from one source; the ≤720px block swaps which one shows). */
 .room-foot {
   display: none;
@@ -547,7 +547,7 @@ body.nav-resizing .sidebar {
 .rail-link:hover {
   color: var(--fg);
 }
-/* The short label is for the phone chip row only. */
+/* The short label is for the mobile chip row only. */
 .rail-link-short {
   display: none;
 }
@@ -829,8 +829,8 @@ body.nav-resizing .sidebar {
 }
 
 /* Collapse ↔ expand chevron, pushed to the right end of the footer row (opposite the
-   Kestrel mark). Icon-only; overrides the base button chrome. Hidden on phones (the
-   overlay is always full) — see the phone block. */
+   Kestrel mark). Icon-only; overrides the base button chrome. Hidden on mobile (the
+   overlay is always full) — see the mobile block. */
 .nav-collapse {
   margin-left: auto;
   flex: 0 0 auto;
@@ -893,7 +893,7 @@ body.tool-mode .content {
    default across the tablet range and small desktops; the nav keeps its one-click
    reach, labels move to hover/focus tooltips, and the secondary chrome (brand text,
    account, tool footer) folds down to its marks. The whole block is gated at ≥540 so a
-   stray data-nav can never fight the phone drawer (<540) mid-resize — below that the
+   stray data-nav can never fight the mobile drawer (<540) mid-resize — below that the
    overlay rules take over. --- */
 @media (min-width: 540px) {
   [data-nav="rail"] .sidebar {
@@ -1027,7 +1027,7 @@ body.tool-mode .content {
   }
 }
 
-/* Phones (<540px): the icon rail gives way — the sidebar leaves the flow and becomes
+/* Mobile (<540px): the icon rail gives way — the sidebar leaves the flow and becomes
    an off-canvas drawer opened by the hamburger, carrying the full brand + labels. */
 @media (max-width: 539px) {
   /* The publication sidebar becomes an off-canvas drawer opened by the hamburger
@@ -3077,7 +3077,7 @@ textarea.is-invalid {
   padding: 10px 12px;
   font: 12.5px / 1.5 var(--mono);
 }
-/* Reference room on a phone. The bar stays ONE row at --bar-h, the same as on desktop, so
+/* Reference room on mobile. The bar stays ONE row at --bar-h, the same as on desktop, so
    the in-page anchors (scroll-margin-top) and the scroll-spy line keep clearing it: the back
    link is a --bar-h square holding its arrow, the wordmark and the two tabs follow, and the
    ✕ drops (← is the way back). The body stacks, rail over content, and each rail takes the
@@ -3129,7 +3129,7 @@ textarea.is-invalid {
   }
   /* "On this page" as a real fold: the summary is the one row you see (label + chevron,
      a 44px target), the section list opens under it. renderDocPage leaves it closed on
-     a phone and closes it again after a pick. */
+     mobile and closes it again after a pick. */
   .toc-onpage > summary {
     pointer-events: auto;
     cursor: pointer;
@@ -3214,7 +3214,7 @@ textarea.is-invalid {
   .doc-topnav-word {
     display: none;
   }
-  /* Pager cards stack full-width and read left-to-right on a phone. */
+  /* Pager cards stack full-width and read left-to-right on mobile. */
   .doc-pager {
     flex-direction: column;
   }
@@ -3245,7 +3245,7 @@ textarea.is-invalid {
   margin: 0 0 22px;
   /* A grid item defaults to min-width:auto, which refuses to shrink below its
      content — that let the pub cards' URLs and the tables push the page wider than
-     a phone. min-width:0 lets the column shrink so the inner overflow-x / wrapping
+     a mobile screen. min-width:0 lets the column shrink so the inner overflow-x / wrapping
      takes over. */
   min-width: 0;
 }
@@ -4685,7 +4685,7 @@ textarea.is-invalid {
    doubles as the home for a rejected save's error (the bar stays up and says why).
    The left offset tracks the sidebar — clearing the 240px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
-   phone drawer. The post editor keeps its own autosave + conflict model, so it does
+   mobile drawer. The post editor keeps its own autosave + conflict model, so it does
    NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
    (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
@@ -4762,7 +4762,7 @@ body.has-savebar .content {
   .savebar {
     left: 0;
   }
-  /* Stack on phones: the message on its own row, the actions right-aligned below,
+  /* Stack on mobile: the message on its own row, the actions right-aligned below,
      rather than cramming a message and two buttons onto one narrow line. */
   .savebar-inner {
     padding: 0 16px;
@@ -4824,13 +4824,13 @@ body.has-savebar .content {
   }
 }
 
-/* Phones and the icon-rail range (≤720px): a list table can't fit its fixed columns
+/* Mobile and the icon-rail range (≤720px): a list table can't fit its fixed columns
    (Sent wants 428px, Drafts 480px; the rail leaves 412px at 540px), so a `.stacks` table
    turns each row into a stacked entry — the lead cell (title / subject / email) on its own
    line, then the rest as one muted meta line, then any delivery-failure note — on the same markup:
    the cells are named and the labels are ::before/::after content, so the desktop table
-   and the phone list are one render. Headers go, and the sort buttons with them; the
-   default order is what a phone wants. A row's ⋯ menu pins to its top-right corner. */
+   and the mobile list are one render. Headers go, and the sort buttons with them; the
+   default order is what a mobile screen wants. A row's ⋯ menu pins to its top-right corner. */
 @media (max-width: 720px) {
   .list-table.stacks,
   .list-table.stacks tbody,

@@ -116,9 +116,9 @@ navCollapse?.addEventListener("click", () => {
   applyNavMode();
 });
 // Track the responsive default as the window resizes (rAF-coalesced). A session
-// override still wins at 540 and up; below it, the phone overlay takes over. The
+// override still wins at 540 and up; below it, the mobile overlay takes over. The
 // nav-resizing class suppresses the sidebar's own transitions for the duration, so a
-// breakpoint cross (rail → phone drawer) snaps instead of animating a stray slide.
+// breakpoint cross (rail → mobile drawer) snaps instead of animating a stray slide.
 let navResizeRaf = 0;
 let navResizeSettle = 0;
 window.addEventListener("resize", () => {
@@ -169,17 +169,17 @@ const kestrelMark = () =>
 // contents rail — lines up exactly under "← Dashboard". Pass railHtml = null for a
 // surface with no contents rail.
 //
-// On a phone (≤720px, styles.css) the same markup collapses to one --bar-h row — a square
+// On mobile (≤720px, styles.css) the same markup collapses to one --bar-h row — a square
 // back arrow, the mark, the tabs — so the bar never grows past the height the in-page
 // anchors and the sticky rail are calibrated for; the ✕ drops there (← is the one way
-// back). The body stacks, and each rail decides its own phone shape (a folded "On this
+// back). The body stacks, and each rail decides its own mobile shape (a folded "On this
 // page", or a chip row — see the surfaces below).
 function roomShell(active, railHtml, mainHtml) {
   const tab = (view, label) =>
     `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
   // The running build (SPEC §9) as quiet metadata — version → release, sha → commit —
   // pinned to the rail's bottom-left corner on every surface, so the bar stays identity +
-  // nav. On a phone the rail is no longer a column, so the same stamp is the room's foot
+  // nav. On mobile the rail is no longer a column, so the same stamp is the room's foot
   // instead (styles.css shows one or the other). "" until a build is known; the build time
   // rides the tooltip. Build info lives in the app's own room (and at GET /api/version),
   // never in the publisher-facing dashboard.
@@ -304,7 +304,7 @@ function renderSidebarBrand() {
 // tagged release), sha → its commit, both on the repo and never getkestrel.dev. Each
 // degrades to plain text (no dead link) when there's no repo, the build isn't a release, or
 // the sha is "dev" (a local build). null until a build is known. Build metadata is quiet,
-// secondary info: roomShell pins it to the rail's bottom-left corner (and, on a phone, sets
+// secondary info: roomShell pins it to the rail's bottom-left corner (and, on mobile, sets
 // it as the room's foot); it's also at GET /api/version, where a bug report is filed. Never
 // in the publisher-facing dashboard.
 function buildRefParts() {
@@ -4844,11 +4844,11 @@ function renderDocsIndex(docs) {
     `<ol class="doc-cards">${cards}</ol>` +
     `</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
-  // label + tiers, so a phone can give both the same chip row. getkestrel.dev is the
+  // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
   // license links are the deploy's own repo (package.json → build stamp), so they're
   // absent when no repo is known.
-  // Each link carries a short form for the phone chip row (styles.css swaps which span
+  // Each link carries a short form for the mobile chip row (styles.css swaps which span
   // shows); the full label stays the accessible name at every width.
   const repoUrl = appConfig?.deployment?.build?.repoUrl || "";
   const out = (href, label, short = label) =>
@@ -4869,24 +4869,24 @@ function renderDocsIndex(docs) {
 // — never a list of the other docs. Sequential Prev/Next sits on the title line (compact)
 // and at the foot of the article (with titles), not in the rail.
 //
-// The rail folds on a phone: "On this page" is a <details> that is open on desktop (where
-// the summary is inert — it just looks like the label) and closed on a phone, where it is
+// The rail folds on mobile: "On this page" is a <details> that is open on desktop (where
+// the summary is inert — it just looks like the label) and closed on mobile, where it is
 // one tappable row above the article and closes again once a section is picked. The state
 // follows the layout, not the width at render time: crossing 720px (a rotation, a resized
 // window) re-opens it on desktop — where nothing else could, the summary being inert —
 // and takes the summary out of the tab order there, so a keyboard user can't collapse a
 // list no pointer can reopen. One listener for the app's lifetime; it finds the fold that
 // is in the DOM, if any.
-const phoneMq = matchMedia("(max-width: 720px)");
+const mobileMq = matchMedia("(max-width: 720px)");
 function syncFold(fold) {
   if (!fold) {
     return;
   }
-  const phone = phoneMq.matches;
-  fold.open = !phone;
-  fold.querySelector("summary").tabIndex = phone ? 0 : -1;
+  const mobile = mobileMq.matches;
+  fold.open = !mobile;
+  fold.querySelector("summary").tabIndex = mobile ? 0 : -1;
 }
-phoneMq.addEventListener("change", () => syncFold(document.getElementById("tocOnPage")));
+mobileMq.addEventListener("change", () => syncFold(document.getElementById("tocOnPage")));
 function renderDocPage(docs, slug) {
   const at = docs.findIndex((d) => d.slug === slug);
   if (at === -1) {
@@ -4900,7 +4900,7 @@ function renderDocPage(docs, slug) {
   const prev = docs[at - 1];
   const next = docs[at + 1];
   // Compact Prev/Next on the title line, right of the H1 — no titles (the foot pager
-  // carries those; each link's aria-label names its target). On a phone the words drop
+  // carries those; each link's aria-label names its target). On mobile the words drop
   // and the arrows alone remain, so the row still fits beside a wrapping title.
   const topLink = (doc, dir) =>
     `<a href="#/docs/${esc(doc.slug)}" aria-label="${esc(`${dir}: ${doc.title}`)}">` +
@@ -4965,7 +4965,7 @@ function renderDocPage(docs, slug) {
 
   // Rail: this doc's "On this page" only (scroll-spy-tracked). No back-link (the "Docs" tab
   // returns to the index) and no rail pager (Prev/Next is the title line + the article
-  // foot). A <details>, open unless this is a phone (the header comment says why).
+  // foot). A <details>, open unless this is mobile (the header comment says why).
   const onPage = sections
     .map(
       (s) =>
@@ -4976,11 +4976,11 @@ function renderDocPage(docs, slug) {
     ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
 
-  // "On this page" links smooth-scroll within the current doc and highlight at once. On a
-  // phone the fold closes first, so the page height above the target is settled before
+  // "On this page" links smooth-scroll within the current doc and highlight at once. On
+  // mobile the fold closes first, so the page height above the target is settled before
   // the scroll is measured.
   const onPageEl = document.getElementById("tocOnPage");
-  syncFold(onPageEl); // open + inert on desktop, closed + tappable on a phone (before paint)
+  syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
   const markActive = (id) => {
     if (!onPageEl) {
       return;
@@ -4996,7 +4996,7 @@ function renderDocPage(docs, slug) {
     }
     ev.preventDefault();
     markActive(a.dataset.target);
-    if (onPageEl && phoneMq.matches) {
+    if (onPageEl && mobileMq.matches) {
       onPageEl.open = false;
     }
     document
