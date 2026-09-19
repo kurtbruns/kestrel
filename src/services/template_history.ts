@@ -17,13 +17,21 @@ import {
   type TemplateRevisionRow,
 } from "../db/template_revisions";
 import { newId } from "../lib/ids";
+import { unwrap } from "../lib/unwrap";
 import { DEFAULT_EMAIL_TEMPLATE } from "../render/template_engine";
+
+/** The id of the first-use record. Fixed, not random, so two isolates recording it
+ *  at once collide on the primary key instead of writing two "revision ones": the
+ *  loser's batch fails whole (the row and the pointer land together or not at all)
+ *  and it reads the winner's row back. */
+export const INITIAL_TEMPLATE_REVISION_ID = "initial";
 
 /**
  * The current template revision, recording it first if the history is empty. A fresh
  * install has a template (the built-in default) with no revision behind it; the first
  * call writes that template, as it stands, as revision one and points settings at it,
- * so every send pins a revision that exists. Idempotent: every later call is two reads.
+ * so every send pins a revision that exists. Idempotent: every later call is two reads,
+ * and two first calls at once still record one row.
  */
 export async function currentTemplateRevision(db: D1Database): Promise<TemplateRevisionRow> {
   const settings = await getSettings(db);
@@ -37,7 +45,21 @@ export async function currentTemplateRevision(db: D1Database): Promise<TemplateR
   // template and a later change to the built-in must not silently move this one.
   // (Settings keeps mirroring the html from here on, so "" never recurs.)
   const html = settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE;
-  return writeRevision(db, settings, html, null);
+  try {
+    return await writeRevision(db, settings, html, null, INITIAL_TEMPLATE_REVISION_ID);
+  } catch (err) {
+    if (!isDuplicateRevision(err)) {
+      throw err;
+    }
+    // Lost the race: the other isolate's batch committed the row and the pointer.
+    return unwrap(await getTemplateRevision(db, INITIAL_TEMPLATE_REVISION_ID), "template revision");
+  }
+}
+
+/** True for the SQLite primary-key violation on `template_revisions`. */
+function isDuplicateRevision(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return /UNIQUE constraint failed:\s*template_revisions\.id/i.test(message);
 }
 
 /** The outcome of a template save: the revision now current, and whether this save
@@ -92,8 +114,9 @@ async function writeRevision(
   settings: AppSettings,
   html: string,
   author: string | null,
+  id = newId(),
 ): Promise<TemplateRevisionRow> {
-  const row: TemplateRevisionRow = { id: newId(), html, saved_at: Date.now(), author };
+  const row: TemplateRevisionRow = { id, html, saved_at: Date.now(), author };
   const next = { ...settings, emailTemplate: html, emailTemplateRevision: row.id };
   await db.batch([insertTemplateRevisionStmt(db, row), persistSettingsStmt(db, next)]);
   return row;

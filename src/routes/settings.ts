@@ -34,9 +34,14 @@ import {
   setPublicationLogo,
   updateSettings,
 } from "../db/settings";
-import { listTemplateRevisions, templateRevisionRef } from "../db/template_revisions";
+import {
+  getTemplateRevision,
+  listTemplateRevisions,
+  templateRevisionRef,
+} from "../db/template_revisions";
 import type { Config } from "../env";
 import { badRequest, json, notFound } from "../lib/errors";
+import { unwrap } from "../lib/unwrap";
 import { DEFAULT_EMAIL_TEMPLATE, validateEmailTemplate } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -145,31 +150,31 @@ export async function update(c: RequestContext): Promise<Response> {
     }
     warnings = v.warnings;
   }
+  // The preferences first: their validation throws before anything is written, so an
+  // invalid field never leaves a template revision behind. Only this call maps a plain
+  // Error to a 400 (a bad address, too many recipients); a database failure below
+  // stays a 500.
+  let settings: AppSettings;
   try {
-    // The preferences first: their validation throws before anything is written, so
-    // an invalid field never leaves a template revision behind.
-    let settings = await updateSettings(c.env.DB, patch);
-    let template = templateRevisionRef(await currentTemplateRevision(c.env.DB));
-    if (emailTemplate === undefined) {
-      return json({ settings: settingsView(settings, c.config), template, warnings });
-    }
-    // A template save writes a revision and reports the scheduled sends it does NOT
-    // change (SPEC §9): each keeps the revision it was made with until updated.
-    const saved = await saveTemplate(c.env.DB, emailTemplate, author(c));
-    settings = await getSettings(c.env.DB);
-    template = templateRevisionRef(saved.revision);
-    const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
-    return json({
-      settings: settingsView(settings, c.config),
-      template,
-      warnings,
-      scheduled_posts_kept,
-    });
+    settings = await updateSettings(c.env.DB, patch);
   } catch (e) {
-    // updateSettings / saveTemplate throw plain Errors for invalid input (a bad
-    // address, too many recipients, an oversized template).
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
+  if (emailTemplate === undefined) {
+    const template = templateRevisionRef(await currentTemplateRevision(c.env.DB));
+    return json({ settings: settingsView(settings, c.config), template, warnings });
+  }
+  // A template save writes a revision and reports the scheduled sends it does NOT
+  // change (SPEC §9): each keeps the revision it was made with until updated.
+  const saved = await saveTemplate(c.env.DB, emailTemplate, author(c));
+  settings = await getSettings(c.env.DB);
+  const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
+  return json({
+    settings: settingsView(settings, c.config),
+    template: templateRevisionRef(saved.revision),
+    warnings,
+    scheduled_posts_kept,
+  });
 }
 
 /** The template's history, newest first, each marked whether it is the current one. */
@@ -189,20 +194,31 @@ export async function listRevisions(c: RequestContext): Promise<Response> {
 
 /**
  * Restore a past revision (SPEC §9): a new revision equal to it becomes current; the
- * history is never rewritten. Like a save, it reports the scheduled sends it leaves on
- * the revision they had.
+ * history is never rewritten. A restore is a save, so it passes the same structural
+ * validation: a revision that no longer meets today's rules (the rules can tighten
+ * between the save and the restore) is refused, never made current — otherwise the
+ * render path would fall back to the built-in default while every new send pinned the
+ * restored revision's id. Like a save, it reports the scheduled sends it leaves on the
+ * revision they had, and returns the revision's advisory warnings.
  */
 export async function restoreRevision(c: RequestContext): Promise<Response> {
-  const saved = await restoreTemplateRevision(c.env.DB, param(c, "id"), author(c));
-  if (!saved) {
+  const id = param(c, "id");
+  const old = await getTemplateRevision(c.env.DB, id);
+  if (!old) {
     throw notFound("template revision");
   }
+  const v = validateEmailTemplate(old.html);
+  if (v.errors.length > 0) {
+    throw badRequest(`this revision can no longer be restored as it is: ${v.errors.join(" ")}`);
+  }
+  const saved = unwrap(await restoreTemplateRevision(c.env.DB, id, author(c)), "template revision");
   const settings = await getSettings(c.env.DB);
   const scheduled_posts_kept = await scheduledSendsNotOn(c.env.DB, saved.revision.id);
   return json({
     settings: settingsView(settings, c.config),
     template: templateRevisionRef(saved.revision),
-    restored_from: param(c, "id"),
+    restored_from: id,
+    warnings: v.warnings,
     scheduled_posts_kept,
   });
 }

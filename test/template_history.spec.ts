@@ -2,8 +2,13 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { getSettings } from "../src/db/settings";
-import { getTemplateRevision, listTemplateRevisions } from "../src/db/template_revisions";
+import {
+  getTemplateRevision,
+  insertTemplateRevisionStmt,
+  listTemplateRevisions,
+} from "../src/db/template_revisions";
 import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
+import { currentTemplateRevision } from "../src/services/template_history";
 import { adminAuth } from "./support/auth";
 
 // One template, with history, pinned per send (SPEC §2, §6, §8, §9): every save writes a
@@ -81,6 +86,21 @@ describe("the template has a history", () => {
     // A second read records nothing more.
     expect((await getTemplate()).revision).toBe(template.revision);
     expect(await listTemplateRevisions(env.DB)).toHaveLength(1);
+  });
+
+  it("two first uses at once record one revision, not two", async () => {
+    // A fresh database (this file's first test recorded revision one; take it back out).
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM template_revisions"),
+      env.DB.prepare("DELETE FROM settings"),
+    ]);
+    const [a, b] = await Promise.all([
+      currentTemplateRevision(env.DB),
+      currentTemplateRevision(env.DB),
+    ]);
+    expect(a.id).toBe(b.id);
+    expect(await listTemplateRevisions(env.DB)).toHaveLength(1);
+    expect((await getSettings(env.DB)).emailTemplateRevision).toBe(a.id);
   });
 
   it("a save writes a template revision and makes it current", async () => {
@@ -450,6 +470,26 @@ describe("restoring a past revision", () => {
         template_revision: two.template.revision,
       },
     ]);
+  });
+
+  it("refuses to restore a revision that no longer passes validation (400), leaving the current one", async () => {
+    // A revision saved under looser rules than today's: inserted directly, since a save
+    // through the API could never have written it.
+    const stale = {
+      id: "stale-rev",
+      html: "<div>{{ post.body }}</div>",
+      saved_at: 1,
+      author: null,
+    };
+    await insertTemplateRevisionStmt(env.DB, stale).run();
+    const before = await getTemplate();
+    const res = await SELF.fetch(`${base}/api/settings/template/revisions/${stale.id}/restore`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).message).toMatch(/unsubscribe/i);
+    expect((await getTemplate()).revision).toBe(before.revision);
   });
 
   it("404s an unknown revision", async () => {

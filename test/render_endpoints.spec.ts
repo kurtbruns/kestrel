@@ -1,4 +1,5 @@
 import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { adminAuth } from "./support/auth";
 
@@ -141,6 +142,37 @@ describe("preview + test endpoints", () => {
       await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
     );
     expect(info.frozen).toBe(true);
+  });
+
+  it("POST /test on a post whose send is in flight still sends the frozen copy", async () => {
+    await putTemplate(tpl("firing-look"));
+    const id = await draftWithImage("Firing Test");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 30 * 60 * 1000).toISOString() }),
+      }),
+    );
+    await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?")
+      .bind(scheduled.send.id)
+      .run();
+    await putTemplate(tpl("later-look"));
+    const to = `firing-${id}@example.com`;
+    const body = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      }),
+    );
+    expect(body.frozen).toBe(true);
+    expect(body.send_id).toBe(scheduled.send.id);
+    const msg = await outboxFor(to);
+    expect(msg.html).toContain('class="firing-look"');
+    expect(msg.html).not.toContain('class="later-look"');
+    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    expect(page).toContain('class="firing-look"');
   });
 
   it("POST /test on a draft sends the live render: the current template", async () => {

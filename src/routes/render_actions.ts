@@ -53,15 +53,16 @@ async function loadBranding(c: RequestContext): Promise<EmailBranding> {
 }
 
 /** The email a post's publisher-facing instruments show or send (SPEC §5): once the
- *  post is scheduled, the send's frozen copy, exactly what will fire; before that, a
- *  live render of the current draft through the one render path (I5). One reader for
- *  the preview page, the preview action, and the post test, so the three instruments
- *  can never disagree about what is going out. */
+ *  post is scheduled, the active send's frozen copy — exactly what will fire, or is
+ *  firing (a send in flight is still the frozen copy readers are receiving); before
+ *  that, a live render of the current draft through the one render path (I5). One
+ *  reader for the preview page, the preview action, and the post test, so the three
+ *  instruments can never disagree about what is going out. */
 interface PostEmail {
   input: RenderInput;
   email: RenderedEmail;
   warnings: string[];
-  /** The scheduled send whose frozen copy this is; null for a draft's live render. */
+  /** The active send whose frozen copy this is; null for a draft's live render. */
   frozen: { id: string } | null;
 }
 
@@ -69,7 +70,7 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
   const input = await loadRenderInput(c);
   const active =
     input.post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, input.post.id) : null;
-  if (active?.status === "scheduled") {
+  if (active) {
     return {
       input,
       email: { subject: active.subject, html: active.rendered_html, text: active.rendered_text },

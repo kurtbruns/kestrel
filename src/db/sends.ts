@@ -537,7 +537,6 @@ export async function countDeliveriesFiltered(
 
 // --- send-loop / sweep (M6) -------------------------------------------------
 
-/** Scheduled sends whose fire time has arrived. */
 /** One scheduled send that keeps a template revision other than the current one, as
  *  the template save reports it (SPEC §9). */
 export interface SendKept {
@@ -628,6 +627,7 @@ export async function refreezeSend(
   return (res.meta.changes ?? 0) > 0;
 }
 
+/** Scheduled sends whose fire time has arrived. */
 export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> {
   const { results } = await db
     .prepare("SELECT * FROM sends WHERE status = 'scheduled' AND fire_at <= ? ORDER BY fire_at ASC")
