@@ -80,8 +80,8 @@ export interface AppSettings {
   emailTemplate: string;
   /**
    * The id of the current template revision (`template_revisions.id`), the one
-   * `emailTemplate` mirrors. Null until the first template save or the first-run
-   * backfill that records the template as it stands (services/template_history.ts).
+   * `emailTemplate` mirrors. Null on a fresh install until the first template save, or
+   * the first use that records the initial template (services/template_history.ts).
    */
   emailTemplateRevision: string | null;
   /** Editable wording of the double opt-in confirmation email (SPEC §7). */

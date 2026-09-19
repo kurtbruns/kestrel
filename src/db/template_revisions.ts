@@ -12,7 +12,7 @@ export interface TemplateRevisionRow {
   id: string;
   html: string;
   saved_at: number;
-  /** Principal that saved it; null for the app's own writes (the first-run backfill). */
+  /** Principal that saved it; null for the app's own first-use record. */
   author: string | null;
 }
 

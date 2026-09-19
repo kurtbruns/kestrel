@@ -134,9 +134,9 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // with, and whether they differ — the dialog and the API read the same three facts,
   // so neither has to derive the choice.
   const { facts } = await postTemplateFacts(c.env.DB, post.id);
-  // The revision the active send was made with; null when it predates the history.
+  // The revision the active send was made with.
   const scheduledTemplate =
-    active?.status === "scheduled" && active.template_revision
+    active?.status === "scheduled"
       ? await getTemplateRevision(c.env.DB, active.template_revision)
       : null;
   return json(

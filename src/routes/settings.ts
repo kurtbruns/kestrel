@@ -108,8 +108,8 @@ function author(c: RequestContext): string | null {
 }
 
 export async function get(c: RequestContext): Promise<Response> {
-  // Reading the current revision records the template as revision one on a database
-  // from before the history existed, so the surface always has a revision to show.
+  // Reading the current revision records the initial template as revision one on a
+  // fresh install, so the surface always has a revision to show.
   const template = templateRevisionRef(await currentTemplateRevision(c.env.DB));
   const settings = await getSettings(c.env.DB);
   return json({

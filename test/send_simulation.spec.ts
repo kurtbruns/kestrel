@@ -4,6 +4,7 @@ import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { drainSimulatedWebhooks, SimProvider, simulationActive } from "../src/providers/simulate";
 import type { RenderedEmail } from "../src/providers/types";
+import { currentTemplateRevision } from "../src/services/template_history";
 
 // #156/#163: the dev-only seeded send simulation behind the provider seam. The valuable,
 // honest surface to test is the delayed-webhook drain — it runs through the REAL ingest
@@ -37,10 +38,11 @@ async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<v
   )
     .bind(`p-${sendId}`, `slug-${sendId}`, now, now)
     .run();
+  const tpl = (await currentTemplateRevision(env.DB)).id; // every send pins a revision
   await env.DB.prepare(
-    "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at, started_at) VALUES (?, ?, 'sending', ?, '', '', '', ?, ?, ?)",
+    "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, template_revision, scheduled_at, started_at) VALUES (?, ?, 'sending', ?, '', '', '', ?, ?, ?, ?)",
   )
-    .bind(sendId, `p-${sendId}`, now, n, now, now)
+    .bind(sendId, `p-${sendId}`, now, n, tpl, now, now)
     .run();
   for (let i = 0; i < n; i++) {
     const email = `sim${i}@example.com`;

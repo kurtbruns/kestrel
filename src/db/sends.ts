@@ -14,9 +14,8 @@ export interface SendRow {
   rendered_text: string;
   subject: string;
   recipient_count: number;
-  /** The template revision the render was frozen with (SPEC §9). Null only for a send
-   *  made before the template had a history; see migrations/0002. */
-  template_revision: string | null;
+  /** The template revision the render was frozen with (SPEC §9). */
+  template_revision: string;
   locked_until: number | null;
   scheduled_at: number;
   started_at: number | null;
@@ -545,13 +544,11 @@ export interface SendKept {
   post_id: string;
   send_id: string;
   fire_at: number;
-  template_revision: string | null;
+  template_revision: string;
 }
 
 /** The scheduled sends NOT made with `currentRevision` — the ones a template save leaves
- *  on the revision they had, soonest first. A send with no recorded revision (from
- *  before the history existed) counts as kept: its template is unknown, so it is
- *  reported rather than assumed current. */
+ *  on the revision they had, soonest first. */
 export async function scheduledSendsNotOn(
   db: D1Database,
   currentRevision: string,
@@ -560,7 +557,7 @@ export async function scheduledSendsNotOn(
     .prepare(
       `SELECT post_id, id AS send_id, fire_at, template_revision
          FROM sends
-         WHERE status = 'scheduled' AND (template_revision IS NULL OR template_revision <> ?)
+         WHERE status = 'scheduled' AND template_revision <> ?
          ORDER BY fire_at ASC, id ASC`,
     )
     .bind(currentRevision)

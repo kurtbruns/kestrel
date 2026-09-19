@@ -20,11 +20,10 @@ import { newId } from "../lib/ids";
 import { DEFAULT_EMAIL_TEMPLATE } from "../render/template_engine";
 
 /**
- * The current template revision, recording it first if the history is empty. A
- * database from before the history existed holds a template (or the built-in default)
- * with no revision behind it; the first call writes that template, as it stands, as
- * revision one and points settings at it, so no send is ever made from an unrecorded
- * template. Idempotent: every later call is two reads.
+ * The current template revision, recording it first if the history is empty. A fresh
+ * install has a template (the built-in default) with no revision behind it; the first
+ * call writes that template, as it stands, as revision one and points settings at it,
+ * so every send pins a revision that exists. Idempotent: every later call is two reads.
  */
 export async function currentTemplateRevision(db: D1Database): Promise<TemplateRevisionRow> {
   const settings = await getSettings(db);
@@ -36,6 +35,7 @@ export async function currentTemplateRevision(db: D1Database): Promise<TemplateR
   }
   // "" means the built-in default; record its bytes, since a revision is a concrete
   // template and a later change to the built-in must not silently move this one.
+  // (Settings keeps mirroring the html from here on, so "" never recurs.)
   const html = settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE;
   return writeRevision(db, settings, html, null);
 }

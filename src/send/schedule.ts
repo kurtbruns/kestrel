@@ -38,11 +38,9 @@ import { currentTemplateRevision } from "../services/template_history";
 
 /**
  * The template facts about a post (SPEC §6, §9): the current revision, the revision
- * the post was last made with, and whether the two differ — the one condition under
- * which making the post again needs a choice. `last_made_with` is the post's most
- * recent send's revision; a send from before the history existed recorded none, so a
- * post whose only sends are unrecorded reads as never made (there is no "the one it
- * had" to name).
+ * the post was last made with (that of its most recent send; null for a post never
+ * scheduled), and whether the two differ — the one condition under which making the
+ * post again needs a choice.
  */
 export interface PostTemplateFacts {
   current: TemplateRevisionRef;
@@ -50,7 +48,7 @@ export interface PostTemplateFacts {
   changed_since_last_made: boolean;
 }
 
-/** Read the template facts for a post, recording the current template if the history
+/** Read the template facts for a post, recording the initial template if the history
  *  is empty (see `currentTemplateRevision`). */
 export async function postTemplateFacts(
   db: D1Database,
@@ -62,9 +60,7 @@ export async function postTemplateFacts(
 }> {
   const current = await currentTemplateRevision(db);
   const latest = await latestSendForPost(db, postId);
-  const last = latest?.template_revision
-    ? await getTemplateRevision(db, latest.template_revision)
-    : null;
+  const last = latest ? await getTemplateRevision(db, latest.template_revision) : null;
   const lastRef = last ? templateRevisionRef(last) : null;
   return {
     current,

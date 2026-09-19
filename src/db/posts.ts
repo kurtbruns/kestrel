@@ -48,7 +48,8 @@ export interface PostListRow extends PostRow {
   active_send_id: string | null;
   active_send_status: "scheduled" | "sending" | null;
   /** The template revision the active send was made with (SPEC §9), so a list can mark
-   *  a scheduled post whose send keeps an older template than the current one. */
+   *  a scheduled post whose send keeps an older template than the current one. Null
+   *  only when there is no active send. */
   active_send_template_revision: string | null;
   /** The current revision's author ("Claude" surfaces as `service`; SPEC §4). Lets the
    *  dashboard tell whether the agent has edited here without a per-post revision fetch. */

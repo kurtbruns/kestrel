@@ -6,6 +6,7 @@ import type { AppEnv, Config } from "../src/env";
 import { ResendProvider, signSvix } from "../src/providers/resend";
 import type { Recipient, RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
+import { currentTemplateRevision } from "../src/services/template_history";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
@@ -157,10 +158,11 @@ async function seedDelivery(providerId: string, email: string): Promise<void> {
   )
     .bind(now, now)
     .run();
+  const tpl = (await currentTemplateRevision(env.DB)).id; // every send pins a revision
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-wh','p-wh','sending',?, '', '', '', ?)",
+    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, template_revision, scheduled_at) VALUES ('s-wh','p-wh','sending',?, '', '', '', ?, ?)",
   )
-    .bind(now, now)
+    .bind(now, tpl, now)
     .run();
   await env.DB.prepare(
     "INSERT OR IGNORE INTO deliveries (id, send_id, email, status, provider_id, attempts, updated_at) VALUES (?, 's-wh', ?, 'accepted', ?, 0, ?)",

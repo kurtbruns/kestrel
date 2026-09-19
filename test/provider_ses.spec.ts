@@ -9,6 +9,7 @@ import { base64Bytes } from "../src/providers/ses_mime";
 import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
 import type { RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
+import { currentTemplateRevision } from "../src/services/template_history";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 
 // --- fixtures ---------------------------------------------------------------
@@ -303,10 +304,11 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     )
       .bind(now, now)
       .run();
+    const tpl = (await currentTemplateRevision(env.DB)).id; // every send pins a revision
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-ses','p-ses','sent',?, '', '', '', ?)",
+      "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, template_revision, scheduled_at) VALUES ('s-ses','p-ses','sent',?, '', '', '', ?, ?)",
     )
-      .bind(now, now)
+      .bind(now, tpl, now)
       .run();
     await env.DB.prepare(
       "INSERT INTO deliveries (id, send_id, email, status, provider_id, updated_at) VALUES (?, 's-ses', ?, 'accepted', ?, ?)",

@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { isSuppressed } from "../src/db/subscribers";
 import type { DeliveryEvent } from "../src/providers/types";
+import { currentTemplateRevision } from "../src/services/template_history";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 
 // applyDeliveryEvents() is the ONLY thing that mutates state from provider
@@ -19,10 +20,11 @@ async function seedDelivery(email: string, providerId: string): Promise<void> {
   )
     .bind(now, now)
     .run();
+  const tpl = (await currentTemplateRevision(env.DB)).id; // every send pins a revision
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-we','p-we','sent',?, '', '', '', ?)",
+    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, template_revision, scheduled_at) VALUES ('s-we','p-we','sent',?, '', '', '', ?, ?)",
   )
-    .bind(now, now)
+    .bind(now, tpl, now)
     .run();
   await env.DB.prepare(
     "INSERT INTO deliveries (id, send_id, email, status, provider_id, updated_at) VALUES (?, 's-we', ?, 'accepted', ?, ?)",

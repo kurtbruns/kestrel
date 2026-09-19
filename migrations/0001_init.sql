@@ -92,12 +92,26 @@ CREATE TABLE settings (
   updated_at INTEGER NOT NULL
 );
 
+-- The email template's history (SPEC §9). One template, with history: every save
+-- writes a row here, the current template is the latest, and the settings blob keeps
+-- its id (the app records the initial template as revision one on first use). Rows are
+-- append-only — a restore writes a NEW revision equal to an old one, never rewrites
+-- one — so the revision a send pins always still exists and still says what it said.
+CREATE TABLE template_revisions (
+  id       TEXT PRIMARY KEY,
+  html     TEXT NOT NULL,                      -- the full template, as saved
+  saved_at INTEGER NOT NULL,
+  author   TEXT                                -- principal that saved it (null = the app's own first-use record)
+);
+CREATE INDEX idx_template_revisions_saved ON template_revisions (saved_at);
+
 -- ---------------------------------------------------------------- the record
 
--- A send is created at schedule time and holds the frozen render (I3). Its status is
--- scheduled -> sending -> sent, or canceled during the review window; a send never
--- fails — it keeps retrying, and the one ambiguous case waits for a human (SPEC §12).
--- locked_until is the send-loop lease (overlap guard).
+-- A send is created at schedule time and holds the frozen render (I3) and the template
+-- revision it was made with (SPEC §9). Its status is scheduled -> sending -> sent, or
+-- canceled during the review window; a send never fails — it keeps retrying, and the
+-- one ambiguous case waits for a human (SPEC §12). locked_until is the send-loop lease
+-- (overlap guard).
 --
 -- The c_* columns are denormalized progress counters (SPEC §8) so a poll of an
 -- in-flight send is a single-row read instead of an aggregate over its audience.
@@ -119,6 +133,8 @@ CREATE TABLE sends (
   subject         TEXT NOT NULL,
   recipient_count INTEGER NOT NULL DEFAULT 0,  -- schedule-time snapshot for display; the
                                                -- audience is resolved when the send fires
+  template_revision TEXT NOT NULL REFERENCES template_revisions (id),  -- the revision the
+                                               -- render was frozen with (SPEC §9)
   locked_until    INTEGER,                     -- send-loop lease (overlap guard)
   scheduled_at    INTEGER NOT NULL,
   started_at      INTEGER,

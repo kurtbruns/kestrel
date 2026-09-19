@@ -67,9 +67,8 @@ export interface SeedSend {
   rendered_text: string;
   subject: string;
   recipient_count: number;
-  /** The template revision the demo render was frozen with, so the demo's scheduled
-   *  send is recorded like a real one (and never reads as outdated on first open). */
-  template_revision: string | null;
+  /** The template revision the demo render was frozen with, as a real freeze pins it. */
+  template_revision: string;
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;

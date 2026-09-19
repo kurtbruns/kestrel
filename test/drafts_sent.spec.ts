@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { recomputeSendCounters } from "../src/db/sends";
+import { currentTemplateRevision } from "../src/services/template_history";
 import { adminAuth } from "./support/auth";
 
 // PR1 (#147/#148): the Drafts view scopes /posts to draft+scheduled via a comma status
@@ -79,8 +80,9 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   )
     .bind(postId, slug, subject, now, now)
     .run();
+  const tpl = (await currentTemplateRevision(env.DB)).id; // every send pins a revision
   await env.DB.prepare(
-    "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at, started_at, completed_at) VALUES (?, ?, 'sent', ?, ?, ?, ?, ?, ?, ?, ?)",
+    "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, template_revision, scheduled_at, started_at, completed_at) VALUES (?, ?, 'sent', ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   )
     .bind(
       sendId,
@@ -90,6 +92,7 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
       "frozen",
       subject,
       deliveries.length,
+      tpl,
       now - 2000,
       now - 1500,
       now - 1000,

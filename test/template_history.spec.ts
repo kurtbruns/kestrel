@@ -64,7 +64,7 @@ const getTemplate = async () =>
   (await readJson(await SELF.fetch(`${base}/api/settings`, { headers: AUTH }))).template;
 
 describe("the template has a history", () => {
-  it("records the template as revision one on first read, so no send is ever made from an unrecorded template", async () => {
+  it("records the initial template as revision one on first read, so every send pins a revision that exists", async () => {
     // A fresh database: no revision yet, a blank (= built-in) template.
     expect(await listTemplateRevisions(env.DB)).toHaveLength(0);
     const template = await getTemplate();

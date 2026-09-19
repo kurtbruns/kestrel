@@ -1195,12 +1195,9 @@ async function renderEditor(id) {
   // means scheduled — signaled by the scheduled banner, not a status pill (#147).
   const locked = post.status !== "draft";
   // A scheduled send made with an older template than the current one says so wherever
-  // it is shown, and offers Update beside Reschedule and Cancel (SPEC §8, DESIGN §7). A
-  // send with no recorded revision (from before the template had a history) counts.
+  // it is shown, and offers Update beside Reschedule and Cancel (SPEC §8, DESIGN §7).
   const tplOutdated = Boolean(
-    locked &&
-      scheduled &&
-      (!scheduled.template || scheduled.template.revision !== templateFacts.current.revision),
+    locked && scheduled && scheduled.template.revision !== templateFacts.current.revision,
   );
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
@@ -1787,9 +1784,7 @@ async function renderEditor(id) {
         } else if (data.scheduled) {
           // A template save elsewhere (or an update / cancel of this send elsewhere)
           // changes what the banner must say; the read-only editor is cheap to re-mount.
-          const nowOutdated =
-            !data.scheduled.template ||
-            data.scheduled.template.revision !== data.template.current.revision;
+          const nowOutdated = data.scheduled.template.revision !== data.template.current.revision;
           if (nowOutdated !== tplOutdated || data.scheduled.id !== scheduled.id) {
             renderEditor(id);
           }
