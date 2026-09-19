@@ -208,6 +208,19 @@ function roomShell(active, railHtml, mainHtml) {
     ${foot}
   </div>`;
 }
+// A room-bar link to the page you're already on (the active tab, or the wordmark on the
+// docs index) sets the hash to what it already is, so no hashchange fires and nothing
+// re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
+// the same whether or not the tap happens to change the hash. Delegated once on #app,
+// so it survives every re-render of the room.
+app.addEventListener("click", (ev) => {
+  const a = ev.target.closest(".room-bar a[href^='#/']");
+  if (!a || a.getAttribute("href") !== location.hash) {
+    return;
+  }
+  ev.preventDefault();
+  window.scrollTo({ top: 0, behavior: "smooth" });
+});
 
 // ---- auth ----
 function setToken(t) {
