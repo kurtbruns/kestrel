@@ -216,35 +216,28 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 | State | Meaning | In the send's audience? |
 | --- | --- | --- |
 | **Pending** | Subscribed but hasn't clicked the confirmation link yet | No |
-| **Confirmed** | Completed double opt-in; consent is recorded and timestamped | Yes — unless suppressed |
+| **Confirmed** | Completed double opt-in; consent is recorded and timestamped | Yes, unless suppressed |
 | **Unsubscribed** | Left the list (their own unsubscribe, or the publisher on their behalf) | No |
 
-**Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state. That exclusion is a deliverability rule (§10), separate from the consent rule (I1). So a subscriber can be *confirmed and suppressed* at once: consented, but still never mailed. The audience for any send is exactly *confirmed minus suppressed*.
+**Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state, so a subscriber can be *confirmed and suppressed* at once, consented but never mailed. The audience for any send is exactly *confirmed minus suppressed*. The two marks have different owners, which is what keeps them distinct: unsubscribed is the reader's to set (or the publisher's, on their behalf) and the reader's to clear by subscribing again; suppressed is set by the app from the provider's signals and cleared only by the publisher, deliberately. Suppression is a deliverability rule (§10), separate from the consent rule (I1).
 
 ### Joining
 
 Someone subscribes through a public form, which creates a **pending** subscriber and sends a confirmation email. Clicking the link **confirms** them (double opt-in). Only confirmed subscribers are ever mailed (I1). Double opt-in is a deliberate cost: it's the record that consent was given, it keeps the list clean, and it protects sending reputation.
 
-The confirmation email's **wording** — its subject, the line above the button, the button's label, and an optional reassurance footer — is the publisher's to edit, a runtime preference read and written through the same authenticated API as everything else (§9). Its structure is not: there is no layout choice, and the email always leads with the **publication identity** (logo, name, tagline) as a masthead, which degrades to nothing when no identity is set — a transactional first-touch opens with who it is before the ask, rather than carrying identity author-placed inside a body the way a post does. The **confirm link** is inserted by the app and always present, a required field left blank falls back to a built-in default, and the HTML and plain-text bodies are generated together — so editing the copy can never produce a confirmation email that is wordless, misshapen, or missing the link that records consent (I1). It is transactional, not a post: it does not use the post email template (§9) and carries no unsubscribe link.
+The confirmation email's **wording** (its subject, the line above the button, the button's label, and an optional reassurance footer) is the publisher's to edit, a runtime preference (§9). Its structure is not: it always opens with the publication identity as a masthead, because a first-touch email says who it is before the ask, and the masthead degrades to nothing when no identity is set. The confirm link is inserted by the app and always present, a required field left blank falls back to a built-in default, and the HTML and plain-text bodies are generated together, so no edit can produce a confirmation email that is wordless, misshapen, or missing the link that records consent (I1). It is transactional, not a post: it does not use the post template and carries no unsubscribe link.
 
 ### Leaving
 
-Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The publisher can also unsubscribe someone from the admin subscriber list — the same immediate, idempotent effect (I2) — for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
+Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The publisher can also unsubscribe someone from the subscriber list, the same immediate, idempotent effect, for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
 
 ### Two tokens, two jobs
 
-A subscriber carries two independent unguessable tokens, one per job. The **confirm token** drives double opt-in and is one-shot: it is rotated every time a pending or unsubscribed address re-subscribes, so a stale confirmation link can't be replayed (its single-use property comes from confirmation only acting on a *pending* row, not from consuming the token). The **unsubscribe token** is durable — minted once and never rotated, not even across an unsubscribe→resubscribe cycle — because it is the token embedded in the one-click unsubscribe link of every post already delivered. Keeping them separate is what lets that link keep working forever (I2): a returning subscriber can still leave from mail that has been in their inbox since before they last left, which a single rotated-on-resubscribe token would silently break. Neither token can do the other's job — a confirm token can't unsubscribe, and an unsubscribe token can't confirm.
-
-Consent withdrawn (unsubscribe) and undeliverable (suppression) are different states with different owners:
-
-| State | Meaning | Who sets it | Who clears it |
-| --- | --- | --- | --- |
-| Unsubscribed | Consent was withdrawn | The reader, or the publisher on their behalf | The reader, by re-subscribing |
-| Suppressed | Bounced hard or complained | The app, from provider signals | The publisher, deliberately |
+A subscriber carries two independent unguessable tokens, one per job, and neither can do the other's. The **confirm token** drives double opt-in and is one-shot: it is rotated whenever a pending or unsubscribed address subscribes again, so a stale confirmation link can't be replayed. The **unsubscribe token** is durable and never rotated, not even across an unsubscribe and a resubscribe, because it is embedded in the one-click link of every post already delivered: a returning subscriber can still leave from mail that has sat in their inbox since before they last left (I2). One token doing both jobs would go dead in delivered mail the moment it rotated.
 
 ### Deferred: topics and segmentation
 
-Topics and segmentation — letting people subscribe to some kinds of post and not others — are a real feature and a deliberate v2. They add a preference center and turn "the audience" into "the audience matching this post's topics." The model is built so this slots in as a filter applied when a send resolves its audience, plus a few columns on the subscriber, without disturbing anything above.
+Topics and segmentation, letting people subscribe to some kinds of post and not others, are a real feature and a deliberate v2. They add a preference center and turn "the audience" into "the audience matching this post's topics." The model is built so this slots in as a filter applied when a send resolves its audience, plus a few columns on the subscriber, without disturbing anything above.
 
 ---
 
