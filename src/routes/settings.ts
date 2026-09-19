@@ -55,7 +55,7 @@ function deploymentView(cfg: Config) {
     // Booleans only — never the values.
     accessConfigured: Boolean(cfg.accessTeamDomain && cfg.accessAud),
     authMode: cfg.accessTeamDomain ? "access" : "dev",
-    // The running build (SPEC §9), so the editor footer can show/link it. Build metadata,
+    // The running build (SPEC §9), so the editor can show/link it. Build metadata,
     // resolved at build (src/build.ts) — not deploy config, and never a secret.
     build: buildInfo(),
   };

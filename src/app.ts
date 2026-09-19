@@ -65,8 +65,8 @@ export function createRouter(archiveBasePath: string): Router {
     {
       // The running build (SPEC §9), so an API client (Claude, curl) can self-identify a
       // bug report without opening the editor. Admin like the rest of /api/*; the same
-      // stamp also rides the settings `deployment` reflection for the editor footer. Not
-      // deploy config or a secret — resolved at build (src/build.ts), never from env.
+      // stamp also rides the settings `deployment` reflection for the editor to show.
+      // Not deploy config or a secret — resolved at build (src/build.ts), never from env.
       method: "GET",
       path: "/api/version",
       access: "admin",

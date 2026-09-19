@@ -182,6 +182,16 @@ function roomShell(active, railHtml, mainHtml) {
     railHtml == null
       ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
       : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}</div></nav><div class="room-main">${mainHtml}</div></div>`;
+  // The running build (SPEC §9), pinned quietly in the room's bottom-left corner — aligned
+  // to the contents rail, persistent across Overview / Docs / API. This is the app's own
+  // room, so its build metadata lives here (and at GET /api/version), never in the
+  // publisher-facing dashboard. Version and sha sit at opposite ends of the rail width;
+  // build time rides the tooltip.
+  const parts = buildRefParts();
+  const bt = appConfig?.deployment?.build?.buildTime;
+  const buildmark = parts
+    ? `<div class="room-buildmark"${bt ? ` title="Built ${esc(bt)}"` : ""}><span>${parts.version}</span><span>${parts.sha}</span></div>`
+    : "";
   return `<div class="room">
     <header class="room-bar">
       <a class="room-back" href="#/dashboard"><span aria-hidden="true">←</span>&nbsp;Dashboard</a>
@@ -192,6 +202,7 @@ function roomShell(active, railHtml, mainHtml) {
       </div>
     </header>
     ${body}
+    ${buildmark}
   </div>`;
 }
 
@@ -284,32 +295,26 @@ function renderSidebarBrand() {
   }
 }
 
-// ---- build stamp (sidebar footer) ----
-// The running build, from the read-only deployment reflection (appConfig.deployment.build,
-// resolved at build in src/build.ts): "v{version} · {sha}", version linked to its tag and
-// the sha to its commit — both on the repo, never getkestrel.dev — with the full build
-// time in the tooltip. Falls back to plain text with no links when there's no repo or the
-// sha is "dev" (a local build), so a dev instance never shows a dead link. Hidden until a
-// build is known, and folded away in the collapsed rail by CSS.
-function renderBuildStamp() {
-  const el = document.getElementById("buildStamp");
-  if (!el) {
-    return;
-  }
+// ---- build reference (the running build, as two link fragments) ----
+// { version, sha } from the read-only deployment reflection (appConfig.deployment.build,
+// resolved at build in src/build.ts): version → its tag, sha → its commit, both on the repo
+// and never getkestrel.dev. Each degrades to plain text (no dead link) when there's no repo
+// or the sha is "dev" (a local build). null until a build is known. Build metadata is quiet,
+// secondary info: it does NOT go in the room's top bar (identity + nav only) — the reference
+// room lays these two out at its bottom-left corner (roomShell), and it's also at
+// GET /api/version, where a bug report is filed. Never in the publisher-facing dashboard.
+function buildRefParts() {
   const b = appConfig?.deployment?.build;
   if (!b?.version) {
-    el.hidden = true;
-    return;
+    return null;
   }
-  el.hidden = false;
   const version = b.tagUrl
-    ? `<a href="${esc(b.tagUrl)}" target="_blank" rel="noopener">v${esc(b.version)}</a>`
+    ? `<a class="build-link" href="${esc(b.tagUrl)}" target="_blank" rel="noopener">v${esc(b.version)}</a>`
     : `v${esc(b.version)}`;
   const sha = b.commitUrl
-    ? `<a href="${esc(b.commitUrl)}" target="_blank" rel="noopener">${esc(b.sha)}</a>`
+    ? `<a class="build-link" href="${esc(b.commitUrl)}" target="_blank" rel="noopener">${esc(b.sha)}</a>`
     : esc(b.sha);
-  el.innerHTML = `${version} <span aria-hidden="true">·</span> ${sha}`;
-  el.title = b.buildTime ? `Built ${b.buildTime}` : "";
+  return { version, sha };
 }
 
 // Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
@@ -5632,7 +5637,6 @@ async function boot() {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
-    renderBuildStamp();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

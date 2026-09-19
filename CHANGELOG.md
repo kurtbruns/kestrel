@@ -23,7 +23,7 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - An admin editor and authoring API behind Cloudflare Access (human SSO plus a service token for Claude), with a local dev token for local-only development.
 - Configurable publication identity (name, tagline, logo), email template, and confirmation-email wording, plus default test recipients — preferences only, never secrets.
 - A swappable email-provider seam with a fake in-memory transport for local dev and tests, alongside SES and Resend adapters.
-- A build-version stamp: every instance reports its version, commit, and build time — read-only in the admin footer and at `GET /api/version`.
+- A build-version stamp: every instance reports its version, commit, and build time — read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
 [Unreleased]: https://github.com/kurtbruns/kestrel/compare/v0.1.0...HEAD

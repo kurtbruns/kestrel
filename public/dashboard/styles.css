@@ -213,8 +213,8 @@ h2 {
    the full page height (it owns the background + right border), and the inner wrapper
    is the sticky, viewport-tall part that actually holds and pins the content. */
 .sidebar {
-  flex: 0 0 260px;
-  /* Hold the 260px basis: without this a flex item's min-width:auto floor lets a
+  flex: 0 0 240px;
+  /* Hold the 240px basis: without this a flex item's min-width:auto floor lets a
      long brand name/tagline push the column wider than its basis (the ellipsis on
      .brand-name/.brand-tagline can't engage until the column itself stops growing). */
   min-width: 0;
@@ -252,7 +252,9 @@ body.nav-resizing .sidebar {
    renders its own top bar + two-column grid, so the "← Dashboard" block is exactly
    the sidebar's width and sits directly above the contents rail. */
 .room {
-  --rail: 260px;
+  /* Matches the publication sidebar's width, so the room's "← Dashboard" block and its
+     contents rail line up exactly where the sidebar was. Keep the two in step. */
+  --rail: 240px;
 }
 .room-bar {
   position: sticky;
@@ -362,7 +364,9 @@ body.nav-resizing .sidebar {
   top: 54px;
   max-height: calc(100vh - 54px);
   overflow-y: auto;
-  padding: 20px 12px;
+  /* Extra bottom padding clears the build stamp fixed in the rail's bottom-left corner
+     (.room-buildmark), so the last contents-rail item is never hidden behind it. */
+  padding: 20px 12px 62px;
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -370,6 +374,31 @@ body.nav-resizing .sidebar {
 .room-main {
   min-width: 0;
   padding: 28px 32px 80px;
+}
+/* The running build (SPEC §9), pinned to the room's bottom-left corner — aligned to the
+   contents rail and matching its borders, so it reads as the rail's quiet footer while
+   staying put across Overview / Docs / API. In tool mode the room spans the full viewport,
+   so left:0 is the true corner. Hidden on a phone, where the rail collapses inline. */
+.room-buildmark {
+  position: fixed;
+  left: 0;
+  bottom: 0;
+  width: var(--rail);
+  box-sizing: border-box;
+  /* Version and sha at opposite ends of the rail width, one reading left, one right. */
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  /* Roomy bottom padding lifts the text clear of the browser's own bottom-left overlay
+     (Chrome's link-hover status bar / download shelf), which occasionally sits here. */
+  padding: 12px 14px 22px;
+  border-top: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  z-index: var(--z-header);
 }
 /* Overview: same reading measure as Docs and the API reference. */
 .room-overview {
@@ -659,41 +688,15 @@ body.nav-resizing .sidebar {
   display: block;
   flex: 0 0 auto;
 }
-.nav-tools {
-  display: flex;
-  gap: 14px;
-  padding: 0;
-}
-.nav-tools a {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
-  text-decoration: none;
-  color: var(--muted);
-  font-size: 14px;
-}
-.nav-tools a:hover {
-  color: var(--fg);
-}
-.nav-tools a[aria-current="page"] {
-  color: var(--fg);
-  font-weight: 600;
-}
 
-/* Build stamp: the running version, at the very bottom of the sidebar footer. Muted and
-   small; its links inherit that color and brighten on hover like the other footer links.
-   Hidden in the collapsed rail (see the rail block). */
-.build {
-  padding: 0 0 4px 8px;
-  color: var(--muted);
-  font-size: 12px;
-  font-variant-numeric: tabular-nums;
-}
-.build a {
+/* The version → tag and sha → commit links in the build stamp take the surrounding muted
+   color and only brighten + underline on hover, so they read as metadata, not calls to
+   action. (The stamp itself lives in the reference room — see .room-buildmark.) */
+.build-link {
   color: inherit;
   text-decoration: none;
 }
-.build a:hover {
+.build-link:hover {
   color: var(--fg);
   text-decoration: underline;
 }
@@ -887,13 +890,6 @@ body.tool-mode .content {
     padding: 4px;
   }
   [data-nav="rail"] .powered > span {
-    display: none;
-  }
-  [data-nav="rail"] .nav-tools {
-    display: none;
-  }
-  /* No room for a version line in the icon rail; it returns when the sidebar expands. */
-  [data-nav="rail"] .build {
     display: none;
   }
   [data-nav="rail"] .nav-collapse {
@@ -3008,6 +3004,11 @@ textarea.is-invalid {
     border-right: 0;
     border-bottom: 1px solid var(--line);
   }
+  /* The rail collapses inline on a phone, so there's no bottom-left corner to pin to; the
+     build is still readable at GET /api/version. */
+  .room-buildmark {
+    display: none;
+  }
   .room-main {
     padding: 20px 16px 64px;
   }
@@ -4537,15 +4538,15 @@ textarea.is-invalid {
    with an explicit save + a revertible baseline (Settings and the Template page).
    It slides up only while there are unsaved changes, carries Save + Discard, and
    doubles as the home for a rejected save's error (the bar stays up and says why).
-   The left offset tracks the sidebar — clearing the 260px full column or the 64px
+   The left offset tracks the sidebar — clearing the 240px full column or the 64px
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    phone drawer. The post editor keeps its own autosave + conflict model, so it does
    NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
    (DESIGN §1), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
-  /* Clears the full 260px sidebar; narrowed to the rail / drawer in the rules below. */
-  left: 260px;
+  /* Clears the full 240px sidebar; narrowed to the rail / drawer in the rules below. */
+  left: 240px;
   right: 0;
   bottom: 0;
   z-index: var(--z-bar);
