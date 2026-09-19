@@ -38,9 +38,9 @@ Content lives in the app's own database, with every version of a post kept as a 
 
 ### What it isn't
 
-- **Not a general CMS.** It serves the newsletter's own reader surface (a landing page, the archive index, and the per-post pages), and only that. It doesn't author arbitrary pages or replace your main website or blog.
+- **Not a general CMS.** It serves the newsletter's own reader surface (a landing page, the archive index, and the per-post pages), and only that. It doesn't author arbitrary pages or replace the publisher's website or blog.
 - **Not multi-channel.** Email only. Cross-posting to a website, RSS, or social is out of scope.
-- **Not a marketing automation suite.** No drip sequences, funnels, or A/B campaigns. One post, reviewed, sent to your subscribers.
+- **Not a marketing automation suite.** No drip sequences, funnels, or A/B campaigns. One post, reviewed, sent to the list.
 
 ---
 
@@ -48,9 +48,9 @@ Content lives in the app's own database, with every version of a post kept as a 
 
 Six nouns make up the whole domain: the first three are content, the last three are the audience and the record.
 
-**Post** — one piece the publisher writes and sends: a Markdown body plus its metadata, editable while a draft, frozen once scheduled, and closed once sent. Its metadata is a **subject** and a **slug**. The subject is the email's subject line, and it also names the post in the list and seeds the slug. The slug is the post's path in the archive. The subject is the one field you must set to send.
+**Post** — one piece the publisher writes and sends: a Markdown body plus its metadata, editable while a draft, frozen once scheduled, and closed once sent. Its metadata is a **subject** and a **slug**. The subject is the email's subject line, and it also names the post in the list and seeds the slug. The slug is the post's path in the archive. The subject is the one field that must be set to send.
 
-**Revision** — a saved version of a post's Markdown and metadata. Every save writes one. This is the versioning that files would have given you for free, handed back deliberately.
+**Revision** — a saved version of a post's Markdown and metadata. Every save writes one. This is the versioning that files would have given for free, handed back deliberately.
 
 **Image** — a file belonging to a post, referenced by name in the Markdown. The app stores it, sizes it, and resolves it to an absolute URL at render time.
 
@@ -58,7 +58,7 @@ Six nouns make up the whole domain: the first three are content, the last three 
 
 **Send** — one dispatch of a post, created the moment the post is scheduled, not when it fires. It holds the frozen render, the template revision it was made with (§9), the fire time, and after firing, who it reached and how it went. Never rewritten once sent. The word is both the verb and, like *build* or *deploy*, the noun for one instance of it; the article tells them apart, and *a send* always means this record.
 
-**Suppression** — an address that hard-bounced or complained and must not be mailed again until you clear it deliberately.
+**Suppression** — an address that hard-bounced or complained and must not be mailed again until the publisher clears it deliberately.
 
 ### The lifecycle
 
@@ -88,7 +88,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I4 — A post is sent at most once per send, to each person at most once.** Triggering a send is idempotent. A retry, a double-click, or a resumed send never mails anyone twice.
 
-**I5 — A test is a real test.** The email you send yourself to check is produced by the same render path as the email that goes to the list. A clean test is a guarantee, not a lookalike.
+**I5 — A test is a real test.** The email the publisher sends themselves to check is produced by the same render path as the email that goes to the list. A clean test is a guarantee, not a lookalike.
 
 **I6 — Nothing is delivered without a window to stop it.** Every send becomes a visible, cancelable send before any mail leaves, for as long as the publisher scheduled and never less than the **minimum lead** (§6). Nothing fires the instant it's requested. This window is the review gate.
 
@@ -96,7 +96,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 - **The schedule is the safety.** Because a send exists as a cancelable send before it fires, a person and Claude can prepare one unattended and still have a window to catch a mistake (I6). This is the newsletter's place where something irreversible is visible before it happens.
 - **The archive is the record.** There is no separate "what did the email look like" store to build later (I3). The page a reader opens is the artifact, and it's the very copy that was reviewed.
-- **Consent is data you own, and can prove.** Not a setting on a provider you'd have to trust and can't export (I1).
+- **Consent is data the publisher owns, and can prove.** Not a setting on a provider they'd have to trust and can't export (I1).
 - **You can always resend safely.** Because a send tracks who it reached, a failed or interrupted send resumes instead of starting over (I4).
 
 ---
@@ -245,7 +245,7 @@ A small status surface, readable in the editor and through the API, answers the 
 
 ### What's scheduled, and when does it fire?
 
-The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window you can't see into or act on isn't one, I6), each carries the actions that manage a pending send without editing its content: a **one-call cancel**, a **one-call reschedule** of the fire time (§6, which moves it without re-freezing), and, only when the template has changed since the send was made, a **one-call update** to the current template (§9). A send made with an older template than the current one says so.
+The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window no one can see into or act on isn't one, I6), each carries the actions that manage a pending send without editing its content: a **one-call cancel**, a **one-call reschedule** of the fire time (§6, which moves it without re-freezing), and, only when the template has changed since the send was made, a **one-call update** to the current template (§9). A send made with an older template than the current one says so.
 
 ### What have I sent, and how did it do?
 
@@ -253,7 +253,7 @@ Each sent post is a read-only delivery record, not an editable draft. The record
 
 The record keeps two layers on different clocks: the render (frozen at schedule, I3) and the audience (resolved at fire) are **fixed**, while the **delivery outcomes go on settling** as *this send's own* webhook events arrive. Bounces and complaints land after completion (§12), so the breakdown is the current truth about this one send, never rewritten by another send or a later cleared suppression.
 
-Beneath the breakdown are the **per-recipient rows themselves**, every one of them, findable by address, so "who bounced" is a look, not a download. Each row carries the provider's error or detail and splits a **hard** bounce (permanent; it suppressed the address) from a **soft** one (transient; counted, never suppressed) on the kind recorded for this send when the event landed. That kind is a frozen fact of the record, not a read of the current, clearable suppression list, so the split can't drift after the fact. The record links to the archived post (the exact frozen copy readers received, I3), and the whole per-recipient record can be exported, because a record is only inspectable if you can get at it (§12).
+Beneath the breakdown are the **per-recipient rows themselves**, every one of them, findable by address, so "who bounced" is a look, not a download. Each row carries the provider's error or detail and splits a **hard** bounce (permanent; it suppressed the address) from a **soft** one (transient; counted, never suppressed) on the kind recorded for this send when the event landed. That kind is a frozen fact of the record, not a read of the current, clearable suppression list, so the split can't drift after the fact. The record links to the archived post (the exact frozen copy readers received, I3), and the whole per-recipient record can be exported, because a record is only inspectable if the publisher can get at it (§12).
 
 Wherever the record is compressed to a single glanceable number, that number is **confirmed delivered**, with any complaints, bounces, or send-time failures called out beside it, each by kind. The number is drawn from the same per-recipient outcomes as the record, so a send never reads as cleanly "delivered" in a list while its own record shows it bounced, and the list of sends can be narrowed to those with a delivery failure. "Delivered" everywhere means webhook-confirmed, never merely provider-accepted.
 
