@@ -591,33 +591,46 @@ function recordDismissed(kind, members) {
   }
   writeDismissed(map);
 }
-// Returns the rendered element, or null when every member is already dismissed. Rendering
-// the same identity into a slot again replaces it rather than stacking a duplicate, so a
-// surface can call this from a poll.
+// Returns the rendered element, or null when every member is already dismissed (or there
+// is none: an aggregate with no members clears any prior one). A slot holds one notice per
+// subject and one aggregate per kind, so a surface can call this from a poll: the same
+// events rendered again leave the element as it is (a live region announces on change,
+// and a repaint must not pull focus off the dismiss), and a changed set of events, or a
+// new version, replaces it rather than stacking a duplicate.
 // biome-ignore lint/correctness/noUnusedVariables: the kind ships ahead of its first occupant, the applied-change notice of the template re-make; drop this note when a surface calls it
 function notice(slot, { kind, subject, version, members, html }) {
   if (!slot) {
     return null;
   }
   const all = members || [{ subject, version }];
-  const id = `${kind}|${all.map((m) => m.subject).join(",")}`;
+  const id = members ? `${kind}|*` : `${kind}|${subject}`;
+  const events = all.map((m) => `${m.subject}@${m.version}`).join(",");
   const prior = Array.from(slot.children).find((c) => c.dataset.notice === id);
   const map = readDismissed();
   if (all.every((m) => map[noticeMemberKey(kind, m.subject)]?.v === String(m.version))) {
     prior?.remove();
     return null;
   }
+  if (prior?.dataset.noticeEvents === events) {
+    return prior;
+  }
   const el = document.createElement("div");
   el.className = "notice";
   el.setAttribute("role", "status");
   el.dataset.notice = id;
+  el.dataset.noticeEvents = events;
   el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${SET_ICON.x}</button>`;
-  el.querySelector(".notice-dismiss").onclick = () => {
+  const dismiss = el.querySelector(".notice-dismiss");
+  dismiss.onclick = () => {
     recordDismissed(kind, all);
     el.remove(); // nothing to animate: the reader clicked it away
   };
   if (prior) {
+    const refocus = prior.querySelector(".notice-dismiss") === document.activeElement;
     prior.replaceWith(el);
+    if (refocus) {
+      dismiss.focus();
+    }
   } else {
     slot.appendChild(el);
   }
