@@ -1,12 +1,14 @@
 -- 0001_init — the Kestrel schema (SPEC §2: the six nouns, plus settings).
 --
--- This is a baseline: the migration history that preceded it was squashed into one
--- file before the first deployment, so no database has ever run anything else. From
--- here on migrations are append-only — never edit this file, add the next one.
+-- This is the baseline. Until the first deployment it is edited in place: no database
+-- has ever run anything else, so there is nothing to migrate — but wrangler tracks
+-- applied migrations by filename, so after a change here every local database must be
+-- rebuilt (delete .wrangler/state/v3/d1 and run `migrate:local`). From the first
+-- deployment on, migrations are append-only: never edit this file, add the next one.
 --
 -- Timestamps are unix epoch milliseconds (INTEGER). Text ids are app-generated
--- (UUID / random tokens). FK declarations document intent; the app also enforces
--- cascades in code since D1 does not enable foreign_keys by default.
+-- (UUID / random tokens). D1 enforces the FK declarations (foreign_keys is on) but
+-- none declares an ON DELETE action, so the app deletes children before parents in code.
 
 -- ---------------------------------------------------------------- content
 

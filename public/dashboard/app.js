@@ -208,6 +208,20 @@ function roomShell(active, railHtml, mainHtml) {
     ${foot}
   </div>`;
 }
+// A room-bar link to the page you're already on (the active tab, or the wordmark on the
+// docs index) sets the hash to what it already is, so no hashchange fires and nothing
+// re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
+// the same whether or not the tap happens to change the hash. Instant, like every other
+// in-page move here (the "On this page" links) and like a cross-page click landing at
+// the top of its page. Delegated once on #app, so it survives every re-render of the room.
+app.addEventListener("click", (ev) => {
+  const a = ev.target.closest(".room-bar a[href^='#/']");
+  if (!a || a.getAttribute("href") !== location.hash) {
+    return;
+  }
+  ev.preventDefault();
+  window.scrollTo(0, 0);
+});
 
 // ---- auth ----
 function setToken(t) {
@@ -2201,7 +2215,7 @@ function startCountdowns() {
 // but one or more in-flight recipients whose fate a transport error left unknown
 // (SPEC §12). This is the state the sweep flags and the operator must adjudicate; it
 // can't clear on its own without risking a double-mail (I4). Read straight off the row's
-// denormalized counters (c_pending / c_in_flight, migration 0006) — the same signals the
+// denormalized counters (`sends.c_pending` / `c_in_flight`) — the same signals the
 // server's buildSendProgress derives `wedged` from, so the list and the watch agree.
 // The lease check is essential: while the loop is ACTIVELY working a send it holds the
 // lease (`locked_until` in the future) — so a normal send's final dispatched batch
@@ -5137,9 +5151,9 @@ function renderDocPage(docs, slug) {
     ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
 
-  // "On this page" links smooth-scroll within the current doc and highlight at once. On
-  // mobile the fold closes first, so the page height above the target is settled before
-  // the scroll is measured.
+  // "On this page" links jump within the current doc and highlight at once. On mobile the
+  // fold closes first, so the page height above the target is settled before the scroll
+  // is measured.
   const onPageEl = document.getElementById("tocOnPage");
   syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
   const markActive = (id) => {
@@ -5160,9 +5174,7 @@ function renderDocPage(docs, slug) {
     if (onPageEl && mobileMq.matches) {
       onPageEl.open = false;
     }
-    document
-      .getElementById(a.dataset.target)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
   });
 
   // Copy buttons on the guide's shell / DNS code blocks.
@@ -5282,7 +5294,7 @@ async function renderReference() {
   const navEl = document.getElementById("apiNav");
   const contentEl = document.getElementById("apiContent");
   // Delegate clicks synchronously with one listener on the stable nav, so it survives
-  // the async fill below: a sidebar click smooth-scrolls to that section.
+  // the async fill below: a sidebar click jumps to that section.
   navEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-sec]");
     if (!a) {
@@ -5374,7 +5386,7 @@ function computeHealth(sends) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
     alerts.push({
       level: "red",
-      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
+      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve on the Sent page.`,
     });
   }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
@@ -5390,7 +5402,7 @@ function computeHealth(sends) {
   }
   // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
   // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
-  // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
+  // row's `c_bounced` counter over the frozen audience — not the old
   // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
   // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
   // from tripping it. Read-only reporting — it never throttles or halts a send (§12 leaves
@@ -5410,7 +5422,7 @@ function computeHealth(sends) {
     const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
     alerts.push({
       level: "amber",
-      text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
+      text: `Elevated bounce rate (${pct}%) on a recent send — check the Sent page.`,
     });
   }
   return alerts;
