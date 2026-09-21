@@ -11,6 +11,8 @@
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
 
+import { startDevReload } from "./dev_reload";
+
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
 let session = null; // { principal: { kind, email? }, auth: { mode } } once booted
@@ -6120,6 +6122,11 @@ async function boot() {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
+    // Local dev only (no Access edge): pick up a rebuilt bundle or an edited stylesheet
+    // without a hand refresh. Deployed envs report `access` and never poll.
+    if (session.auth?.mode === "dev") {
+      startDevReload();
+    }
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.
