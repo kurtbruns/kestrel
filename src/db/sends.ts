@@ -18,6 +18,9 @@ export interface SendRow {
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
+  /** When a template or identity change last re-made the frozen render while the send
+   *  was scheduled (SPEC §6); null if never. The sign-off reset a publisher sees. */
+  remade_at: number | null;
   // Denormalized progress counters (the `c_*` columns on `sends`). A rebuildable cache of the
   // `deliveries` bucketing, maintained in the same transactions as each recipient
   // transition so `GET /sends/:id/progress` is a single-row read (SPEC §8).
@@ -236,7 +239,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, remade_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -521,6 +524,60 @@ export async function countDeliveriesFiltered(
     .bind(...binds)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+// --- the freeze ------------------------------------------------------------------
+
+/** The frozen render a freeze (or a re-make) writes onto a send: the one render
+ *  path's output, as the three columns the send loop reads back. */
+export interface FrozenRender {
+  rendered_html: string;
+  rendered_text: string;
+  subject: string;
+}
+
+/** The predicate that ties a settings-dependent write to the settings the writer
+ *  read: the row's `updated_at` (0 when there is no row yet) must still equal
+ *  `version`. The freeze puts it on its insert so a schedule that rendered with a
+ *  template the publisher has since replaced can never land (SPEC §6, §9). */
+export function settingsVersionIs(version: number): { sql: string; binds: unknown[] } {
+  return {
+    sql: "COALESCE((SELECT updated_at FROM settings WHERE id = 1), 0) = ?",
+    binds: [version],
+  };
+}
+
+/**
+ * Insert a `scheduled` send holding a frozen render, guarded on the settings version
+ * the render used (`settingsVersionIs`): `meta.changes === 0` means the template or
+ * identity changed between the read and this write, and the caller re-renders. The
+ * partial unique index on active sends still fails the insert for a second active
+ * send, which the caller maps to a conflict.
+ */
+export function insertScheduledSendStmt(
+  db: D1Database,
+  send: FrozenRender & { id: string; post_id: string; fire_at: number; recipient_count: number },
+  now: number,
+  settingsVersion: number,
+): D1PreparedStatement {
+  const guard = settingsVersionIs(settingsVersion);
+  return db
+    .prepare(
+      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?
+        WHERE ${guard.sql}`,
+    )
+    .bind(
+      send.id,
+      send.post_id,
+      send.fire_at,
+      send.rendered_html,
+      send.rendered_text,
+      send.subject,
+      send.recipient_count,
+      now,
+      ...guard.binds,
+    );
 }
 
 // --- send-loop / sweep (M6) -------------------------------------------------

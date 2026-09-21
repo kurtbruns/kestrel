@@ -1,22 +1,53 @@
 /**
- * Freeze + soft-lock (I3, I6). Scheduling renders the post NOW and stores the
- * bytes on a `sends` row, then locks the post to draft-edits. Canceling
- * (= unscheduling) is a CAS that only succeeds while the send is still
- * `scheduled` — the cancel window is exactly the review window.
+ * Freeze + soft-lock (I3, I6). Scheduling makes the email: it renders the post NOW,
+ * with the template and the identity as they stand, stores the bytes on a `sends`
+ * row, and locks the post to draft-edits. Canceling is a CAS that only succeeds while
+ * the send is still `scheduled` — the cancel window is exactly the review window. A
+ * later template or identity change re-makes the frozen render in place (remake.ts);
+ * a move touches only the fire time.
  */
 
 import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
-import { getCurrentRevision } from "../db/posts";
-import { getActiveSendForPost, getSend, type SendRow } from "../db/sends";
-import { getSettings } from "../db/settings";
+import { getCurrentRevision, setPostStatusStmt } from "../db/posts";
+import {
+  type FrozenRender,
+  getActiveSendForPost,
+  getSend,
+  insertScheduledSendStmt,
+  type SendRow,
+  settingsVersionIs,
+} from "../db/sends";
+import { readSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
-import { resolveBranding } from "../render/template_engine";
+import { type EmailBranding, resolveBranding } from "../render/template_engine";
+
+/** The one render a freeze performs: the post's current content and images through
+ *  the single render path (I5), inside `branding` (the template plus the identity).
+ *  Shared by the schedule and the re-make, so the two cannot drift on what they render. */
+export async function renderPost(
+  env: AppEnv,
+  config: Config,
+  post: PostRow,
+  branding: EmailBranding,
+): Promise<FrozenRender> {
+  const revision = await getCurrentRevision(env.DB, post);
+  if (!revision) {
+    throw badRequest("post has no content to send");
+  }
+  const images = await listImages(env.DB, post.id);
+  const rendered = await render({ post, revision, images }, config, branding);
+  return { rendered_html: rendered.html, rendered_text: rendered.text, subject: rendered.subject };
+}
+
+/** How many times a freeze re-reads and re-renders when the settings changed under it.
+ *  A template save landing in that gap is rare; a couple of retries settles it. */
+const FREEZE_RETRIES = 3;
 
 /** Create a scheduled Send from the post's current content and lock the post. */
 export async function freeze(
@@ -37,51 +68,53 @@ export async function freeze(
   if (await getActiveSendForPost(env.DB, post.id)) {
     throw conflict("post already has an active send");
   }
-  const revision = await getCurrentRevision(env.DB, post);
-  if (!revision) {
-    throw badRequest("post has no content to send");
-  }
 
-  const images = await listImages(env.DB, post.id);
-  const settings = await getSettings(env.DB);
-  const rendered = await render(
-    { post, revision, images },
-    config,
-    resolveBranding(settings, config),
-  );
-  const audience = await audienceEmails(env.DB);
+  for (let attempt = 0; attempt < FREEZE_RETRIES; attempt++) {
+    // Render with the settings as they stand, and remember which: the insert below
+    // lands only while the settings row is still at this version. A template or
+    // identity save that commits in between (a re-make of every scheduled send, SPEC
+    // §9) would otherwise leave this new send on the older look, unlisted; instead
+    // the insert changes zero rows and the freeze renders again with the new settings.
+    const { settings, version } = await readSettings(env.DB);
+    const rendered = await renderPost(env, config, post, resolveBranding(settings, config));
+    const audience = await audienceEmails(env.DB);
 
-  const now = Date.now();
-  const id = newId();
-  try {
-    await env.DB.batch([
-      env.DB.prepare(
-        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at) VALUES (?, ?, 'scheduled', ?, ?, ?, ?, ?, ?)",
-      ).bind(
-        id,
-        post.id,
-        fireAt,
-        rendered.html,
-        rendered.text,
-        rendered.subject,
-        audience.length,
-        now,
-      ),
-      env.DB.prepare(
-        "UPDATE posts SET status = 'scheduled', updated_at = ? WHERE id = ? AND status = 'draft'",
-      ).bind(now, post.id),
-    ]);
-  } catch (err) {
-    // The pre-check above is UX, not the guarantee: a concurrent freeze() for the
-    // same post can pass it and reach here. The partial unique index (`idx_sends_one_active_per_post`)
-    // is the real backstop — it fails the loser's insert, which we map to the same
-    // friendly conflict so the DB, not check-then-act, enforces one active send (I4, I6).
-    if (isActiveSendConflict(err)) {
-      throw conflict("post already has an active send");
+    const now = Date.now();
+    const id = newId();
+    const settingsVersion = version ?? 0;
+    let results: D1Result[];
+    try {
+      results = await env.DB.batch([
+        insertScheduledSendStmt(
+          env.DB,
+          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience.length },
+          now,
+          settingsVersion,
+        ),
+        setPostStatusStmt(
+          env.DB,
+          post.id,
+          "draft",
+          "scheduled",
+          now,
+          settingsVersionIs(settingsVersion),
+        ),
+      ]);
+    } catch (err) {
+      // The pre-check above is UX, not the guarantee: a concurrent freeze() for the
+      // same post can pass it and reach here. The partial unique index (`idx_sends_one_active_per_post`)
+      // is the real backstop — it fails the loser's insert, which we map to the same
+      // friendly conflict so the DB, not check-then-act, enforces one active send (I4, I6).
+      if (isActiveSendConflict(err)) {
+        throw conflict("post already has an active send");
+      }
+      throw err;
     }
-    throw err;
+    if ((results[0]?.meta.changes ?? 0) > 0) {
+      return unwrap(await getSend(env.DB, id), "send");
+    }
   }
-  return unwrap(await getSend(env.DB, id), "send");
+  throw conflict("the template or identity changed while scheduling; try again");
 }
 
 /** True for the D1/SQLite violation of the "one active send per post" partial unique index. */

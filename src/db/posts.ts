@@ -31,6 +31,25 @@ export interface PostInput {
   markdown?: string;
 }
 
+/**
+ * Move a post between lifecycle states by compare-and-swap, as a statement so the
+ * freeze can batch the lock with its send insert. `guard` (the settings-version
+ * predicate the insert carries) keeps the two in step: neither lands without the other.
+ */
+export function setPostStatusStmt(
+  db: D1Database,
+  postId: string,
+  from: PostStatus,
+  to: PostStatus,
+  now: number,
+  guard?: { sql: string; binds: unknown[] },
+): D1PreparedStatement {
+  const extra = guard ? ` AND ${guard.sql}` : "";
+  return db
+    .prepare(`UPDATE posts SET status = ?, updated_at = ? WHERE id = ? AND status = ?${extra}`)
+    .bind(to, now, postId, from, ...(guard?.binds ?? []));
+}
+
 export function getPost(db: D1Database, id: string): Promise<PostRow | null> {
   return db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first<PostRow>();
 }

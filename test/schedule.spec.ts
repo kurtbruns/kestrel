@@ -304,6 +304,23 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(second.send.id).toBe(first.send.id);
   });
 
+  it("refuses a stray template_revision on schedule and send-now (400): a send is made with the template as it stands", async () => {
+    const id = await makeDraft();
+    const sched = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(10 * 60 * 1000), template_revision: "tr_1" }),
+    });
+    expect(sched.status).toBe(400);
+    const now = await SELF.fetch(`${base}/posts/${id}/send`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ template_revision: "tr_1" }),
+    });
+    expect(now.status).toBe(400);
+    expect(await postStatus(id)).toBe("draft");
+  });
+
   it("yields exactly one active send when two schedules race the same post", async () => {
     const id = await makeDraft();
     const fire = JSON.stringify({ fire_at: future(10 * 60 * 1000) });
