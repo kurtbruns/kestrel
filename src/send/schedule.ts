@@ -92,7 +92,7 @@ function isActiveSendConflict(err: unknown): boolean {
 
 /**
  * Move a scheduled Send's fire time without re-freezing (I3) or resetting the review
- * window (I6). Distinct from the unschedule → edit → re-schedule path (which is for
+ * window (I6). Distinct from the cancel → edit → schedule-again path (which is for
  * *content* changes): this touches only `fire_at`, so the frozen render is untouched (the
  * audience is resolved when the send fires, not here) and it stays the post's single
  * active send throughout — only the moment it fires changes. A CAS on `scheduled` status

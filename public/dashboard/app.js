@@ -5212,7 +5212,7 @@ function computeHealth(sends) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
     alerts.push({
       level: "red",
-      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
+      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve on the Sent page.`,
     });
   }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
@@ -5248,7 +5248,7 @@ function computeHealth(sends) {
     const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
     alerts.push({
       level: "amber",
-      text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
+      text: `Elevated bounce rate (${pct}%) on a recent send — check the Sent page.`,
     });
   }
   return alerts;
