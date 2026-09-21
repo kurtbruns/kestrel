@@ -2477,7 +2477,6 @@ const PHASE_META = {
   "needs-attention": { label: "Needs attention", tone: "danger" },
   settling: { label: "Settling", tone: "sending" },
   complete: { label: "Complete", tone: "ok" },
-  failed: { label: "Failed", tone: "danger" },
   canceled: { label: "Canceled", tone: "muted" },
 };
 const PHASE_BLURB = {
@@ -5209,13 +5208,6 @@ const BOUNCE_SPIKE_MIN = 3;
 function computeHealth(sends) {
   const now = Date.now();
   const alerts = [];
-  const failed = sends.filter((s) => s.status === "failed");
-  if (failed.length) {
-    alerts.push({
-      level: "red",
-      text: `${failed.length} send${failed.length === 1 ? "" : "s"} failed — check Sends.`,
-    });
-  }
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
   if (missed.length) {
     alerts.push({
@@ -5232,7 +5224,7 @@ function computeHealth(sends) {
     const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
     alerts.push({
       level: "red",
-      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve in Sends.`,
+      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve on the Sent page.`,
     });
   }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
@@ -5268,7 +5260,7 @@ function computeHealth(sends) {
     const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
     alerts.push({
       level: "amber",
-      text: `Elevated bounce rate (${pct}%) on a recent send — check Sends.`,
+      text: `Elevated bounce rate (${pct}%) on a recent send — check the Sent page.`,
     });
   }
   return alerts;
@@ -5357,9 +5349,7 @@ async function renderDashboard() {
   const nextUpHtml = dashScheduledHtml(scheduled);
 
   const slugById = new Map(posts.map((p) => [p.id, p.slug]));
-  const recent = sends
-    .filter((s) => s.status === "sent" || s.status === "sending" || s.status === "failed")
-    .slice(0, 5);
+  const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
   const recentHtml = recent.length
     ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent
         .map((s) => {
