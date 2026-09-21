@@ -50,18 +50,60 @@ describe("planReload", () => {
   });
 });
 
+const hrefs = () =>
+  [...document.head.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.getAttribute("href"));
+
+/**
+ * Take over the `load`/`error` listeners of every <link> the swap creates, so the test
+ * decides when each "loads". happy-dom (with file loading off) fires `load` synchronously
+ * on insertion, which would hide the in-flight state the no-flash contract is about.
+ */
+function captureLinkLoads(): Array<() => void> {
+  const loads: Array<() => void> = [];
+  const create = document.createElement.bind(document);
+  vi.spyOn(document, "createElement").mockImplementation((tag: string) => {
+    const el = create(tag);
+    if (tag === "link") {
+      vi.spyOn(el, "addEventListener").mockImplementation((_type, handler) => {
+        loads.push(handler as () => void);
+      });
+    }
+    return el;
+  });
+  return loads;
+}
+
 describe("swapStylesheet", () => {
-  it("inserts the new link beside the old and retires the old once the new has loaded", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("inserts the new link beside the old and retires the old only once the new has loaded", () => {
     document.head.innerHTML = `<link rel="stylesheet" href="./styles.css?v=old">`;
+    const loads = captureLinkLoads();
     expect(swapStylesheet(document, "new")).toBe(true);
-    const links = document.head.querySelectorAll('link[rel="stylesheet"]');
-    expect(links).toHaveLength(2);
-    expect(links[0]!.getAttribute("href")).toBe("./styles.css?v=old");
-    expect(links[1]!.getAttribute("href")).toBe("./styles.css?v=new");
-    links[1]!.dispatchEvent(new Event("load"));
-    const after = document.head.querySelectorAll('link[rel="stylesheet"]');
-    expect(after).toHaveLength(1);
-    expect(after[0]!.getAttribute("href")).toBe("./styles.css?v=new");
+    expect(hrefs()).toEqual(["./styles.css?v=old", "./styles.css?v=new"]);
+    loads[0]!();
+    expect(hrefs()).toEqual(["./styles.css?v=new"]);
+  });
+
+  it("keeps the newest stylesheet last and alone when two swaps overlap, whichever loads first", () => {
+    for (const order of [
+      [0, 1],
+      [1, 0],
+    ]) {
+      document.head.innerHTML = `<link rel="stylesheet" href="./styles.css?v=c1">`;
+      const loads = captureLinkLoads();
+      swapStylesheet(document, "c2");
+      swapStylesheet(document, "c3"); // before c2 has loaded
+      expect(hrefs()).toEqual(["./styles.css?v=c1", "./styles.css?v=c2", "./styles.css?v=c3"]);
+      // Each fresh link registered load + error; index 0/2 are the two loads.
+      for (const i of order) {
+        loads[i * 2]!();
+      }
+      expect(hrefs()).toEqual(["./styles.css?v=c3"]);
+      vi.restoreAllMocks();
+    }
   });
 
   it("does nothing when there is no stylesheet link to swap", () => {
@@ -89,19 +131,26 @@ describe("startDevReload", () => {
     stop();
   });
 
+  it("requests the reload once, then stops: a declined leave prompt is not re-asked", async () => {
+    const reload = vi.fn();
+    const fetchIndex = vi.fn().mockResolvedValue(INDEX("a2", "c1"));
+    startDevReload({ fetchIndex, reload, intervalMs: 50 });
+    await vi.advanceTimersByTimeAsync(400);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(fetchIndex).toHaveBeenCalledTimes(1);
+  });
+
   it("hot-swaps the stylesheet, then treats the new stamp as current", async () => {
     const reload = vi.fn();
     const fetchIndex = vi.fn().mockResolvedValue(INDEX("a1", "c2"));
     const stop = startDevReload({ fetchIndex, reload, intervalMs: 50 });
     await vi.advanceTimersByTimeAsync(60);
     expect(reload).not.toHaveBeenCalled();
-    const links = document.head.querySelectorAll('link[rel="stylesheet"]');
-    expect(links).toHaveLength(2);
-    expect(links[1]!.getAttribute("href")).toBe("./styles.css?v=c2");
-    // A second tick with the same stamps must not stack another link: exactly one
-    // carries the new stamp, whether or not happy-dom has retired the old one yet.
+    // happy-dom fires the new link's load at once, so the old one is already retired.
+    expect(hrefs()).toEqual(["./styles.css?v=c2"]);
+    // A second tick with the same stamps must not swap again.
     await vi.advanceTimersByTimeAsync(60);
-    expect(document.head.querySelectorAll('link[rel="stylesheet"][href$="v=c2"]')).toHaveLength(1);
+    expect(hrefs()).toEqual(["./styles.css?v=c2"]);
     stop();
   });
 

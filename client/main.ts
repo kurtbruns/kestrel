@@ -1,7 +1,7 @@
 // @ts-nocheck
-// Phase 0 of the client build: the former public/dashboard/app.js, moved here verbatim and
-// typed nowhere yet. The pragma is lifted module by module as this file is split; every
-// new client module is strict from its first line.
+// The former public/dashboard/app.js, moved here verbatim and typed nowhere yet. The
+// pragma is lifted module by module as this file is split; every new client module is
+// strict from its first line.
 
 // Kestrel editor — a small vanilla SPA over the same HTTP API Claude uses.
 // Auth is edge-centric: in production Cloudflare Access gates this surface, so the

@@ -66,30 +66,37 @@ export function planReload(loaded: AssetStamps, current: AssetStamps): ReloadPla
 }
 
 /**
- * Swap the stylesheet to its new stamp without a flash: insert the new `<link>` beside the
- * old one, and drop the old only once the new has loaded (or failed — a broken stylesheet
- * must not leave two stacked). Returns false when there is no stylesheet link to swap.
+ * Swap the stylesheet to its new stamp without a flash: insert the new `<link>` after the
+ * last one for this stylesheet, and drop every older one only once the new has loaded (or
+ * failed — a broken stylesheet must not leave two stacked). "Last" and "every" matter: two
+ * swaps in quick succession, the second before the first has loaded, must still end with
+ * the newest stylesheet last in the cascade and alone. Returns false when there is no
+ * stylesheet link to swap.
  */
 export function swapStylesheet(doc: Document, stamp: string): boolean {
-  for (const old of doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]')) {
-    const href = old.getAttribute("href");
-    if (!href) {
-      continue;
+  const older: HTMLLinkElement[] = [];
+  for (const link of doc.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"][href]')) {
+    const href = link.getAttribute("href");
+    if (href && new URL(href, "http://stamps.invalid/dashboard/").pathname.endsWith(`/${CSS}`)) {
+      older.push(link);
     }
-    const url = new URL(href, "http://stamps.invalid/dashboard/");
-    if (!url.pathname.endsWith(`/${CSS}`)) {
-      continue;
-    }
-    const fresh = doc.createElement("link");
-    fresh.rel = "stylesheet";
-    fresh.href = `./${CSS}?v=${encodeURIComponent(stamp)}`;
-    const retire = () => old.remove();
-    fresh.addEventListener("load", retire, { once: true });
-    fresh.addEventListener("error", retire, { once: true });
-    old.after(fresh);
-    return true;
   }
-  return false;
+  const last = older.at(-1);
+  if (!last) {
+    return false;
+  }
+  const fresh = doc.createElement("link");
+  fresh.rel = "stylesheet";
+  fresh.href = `./${CSS}?v=${encodeURIComponent(stamp)}`;
+  const retire = () => {
+    for (const link of older) {
+      link.remove();
+    }
+  };
+  fresh.addEventListener("load", retire, { once: true });
+  fresh.addEventListener("error", retire, { once: true });
+  last.after(fresh);
+  return true;
 }
 
 /** The seams a poll runs through — real in the browser, substituted in the client tests. */
@@ -120,7 +127,10 @@ async function fetchLiveIndex(): Promise<string | null> {
 
 /**
  * Start polling index.html for a new stamp. Returns the stop function. Call only once the
- * boot probe has reported auth mode `dev`; the poll itself never re-checks that.
+ * boot probe has reported auth mode `dev`; the poll itself never re-checks that. A reload
+ * is requested once, then the poll stops: the editor's leave guard can turn the reload
+ * into a prompt, and a declined prompt must not come back every second — the page is
+ * stale by choice at that point, and a hand refresh ends it.
  */
 export function startDevReload(opts: DevReloadOptions = {}): () => void {
   const doc = opts.doc ?? document;
@@ -128,6 +138,8 @@ export function startDevReload(opts: DevReloadOptions = {}): () => void {
   const reload = opts.reload ?? (() => location.reload());
   const loaded = readStamps(doc);
   let inFlight = false;
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const stop = () => clearInterval(timer);
 
   const tick = async () => {
     if (inFlight) {
@@ -142,6 +154,7 @@ export function startDevReload(opts: DevReloadOptions = {}): () => void {
       const current = readStamps(parseIndex(html));
       const plan = planReload(loaded, current);
       if (plan === "reload") {
+        stop();
         reload();
       } else if (plan === "swap-css" && current.css && swapStylesheet(doc, current.css)) {
         loaded.css = current.css;
@@ -151,6 +164,6 @@ export function startDevReload(opts: DevReloadOptions = {}): () => void {
     }
   };
 
-  const timer = setInterval(tick, opts.intervalMs ?? 1000);
-  return () => clearInterval(timer);
+  timer = setInterval(tick, opts.intervalMs ?? 1000);
+  return stop;
 }

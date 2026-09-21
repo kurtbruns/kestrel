@@ -190,6 +190,16 @@ watcher.on("exit", (code) => {
     );
   }
 });
+// A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave the
+// watcher behind rewriting app.js and index.html forever. Stop it, then re-raise: `once`
+// means the re-raised signal meets the default disposition and ends us as it always did
+// (a terminal Ctrl-C reaches the whole group, watcher included, and behaves the same).
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.once(signal, () => {
+    watcher.kill();
+    process.kill(process.pid, signal);
+  });
+}
 
 const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",

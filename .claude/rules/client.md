@@ -14,8 +14,9 @@ paths:
 ## The build
 
 - `scripts/build-client.mjs` bundles `client/main.ts` with esbuild into one framework-free, dependency-free, plain-JS IIFE, so the browser receives exactly what it always did. It runs at every entry that needs the bundle: `npm run dev` (once, then an esbuild watch beside wrangler that rebuilds a `client/` edit in ~10 ms and re-stamps `index.html`, also after a `styles.css` save), wrangler's `build.command` (so a bare `wrangler deploy` can never ship a stale bundle; `watch_dir` is pinned to `src/` so `wrangler dev` does not double-build client edits), and `pretest`.
-- The build must stay deterministic: no build-time defines, no environment-dependent output. The `?v=` stamp of app.js in `index.html` is committed and is a hash of the bundle's bytes, so anything that varies the bytes between dev and deploy dirties every checkout. Dev-only behavior is gated at runtime instead (the live reload below is the pattern).
-- `npm run assets:build` rebuilds and re-stamps by hand; never hand-edit a `?v=`.
+- The build must stay deterministic: no build-time defines, no environment-dependent output. The `?v=` stamp of app.js in `index.html` is committed and is a hash of the bundle's bytes, so anything that varies the bytes between dev and deploy dirties every checkout. Dev-only behavior is gated at runtime instead (the live reload below is the pattern). Two inputs the bytes depend on, both pinned: esbuild's exact version (`package.json` pins it, not a caret range) and the root `tsconfig.json`'s `strict` (esbuild honors it and emits the `"use strict"` directive from it).
+- `npm run assets:build` rebuilds and re-stamps by hand; never hand-edit a `?v=`. `wrangler types` runs `build.command` too, so `npm run typecheck` also rebuilds the bundle (same bytes) and re-stamps `index.html` if it was stale; harmless, but it is why a typecheck can touch a tracked file.
+- The linked sourcemap (`app.js.map`) is deliberately shipped as an asset: it sits behind Access with the rest of `/dashboard`, the source is public, and a readable stack trace from a deployed editor is worth the file. It is not stamped or cached immutably; only devtools ever fetch it.
 
 ## Types and tests
 

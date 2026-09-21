@@ -9,8 +9,8 @@
 <script>
 // Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
 // sidebar renders in its final width with no flash. The collapse toggle's override is
-// session-only (in-memory in app.js), so a fresh load always starts from this default;
-// keep this width formula in sync with computeNavMode() in app.js.
+// session-only (in-memory in client/main.ts), so a fresh load always starts from this
+// default; keep this width formula in sync with computeNavMode() there.
 (() => {
   const w = window.innerWidth;
   const mode = w < 540 || w > 1024 ? "full" : "rail";
@@ -113,6 +113,6 @@
 </section>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=bacfd924"></script>
+<script src="./app.js?v=c9971f82"></script>
 </body>
 </html>

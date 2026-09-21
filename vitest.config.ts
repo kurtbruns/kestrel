@@ -49,6 +49,18 @@ export default defineConfig(async () => {
           test: {
             name: "client",
             environment: "happy-dom",
+            // happy-dom loads an inserted <link rel=stylesheet> / <script src> for real by
+            // default, so a swap test would do DNS + TCP; these are DOM tests, not fetch tests.
+            environmentOptions: {
+              happyDOM: {
+                settings: {
+                  disableCSSFileLoading: true,
+                  disableJavaScriptFileLoading: true,
+                  // ...and a disabled load is a silent `load`, not a logged `error`.
+                  handleDisabledFileLoadingAsSuccess: true,
+                },
+              },
+            },
             include: ["client/**/*.spec.ts"],
             exclude: [...configDefaults.exclude, "**/.claude/**"],
           },

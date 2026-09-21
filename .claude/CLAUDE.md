@@ -20,7 +20,7 @@ npm run dev                         # wrangler dev on http://localhost:8787 (edi
 
 npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
 npm run test:watch                  # watch mode
-npm run typecheck                   # stamps the build (if changed), wrangler types, then tsc for both programs (src/ + test/, and client/)
+npm run typecheck                   # stamps the build (if changed), wrangler types (which also runs the client build), then tsc for both programs
 npm run check                       # biome check --write . (format + organize imports + lint, applies safe fixes)
 npm run client:build                # bundle client/ → public/dashboard/app.js once (client:watch keeps rebuilding)
 npm run lint                        # biome lint .          (report only, no writes)

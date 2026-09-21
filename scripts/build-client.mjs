@@ -84,7 +84,8 @@ if (process.argv.includes("--watch")) {
   // several events.
   let cssTimer = null;
   watch(join(ROOT, "public", "dashboard"), (_event, filename) => {
-    if (filename !== "styles.css") {
+    // A null filename (some platforms) is treated as "maybe": the stamp is a no-op when current.
+    if (filename && filename !== "styles.css") {
       return;
     }
     clearTimeout(cssTimer);
