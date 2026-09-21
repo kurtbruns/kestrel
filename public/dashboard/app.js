@@ -552,6 +552,105 @@ function modal(html) {
   });
   return { el: back, close };
 }
+
+// ---- dismissible notice (DESIGN §2, home ⑥) ----
+// An event, with a time, that the reader could not otherwise know happened: shown once
+// per event, cleared by the reader, asking nothing. Never a tip, a standing state (the
+// banner's), a warning (the health block's), or a nag. `notice(slot, {...})` renders one
+// into a surface's notice slot and owns both the dismiss control and the record of what
+// was dismissed, so a surface never touches either.
+//
+// Identity is the (kind, subject, version) triple, e.g. ("applied", a send id, its
+// remade_at): clearing records it, and a newer version of the same subject shows again
+// on its own. An aggregate over several subjects passes `members: [{ subject, version }]`
+// instead of one subject; dismissing it records every member and it is hidden once every
+// member is, so clearing it on one surface clears the members everywhere.
+//
+// The record is per browser: one localStorage key holding one JSON map from
+// `kind|subject` to { v: version, t: dismissed-at }, capped (oldest dismissal dropped)
+// so it never grows without bound. Every read and write is guarded, so a browser that
+// blocks storage simply shows the notice each time. A convenience, safe to lose, like
+// the template editor's line-number toggle: the fact itself always lives in the API.
+// Server-side "seen" state (per principal) is deliberately not this.
+const NOTICE_KEY = "kestrel.notices";
+const NOTICE_CAP = 100;
+function readDismissed() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(NOTICE_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+function writeDismissed(map) {
+  try {
+    localStorage.setItem(NOTICE_KEY, JSON.stringify(map));
+  } catch {
+    /* storage blocked or full: the notice simply shows again next time */
+  }
+}
+const noticeMemberKey = (kind, subject) => `${kind}|${subject}`;
+function recordDismissed(kind, members) {
+  const map = readDismissed();
+  const now = Date.now();
+  for (const { subject, version } of members) {
+    map[noticeMemberKey(kind, subject)] = { v: String(version), t: now };
+  }
+  const keys = Object.keys(map);
+  if (keys.length > NOTICE_CAP) {
+    keys.sort((a, b) => (map[a]?.t || 0) - (map[b]?.t || 0));
+    for (const k of keys.slice(0, keys.length - NOTICE_CAP)) {
+      delete map[k];
+    }
+  }
+  writeDismissed(map);
+}
+// Returns the rendered element, or null when every member is already dismissed (or there
+// is none: an aggregate with no members clears any prior one). A slot holds one notice per
+// subject and one aggregate per kind, so a surface can call this from a poll: the same
+// events rendered again leave the element as it is (a live region announces on change,
+// and a repaint must not pull focus off the dismiss), and a changed set of events, or a
+// new version, replaces it rather than stacking a duplicate.
+// biome-ignore lint/correctness/noUnusedVariables: the kind ships ahead of its first occupant, the applied-change notice of the template re-make; drop this note when a surface calls it
+function notice(slot, { kind, subject, version, members, html }) {
+  if (!slot) {
+    return null;
+  }
+  const all = members || [{ subject, version }];
+  const id = members ? `${kind}|*` : `${kind}|${subject}`;
+  const events = all.map((m) => `${m.subject}@${m.version}`).join(",");
+  const prior = Array.from(slot.children).find((c) => c.dataset.notice === id);
+  const map = readDismissed();
+  if (all.every((m) => map[noticeMemberKey(kind, m.subject)]?.v === String(m.version))) {
+    prior?.remove();
+    return null;
+  }
+  if (prior?.dataset.noticeEvents === events) {
+    return prior;
+  }
+  const el = document.createElement("div");
+  el.className = "notice";
+  el.setAttribute("role", "status");
+  el.dataset.notice = id;
+  el.dataset.noticeEvents = events;
+  el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${SET_ICON.x}</button>`;
+  const dismiss = el.querySelector(".notice-dismiss");
+  dismiss.onclick = () => {
+    recordDismissed(kind, all);
+    el.remove(); // nothing to animate: the reader clicked it away
+  };
+  if (prior) {
+    const refocus = prior.querySelector(".notice-dismiss") === document.activeElement;
+    prior.replaceWith(el);
+    if (refocus) {
+      dismiss.focus();
+    }
+  } else {
+    slot.appendChild(el);
+  }
+  return el;
+}
+
 async function busy(btn, label, fn) {
   const orig = btn.textContent;
   btn.disabled = true;
@@ -1223,6 +1322,9 @@ async function renderEditor(id) {
   // readonly, not disabled: a scheduled post's text can still be read, selected, and
   // copied; only a change is refused (DESIGN §7).
   const ro = locked ? "readonly" : "";
+  // The notice slot (#editorNotices, DESIGN §2 home ⑥) sits between the scheduled banner
+  // and the conflict banner, so the top of the editor reads state, then event, then
+  // decision. Empty, it has no height; notice() renders into it.
 
   app.innerHTML = `
     <div class="editor-head">
@@ -1232,6 +1334,7 @@ async function renderEditor(id) {
       </div>
     </div>
     ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    <div id="editorNotices"></div>
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -5451,6 +5554,9 @@ async function renderDashboard() {
   const claudeConnected = posts.some((p) => p.author === "service");
   const apiCardHtml = apiConnectCard(claudeConnected);
 
+  // The notice slot (#dashNotices, DESIGN §2 home ⑥) sits above the Scheduled section: a
+  // problem (the health block) outranks news, and the notices that exist are about
+  // scheduled sends, so the eye lands on the queue right after reading one.
   const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
   root.innerHTML = `
@@ -5461,6 +5567,7 @@ async function renderDashboard() {
     ${healthHtml}
     <div id="dashActive">${dashActiveHtml(activeSends)}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
+    <div id="dashNotices"></div>
     <div class="dash-cols">
       <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${nextUpHtml}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>

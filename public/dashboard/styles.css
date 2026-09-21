@@ -2738,6 +2738,55 @@ textarea.is-invalid {
   border-color: var(--banner-line);
 }
 
+/* --- Notice (DESIGN §2, home ⑥): an event the reader could not otherwise know happened,
+   shown once and cleared by the reader, asking nothing. It wears the banner's `info` tone
+   (the same tokens as .banner-info, so the tint has one definition) but is its own class:
+   its layout is prose plus one control, not a status line with an actions row, so it never
+   wraps the dismiss beneath the text the way the banner wraps its buttons. Padding is a
+   full 1rem because it is a sentence or two, not a status line. Removed on dismiss with
+   no animation. Both themes come through the existing tokens. --- */
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  border: 1px solid var(--banner-line);
+  border-radius: 8px;
+  background: var(--banner-bg);
+  color: var(--fg);
+  padding: 1rem;
+  margin-bottom: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.notice-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+/* Links are allowed (buttons are not); underlined so they stay findable on the tint. */
+.notice a {
+  color: var(--accent);
+  font-weight: 550;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+/* The dismiss is the Icon role (button.icon) carrying the app's `x` glyph: a square hit
+   target pinned to the right, pulled 4px into the padding on three sides so it centers on
+   the first line of text without making a one-line notice taller than its text. */
+button.notice-dismiss {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  margin: -4px -4px -4px 0;
+}
+button.notice-dismiss svg {
+  width: 14px;
+  height: 14px;
+}
+
 .grid2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
