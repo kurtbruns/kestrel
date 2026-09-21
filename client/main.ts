@@ -6122,9 +6122,9 @@ async function boot() {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
-    // Local dev only (no Access edge): pick up a rebuilt bundle or an edited stylesheet
-    // without a hand refresh. Deployed envs report `access` and never poll.
-    if (session.auth?.mode === "dev") {
+    // Dev flavor only: pick up a rebuilt bundle or an edited stylesheet without a hand
+    // refresh. The production flavor compiles this out (see scripts/build-client.mjs).
+    if (__DEV__) {
       startDevReload();
     }
     return route();

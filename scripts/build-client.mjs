@@ -1,98 +1,135 @@
 #!/usr/bin/env node
 /*
- * Bundle the admin SPA: client/main.ts → public/dashboard/app.js.
+ * Build the admin SPA's served tree: public/ + client/ (source) → dist/public (served).
  *
- * The client is authored as TypeScript ES modules under client/ and shipped as the one
- * framework-free, dependency-free, plain-JS asset the browser has always received. Only
- * the pipeline that produces app.js is new; what is served, how it is fingerprinted
- * (scripts/stamp-admin-assets.mjs), and how public/_headers caches it are unchanged.
- * app.js is generated and gitignored: the committed `?v=` stamp in index.html is a hash
- * of these bytes, so the build must be deterministic — no build-time defines, no
- * environment-dependent output — or the stamp would flip between dev and deploy.
+ * public/ is pure source and dist/public is pure output, gitignored and rebuilt at will:
+ * nothing tracked ever carries a build artifact's hash. The build copies public/ through
+ * (styles.css, _headers, favicon — served exactly as written; esbuild never touches the
+ * stylesheet), bundles client/main.ts with esbuild to app.js, and generates index.html
+ * from its source with each asset's content hash as its `?v=`. public/_headers caches
+ * those two paths immutably, and a changed asset is always a new URL. The browser still
+ * receives one framework-free, dependency-free, plain-JS asset.
+ *
+ * Stable names with a `?v=`, not esbuild's content-hashed filenames, on purpose: under
+ * `wrangler dev` a file added to the assets directory after startup is never served (its
+ * path manifest is built once; only the content of files it already knows is read live),
+ * so a new filename per rebuild would 404 until the next restart and kill the dev loop.
+ * A rewritten app.js is served fresh on the next request.
+ *
+ * Flavors. Production (the default, and what wrangler's build.command produces for a
+ * deploy) is minified with `__DEV__` false, so dev-only code such as the live reload is
+ * compiled out. Dev (`--dev`, or KESTREL_CLIENT_DEV=1 for wrangler's build.command, which
+ * takes no flag; scripts/dev.mjs sets it) is readable with `__DEV__` true. Both link a
+ * sourcemap: readable stack traces from a deployed editor are worth the file, which sits
+ * behind Access with the rest of /dashboard.
  *
  * Modes:
- *   (default)  build once and exit non-zero on error.
- *   --watch    keep rebuilding as client/ changes (esbuild's incremental context, ~10ms a
- *              rebuild), re-stamping index.html after each successful build so the SPA's
- *              dev-mode poll (client/dev_reload.ts) sees the new hash. Errors are printed
- *              loudly and the previous bundle stays in place. The hand-authored
- *              styles.css is outside esbuild's build, so watch mode also re-stamps when
- *              it changes — that is what lets the poll hot-swap a CSS edit.
- *
- * Runs at every entry point that needs the bundle: `npm run dev` (scripts/dev.mjs, in
- * --watch mode), wrangler's build.command (so a bare `wrangler deploy` can never ship a
- * stale bundle), and pretest (so the stamp check hashes a fresh build).
+ *   (default)  build once; exit non-zero on error.
+ *   --watch    keep rebuilding: client/ edits through esbuild's incremental context (~10ms),
+ *              public/ edits by re-emitting the copied and generated files. Errors are loud
+ *              and the previous output stays in place.
  */
-import { spawnSync } from "node:child_process";
-import { watch } from "node:fs";
+import { createHash } from "node:crypto";
+import { cpSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as esbuild from "esbuild";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const SRC = join(ROOT, "public");
+const OUT = join(ROOT, "dist", "public");
+const ADMIN = "dashboard";
+
+const args = process.argv.slice(2);
+const dev = args.includes("--dev") || process.env.KESTREL_CLIENT_DEV === "1";
+const watchMode = args.includes("--watch");
+
+/** Content fingerprint of a served asset: first 8 hex of its SHA-256. */
+const fingerprint = (bytes) => createHash("sha256").update(bytes).digest("hex").slice(0, 8);
+
+/** The assets index.html references with a `?v=`, by the exact reference form it uses. */
+const STAMPED = ["app.js", "styles.css"];
+
+/**
+ * Copy public/ through and generate index.html with each stamped asset's `?v=`. Runs after
+ * esbuild has written app.js. The exact reference form (`./app.js`) is rewritten, so a
+ * prose mention of app.js in a comment is left alone; a template that lost a reference
+ * fails loud here rather than serve a stale asset in production.
+ */
+function emitServedTree() {
+  mkdirSync(join(OUT, ADMIN), { recursive: true });
+  cpSync(SRC, OUT, { recursive: true, filter: (src) => src !== join(SRC, ADMIN, "index.html") });
+  let html = readFileSync(join(SRC, ADMIN, "index.html"), "utf8");
+  for (const name of STAMPED) {
+    const ref = `./${name}`;
+    if (!html.includes(ref)) {
+      throw new Error(`index.html no longer references ${ref}; the served copy would be wrong`);
+    }
+    html = html.replaceAll(ref, `${ref}?v=${fingerprint(readFileSync(join(OUT, ADMIN, name)))}`);
+  }
+  writeFileSync(join(OUT, ADMIN, "index.html"), html);
+}
 
 /** @type {esbuild.BuildOptions} */
 const options = {
   absWorkingDir: ROOT,
   entryPoints: ["client/main.ts"],
-  outfile: "public/dashboard/app.js",
+  outfile: join(OUT, ADMIN, "app.js"),
   bundle: true,
   format: "iife",
   target: "es2022",
   sourcemap: true,
-  // Readable output on purpose: the served file is still something you can open and
-  // read in the browser's devtools, and a stack trace stays meaningful with the map.
-  minify: false,
+  minify: !dev,
+  define: { __DEV__: String(dev) },
   logLevel: "info",
   banner: {
     js: "// GENERATED by scripts/build-client.mjs from client/ — edit the source there, never this file.",
   },
+  plugins: [
+    {
+      name: "emit-served-tree",
+      setup(build) {
+        build.onEnd((result) => {
+          if (result.errors.length > 0) {
+            return;
+          }
+          try {
+            emitServedTree();
+          } catch (e) {
+            console.error(`[client] ${e.message}`);
+            if (!watchMode) {
+              process.exit(1);
+            }
+          }
+        });
+      },
+    },
+  ],
 };
 
-// Re-fingerprint index.html against the new bytes. Best-effort in watch mode (a failure
-// only leaves a stale `?v=`, which the next successful build re-stamps).
-function stamp() {
-  const r = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-admin-assets.mjs")], {
-    stdio: "inherit",
-  });
-  if (r.status !== 0) {
-    console.warn("[client] admin asset fingerprinting failed (continuing)");
-  }
-}
-
-if (process.argv.includes("--watch")) {
-  const ctx = await esbuild.context({
-    ...options,
-    plugins: [
-      {
-        name: "restamp-on-build",
-        setup(build) {
-          build.onEnd((result) => {
-            if (result.errors.length === 0) {
-              stamp();
-            }
-          });
-        },
-      },
-    ],
-  });
+if (watchMode) {
+  const ctx = await esbuild.context(options);
   await ctx.watch();
 
-  // styles.css is served as authored, so only its stamp needs refreshing. Watch the
-  // directory rather than the file: an editor that saves by rename replaces the inode,
-  // which a single-file watch would silently lose. Debounced, since one save can land as
-  // several events.
-  let cssTimer = null;
-  watch(join(ROOT, "public", "dashboard"), (_event, filename) => {
-    // A null filename (some platforms) is treated as "maybe": the stamp is a no-op when current.
-    if (filename && filename !== "styles.css") {
-      return;
-    }
-    clearTimeout(cssTimer);
-    cssTimer = setTimeout(stamp, 50);
+  // public/ edits (the stylesheet, the index.html template, favicon, _headers) need no
+  // bundling, only a re-emit. Watch the directory, not files: an editor that saves by
+  // rename replaces the inode, which a file watch would silently lose. Debounced, since
+  // one save can land as several events.
+  let timer = null;
+  watch(SRC, { recursive: true }, () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      try {
+        emitServedTree();
+      } catch (e) {
+        console.error(`[client] ${e.message}`);
+      }
+    }, 50);
   });
 
-  console.log("[client] watching client/ and styles.css — rebuilding and re-stamping on change");
+  console.log(
+    `[client] ${dev ? "dev" : "production"} flavor — watching client/ and public/, serving from dist/public`,
+  );
 } else {
   await esbuild.build(options);
 }

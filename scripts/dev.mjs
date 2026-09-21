@@ -61,26 +61,11 @@ function findFreePort() {
   });
 }
 
-// Build the admin SPA bundle (client/ → public/dashboard/app.js) once, up front, so the
-// stamp below hashes a current file and the dashboard is servable before wrangler binds.
-// A build error is loud here, and the esbuild watch spawned below keeps reporting it
-// until the source is fixed; the previous bundle, if any, stays in place meanwhile.
-const build = spawnSync(process.execPath, [join(ROOT, "scripts", "build-client.mjs")], {
-  stdio: "inherit",
-});
-if (build.status !== 0) {
-  console.warn("[dev] client build failed (continuing; the watcher rebuilds on the next edit)");
-}
-
-// Fingerprint the admin static assets so index.html points at content-hashed URLs
-// (public/_headers then caches them immutably). Runs on every startup; a no-op when
-// the stamps are already current. Best-effort — a failure only leaves a stale `?v=`.
-const stamp = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-admin-assets.mjs")], {
-  stdio: "inherit",
-});
-if (stamp.status !== 0) {
-  console.warn("[dev] admin asset fingerprinting failed (continuing)");
-}
+// The admin SPA is served from the tree scripts/build-client.mjs emits (see wrangler.jsonc).
+// Ask for its dev flavor — readable, with the live reload compiled in — from every builder
+// this process starts: the watcher below, and wrangler's own build.command, which takes no
+// flag and inherits this environment.
+process.env.KESTREL_CLIENT_DEV = "1";
 
 // Resolve the build stamp (version/sha/build-time/repo) into src/generated/version.ts,
 // which the Worker imports and reflects (SPEC §9). Done here, ONCE, before wrangler starts
@@ -176,10 +161,12 @@ const originArgs = isRemote
 // (see scripts/dev-port.mjs). Cleared on exit; a stale value self-heals on next start.
 writeDevPort(port);
 
-// Rebuild the SPA bundle as client/ changes, beside wrangler: esbuild's incremental watch
-// (~10ms a rebuild) re-stamps index.html after each build, and the SPA's dev-mode poll
-// picks the new stamp up and reloads. Wrangler's own build.command handles only src/
-// edits (see wrangler.jsonc), so exactly one process reacts to a client/ edit.
+// Re-emit the served tree as client/ or public/ change, beside wrangler: esbuild's
+// incremental watch (~10ms a rebuild) regenerates index.html with the new hashed names,
+// and the SPA's dev-flavor poll picks that up and reloads. Wrangler's own build.command
+// handles only src/ edits (see wrangler.jsonc), so exactly one process reacts to a change.
+// Wrangler's startup build and this watcher's first build emit the same tree; the order
+// doesn't matter.
 const watcher = spawn(process.execPath, [join(ROOT, "scripts", "build-client.mjs"), "--watch"], {
   stdio: "inherit",
 });
@@ -191,7 +178,7 @@ watcher.on("exit", (code) => {
   }
 });
 // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave the
-// watcher behind rewriting app.js and index.html forever. Stop it, then re-raise: `once`
+// watcher behind rewriting dist/ forever. Stop it, then re-raise: `once`
 // means the re-raised signal meets the default disposition and ends us as it always did
 // (a terminal Ctrl-C reaches the whole group, watcher included, and behaves the same).
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {

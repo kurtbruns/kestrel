@@ -1,14 +1,13 @@
 // Dev-only live reload for the admin SPA: notice a rebuilt bundle or an edited stylesheet
 // and pick it up without a hand refresh.
 //
-// The signal is index.html's own `?v=` stamps (scripts/stamp-admin-assets.mjs rewrites
-// them after every rebuild), polled once a second. Nothing is pushed and nothing is
-// compiled in: the bundle is byte-identical in dev and production — it must be, because
-// the committed stamp IS a hash of it — and only a runtime check (the boot probe's auth
-// mode is `dev`, which no deployed env has) turns this on. Polling the stamps also
-// checks exactly the URLs the browser would load: a new app.js stamp means the page
-// itself is stale, so it reloads; a new styles.css stamp is hot-swapped in place, so
-// the common CSS tweak loop never loses editor state.
+// The signal is the served index.html's own `?v=` stamps: scripts/build-client.mjs
+// regenerates it with each asset's content hash after every rebuild, and this polls it
+// once a second and compares the stamps to the ones the page loaded with. Nothing is
+// pushed: polling what the browser would load is the one check that can never disagree
+// with it. A new app.js stamp means the page itself is stale, so it reloads; a new
+// styles.css stamp is hot-swapped in place, so the common CSS tweak loop never loses
+// editor state. Only the dev flavor contains this (`__DEV__`, see the build script).
 
 /** The `?v=` stamp on each fingerprinted asset reference in index.html, `null` if absent. */
 export interface AssetStamps {
@@ -111,10 +110,11 @@ export interface DevReloadOptions {
  * Fetch the live index.html from the network; `null` on any failure (a server mid-restart,
  * say). Cache mode `reload`, not `no-store`: it bypasses the browser cache on the way out
  * but stores the response, so the cache entry for this page is the file as it is now. That
- * matters because `wrangler dev` keeps serving a rewritten asset under its original ETag:
- * a plain `location.reload()` revalidates, gets a 304, and would reuse the stale cached
- * page — and then poll, see the new stamp, and reload again, forever. With the entry
- * refreshed by every poll, the 304 hands the reload the current page.
+ * matters because `wrangler dev` keeps serving a rewritten file (index.html is regenerated
+ * in place) under its original ETag: a plain `location.reload()` revalidates, gets a 304,
+ * and would reuse the stale cached page — and then poll, see the new stamp, and reload
+ * again, forever. With the entry refreshed by every poll, the 304 hands the reload the
+ * current page. The stamped assets themselves are new URLs, so they never hit this.
  */
 async function fetchLiveIndex(): Promise<string | null> {
   try {
