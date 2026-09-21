@@ -766,11 +766,11 @@ const fmtAt = (ms) =>
 // The applied-change notice (SPEC §8; DESIGN §2 home ⑥): a template or identity change
 // re-made the scheduled emails at `at`. One text for both surfaces; `n` is how many
 // posts it names (the dashboard's aggregate) or 1 for the post's own. It states the
-// event and its consequence, and leaves the next step to the publisher.
+// event and the next step: the window is the review (SPEC §6), and a cleared notice
+// can afford to say so.
 function appliedNoticeHtml(at, n, onPost) {
   const who = onPost ? "this post" : `${n} scheduled post${n === 1 ? "" : "s"}`;
-  const whose = n === 1 || onPost ? "its email as it will" : "their emails as they will";
-  return `A template or identity change made <strong>${esc(fmtAt(at))}</strong> was applied to ${who}. A fresh test shows ${whose} now send.`;
+  return `A template or identity change made <strong>${esc(fmtAt(at))}</strong> was applied to ${who}. Send a fresh test email to review the changes.`;
 }
 // After a save that applied to scheduled emails, the toast says how many and that a
 // test is needed again (DESIGN §2); with none, the plain confirmation.
