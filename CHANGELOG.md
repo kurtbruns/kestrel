@@ -8,9 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+## [0.2.0] - 2026-09-21
+
 ### Changed
 
-- The migration history is squashed into a single baseline; no deployed database had run the old chain. Until the first deployment the baseline is edited in place, so when it changes an existing local database is rebuilt, not migrated: delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
+- The migration history is squashed into a single baseline; no deployed database had run the old chain. Until 1.0.0 the baseline is edited in place, so when it changes an existing database is rebuilt, not migrated: delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
 - The send list's status filter no longer accepts `failed`: a send never fails, it keeps retrying and hands the one ambiguous case to you (SPEC §12). The dashboard alert for it, which could never fire, is gone.
 - Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page; the confirmation names the fire time.
 - The composer's tabs are Edit and Preview, with icons. A scheduled post opens on Preview; its Edit tab keeps the text readable and copyable, says "Cancel the schedule to edit" beneath it (and pulses that line when an edit is attempted), and keeps the formatting toolbar in view, disabled.
@@ -42,5 +44,6 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0
