@@ -15,6 +15,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page; the confirmation names the fire time.
 - The composer's tabs are Edit and Preview, with icons. A scheduled post opens on Preview; its Edit tab keeps the text readable and copyable, says "Cancel the schedule to edit" beneath it (and pulses that line when an edit is attempted), and keeps the formatting toolbar in view, disabled.
 
+### Fixed
+
+- Two settings writers at once (the identity fields and the logo, or the editor and Claude) no longer overwrite each other's change.
+
 ## [0.1.0] - 2026-09-19
 
 The first tagged release: a self-contained newsletter app on a Cloudflare Worker over D1 and R2, with a cron-driven send sweep and a swappable email provider.

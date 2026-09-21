@@ -11,6 +11,7 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
+import { HttpError } from "../lib/errors";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
 /**
@@ -182,26 +183,112 @@ export function resolveConfirmationEmail(settings: AppSettings): ConfirmationEma
   };
 }
 
-export async function getSettings(db: D1Database): Promise<AppSettings> {
-  const row = await db.prepare("SELECT data FROM settings WHERE id = 1").first<{ data: string }>();
+/**
+ * The blob plus its version: the row's `updated_at`, or null when no row exists yet.
+ * Every write is a read-merge-write of the whole blob, and two writers can overlap
+ * (the dashboard's identity save and its logo upload; the editor and Claude), so a
+ * writer hands the version it read back to `persistSettingsStmt`, which writes only
+ * while the row is still at that version. A lost update becomes a retry instead of a
+ * silently dropped field.
+ */
+export interface SettingsSnapshot {
+  settings: AppSettings;
+  version: number | null;
+}
+
+export async function readSettings(db: D1Database): Promise<SettingsSnapshot> {
+  const row = await db
+    .prepare("SELECT data, updated_at FROM settings WHERE id = 1")
+    .first<{ data: string; updated_at: number }>();
   if (!row) {
-    return structuredClone(DEFAULT_SETTINGS);
+    return { settings: structuredClone(DEFAULT_SETTINGS), version: null };
   }
   try {
-    return coerce(JSON.parse(row.data));
+    return { settings: coerce(JSON.parse(row.data)), version: row.updated_at };
   } catch {
-    return structuredClone(DEFAULT_SETTINGS);
+    return { settings: structuredClone(DEFAULT_SETTINGS), version: row.updated_at };
   }
 }
 
-async function persist(db: D1Database, next: AppSettings): Promise<void> {
+export async function getSettings(db: D1Database): Promise<AppSettings> {
+  return (await readSettings(db)).settings;
+}
+
+/**
+ * Make sure the singleton row exists, so every write is an UPDATE with one shape
+ * (a compare-and-swap on `updated_at`, plus any guard the caller adds). A fresh
+ * install has no row; a blank blob at version 0 reads exactly as no row does.
+ */
+export async function ensureSettingsRow(db: D1Database): Promise<void> {
   await db
-    .prepare(
-      `INSERT INTO settings (id, data, updated_at) VALUES (1, ?1, ?2)
-       ON CONFLICT (id) DO UPDATE SET data = ?1, updated_at = ?2`,
-    )
-    .bind(JSON.stringify(next), Date.now())
+    .prepare("INSERT OR IGNORE INTO settings (id, data, updated_at) VALUES (1, '{}', 0)")
     .run();
+}
+
+/** An extra WHERE fragment (with its binds) a caller appends to a settings write, so
+ *  the write lands only while the fragment holds: the send re-make's guards. */
+export interface WriteGuard {
+  sql: string;
+  binds: unknown[];
+}
+
+/**
+ * The compare-and-swap write of the whole blob, as a statement so a caller can batch
+ * it with writes it must land together with (the re-make pairs it with one re-freeze
+ * per scheduled send). `expected` is the version the caller read (`readSettings`,
+ * after `ensureSettingsRow`): the update applies only while the row is still at it,
+ * so `meta.changes === 0` means another writer got there first, or a `guard` failed.
+ * The new version is strictly greater than the old one even within one millisecond,
+ * so a version never repeats.
+ */
+export function persistSettingsStmt(
+  db: D1Database,
+  next: AppSettings,
+  expected: number,
+  guard?: WriteGuard,
+): D1PreparedStatement {
+  const extra = guard ? ` AND ${guard.sql}` : "";
+  return db
+    .prepare(
+      `UPDATE settings SET data = ?, updated_at = MAX(?, updated_at + 1)
+        WHERE id = 1 AND updated_at = ?${extra}`,
+    )
+    .bind(JSON.stringify(next), Date.now(), expected, ...(guard?.binds ?? []));
+}
+
+/** How many times a writer re-reads and retries when another writer wins the CAS.
+ *  Contention is two clients on one row; a handful of retries settles it. */
+export const WRITE_RETRIES = 5;
+
+/** The retries are spent: another writer is hammering the row. A 409, so the client
+ *  retries the write rather than reading it as its own bad input (400) or a server
+ *  fault (500). */
+export class SettingsContention extends HttpError {
+  constructor() {
+    super(409, "conflict", "settings changed concurrently; try again");
+  }
+}
+
+/**
+ * Read the blob, derive the next one, and persist it under the CAS; on a lost race,
+ * re-read and derive again. `derive` must be pure over its input (it runs once per
+ * attempt). Throws after the retries are spent, which in practice means a writer is
+ * hammering the row.
+ */
+export async function updateSettingsWith(
+  db: D1Database,
+  derive: (current: AppSettings) => AppSettings,
+): Promise<AppSettings> {
+  await ensureSettingsRow(db);
+  for (let attempt = 0; attempt < WRITE_RETRIES; attempt++) {
+    const { settings, version } = await readSettings(db);
+    const next = derive(settings);
+    const res = await persistSettingsStmt(db, next, version ?? 0).run();
+    if ((res.meta.changes ?? 0) > 0) {
+      return next;
+    }
+  }
+  throw new SettingsContention();
 }
 
 /**
@@ -210,7 +297,11 @@ async function persist(db: D1Database, next: AppSettings): Promise<void> {
  * input, which the route maps to a 400.
  */
 export async function updateSettings(db: D1Database, patch: SettingsPatch): Promise<AppSettings> {
-  const current = await getSettings(db);
+  return updateSettingsWith(db, (current) => applyPatch(current, patch));
+}
+
+/** Merge a validated patch onto the current settings (pure; throws on invalid input). */
+export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSettings {
   const next: AppSettings = {
     ...current,
     publication: { ...current.publication },
@@ -269,9 +360,15 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
       );
     }
   }
-
-  await persist(db, next);
   return next;
+}
+
+/** The settings with the logo metadata set (or cleared, with `null`); pure. */
+export function withPublicationLogo(
+  current: AppSettings,
+  logo: PublicationLogo | null,
+): AppSettings {
+  return { ...current, publication: { ...current.publication, logo } };
 }
 
 /** Set (or clear, with `null`) the publication logo metadata, preserving the rest. */
@@ -279,10 +376,7 @@ export async function setPublicationLogo(
   db: D1Database,
   logo: PublicationLogo | null,
 ): Promise<AppSettings> {
-  const current = await getSettings(db);
-  const next: AppSettings = { ...current, publication: { ...current.publication, logo } };
-  await persist(db, next);
-  return next;
+  return updateSettingsWith(db, (current) => withPublicationLogo(current, logo));
 }
 
 function normalizeText(v: unknown, what: string, max: number): string {
