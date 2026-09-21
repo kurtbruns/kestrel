@@ -1209,15 +1209,20 @@ async function renderEditor(id) {
   // (409) rather than clobbers a newer save from another tab or from Claude.
   let baseRevision = post.current_revision;
   let warnedRevision = null; // newest revision we've surfaced, so we re-arm only on a genuinely newer one
+  // A scheduled post keeps its formatting toolbar in view, greyed. The buttons take
+  // aria-disabled rather than disabled so a click still reaches applyFormat, whose locked
+  // branch nudges the foot line, the way out (DESIGN §7).
   const toolbarHtml = TOOLBAR.map((group) =>
     group
       .map(
         ([kind, label]) =>
-          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}">${icon(kind)}</button>`,
+          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? ' aria-disabled="true"' : ""}>${icon(kind)}</button>`,
       )
       .join(""),
   ).join(`<span class="sep"></span>`);
-  const dis = locked ? "disabled" : "";
+  // readonly, not disabled: a scheduled post's text can still be read, selected, and
+  // copied; only a change is refused (DESIGN §7).
+  const ro = locked ? "readonly" : "";
 
   app.innerHTML = `
     <div class="editor-head">
@@ -1226,17 +1231,17 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong> — cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" aria-describedby="f-subject-error" ${dis}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" aria-describedby="f-subject-error" ${ro}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
             ${infoTip("The web address of this post's archive page.")}
           </div>
-          <input id="f-slug" value="${esc(post.slug)}" ${dis}>
+          <input id="f-slug" value="${esc(post.slug)}" ${ro}>
           ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
         </div>
       </div>
@@ -1245,17 +1250,21 @@ async function renderEditor(id) {
       <div class="composer">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
-            <button type="button" class="ctab active" data-tab="write" data-text="Write" role="tab" aria-selected="true">Write</button>
-            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false">Preview</button>
+            <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${SET_ICON.editable}Edit</span></button>
+            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${SET_ICON.preview}Preview</span></button>
           </div>
-          <div class="toolbar" role="toolbar" aria-label="Formatting"${locked ? " hidden" : ""}>${toolbarHtml}</div>
+          <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
-        <div class="composer-body" id="composerBody">
+        <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${dis}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor"${locked ? "" : ' placeholder="Type your post in Markdown…"'} ${ro}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
-        <div class="composer-foot" id="dropFoot" ${locked ? "hidden" : ""}>${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>
+        ${
+          locked
+            ? `<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${SET_ICON.readonly}<span>Cancel the schedule to edit</span></div>`
+            : `<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
+        }
         <input type="file" id="imgInput" accept="image/*" multiple hidden>
       </div>
       <div id="warnings"></div>
@@ -1263,8 +1272,7 @@ async function renderEditor(id) {
       <div class="actions-bar">
         ${
           locked
-            ? `<span class="locked-note">Locked while scheduled — cancel the schedule to edit.</span>
-               <div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
+            ? `<div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
             : `<div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>
@@ -1408,11 +1416,11 @@ async function renderEditor(id) {
       t.classList.toggle("active", on);
       t.setAttribute("aria-selected", on ? "true" : "false");
     });
-    ta.hidden = name !== "write";
-    mdHl.hidden = name !== "write"; // the highlight layer travels with the textarea
+    ta.hidden = name !== "edit";
+    mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
     previewFrame.hidden = name !== "preview";
-    toolbarEl.classList.toggle("off", name !== "write");
-    if (name === "write") {
+    toolbarEl.classList.toggle("off", name !== "edit");
+    if (name === "edit") {
       syncMdScroll();
     }
   }
@@ -1433,8 +1441,30 @@ async function renderEditor(id) {
     }
   }
   tabs.forEach((t) => {
-    t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("write"));
+    t.onclick = () => (t.dataset.tab === "preview" ? showPreview() : showTab("edit"));
   });
+  // A scheduled post opens on Preview: the preview is the copy that will send, and the
+  // Edit tab is read-only, so it is somewhere the publisher goes deliberately and finds
+  // the way out written on it (DESIGN §7).
+  if (locked) {
+    showPreview();
+  }
+
+  // --- the lock's nudge ---
+  // A scheduled post refuses edits at the browser (readonly) and at the API (SPEC §6). When
+  // one is attempted anyway, the foot's "Cancel the schedule to edit" pulses once, so the
+  // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §7).
+  const lockFoot = document.getElementById("lockFoot");
+  let nudgeTimer = null;
+  function nudge() {
+    if (!lockFoot) {
+      return;
+    }
+    lockFoot.classList.remove("nudge");
+    requestAnimationFrame(() => lockFoot.classList.add("nudge")); // a frame apart, so a second nudge restarts the pulse
+    clearTimeout(nudgeTimer);
+    nudgeTimer = setTimeout(() => lockFoot.classList.remove("nudge"), 900);
+  }
 
   // --- formatting toolbar ---
   function wrapSel(before, after, placeholder) {
@@ -1461,9 +1491,10 @@ async function renderEditor(id) {
   }
   function applyFormat(kind) {
     if (locked) {
+      nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
       return;
     }
-    showTab("write");
+    showTab("edit");
     if (kind === "bold") {
       wrapSel("**", "**", "bold text");
     } else if (kind === "italic") {
@@ -1855,7 +1886,7 @@ async function renderEditor(id) {
     body.addEventListener("drop", (e) => {
       e.preventDefault();
       body.classList.remove("dragover");
-      showTab("write");
+      showTab("edit");
       for (const f of e.dataTransfer.files) {
         uploadAndInsert(f);
       }
@@ -1878,6 +1909,30 @@ async function renderEditor(id) {
       }
       imgInput.value = "";
     };
+  } else {
+    // Locked: a key that would change the text, a paste, or a drop is refused (readonly
+    // does the refusing; a drop is stopped from opening the file) and nudges the foot.
+    // Navigation, selection, and copy keys pass, so reading stays free.
+    const body = document.getElementById("composerBody");
+    const wouldEdit = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        return ["x", "z", "y"].includes(e.key.toLowerCase()); // cut, undo, redo (paste fires its own event)
+      }
+      return e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Delete";
+    };
+    for (const f of [ta, document.getElementById("f-subject"), document.getElementById("f-slug")]) {
+      f.addEventListener("keydown", (e) => {
+        if (wouldEdit(e)) {
+          nudge();
+        }
+      });
+      f.addEventListener("paste", nudge);
+    }
+    body.addEventListener("dragover", (e) => e.preventDefault());
+    body.addEventListener("drop", (e) => {
+      e.preventDefault();
+      nudge();
+    });
   }
 
   function showWarnings(ws) {
@@ -1979,8 +2034,10 @@ async function renderEditor(id) {
               json: { fire_at: new Date(t).toISOString() },
             });
             m.close();
-            toast(withNoProviderNote("Scheduled"));
-            location.hash = "#/sent";
+            // Stay on the post, re-rendered in its scheduled state: the window is the
+            // review and this page is the review surface (SPEC §6, DESIGN §7).
+            toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
+            renderEditor(id);
           } catch (e) {
             toast(e.message);
           }
@@ -1992,8 +2049,8 @@ async function renderEditor(id) {
             await saveDraft(true);
             await api(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withNoProviderNote("Queued — cancelable for 5 minutes"));
-            location.hash = "#/sent";
+            toast(withNoProviderNote("Sends in 5 minutes, cancelable until then."));
+            renderEditor(id);
           } catch (e) {
             toast(e.message);
           }
@@ -2009,7 +2066,7 @@ async function renderEditor(id) {
 
       async function showSendNow() {
         box.innerHTML =
-          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
+          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel until it fires.</p>` +
           `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
           `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
         box.setAttribute("aria-labelledby", "snHead");
@@ -3123,6 +3180,8 @@ const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resen
 
 // Small inline icons for the intent chips, read-only notes, and controls.
 const SET_ICON = {
+  preview:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
   editable:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
   readonly:
@@ -4299,7 +4358,7 @@ async function renderSettings() {
       <div class="set-preview">
         <div class="set-preview-bar set-ce-bar">
           <div class="set-ce-modetog" role="group" aria-label="Confirmation email view">
-            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>Preview</button>
+            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true">${SET_ICON.preview}Preview</button>
             <button type="button" class="set-ce-modebtn" id="ceTabEdit" aria-pressed="false">${SET_ICON.editable}Edit</button>
           </div>
         </div>

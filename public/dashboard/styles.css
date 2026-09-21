@@ -2072,10 +2072,23 @@ th.num .th-sort {
   flex-direction: column;
   align-items: center;
 }
-/* Reserve the width of the active (600) label so toggling weight never reflows the tab. */
+/* The label row: an icon beside the word, the same pairing the settings toggles use. */
+.ctab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ctab-label svg {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 auto;
+}
+/* Reserve the width of the active (600) label so toggling weight never reflows the tab;
+   the margin stands in for the icon and its gap. */
 .ctab::after {
   content: attr(data-text);
   height: 0;
+  margin-left: 21px;
   font-weight: 600;
   overflow: hidden;
   visibility: hidden;
@@ -2109,6 +2122,9 @@ th.num .th-sort {
   background: var(--line);
   margin: 0 6px;
 }
+/* A scheduled post's toolbar stays in view with its buttons greyed. They carry
+   aria-disabled, not disabled, so a click still lands and can nudge the foot line
+   (`.composer-foot-lock`), which is where the way out is written. */
 .tb {
   display: inline-flex;
   align-items: center;
@@ -2126,9 +2142,19 @@ th.num .th-sort {
   background: var(--hover);
   color: var(--fg);
 }
-.tb:disabled {
+.tb[aria-disabled="true"] {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.tb[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--muted);
+}
+/* On the Preview tab the whole toolbar is already dimmed by `.toolbar.off`; a locked post's
+   per-button dim must not stack on it, or the toolbar all but vanishes there (0.4 x 0.4) and
+   its weight changes with the tab. One dim at a time. */
+.toolbar.off .tb[aria-disabled="true"] {
+  opacity: 1;
 }
 .tb svg {
   width: 18px;
@@ -2214,6 +2240,25 @@ th.num .th-sort {
   background: #fff;
   display: block;
 }
+/* A scheduled post's Edit tab (DESIGN §7): the text stays fully legible, selectable, and
+   copyable (the fields are readonly, not disabled, since a disabled textarea cannot even be
+   selected), on the recessed surface Settings uses for a read-only card (`.set-card.sunken`);
+   the caret is hidden because the field is not for typing. The way out is the composer's
+   foot line, below. */
+.composer-body.locked .md-hl {
+  background: var(--sunken);
+}
+.composer-body.locked textarea.editor {
+  caret-color: transparent;
+}
+/* The subject and slug of a scheduled post are read-only too, and readonly (unlike disabled)
+   carries no native greying, so they take the same recessed surface as the body: otherwise
+   they read as editable, and the refusal pulses a line far below where the keystroke landed. */
+#f-subject[readonly],
+#f-slug[readonly] {
+  background: var(--sunken);
+  border-color: var(--line-soft);
+}
 .composer-body.dragover::after {
   content: "Drop images to upload";
   position: absolute;
@@ -2246,6 +2291,32 @@ th.num .th-sort {
   height: 16px;
   fill: currentColor;
 }
+/* The locked composer's foot: where a draft's foot offers images, a scheduled post's says
+   the way out, "Cancel the schedule to edit", with the read-only lock Settings uses. It is
+   a hint, not a control (Cancel stays on the banner, DESIGN §7), so no pointer and no hover
+   lift. `.nudge` pulses it once, in the read-only note's tint, when an edit is attempted,
+   so the refusal is seen where the keystroke landed; reduced-motion holds the tint instead. */
+.composer-foot-lock {
+  cursor: default;
+}
+.composer-foot-lock:hover {
+  color: var(--muted);
+}
+.composer-foot-lock svg {
+  fill: none;
+  color: var(--warn-fg);
+}
+.composer-foot-lock.nudge {
+  animation: lock-nudge 900ms ease-out;
+}
+@keyframes lock-nudge {
+  from {
+    background: color-mix(in srgb, var(--warn-fg) 18%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
 
 .actions-bar {
   display: flex;
@@ -2255,12 +2326,11 @@ th.num .th-sort {
   margin-top: 16px;
   flex-wrap: wrap;
 }
-/* Left-hand note in the actions bar of a locked (scheduled) post, where there is no
-   Primary and nothing to autosave — it stands in for the Save draft + cue that a
-   draft shows, explaining why the row is quiet. */
-.locked-note {
-  font-size: 13px;
-  color: var(--muted);
+/* A locked (scheduled) post's actions bar holds Send test email alone: no Primary,
+   nothing to autosave, and the lock is said where editing would happen, on the
+   composer. The lone row keeps to the right, where the draft's send actions sit. */
+.actions-bar > .row:only-child {
+  margin-left: auto;
 }
 /* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
@@ -4833,6 +4903,10 @@ body.has-savebar .content {
     transition: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: and every looping animation (e.g. the Saving… cue's pulsing dot) */
     animation: none !important;
+  }
+  /* The lock's nudge holds its tint for the class's lifetime instead of fading. */
+  .composer-foot-lock.nudge {
+    background: color-mix(in srgb, var(--warn-fg) 18%, transparent);
   }
 }
 
