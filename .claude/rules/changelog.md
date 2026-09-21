@@ -25,7 +25,9 @@ What earns a line: a change to behavior, the admin UI, the HTTP API surface, con
 
 ## Cutting a release
 
-A release is cut by the maintainer, by hand, on `main` after the change has merged (a tag on a feature branch would point at the wrong commit):
+**When.** Kestrel is self-hosted, so a release is not tied to any one deploy: operators upgrade on their own schedule, and what the maintainer controls is what `[Unreleased]` would hand them. Cut a release when `[Unreleased]` holds something an operator would want to upgrade for (a feature, or a fix they would notice), and promptly after a `Breaking` line lands, so the break ships under its own version instead of riding a later one. Between releases every build still identifies itself: the build stamp carries the version and the commit, so a build off `main` is never mistaken for the release before it.
+
+**How.** A release is cut by the maintainer, by hand. The edit below can land through a pull request like any other change; the tag goes on `main` once it is there (a tag on a feature branch would point at the wrong commit):
 
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - <date>` and add a fresh, empty `## [Unreleased]` above it.
 2. Bump `version` in `package.json` to `X.Y.Z`.
