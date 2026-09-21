@@ -605,32 +605,45 @@ function recordDismissed(kind, members) {
   }
   writeDismissed(map);
 }
-// Returns the rendered element, or null when every member is already dismissed. Rendering
-// the same identity into a slot again replaces it rather than stacking a duplicate, so a
-// surface can call this from a poll.
+// Returns the rendered element, or null when every member is already dismissed (or there
+// is none: an aggregate with no members clears any prior one). A slot holds one notice per
+// subject and one aggregate per kind, so a surface can call this from a poll: the same
+// events rendered again leave the element as it is (a live region announces on change,
+// and a repaint must not pull focus off the dismiss), and a changed set of events, or a
+// new version, replaces it rather than stacking a duplicate.
 function notice(slot, { kind, subject, version, members, html }) {
   if (!slot) {
     return null;
   }
   const all = members || [{ subject, version }];
-  const id = `${kind}|${all.map((m) => m.subject).join(",")}`;
+  const id = members ? `${kind}|*` : `${kind}|${subject}`;
+  const events = all.map((m) => `${m.subject}@${m.version}`).join(",");
   const prior = Array.from(slot.children).find((c) => c.dataset.notice === id);
   const map = readDismissed();
   if (all.every((m) => map[noticeMemberKey(kind, m.subject)]?.v === String(m.version))) {
     prior?.remove();
     return null;
   }
+  if (prior?.dataset.noticeEvents === events) {
+    return prior;
+  }
   const el = document.createElement("div");
   el.className = "notice";
   el.setAttribute("role", "status");
   el.dataset.notice = id;
+  el.dataset.noticeEvents = events;
   el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${SET_ICON.x}</button>`;
-  el.querySelector(".notice-dismiss").onclick = () => {
+  const dismiss = el.querySelector(".notice-dismiss");
+  dismiss.onclick = () => {
     recordDismissed(kind, all);
     el.remove(); // nothing to animate: the reader clicked it away
   };
   if (prior) {
+    const refocus = prior.querySelector(".notice-dismiss") === document.activeElement;
     prior.replaceWith(el);
+    if (refocus) {
+      dismiss.focus();
+    }
   } else {
     slot.appendChild(el);
   }
@@ -1482,7 +1495,7 @@ async function renderEditor(id) {
         </div>
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${ro}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor"${locked ? "" : ' placeholder="Type your post in Markdown…"'} ${ro}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
         ${
@@ -2309,7 +2322,7 @@ async function renderEditor(id) {
 
       async function showSendNow() {
         box.innerHTML =
-          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
+          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel until it fires.</p>` +
           `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
           `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
         box.setAttribute("aria-labelledby", "snHead");
@@ -5857,22 +5870,15 @@ async function renderDashboard() {
 // none), and the notice is always one moment and N posts. Its members are the sends
 // by id and remade_at, the same record each post page uses, so clearing it here
 // clears them there, and clearing every post hides it here. Re-painted with the
-// queue: the last line is cleared first, since notice() replaces a prior render only
-// when its members match, and the set changes as a re-made send fires or is canceled
-// (one aggregate per slot, never two).
+// queue: notice() keeps one aggregate per slot, replaces it when the set changes (a
+// re-made send fired or was canceled), and clears it when the set is empty.
 function paintAppliedNotice(scheduled) {
   const slot = document.getElementById("dashNotices");
   if (!slot) {
     return;
   }
-  for (const el of slot.querySelectorAll('[data-notice^="applied|"]')) {
-    el.remove();
-  }
   const remade = scheduled.filter((s) => s.remade_at);
-  if (!remade.length) {
-    return;
-  }
-  const at = Math.max(...remade.map((s) => s.remade_at));
+  const at = remade.length ? Math.max(...remade.map((s) => s.remade_at)) : 0;
   notice(slot, {
     kind: "applied",
     members: remade.map((s) => ({ subject: s.id, version: s.remade_at })),

@@ -2150,6 +2150,12 @@ th.num .th-sort {
   background: transparent;
   color: var(--muted);
 }
+/* On the Preview tab the whole toolbar is already dimmed by `.toolbar.off`; a locked post's
+   per-button dim must not stack on it, or the toolbar all but vanishes there (0.4 x 0.4) and
+   its weight changes with the tab. One dim at a time. */
+.toolbar.off .tb[aria-disabled="true"] {
+  opacity: 1;
+}
 .tb svg {
   width: 18px;
   height: 18px;
@@ -2244,6 +2250,14 @@ th.num .th-sort {
 }
 .composer-body.locked textarea.editor {
   caret-color: transparent;
+}
+/* The subject and slug of a scheduled post are read-only too, and readonly (unlike disabled)
+   carries no native greying, so they take the same recessed surface as the body: otherwise
+   they read as editable, and the refusal pulses a line far below where the keystroke landed. */
+#f-subject[readonly],
+#f-slug[readonly] {
+  background: var(--sunken);
+  border-color: var(--line-soft);
 }
 .composer-body.dragover::after {
   content: "Drop images to upload";
