@@ -2122,8 +2122,9 @@ th.num .th-sort {
   background: var(--line);
   margin: 0 6px;
 }
-/* A scheduled post's toolbar stays in view with its buttons disabled (`.tb:disabled`);
-   the way out is written on the Edit tab itself (`.composer-lock`). */
+/* A scheduled post's toolbar stays in view with its buttons greyed. They carry
+   aria-disabled, not disabled, so a click still lands and can nudge the foot line
+   (`.composer-foot-lock`), which is where the way out is written. */
 .tb {
   display: inline-flex;
   align-items: center;
@@ -2141,9 +2142,13 @@ th.num .th-sort {
   background: var(--hover);
   color: var(--fg);
 }
-.tb:disabled {
+.tb[aria-disabled="true"] {
   opacity: 0.4;
   cursor: not-allowed;
+}
+.tb[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--muted);
 }
 .tb svg {
   width: 18px;
@@ -2229,30 +2234,16 @@ th.num .th-sort {
   background: #fff;
   display: block;
 }
-/* A scheduled post's Edit tab (DESIGN §7): the text greys (the highlight layer carries
-   the visible text) and one message sits over it with the way out. The post opens on
-   Preview, so this is what the publisher meets when they come to edit. Pointer-events
-   pass through; the textarea beneath is disabled anyway. */
+/* A scheduled post's Edit tab (DESIGN §7): the text stays fully legible, selectable, and
+   copyable (the fields are readonly, not disabled, since a disabled textarea cannot even be
+   selected), on the recessed surface Settings uses for a read-only card (`.set-card.sunken`);
+   the caret is hidden because the field is not for typing. The way out is the composer's
+   foot line, below. */
 .composer-body.locked .md-hl {
-  opacity: 0.45;
+  background: var(--sunken);
 }
-.composer-lock {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-}
-.composer-lock-msg {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--fg);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+.composer-body.locked textarea.editor {
+  caret-color: transparent;
 }
 .composer-body.dragover::after {
   content: "Drop images to upload";
@@ -2285,6 +2276,32 @@ th.num .th-sort {
   width: 16px;
   height: 16px;
   fill: currentColor;
+}
+/* The locked composer's foot: where a draft's foot offers images, a scheduled post's says
+   the way out, "Cancel the schedule to edit", with the read-only lock Settings uses. It is
+   a hint, not a control (Cancel stays on the banner, DESIGN §7), so no pointer and no hover
+   lift. `.nudge` pulses it once, in the read-only note's tint, when an edit is attempted,
+   so the refusal is seen where the keystroke landed; reduced-motion holds the tint instead. */
+.composer-foot-lock {
+  cursor: default;
+}
+.composer-foot-lock:hover {
+  color: var(--muted);
+}
+.composer-foot-lock svg {
+  fill: none;
+  color: var(--warn-fg);
+}
+.composer-foot-lock.nudge {
+  animation: lock-nudge 900ms ease-out;
+}
+@keyframes lock-nudge {
+  from {
+    background: color-mix(in srgb, var(--warn-fg) 18%, transparent);
+  }
+  to {
+    background: transparent;
+  }
 }
 
 .actions-bar {
@@ -4872,6 +4889,10 @@ body.has-savebar .content {
     transition: none !important;
     /* biome-ignore lint/complexity/noImportantStyles: and every looping animation (e.g. the Saving… cue's pulsing dot) */
     animation: none !important;
+  }
+  /* The lock's nudge holds its tint for the class's lifetime instead of fading. */
+  .composer-foot-lock.nudge {
+    background: color-mix(in srgb, var(--warn-fg) 18%, transparent);
   }
 }
 

@@ -1195,17 +1195,20 @@ async function renderEditor(id) {
   // (409) rather than clobbers a newer save from another tab or from Claude.
   let baseRevision = post.current_revision;
   let warnedRevision = null; // newest revision we've surfaced, so we re-arm only on a genuinely newer one
-  // A scheduled post keeps its formatting toolbar in view, greyed; the way out is said
-  // on the greyed Edit tab itself (DESIGN §7).
+  // A scheduled post keeps its formatting toolbar in view, greyed. The buttons take
+  // aria-disabled rather than disabled so a click still reaches applyFormat, whose locked
+  // branch nudges the foot line, the way out (DESIGN §7).
   const toolbarHtml = TOOLBAR.map((group) =>
     group
       .map(
         ([kind, label]) =>
-          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? " disabled" : ""}>${icon(kind)}</button>`,
+          `<button type="button" class="tb" data-fmt="${kind}" title="${label}" aria-label="${label}"${locked ? ' aria-disabled="true"' : ""}>${icon(kind)}</button>`,
       )
       .join(""),
   ).join(`<span class="sep"></span>`);
-  const dis = locked ? "disabled" : "";
+  // readonly, not disabled: a scheduled post's text can still be read, selected, and
+  // copied; only a change is refused (DESIGN §7).
+  const ro = locked ? "readonly" : "";
 
   app.innerHTML = `
     <div class="editor-head">
@@ -1218,13 +1221,13 @@ async function renderEditor(id) {
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" aria-describedby="f-subject-error" ${dis}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${esc(post.subject)}" aria-describedby="f-subject-error" ${ro}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
             ${infoTip("The web address of this post's archive page.")}
           </div>
-          <input id="f-slug" value="${esc(post.slug)}" ${dis}>
+          <input id="f-slug" value="${esc(post.slug)}" ${ro}>
           ${locked ? "" : `<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
         </div>
       </div>
@@ -1240,11 +1243,14 @@ async function renderEditor(id) {
         </div>
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          ${locked ? `<div class="composer-lock" id="composerLock" role="note"><span class="composer-lock-msg">Cancel the schedule to edit</span></div>` : ""}
-          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${dis}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${ro}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
-        <div class="composer-foot" id="dropFoot" ${locked ? "hidden" : ""}>${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>
+        ${
+          locked
+            ? `<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${SET_ICON.readonly}<span>Cancel the schedule to edit</span></div>`
+            : `<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
+        }
         <input type="file" id="imgInput" accept="image/*" multiple hidden>
       </div>
       <div id="warnings"></div>
@@ -1398,10 +1404,6 @@ async function renderEditor(id) {
     });
     ta.hidden = name !== "edit";
     mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
-    const lock = document.getElementById("composerLock");
-    if (lock) {
-      lock.hidden = name !== "edit"; // and so does a scheduled post's lock message
-    }
     previewFrame.hidden = name !== "preview";
     toolbarEl.classList.toggle("off", name !== "edit");
     if (name === "edit") {
@@ -1434,6 +1436,22 @@ async function renderEditor(id) {
     showPreview();
   }
 
+  // --- the lock's nudge ---
+  // A scheduled post refuses edits at the browser (readonly) and at the API (SPEC §6). When
+  // one is attempted anyway, the foot's "Cancel the schedule to edit" pulses once, so the
+  // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §7).
+  const lockFoot = document.getElementById("lockFoot");
+  let nudgeTimer = null;
+  function nudge() {
+    if (!lockFoot) {
+      return;
+    }
+    lockFoot.classList.remove("nudge");
+    requestAnimationFrame(() => lockFoot.classList.add("nudge")); // a frame apart, so a second nudge restarts the pulse
+    clearTimeout(nudgeTimer);
+    nudgeTimer = setTimeout(() => lockFoot.classList.remove("nudge"), 900);
+  }
+
   // --- formatting toolbar ---
   function wrapSel(before, after, placeholder) {
     const s = ta.selectionStart,
@@ -1459,6 +1477,7 @@ async function renderEditor(id) {
   }
   function applyFormat(kind) {
     if (locked) {
+      nudge(); // reached by a toolbar click or a Cmd+B / I / K shortcut
       return;
     }
     showTab("edit");
@@ -1876,6 +1895,30 @@ async function renderEditor(id) {
       }
       imgInput.value = "";
     };
+  } else {
+    // Locked: a key that would change the text, a paste, or a drop is refused (readonly
+    // does the refusing; a drop is stopped from opening the file) and nudges the foot.
+    // Navigation, selection, and copy keys pass, so reading stays free.
+    const body = document.getElementById("composerBody");
+    const wouldEdit = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        return ["x", "z", "y"].includes(e.key.toLowerCase()); // cut, undo, redo (paste fires its own event)
+      }
+      return e.key.length === 1 || e.key === "Enter" || e.key === "Backspace" || e.key === "Delete";
+    };
+    for (const f of [ta, document.getElementById("f-subject"), document.getElementById("f-slug")]) {
+      f.addEventListener("keydown", (e) => {
+        if (wouldEdit(e)) {
+          nudge();
+        }
+      });
+      f.addEventListener("paste", nudge);
+    }
+    body.addEventListener("dragover", (e) => e.preventDefault());
+    body.addEventListener("drop", (e) => {
+      e.preventDefault();
+      nudge();
+    });
   }
 
   function showWarnings(ws) {
