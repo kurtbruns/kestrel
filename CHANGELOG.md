@@ -13,6 +13,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - The migration history is squashed into a single baseline; no deployed database had run the old chain. Until the first deployment the baseline is edited in place, so when it changes an existing local database is rebuilt, not migrated: delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
 - The send list's status filter no longer accepts `failed`: a send never fails, it keeps retrying and hands the one ambiguous case to you (SPEC §12). The dashboard alert for it, which could never fire, is gone.
 
+### Fixed
+
+- In the reference room, the tab for the page you are already on (and the Kestrel wordmark on the docs index) now scrolls back to the top instead of doing nothing.
+
 ## [0.1.0] - 2026-09-19
 
 The first tagged release: a self-contained newsletter app on a Cloudflare Worker over D1 and R2, with a cron-driven send sweep and a swappable email provider.
