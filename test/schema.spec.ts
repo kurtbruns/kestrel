@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 describe("schema (0001_init)", () => {
-  it("creates all seven tables", async () => {
+  it("creates all eight tables", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     ).all<{ name: string }>();
@@ -13,6 +13,7 @@ describe("schema (0001_init)", () => {
       "images",
       "subscribers",
       "suppressions",
+      "settings",
       "sends",
       "deliveries",
     ]) {
@@ -62,6 +63,22 @@ describe("schema (0001_init)", () => {
       .bind(now)
       .run();
     expect(res.meta.changes).toBe(0);
+  });
+
+  it("rejects `failed` as a send status: a send never fails (SPEC §12)", async () => {
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO posts (id, slug, status, created_at, updated_at) VALUES ('p3','p-3','draft',?,?)",
+    )
+      .bind(now, now)
+      .run();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('sf1','p3','failed',?, '', '', '', ?)",
+      )
+        .bind(now, now)
+        .run(),
+    ).rejects.toThrow(/CHECK constraint failed/);
   });
 
   it("enforces one active send per post via the partial unique index", async () => {
