@@ -1,10 +1,11 @@
 -- 0001_init — the Kestrel schema (SPEC §2: the six nouns, plus settings).
 --
--- This is the baseline. Until the first deployment it is edited in place: no database
--- has ever run anything else, so there is nothing to migrate — but wrangler tracks
--- applied migrations by filename, so after a change here every local database must be
--- rebuilt (delete .wrangler/state/v3/d1 and run `migrate:local`). From the first
--- deployment on, migrations are append-only: never edit this file, add the next one.
+-- This is the baseline. Until 1.0.0, the self-host release, it is edited in place: no
+-- database anyone would mind rebuilding has run it, so there is nothing to migrate. But
+-- wrangler tracks applied migrations by filename, so after a change here every existing
+-- database is rebuilt (delete .wrangler/state/v3/d1 and run `migrate:local`). It freezes
+-- at 1.0.0, or earlier the day a database with data worth keeping has run it; from then
+-- on migrations are append-only: never edit this file, add the next one.
 --
 -- Timestamps are unix epoch milliseconds (INTEGER). Text ids are app-generated
 -- (UUID / random tokens). D1 enforces the FK declarations (foreign_keys is on) but
