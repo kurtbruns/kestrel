@@ -580,6 +580,75 @@ export function insertScheduledSendStmt(
     );
 }
 
+// --- the re-make (SPEC §6, §9) ---------------------------------------------------
+
+/** A scheduled send as the settings surface lists it: what a template or identity
+ *  change would re-make, and what the client acknowledges by id. */
+export interface ScheduledSendRef {
+  id: string;
+  post_id: string;
+  subject: string;
+  fire_at: number;
+  remade_at: number | null;
+}
+
+/** Every `scheduled` send, soonest first: the set "in use" by the template and the
+ *  identity. A `sending` send is past the window and a `sent` one is the record;
+ *  neither is listed, counted, or ever re-made. */
+export async function listScheduledSends(db: D1Database): Promise<ScheduledSendRef[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT id, post_id, subject, fire_at, remade_at FROM sends WHERE status = 'scheduled' ORDER BY fire_at ASC, id ASC",
+    )
+    .all<ScheduledSendRef>();
+  return results;
+}
+
+/**
+ * The predicate every statement of a re-make batch carries, so the batch lands whole
+ * or not at all against three things that can move between the read and the write:
+ * the settings version the render used (`settingsVersionIs`), a scheduled send inside
+ * the minimum lead (`minFireAt` is now + the lead), and a scheduled send the client
+ * did not acknowledge (`ackIds`), such as one scheduled in the gap. Nothing here is
+ * user text: the ids are bound, the rest is fixed SQL.
+ */
+export function remakeGuard(
+  settingsVersion: number,
+  minFireAt: number,
+  ackIds: string[],
+): { sql: string; binds: unknown[] } {
+  const version = settingsVersionIs(settingsVersion);
+  const unacked =
+    ackIds.length === 0
+      ? "NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled')"
+      : `NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND id NOT IN (${ackIds.map(() => "?").join(", ")}))`;
+  return {
+    sql: `${version.sql} AND NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND fire_at < ?) AND ${unacked}`,
+    binds: [...version.binds, minFireAt, ...ackIds],
+  };
+}
+
+/**
+ * Re-freeze one scheduled send in place: the rendered columns and `remade_at`, nothing
+ * else (the fire time, the window's anchor, and the audience snapshot stay). A CAS on
+ * `status = 'scheduled'` plus the batch's `guard`: a send that fired or was canceled in
+ * the gap changes zero rows without failing the batch, and is never touched.
+ */
+export function remakeSendStmt(
+  db: D1Database,
+  sendId: string,
+  render: FrozenRender,
+  now: number,
+  guard: { sql: string; binds: unknown[] },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, remade_at = ?
+        WHERE id = ? AND status = 'scheduled' AND ${guard.sql}`,
+    )
+    .bind(render.rendered_html, render.rendered_text, render.subject, now, sendId, ...guard.binds);
+}
+
 // --- send-loop / sweep (M6) -------------------------------------------------
 
 /** Scheduled sends whose fire time has arrived. */

@@ -1,35 +1,47 @@
 /**
  * App settings surface (authed admin). Three parts:
  *
- *   GET    /api/settings      → { settings, deployment }
- *   PUT    /api/settings      → update editable settings (merge), returns { settings }
+ *   GET    /api/settings      → { settings, deployment, inUse }
+ *   PUT    /api/settings      → update editable settings (merge), returns { settings, remade }
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
  *
  * `settings` are the mutable, in-app preferences (src/db/settings.ts) — including
- * the publication identity: name, tagline, brand color, and logo.
+ * the publication identity: name, tagline, address, and logo.
  * `deployment` is a READ-ONLY reflection of the env-resolved Config — which
  * provider is live, the From address, the origins, whether Access is configured —
  * so the editor can show what was set at deploy time and link to the setup docs
  * for how to change it. It deliberately exposes NO secrets (SPEC §9/§11): the
  * provider credentials, the Access AUD, and the dev secret never appear here.
+ * `inUse` is the scheduled sends a template or identity change would re-make, and
+ * the identity fields the template renders (SPEC §9): the pre-flight a client reads
+ * before saving. Every write goes through the re-make (send/remake.ts): a change
+ * that reaches the email is refused until the client acknowledges those sends by id
+ * (`remake`), and the response says what was re-made.
  */
 
 import { buildInfo } from "../build";
+import { listScheduledSends } from "../db/sends";
 import {
   type AppSettings,
+  applyPatch,
   BRANDING_LOGO_KEY,
   DEFAULT_CONFIRMATION_EMAIL,
   getSettings,
   resolveConfirmationEmail,
   type SettingsPatch,
-  setPublicationLogo,
-  updateSettings,
+  withPublicationLogo,
 } from "../db/settings";
 import type { Config } from "../env";
 import { badRequest, json } from "../lib/errors";
-import { DEFAULT_EMAIL_TEMPLATE, validateEmailTemplate } from "../render/template_engine";
+import {
+  DEFAULT_EMAIL_TEMPLATE,
+  identityFieldsInUse,
+  resolveBranding,
+  validateEmailTemplate,
+} from "../render/template_engine";
 import type { RequestContext } from "../router";
+import { insideLead, saveSettingsRemaking } from "../send/remake";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
 const MAX_LOGO_BYTES = 512 * 1024;
@@ -88,9 +100,49 @@ function settingsView(settings: AppSettings, cfg: Config) {
   };
 }
 
+/** The scheduled sends a template or identity change would re-make (SPEC §9), the
+ *  moment after which a save stops being refused for the lead, and the identity fields
+ *  the current template renders: what a client reads before it saves. */
+async function inUseView(db: D1Database, settings: AppSettings, cfg: Config) {
+  const sends = await listScheduledSends(db);
+  return {
+    sends,
+    retry_after: insideLead(sends, Date.now()).retryAfter,
+    identityFields: identityFieldsInUse(resolveBranding(settings, cfg).template),
+  };
+}
+
 export async function get(c: RequestContext): Promise<Response> {
   const settings = await getSettings(c.env.DB);
-  return json({ settings: settingsView(settings, c.config), deployment: deploymentView(c.config) });
+  return json({
+    settings: settingsView(settings, c.config),
+    deployment: deploymentView(c.config),
+    inUse: await inUseView(c.env.DB, settings, c.config),
+  });
+}
+
+/** The acknowledged send ids from a JSON body's `remake` (a list of strings), or null. */
+function readAck(o: Record<string, unknown>): string[] | null {
+  if (!("remake" in o)) {
+    return null;
+  }
+  if (!Array.isArray(o.remake) || !o.remake.every((id) => typeof id === "string")) {
+    throw badRequest("remake must be a list of send ids");
+  }
+  return o.remake as string[];
+}
+
+/** The acknowledged send ids from the `remake` query parameter (comma-separated), for
+ *  the logo routes, which carry no JSON body; null when absent. */
+function readAckQuery(c: RequestContext): string[] | null {
+  const raw = c.url.searchParams.get("remake");
+  if (raw === null) {
+    return null;
+  }
+  return raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
 }
 
 export async function update(c: RequestContext): Promise<Response> {
@@ -101,6 +153,7 @@ export async function update(c: RequestContext): Promise<Response> {
     throw badRequest("a JSON body is required");
   }
   const patch = readPatch(body);
+  const ack = readAck((body && typeof body === "object" ? body : {}) as Record<string, unknown>);
   // Structural template validation: a missing unsubscribe (or body) is an error and
   // rejects the write — no email may ship without a way to leave (I2). Other issues
   // are warnings, returned so the client can surface them without blocking. An empty
@@ -116,13 +169,20 @@ export async function update(c: RequestContext): Promise<Response> {
     }
     warnings = v.warnings;
   }
+  // Validate the patch against the current settings up front, so a bad field is a 400
+  // before any refusal about scheduled sends (applyPatch throws plain Errors).
   try {
-    const settings = await updateSettings(c.env.DB, patch);
-    return json({ settings: settingsView(settings, c.config), warnings });
+    applyPatch(await getSettings(c.env.DB), patch);
   } catch (e) {
-    // updateSettings throws plain Errors for invalid input (bad address/color, too many).
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
+  const { settings, remade } = await saveSettingsRemaking(
+    c.env,
+    c.config,
+    (current) => applyPatch(current, patch),
+    ack,
+  );
+  return json({ settings: settingsView(settings, c.config), warnings, remade });
 }
 
 /** Store the uploaded logo bytes under the reserved R2 key, then bump its version. */
@@ -147,19 +207,36 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (bytes.byteLength > MAX_LOGO_BYTES) {
     throw badRequest("logo must be 512 KB or smaller");
   }
-  await c.env.MEDIA.put(BRANDING_LOGO_KEY, bytes, { httpMetadata: { contentType: type } });
   // The `?v=` cache-buster is a timestamp, not a counter: it must strictly increase
   // even across a delete → re-upload, so it never reuses an old value and serves a
   // stale logo through a cache that ignores the ETag (self-hosted deployments vary).
   const version = Date.now();
-  const settings = await setPublicationLogo(c.env.DB, { version, contentType: type });
-  return json({ settings: settingsView(settings, c.config) });
+  // The logo is part of the identity, so the same re-make rule applies (SPEC §9); the
+  // bytes are written only once the refusals are ruled out, so a refused upload never
+  // leaves a new logo behind the old version.
+  const ack = readAckQuery(c);
+  const { settings, remade } = await saveSettingsRemaking(
+    c.env,
+    c.config,
+    (current) => withPublicationLogo(current, { version, contentType: type }),
+    ack,
+    async () => {
+      await c.env.MEDIA.put(BRANDING_LOGO_KEY, bytes, { httpMetadata: { contentType: type } });
+    },
+  );
+  return json({ settings: settingsView(settings, c.config), remade });
 }
 
 export async function deleteLogo(c: RequestContext): Promise<Response> {
-  await c.env.MEDIA.delete(BRANDING_LOGO_KEY);
-  const settings = await setPublicationLogo(c.env.DB, null);
-  return json({ settings: settingsView(settings, c.config) });
+  const ack = readAckQuery(c);
+  const { settings, remade } = await saveSettingsRemaking(
+    c.env,
+    c.config,
+    (current) => withPublicationLogo(current, null),
+    ack,
+    () => c.env.MEDIA.delete(BRANDING_LOGO_KEY),
+  );
+  return json({ settings: settingsView(settings, c.config), remade });
 }
 
 /** Pick only the known editable keys off the request body. */

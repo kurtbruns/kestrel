@@ -122,14 +122,55 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/settings",
       access: "admin",
-      summary: "Runtime preferences + a read-only reflection of deploy config (no secrets).",
+      summary:
+        "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
+      description:
+        "`inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
+      example: {
+        response: {
+          settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },
+          deployment: { provider: "ses" },
+          inUse: {
+            sends: [
+              {
+                id: "s_xyz789",
+                post_id: "p_abc123",
+                subject: "Hello, world",
+                fire_at: 1768467600000,
+                remade_at: null,
+              },
+            ],
+            retry_after: null,
+            identityFields: ["name", "tagline", "logoUrl"],
+          },
+        },
+      },
       handler: settingsRoutes.get,
     },
     {
       method: "PUT",
       path: "/api/settings",
       access: "admin",
-      summary: "Update runtime preferences (test recipients; the publication identity).",
+      summary:
+        "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
+      description:
+        "Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test.",
+      example: {
+        request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
+        response: {
+          settings: { emailTemplate: "…" },
+          warnings: [],
+          remade: [
+            {
+              id: "s_xyz789",
+              post_id: "p_abc123",
+              subject: "Hello, world",
+              fire_at: 1768467600000,
+              remade_at: 1768460000000,
+            },
+          ],
+        },
+      },
       handler: settingsRoutes.update,
     },
     {
@@ -137,6 +178,8 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/api/settings/logo",
       access: "admin",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
+      description:
+        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out.",
       handler: settingsRoutes.uploadLogo,
     },
     {
@@ -144,6 +187,8 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/api/settings/logo",
       access: "admin",
       summary: "Remove the publication logo.",
+      description:
+        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead.",
       handler: settingsRoutes.deleteLogo,
     },
     {
@@ -155,6 +200,8 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
+      description:
+        "Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see `PUT /api/settings`).",
       example: {
         request: { to: "you@example.com" },
         response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
@@ -205,7 +252,8 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id",
       access: "admin",
-      summary: "One post with its current markdown and any active schedule.",
+      summary:
+        "One post with its current markdown and any active schedule; `scheduled.remade_at` says when a template or identity change last re-made its email.",
       handler: postRoutes.getPost,
     },
     {
@@ -326,7 +374,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
       description:
-        "Freezes the current draft onto a send row and soft-locks the post; cancelable until it fires.",
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400.",
       example: {
         request: { fire_at: "2026-01-15T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
@@ -339,6 +387,8 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary:
         "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post.",
+      description:
+        "The same freeze as scheduling, with the template and identity as they stand. For its five minutes the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired.",
       example: {
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
       },
@@ -349,7 +399,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/sends",
       access: "admin",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled.",
       query: [
         {
           name: "status",
@@ -376,7 +426,7 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/sends/:id",
       access: "admin",
       summary:
-        "One send: the frozen record, the delivery-outcome breakdown, and its archive URL (published once sent).",
+        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent).",
       handler: sendRoutes.get,
     },
     {
@@ -466,7 +516,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved. Distinct from cancel → edit → re-schedule, which is for content changes. Same minimum lead as scheduling.",
+        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → re-schedule, which is for content changes. Same minimum lead as scheduling.",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768554000000 } },

@@ -32,6 +32,22 @@ describe("API reference is generated from the route registration", () => {
     }
   });
 
+  it("every route under the re-make rule states it in its own description (the reference is what Claude reads)", () => {
+    // SPEC §9: a template or identity change re-makes the scheduled sends after an
+    // explicit acknowledgement. The generated reference is where a client learns that
+    // before calling, so the rule lives on the route, not in a document beside it.
+    const byKey = new Map(defs.map((d) => [`${d.method} ${d.path}`, d]));
+    for (const key of [
+      "PUT /api/settings",
+      "POST /api/settings/logo",
+      "DELETE /api/settings/logo",
+    ]) {
+      expect(byKey.get(key)?.description ?? "").toMatch(/re-make/);
+      expect(byKey.get(key)?.description ?? "").toMatch(/remake/);
+    }
+    expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/inUse/);
+  });
+
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {
     const groups = buildReference(defs);
     expect(groups.map((g) => g.access)).toEqual(["admin", "public", "webhook"]);
