@@ -30,7 +30,7 @@ What earns a line: a change to behavior, the admin UI, the HTTP API surface, con
 **How.** A release is cut by the maintainer, by hand. The edit below can land through a pull request like any other change; the tag goes on `main` once it is there (a tag on a feature branch would point at the wrong commit):
 
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - <date>` and add a fresh, empty `## [Unreleased]` above it.
-2. Bump `version` in `package.json` to `X.Y.Z`.
+2. Run `npm version X.Y.Z --no-git-tag-version`, which bumps `package.json` and `package-lock.json` together without committing or tagging.
 3. Update the link references at the bottom of `CHANGELOG.md` (`[Unreleased]` compare, new `[X.Y.Z]` tag).
 4. Commit, then `git tag -a vX.Y.Z -m "kestrel vX.Y.Z"` and `git push origin vX.Y.Z` (that tag alone, not `--tags`, which would push every local tag).
 
