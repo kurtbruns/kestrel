@@ -2055,7 +2055,7 @@ function startCountdowns() {
 // but one or more in-flight recipients whose fate a transport error left unknown
 // (SPEC §12). This is the state the sweep flags and the operator must adjudicate; it
 // can't clear on its own without risking a double-mail (I4). Read straight off the row's
-// denormalized counters (c_pending / c_in_flight, migration 0006) — the same signals the
+// denormalized counters (`sends.c_pending` / `c_in_flight`) — the same signals the
 // server's buildSendProgress derives `wedged` from, so the list and the watch agree.
 // The lease check is essential: while the loop is ACTIVELY working a send it holds the
 // lease (`locked_until` in the future) — so a normal send's final dispatched batch
@@ -5240,7 +5240,7 @@ function computeHealth(sends) {
   }
   // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
   // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
-  // row's `c_bounced` counter (migration 0006) over the frozen audience — not the old
+  // row's `c_bounced` counter over the frozen audience — not the old
   // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
   // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
   // from tripping it. Read-only reporting — it never throttles or halts a send (§12 leaves

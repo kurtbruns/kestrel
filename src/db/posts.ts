@@ -107,7 +107,7 @@ export async function listPosts(
   const limit = page ? page.limit : -1; // -1 = SQLite "no limit"
   const offset = page ? page.offset : 0;
   // Join the post's ACTIVE send — scheduled OR sending — so an in-flight post carries its
-  // send id and status (a post has at most one active send, migration 0004, so the join
+  // send id and status (a post has at most one active send, enforced by `idx_sends_one_active_per_post`, so the join
   // is 1:1). The scheduled-first default sort keys on that fire time.
   const { results } = await db
     .prepare(

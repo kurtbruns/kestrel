@@ -32,7 +32,7 @@ export async function list(c: RequestContext): Promise<Response> {
   // list surfaces dispatch/delivery progress and the wedged signal straight off the row.
   // The per-row `deliveryRollup` aggregate this once ran — an O(rows × audience) scan on
   // every Sent-page load and every ~3s active-send poll — is exactly what the counters
-  // (migration 0006) make redundant, so it is gone (#166). `deliveries` stays the source
+  // (`sends.c_*`) make redundant, so it is gone (#166). `deliveries` stays the source
   // of truth; the counters are its rebuildable cache (SPEC §8).
   return json({ sends: rows, page: listPage(total, page) });
 }
@@ -66,7 +66,7 @@ export async function get(c: RequestContext): Promise<Response> {
 
 /**
  * The cheap poll target for the live in-flight watch (SPEC §8). A single-row read off
- * the denormalized counters (migration 0006) — no aggregate over the audience — plus
+ * the denormalized counters (`sends.c_*`) — no aggregate over the audience — plus
  * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
  * the loud attention flags (§12). `deliveries` stays the source of truth; this is its
  * rebuildable cache. Both the watch view and the dashboard active-send widget poll it.

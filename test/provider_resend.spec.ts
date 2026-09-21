@@ -170,7 +170,7 @@ async function seedDelivery(providerId: string, email: string): Promise<void> {
 }
 
 // The shared webhook-events applier records the provider outcome in the separate
-// `event` column and leaves the send-loop `status` untouched (migration 0002), so
+// `event` column and leaves the send-loop `status` untouched, so
 // a reconciled delivery reads its outcome from `event`, not `status`.
 async function deliveryEvent(providerId: string): Promise<string | undefined> {
   const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = ?")

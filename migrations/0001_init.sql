@@ -1,7 +1,16 @@
--- 0001_init — Kestrel schema (spec §9).
+-- 0001_init — the Kestrel schema (SPEC §2: the six nouns, plus settings).
+--
+-- This is the baseline. Until the first deployment it is edited in place: no database
+-- has ever run anything else, so there is nothing to migrate — but wrangler tracks
+-- applied migrations by filename, so after a change here every local database must be
+-- rebuilt (delete .wrangler/state/v3/d1 and run `migrate:local`). From the first
+-- deployment on, migrations are append-only: never edit this file, add the next one.
+--
 -- Timestamps are unix epoch milliseconds (INTEGER). Text ids are app-generated
--- (UUID / random tokens). FK declarations document intent; the app also enforces
--- cascades in code since D1 does not enable foreign_keys by default.
+-- (UUID / random tokens). D1 enforces the FK declarations (foreign_keys is on) but
+-- none declares an ON DELETE action, so the app deletes children before parents in code.
+
+-- ---------------------------------------------------------------- content
 
 -- The only content tables. Everything else is audience and record.
 CREATE TABLE posts (
@@ -15,6 +24,7 @@ CREATE TABLE posts (
   updated_at       INTEGER NOT NULL
 );
 CREATE INDEX idx_posts_status ON posts (status);
+CREATE INDEX idx_posts_updated ON posts (updated_at);   -- the post list's default sort
 
 CREATE TABLE post_revisions (
   id         TEXT PRIMARY KEY,
@@ -39,18 +49,32 @@ CREATE TABLE images (
 );
 CREATE INDEX idx_images_post ON images (post_id);
 
+-- ---------------------------------------------------------------- audience
+
+-- Two tokens, two jobs (SPEC §7). The confirm token is one-shot double opt-in and is
+-- rotated when a pending/unsubscribed address re-subscribes; its single-use property
+-- comes from confirm() gating on status = 'pending', not from clearing it. The
+-- unsubscribe token is durable and NEVER rotated, not even across an unsubscribe →
+-- resubscribe cycle, because it is embedded in the one-click unsubscribe link of every
+-- post already delivered: a returning subscriber can still leave from mail that has
+-- been in their inbox since before they last left (I2). One token doing both jobs
+-- would go dead in delivered mail the moment it rotated.
 CREATE TABLE subscribers (
   id              TEXT PRIMARY KEY,
   email           TEXT NOT NULL UNIQUE,
   status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'confirmed', 'unsubscribed')),
-  token           TEXT NOT NULL UNIQUE,        -- unguessable; confirm + unsubscribe
+  confirm_token   TEXT UNIQUE,                 -- one-shot double opt-in; rotated on re-arm
+  unsub_token     TEXT NOT NULL UNIQUE,        -- durable; embedded in delivered mail; never rotated
   created_at      INTEGER NOT NULL,
   confirmed_at    INTEGER,
   unsubscribed_at INTEGER
 );
 CREATE INDEX idx_subscribers_status ON subscribers (status);
+CREATE INDEX idx_subscribers_created ON subscribers (created_at);   -- the roster's default sort
 
+-- Deliverability, not consent (SPEC §7): an address that hard-bounced or complained is
+-- excluded from every send whatever its consent state, until cleared deliberately.
 CREATE TABLE suppressions (
   email      TEXT PRIMARY KEY,
   reason     TEXT NOT NULL,                    -- 'bounce' | 'complaint' | 'manual'
@@ -58,41 +82,94 @@ CREATE TABLE suppressions (
   created_at INTEGER NOT NULL
 );
 
--- Created at schedule time; holds the frozen render (I3). status:
--- scheduled -> sending -> sent | canceled | failed. locked_until is the send-loop lease.
+-- ---------------------------------------------------------------- preferences
+
+-- App-level runtime settings (SPEC §9): a single-row JSON blob so a new preference is
+-- a code change, not a migration; the app owns the typed shape (src/db/settings.ts).
+-- Holds ONLY runtime preferences — never secrets or deploy-time infrastructure, which
+-- stay in env/secrets. Edited via the authed /api/settings.
+CREATE TABLE settings (
+  id         INTEGER PRIMARY KEY CHECK (id = 1),  -- singleton
+  data       TEXT NOT NULL DEFAULT '{}',          -- JSON: the AppSettings shape
+  updated_at INTEGER NOT NULL
+);
+
+-- ---------------------------------------------------------------- the record
+
+-- A send is created at schedule time and holds the frozen render (I3). Its status is
+-- scheduled -> sending -> sent, or canceled during the review window; a send never
+-- fails — it keeps retrying, and the one ambiguous case waits for a human (SPEC §12).
+-- locked_until is the send-loop lease (overlap guard).
+--
+-- The c_* columns are denormalized progress counters (SPEC §8) so a poll of an
+-- in-flight send is a single-row read instead of an aggregate over its audience.
+-- `deliveries` stays the source of truth; the counters are a rebuildable cache,
+-- maintained in the SAME transactions as each recipient transition and the webhook
+-- ingest, and recomputed from the aggregate whenever a send completes. The eight
+-- buckets are mutually exclusive and sum to the materialized audience: the webhook
+-- `event` wins over the send-loop `status` (a delivered/bounced/complained row counts
+-- in its event bucket, never in `accepted`), and in-flight work is split into
+-- `c_pending` (queued) + `c_in_flight` (dispatched, awaiting a provider response).
 CREATE TABLE sends (
   id              TEXT PRIMARY KEY,
   post_id         TEXT NOT NULL REFERENCES posts (id),
   status          TEXT NOT NULL DEFAULT 'scheduled'
-                    CHECK (status IN ('scheduled', 'sending', 'sent', 'canceled', 'failed')),
+                    CHECK (status IN ('scheduled', 'sending', 'sent', 'canceled')),
   fire_at         INTEGER NOT NULL,
   rendered_html   TEXT NOT NULL,               -- frozen; carries %%UNSUBSCRIBE_URL%% sentinel
   rendered_text   TEXT NOT NULL,
   subject         TEXT NOT NULL,
-  recipient_count INTEGER NOT NULL DEFAULT 0,  -- display snapshot only
+  recipient_count INTEGER NOT NULL DEFAULT 0,  -- schedule-time snapshot for display; the
+                                               -- audience is resolved when the send fires
   locked_until    INTEGER,                     -- send-loop lease (overlap guard)
   scheduled_at    INTEGER NOT NULL,
   started_at      INTEGER,
-  completed_at    INTEGER
+  completed_at    INTEGER,
+  c_pending       INTEGER NOT NULL DEFAULT 0,
+  c_in_flight     INTEGER NOT NULL DEFAULT 0,
+  c_accepted      INTEGER NOT NULL DEFAULT 0,
+  c_delivered     INTEGER NOT NULL DEFAULT 0,
+  c_bounced       INTEGER NOT NULL DEFAULT 0,
+  c_complained    INTEGER NOT NULL DEFAULT 0,
+  c_skipped       INTEGER NOT NULL DEFAULT 0,
+  c_unsent        INTEGER NOT NULL DEFAULT 0
 );
+-- (status, fire_at) serves the sweep and the status-filtered list sort; the unfiltered
+-- fire_at sort is a small scan accepted at newsletter scale rather than a third index.
 CREATE INDEX idx_sends_status_fire ON sends (status, fire_at);
 CREATE INDEX idx_sends_post ON sends (post_id);
 
--- One row per recipient per send. UNIQUE(send_id, email) is the backbone of
--- idempotent resume (I4). status: pending -> dispatched -> accepted | failed | skipped.
+-- "One active send per post" is a database guarantee, not a check-then-insert (I4, I6).
+-- Two concurrent schedule requests across Worker isolates could both pass an app-side
+-- check and both insert; a PARTIAL unique index closes that: uniqueness on post_id, but
+-- only over the active statuses, so a completed or canceled send never blocks a later
+-- re-schedule. The state machine only ever transitions a row in place, so it never
+-- creates a second active row and the index holds across a send's life.
+CREATE UNIQUE INDEX idx_sends_one_active_per_post
+  ON sends (post_id)
+  WHERE status IN ('scheduled', 'sending');
+
+-- One row per recipient per send. UNIQUE(send_id, email) is the backbone of idempotent
+-- resume (I4). The send-loop status is pending -> dispatched -> accepted | unsent |
+-- skipped: `unsent` is the send-side failure (never accepted by the provider — a
+-- permanent rejection, retries exhausted, or an "assume not sent" resolution), and
+-- `skipped` is a deliberate non-send (consent or suppression re-checked at hand-off).
 --
--- The event columns hold out-of-band provider notifications (delivered / bounced /
--- complained), which arrive later via the delivery webhook. They are recorded
--- SEPARATELY from the send-loop `status` (whose CHECK stays fixed), so the send
--- state machine and its idempotent-resume backbone are untouched. A hard bounce or
--- a complaint also adds a suppression — see src/services/webhook_events.ts. Matching
--- is by the provider message id stored as `provider_id`, so it is indexed.
+-- The event columns hold the provider's out-of-band notifications (delivered / bounced /
+-- complained), which arrive later via the webhook. They are recorded SEPARATELY from the
+-- send-loop `status`, so the state machine and its idempotent-resume backbone are
+-- untouched. Matching is by the provider message id stored as `provider_id`, so it is
+-- indexed. A hard bounce or a complaint also adds a suppression.
+--
+-- `bounce_kind` freezes the hard/soft split as a fact of THIS send, recorded when the
+-- event landed (I3, SPEC §8), rather than derived later from the global, clearable
+-- `suppressions` table — which would let a "frozen" record drift after the fact.
 CREATE TABLE deliveries (
   id           TEXT PRIMARY KEY,
   send_id      TEXT NOT NULL REFERENCES sends (id),
   email        TEXT NOT NULL,
   status       TEXT NOT NULL DEFAULT 'pending'
-                 CHECK (status IN ('pending', 'dispatched', 'accepted', 'failed', 'skipped')),
+                 CHECK (status IN ('pending', 'dispatched', 'accepted', 'unsent', 'skipped')),
   provider_id  TEXT,
   error        TEXT,
   attempts     INTEGER NOT NULL DEFAULT 0,
@@ -100,6 +177,7 @@ CREATE TABLE deliveries (
   event        TEXT,                           -- delivered | bounced | complained
   event_detail TEXT,                           -- bounce subtype / complaint feedback / diagnostic
   event_at     INTEGER,                        -- when the event was applied (epoch ms)
+  bounce_kind  TEXT CHECK (bounce_kind IN ('hard', 'soft')),
   UNIQUE (send_id, email)
 );
 CREATE INDEX idx_deliveries_send_status ON deliveries (send_id, status);
