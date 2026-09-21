@@ -46,6 +46,14 @@ describe("API reference is generated from the route registration", () => {
       expect(byKey.get(key)?.description ?? "").toMatch(/remake/);
     }
     expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/inUse/);
+    // SPEC §5: once scheduled, the test and preview are the frozen copy.
+    for (const key of [
+      "POST /posts/:id/preview",
+      "GET /posts/:id/preview",
+      "POST /posts/:id/test",
+    ]) {
+      expect(byKey.get(key)?.description ?? "").toMatch(/frozen copy/);
+    }
   });
 
   it("groups admin, public, and webhook tiers (mirroring app.ts)", () => {

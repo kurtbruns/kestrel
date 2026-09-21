@@ -19,6 +19,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- A test or preview of a scheduled post sends its frozen copy, exactly as it will fire, and of a sent post its record, instead of a live render that could differ from either (SPEC §5).
 - Two settings writers at once (the identity fields and the logo, or the editor and Claude) no longer overwrite each other's change.
 
 ## [0.1.0] - 2026-09-19

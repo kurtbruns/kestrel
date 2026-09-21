@@ -325,7 +325,10 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/preview",
       access: "admin",
-      summary: "Render current markdown to the email HTML (returns HTML + warnings).",
+      summary:
+        "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
+      description:
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
       handler: renderRoutes.preview,
     },
     {
@@ -333,6 +336,8 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/posts/:id/preview",
       access: "admin",
       summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      description:
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
       handler: renderRoutes.previewPage,
     },
     {
@@ -341,6 +346,19 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
+      description:
+        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which.",
+      example: {
+        request: { to: "you@example.com" },
+        response: {
+          sent: true,
+          provider: "ses",
+          to: "you@example.com",
+          subject: "Hello, world",
+          warnings: [],
+          frozen: true,
+        },
+      },
       handler: renderRoutes.test,
     },
     {
