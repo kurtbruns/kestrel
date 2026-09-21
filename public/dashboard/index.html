@@ -5,12 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kestrel</title>
 <link rel="icon" href="/favicon.svg">
-<link rel="stylesheet" href="./styles.css?v=c9770d9c">
+<link rel="stylesheet" href="./styles.css">
 <script>
 // Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
 // sidebar renders in its final width with no flash. The collapse toggle's override is
-// session-only (in-memory in app.js), so a fresh load always starts from this default;
-// keep this width formula in sync with computeNavMode() in app.js.
+// session-only (in-memory in client/main.ts), so a fresh load always starts from this
+// default; keep this width formula in sync with computeNavMode() there.
 (() => {
   const w = window.innerWidth;
   const mode = w < 540 || w > 1024 ? "full" : "rail";
@@ -100,7 +100,7 @@
      viewport, offset past the sidebar on desktop and edge-to-edge once the sidebar
      is the off-canvas drawer. Every surface with an explicit save + a revertible
      baseline (Settings, the Template page) drives it through the savebar controller
-     in app.js; route() detaches it on each navigation. The post editor keeps its own
+     in client/main.ts; route() detaches it on each navigation. The post editor keeps its own
      autosave + conflict model and deliberately does not use this. -->
 <section class="savebar" id="savebar" aria-label="Unsaved changes" aria-live="polite" hidden>
   <div class="savebar-inner">
@@ -113,6 +113,6 @@
 </section>
 <div id="toasts" role="status" aria-live="polite"></div>
 
-<script src="./app.js?v=937cb2dd"></script>
+<script src="./app.js"></script>
 </body>
 </html>

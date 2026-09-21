@@ -16,7 +16,7 @@ worker-configuration.d.ts
 # generated at build (scripts/stamp-version.mjs); regenerated at every entry point
 src/generated/
 
-# build output
+# build output (the served admin tree, scripts/build-client.mjs from public/ + client/)
 dist/
 
 # test coverage

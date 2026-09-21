@@ -61,15 +61,11 @@ function findFreePort() {
   });
 }
 
-// Fingerprint the admin static assets so index.html points at content-hashed URLs
-// (public/_headers then caches them immutably). Runs on every startup; a no-op when
-// the stamps are already current. Best-effort — a failure only leaves a stale `?v=`.
-const stamp = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-admin-assets.mjs")], {
-  stdio: "inherit",
-});
-if (stamp.status !== 0) {
-  console.warn("[dev] admin asset fingerprinting failed (continuing)");
-}
+// The admin SPA is served from the tree scripts/build-client.mjs emits (see wrangler.jsonc).
+// Ask for its dev flavor — readable, with the live reload compiled in — from every builder
+// this process starts: the watcher below, and wrangler's own build.command, which takes no
+// flag and inherits this environment.
+process.env.KESTREL_CLIENT_DEV = "1";
 
 // Resolve the build stamp (version/sha/build-time/repo) into src/generated/version.ts,
 // which the Worker imports and reflects (SPEC §9). Done here, ONCE, before wrangler starts
@@ -165,6 +161,33 @@ const originArgs = isRemote
 // (see scripts/dev-port.mjs). Cleared on exit; a stale value self-heals on next start.
 writeDevPort(port);
 
+// Re-emit the served tree as client/ or public/ change, beside wrangler: esbuild's
+// incremental watch (~10ms a rebuild) regenerates index.html with the new hashed names,
+// and the SPA's dev-flavor poll picks that up and reloads. Wrangler's own build.command
+// handles only src/ edits (see wrangler.jsonc), so exactly one process reacts to a change.
+// Wrangler's startup build and this watcher's first build emit the same tree; the order
+// doesn't matter.
+const watcher = spawn(process.execPath, [join(ROOT, "scripts", "build-client.mjs"), "--watch"], {
+  stdio: "inherit",
+});
+watcher.on("exit", (code) => {
+  if (code !== null && code !== 0) {
+    console.warn(
+      `[dev] client watcher exited (${code}); run \`npm run client:watch\` to restart it`,
+    );
+  }
+});
+// A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave the
+// watcher behind rewriting dist/ forever. Stop it, then re-raise: `once`
+// means the re-raised signal meets the default disposition and ends us as it always did
+// (a terminal Ctrl-C reaches the whole group, watcher included, and behaves the same).
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.once(signal, () => {
+    watcher.kill();
+    process.kill(process.pid, signal);
+  });
+}
+
 const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",
 });
@@ -173,6 +196,7 @@ const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passth
 // a fatal signal by re-raising it on ourselves, otherwise exit with its code.
 child.on("exit", (code, signal) => {
   clearDevPort();
+  watcher.kill();
   if (signal) {
     process.kill(process.pid, signal);
   } else {

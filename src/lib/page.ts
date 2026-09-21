@@ -352,5 +352,5 @@ export function archiveIndexPage(opts: {
 
 // The setup guide and the API reference are both rendered natively by
 // the admin SPA from JSON the authed `/api/docs` and `/api/reference` routes return
-// (see src/docs/, src/reference/, and public/dashboard/app.js) — long-form prose is
+// (see src/docs/, src/reference/, and client/main.ts) — long-form prose is
 // styled by the SPA's own `.doc` block, so there is no server-rendered docs page.

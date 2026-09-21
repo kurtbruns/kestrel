@@ -1,3 +1,8 @@
+// @ts-nocheck
+// The former public/dashboard/app.js, moved here verbatim and typed nowhere yet. The
+// pragma is lifted module by module as this file is split; every new client module is
+// strict from its first line.
+
 // Kestrel editor — a small vanilla SPA over the same HTTP API Claude uses.
 // Auth is edge-centric: in production Cloudflare Access gates this surface, so the
 // browser's Access session cookie authenticates every same-origin call and there is
@@ -5,6 +10,8 @@
 // on boot (/api/dev/token) and sends it as a bearer. Either way the boot probe
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
+
+import { startDevReload } from "./dev_reload";
 
 const TOKEN_KEY = "kestrel_token";
 let token = localStorage.getItem(TOKEN_KEY) || "";
@@ -6115,6 +6122,11 @@ async function boot() {
       /* keep the placeholder brand */
     }
     renderSidebarBrand();
+    // Dev flavor only: pick up a rebuilt bundle or an edited stylesheet without a hand
+    // refresh. The production flavor compiles this out (see scripts/build-client.mjs).
+    if (__DEV__) {
+      startDevReload();
+    }
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

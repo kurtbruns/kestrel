@@ -29,11 +29,19 @@
   },
   "overrides": [
     {
-      "includes": ["test/**"],
+      "includes": ["test/**", "client/**/*.spec.ts"],
       "linter": {
         "rules": {
           "style": { "noNonNullAssertion": "off" },
           "suspicious": { "noExplicitAny": "off" }
+        }
+      }
+    },
+    {
+      "includes": ["client/main.ts"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noImplicitAnyLet": "off" }
         }
       }
     }

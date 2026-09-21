@@ -2,11 +2,11 @@
 /*
  * Lint the admin SPA's design tokens (DESIGN §3).
  *
- * This is a framework-free, no-build app: a `var(--typo)` silently falls back to
- * nothing, and there is no compiler to catch a mistyped or renamed token. Two rules
- * from DESIGN §3 are stated there but nothing enforced them — this script does:
+ * This is a framework-free app with a bundler but no CSS compiler: a `var(--typo)`
+ * silently falls back to nothing, and nothing catches a mistyped or renamed token. Two
+ * rules from DESIGN §3 are stated there but nothing enforced them — this script does:
  *
- *   1. Every `var(--x)` with no fallback (styles.css or app.js) resolves to a token
+ *   1. Every `var(--x)` with no fallback (styles.css or the client source) resolves to a token
  *      declared somewhere — a `:root` theme token or a component-scoped one. This is
  *      what makes a token *rename* safe: drop a definition without updating a
  *      reference and it becomes a build failure here, not a silent wrong color in the
@@ -20,14 +20,16 @@
  * Wired into `pretest` beside the asset-stamp check, so the quality gate catches a
  * dangling reference or a single-theme color. Pure Node, no dependencies.
  */
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const ADMIN = join(ROOT, "public", "dashboard");
 const CSS = join(ADMIN, "styles.css");
-const JS = join(ADMIN, "app.js");
+// The SPA's source (client/**/*.ts, specs excluded), not the generated bundle: the source
+// is what a rename edits, and it exists on a fresh clone before anything has built.
+const CLIENT = join(ROOT, "client");
 
 /* Custom properties set at runtime from JS (never declared in :root), so a var()
  * reference to one is legitimate even though no static definition exists. */
@@ -94,7 +96,12 @@ function allDecls(text) {
 }
 
 const css = await readFile(CSS, "utf8");
-const js = await readFile(JS, "utf8");
+const clientFiles = (await readdir(CLIENT, { recursive: true }))
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".spec.ts"))
+  .sort();
+const js = (await Promise.all(clientFiles.map((f) => readFile(join(CLIENT, f), "utf8")))).join(
+  "\n",
+);
 
 // Light `:root` is the first one; the dark override is the `:root` nested in the
 // `@media (prefers-color-scheme: dark)` block.
