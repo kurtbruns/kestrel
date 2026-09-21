@@ -61,6 +61,17 @@ function findFreePort() {
   });
 }
 
+// Build the admin SPA bundle (client/ → public/dashboard/app.js) once, up front, so the
+// stamp below hashes a current file and the dashboard is servable before wrangler binds.
+// A build error is loud here, and the esbuild watch spawned below keeps reporting it
+// until the source is fixed; the previous bundle, if any, stays in place meanwhile.
+const build = spawnSync(process.execPath, [join(ROOT, "scripts", "build-client.mjs")], {
+  stdio: "inherit",
+});
+if (build.status !== 0) {
+  console.warn("[dev] client build failed (continuing; the watcher rebuilds on the next edit)");
+}
+
 // Fingerprint the admin static assets so index.html points at content-hashed URLs
 // (public/_headers then caches them immutably). Runs on every startup; a no-op when
 // the stamps are already current. Best-effort — a failure only leaves a stale `?v=`.
@@ -165,6 +176,21 @@ const originArgs = isRemote
 // (see scripts/dev-port.mjs). Cleared on exit; a stale value self-heals on next start.
 writeDevPort(port);
 
+// Rebuild the SPA bundle as client/ changes, beside wrangler: esbuild's incremental watch
+// (~10ms a rebuild) re-stamps index.html after each build, and the SPA's dev-mode poll
+// picks the new stamp up and reloads. Wrangler's own build.command handles only src/
+// edits (see wrangler.jsonc), so exactly one process reacts to a client/ edit.
+const watcher = spawn(process.execPath, [join(ROOT, "scripts", "build-client.mjs"), "--watch"], {
+  stdio: "inherit",
+});
+watcher.on("exit", (code) => {
+  if (code !== null && code !== 0) {
+    console.warn(
+      `[dev] client watcher exited (${code}); run \`npm run client:watch\` to restart it`,
+    );
+  }
+});
+
 const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
   stdio: "inherit",
 });
@@ -173,6 +199,7 @@ const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passth
 // a fatal signal by re-raising it on ourselves, otherwise exit with its code.
 child.on("exit", (code, signal) => {
   clearDevPort();
+  watcher.kill();
   if (signal) {
     process.kill(process.pid, signal);
   } else {

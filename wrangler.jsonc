@@ -28,6 +28,17 @@
   // requests fall through to the Worker so the API/reader routes still run.
   "assets": { "directory": "./public", "not_found_handling": "none" },
 
+  // The SPA's bundle (public/dashboard/app.js, gitignored) is built from client/ and its
+  // content hash stamped into index.html. Done as wrangler's own build step so a bare
+  // `wrangler deploy` can never ship a stale bundle or a stale stamp. watch_dir is pinned
+  // to src/ (wrangler's default, made explicit): under `wrangler dev` this command re-runs
+  // only on Worker edits, while client/ edits are rebuilt by the esbuild watch that
+  // scripts/dev.mjs runs beside it — the two must not both react to client/ changes.
+  "build": {
+    "command": "node scripts/build-client.mjs && node scripts/stamp-admin-assets.mjs",
+    "watch_dir": "./src"
+  },
+
   "d1_databases": [
     {
       "binding": "DB",

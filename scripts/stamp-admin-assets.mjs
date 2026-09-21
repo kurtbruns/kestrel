@@ -2,8 +2,9 @@
 /*
  * Fingerprint the admin SPA's static assets.
  *
- * The editor ships two hand-authored static files — public/dashboard/styles.css and
- * app.js — referenced from index.html. This stamps each reference with a content
+ * The editor ships two static files referenced from index.html — the hand-authored
+ * public/dashboard/styles.css and app.js, which scripts/build-client.mjs generates from
+ * client/ (so this runs after that build). This stamps each reference with a content
  * fingerprint (`?v=<hash>`, the first 8 hex of the file's SHA-256), so a changed
  * asset lands on a fresh URL and public/_headers can cache the old one immutably.
  * It replaces the hand-bumped `?v=NN`: the hash is derived from the bytes, so it

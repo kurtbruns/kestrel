@@ -1,0 +1,11 @@
+{
+  // The admin SPA's TypeScript program: browser code, so the DOM lib and none of the
+  // Worker/Vitest ambient types the root program carries. `npm run typecheck` runs both.
+  // Never served: scripts/build-client.mjs bundles it to public/dashboard/app.js.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "types": []
+  },
+  "include": ["."]
+}
