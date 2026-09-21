@@ -647,6 +647,108 @@ function renderError(container, msg, retryFn) {
   }
 }
 
+// ---- the re-make confirmation (SPEC §6, §9; DESIGN §5) ----
+// A template or identity change reaches every scheduled email, and the server refuses
+// such a save until the client has acknowledged those sends by id (409
+// remake_required, listing them). The flow is server-driven so the dashboard never
+// decides which fields count: `attempt(ack)` runs the write with no acknowledgement;
+// a refusal opens the confirmation with the list the server handed back; confirming
+// retries with those ids; a second refusal (a send scheduled meanwhile) asks again
+// with the fresh list. Resolves to the write's response, or to null when the
+// publisher canceled (the caller then leaves everything as it was). Any other
+// refusal, including 409 remake_too_close (a send about to fire), is rethrown for the
+// surface's own blocking-error home.
+async function withRemakeConfirm(attempt, verb) {
+  let ack = null;
+  for (;;) {
+    try {
+      return await attempt(ack);
+    } catch (err) {
+      if (err.status !== 409 || err.data?.error !== "remake_required") {
+        throw err;
+      }
+      const sends = err.data.sends || [];
+      const ok = await confirmRemake(sends, verb);
+      if (!ok) {
+        return null;
+      }
+      ack = sends.map((s) => s.id);
+    }
+  }
+}
+// The confirmation itself: what happens to the scheduled posts' content (nothing),
+// what changes (the look, and the sign-off), and what the other path would be (a
+// second template, which Kestrel does not offer yet). `verb` is what the commit does:
+// { action: "Save", change: "the new template" }.
+function confirmRemake(sends, verb) {
+  const n = sends.length;
+  const noun = `${n} scheduled email${n === 1 ? "" : "s"}`;
+  return new Promise((resolve) => {
+    const m = modal(
+      `<h3>Apply this change to ${esc(noun)}?</h3>` +
+        `<p>This change reaches every email Kestrel sends, including the ${n} post${n === 1 ? "" : "s"} already scheduled. ${n === 1 ? "Its email" : "Their emails"} will be made again with ${esc(verb.change)}, so nothing goes out on an older look. ${n === 1 ? "Its" : "Their"} content and fire time${n === 1 ? " doesn't" : "s don't"} change, and ${n === 1 ? "it" : "each"} will need a fresh test.</p>` +
+        `<ul class="remake-list">${sends
+          .map(
+            (s) =>
+              `<li><span>${esc(s.subject) || "<em>untitled</em>"}</span><span>sends ${esc(fmt(s.fire_at))}</span></li>`,
+          )
+          .join("")}</ul>` +
+        `<p class="hint">To keep scheduled emails on the current look while future posts change, you would need a second template, which Kestrel doesn't offer yet.</p>` +
+        `<div class="actions"><button type="button" id="rmCancel">Cancel</button><button type="button" class="primary" id="rmGo">${esc(verb.action)} and apply to ${esc(noun)}</button></div>`,
+    );
+    let settled = false;
+    const done = (v) => {
+      if (!settled) {
+        settled = true;
+        resolve(v);
+      }
+    };
+    m.el.querySelector("#rmCancel").onclick = () => {
+      m.close();
+      done(false);
+    };
+    m.el.querySelector("#rmGo").onclick = () => {
+      m.close();
+      done(true);
+    };
+    // Backdrop click / Escape close the modal without going through a button.
+    const obs = new MutationObserver(() => {
+      if (!m.el.isConnected) {
+        obs.disconnect();
+        done(false);
+      }
+    });
+    obs.observe(document.body, { childList: true });
+    m.el.querySelector("#rmGo").focus();
+  });
+}
+// The standing in-use chip (DESIGN §3): the state a template or identity change would
+// reach, read from GET /api/settings `inUse`. `identityFields` narrows it for the
+// identity surface: a field the template does not render is not in use at all.
+function inUseChip(inUse, forIdentity = false) {
+  const sends = inUse?.sends || [];
+  if (forIdentity && !(inUse?.identityFields || []).length) {
+    return `<span class="set-chip" title="The email template doesn't use your name, tagline, address, or logo.">${SET_ICON.info}Not used by the email template</span>`;
+  }
+  if (!sends.length) {
+    return `<span class="set-chip">${SET_ICON.info}No posts scheduled</span>`;
+  }
+  const n = sends.length;
+  const title = inUse.retry_after
+    ? ` title="One sends at ${esc(fmt(inUse.retry_after))}; saving waits until it has sent."`
+    : "";
+  return `<span class="set-chip inuse"${title}><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+}
+// After a save that applied to scheduled emails, the toast says how many and that a
+// test is needed again (DESIGN §2); with none, the plain confirmation.
+function savedToast(what, remade) {
+  const n = (remade || []).length;
+  if (!n) {
+    return what;
+  }
+  return `${what} and applied to ${n} scheduled email${n === 1 ? "" : "s"}. Send yourself a test of each.`;
+}
+
 // ---- shared unsaved-changes bar ----
 // One full-width banner fixed to the bottom of the viewport (markup in index.html),
 // shared by every surface with an explicit save + a revertible baseline: Settings
@@ -1306,7 +1408,18 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
+    ${
+      locked && scheduled
+        ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.${
+            // A template or identity change re-made this email (SPEC §8): said here,
+            // where Send test is at hand, and nowhere else. It informs; the next step
+            // is the publisher's call.
+            scheduled.remade_at
+              ? ` A template or identity change was applied at ${esc(fmt(scheduled.remade_at))}.`
+              : ""
+          }</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>`
+        : ""
+    }
     <div id="editorNotices"></div>
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
@@ -2022,8 +2135,13 @@ async function renderEditor(id) {
   // several — one per line. Each address is a separate test send through the same
   // per-recipient path as a real send (I5).
   document.getElementById("testBtn").onclick = () => {
+    // A scheduled post's test is its frozen copy, exactly as it will fire (SPEC §5);
+    // the dialog is where that is said (DESIGN §7).
+    const lead = locked
+      ? "Delivers the frozen copy that will send, exactly as it will fire, so you can check it in a client. One address per line."
+      : "Delivers the rendered email to real inboxes so you can check it in a client. One address per line.";
     const m = modal(
-      `<h3>Send a test</h3><p class="hint">Delivers the rendered email to real inboxes so you can check it in a client. One address per line.</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      `<h3>Send a test</h3><p class="hint">${lead}</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
     );
     const to = m.el.querySelector("#testTo");
     to.focus();
@@ -3851,7 +3969,7 @@ function highlightMarkdown(src) {
 }
 
 async function renderTemplate() {
-  app.innerHTML = `<div class="tpl-page"><div class="page-head"><h1>Email template</h1><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
+  app.innerHTML = `<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
   const bodyEl = document.getElementById("tplBody");
   let data;
   try {
@@ -3871,6 +3989,8 @@ async function renderTemplate() {
   };
   let templateBaseline = s.emailTemplate || "";
   const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
+  // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §3).
+  document.getElementById("tplInUse").innerHTML = inUseChip(data.inUse);
 
   bodyEl.innerHTML = `
     <div class="set-preview set-tpl-sample">
@@ -3923,7 +4043,7 @@ async function renderTemplate() {
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template, starting from a sensible default, when you send an email. Each sent email is archived exactly as it went out, so editing the template changes future emails and never ones already sent. Save and Discard are in the bar at the bottom of the page.</span></div>
+      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template for every post, starting from a sensible default. Saving a change while posts are scheduled applies it to their emails too, after you confirm, so nothing scheduled goes out on an older look; their content stays as it was. Sent emails are archived exactly as they went out and never change. Save and Discard are in the bar at the bottom of the page.</span></div>
     </div>
 
     <div class="set-card set-tpl-varcard">
@@ -4017,29 +4137,48 @@ async function renderTemplate() {
     preview.repaint();
     refreshDirty();
   }
-  // Persist the current editor content. Returns the server's warnings (empty on a
-  // clean save); THROWS on a rejected template (e.g. no unsubscribe link → 400), so
-  // callers decide what to do. Shared by the save bar's Save and Save-&-send-test.
+  // Persist the current editor content, confirming first when the save would apply to
+  // scheduled emails (withRemakeConfirm). Returns { warnings, remade }, or null when
+  // the publisher declined the confirmation (nothing was saved; the page stays dirty).
+  // THROWS on a rejected template (no unsubscribe link → 400) or a send about to fire
+  // (409 remake_too_close), so callers decide what to do. Shared by the save bar's
+  // Save and Save-&-send-test.
   async function saveTemplate() {
-    const r = await api("/api/settings", {
-      method: "PUT",
-      json: { emailTemplate: tplEditor.value },
-    });
+    const value = tplEditor.value;
+    const r = await withRemakeConfirm(
+      (ack) =>
+        api("/api/settings", {
+          method: "PUT",
+          json: ack ? { emailTemplate: value, remake: ack } : { emailTemplate: value },
+        }),
+      { action: "Save", change: "the new template" },
+    );
+    if (!r) {
+      return null;
+    }
     // The server may resolve "" to the default — reflect what was actually stored.
     templateBaseline = r.settings.emailTemplate;
     tplEditor.value = templateBaseline;
     appConfig = { ...(appConfig || {}), settings: r.settings };
     preview.repaint();
     refreshDirty(); // clean now — slides the bar away
-    return Array.isArray(r.warnings) ? r.warnings : [];
+    return { warnings: Array.isArray(r.warnings) ? r.warnings : [], remade: r.remade || [] };
   }
   // The shared save bar's Save button (run inside busy() by the controller). Persists,
   // surfaces warnings inline; a rejected save keeps the bar up and shows why in it.
   async function onSaveTemplate() {
     try {
-      const warnings = await saveTemplate();
-      showWarnings(warnings);
-      toast(warnings.length ? "Template saved with warnings" : "Template saved");
+      const saved = await saveTemplate();
+      if (!saved) {
+        return; // declined: the edits stay, the bar stays up
+      }
+      showWarnings(saved.warnings);
+      toast(
+        savedToast(
+          saved.warnings.length ? "Template saved with warnings" : "Template saved",
+          saved.remade,
+        ),
+      );
     } catch (err) {
       // The bar owns the blocking error (it stays up and says why). No toast — a
       // bottom-center toast would sit on top of the bar and hide the very message.
@@ -4178,8 +4317,12 @@ async function renderTemplate() {
         // A rejected save shows in the bar and stops the send.
         if (isDirty()) {
           try {
-            const warnings = await saveTemplate();
-            showWarnings(warnings);
+            const saved = await saveTemplate();
+            if (!saved) {
+              m.close(); // declined the re-make: nothing saved, so nothing to test yet
+              return;
+            }
+            showWarnings(saved.warnings);
           } catch (err) {
             // The save failed, so the test can't send what would ship. The bar shows
             // why (and stays up); closing the dialog returns you to it. No toast — it
@@ -4300,9 +4443,33 @@ async function renderSettings() {
   const secHead = (title, chipHtml, extra = "") =>
     `<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 
+  // Which identity fields the template renders (SPEC §9): the note under the card says
+  // which reach the email, and the chip says whether scheduled posts are using them.
+  const inUse = data.inUse || { sends: [], retry_after: null, identityFields: [] };
+  const identityNote = (() => {
+    const names = { name: "name", tagline: "tagline", address: "mailing address", logoUrl: "logo" };
+    const all = ["name", "tagline", "address", "logoUrl"];
+    const used = all.filter((f) => (inUse.identityFields || []).includes(f));
+    const unused = all.filter((f) => !used.includes(f));
+    const list = (fs) =>
+      fs.length === 1
+        ? names[fs[0]]
+        : `${fs
+            .slice(0, -1)
+            .map((f) => names[f])
+            .join(", ")}, and ${names[fs[fs.length - 1]]}`;
+    if (!used.length) {
+      return "The email template doesn’t use your name, tagline, address, or logo, so a change here reaches no scheduled email.";
+    }
+    const first = unused.length
+      ? `Your ${list(used)} ride inside every email; the template doesn’t use your ${list(unused)}.`
+      : "Your name, tagline, address, and logo ride inside every email.";
+    return `${first} Saving a change to those while posts are scheduled applies it to their emails too, after you confirm: the same result as canceling each, saving, and scheduling it again, without the steps. Sent emails never change.`;
+  })();
+
   const identitySection = `
     <section class="set-sec">
-      ${secHead("Publication identity", chip("editable", "Editable"))}
+      ${secHead("Publication identity", chip("editable", "Editable"), inUseChip(inUse, true))}
       <div class="set-card">
         <div class="set-id-grid">
           <div class="set-logo-slot">
@@ -4315,6 +4482,7 @@ async function renderSettings() {
               <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? "" : " hidden"}>Remove</button>
             </div>
             <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. Saves immediately.</p>
+            <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
           </div>
           <div class="set-id-fields">
             <div class="set-field">
@@ -4334,12 +4502,13 @@ async function renderSettings() {
             </div>
           </div>
         </div>
+        <div class="set-note">${SET_ICON.info}<span>${esc(identityNote)}</span></div>
       </div>
     </section>`;
 
   const templateSection = `
     <section class="set-sec">
-      ${secHead("Email template", chip("editable", "Editable"))}
+      ${secHead("Email template", chip("editable", "Editable"), inUseChip(inUse))}
       <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.</p>
       <div class="set-preview set-tpl-sample">
         <div class="set-preview-bar">
@@ -4590,6 +4759,13 @@ async function renderSettings() {
       logoInput.click();
     }
   });
+  // A refused logo change (a scheduled send about to fire) is said beneath the tile,
+  // field validation's home (DESIGN §2, ④): the logo has no save bar state of its own.
+  const logoError = document.getElementById("logoError");
+  const showLogoError = (msg) => {
+    logoError.lastElementChild.textContent = msg || "";
+    logoError.hidden = !msg;
+  };
   logoInput.onchange = async () => {
     const file = logoInput.files?.[0];
     logoInput.value = "";
@@ -4600,28 +4776,58 @@ async function renderSettings() {
       toast("That image is over 512 KB — pick a smaller one.");
       return;
     }
+    showLogoError("");
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await api("/api/settings/logo", { method: "POST", body: fd });
+      // The logo is part of the identity, so an upload that reaches scheduled emails
+      // asks first (withRemakeConfirm); the file is held and re-sent with the ids.
+      const r = await withRemakeConfirm(
+        (ack) => {
+          const fd = new FormData();
+          fd.append("file", file);
+          const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
+          return api(`/api/settings/logo${q}`, { method: "POST", body: fd });
+        },
+        { action: "Upload", change: "the new logo" },
+      );
+      if (!r) {
+        return; // declined: the logo stays as it was
+      }
       state.logoUrl = r.settings.publication.logoUrl || "";
       applySettings(r.settings);
       applyLogoUi();
-      toast("Logo updated");
+      toast(savedToast("Logo updated", r.remade));
     } catch (err) {
-      toast(err.message);
+      if (err.status === 409 && err.data?.error === "remake_too_close") {
+        showLogoError(err.message);
+      } else {
+        toast(err.message);
+      }
     }
   };
   logoRemove.onclick = () =>
     busy(logoRemove, "Removing…", async () => {
+      showLogoError("");
       try {
-        const r = await api("/api/settings/logo", { method: "DELETE" });
+        const r = await withRemakeConfirm(
+          (ack) => {
+            const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
+            return api(`/api/settings/logo${q}`, { method: "DELETE" });
+          },
+          { action: "Remove", change: "no logo" },
+        );
+        if (!r) {
+          return;
+        }
         state.logoUrl = r.settings.publication.logoUrl || "";
         applySettings(r.settings);
         applyLogoUi();
-        toast("Logo removed");
+        toast(savedToast("Logo removed", r.remade));
       } catch (err) {
-        toast(err.message);
+        if (err.status === 409 && err.data?.error === "remake_too_close") {
+          showLogoError(err.message);
+        } else {
+          toast(err.message);
+        }
       }
     });
 
@@ -4841,14 +5047,25 @@ async function renderSettings() {
   // saveSettings inside busy() on its Save button, so these stay plain callbacks.
   async function saveSettings() {
     try {
-      const r = await api("/api/settings", {
-        method: "PUT",
-        json: {
-          publication: { name: state.name, tagline: state.tagline, address: state.address },
-          testRecipients: state.recipients,
-          confirmationEmail: state.confirmation,
-        },
-      });
+      // An identity change the template renders reaches every scheduled email, so the
+      // server may ask for the acknowledgement first (withRemakeConfirm); a save that
+      // touches only recipients or the confirmation wording never does.
+      const payload = {
+        publication: { name: state.name, tagline: state.tagline, address: state.address },
+        testRecipients: state.recipients,
+        confirmationEmail: state.confirmation,
+      };
+      const r = await withRemakeConfirm(
+        (ack) =>
+          api("/api/settings", {
+            method: "PUT",
+            json: ack ? { ...payload, remake: ack } : payload,
+          }),
+        { action: "Save", change: "the new name, tagline, address, or logo" },
+      );
+      if (!r) {
+        return; // declined: the edits stay, the bar stays up
+      }
       // Adopt the server's normalized result (trim, lowercase, dedupe) as baseline.
       const ns = r.settings;
       state.name = ns.publication.name;
@@ -4872,10 +5089,15 @@ async function renderSettings() {
       rebuildEmbed();
       templatePreview.repaint();
       refreshDirty(); // clean now — slides the bar away
-      toast("Settings saved");
+      toast(savedToast("Settings saved", r.remade));
     } catch (err) {
-      // A failed save leaves the edits in place (still dirty → bar stays up).
-      toast(err.message);
+      // A failed save leaves the edits in place (still dirty → bar stays up). A send
+      // about to fire is the bar's blocking error, naming when to try again (DESIGN §5).
+      if (err.status === 409 && err.data?.error === "remake_too_close") {
+        bar.showError(err.message);
+      } else {
+        toast(err.message);
+      }
     }
   }
   function discardSettings() {

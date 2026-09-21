@@ -2511,6 +2511,38 @@ button.linkbtn:hover {
 .page-head {
   margin-bottom: 16px;
 }
+.page-head-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.page-head-row h1 {
+  margin: 0;
+}
+/* The re-make confirmation's list of scheduled posts: subject and fire time per row. */
+.remake-list {
+  list-style: none;
+  margin: 10px 0 12px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.remake-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+.remake-list li + li {
+  border-top: 1px solid var(--line);
+}
+.remake-list li span:last-child {
+  color: var(--muted);
+  white-space: nowrap;
+}
 td.act {
   text-align: right;
   width: 1%;
@@ -3676,6 +3708,20 @@ button.notice-dismiss svg {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 34%, var(--line-soft));
   background: var(--accent-soft);
+}
+/* In use by scheduled posts (SPEC §9): the scheduled violet, a lifecycle fact and not a
+   warning, the same reading as the scheduled badge (DESIGN §3). Adds no token. */
+.set-chip.inuse {
+  color: var(--status-scheduled-fg);
+  border-color: var(--status-scheduled-line);
+  background: var(--status-scheduled-bg);
+}
+.set-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.85;
 }
 .set-chip.readonly {
   color: var(--warn-fg);
