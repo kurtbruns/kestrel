@@ -676,25 +676,32 @@ async function withRemakeConfirm(attempt, verb) {
     }
   }
 }
-// The confirmation itself: what happens to the scheduled posts' content (nothing),
-// what changes (the look, and the sign-off), and what the other path would be (a
-// second template, which Kestrel does not offer yet). `verb` is what the commit does:
-// { action: "Save", change: "the new template" }.
+// The confirmation itself (DESIGN §5): one sentence on what the save reaches, the
+// scheduled posts by name, three short facts the publisher scans (what changes, what
+// stays, what's next), and the alternative (a second template, which Kestrel does not
+// offer yet). `verb` names the commit: { action: "Save", gerund: "Saving", lead(n) },
+// where `lead` says what is in use ("This template is used by 2 posts …").
 function confirmRemake(sends, verb) {
   const n = sends.length;
-  const noun = `${n} scheduled email${n === 1 ? "" : "s"}`;
+  const one = n === 1;
+  const noun = `${n} scheduled email${one ? "" : "s"}`;
   return new Promise((resolve) => {
     const m = modal(
       `<h3>Apply this change to ${esc(noun)}?</h3>` +
-        `<p>This change reaches every email Kestrel sends, including the ${n} post${n === 1 ? "" : "s"} already scheduled. ${n === 1 ? "Its email" : "Their emails"} will be made again with ${esc(verb.change)}, so nothing goes out on an older look. ${n === 1 ? "Its" : "Their"} content and fire time${n === 1 ? " doesn't" : "s don't"} change, and ${n === 1 ? "it" : "each"} will need a fresh test.</p>` +
+        `<p class="hint">${esc(verb.lead(n))} ${esc(verb.gerund)} applies the change to ${one ? "its email" : "their emails"} too.</p>` +
         `<ul class="remake-list">${sends
           .map(
             (s) =>
               `<li><span>${esc(s.subject) || "<em>untitled</em>"}</span><span>sends ${esc(fmt(s.fire_at))}</span></li>`,
           )
           .join("")}</ul>` +
-        `<p class="hint">To keep scheduled emails on the current look while future posts change, you would need a second template, which Kestrel doesn't offer yet.</p>` +
-        `<div class="actions"><button type="button" id="rmCancel">Cancel</button><button type="button" class="primary" id="rmGo">${esc(verb.action)} and apply to ${esc(noun)}</button></div>`,
+        `<dl class="remake-facts">` +
+        `<div><dt>Changes</dt><dd>the look of ${one ? "its email" : "their emails"}</dd></div>` +
+        `<div><dt>Stays</dt><dd>${one ? "its content and fire time" : "their content and fire times"}</dd></div>` +
+        `<div><dt>Next</dt><dd>send yourself a fresh test${one ? "" : " of each"}</dd></div>` +
+        `</dl>` +
+        `<p class="hint">To leave scheduled emails as they are while future posts change, you'd need a second template, which Kestrel doesn't offer yet.</p>` +
+        `<div class="actions"><button type="button" id="rmCancel">Cancel</button><button type="button" class="primary" id="rmGo">${esc(verb.action)} and apply</button></div>`,
     );
     let settled = false;
     const done = (v) => {
@@ -722,6 +729,19 @@ function confirmRemake(sends, verb) {
     m.el.querySelector("#rmGo").focus();
   });
 }
+// The two leads: what is in use by the scheduled posts.
+const REMAKE_TEMPLATE = {
+  action: "Save",
+  gerund: "Saving",
+  lead: (n) =>
+    `This template is used by ${n} post${n === 1 ? " that's" : "s that are"} already scheduled.`,
+};
+const remakeIdentity = (action, gerund) => ({
+  action,
+  gerund,
+  lead: (n) =>
+    `Your name, tagline, address, and logo ride inside every email, including ${n} post${n === 1 ? " that's" : "s that are"} already scheduled.`,
+});
 // The standing in-use chip (DESIGN §3): the state a template or identity change would
 // reach, read from GET /api/settings `inUse`. `identityFields` narrows it for the
 // identity surface: a field the template does not render is not in use at all.
@@ -1413,7 +1433,8 @@ async function renderEditor(id) {
         ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.${
             // A template or identity change re-made this email (SPEC §8): said here,
             // where Send test is at hand, and nowhere else. It informs; the next step
-            // is the publisher's call.
+            // is the publisher's call. An event riding a state banner is an interim:
+            // a dismissible notice, the app's own notification kind, replaces it.
             scheduled.remade_at
               ? ` A template or identity change was applied at ${esc(fmt(scheduled.remade_at))}.`
               : ""
@@ -4151,7 +4172,7 @@ async function renderTemplate() {
           method: "PUT",
           json: ack ? { emailTemplate: value, remake: ack } : { emailTemplate: value },
         }),
-      { action: "Save", change: "the new template" },
+      REMAKE_TEMPLATE,
     );
     if (!r) {
       return null;
@@ -4787,7 +4808,7 @@ async function renderSettings() {
           const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
           return api(`/api/settings/logo${q}`, { method: "POST", body: fd });
         },
-        { action: "Upload", change: "the new logo" },
+        remakeIdentity("Upload", "Uploading"),
       );
       if (!r) {
         return; // declined: the logo stays as it was
@@ -4813,7 +4834,7 @@ async function renderSettings() {
             const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
             return api(`/api/settings/logo${q}`, { method: "DELETE" });
           },
-          { action: "Remove", change: "no logo" },
+          remakeIdentity("Remove", "Removing"),
         );
         if (!r) {
           return;
@@ -5061,7 +5082,7 @@ async function renderSettings() {
             method: "PUT",
             json: ack ? { ...payload, remake: ack } : payload,
           }),
-        { action: "Save", change: "the new name, tagline, address, or logo" },
+        remakeIdentity("Save", "Saving"),
       );
       if (!r) {
         return; // declined: the edits stay, the bar stays up
