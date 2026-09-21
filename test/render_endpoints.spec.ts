@@ -1,4 +1,5 @@
 import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { adminAuth } from "./support/auth";
 
@@ -77,6 +78,104 @@ describe("preview + test endpoints", () => {
     expect(msg.html).toContain(`/media/posts/${id}/cat.png`);
     expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
     expect(msg.html).toContain("/unsubscribe?test=1");
+  });
+
+  it("a scheduled post's test and preview are its frozen copy, not a live render (SPEC §5)", async () => {
+    // Once the re-make rule holds, the frozen copy differs from a live render only by
+    // a direct edit of the send's bytes, which is exactly what makes this test honest:
+    // the instruments must read the send, whatever it holds.
+    const id = await draftWithImage("Frozen");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+      }),
+    );
+    const sentinel = `FROZEN-${crypto.randomUUID()}`;
+    await env.DB.prepare("UPDATE sends SET rendered_html = ?, rendered_text = ? WHERE id = ?")
+      .bind(
+        `<p>${sentinel}</p><a href="%%UNSUBSCRIBE_URL%%">u</a>`,
+        `${sentinel}\nUnsubscribe: %%UNSUBSCRIBE_URL%%`,
+        scheduled.send.id,
+      )
+      .run();
+
+    const to = `frozen-${id}@example.com`;
+    const test = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      }),
+    );
+    expect(test.frozen).toBe(true);
+    const msg = (
+      await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }))
+    ).messages.find((m: any) => m.to === to);
+    expect(msg.html).toContain(sentinel);
+    expect(msg.html).toContain("/unsubscribe?test=1"); // the placeholders are filled as at fire
+    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+
+    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    expect(page).toContain(sentinel);
+    expect(page).toContain("/unsubscribe");
+    expect(page).not.toContain("%%UNSUBSCRIBE_URL%%");
+    const action = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+    );
+    expect(action.frozen).toBe(true);
+
+    // A post whose send is in flight is still the frozen copy (the post stays
+    // `scheduled` while its send is `sending`).
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(Date.now(), scheduled.send.id)
+      .run();
+    const inFlight = await (
+      await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })
+    ).text();
+    expect(inFlight).toContain(sentinel);
+
+    // Once sent, the record's copy: the same bytes the archive page serves (I3).
+    await env.DB.batch([
+      env.DB.prepare("UPDATE sends SET status = 'sent', completed_at = ? WHERE id = ?").bind(
+        Date.now(),
+        scheduled.send.id,
+      ),
+      env.DB.prepare("UPDATE posts SET status = 'sent' WHERE id = ?").bind(id),
+    ]);
+    const sentPage = await (
+      await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })
+    ).text();
+    expect(sentPage).toContain(sentinel);
+    const sentTest = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to: `sent-${to}` }),
+      }),
+    );
+    expect(sentTest.frozen).toBe(true);
+    const post = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const slug = post.post.slug;
+    const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
+    expect(archive).toContain(sentinel);
+  });
+
+  it("a draft's test and preview are a live render (frozen: false)", async () => {
+    const id = await draftWithImage("Live");
+    const action = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+    );
+    expect(action.frozen).toBe(false);
+    const test = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to: `live-${id}@example.com` }),
+      }),
+    );
+    expect(test.frozen).toBe(false);
   });
 
   it("POST /test rejects a missing/invalid address (400)", async () => {

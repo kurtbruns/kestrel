@@ -101,6 +101,11 @@ CREATE TABLE settings (
 -- fails — it keeps retrying, and the one ambiguous case waits for a human (SPEC §12).
 -- locked_until is the send-loop lease (overlap guard).
 --
+-- A scheduled send's frozen render is made again in place when the template or the
+-- identity changes (SPEC §6, §9): the rendered columns are rewritten under a
+-- compare-and-swap on status = 'scheduled', so a send that has fired is never touched,
+-- and remade_at records when that last happened (the sign-off reset a publisher sees).
+--
 -- The c_* columns are denormalized progress counters (SPEC §8) so a poll of an
 -- in-flight send is a single-row read instead of an aggregate over its audience.
 -- `deliveries` stays the source of truth; the counters are a rebuildable cache,
@@ -125,6 +130,8 @@ CREATE TABLE sends (
   scheduled_at    INTEGER NOT NULL,
   started_at      INTEGER,
   completed_at    INTEGER,
+  remade_at       INTEGER,                     -- when a template or identity change last
+                                               -- re-made the frozen render while scheduled
   c_pending       INTEGER NOT NULL DEFAULT 0,
   c_in_flight     INTEGER NOT NULL DEFAULT 0,
   c_accepted      INTEGER NOT NULL DEFAULT 0,

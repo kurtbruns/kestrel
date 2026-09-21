@@ -155,6 +155,53 @@ export function fillDeliveryTokens(
   return out;
 }
 
+/** Every `{{ token }}` name a template references, known or not. */
+export function templateTokens(html: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const m of html.matchAll(TOKEN)) {
+    if (m[1]) {
+      tokens.add(m[1]);
+    }
+  }
+  return tokens;
+}
+
+/** The identity fields an email can carry, named as the settings surface names them. */
+export type IdentityField = "name" | "tagline" | "logoUrl" | "address";
+
+const IDENTITY_TOKENS: ReadonlyArray<[token: string, field: IdentityField]> = [
+  ["publication.name", "name"],
+  ["publication.tagline", "tagline"],
+  ["publication.logoUrl", "logoUrl"],
+  ["publication.address", "address"],
+];
+
+/**
+ * The identity fields `template` renders. The identity reaches the frozen bytes only
+ * through the `publication.*` tokens, so a field the template does not reference is
+ * not an input to the email: changing it alters no scheduled send, and the re-make
+ * guard (SPEC §9) leaves it alone. The built-in template renders the logo, name, and
+ * tagline, and not the address.
+ */
+export function identityFieldsInUse(template: string): IdentityField[] {
+  const tokens = templateTokens(template);
+  return IDENTITY_TOKENS.filter(([token]) => tokens.has(token)).map(([, field]) => field);
+}
+
+/**
+ * Whether a settings save changes what the render path would put into an email:
+ * the template's text, or an identity field the template renders (`identityFieldsInUse`,
+ * taken from `next`, the template the save leaves in place). Compared on the resolved
+ * branding, not the stored strings, so saving the built-in default's text over a blank
+ * template, or a name equal to the From display name over a blank one, is no change.
+ */
+export function brandingDiffers(current: EmailBranding, next: EmailBranding): boolean {
+  if (current.template !== next.template) {
+    return true;
+  }
+  return identityFieldsInUse(next.template).some((field) => current[field] !== next[field]);
+}
+
 export interface TemplateValidation {
   errors: string[];
   warnings: string[];
@@ -167,13 +214,7 @@ export interface TemplateValidation {
 export function validateEmailTemplate(html: string): TemplateValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
-  const tokens = new Set<string>();
-  for (const m of html.matchAll(TOKEN)) {
-    const t = m[1];
-    if (t) {
-      tokens.add(t);
-    }
-  }
+  const tokens = templateTokens(html);
 
   if (!tokens.has("post.body")) {
     errors.push("Every email must include {{ post.body }} to render the content of the post.");

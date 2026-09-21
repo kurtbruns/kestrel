@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
+import { readSettings, updateSettings } from "../src/db/settings";
+import * as subscribersDb from "../src/db/subscribers";
 import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
@@ -40,6 +42,66 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM subscribers"),
   ]);
   clearFakeOutbox();
+});
+
+describe("the freeze reads the template it froze with", () => {
+  it("the insert lands only while the settings row is still at the version the render used", async () => {
+    // The guard closes one direction of a schedule racing a template save: a freeze
+    // that rendered with settings the publisher has since replaced must not land as a
+    // scheduled send on the older look (SPEC §6, §9). Exercised at the statement level
+    // so the order is deterministic: a stale version inserts nothing, the current one
+    // inserts the row.
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
+    await updateSettings(env.DB, { publication: { tagline: "v1" } });
+    const { version } = await readSettings(env.DB);
+    const row = {
+      id: "s-guard",
+      post_id: post.id,
+      fire_at: Date.now() + 600_000,
+      recipient_count: 0,
+      rendered_html: "<p>x</p>",
+      rendered_text: "x",
+      subject: "Subj",
+    };
+    const stale = await sends
+      .insertScheduledSendStmt(env.DB, row, Date.now(), (version ?? 0) - 1)
+      .run();
+    expect(stale.meta.changes ?? 0).toBe(0);
+    expect(await sends.getSend(env.DB, "s-guard")).toBeNull();
+
+    const fresh = await sends.insertScheduledSendStmt(env.DB, row, Date.now(), version ?? 0).run();
+    expect(fresh.meta.changes ?? 0).toBe(1);
+    expect((await sends.getSend(env.DB, "s-guard"))?.status).toBe("scheduled");
+  });
+
+  it("freeze() re-renders when the settings move under it, and still lands one scheduled send", async () => {
+    // A settings write that lands between a freeze's read and its insert makes the
+    // guarded insert change zero rows; the freeze then reads again and renders with
+    // the new settings. Simulated by bumping the row's version from a hook on the
+    // first render: the send that lands carries the tagline saved in the gap.
+    await updateSettings(env.DB, { publication: { tagline: "before" } });
+    const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
+    const tpl = `<div>{{ post.body }} <i>{{ publication.tagline }}</i> <a href="{{ email.unsubscribeUrl }}">u</a></div>`;
+    await updateSettings(env.DB, { emailTemplate: tpl });
+    let bumped = false;
+    const spy = vi.spyOn(subscribersDb, "audienceEmails").mockImplementation(async (db) => {
+      // Runs after the render and before the insert, once: the "concurrent" save.
+      if (!bumped) {
+        bumped = true;
+        await updateSettings(db, { publication: { tagline: "after" } });
+      }
+      return [];
+    });
+    try {
+      const send = await freeze(env, config(), post, Date.now() + 600_000);
+      expect(send.status).toBe("scheduled");
+      expect(send.rendered_html).toContain("after");
+      expect(send.rendered_html).not.toContain("before");
+      expect((await posts.getPost(env.DB, post.id))!.status).toBe("scheduled");
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });
 
 describe("send loop + sweep", () => {

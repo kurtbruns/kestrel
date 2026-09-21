@@ -18,6 +18,9 @@ export interface SendRow {
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
+  /** When a template or identity change last re-made the frozen render while the send
+   *  was scheduled (SPEC §6); null if never. The sign-off reset a publisher sees. */
+  remade_at: number | null;
   // Denormalized progress counters (the `c_*` columns on `sends`). A rebuildable cache of the
   // `deliveries` bucketing, maintained in the same transactions as each recipient
   // transition so `GET /sends/:id/progress` is a single-row read (SPEC §8).
@@ -236,7 +239,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, remade_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -521,6 +524,129 @@ export async function countDeliveriesFiltered(
     .bind(...binds)
     .first<{ n: number }>();
   return row?.n ?? 0;
+}
+
+// --- the freeze ------------------------------------------------------------------
+
+/** The frozen render a freeze (or a re-make) writes onto a send: the one render
+ *  path's output, as the three columns the send loop reads back. */
+export interface FrozenRender {
+  rendered_html: string;
+  rendered_text: string;
+  subject: string;
+}
+
+/** The predicate that ties a settings-dependent write to the settings the writer
+ *  read: the row's `updated_at` (0 when there is no row yet) must still equal
+ *  `version`. The freeze puts it on its insert so a schedule that rendered with a
+ *  template the publisher has since replaced can never land (SPEC §6, §9). */
+export function settingsVersionIs(version: number): { sql: string; binds: unknown[] } {
+  return {
+    sql: "COALESCE((SELECT updated_at FROM settings WHERE id = 1), 0) = ?",
+    binds: [version],
+  };
+}
+
+/**
+ * Insert a `scheduled` send holding a frozen render, guarded on the settings version
+ * the render used (`settingsVersionIs`): `meta.changes === 0` means the template or
+ * identity changed between the read and this write, and the caller re-renders. The
+ * partial unique index on active sends still fails the insert for a second active
+ * send, which the caller maps to a conflict.
+ */
+export function insertScheduledSendStmt(
+  db: D1Database,
+  send: FrozenRender & { id: string; post_id: string; fire_at: number; recipient_count: number },
+  now: number,
+  settingsVersion: number,
+): D1PreparedStatement {
+  const guard = settingsVersionIs(settingsVersion);
+  return db
+    .prepare(
+      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?
+        WHERE ${guard.sql}`,
+    )
+    .bind(
+      send.id,
+      send.post_id,
+      send.fire_at,
+      send.rendered_html,
+      send.rendered_text,
+      send.subject,
+      send.recipient_count,
+      now,
+      ...guard.binds,
+    );
+}
+
+// --- the re-make (SPEC §6, §9) ---------------------------------------------------
+
+/** A scheduled send as the settings surface lists it: what a template or identity
+ *  change would re-make, and what the client acknowledges by id. */
+export interface ScheduledSendRef {
+  id: string;
+  post_id: string;
+  subject: string;
+  fire_at: number;
+  remade_at: number | null;
+}
+
+/** Every `scheduled` send, soonest first: the set "in use" by the template and the
+ *  identity. A `sending` send is past the window and a `sent` one is the record;
+ *  neither is listed, counted, or ever re-made. */
+export async function listScheduledSends(db: D1Database): Promise<ScheduledSendRef[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT id, post_id, subject, fire_at, remade_at FROM sends WHERE status = 'scheduled' ORDER BY fire_at ASC, id ASC",
+    )
+    .all<ScheduledSendRef>();
+  return results;
+}
+
+/**
+ * The predicate every statement of a re-make batch carries, so the batch lands whole
+ * or not at all against three things that can move between the read and the write:
+ * the settings version the render used (`settingsVersionIs`), a scheduled send inside
+ * the minimum lead (`minFireAt` is now + the lead), and a scheduled send the client
+ * did not acknowledge (`ackIds`), such as one scheduled in the gap. Nothing here is
+ * user text: the ids are bound, the rest is fixed SQL.
+ */
+export function remakeGuard(
+  settingsVersion: number,
+  minFireAt: number,
+  ackIds: string[],
+): { sql: string; binds: unknown[] } {
+  const version = settingsVersionIs(settingsVersion);
+  const unacked =
+    ackIds.length === 0
+      ? "NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled')"
+      : `NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND id NOT IN (${ackIds.map(() => "?").join(", ")}))`;
+  return {
+    sql: `${version.sql} AND NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND fire_at < ?) AND ${unacked}`,
+    binds: [...version.binds, minFireAt, ...ackIds],
+  };
+}
+
+/**
+ * Re-freeze one scheduled send in place: the rendered columns and `remade_at`, nothing
+ * else (the fire time, the window's anchor, and the audience snapshot stay). A CAS on
+ * `status = 'scheduled'` plus the batch's `guard`: a send that fired or was canceled in
+ * the gap changes zero rows without failing the batch, and is never touched.
+ */
+export function remakeSendStmt(
+  db: D1Database,
+  sendId: string,
+  render: FrozenRender,
+  now: number,
+  guard: { sql: string; binds: unknown[] },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, remade_at = ?
+        WHERE id = ? AND status = 'scheduled' AND ${guard.sql}`,
+    )
+    .bind(render.rendered_html, render.rendered_text, render.subject, now, sendId, ...guard.binds);
 }
 
 // --- send-loop / sweep (M6) -------------------------------------------------

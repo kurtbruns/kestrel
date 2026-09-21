@@ -2,7 +2,7 @@
 
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
-import { badRequest, json, notFound } from "../lib/errors";
+import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -43,6 +43,20 @@ export function parseFutureFireAt(input: unknown, immediateHint = false): number
   return fireAt;
 }
 
+/**
+ * A freeze always uses the template and identity as they stand (SPEC §6): there is no
+ * per-send template to choose, so a request that tries to name one is refused rather
+ * than silently given the current template. Keeps a client written against a design
+ * that had such a field from believing its choice took.
+ */
+function rejectStrayTemplateChoice(body: unknown): void {
+  if (body && typeof body === "object" && "template_revision" in body) {
+    throw badRequest(
+      "template_revision is not a field: a send is made with the template and identity as they stand, and a later change re-makes it",
+    );
+  }
+}
+
 export async function schedule(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
@@ -55,6 +69,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   } catch {
     throw badRequest("JSON body with 'fire_at' is required");
   }
+  rejectStrayTemplateChoice(body);
   const fireAt = parseFutureFireAt(body.fire_at, true);
   const send = await freeze(c.env, c.config, post, fireAt);
   return json({ send }, 201);
@@ -64,6 +79,17 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   const post = await getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
+  }
+  // Send-now needs no body; one is read only to refuse a stray template choice.
+  if ((c.req.headers.get("content-type") ?? "").includes("application/json")) {
+    try {
+      rejectStrayTemplateChoice(await c.req.json());
+    } catch (err) {
+      if (err instanceof HttpError) {
+        throw err;
+      }
+      // Unparseable JSON on a route that needs none is ignored, as before.
+    }
   }
 
   // Idempotent: if a send is already in flight for this post, return it.

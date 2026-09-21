@@ -121,8 +121,12 @@ export async function getPost(c: RequestContext): Promise<Response> {
       post,
       markdown: revision?.markdown ?? "",
       author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
+      // `remade_at`: when a template or identity change last re-made the frozen email
+      // (SPEC §8), so the editor can say the earlier test no longer stands.
       scheduled:
-        active && active.status === "scheduled" ? { id: active.id, fire_at: active.fire_at } : null,
+        active && active.status === "scheduled"
+          ? { id: active.id, fire_at: active.fire_at, remade_at: active.remade_at }
+          : null,
       sending: active && active.status === "sending" ? { id: active.id } : null,
       sent: sent ? { id: sent.id } : null,
     },

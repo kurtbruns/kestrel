@@ -212,6 +212,7 @@ describe("buildSendProgress — derived phase", () => {
       scheduled_at: Date.now(),
       started_at: Date.now() - 60_000,
       completed_at: null,
+      remade_at: null,
       c_pending: 0,
       c_in_flight: 0,
       c_accepted: 0,

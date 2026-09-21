@@ -21,6 +21,16 @@ describe("schema (0001_init)", () => {
     }
   });
 
+  it("sends.remade_at exists and is nullable (a send that was never re-made carries null)", async () => {
+    const { results } = await env.DB.prepare("PRAGMA table_info(sends)").all<{
+      name: string;
+      notnull: number;
+    }>();
+    const col = results.find((c) => c.name === "remade_at");
+    expect(col).toBeTruthy();
+    expect(col!.notnull).toBe(0);
+  });
+
   it("enforces the subscribers.email unique constraint", async () => {
     const now = Date.now();
     await env.DB.prepare(

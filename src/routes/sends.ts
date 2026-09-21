@@ -173,8 +173,9 @@ export async function cancel(c: RequestContext): Promise<Response> {
 
 /**
  * Move a scheduled send's fire time without re-freezing the render (SPEC §6). The
- * frozen bytes and the frozen audience are untouched (I3) and the review window is
- * preserved (I6) — only `fire_at` moves. Same minimum-lead guard as scheduling, and
+ * frozen bytes are untouched (I3; the audience is resolved when the send fires, not
+ * here) and the review window is preserved (I6) — only `fire_at` moves. Same
+ * minimum-lead guard as scheduling, and
  * `scheduled`-status only (the state machine's CAS enforces the latter, I6).
  */
 export async function reschedule(c: RequestContext): Promise<Response> {

@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { DEFAULT_CONFIRMATION_EMAIL } from "../src/db/settings";
+import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
 import { adminAuth } from "./support/auth";
 
@@ -394,5 +395,24 @@ describe("publication logo (issue #81)", () => {
   it("rejects a non-image upload with 400", async () => {
     const res = await putLogo(Uint8Array.from([1, 2, 3]), "application/pdf");
     expect(res.status).toBe(400);
+  });
+});
+
+describe("two writers on the one settings row", () => {
+  it("both land: neither clobbers the other's field (a CAS with retry, not last-write-wins)", async () => {
+    // Every settings write is a read-merge-write of the whole blob. Three writers in
+    // one isolate interleave at their awaits (each reads before any of them writes),
+    // so without the compare-and-swap on `updated_at` the last write would carry the
+    // first reader's stale copy and silently drop the others' fields.
+    const marker = `race-${crypto.randomUUID().slice(0, 8)}`;
+    await Promise.all([
+      updateSettings(env.DB, { publication: { name: `name-${marker}` } }),
+      updateSettings(env.DB, { publication: { tagline: `tagline-${marker}` } }),
+      setPublicationLogo(env.DB, { version: 42, contentType: "image/png" }),
+    ]);
+    const { body } = await getSettings();
+    expect(body.settings.publication.name).toBe(`name-${marker}`);
+    expect(body.settings.publication.tagline).toBe(`tagline-${marker}`);
+    expect(body.settings.publication.logoUrl).toContain("/media/branding/logo?v=42");
   });
 });
