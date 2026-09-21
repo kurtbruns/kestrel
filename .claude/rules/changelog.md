@@ -20,7 +20,7 @@ What earns a line: a change to behavior, the admin UI, the HTTP API surface, con
 ## How to write the line
 
 - **Section.** Group under `Added`, `Changed`, `Fixed`, or `Breaking`. A `Breaking` entry also decides the next release is a major bump.
-- **Altitude.** One line, written for the person running Kestrel: what changed for them, not the mechanism. Cite a `docs/SPEC.md` section if it helps; never a file or symbol.
+- **Level.** One line, written for the person running Kestrel: what changed for them, not the mechanism. Cite a `docs/SPEC.md` section if it helps; never a file or symbol.
 - **Voice.** Match the entries already there. No PR or issue numbers (the repo's comment style keeps those out of prose).
 
 ## Cutting a release
