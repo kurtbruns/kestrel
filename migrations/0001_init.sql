@@ -7,8 +7,8 @@
 -- deployment on, migrations are append-only: never edit this file, add the next one.
 --
 -- Timestamps are unix epoch milliseconds (INTEGER). Text ids are app-generated
--- (UUID / random tokens). FK declarations document intent; the app also enforces
--- cascades in code since D1 does not enable foreign_keys by default.
+-- (UUID / random tokens). D1 enforces the FK declarations (foreign_keys is on) but
+-- none declares an ON DELETE action, so the app deletes children before parents in code.
 
 -- ---------------------------------------------------------------- content
 
