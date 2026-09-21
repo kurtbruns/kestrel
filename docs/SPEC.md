@@ -245,7 +245,7 @@ A small status surface, readable in the editor and through the API, answers the 
 
 ### What's scheduled, and when does it fire?
 
-The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window no one can see into or act on isn't one, I6), each carries the actions that manage a pending send without editing its content: a **one-call cancel** and a **one-call reschedule** of the fire time (§6, which moves it without re-freezing). A send that a template or identity change has re-made (§6) says so until it fires, so the publisher knows its earlier test no longer stands.
+The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window no one can see into or act on isn't one, I6), each carries the actions that manage a pending send without editing its content: a **one-call cancel** and a **one-call reschedule** of the fire time (§6, which moves it without re-freezing). A send that a template or identity change has re-made (§6) says so, on the post and at the top of the status surface, until the publisher has seen it or it fires, so they know an earlier test no longer stands.
 
 ### What have I sent, and how did it do?
 

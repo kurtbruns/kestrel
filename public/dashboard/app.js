@@ -594,7 +594,6 @@ function recordDismissed(kind, members) {
 // Returns the rendered element, or null when every member is already dismissed. Rendering
 // the same identity into a slot again replaces it rather than stacking a duplicate, so a
 // surface can call this from a poll.
-// biome-ignore lint/correctness/noUnusedVariables: the kind ships ahead of its first occupant, the applied-change notice of the template re-make; drop this note when a surface calls it
 function notice(slot, { kind, subject, version, members, html }) {
   if (!slot) {
     return null;
@@ -758,6 +757,20 @@ function inUseChip(inUse, forIdentity = false) {
     ? ` title="One sends at ${esc(fmt(inUse.retry_after))}; saving waits until it has sent."`
     : "";
   return `<span class="set-chip inuse"${title}><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
+}
+// "Sep 20 at 4:12 PM": the moment a notice names, read as a clause rather than a stamp.
+const fmtAt = (ms) =>
+  `${new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric" })} at ${new Date(
+    ms,
+  ).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })}`;
+// The applied-change notice (SPEC §8; DESIGN §2 home ⑥): a template or identity change
+// re-made the scheduled emails at `at`. One text for both surfaces; `n` is how many
+// posts it names (the dashboard's aggregate) or 1 for the post's own. It states the
+// event and its consequence, and leaves the next step to the publisher.
+function appliedNoticeHtml(at, n, onPost) {
+  const who = onPost ? "this post" : `${n} scheduled post${n === 1 ? "" : "s"}`;
+  const whose = n === 1 || onPost ? "its email as it will" : "their emails as they will";
+  return `A template or identity change made <strong>${esc(fmtAt(at))}</strong> was applied to ${who}. A fresh test shows ${whose} now send.`;
 }
 // After a save that applied to scheduled emails, the toast says how many and that a
 // test is needed again (DESIGN §2); with none, the plain confirmation.
@@ -1428,19 +1441,7 @@ async function renderEditor(id) {
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${
-      locked && scheduled
-        ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.${
-            // A template or identity change re-made this email (SPEC §8): said here,
-            // where Send test is at hand, and nowhere else. It informs; the next step
-            // is the publisher's call. An event riding a state banner is an interim:
-            // a dismissible notice, the app's own notification kind, replaces it.
-            scheduled.remade_at
-              ? ` A template or identity change was applied at ${esc(fmt(scheduled.remade_at))}.`
-              : ""
-          }</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>`
-        : ""
-    }
+    ${locked && scheduled ? `<div class="banner banner-scheduled"><span>Scheduled for <strong>${esc(fmt(scheduled.fire_at))}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : ""}
     <div id="editorNotices"></div>
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
@@ -2044,6 +2045,19 @@ async function renderEditor(id) {
   if (rescheduleBtn && scheduled) {
     rescheduleBtn.onclick = () =>
       openRescheduleModal(scheduled.id, scheduled.fire_at, () => renderEditor(id));
+  }
+
+  // --- the applied-change notice (SPEC §8): an event, read once and cleared ---
+  // The same record as the dashboard's aggregate (kind "applied", the send id, its
+  // remade_at), so clearing it here clears it there once every member is, and a later
+  // change shows it again on its own.
+  if (locked && scheduled?.remade_at) {
+    notice(document.getElementById("editorNotices"), {
+      kind: "applied",
+      subject: scheduled.id,
+      version: scheduled.remade_at,
+      html: appliedNoticeHtml(scheduled.remade_at, 1, true),
+    });
   }
 
   // --- cancel schedule (from the scheduled banner) ---
@@ -5817,6 +5831,7 @@ async function renderDashboard() {
   });
   wireDashActiveCards();
   wireDashScheduledCards();
+  paintAppliedNotice(scheduled);
   startCountdowns();
   // Keep the send sections live: advance the active-send widget's bar, and when a send
   // starts or finishes, refresh the Scheduled queue so a fired post clears out of it (its
@@ -5827,6 +5842,30 @@ async function renderDashboard() {
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
  *  the review window needs (SPEC §8). */
+// The dashboard's applied-change notice (SPEC §8): one aggregate over every scheduled
+// send a template or identity change re-made. Every re-make touches every scheduled
+// send, so the re-made ones always share one remade_at (a send scheduled since has
+// none), and the notice is always one moment and N posts. Its members are the sends
+// by id and remade_at, the same record each post page uses, so clearing it here
+// clears them there, and clearing every post hides it here. Re-painted with the
+// queue; notice() replaces rather than stacks.
+function paintAppliedNotice(scheduled) {
+  const slot = document.getElementById("dashNotices");
+  if (!slot) {
+    return;
+  }
+  const remade = scheduled.filter((s) => s.remade_at);
+  if (!remade.length) {
+    slot.querySelector('[data-notice^="applied|"]')?.remove();
+    return;
+  }
+  const at = Math.max(...remade.map((s) => s.remade_at));
+  notice(slot, {
+    kind: "applied",
+    members: remade.map((s) => ({ subject: s.id, version: s.remade_at })),
+    html: appliedNoticeHtml(at, remade.length, false),
+  });
+}
 function dashScheduledHtml(scheduled) {
   if (!scheduled.length) {
     return `<p class="muted">Nothing scheduled.</p>`;
@@ -5917,6 +5956,7 @@ async function refreshDashScheduled() {
     const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
     el.innerHTML = dashScheduledHtml(sends);
     wireDashScheduledCards();
+    paintAppliedNotice(sends);
     startCountdowns(); // re-arm the countdown ticker over the refreshed cards
   } catch {
     /* non-fatal — the scheduled section keeps its last render */
