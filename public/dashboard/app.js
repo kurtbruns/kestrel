@@ -1360,7 +1360,7 @@ async function renderEditor(id) {
         </div>
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
-          <textarea id="f-markdown" class="editor" placeholder="Type your post in Markdown…" ${ro}>${esc(markdown)}</textarea>
+          <textarea id="f-markdown" class="editor"${locked ? "" : ' placeholder="Type your post in Markdown…"'} ${ro}>${esc(markdown)}</textarea>
           <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
         </div>
         ${
@@ -2169,7 +2169,7 @@ async function renderEditor(id) {
 
       async function showSendNow() {
         box.innerHTML =
-          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel from Status until it fires.</p>` +
+          `<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel until it fires.</p>` +
           `<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div>` +
           `<div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`;
         box.setAttribute("aria-labelledby", "snHead");
