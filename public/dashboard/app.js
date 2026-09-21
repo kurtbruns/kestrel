@@ -2385,7 +2385,7 @@ function openResolveModal(send, reload) {
   m.el.querySelector("#rAccepted").onclick = (e) => doResolve(e.target, "accepted", "sent");
 }
 
-// Move a scheduled send's fire time without unscheduling or re-editing: the content stays
+// Move a scheduled send's fire time without canceling or re-editing: the content stays
 // frozen (I3) and the cancelable review window is preserved (I6) — only fire_at moves, via
 // POST /sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule modal,
 // prefilled with the current fire time and floored at the minimum lead. Shared by the
@@ -5839,24 +5839,25 @@ async function renderDashboard() {
   scheduleDashActivePoll();
 }
 
-/** The dashboard's scheduled cards are read-only summaries: the whole card links into the
- *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
- *  the review window needs (SPEC §8). */
 // The dashboard's applied-change notice (SPEC §8): one aggregate over every scheduled
 // send a template or identity change re-made. Every re-make touches every scheduled
 // send, so the re-made ones always share one remade_at (a send scheduled since has
 // none), and the notice is always one moment and N posts. Its members are the sends
 // by id and remade_at, the same record each post page uses, so clearing it here
 // clears them there, and clearing every post hides it here. Re-painted with the
-// queue; notice() replaces rather than stacks.
+// queue: the last line is cleared first, since notice() replaces a prior render only
+// when its members match, and the set changes as a re-made send fires or is canceled
+// (one aggregate per slot, never two).
 function paintAppliedNotice(scheduled) {
   const slot = document.getElementById("dashNotices");
   if (!slot) {
     return;
   }
+  for (const el of slot.querySelectorAll('[data-notice^="applied|"]')) {
+    el.remove();
+  }
   const remade = scheduled.filter((s) => s.remade_at);
   if (!remade.length) {
-    slot.querySelector('[data-notice^="applied|"]')?.remove();
     return;
   }
   const at = Math.max(...remade.map((s) => s.remade_at));
@@ -5866,6 +5867,9 @@ function paintAppliedNotice(scheduled) {
     html: appliedNoticeHtml(at, remade.length, false),
   });
 }
+/** The dashboard's scheduled cards are read-only summaries: the whole card links into the
+ *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
+ *  the review window needs (SPEC §8). */
 function dashScheduledHtml(scheduled) {
   if (!scheduled.length) {
     return `<p class="muted">Nothing scheduled.</p>`;

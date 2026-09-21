@@ -283,17 +283,38 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await getSend(sent.id)).status).toBe("sent");
     const canceled = await schedule(await makeDraft("Canceled post"));
     await cancel(canceled.id);
+    // A send in flight: past the window, so neither listed nor re-made.
+    const sending = await schedule(await makeDraft("Sending post"));
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(Date.now(), sending.id)
+      .run();
     const kept = await schedule(await makeDraft("Kept post"));
+    expect((await getSettings()).inUse.sends.map((s: any) => s.id)).toEqual([kept.id]);
 
     const res = await putSettings({ emailTemplate: tpl("v2"), remake: [kept.id] });
     expect(res.status).toBe(200);
     expect((await readJson(res)).remade.map((s: any) => s.id)).toEqual([kept.id]);
-    for (const id of [sent.id, canceled.id]) {
+    for (const id of [sent.id, canceled.id, sending.id]) {
       const s = await getSend(id);
       expect(s.rendered_html).toContain("v1");
       expect(s.remade_at).toBeNull();
     }
     expect((await getSend(kept.id)).rendered_html).toContain("v2");
+  });
+
+  it("moving the fire time leaves the re-made copy and its mark alone (SPEC §6)", async () => {
+    const a = await schedule(await makeDraft("Post A"));
+    const body = await readJson(await putSettings({ emailTemplate: tpl("v2"), remake: [a.id] }));
+    const moved = await SELF.fetch(`${base}/sends/${a.id}/reschedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: new Date(Date.now() + 40 * 60 * 1000).toISOString() }),
+    });
+    expect(moved.status).toBe(200);
+    const after = await getSend(a.id);
+    expect(after.fire_at).not.toBe(a.fire_at);
+    expect(after.rendered_html).toContain("v2");
+    expect(after.remade_at).toBe(body.remade[0].remade_at);
   });
 
   it("an acknowledgement that omits a scheduled send is refused with the current list", async () => {
