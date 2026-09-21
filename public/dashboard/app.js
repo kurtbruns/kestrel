@@ -208,6 +208,20 @@ function roomShell(active, railHtml, mainHtml) {
     ${foot}
   </div>`;
 }
+// A room-bar link to the page you're already on (the active tab, or the wordmark on the
+// docs index) sets the hash to what it already is, so no hashchange fires and nothing
+// re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
+// the same whether or not the tap happens to change the hash. Instant, like every other
+// in-page move here (the "On this page" links) and like a cross-page click landing at
+// the top of its page. Delegated once on #app, so it survives every re-render of the room.
+app.addEventListener("click", (ev) => {
+  const a = ev.target.closest(".room-bar a[href^='#/']");
+  if (!a || a.getAttribute("href") !== location.hash) {
+    return;
+  }
+  ev.preventDefault();
+  window.scrollTo(0, 0);
+});
 
 // ---- auth ----
 function setToken(t) {
@@ -4975,9 +4989,9 @@ function renderDocPage(docs, slug) {
     ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
     : "";
 
-  // "On this page" links smooth-scroll within the current doc and highlight at once. On
-  // mobile the fold closes first, so the page height above the target is settled before
-  // the scroll is measured.
+  // "On this page" links jump within the current doc and highlight at once. On mobile the
+  // fold closes first, so the page height above the target is settled before the scroll
+  // is measured.
   const onPageEl = document.getElementById("tocOnPage");
   syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
   const markActive = (id) => {
@@ -4998,9 +5012,7 @@ function renderDocPage(docs, slug) {
     if (onPageEl && mobileMq.matches) {
       onPageEl.open = false;
     }
-    document
-      .getElementById(a.dataset.target)
-      ?.scrollIntoView({ block: "start", behavior: "smooth" });
+    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
   });
 
   // Copy buttons on the guide's shell / DNS code blocks.
@@ -5120,7 +5132,7 @@ async function renderReference() {
   const navEl = document.getElementById("apiNav");
   const contentEl = document.getElementById("apiContent");
   // Delegate clicks synchronously with one listener on the stable nav, so it survives
-  // the async fill below: a sidebar click smooth-scrolls to that section.
+  // the async fill below: a sidebar click jumps to that section.
   navEl.addEventListener("click", (ev) => {
     const a = ev.target.closest("a[data-sec]");
     if (!a) {
