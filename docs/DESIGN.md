@@ -26,7 +26,7 @@ The roles differ by **treatment — fill, border, weight, font-size — never by
 
 If a new button doesn't fit one of the five, that's a signal to reconsider the button, not to add a sixth role.
 
-A role class can carry a small structural modifier for one control's own layout without leaving the role. `.set-menu-btn` (the Template page's "Start from example" trigger) only adds the inline-flex layout its caret needs on top of `button.ghost`; `.sched-toggle` (the Sent queue's "Show all N scheduled" expander) only adds its margin the same way. Neither touches Ghost's fill, border, or text color, so neither is a new role — both stay Ghost with a layout hook.
+A role class can carry a small structural modifier for one control's own layout without leaving the role. `.set-menu-btn` (the Template page's "Start from example" trigger) only adds the layout its caret needs on top of `button.ghost`; `.sched-toggle` (the Sent queue's "Show all N scheduled" expander) only adds its own spacing the same way. Neither touches Ghost's fill, border, or text color, so neither is a new role — both stay Ghost with a layout hook.
 
 ### Toggle is a Control, not a button
 
