@@ -1,5 +1,5 @@
 // The reference room shell shared by Docs and the API reference: the top bar, the
-// contents rail, and the surface switch.
+// contents rail, and the surface switch; installRoomBar() wires the bar's one delegate.
 
 import { buildRefParts } from "./deployment";
 import { type Html, html } from "./html";
@@ -69,17 +69,22 @@ export function roomShell(active: RoomSurface, rail: Html | null, main: Html): H
   </div>`;
 }
 
-// A room-bar link to the page you're already on (the active tab, or the wordmark on the
-// docs index) sets the hash to what it already is, so no hashchange fires and nothing
-// re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
-// the same whether or not the tap happens to change the hash. Instant, like every other
-// in-page move here (the "On this page" links) and like a cross-page click landing at
-// the top of its page. Delegated once on #app, so it survives every re-render of the room.
-app.addEventListener("click", (ev) => {
-  const a = ev.target instanceof Element ? ev.target.closest(".room-bar a[href^='#/']") : null;
-  if (!a || a.getAttribute("href") !== location.hash) {
-    return;
-  }
-  ev.preventDefault();
-  window.scrollTo(0, 0);
-});
+/**
+ * A room-bar link to the page you're already on (the active tab, or the wordmark on the
+ * docs index) sets the hash to what it already is, so no hashchange fires and nothing
+ * re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
+ * the same whether or not the tap happens to change the hash. Instant, like every other
+ * in-page move here (the "On this page" links) and like a cross-page click landing at
+ * the top of its page. Delegated once on #app, so it survives every re-render of the room;
+ * boot calls this once.
+ */
+export function installRoomBar(): void {
+  app.addEventListener("click", (ev) => {
+    const a = ev.target instanceof Element ? ev.target.closest(".room-bar a[href^='#/']") : null;
+    if (!a || a.getAttribute("href") !== location.hash) {
+      return;
+    }
+    ev.preventDefault();
+    window.scrollTo(0, 0);
+  });
+}
