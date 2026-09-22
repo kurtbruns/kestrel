@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appState, stopTimers } from "../state";
+import type { ViewHandle } from "../lifecycle";
 import {
   $,
   type FakeApi,
@@ -7,8 +7,11 @@ import {
   type FakeRoute,
   fakeApi,
   jsonResponse,
+  mount,
+  mounted,
   resetShell,
   typeInto,
+  unmount,
 } from "../test/support";
 import { renderEditor } from "./editor";
 
@@ -70,6 +73,14 @@ function draftServer(initial = draft()) {
   return server;
 }
 
+/** The editor offers every member; a missing one is a test failure, not a branch. */
+function unwrapHandle(h: ViewHandle | null): Required<ViewHandle> {
+  if (!h?.dirty || !h.beforeLeave || !h.manualSave) {
+    throw new Error("the editor offered no handle");
+  }
+  return { dirty: h.dirty, beforeLeave: h.beforeLeave, manualSave: h.manualSave };
+}
+
 describe("editor view", () => {
   let fake: FakeApi;
   beforeEach(() => {
@@ -79,36 +90,37 @@ describe("editor view", () => {
   });
   afterEach(() => {
     fake?.restore();
-    appState.editorLeaveFlush = null;
     vi.useRealTimers();
   });
 
-  async function mount(routes: FakeRoute[]) {
+  // The editor mounted the way the router mounts it; `handle()` is what the router sees.
+  async function open(routes: FakeRoute[]) {
     fake = fakeApi(routes);
-    await renderEditor("p1");
+    await mount((r, s) => renderEditor("p1", r, s));
     await vi.advanceTimersByTimeAsync(0);
   }
+  const handle = () => unwrapHandle(mounted());
   const puts = () => fake.calls.filter((c) => c.method === "PUT");
   const body = () => $<HTMLTextAreaElement>("#f-markdown");
 
   it("mounts a draft into its fields and reads as saved", async () => {
-    await mount([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/posts/p1", reply: () => draft() }]);
     expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
     expect($<HTMLInputElement>("#f-slug").value).toBe("owls");
     expect(body().value).toBe("# Owls\n\nHoot.");
     expect($("#saveStatus").textContent).toBe("Saved");
-    expect(appState.isEditorDirty).toBe(false);
+    expect(handle().dirty()).toBe(false);
   });
 
   it("marks an edit dirty, then autosaves it after the idle pause with the base revision", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "# Owls\n\nHoot hoot.");
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
-    expect(appState.isEditorDirty).toBe(true);
+    expect(handle().dirty()).toBe(true);
     await vi.advanceTimersByTimeAsync(5000);
     expect(puts()[0]?.json()).toMatchObject({
       markdown: "# Owls\n\nHoot hoot.",
@@ -120,7 +132,7 @@ describe("editor view", () => {
 
   it("saves at the hard cap while the typing never pauses", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
     ]);
@@ -135,7 +147,7 @@ describe("editor view", () => {
     const server = draftServer();
     let release: () => void = () => {};
     let held = false;
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       {
         method: "PUT",
@@ -170,7 +182,7 @@ describe("editor view", () => {
   it("shows the out-of-date banner on a stale save, pauses autosave, and keep-editing adopts the newer base", async () => {
     const server = draftServer();
     let theirs: string | null = null;
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       {
         method: "PUT",
@@ -203,13 +215,12 @@ describe("editor view", () => {
     expect(banner.hidden).toBe(false);
     expect(banner.textContent).toMatch(/changed elsewhere/);
     expect(banner.textContent).toMatch(/Claude/); // "service" reads as Claude
-    expect(appState.editorConflict).toBe(true);
+    expect(handle().beforeLeave()).toBe("confirm"); // a leave would clobber: the router must ask
     typeInto(body(), "mine still");
     await vi.advanceTimersByTimeAsync(30000);
     expect(puts()).toHaveLength(1); // paused while the banner is up
     $("#freshKeep").click();
     expect(banner.hidden).toBe(true);
-    expect(appState.editorConflict).toBe(false);
     await vi.advanceTimersByTimeAsync(5000);
     expect(puts()).toHaveLength(2);
     expect(puts()[1]?.json()).toMatchObject({ base_revision: theirs, markdown: "mine still" });
@@ -218,7 +229,7 @@ describe("editor view", () => {
 
   it("warns when the freshness poll finds a newer revision, and locks when the post left draft", async () => {
     const server = draftServer();
-    await mount([{ path: "/posts/p1", reply: server.get }]);
+    await open([{ path: "/posts/p1", reply: server.get }]);
     server.elsewhere("x@y.z");
     await vi.advanceTimersByTimeAsync(10000);
     const banner = $("#freshnessBanner");
@@ -234,47 +245,47 @@ describe("editor view", () => {
 
   it("flushes a dirty draft on navigation and marks it saved as sent", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "leaving");
-    appState.editorLeaveFlush?.();
-    expect(appState.isEditorDirty).toBe(false);
+    expect(handle().beforeLeave()).toBe("leave"); // saved in the background, no prompt
+    expect(handle().dirty()).toBe(false);
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()[0]?.json()).toMatchObject({ markdown: "leaving", base_revision: "r1" });
   });
 
   it("cancels a pending autosave when the app tears the editor down", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "half-typed");
     expect($("#saveStatus").textContent).toBe("Unsaved changes"); // an autosave is armed
-    // What route() and the re-auth wall run: the armed save must not fire after it.
-    stopTimers();
-    expect(appState.editorAutosave).toBeNull();
+    // What navigating away and the re-auth wall do: the armed save must not fire after it.
+    unmount();
+    expect(mounted()).toBeNull();
     await vi.advanceTimersByTimeAsync(30000);
     expect(puts()).toEqual([]);
   });
 
   it("redirects a sent post to its record and a post in flight to the live watch", async () => {
-    await mount([
+    await open([
       { path: "/posts/p1", reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }) },
     ]);
     expect(location.hash).toBe("#/sent/x9");
     location.hash = "#/edit/p1";
     fake.restore();
-    await mount([{ path: "/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
+    await open([{ path: "/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
     expect(location.hash).toBe("#/sent/x8");
     expect(document.querySelector("#f-markdown")).toBeNull(); // never mounted
   });
 
   it("shows the error with a retry that mounts the draft", async () => {
     let failures = 1;
-    await mount([
+    await open([
       {
         path: "/posts/p1",
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : draft()),
@@ -287,7 +298,7 @@ describe("editor view", () => {
   });
 
   it("derives the slug from the subject until the slug is hand-set, and never leaves it empty", async () => {
-    await mount([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/posts/p1", reply: () => draft() }]);
     const subject = $<HTMLInputElement>("#f-subject");
     const slug = $<HTMLInputElement>("#f-slug");
     const auto = $<HTMLInputElement>("#f-slug-auto");
@@ -305,7 +316,7 @@ describe("editor view", () => {
   });
 
   it("formats the selection from the toolbar and by shortcut, and marks the draft dirty", async () => {
-    await mount([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/posts/p1", reply: () => draft() }]);
     const ta = body();
     ta.setSelectionRange(2, 6); // "Owls"
     $(".tb[data-fmt='bold']").click();
@@ -320,7 +331,7 @@ describe("editor view", () => {
 
   it("opens the preview: a silent save, then the rendered email into the frame", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
       {
@@ -339,7 +350,7 @@ describe("editor view", () => {
   });
 
   it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {
-    await mount([
+    await open([
       { path: "/posts/p1", reply: () => draft() },
       {
         path: "/api/settings",
@@ -368,7 +379,7 @@ describe("editor view", () => {
 
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
     const server = draftServer(draft({ subject: "" }));
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
       {
@@ -403,7 +414,7 @@ describe("editor view", () => {
 
   it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {
     const server = draftServer();
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
       { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
@@ -425,7 +436,7 @@ describe("editor view", () => {
   });
 
   it("uploads a picked image and inserts it at the caret", async () => {
-    await mount([
+    await open([
       { path: "/posts/p1", reply: () => draft() },
       {
         method: "POST",
@@ -445,7 +456,7 @@ describe("editor view", () => {
   });
 
   it("mounts a scheduled post read-only, with no autosave", async () => {
-    await mount([
+    await open([
       {
         path: "/posts/p1",
         reply: () => ({
@@ -464,7 +475,7 @@ describe("editor view", () => {
   it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
     const server = draftServer(draft({ status: "scheduled" }));
     server.scheduled({ id: "s1", fire_at: 1_800_000_000_000, remade_at: 1_790_000_000_000 });
-    await mount([
+    await open([
       { path: "/posts/p1", reply: server.get },
       {
         method: "POST",

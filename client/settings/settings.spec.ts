@@ -8,10 +8,10 @@ import {
   type FakeRoute,
   fakeApi,
   jsonResponse,
+  mount,
   resetShell,
   typeInto,
 } from "../test/support";
-import { savebar } from "../ui/savebar";
 import { renderSettings } from "./settings";
 
 const DEFAULT_COPY = {
@@ -69,19 +69,18 @@ describe("settings view", () => {
   });
   afterEach(() => {
     fake?.restore();
-    savebar.detach();
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
-  async function mount(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
+  async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
     fake = fakeApi(routes);
-    await renderSettings();
+    await mount(renderSettings);
     await vi.advanceTimersByTimeAsync(0);
   }
 
   it("renders the identity, the sender and instance reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
-    await mount();
+    await open();
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
     expect($(".set-note span").textContent).toMatch(
@@ -112,7 +111,7 @@ describe("settings view", () => {
   });
 
   it("raises the save bar on an edit and drops it on discard, restoring the field", async () => {
-    await mount();
+    await open();
     typeInto($<HTMLInputElement>("#setName"), "Birds Monthly");
     expect(bar().classList.contains("show")).toBe(true);
     expect($("#embedPreview label").textContent).toBe("Subscribe to Birds Monthly"); // live
@@ -122,7 +121,7 @@ describe("settings view", () => {
   });
 
   it("saves the identity, recipients, and wording, adopting the server's normalized result and the sidebar brand", async () => {
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
@@ -172,7 +171,7 @@ describe("settings view", () => {
     const sends = [
       { id: "x1", post_id: "p1", subject: "Gulls", fire_at: 1_800_000_000_000, remade_at: null },
     ];
-    await mount([
+    await open([
       {
         path: "/api/settings",
         reply: () => response({ inUse: { sends, retry_after: null, identityFields: ["name"] } }),
@@ -205,7 +204,7 @@ describe("settings view", () => {
   });
 
   it("shows a send about to fire as the bar's blocking error, keeping the edits", async () => {
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
@@ -231,7 +230,7 @@ describe("settings view", () => {
   });
 
   it("validates a recipient before adding it, and removes one from its chip", async () => {
-    await mount();
+    await open();
     const input = $<HTMLInputElement>("#recipInput");
     typeInto(input, "nope");
     $("#recipAdd").click();
@@ -247,7 +246,7 @@ describe("settings view", () => {
   });
 
   it("edits the confirmation wording with a live preview, and resets to the default", async () => {
-    await mount();
+    await open();
     $("#ceTabEdit").click();
     expect($("#ceEditBody").hidden).toBe(false);
     expect($("#cePreviewBody").hidden).toBe(true);
@@ -265,7 +264,7 @@ describe("settings view", () => {
   it("switches the embed snippet and copies it", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
-    await mount();
+    await open();
     $("[data-embed='styled']").click();
     expect($("#embedCode").textContent).toContain('style="max-width:420px');
     expect($("#embedHint").textContent).toMatch(/Self-contained/);
@@ -285,7 +284,7 @@ describe("settings view", () => {
         logoUrl: "https://app.birds.example/media/branding/logo?v=1",
       },
     });
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "POST",
@@ -327,7 +326,7 @@ describe("settings view", () => {
 
   it("shows the error with a retry", async () => {
     let failures = 1;
-    await mount([
+    await open([
       {
         path: "/api/settings",
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : response()),

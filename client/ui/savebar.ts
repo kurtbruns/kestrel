@@ -1,5 +1,6 @@
 // The shared unsaved-changes bar.
 
+import { onAbort } from "../lifecycle";
 import { html, setHtml } from "./html";
 import { busy } from "./widgets";
 
@@ -30,10 +31,10 @@ export interface SavebarHandle {
 // shared by every surface with an explicit save + a revertible baseline: Settings
 // and the Template page. A page attaches once on mount, then drives it — setDirty()
 // slides it up while there are unsaved changes, showError() keeps it up after a
-// rejected save and says why (right beside Save). route() detaches it on every
-// navigation, so a page owns the bar only while it's mounted. The post editor keeps
-// its own autosave + conflict model (see renderEditor) and deliberately does not use
-// this — a "Save / Discard against a baseline" bar doesn't fit continuous autosave.
+// rejected save and says why (right beside Save). The bar detaches when the mount's
+// signal aborts, so a page owns it exactly as long as it is mounted. The post editor
+// keeps its own autosave + conflict model (see renderEditor) and deliberately does not
+// use this — a "Save / Discard against a baseline" bar doesn't fit continuous autosave.
 export const savebar = (() => {
   const el = control<HTMLElement>("savebar");
   const msgEl = el.querySelector(".savebar-msg");
@@ -68,14 +69,17 @@ export const savebar = (() => {
     document.body.classList.remove("has-savebar");
   }
 
-  /** Mount the bar for the current page; returns the handle the page drives. */
-  function attach({
-    onSave,
-    onDiscard,
-    saveLabel = "Save changes",
-    discardLabel = "Discard",
-  }: SavebarOptions): SavebarHandle {
+  /** Attach the bar to the mounting page for the life of its signal; returns the handle the page drives. */
+  function attach(
+    { onSave, onDiscard, saveLabel = "Save changes", discardLabel = "Discard" }: SavebarOptions,
+    signal: AbortSignal,
+  ): SavebarHandle {
     const mine = ++token;
+    onAbort(signal, () => {
+      if (token === mine) {
+        detach();
+      }
+    });
     saveBtn.textContent = saveLabel;
     discardBtn.textContent = discardLabel;
     el.classList.remove("show", "is-error");
@@ -111,5 +115,5 @@ export const savebar = (() => {
     };
   }
 
-  return { attach, detach };
+  return { attach };
 })();

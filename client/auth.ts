@@ -1,8 +1,9 @@
 // Auth on the client: the dev token, the bearer header, the identity chip, and the
 // re-auth wall a dead session lands on.
 
+import { unmount } from "./lifecycle";
 import { app, identity } from "./shell";
-import { appState, stopTimers, TOKEN_KEY } from "./state";
+import { appState, TOKEN_KEY } from "./state";
 import { $ } from "./ui/dom";
 import { html, setHtml } from "./ui/html";
 
@@ -58,9 +59,9 @@ export function renderIdentity(): void {
  */
 export function showReauth(): void {
   // A dead token means every background poll (and a pending editor autosave) now 401s —
-  // which is what routed us here. Stop them so a walled tab goes quiet instead of re-hitting
-  // the API on its timers until reload.
-  stopTimers();
+  // which is what routed us here. Tear the view down so a walled tab goes quiet instead of
+  // re-hitting the API on its timers until reload.
+  unmount();
   // No identity yet — hide the publication chrome so the wall stands alone.
   document.body.classList.add("signed-out");
   setHtml(

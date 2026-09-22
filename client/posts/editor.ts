@@ -15,10 +15,9 @@ import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { withNoProviderNote } from "../deployment";
+import { every, mount, onAbort, type ViewHandle } from "../lifecycle";
 import { openRescheduleModal } from "../sends/dialogs";
 import { appliedNoticeHtml } from "../settings/remake";
-import { app } from "../shell";
-import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { fmt, parseAddresses, toLocalInput } from "../ui/format";
 import { highlightMarkdown } from "../ui/highlight";
@@ -31,8 +30,6 @@ import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-export const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
 
 const TOOLBAR: [IconName, string][][] = [
   [
@@ -58,28 +55,21 @@ const ARIA_DISABLED = html` aria-disabled="true"`;
 
 type ComposerTab = "edit" | "preview";
 
-export async function renderEditor(id: string): Promise<void> {
-  // Reload (and cancel-schedule / error-retry) re-enter renderEditor directly, without
-  // going through route(), so cancel the previous mount's autosave and clear its
-  // freshness poll here too — an orphaned interval would keep firing on a stale
-  // baseRevision closure and wrongly flip editorConflict, silently blocking saves in the
-  // fresh editor.
-  appState.editorAutosave?.cancel();
-  appState.editorAutosave = null;
-  if (appState.editorPollTimer) {
-    clearInterval(appState.editorPollTimer);
-    appState.editorPollTimer = null;
-  }
-  appState.isEditorDirty = false;
-  appState.editorSaveFailed = false;
-  appState.editorConflict = false;
-  appState.editorHash = null; // fresh mount starts clean; the tracking block below re-establishes the hash
-  appState.editorLeaveFlush = null;
-  appState.editorManualSave = null;
-  setHtml(app, html`<p class="muted">Loading…</p>`);
+export async function renderEditor(
+  id: string,
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<ViewHandle | undefined> {
+  // Reload, cancel-schedule, and error-retry re-enter through mount(), which tears this
+  // mount down (its autosave, its freshness poll) before the next one starts.
+  const remount = () => mount((r, s) => renderEditor(id, r, s));
+  setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: PostResponse;
   try {
-    data = await api<PostResponse>(`/posts/${id}`);
+    data = await api<PostResponse>(`/posts/${id}`, { signal });
+    if (signal.aborted) {
+      return; // navigated away while loading: the redirects below must not hijack that
+    }
     // A sent post is a frozen record, not editable (#147/#148): it opens the sent
     // record view, never the editor. Redirect a stale #/edit link (or a post sent in
     // another tab / by Claude) there instead of a locked editor.
@@ -95,7 +85,7 @@ export async function renderEditor(id: string): Promise<void> {
       return;
     }
   } catch (e) {
-    renderError(app, message(e), () => renderEditor(id));
+    renderError(root, message(e), remount);
     return;
   }
   const { post, markdown, scheduled } = data;
@@ -125,7 +115,7 @@ export async function renderEditor(id: string): Promise<void> {
   // decision. Empty, it has no height; notice() renders into it.
 
   setHtml(
-    app,
+    root,
     html`
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
@@ -192,7 +182,7 @@ export async function renderEditor(id: string): Promise<void> {
   const subjectEl = $<HTMLInputElement>("#f-subject");
   const slugEl = $<HTMLInputElement>("#f-slug");
   const ta = $<HTMLTextAreaElement>("#f-markdown");
-  const toolbarEl = $(".toolbar", app);
+  const toolbarEl = $(".toolbar", root);
   const previewFrame = $<HTMLIFrameElement>("#previewFrame");
 
   // Syntax-highlight overlay (issue #138): a transparent <textarea> over a highlighted
@@ -314,10 +304,10 @@ export async function renderEditor(id: string): Promise<void> {
   const mine = createAutosave(() => {
     saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
   });
-  appState.editorAutosave = mine;
+  onAbort(signal, () => mine.cancel());
 
   // --- tabs ---
-  const tabs = $$<HTMLButtonElement>(".ctab", app);
+  const tabs = $$<HTMLButtonElement>(".ctab", root);
   function showTab(name: ComposerTab) {
     for (const t of tabs) {
       const on = t.dataset.tab === name;
@@ -433,7 +423,7 @@ export async function renderEditor(id: string): Promise<void> {
     }
     markEdited();
   }
-  for (const b of $$<HTMLButtonElement>(".tb[data-fmt]", app)) {
+  for (const b of $$<HTMLButtonElement>(".tb[data-fmt]", root)) {
     b.onclick = () => applyFormat(b.dataset.fmt ?? "");
   }
   ta.addEventListener("keydown", (e) => {
@@ -456,8 +446,12 @@ export async function renderEditor(id: string): Promise<void> {
   // --- unsaved-changes tracking + save ---
   // A snapshot of the last-saved field values; the editor is "dirty" whenever the
   // current values differ. We reflect that in a save-status indicator beside the
-  // button, guard navigation (at the router, via isEditorDirty), and autosave.
-  appState.editorHash = location.hash;
+  // button, guard navigation (at the router, through the handle), and autosave.
+  let editorDirty = false;
+  // The last save errored, or the draft changed elsewhere (the out-of-date banner is up):
+  // either way the leave guard prompts instead of silently flushing.
+  let saveFailed = false;
+  let conflicted = false;
   // The save row is a draft's; a scheduled post renders none.
   const saveBtn = locked ? null : $<HTMLButtonElement>("#saveBtn");
   const saveStatus = locked ? null : $("#saveStatus");
@@ -477,7 +471,7 @@ export async function renderEditor(id: string): Promise<void> {
     } else if (saving) {
       saveStatus.className = "save-status is-saving";
       saveStatus.textContent = "Saving…";
-    } else if (appState.isEditorDirty) {
+    } else if (editorDirty) {
       saveStatus.className = "save-status is-dirty";
       saveStatus.textContent = "Unsaved changes";
     } else {
@@ -486,7 +480,7 @@ export async function renderEditor(id: string): Promise<void> {
     }
   }
   function refreshDirty() {
-    appState.isEditorDirty = dirty.dirty;
+    editorDirty = dirty.dirty;
     renderSaveStatus();
   }
   renderSaveStatus(); // paint the initial state (Saved on a fresh draft; empty if locked)
@@ -500,7 +494,7 @@ export async function renderEditor(id: string): Promise<void> {
     }
     paintMarkdown(); // repaint the highlight overlay from the new textarea value
     refreshDirty();
-    if (!appState.editorConflict) {
+    if (!conflicted) {
       scheduleAutosave();
     }
   }
@@ -517,7 +511,7 @@ export async function renderEditor(id: string): Promise<void> {
     if (silent && !dirty.dirty) {
       return null; // nothing changed since the last save
     }
-    if (appState.editorConflict) {
+    if (conflicted) {
       return null; // paused until the out-of-date banner is resolved
     }
     mine.cancel(); // a save is starting — cancel any pending autosave trigger
@@ -540,7 +534,7 @@ export async function renderEditor(id: string): Promise<void> {
       }
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
-      appState.editorSaveFailed = false;
+      saveFailed = false;
       if (!silent) {
         toast("Saved");
       }
@@ -553,7 +547,7 @@ export async function renderEditor(id: string): Promise<void> {
         showConflict(conflict);
         return null;
       }
-      appState.editorSaveFailed = true; // the leave guard now prompts rather than silently flushing
+      saveFailed = true; // the leave guard now prompts rather than silently flushing
       throw e;
     } finally {
       saving = false;
@@ -568,16 +562,17 @@ export async function renderEditor(id: string): Promise<void> {
   }
 
   // Leaving the editor saves in the background instead of prompting. Capture the
-  // payload NOW (the router tears down the DOM right after) and send it through
-  // the chain so it can't overlap an in-flight save.
-  appState.editorLeaveFlush = () => {
+  // payload NOW (the mount tears down the DOM right after) and send it through
+  // the chain so it can't overlap an in-flight save. Deliberately not bound to the
+  // signal: a save the reader started must land whether or not they stayed to watch.
+  const leaveFlush = () => {
     mine.cancel();
     if (locked || !dirty.dirty) {
       return;
     }
     const body: PostEditBody = { ...collect(), base_revision: revisions.base };
     dirty.markSaved();
-    appState.isEditorDirty = false;
+    editorDirty = false;
     saveChain = saveChain
       .catch(() => {})
       .then(() => api<PostSavedResponse>(`/posts/${id}`, { method: "PUT", json: body }))
@@ -589,10 +584,20 @@ export async function renderEditor(id: string): Promise<void> {
         ),
       );
   };
-  appState.editorManualSave = () => {
-    if (saveBtn && !saveBtn.disabled) {
-      saveBtn.click();
-    }
+  const handle: ViewHandle = {
+    dirty: () => editorDirty,
+    beforeLeave() {
+      if (editorDirty && (saveFailed || conflicted)) {
+        return "confirm"; // a silent flush would fail (or clobber): the reader decides
+      }
+      leaveFlush();
+      return "leave";
+    },
+    manualSave() {
+      if (saveBtn && !saveBtn.disabled) {
+        saveBtn.click();
+      }
+    },
   };
 
   // Typed edits mark dirty; blurring subject/slug flushes promptly. The body is
@@ -619,7 +624,7 @@ export async function renderEditor(id: string): Promise<void> {
   const friendlyAuthor = (a: Author) => (a === "service" ? "Claude" : a || null);
 
   function clearConflict() {
-    appState.editorConflict = false;
+    conflicted = false;
     revisions.clearWarning();
     freshnessEl.hidden = true;
     setHtml(freshnessEl, html``);
@@ -628,7 +633,7 @@ export async function renderEditor(id: string): Promise<void> {
     if (locked) {
       return;
     }
-    appState.editorConflict = true; // pauses autosave; makes the leave guard prompt
+    conflicted = true; // pauses autosave; makes the leave guard prompt
     revisions.noteWarned(conflict);
     if (conflict.kind === "locked") {
       setHtml(
@@ -645,7 +650,7 @@ export async function renderEditor(id: string): Promise<void> {
     freshnessEl.hidden = false;
     $<HTMLButtonElement>("#freshReload", freshnessEl).onclick = () => {
       clearConflict();
-      renderEditor(id);
+      remount();
     };
     const keep = freshnessEl.querySelector<HTMLButtonElement>("#freshKeep");
     if (keep) {
@@ -653,7 +658,7 @@ export async function renderEditor(id: string): Promise<void> {
         revisions.adoptWarned(); // the newer revision becomes our base — our next save wins
         clearConflict();
         refreshDirty();
-        if (appState.isEditorDirty) {
+        if (editorDirty) {
           scheduleAutosave();
         }
       };
@@ -664,12 +669,12 @@ export async function renderEditor(id: string): Promise<void> {
     // Skipped while hidden, saving, or already warned — poll GET is cheap and only
     // re-warns on a revision we haven't surfaced yet.
     const pollFreshness = async () => {
-      if (saving || appState.editorConflict || document.hidden) {
+      if (saving || conflicted || document.hidden) {
         return;
       }
       const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
       try {
-        const fresh = await api<PostResponse>(`/posts/${id}`);
+        const fresh = await api<PostResponse>(`/posts/${id}`, { signal });
         const decision = revisions.decide(
           {
             status: fresh.post.status,
@@ -685,7 +690,7 @@ export async function renderEditor(id: string): Promise<void> {
         /* transient — try again next tick */
       }
     };
-    appState.editorPollTimer = setInterval(pollFreshness, 10000);
+    every(10000, pollFreshness, signal);
   } else {
     // A scheduled post is soft-locked here (read-only, showing the scheduled banner). If its
     // send FIRES while the editor is open, it's no longer a cancelable scheduled draft — it's
@@ -696,7 +701,7 @@ export async function renderEditor(id: string): Promise<void> {
         return;
       }
       try {
-        const fresh = await api<PostResponse>(`/posts/${id}`);
+        const fresh = await api<PostResponse>(`/posts/${id}`, { signal });
         if (fresh.sending) {
           location.hash = `#/sent/${fresh.sending.id}`;
         } else if (fresh.post.status === "sent") {
@@ -706,7 +711,7 @@ export async function renderEditor(id: string): Promise<void> {
         /* transient — try again next tick */
       }
     };
-    appState.editorPollTimer = setInterval(pollSchedule, 10000);
+    every(10000, pollSchedule, signal);
   }
 
   // --- open in browser ---
@@ -729,8 +734,7 @@ export async function renderEditor(id: string): Promise<void> {
   if (locked && scheduled) {
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
     const rescheduleBtn = $<HTMLButtonElement>("#rescheduleSchedule");
-    rescheduleBtn.onclick = () =>
-      openRescheduleModal(scheduled.id, scheduled.fire_at, () => renderEditor(id));
+    rescheduleBtn.onclick = () => openRescheduleModal(scheduled.id, scheduled.fire_at, remount);
 
     // --- the applied-change notice (SPEC §8): an event, read once and cleared ---
     // The same record as the dashboard's aggregate (kind "applied", the send id, its
@@ -752,7 +756,7 @@ export async function renderEditor(id: string): Promise<void> {
         try {
           await api(`/sends/${scheduled.id}/cancel`, { method: "POST" });
           toast("Schedule canceled");
-          renderEditor(id);
+          remount();
         } catch (e) {
           toast(message(e));
         }
@@ -958,7 +962,7 @@ export async function renderEditor(id: string): Promise<void> {
             // Stay on the post, re-rendered in its scheduled state: the window is the
             // review and this page is the review surface (SPEC §6, DESIGN §7).
             toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
-            renderEditor(id);
+            remount();
           } catch (e) {
             toast(message(e));
           }
@@ -971,7 +975,7 @@ export async function renderEditor(id: string): Promise<void> {
             await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
             m.close();
             toast(withNoProviderNote("Sends in 5 minutes, cancelable until then."));
-            renderEditor(id);
+            remount();
           } catch (e) {
             toast(message(e));
           }
@@ -1012,4 +1016,5 @@ export async function renderEditor(id: string): Promise<void> {
       wireSchedule();
     };
   }
+  return handle;
 }

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendSummary } from "../../shared/sends";
-import { $, $$, type FakeApi, fakeApi, resetShell } from "../test/support";
+import { $, $$, type FakeApi, fakeApi, mount, resetShell } from "../test/support";
 import { renderSent } from "./list";
 import { deliveredCell, isWedged } from "./progress";
 
@@ -89,7 +89,7 @@ describe("sent view", () => {
         },
       },
     ]);
-    await renderSent();
+    await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".sched-card .sched-subj").textContent).toBe("Waxwings");
     expect($(".sched-card .countdown").textContent).toMatch(/Sends in 2h/);
@@ -113,7 +113,7 @@ describe("sent view", () => {
         },
       },
     ]);
-    await renderSent();
+    await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     $("tr[data-id='x1'] .delivered").click();
     expect(location.hash).toBe("#/sent/x1");
@@ -149,7 +149,7 @@ describe("sent view", () => {
         },
       },
     ]);
-    await renderSent();
+    await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     $("[data-cancel='sch']").click();
     await vi.advanceTimersByTimeAsync(10);

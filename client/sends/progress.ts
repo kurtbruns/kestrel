@@ -2,7 +2,7 @@
 // wedge test, the list row's cells, the countdowns, and the small number formats.
 
 import type { SendSummary } from "../../shared/sends";
-import { appState } from "../state";
+import { every } from "../lifecycle";
 import { $$ } from "../ui/dom";
 import { untilStr } from "../ui/format";
 import { type Html, html } from "../ui/html";
@@ -27,19 +27,19 @@ export function fmtDuration(ms: number | null | undefined): string {
   return `${Math.round(m / 60)} hr`;
 }
 
-export function startCountdowns(): void {
-  // Clear any prior interval first: reloadAll() re-runs loadScheduled (and this) on
-  // every cancel/resolve, so without this each refresh would leak a 1s interval.
-  if (appState.statusTimer) {
-    clearInterval(appState.statusTimer);
-  }
+/**
+ * The live "Sends in …" cells under `root`, ticking once a second for the life of the
+ * mount. Returns the tick, for a section that re-renders its cards: a fresh cell is
+ * empty until the next tick paints it.
+ */
+export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   const tick = () => {
-    for (const el of $$<HTMLElement>("[data-fire]")) {
+    for (const el of $$<HTMLElement>("[data-fire]", root)) {
       el.textContent = untilStr(Number(el.dataset.fire));
     }
   };
-  tick();
-  appState.statusTimer = setInterval(tick, 1000);
+  every(1000, tick, signal);
+  return tick;
 }
 
 /**

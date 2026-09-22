@@ -2,7 +2,6 @@
 
 import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
 import { api } from "../api";
-import { app } from "../shell";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
@@ -43,7 +42,7 @@ export function createNewPost(btn: HTMLButtonElement): Promise<void> {
   });
 }
 
-export async function renderDrafts(): Promise<void> {
+export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Promise<void> {
   // Default sort left empty so the server keeps its scheduled-first order until the
   // reader clicks a column header.
   const state: ListState = {
@@ -55,20 +54,20 @@ export async function renderDrafts(): Promise<void> {
     limit: 50,
   };
   setHtml(
-    app,
+    root,
     html`<div class="spread page-head"><h1>Drafts</h1><button class="primary" id="newPost">New post</button></div>
     ${listToolbar({ statuses: DRAFT_STATUSES, allValue: DRAFTS_SCOPE, searchPlaceholder: "Search subject…" })}
     <div id="list" class="muted">Loading…</div>
     <div id="postsPager"></div>`,
   );
-  const newPost = $<HTMLButtonElement>("#newPost");
+  const newPost = $<HTMLButtonElement>("#newPost", root);
   newPost.onclick = () => createNewPost(newPost);
-  const listEl = $("#list");
-  const pagerEl = $("#postsPager");
+  const listEl = $("#list", root);
+  const pagerEl = $("#postsPager", root);
 
   async function load() {
     try {
-      const data = await api<PostListResponse>(`/posts?${listQuery(state)}`);
+      const data = await api<PostListResponse>(`/posts?${listQuery(state)}`, { signal });
       const posts = data.posts;
       if (!posts.length) {
         // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
@@ -138,11 +137,11 @@ export async function renderDrafts(): Promise<void> {
       renderError(listEl, e instanceof Error ? e.message : String(e), load);
     }
   }
-  wireToolbar(app, state, load);
+  wireToolbar(root, state, load);
   load();
 }
 
-function confirmDelete(pid: string, reload: () => unknown = renderDrafts): void {
+function confirmDelete(pid: string, reload: () => unknown): void {
   const m = modal(
     html`<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`,
   );

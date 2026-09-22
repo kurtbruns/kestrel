@@ -10,6 +10,12 @@ export interface ApiOptions {
   headers?: Record<string, string>;
   body?: BodyInit | null;
   json?: unknown;
+  /**
+   * The mounted view's signal, for a read that paints: navigating away cuts the request
+   * off, and the view is spared a stale answer. Never for a write (a save the reader
+   * started must land whether or not they stayed to watch).
+   */
+  signal?: AbortSignal;
 }
 
 /**
@@ -36,7 +42,12 @@ async function send(path: string, opts: ApiOptions): Promise<Response> {
     headers["content-type"] = "application/json";
     body = JSON.stringify(opts.json);
   }
-  const res = await fetch(path, { method: opts.method ?? "GET", headers, body });
+  const res = await fetch(path, {
+    method: opts.method ?? "GET",
+    headers,
+    body,
+    signal: opts.signal,
+  });
   if (res.status === 401) {
     showReauth();
     throw new ApiError(REAUTH_MESSAGE, 401);

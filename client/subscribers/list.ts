@@ -2,7 +2,6 @@
 
 import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
-import { app } from "../shell";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
@@ -29,7 +28,11 @@ const SUB_STATUSES = [
   { value: "unsubscribed", label: "Unsubscribed" },
 ];
 
-export async function renderSubscribers(initialFilter?: string): Promise<void> {
+export async function renderSubscribers(
+  initialFilter: string | undefined,
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<void> {
   const state: ListState = {
     status: "",
     search: "",
@@ -50,7 +53,7 @@ export async function renderSubscribers(initialFilter?: string): Promise<void> {
   }
 
   setHtml(
-    app,
+    root,
     html`
     <div class="spread page-head"><h1>Subscribers</h1><button class="primary" id="addSub">Add subscriber</button></div>
     <div id="subCounts" class="muted">Loading…</div>
@@ -64,7 +67,9 @@ export async function renderSubscribers(initialFilter?: string): Promise<void> {
 
   async function load() {
     try {
-      const data = await api<SubscriberListResponse>(`/subscribers?${listQuery(state)}`);
+      const data = await api<SubscriberListResponse>(`/subscribers?${listQuery(state)}`, {
+        signal,
+      });
       const c = data.counts;
       // The counts card stays a global by-status summary (independent of the active
       // filter); the page total below reflects the filtered roster.
@@ -83,7 +88,7 @@ export async function renderSubscribers(initialFilter?: string): Promise<void> {
   }
 
   $("#addSub").onclick = () => addSubscriberModal(load);
-  wireToolbar(app, state, load);
+  wireToolbar(root, state, load);
   load();
 }
 

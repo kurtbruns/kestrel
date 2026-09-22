@@ -1,9 +1,11 @@
-// The hash router: route() tears the previous view down (timers, editor guards) and
-// mounts the next; the leave guards live here, wired by installRouter() when boot calls it.
+// The hash router: route() mounts the view the hash names, and the mount tears the
+// previous one down; the leave guards live here, over the mounted view's handle, wired by
+// installRouter() when boot calls it.
 
 import { renderDashboard } from "./dashboard/dashboard";
+import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
-import { LEAVE_MSG, renderEditor } from "./posts/editor";
+import { renderEditor } from "./posts/editor";
 import { renderDocs } from "./room/docs";
 import { renderReference } from "./room/reference";
 import { renderSent } from "./sends/list";
@@ -11,21 +13,18 @@ import { renderSentRecord } from "./sends/record";
 import { renderSettings } from "./settings/settings";
 import { renderTemplate } from "./settings/template";
 import { setNavOpen } from "./shell";
-import { appState, stopTimers } from "./state";
 import { renderSubscribers } from "./subscribers/list";
-import { savebar } from "./ui/savebar";
 
-/** Mount the view the hash names, tearing the previous one down first. */
-export function route(): unknown {
-  stopTimers();
-  appState.isEditorDirty = false;
-  appState.editorSaveFailed = false;
-  appState.editorConflict = false;
-  appState.editorHash = null; // renderEditor re-establishes these when it mounts
-  appState.editorLeaveFlush = null;
-  appState.editorManualSave = null;
-  savebar.detach(); // the mounting page re-attaches if it uses the shared save bar
+const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
+
+// The hash the mounted view was routed at: a hashchange back to it is nothing to do (the
+// echo of a declined leave prompt putting it back), and a declined prompt knows where to go.
+let mountedHash = "";
+
+/** Mount the view the hash names; the mount tears the previous one down. */
+export function route(): Promise<void> {
   const hash = location.hash || "#/dashboard";
+  mountedHash = hash;
   const [, view, arg] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
@@ -47,73 +46,62 @@ export function route(): unknown {
   // the mobile nav drawer on any navigation.
   setNavOpen(false);
   if (view === "edit" && arg) {
-    return renderEditor(arg);
+    return mount((root, signal) => renderEditor(arg, root, signal));
   }
   if (view === "drafts") {
-    return renderDrafts();
+    return mount(renderDrafts);
   }
   if (view === "subscribers") {
-    return renderSubscribers(arg);
+    return mount((root, signal) => renderSubscribers(arg, root, signal));
   }
   if (view === "sent") {
-    return arg ? renderSentRecord(arg) : renderSent();
+    return arg ? mount((root, signal) => renderSentRecord(arg, root, signal)) : mount(renderSent);
   }
   if (view === "template") {
-    return renderTemplate();
+    return mount(renderTemplate);
   }
   if (view === "settings") {
-    return renderSettings();
+    return mount(renderSettings);
   }
   if (view === "reference") {
-    return renderReference();
+    return mount(renderReference);
   }
   if (view === "docs") {
-    return renderDocs(arg);
+    return mount((root, signal) => renderDocs(arg, root, signal));
   }
-  return renderDashboard();
+  return mount(renderDashboard);
 }
-let revertingHash = false;
-
-/** Wire navigation and the editor's guards: hashchange, the unload prompt, and ⌘S. Boot calls this once. */
+/** Wire navigation and the mounted view's guards: hashchange, the unload prompt, and ⌘S. Boot calls this once. */
 export function installRouter(): void {
-  // Navigating away from a dirty editor saves in the background rather than
-  // prompting — hashchange fires after the hash has already moved, so the flush
-  // captures the payload before route() tears down the DOM. The exception is when
-  // the last save FAILED: silently flushing could lose work, so we fall back to a
-  // confirm() (synchronous, unlike the modal helper) and, on cancel, restore the
-  // editor's hash and swallow the echo.
+  // hashchange fires after the hash has already moved, so the mounted view is asked
+  // before route() tears it down: a dirty editor saves in the background and lets the
+  // navigation through, unless its last save failed (a silent flush could lose work),
+  // when it asks for a confirm() (synchronous, unlike the modal helper) and, on cancel,
+  // the hash goes back, which is a hashchange to the mounted hash and so nothing to do.
   window.addEventListener("hashchange", () => {
-    if (revertingHash) {
-      revertingHash = false;
+    if (location.hash === mountedHash) {
       return;
     }
-    if (appState.isEditorDirty && appState.editorHash && location.hash !== appState.editorHash) {
-      if (appState.editorSaveFailed || appState.editorConflict) {
-        // A silent flush would fail (or clobber) — prompt so the user decides.
-        if (!confirm(LEAVE_MSG)) {
-          revertingHash = true;
-          location.hash = appState.editorHash;
-          return;
-        }
-      } else if (appState.editorLeaveFlush) {
-        appState.editorLeaveFlush();
-      }
+    if (mounted()?.beforeLeave?.() === "confirm" && !confirm(LEAVE_MSG)) {
+      location.hash = mountedHash;
+      return;
     }
     route();
   });
   // Tab close / reload / external navigation: can't reliably finish an async save,
   // so fall back to the browser's own generic unsaved-changes prompt.
   window.addEventListener("beforeunload", (e) => {
-    if (appState.isEditorDirty) {
+    if (mounted()?.dirty?.()) {
       e.preventDefault();
       e.returnValue = "";
     }
   });
-  // ⌘S / Ctrl-S saves the mounted editor (registered once; no-op elsewhere).
+  // ⌘S / Ctrl-S saves the mounted view, when it saves (registered once; no-op elsewhere).
   window.addEventListener("keydown", (e) => {
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && appState.editorManualSave) {
+    const save = mounted()?.manualSave;
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && save) {
       e.preventDefault();
-      appState.editorManualSave();
+      save();
     }
   });
 }

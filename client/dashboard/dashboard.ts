@@ -8,10 +8,10 @@ import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subs
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor } from "../deployment";
+import { mount, poll } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
-import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "../sends/progress";
+import { activeRowHtml, countdowns, deliveredCell, isWedged } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
-import { app } from "../shell";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
 import { $, $$ } from "../ui/dom";
@@ -113,9 +113,10 @@ interface Tile {
   sub?: string;
 }
 
-export async function renderDashboard(): Promise<void> {
-  setHtml(app, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
-  const root = $("#dash");
+export async function renderDashboard(view: HTMLElement, signal: AbortSignal): Promise<void> {
+  const remount = () => mount(renderDashboard);
+  setHtml(view, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
+  const root = $("#dash", view);
   let posts: PostListItem[];
   let sends: SendSummary[];
   let counts: SubscriberCounts;
@@ -124,15 +125,15 @@ export async function renderDashboard(): Promise<void> {
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
     const [p, s, subs] = await Promise.all([
-      api<PostListResponse>("/posts?limit=200"),
-      api<SendListResponse>("/sends?limit=200"),
-      api<SubscriberListResponse>("/subscribers"),
+      api<PostListResponse>("/posts?limit=200", { signal }),
+      api<SendListResponse>("/sends?limit=200", { signal }),
+      api<SubscriberListResponse>("/subscribers", { signal }),
     ]);
     posts = p.posts;
     sends = s.sends;
     counts = subs.counts;
   } catch (e) {
-    renderError(root, e instanceof Error ? e.message : String(e), renderDashboard);
+    renderError(root, e instanceof Error ? e.message : String(e), remount);
     return;
   }
   const pub = derivePublication(appState.appConfig);
@@ -149,7 +150,7 @@ export async function renderDashboard(): Promise<void> {
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
       }<p class="muted">Let's get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
-    wireDashActions(root, renderDashboard);
+    wireDashActions(root, remount);
     return;
   }
 
@@ -268,7 +269,7 @@ export async function renderDashboard(): Promise<void> {
     </div>`,
   );
 
-  wireDashActions(root, renderDashboard);
+  wireDashActions(root, remount);
   // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
   for (const tr of $$<HTMLTableRowElement>("tr[data-id]", root)) {
@@ -288,14 +289,15 @@ export async function renderDashboard(): Promise<void> {
       }
     };
   }
-  wireDashActiveCards();
-  wireDashScheduledCards();
-  paintAppliedNotice(scheduled);
-  startCountdowns();
+  wireDashActiveCards(root);
+  wireDashScheduledCards(root);
+  paintAppliedNotice(root, scheduled);
+  const tickCountdowns = countdowns(root, signal);
+  tickCountdowns();
   // Keep the send sections live: advance the active-send widget's bar, and when a send
   // starts or finishes, refresh the Scheduled queue so a fired post clears out of it (its
-  // home is now the In-progress widget, then the records). Cleared on navigation.
-  scheduleDashActivePoll();
+  // home is now the In-progress widget, then the records). Ends with the mount.
+  liveSendSections(root, signal, tickCountdowns);
 }
 
 // The dashboard's applied-change notice (SPEC §8): one aggregate over every scheduled
@@ -306,12 +308,8 @@ export async function renderDashboard(): Promise<void> {
 // clears them there, and clearing every post hides it here. Re-painted with the
 // queue: notice() keeps one aggregate per slot, replaces it when the set changes (a
 // re-made send fired or was canceled), and clears it when the set is empty.
-function paintAppliedNotice(scheduled: SendSummary[]): void {
-  // Nullable on purpose: the poll repaints after an await, when the reader may have left.
-  const slot = document.getElementById("dashNotices");
-  if (!slot) {
-    return;
-  }
+function paintAppliedNotice(root: HTMLElement, scheduled: SendSummary[]): void {
+  const slot = $("#dashNotices", root);
   const remade = scheduled.flatMap((s) => (s.remade_at ? [{ id: s.id, at: s.remade_at }] : []));
   const at = remade.length ? Math.max(...remade.map((r) => r.at)) : 0;
   notice(slot, {
@@ -332,8 +330,8 @@ function dashScheduledHtml(scheduled: SendSummary[]): Html {
       html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
   )}`;
 }
-function wireDashScheduledCards(): void {
-  for (const card of $$("#dashScheduled .nextup")) {
+function wireDashScheduledCards(root: HTMLElement): void {
+  for (const card of $$("#dashScheduled .nextup", root)) {
     card.onclick = (e) => {
       const t = e.target;
       if (t instanceof Element && t.tagName !== "A") {
@@ -352,8 +350,8 @@ function dashActiveHtml(active: SendSummary[]): Html {
     activeRowHtml,
   )}</section>`;
 }
-function wireDashActiveCards(): void {
-  for (const card of $$("#dashActive .active-card[data-watch]")) {
+function wireDashActiveCards(root: HTMLElement): void {
+  for (const card of $$("#dashActive .active-card[data-watch]", root)) {
     card.onclick = (e) => {
       const t = e.target;
       if (t instanceof Element && t.tagName !== "A") {
@@ -365,58 +363,51 @@ function wireDashActiveCards(): void {
 // Poll the in-flight set (~3s) and repaint ONLY the widget container in place — it slides
 // in as a send starts, advances, and clears when it finishes, with no full-page re-render
 // (a full re-render flashed the whole dashboard as the send started). The health line and
-// Sent table is a glance snapshot that refreshes on navigation. A recursive setTimeout, so
-// a slow read never overlaps; `progressTimer` holds it so navigation clears it.
-let dashActiveSig = "";
-function scheduleDashActivePoll(): void {
-  const gen = appState.navGeneration;
-  appState.progressTimer = setTimeout(async () => {
-    let sends: SendSummary[];
-    try {
-      ({ sends } = await api<SendListResponse>("/sends?status=sending&limit=200"));
-    } catch {
-      if (gen === appState.navGeneration) {
-        scheduleDashActivePoll();
+// Sent table is a glance snapshot that refreshes on navigation. Ends with the mount.
+function liveSendSections(
+  root: HTMLElement,
+  signal: AbortSignal,
+  tickCountdowns: () => void,
+): void {
+  let activeSig = "";
+  poll(
+    3000,
+    async () => {
+      const { sends } = await api<SendListResponse>("/sends?status=sending&limit=200", {
+        signal,
+      });
+      const active = sends.filter((s) => !isWedged(s));
+      setHtml($("#dashActive", root), dashActiveHtml(active));
+      wireDashActiveCards(root);
+      // On a transition (a send started or finished) the scheduled queue changed — a fired
+      // send left it — so refresh just that section in place (no full-page re-render).
+      const sig = active
+        .map((s) => s.id)
+        .sort()
+        .join(",");
+      if (sig !== activeSig) {
+        activeSig = sig;
+        await refreshScheduled(root, signal, tickCountdowns);
       }
-      return;
-    }
-    // Navigated off the dashboard mid-fetch: #dashActive is gone (or belongs to a re-mounted
-    // dashboard with its own poll), so don't repaint or reschedule onto it (see navGeneration).
-    if (gen !== appState.navGeneration) {
-      return;
-    }
-    const active = sends.filter((s) => !isWedged(s));
-    const el = document.getElementById("dashActive");
-    if (el) {
-      setHtml(el, dashActiveHtml(active));
-      wireDashActiveCards();
-    }
-    // On a transition (a send started or finished) the scheduled queue changed — a fired
-    // send left it — so refresh just that section in place (no full-page re-render).
-    const sig = active
-      .map((s) => s.id)
-      .sort()
-      .join(",");
-    if (sig !== dashActiveSig) {
-      dashActiveSig = sig;
-      refreshDashScheduled();
-    }
-    scheduleDashActivePoll();
-  }, 3000);
+    },
+    signal,
+  );
 }
-async function refreshDashScheduled(): Promise<void> {
-  const el = document.getElementById("dashScheduled");
-  if (!el) {
-    return;
-  }
+async function refreshScheduled(
+  root: HTMLElement,
+  signal: AbortSignal,
+  tickCountdowns: () => void,
+): Promise<void> {
+  const el = $("#dashScheduled", root);
   try {
     const { sends } = await api<SendListResponse>(
       "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
+      { signal },
     );
     setHtml(el, dashScheduledHtml(sends));
-    wireDashScheduledCards();
-    paintAppliedNotice(sends);
-    startCountdowns(); // re-arm the countdown ticker over the refreshed cards
+    wireDashScheduledCards(root);
+    paintAppliedNotice(root, sends);
+    tickCountdowns(); // the fresh cards are empty until the next tick
   } catch {
     /* non-fatal — the scheduled section keeps its last render */
   }
