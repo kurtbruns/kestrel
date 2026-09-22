@@ -90,6 +90,7 @@ describe("editor view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -439,6 +440,8 @@ describe("editor view", () => {
       { method: "POST", path: "/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
       { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
     ]);
+    // happy-dom has no layout, so scrollIntoView is only observable as a call.
+    const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     typeInto(body(), "mine, not theirs");
     $("#scheduleBtn").click();
     $<HTMLInputElement>("#schWhen").value = "2026-09-25T15:00";
@@ -450,6 +453,7 @@ describe("editor view", () => {
     expect(document.querySelector(".modal")).toBeNull();
     expect($("#freshnessBanner").hidden).toBe(false);
     expect($("#freshnessBanner").textContent).toMatch(/changed elsewhere/);
+    expect(intoView).toHaveBeenCalledTimes(1); // and the publisher is looking at it
     // Send now is the same door, and refuses the same way.
     $("#scheduleBtn").click();
     $("#toSendNow").click();

@@ -961,6 +961,16 @@ export async function renderEditor(
       const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
+      // A refused save closes the dialog, and the out-of-date banner it was covering is
+      // the whole answer — so make sure the publisher is actually looking at it: they
+      // clicked Schedule at the foot of the post and the banner sits at its head. Only
+      // here, never in showConflict: the freshness poll raises the same banner on its own
+      // every ten seconds, and scrolling the page out from under someone mid-sentence to
+      // announce it would be its own bug. `nearest` leaves an already-visible banner alone.
+      const refused = () => {
+        m.close();
+        freshnessEl.scrollIntoView({ block: "nearest" });
+      };
 
       const doSchedule = () =>
         busy($<HTMLButtonElement>("#schGo", box), "Scheduling…", async () => {
@@ -975,7 +985,7 @@ export async function renderEditor(
             // scheduling now would freeze content the publisher never saw (SPEC §6).
             // Close the dialog and let the out-of-date banner behind it be the next step.
             if ((await saveDraft(true)) === "refused") {
-              m.close();
+              refused();
               return;
             }
             await api<ScheduleResponse>(`/posts/${id}/schedule`, {
@@ -997,7 +1007,7 @@ export async function renderEditor(
           try {
             // As in doSchedule: a refused save must not become a frozen send.
             if ((await saveDraft(true)) === "refused") {
-              m.close();
+              refused();
               return;
             }
             await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
