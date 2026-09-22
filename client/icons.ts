@@ -4,6 +4,7 @@
 // is separate because it paints before any script runs.
 
 import { type Html, unsafeHtml } from "./html";
+import article from "./icons/article.svg";
 import bold from "./icons/bold.svg";
 import check from "./icons/check.svg";
 import code from "./icons/code.svg";
@@ -30,6 +31,7 @@ import x from "./icons/x.svg";
 // The files are the app's own drawings, so vouching for them here is the one place icons
 // become markup; every other use goes through icon().
 const ICONS = {
+  article: unsafeHtml(article),
   bold: unsafeHtml(bold),
   check: unsafeHtml(check),
   code: unsafeHtml(code),

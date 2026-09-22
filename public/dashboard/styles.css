@@ -557,22 +557,6 @@ body.nav-resizing .sidebar {
   margin: 10px 2px 0;
   line-height: 1.5;
 }
-/* API-access card: the primary "Connect Claude" action leads (a link, not a button —
-   DESIGN §1); the base URL below it is a supporting detail. */
-.pub-cta {
-  margin: 2px 2px 0;
-}
-.pub-cta a {
-  font-size: 14px;
-  font-weight: 600;
-  /* The one action hue (DESIGN §1) — same as the buttons, not the focus-ring blue.
-     `--ring` stays reserved for the focus outline it's named for. */
-  color: var(--accent);
-  text-decoration: none;
-}
-.pub-cta a:hover {
-  text-decoration: underline;
-}
 /* The connected state: an inline status line reusing the --ok feedback scale (DESIGN §3),
    not a notification — a quiet confirmation the agent has edited here. */
 .conn-status {
@@ -591,12 +575,25 @@ body.nav-resizing .sidebar {
   border-radius: 50%;
   background: var(--ok-fg);
 }
-/* Stacked secondary links (connected state) — each on its own line, matching the
-   disconnected card's stacked "Connect Claude" / "API reference". */
+/* The API-access card's links, both states: stacked, each on its own line, at one weight —
+   none is an action (connecting Claude happens outside the app), so none leads. Each is led
+   by a glyph for what it is (article: the guide; code: the reference), which says the kind
+   where the trailing arrow says the direction; the glyph takes the link's own color. */
 .pub-links {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+}
+.pub-links a {
+  display: inline-flex;
+  align-items: center;
   gap: 6px;
+}
+.pub-links a svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+  flex: 0 0 auto;
 }
 .pub-note a {
   color: var(--accent);
@@ -3596,10 +3593,15 @@ button.notice-dismiss svg {
   flex: 0 0 auto;
 }
 .pub-foot {
-  margin-top: 2px;
+  margin-top: 4px;
 }
+/* A card's foot links are its navigation, not a footnote: body size and the in-row link
+   weight (`td a`), a step above the 13px prose they sit under, so the navigable things
+   separate from the sentence by size and weight while keeping the quiet link color that
+   brightens on hover. Bigger than `.ghost-link`, which is subordinate to a table row. */
 .pub-foot a {
-  font-size: 13px;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--muted);
   text-decoration: none;
 }

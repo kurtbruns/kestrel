@@ -15,6 +15,7 @@ import { archiveUrlFor, copyText, createNewPost } from "../build_ref";
 import { $, $$ } from "../dom";
 import { badge, fmt, modal, toast } from "../helpers";
 import { type Html, html, setHtml } from "../html";
+import { icon } from "../icons";
 import { busy, notice, renderError } from "../notice";
 import { appliedNoticeHtml } from "../remake";
 import { app } from "../shell";
@@ -447,20 +448,22 @@ function wireDashActions(root: HTMLElement, reload: () => void): void {
 // (the `service` principal, SPEC §4) has edited here — a plain "Claude is connected" note.
 // Shared by the populated dashboard and the first-run state (a card below the setup
 // checklist), so the two can't drift; connecting an agent is optional, so this is never a
-// required setup step. Typography-led with no base-URL field: the operator already knows
-// their own origin (it's the Publication card's URL right beside this one), and the
-// connect guide is where that URL is actually used.
+// required setup step. Both states have one shape — a line, then the card's links stacked
+// at one weight, each led by a glyph for what it is (the guide, the reference) — because
+// neither link is an action: connecting happens outside the app (an Access service token),
+// so nothing here may look like a button that would do it. Typography-led with no base-URL
+// field: the operator already knows their own origin (it's the Publication card's URL right
+// beside this one), and the connect guide is where that URL is actually used.
 function apiConnectCard(connected: boolean): Html {
   if (connected) {
     return html`<div class="card pub-card">
     <p class="conn-status"><span class="conn-dot" aria-hidden="true"></span>Claude is connected.</p>
-    <div class="pub-foot pub-links"><a href="#/reference">API reference →</a><a href="#/docs/connect-claude">Connection guide →</a></div>
+    <div class="pub-foot pub-links"><a href="#/reference">${icon("code")}API reference →</a><a href="#/docs/connect-claude">${icon("article")}Connection guide →</a></div>
   </div>`;
   }
   return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
-    <p class="pub-cta"><a href="#/docs/connect-claude">Connect Claude →</a></p>
-    <p class="pub-foot"><a href="#/reference">API reference →</a></p>
+    <div class="pub-foot pub-links"><a href="#/docs/connect-claude">${icon("article")}Connect Claude →</a><a href="#/reference">${icon("code")}API reference →</a></div>
   </div>`;
 }
 
