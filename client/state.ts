@@ -1,7 +1,6 @@
-// The editor's module-scope state: every value more than one module reads or writes, in one
-// object (`appState`) so each cross-module write is visible here, and the teardown that
-// stops its timers. The view lifecycle work dissolves most of this into per-view state;
-// until then this is the whole shared surface.
+// The app-wide state: the three values every view reads and boot writes, in one object
+// (`appState`) so each cross-module write is visible here. What a view owns lives in the
+// view, for as long as its mount (client/lifecycle.ts).
 
 /** The boot probe's answer (GET /api/whoami): who we are and which auth mode gates this surface. */
 export interface Session {
@@ -22,36 +21,6 @@ export interface AppState {
    * fallback without re-fetching on every render.
    */
   appConfig: SettingsResponse | null;
-  /** Countdown interval on the sent list, cleared on navigation. */
-  statusTimer: number | null;
-  /** Freshness poll while the editor is open, cleared on navigation. */
-  editorPollTimer: number | null;
-  /** Live in-flight /progress poll (watch view + active-send widget), cleared on navigation. */
-  progressTimer: number | null;
-  /**
-   * Bumped on every navigation (route()). The recursive-setTimeout pollers (sends, the sent
-   * record, the dashboard) capture it when they schedule and bail after their await if it
-   * changed: clearing progressTimer stops the *next* tick, but a poll whose fetch is already
-   * in flight when the user navigates would otherwise resolve afterward and repaint (or swap)
-   * the view they just opened, and clobber that new view's own poll timer. The generation
-   * check is the guard that in-flight poll can't.
-   */
-  navGeneration: number;
-  // Current-editor state, reset on navigation; the mounted editor re-establishes it.
-  /** Has unsaved edits; drives the nav guards. */
-  isEditorDirty: boolean;
-  /** The last save errored, so the leave guard prompts instead of silently flushing. */
-  editorSaveFailed: boolean;
-  /** The draft changed elsewhere (out-of-date banner up); like a save failure, the leave guard prompts. */
-  editorConflict: boolean;
-  /** Hash the editor is mounted at, so the leave guard knows where to return. */
-  editorHash: string | null;
-  /** Save-and-go on SPA navigation away from a dirty editor. */
-  editorLeaveFlush: (() => void) | null;
-  /** ⌘S / Ctrl-S handler for the mounted editor. */
-  editorManualSave: (() => void) | null;
-  /** The mounted editor's pending autosave (posts/autosave.ts), as the one thing teardown does to it. */
-  editorAutosave: { cancel(): void } | null;
 }
 
 /** localStorage key of the dev token. */
@@ -61,41 +30,4 @@ export const appState: AppState = {
   token: localStorage.getItem(TOKEN_KEY) || "",
   session: null,
   appConfig: null,
-  statusTimer: null,
-  editorPollTimer: null,
-  progressTimer: null,
-  navGeneration: 0,
-  isEditorDirty: false,
-  editorSaveFailed: false,
-  editorConflict: false,
-  editorHash: null,
-  editorLeaveFlush: null,
-  editorManualSave: null,
-  editorAutosave: null,
 };
-
-/**
- * Stop every timer-driven background task (the three pollers and the editor's pending
- * autosave) and invalidate any poll whose fetch is already in flight. Shared by route()
- * (on every navigation) and showReauth(): a walled tab must go quiet instead of hammering
- * the API on a dead token every few seconds. Clearing a timer only stops the pending tick,
- * not a poll already mid-await, so bumping navGeneration makes that callback bail instead
- * of rescheduling (see navGeneration).
- */
-export function stopTimers(): void {
-  if (appState.statusTimer) {
-    clearInterval(appState.statusTimer);
-    appState.statusTimer = null;
-  }
-  if (appState.editorPollTimer) {
-    clearInterval(appState.editorPollTimer);
-    appState.editorPollTimer = null;
-  }
-  if (appState.progressTimer) {
-    clearInterval(appState.progressTimer);
-    appState.progressTimer = null;
-  }
-  appState.editorAutosave?.cancel();
-  appState.editorAutosave = null;
-  appState.navGeneration++;
-}

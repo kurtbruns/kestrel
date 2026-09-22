@@ -5,7 +5,7 @@ import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
 import { confirmUnsubscribe } from "../subscribers/dialogs";
-import { $, $$, type FakeApi, fakeApi, resetShell } from "../test/support";
+import { $, $$, type FakeApi, fakeApi, mount, resetShell, unmount } from "../test/support";
 import { renderDashboard } from "./dashboard";
 
 const NOW = 1_700_000_000_000;
@@ -130,7 +130,7 @@ describe("dashboard", () => {
       }),
     ];
     fake = world(posts, () => sends);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".dash-head h1").textContent).toBe("Birds Weekly");
     expect($(".dash-tagline").textContent).toBe("Owls & more");
@@ -174,7 +174,7 @@ describe("dashboard", () => {
 
   it("reports Claude as connected once the service principal has authored a revision", async () => {
     fake = world([post({ author: "service" })], () => []);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".conn-status").textContent).toBe("Claude is connected.");
     // The same two links, same shape, once connected: the reference first, each with its glyph.
@@ -202,7 +202,7 @@ describe("dashboard", () => {
       }),
     ];
     fake = world([post()], () => sends);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
@@ -217,7 +217,7 @@ describe("dashboard", () => {
 
   it("flags an elevated bounce rate on a recent send, amber", async () => {
     fake = world([post()], () => [send({ c_delivered: 90, c_bounced: 10 })]);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
     expect(health.classList.contains("amber")).toBe(true);
@@ -231,7 +231,7 @@ describe("dashboard", () => {
       { path: "/subscribers", reply: () => ({ counts: none, subscribers: [], page }) },
       { method: "POST", path: "/posts", reply: () => ({ post: { id: "p9" }, revision_id: "r" }) },
     ]);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
@@ -251,7 +251,7 @@ describe("dashboard", () => {
       send({ id: "x3", post_id: "p4", status: "sending", c_pending: 50, c_accepted: 50 }),
     ];
     fake = world([post()], () => sends);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     $("tr[data-id='p1'] td:last-child").click();
     expect(location.hash).toBe("#/edit/p1");
@@ -277,7 +277,7 @@ describe("dashboard", () => {
       }),
     ];
     fake = world([post()], sends);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($("#dashActive .active-card").dataset.watch).toBe("x3");
     const polls = () =>
@@ -301,15 +301,15 @@ describe("dashboard", () => {
 
   it("stops polling when the reader navigates away", async () => {
     fake = world([post()], () => [send({ id: "x3", status: "sending", c_pending: 50 })]);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const polls = () =>
       fake.calls.filter((c) => c.url.searchParams.get("status") === "sending").length;
     await vi.advanceTimersByTimeAsync(3000);
     expect(polls()).toBe(1);
-    appState.navGeneration++; // what route() does on navigation
+    unmount(); // what navigating away does: the armed tick is cleared with the mount
     await vi.advanceTimersByTimeAsync(9000);
-    expect(polls()).toBe(2); // the one tick in flight, then no reschedule
+    expect(polls()).toBe(1);
   });
 
   it("paints one applied-change notice over the re-made scheduled sends, which a dismiss clears", async () => {
@@ -331,14 +331,14 @@ describe("dashboard", () => {
       send({ id: "x5", post_id: "p6", status: "scheduled", fire_at: NOW + 180_000 }),
     ];
     fake = world([post()], () => sends);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const n = $("#dashNotices .notice");
     expect(n.dataset.notice).toBe("applied|*");
     expect(n.textContent).toMatch(/was applied to 2 scheduled posts\. Send a fresh test email/);
     $(".notice-dismiss", n).click();
     expect(document.querySelector("#dashNotices .notice")).toBeNull();
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect(document.querySelector("#dashNotices .notice")).toBeNull(); // dismissed stays dismissed
   });
@@ -347,7 +347,7 @@ describe("dashboard", () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     fake = world([post()], () => []);
-    await renderDashboard();
+    await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     $(".quick-actions [data-act='add-sub']").click();
     expect($("#addEmail")).toBeTruthy();

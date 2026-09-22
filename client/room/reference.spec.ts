@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReferenceGroup } from "../../shared/reference";
-import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test/support";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  mount,
+  resetShell,
+  settle,
+} from "../test/support";
 import { renderReference } from "./reference";
 
 // Two tiers as the Worker groups them from its manifest; the webhook tier is absent, as it
@@ -73,7 +82,7 @@ describe("reference room", () => {
 
   it("renders the tiers as sections and the nav with a count per tier, the first active", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
-    await renderReference();
+    await mount(renderReference);
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("API");
     expect($$(".api-section").map((s) => s.id)).toEqual(["api-admin", "api-public"]);
@@ -105,7 +114,7 @@ describe("reference room", () => {
 
   it("jumps to a section from the nav without navigating", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
-    await renderReference();
+    await mount(renderReference);
     await settle();
     const scroll = vi.spyOn(HTMLElement.prototype, "scrollIntoView").mockImplementation(() => {});
     $("#apiNav a[data-sec='public']").click();
@@ -117,13 +126,13 @@ describe("reference room", () => {
 
   it("highlights the tier in view as the reader scrolls, and drops the last room's observer on re-render", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
-    await renderReference();
+    await mount(renderReference);
     await settle();
     const first = FakeObserver.last;
     expect(first?.observed).toEqual([$("#api-admin"), $("#api-public")]);
     first?.enter($("#api-public"));
     expect($$("#apiNav a").map((a) => a.classList.contains("active"))).toEqual([false, true]);
-    await renderReference();
+    await mount(renderReference);
     await settle();
     expect(first?.disconnected).toBe(true);
     expect(FakeObserver.last).not.toBe(first);
@@ -137,7 +146,7 @@ describe("reference room", () => {
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { groups }),
       },
     ]);
-    await renderReference();
+    await mount(renderReference);
     await settle();
     expect($("#apiContent .error").textContent).toMatch(/down/);
     $("[data-retry]").click();

@@ -8,10 +8,10 @@ import {
   type FakeRoute,
   fakeApi,
   jsonResponse,
+  mount,
   resetShell,
   typeInto,
 } from "../test/support";
-import { savebar } from "../ui/savebar";
 import { renderTemplate } from "./template";
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
@@ -63,19 +63,18 @@ describe("template view", () => {
   });
   afterEach(() => {
     fake?.restore();
-    savebar.detach();
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
-  async function mount(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
+  async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
     fake = fakeApi(routes);
-    await renderTemplate();
+    await mount(renderTemplate);
     await vi.advanceTimersByTimeAsync(0);
   }
 
   it("renders the in-use chip, the saved template in the editor with its highlight and gutter, and the required pills", async () => {
-    await mount();
+    await open();
     expect($("#tplInUse").textContent).toContain("No posts scheduled");
     expect(editor().value).toBe(TEMPLATE);
     expect($("#tplHl code").textContent).toContain("{{ post.body }}");
@@ -92,7 +91,7 @@ describe("template view", () => {
   });
 
   it("an edit raises the save bar, flips the test button, and predicts a missing required variable", async () => {
-    await mount();
+    await open();
     typeInto(editor(), "<div>{{ post.body }}</div>");
     expect(bar().classList.contains("show")).toBe(true);
     expect($("#reqUnsub").className).toBe("set-req-pill bad");
@@ -102,7 +101,7 @@ describe("template view", () => {
 
   it("saves the template, shows the server's warnings, and adopts what was stored", async () => {
     const stored = `${TEMPLATE}\n`;
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
@@ -128,7 +127,7 @@ describe("template view", () => {
   });
 
   it("a rejected template keeps the bar up with the reason", async () => {
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
@@ -153,7 +152,7 @@ describe("template view", () => {
     const sends = [
       { id: "x1", post_id: "p1", subject: "Gulls", fire_at: 1_800_000_000_000, remade_at: null },
     ];
-    await mount([
+    await open([
       {
         path: "/api/settings",
         reply: () => response({ inUse: { sends, retry_after: null, identityFields: [] } }),
@@ -181,7 +180,7 @@ describe("template view", () => {
   });
 
   it("loads an example from the menu, closes it on an outside click, and discards back to the baseline", async () => {
-    await mount();
+    await open();
     $("#tplExamplesBtn").click();
     expect($("#tplExamplesList").hidden).toBe(false);
     document.body.click();
@@ -198,7 +197,7 @@ describe("template view", () => {
   });
 
   it("save & send test: saves the edits first, then posts the test to the pre-filled recipients", async () => {
-    await mount([
+    await open([
       { path: "/api/settings", reply: () => response() },
       {
         method: "PUT",
@@ -237,19 +236,19 @@ describe("template view", () => {
   });
 
   it("remembers the line-number toggle per browser", async () => {
-    await mount();
+    await open();
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(false);
     $("#tplLineNums").click();
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(true);
     expect($("#tplLineNums").getAttribute("aria-pressed")).toBe("true");
     expect(localStorage.getItem("kestrel.tpl.lineNums")).toBe("1");
-    await renderTemplate();
+    await mount(renderTemplate);
     await vi.advanceTimersByTimeAsync(0);
     expect($("#tplEditorWrap").classList.contains("show-lines")).toBe(true);
   });
 
   it("proofs both inbox widths", async () => {
-    await mount();
+    await open();
     $(".wtog-btn[data-w='375']").click();
     expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("375px");
     expect($$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);

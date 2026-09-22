@@ -12,7 +12,7 @@ import type {
 } from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName, renderSidebarBrand } from "../brand";
-import { app } from "../shell";
+import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { escapeHtml, type Html, html, setHtml } from "../ui/html";
@@ -58,17 +58,17 @@ type EmbedMode = "plain" | "styled";
 // A bare attribute is markup, not text: spelled once as markup so it can be interpolated.
 const HIDDEN = html` hidden`;
 
-export async function renderSettings(): Promise<void> {
+export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
-    app,
+    root,
     html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
   );
-  const body = $("#settingsBody");
+  const body = $("#settingsBody", root);
   let data: SettingsResponse;
   try {
-    data = await api<SettingsResponse>("/api/settings");
+    data = await api<SettingsResponse>("/api/settings", { signal });
   } catch (e) {
-    renderError(body, message(e), renderSettings);
+    renderError(body, message(e), () => mount(renderSettings));
     return;
   }
   const s = data.settings;
@@ -409,7 +409,7 @@ export async function renderSettings(): Promise<void> {
   const taglineEl = $<HTMLInputElement>("#setTagline");
   // The shared bottom save bar (Save + Discard). Its callbacks are the hoisted
   // saveSettings / discardSettings below; refreshDirty just slides it up or down.
-  const bar = savebar.attach({ onSave: saveSettings, onDiscard: discardSettings });
+  const bar = savebar.attach({ onSave: saveSettings, onDiscard: discardSettings }, signal);
 
   // --- dirty tracking: the persisted identity fields (name, tagline, address) +
   // recipients. The email template is edited on its own page, so it isn't tracked here.

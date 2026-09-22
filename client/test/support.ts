@@ -36,6 +36,8 @@ export interface FakeApi {
   restore(): void;
 }
 
+import { unmount } from "../lifecycle";
+
 const ORIGIN = "http://kestrel.test";
 
 /** A JSON response with a status; what a route reply is wrapped in unless it returns a Response. */
@@ -48,7 +50,9 @@ export function jsonResponse(data: unknown, status = 200): Response {
 
 /**
  * Replace the global fetch with a script for the duration of a test. Routes are tried in
- * order; the first whose method and path match answers. Call `restore()` in afterEach.
+ * order; the first whose method and path match answers. A request carrying a signal is cut
+ * off the way the real fetch cuts it off: an AbortError, at once if already aborted, or the
+ * moment it aborts while the reply is pending. Call `restore()` in afterEach.
  */
 export function fakeApi(routes: FakeRoute[]): FakeApi {
   const previous = globalThis.fetch;
@@ -76,7 +80,20 @@ export function fakeApi(routes: FakeRoute[]): FakeApi {
       unhandled.push(call);
       return jsonResponse({ error: `no fake route for ${method} ${url.pathname}` }, 404);
     }
-    const out = await route.reply(call);
+    const signal = init?.signal ?? null;
+    const aborted = () => new DOMException("The operation was aborted.", "AbortError");
+    if (signal?.aborted) {
+      throw aborted();
+    }
+    const replied = Promise.resolve(route.reply(call));
+    const out = signal
+      ? await Promise.race([
+          replied,
+          new Promise<never>((_, reject) =>
+            signal.addEventListener("abort", () => reject(aborted()), { once: true }),
+          ),
+        ])
+      : await replied;
     return out instanceof Response ? out : jsonResponse(out);
   };
   return {
@@ -95,8 +112,12 @@ export async function settle(rounds = 4): Promise<void> {
   }
 }
 
-/** Empty what a view may have left in the shell without replacing its root elements, which the shell module holds by reference. */
+/**
+ * Tear down whatever is mounted and empty what it left in the shell, without replacing the
+ * shell's root elements, which the shell module holds by reference.
+ */
 export function resetShell(): void {
+  unmount();
   for (const id of ["app", "toasts"]) {
     const el = document.getElementById(id);
     if (el) {
@@ -108,7 +129,9 @@ export function resetShell(): void {
   }
 }
 
-// The same DOM helpers the modules use, re-exported so a spec reads like the code it tests.
+// The same DOM and lifecycle helpers the modules use, re-exported so a spec reads like the
+// code it tests: a view is mounted the way the router mounts it.
+export { mount, mounted, unmount } from "../lifecycle";
 export { $, $$ } from "../ui/dom";
 
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */

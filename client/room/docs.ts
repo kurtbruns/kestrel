@@ -2,7 +2,7 @@
 
 import type { DocFragment, DocsResponse } from "../../shared/docs";
 import { api } from "../api";
-import { app } from "../shell";
+import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
@@ -35,27 +35,26 @@ function docDescription(doc: DocFragment): string {
   return leadsIn ? `${text}…` : text;
 }
 
-export async function renderDocs(slug?: string): Promise<void> {
+export async function renderDocs(
+  slug: string | undefined,
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<void> {
   setHtml(
-    app,
+    root,
     roomShell("docs", null, html`<div class="docs-index"><p class="muted">Loading…</p></div>`),
   );
   if (!docsCache) {
-    // The first visit fetches; everything below rewrites the whole view, so if the route
-    // moved on while the request was in flight (a tap on API, or a different doc), this
-    // render is stale and must not paint over the one that replaced it.
-    const wanted = location.hash;
+    // The first visit fetches (with the mount's signal, so a tap on API or a different
+    // doc while it is in flight cuts it off rather than let it paint a stale room).
     try {
-      docsCache = (await api<DocsResponse>("/api/docs")).docs;
+      docsCache = (await api<DocsResponse>("/api/docs", { signal })).docs;
     } catch (e) {
-      if (location.hash === wanted) {
-        renderError($(".room-main"), e instanceof Error ? e.message : String(e), () =>
-          renderDocs(slug),
+      if (!signal.aborted) {
+        renderError($(".room-main", root), e instanceof Error ? e.message : String(e), () =>
+          mount((r, s) => renderDocs(slug, r, s)),
         );
       }
-      return;
-    }
-    if (location.hash !== wanted) {
       return;
     }
   }
@@ -65,9 +64,9 @@ export async function renderDocs(slug?: string): Promise<void> {
     return;
   }
   if (slug) {
-    renderDocPage(docs, slug);
+    renderDocPage(root, docs, slug);
   } else {
-    renderDocsIndex(docs);
+    renderDocsIndex(root, docs);
   }
 }
 
@@ -75,7 +74,7 @@ export async function renderDocs(slug?: string): Promise<void> {
 // room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
 // holds the project's external links — the reference room is about Kestrel itself, so this
 // is where getkestrel.dev and the source live.
-function renderDocsIndex(docs: DocFragment[]): void {
+function renderDocsIndex(root: HTMLElement, docs: DocFragment[]): void {
   const cards = docs.map((d, i) => {
     const desc = docDescription(d);
     return html`<li><a class="doc-card" href="#/docs/${d.slug}"><span class="doc-card-n">${String(i + 1).padStart(2, "0")}</span><span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
@@ -96,7 +95,7 @@ function renderDocsIndex(docs: DocFragment[]): void {
       ? [out(repoUrl, "Source on GitHub", "Source"), out(`${repoUrl}/blob/HEAD/LICENSE`, "License")]
       : null
   }`;
-  setHtml(app, roomShell("docs", rail, main));
+  setHtml(root, roomShell("docs", rail, main));
   window.scrollTo(0, 0);
 }
 
@@ -138,14 +137,14 @@ interface DocSection {
   title: string;
 }
 
-function renderDocPage(docs: DocFragment[], slug: string): void {
+function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): void {
   const at = docs.findIndex((d) => d.slug === slug);
   const cur = docs[at];
   if (!cur) {
     // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
     toast(`No doc named “${slug}” — showing the index.`);
     history.replaceState(history.state, "", "#/docs");
-    renderDocsIndex(docs);
+    renderDocsIndex(root, docs);
     return;
   }
   const prev = docs[at - 1];
@@ -166,7 +165,7 @@ function renderDocPage(docs: DocFragment[], slug: string): void {
   // The rail gets a slot, filled once the sections are known (below) — the slot, not the
   // whole rail, so the build stamp roomShell set under it stays.
   setHtml(
-    app,
+    root,
     roomShell(
       "docs",
       html`<div id="docToc"></div>`,

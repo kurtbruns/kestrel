@@ -4,8 +4,7 @@
 import type { SendListResponse, SendSummary } from "../../shared/sends";
 import { api } from "../api";
 import { noEmailProvider } from "../deployment";
-import { app } from "../shell";
-import { appState } from "../state";
+import { poll } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
@@ -20,11 +19,11 @@ import {
 } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openRescheduleModal, openResolveModal } from "./dialogs";
-import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./progress";
+import { activeRowHtml, countdowns, deliveredCell, isWedged } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export async function renderSent(): Promise<void> {
+export async function renderSent(root: HTMLElement, signal: AbortSignal): Promise<void> {
   // The dispatch side: the still-cancelable Scheduled queue on top, then the frozen Sent
   // records. The table is sent-only, so it carries no status column or filter; default
   // sort = fire desc so the "When" header shows its arrow from the start.
@@ -38,7 +37,7 @@ export async function renderSent(): Promise<void> {
     limit: 50,
   };
   setHtml(
-    app,
+    root,
     html`<h1>Sent</h1>
     ${noEmailProvider() ? html`<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : null}
     <div id="stuck"></div>
@@ -49,11 +48,12 @@ export async function renderSent(): Promise<void> {
     <div id="sendsList" class="muted">Loading…</div>
     <div id="sendsPager"></div>`,
   );
-  const stuckEl = $("#stuck");
-  const schedEl = $("#scheduled");
-  const activeEl = $("#active");
-  const listEl = $("#sendsList");
-  const pagerEl = $("#sendsPager");
+  const stuckEl = $("#stuck", root);
+  const schedEl = $("#scheduled", root);
+  const activeEl = $("#active", root);
+  const listEl = $("#sendsList", root);
+  const pagerEl = $("#sendsPager", root);
+  const tickCountdowns = countdowns(root, signal);
 
   // Resolving a wedged send or canceling a scheduled one touches several sections at
   // once, so refresh them together.
@@ -104,7 +104,7 @@ export async function renderSent(): Promise<void> {
   async function refreshSending() {
     let sends: SendSummary[];
     try {
-      ({ sends } = await api<SendListResponse>("/sends?status=sending&limit=200"));
+      ({ sends } = await api<SendListResponse>("/sends?status=sending&limit=200", { signal }));
     } catch {
       // Non-fatal: the in-flight sections just stay empty if this probe fails.
       setHtml(stuckEl, html``);
@@ -131,6 +131,7 @@ export async function renderSent(): Promise<void> {
     try {
       const { sends } = await api<SendListResponse>(
         "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
+        { signal },
       );
       const schedCard = (s: SendSummary) =>
         html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
@@ -190,7 +191,7 @@ export async function renderSent(): Promise<void> {
             }
           });
       }
-      startCountdowns();
+      tickCountdowns();
     } catch (e) {
       renderError(schedEl, message(e), loadScheduled);
     }
@@ -200,7 +201,7 @@ export async function renderSent(): Promise<void> {
   // view. Sent-only, so no status column; the "When" is the send's completion.
   async function loadList() {
     try {
-      const data = await api<SendListResponse>(`/sends?${listQuery(state)}`);
+      const data = await api<SendListResponse>(`/sends?${listQuery(state)}`, { signal });
       const sends = data.sends;
       if (!sends.length) {
         setHtml(
@@ -240,23 +241,10 @@ export async function renderSent(): Promise<void> {
     }
   }
 
-  wireToolbar(app, state, loadList);
+  wireToolbar(root, state, loadList);
   reloadAll();
   // Poll the in-flight sections every 3s (matching the watch + dashboard): the active
   // bar advances, and a fired/finished send moves through the queue → in-progress →
-  // records on its own. A recursive setTimeout so a slow read never overlaps; cleared on
-  // navigation (route() clears progressTimer). Countdowns run on statusTimer.
-  const scheduleSentPoll = () => {
-    const gen = appState.navGeneration;
-    appState.progressTimer = setTimeout(async () => {
-      await refreshSending();
-      // Navigated off the Sent page mid-fetch: the sections refreshSending paints are gone
-      // and the reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
-      if (gen !== appState.navGeneration) {
-        return;
-      }
-      scheduleSentPoll();
-    }, 3000);
-  };
-  scheduleSentPoll();
+  // records on its own. Ends with the mount.
+  poll(3000, refreshSending, signal);
 }

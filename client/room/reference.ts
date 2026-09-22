@@ -7,7 +7,7 @@ import type {
   ReferenceResponse,
 } from "../../shared/reference";
 import { api } from "../api";
-import { app } from "../shell";
+import { mount } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
@@ -59,9 +59,9 @@ function apiSectionHtml(g: ReferenceGroup): Html {
 // as the view and is disconnected when the next render replaces it.
 let sectionObserver: IntersectionObserver | null = null;
 
-export async function renderReference(): Promise<void> {
+export async function renderReference(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
-    app,
+    root,
     roomShell(
       "reference",
       html`<div class="toc-label">API</div><nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
@@ -83,9 +83,11 @@ export async function renderReference(): Promise<void> {
   });
   let groups: ReferenceGroup[];
   try {
-    ({ groups } = await api<ReferenceResponse>("/api/reference"));
+    ({ groups } = await api<ReferenceResponse>("/api/reference", { signal }));
   } catch (e) {
-    renderError(contentEl, e instanceof Error ? e.message : String(e), renderReference);
+    renderError(contentEl, e instanceof Error ? e.message : String(e), () =>
+      mount(renderReference),
+    );
     return;
   }
 

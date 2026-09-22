@@ -2,7 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocFragment } from "../../shared/docs";
 import type { SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
-import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test/support";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  mount,
+  resetShell,
+  settle,
+  unmount,
+} from "../test/support";
 import { renderDocs } from "./docs";
 
 // The guide as the Worker serves it: sanitized fragments with no ids on the headings.
@@ -42,7 +52,7 @@ const config = (repoUrl: string): SettingsResponse =>
 async function freshDocs() {
   vi.resetModules();
   const mod = await import("./docs");
-  return mod.renderDocs;
+  return (slug?: string) => mount((r, s) => mod.renderDocs(slug, r, s));
 }
 
 describe("docs room", () => {
@@ -59,7 +69,7 @@ describe("docs room", () => {
 
   it("renders the index: the cards in reading order with blurbs from each doc's first paragraph, and the project links in the rail", async () => {
     fake = fakeApi([{ path: "/api/docs", reply: () => ({ docs }) }]);
-    await renderDocs();
+    await mount((r, s) => renderDocs(undefined, r, s));
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("Docs");
     const cards = $$<HTMLAnchorElement>(".doc-card");
@@ -85,14 +95,14 @@ describe("docs room", () => {
   it("links only the project site when the build knows no repository", async () => {
     fake = fakeApi([]);
     appState.appConfig = config("");
-    await renderDocs();
+    await mount((r, s) => renderDocs(undefined, r, s));
     expect($$(".rail-link").map((a) => a.textContent?.trim())).toEqual(["Project siteProject ↗"]);
     expect(fake.calls).toEqual([]); // the guide is cached
   });
 
   it("opens a doc from the cache: the API's HTML as markup, ids on its headings, On this page in the rail, and the sequential pager", async () => {
     fake = fakeApi([]);
-    await renderDocs("overview");
+    await mount((r, s) => renderDocs("overview", r, s));
     expect(fake.calls).toEqual([]);
     const main = $("#docsMain");
     expect($("section.doc-part", main).id).toBe("doc-overview");
@@ -119,7 +129,7 @@ describe("docs room", () => {
 
   it("shows Previous and Next around a middle doc, and jumps within the doc from the rail", async () => {
     fake = fakeApi([]);
-    await renderDocs("provision");
+    await mount((r, s) => renderDocs("provision", r, s));
     expect($$(".doc-topnav a").map((a) => a.getAttribute("href"))).toEqual([
       "#/docs/overview",
       "#/docs/verify",
@@ -136,7 +146,7 @@ describe("docs room", () => {
     fake = fakeApi([]);
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
-    await renderDocs("overview");
+    await mount((r, s) => renderDocs("overview", r, s));
     $("pre .code-copy").click();
     await settle();
     expect(writeText).toHaveBeenCalledWith("npm run dev");
@@ -147,7 +157,7 @@ describe("docs room", () => {
   it("heals an unknown slug to the index", async () => {
     fake = fakeApi([]);
     location.hash = "#/docs/nope";
-    await renderDocs("nope");
+    await mount((r, s) => renderDocs("nope", r, s));
     expect($("#toasts").textContent).toMatch(/No doc named “nope”/);
     expect($$(".doc-card")).toHaveLength(3);
     expect(location.hash).toBe("#/docs");
@@ -170,22 +180,26 @@ describe("docs room", () => {
     expect(fake.calls).toHaveLength(2);
   });
 
-  it("does not paint over a view the reader moved on to while the guide was loading, but keeps what it fetched", async () => {
+  it("is cut off when the reader moves on while the guide is loading, and fetches again when they return", async () => {
     const render = await freshDocs();
     let release: (v: unknown) => void = () => {};
+    let reads = 0;
     fake = fakeApi([
-      { path: "/api/docs", reply: () => new Promise((r) => (release = r)).then(() => ({ docs })) },
+      {
+        path: "/api/docs",
+        // The first read is held open; the one after the return answers at once.
+        reply: () =>
+          ++reads === 1 ? new Promise((r) => (release = r)).then(() => ({ docs })) : { docs },
+      },
     ]);
     const pending = render();
     await settle();
-    location.hash = "#/reference"; // what a tap on the API tab does mid-flight
+    unmount(); // what a tap on the API tab does mid-flight: the mount ends, the read with it
     release(null);
     await pending;
-    expect($(".room-main").textContent).toMatch(/Loading…/); // untouched
-    expect($$(".doc-card")).toHaveLength(0);
-    location.hash = "#/docs";
+    expect($$(".doc-card")).toHaveLength(0); // nothing painted over what replaced it
     await render();
     expect($$(".doc-card")).toHaveLength(3);
-    expect(fake.calls).toHaveLength(1); // the first fetch filled the cache
+    expect(fake.calls).toHaveLength(2); // the cut-off read filled no cache
   });
 });

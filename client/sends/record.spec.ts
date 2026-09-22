@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeliveryOutcomes, Send, SendProgress } from "../../shared/sends";
-import { appState } from "../state";
-import { $, $$, type FakeApi, fakeApi, resetShell } from "../test/support";
+import { $, $$, type FakeApi, fakeApi, mount, resetShell, unmount } from "../test/support";
 import { clampPct, fmtDuration } from "./progress";
 import { renderSentRecord } from "./record";
 
@@ -130,7 +129,7 @@ describe("sent record", () => {
         }),
       },
     ]);
-    await renderSentRecord("x1");
+    await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
     expect($("h1").textContent).toBe("Owls");
     expect($$(".rec-tile")).toHaveLength(5);
@@ -143,8 +142,10 @@ describe("sent record", () => {
     expect(
       fake.calls.find((c) => c.url.pathname.endsWith("/deliveries"))?.url.searchParams.get("view"),
     ).toBe("failures");
-    // Nothing accepted-but-unconfirmed: no settling poll is scheduled.
-    expect(appState.progressTimer).toBeNull();
+    // Nothing accepted-but-unconfirmed: no settling poll runs.
+    const reads = fake.calls.length;
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(fake.calls.length).toBe(reads);
   });
 
   it("switches the recipients view and reloads from page one", async () => {
@@ -165,7 +166,7 @@ describe("sent record", () => {
         reply: () => ({ deliveries: [], view: "all", page: { ...page, total: 0 } }),
       },
     ]);
-    await renderSentRecord("x1");
+    await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
     $(".rec-view-btn[data-view='all']").click();
     await vi.advanceTimersByTimeAsync(10);
@@ -198,7 +199,7 @@ describe("sent record", () => {
         reply: () => ({ deliveries: [], view: "failures", page: { ...page, total: 0 } }),
       },
     ]);
-    await renderSentRecord("x1");
+    await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
     expect($(".watch-card")).toBeTruthy();
     expect($(".phase-pill").textContent).toBe("Sending");
@@ -215,7 +216,10 @@ describe("sent record", () => {
     expect($(".rec-card")).toBeTruthy(); // the frozen record now
   });
 
-  it("stops polling when the reader navigates away mid-flight", async () => {
+  it("stops polling when the reader navigates away, even with a tick's read in flight", async () => {
+    let held: ((v: unknown) => void) | null = null;
+    const release = () => held?.(null);
+    let reads = 0;
     fake = fakeApi([
       {
         path: "/sends/x1",
@@ -228,12 +232,23 @@ describe("sent record", () => {
           published: false,
         }),
       },
-      { path: "/sends/x1/progress", reply: () => progress() },
+      {
+        path: "/sends/x1/progress",
+        // The first read answers at once (the mount); the tick's is held open.
+        reply: () =>
+          ++reads === 1 ? progress() : new Promise((r) => (held = r)).then(() => progress()),
+      },
     ]);
-    await renderSentRecord("x1");
+    await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
-    appState.navGeneration++; // what route() does on navigation
+    const polls = () => fake.calls.filter((c) => c.url.pathname.endsWith("/progress")).length;
+    expect(polls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(3000); // the tick fires; its read is now pending
+    expect(polls()).toBe(2);
+    unmount(); // what navigating away does: the pending read is cut off with the mount
+    release();
     await vi.advanceTimersByTimeAsync(9000);
-    expect(fake.calls.filter((c) => c.url.pathname.endsWith("/progress"))).toHaveLength(2); // the one tick in flight, then no reschedule
+    expect(polls()).toBe(2); // no reschedule
+    expect(document.querySelector(".watch-card")).toBeNull(); // nothing painted back
   });
 });

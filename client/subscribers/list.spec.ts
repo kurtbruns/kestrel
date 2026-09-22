@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { $, $$, type FakeApi, fakeApi, resetShell, settle, typeInto } from "../test/support";
+import { $, $$, type FakeApi, fakeApi, mount, resetShell, settle, typeInto } from "../test/support";
 import { addSubscriberModal } from "./dialogs";
 import { renderSubscribers } from "./list";
 
@@ -48,7 +48,7 @@ describe("subscribers view", () => {
 
   it("shows the counts, the roster with the suppression flag and its reason, and actions only for the confirmed", async () => {
     fake = fakeApi([{ path: "/subscribers", reply: () => ({ counts, subscribers: subs, page }) }]);
-    await renderSubscribers();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
     expect($("#subCounts").textContent).toMatch(
       /2 confirmed.*1 pending.*0 unsubscribed.*1 suppressed/,
@@ -70,7 +70,7 @@ describe("subscribers view", () => {
         reply: () => ({ counts, subscribers: [], page: { ...page, total: 0 } }),
       },
     ]);
-    await renderSubscribers("suppressed");
+    await mount((r, s) => renderSubscribers("suppressed", r, s));
     await settle();
     expect(fake.calls[0]?.url.searchParams.get("suppressed")).toBe("only");
     expect($<HTMLInputElement>(".lt-suppressed").checked).toBe(true);
@@ -89,7 +89,7 @@ describe("subscribers view", () => {
         }),
       },
     ]);
-    await renderSubscribers();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
     $("#addSub").click();
     typeInto($<HTMLInputElement>("#addEmail"), "new@b.c");

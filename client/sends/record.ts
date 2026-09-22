@@ -13,8 +13,7 @@ import type {
 } from "../../shared/sends";
 import { api, apiText } from "../api";
 import { noEmailProvider } from "../deployment";
-import { app } from "../shell";
-import { appState } from "../state";
+import { mount, poll } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
@@ -33,14 +32,28 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * strip), polling /progress until dispatch completes, after which the record keeps
  * absorbing delivery receipts as they settle (SPEC §6/§8/§12).
  */
-export async function renderSentRecord(id: string): Promise<void> {
-  setHtml(app, html`<p class="muted">Loading…</p>`);
+export async function renderSentRecord(
+  id: string,
+  root: HTMLElement,
+  signal: AbortSignal,
+): Promise<void> {
+  // The watch re-enters here when dispatch ends, and the record when it resumes; each is
+  // a fresh mount (its own root and signal), so the poll that noticed ends with its own.
+  const remount = () => {
+    if (!signal.aborted) {
+      mount((r, s) => renderSentRecord(id, r, s)); // never over wherever the reader went since
+    }
+  };
+  setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: SendResponse;
   try {
-    data = await api<SendResponse>(`/sends/${id}`);
+    data = await api<SendResponse>(`/sends/${id}`, { signal });
   } catch (e) {
-    renderError(app, message(e), () => renderSentRecord(id));
+    renderError(root, message(e), remount);
     return;
+  }
+  if (signal.aborted) {
+    return; // navigated away while loading: the redirect below must not hijack that
   }
   const { send } = data;
 
@@ -51,9 +64,9 @@ export async function renderSentRecord(id: string): Promise<void> {
   }
   // A send still in flight opens the live watch, which polls /progress.
   if (send.status === "sending") {
-    return startWatch(id, send);
+    return startWatch(id, send, root, signal, remount);
   }
-  return renderFrozenRecord(id, data);
+  return renderFrozenRecord(id, data, root, signal, remount);
 }
 
 // Phase → { label, tone } for the derived-phase pill. Tones reuse the status/semantic
@@ -193,78 +206,74 @@ function watchHtml(send: Send, prog: SendProgress): Html {
 
 // Wire the header's Resolve control (present only when the send is wedged, §12). It
 // reuses the same modal the Sent page uses, with the in-flight count the progress reports.
-function wireWatchHeader(id: string, send: Send, prog: SendProgress): void {
-  const rb = document.getElementById("resolveBtn");
+function wireWatchHeader(
+  root: HTMLElement,
+  send: Send,
+  prog: SendProgress,
+  remount: () => void,
+): void {
+  const rb = root.querySelector<HTMLButtonElement>("#resolveBtn");
   if (rb) {
-    rb.onclick = () =>
-      openResolveModal({ ...send, c_in_flight: prog.counts.in_flight }, () => renderSentRecord(id));
+    rb.onclick = () => openResolveModal({ ...send, c_in_flight: prog.counts.in_flight }, remount);
   }
 }
-function paintWatch(send: Send, prog: SendProgress): void {
-  const pill = document.getElementById("watchPill");
+function paintWatch(root: HTMLElement, send: Send, prog: SendProgress): void {
+  const pill = root.querySelector("#watchPill");
   if (pill) {
     setHtml(pill, phasePill(prog.phase));
   }
-  const meta = document.getElementById("watchMeta");
+  const meta = root.querySelector("#watchMeta");
   if (meta) {
     setHtml(meta, watchMetaHtml(send, prog));
   }
-  const body = document.getElementById("watchBody");
+  const body = root.querySelector("#watchBody");
   if (body) {
     setHtml(body, watchBodyHtml(prog));
   }
 }
 
-async function startWatch(id: string, send: Send): Promise<void> {
+async function startWatch(
+  id: string,
+  send: Send,
+  root: HTMLElement,
+  signal: AbortSignal,
+  remount: () => void,
+): Promise<void> {
   let prog: SendProgress;
   try {
-    prog = await api<SendProgress>(`/sends/${id}/progress`);
+    prog = await api<SendProgress>(`/sends/${id}/progress`, { signal });
   } catch (e) {
-    renderError(app, message(e), () => renderSentRecord(id));
+    renderError(root, message(e), remount);
+    return;
+  }
+  if (signal.aborted) {
     return;
   }
   // It may have finished between the two reads: fall through to the frozen record.
   if (prog.state !== "sending") {
-    return renderSentRecord(id);
+    return remount();
   }
-  setHtml(app, watchHtml(send, prog));
-  wireWatchHeader(id, send, prog);
-  scheduleWatchPoll(id, send);
-}
-
-// Poll /progress (~3s) while sending; a recursive setTimeout so a slow read never
-// overlaps. `progressTimer` holds the pending id so route() clears it on navigation.
-function scheduleWatchPoll(id: string, send: Send): void {
-  const gen = appState.navGeneration;
-  appState.progressTimer = setTimeout(async () => {
-    let prog: SendProgress;
-    try {
-      prog = await api<SendProgress>(`/sends/${id}/progress`);
-    } catch {
-      // transient: keep the last view, try again (unless we've since navigated away)
-      if (gen === appState.navGeneration) {
-        scheduleWatchPoll(id, send);
+  setHtml(root, watchHtml(send, prog));
+  wireWatchHeader(root, send, prog, remount);
+  // Poll /progress (~3s) while sending; the poll ends with the mount, or with dispatch.
+  poll(
+    3000,
+    async () => {
+      const fresh = await api<SendProgress>(`/sends/${id}/progress`, { signal });
+      if (fresh.state !== "sending") {
+        remount(); // dispatch done → the frozen record (which settles)
+        return false;
       }
-      return;
-    }
-    // Navigated away while the fetch was in flight: the new view owns the screen and its
-    // own poll now; don't renderSentRecord over it, swap it, or reschedule onto its timer.
-    if (gen !== appState.navGeneration) {
-      return;
-    }
-    if (prog.state !== "sending") {
-      appState.progressTimer = null;
-      return renderSentRecord(id); // dispatch done → the frozen record (which settles)
-    }
-    // If it just wedged, the header needs the Resolve control it didn't have: re-render.
-    if (prog.attention?.wedged && !document.getElementById("resolveBtn")) {
-      setHtml(app, watchHtml(send, prog));
-      wireWatchHeader(id, send, prog);
-    } else {
-      paintWatch(send, prog);
-    }
-    scheduleWatchPoll(id, send);
-  }, 3000);
+      // If it just wedged, the header needs the Resolve control it didn't have: re-render.
+      if (fresh.attention?.wedged && !root.querySelector("#resolveBtn")) {
+        setHtml(root, watchHtml(send, fresh));
+        wireWatchHeader(root, send, fresh, remount);
+      } else {
+        paintWatch(root, send, fresh);
+      }
+    },
+    signal,
+  );
 }
 
 // The delivery-outcome tiles + reconciliation line: the frozen record's body, factored
@@ -413,13 +422,19 @@ function deliveryRowsHtml(rows: DeliveryRecord[], dstate: DeliveryListState): Ht
   )}<th class="c-out">Outcome</th><th>Detail</th><th class="c-date">When</th></tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-function renderFrozenRecord(id: string, data: SendResponse): void {
+function renderFrozenRecord(
+  id: string,
+  data: SendResponse,
+  root: HTMLElement,
+  signal: AbortSignal,
+  remount: () => void,
+): void {
   const { send, outcomes, archive_url, published, slug } = data;
   const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;
 
   setHtml(
-    app,
+    root,
     html`
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
@@ -471,12 +486,13 @@ function renderFrozenRecord(id: string, data: SendResponse): void {
     offset: 0,
     limit: 50,
   };
-  const rowsEl = $("#recRows");
-  const recPagerEl = $("#recPager");
+  const rowsEl = $("#recRows", root);
+  const recPagerEl = $("#recPager", root);
   const loadDeliveries = async () => {
     try {
       const d = await api<DeliveryListResponse>(
         `/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`,
+        { signal },
       );
       if (!d.deliveries.length) {
         setHtml(rowsEl, html`<p class="rec-people-empty muted">${deliveryEmpty(dstate)}</p>`);
@@ -490,7 +506,7 @@ function renderFrozenRecord(id: string, data: SendResponse): void {
       renderError(rowsEl, message(e), loadDeliveries);
     }
   };
-  const viewButtons = $$<HTMLButtonElement>(".rec-view-btn", app);
+  const viewButtons = $$<HTMLButtonElement>(".rec-view-btn", root);
   for (const b of viewButtons) {
     b.onclick = () => {
       const v = b.dataset.view;
@@ -504,7 +520,7 @@ function renderFrozenRecord(id: string, data: SendResponse): void {
       loadDeliveries();
     };
   }
-  const recSearch = app.querySelector<HTMLInputElement>(".rec-people-search");
+  const recSearch = root.querySelector<HTMLInputElement>(".rec-people-search");
   if (recSearch) {
     let t: number | undefined;
     recSearch.oninput = () => {
@@ -538,48 +554,32 @@ function renderFrozenRecord(id: string, data: SendResponse): void {
 
   // Still settling: the record keeps absorbing delivery receipts after dispatch (§6), so
   // poll ~15s and repaint the tiles until every accepted recipient is confirmed. Capped
-  // so a provider that never confirms doesn't leave the poll running forever.
+  // (~10 min) so a provider that never confirms doesn't leave the poll running forever;
+  // ends with the mount either way.
   if (outcomes.accepted > 0) {
-    scheduleSettlePoll(id, 0);
+    let ticks = 0;
+    poll(
+      15000,
+      async () => {
+        if (++ticks > 40) {
+          return false; // stop chasing receipts that may never arrive
+        }
+        const fresh = await api<SendResponse>(`/sends/${id}`, { signal });
+        if (fresh.send.status === "sending") {
+          remount(); // resumed (a wedged resolve, say) → back to the watch
+          return false;
+        }
+        const tiles = root.querySelector(".rec-tiles");
+        const recon = root.querySelector(".rec-recon");
+        if (tiles) {
+          setHtml(tiles, outcomeTilesHtml(fresh.outcomes));
+        }
+        if (recon) {
+          recon.textContent = outcomeReconHtml(fresh.outcomes);
+        }
+        return fresh.outcomes.accepted > 0;
+      },
+      signal,
+    );
   }
-}
-
-function scheduleSettlePoll(id: string, count: number): void {
-  if (count > 40) {
-    return; // ~10 min ceiling: stop chasing receipts that may never arrive
-  }
-  const gen = appState.navGeneration;
-  appState.progressTimer = setTimeout(async () => {
-    let data: SendResponse;
-    try {
-      data = await api<SendResponse>(`/sends/${id}`);
-    } catch {
-      if (gen === appState.navGeneration) {
-        scheduleSettlePoll(id, count + 1);
-      }
-      return;
-    }
-    // Navigated away mid-fetch: the tiles we'd repaint belong to a view that's gone, and
-    // the reschedule would leak onto the new view's poll timer. Bail (see navGeneration).
-    if (gen !== appState.navGeneration) {
-      return;
-    }
-    if (data.send.status === "sending") {
-      appState.progressTimer = null;
-      return renderSentRecord(id); // resumed (a wedged resolve, say) → back to the watch
-    }
-    const tiles = app.querySelector(".rec-tiles");
-    const recon = app.querySelector(".rec-recon");
-    if (tiles) {
-      setHtml(tiles, outcomeTilesHtml(data.outcomes));
-    }
-    if (recon) {
-      recon.textContent = outcomeReconHtml(data.outcomes);
-    }
-    if (data.outcomes.accepted > 0) {
-      scheduleSettlePoll(id, count + 1);
-    } else {
-      appState.progressTimer = null;
-    }
-  }, 15000);
 }

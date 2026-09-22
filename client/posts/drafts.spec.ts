@@ -5,6 +5,7 @@ import {
   type FakeApi,
   fakeApi,
   jsonResponse,
+  mount,
   resetShell,
   settle,
   typeInto,
@@ -38,7 +39,7 @@ describe("drafts view", () => {
 
   it("lists drafts and scheduled posts within the drafts scope, with subjects shown as text", async () => {
     fake = fakeApi([{ path: "/posts", reply: () => ({ posts, page }) }]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await settle();
     expect($("h1").textContent).toBe("Drafts");
     expect($$("tr[data-id]")).toHaveLength(2);
@@ -50,7 +51,7 @@ describe("drafts view", () => {
 
   it("opens the editor on a row click, and the live watch for a post being sent", async () => {
     fake = fakeApi([{ path: "/posts", reply: () => ({ posts, page }) }]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await settle();
     $("tr[data-id='p1'] td:last-child").click();
     expect(location.hash).toBe("#/edit/p1");
@@ -61,7 +62,7 @@ describe("drafts view", () => {
   it("searches from page one after the debounce", async () => {
     vi.useFakeTimers();
     fake = fakeApi([{ path: "/posts", reply: () => ({ posts, page }) }]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
     typeInto($<HTMLInputElement>(".lt-search"), "wax");
     await vi.advanceTimersByTimeAsync(300);
@@ -73,7 +74,7 @@ describe("drafts view", () => {
   it("shows the empty state, and says so differently when a filter narrowed it", async () => {
     vi.useFakeTimers();
     fake = fakeApi([{ path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 } }) }]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
     expect($("#list").textContent).toMatch(/create your first draft/);
     typeInto($<HTMLInputElement>(".lt-search"), "zzz");
@@ -89,7 +90,7 @@ describe("drafts view", () => {
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { posts, page }),
       },
     ]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await settle();
     expect($("#list .error").textContent).toMatch(/down/);
     $("[data-retry]").click();
@@ -106,7 +107,7 @@ describe("drafts view", () => {
         reply: (req) => ({ post: { id: "p9", ...(req.json() as object) } }),
       },
     ]);
-    await renderDrafts();
+    await mount(renderDrafts);
     await settle();
     $("#newPost").click();
     await settle();

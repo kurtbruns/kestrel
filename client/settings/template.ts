@@ -10,7 +10,7 @@ import type {
 import { api } from "../api";
 import { parseFromName } from "../brand";
 import { withNoProviderNote } from "../deployment";
-import { app } from "../shell";
+import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
 import { parseAddresses } from "../ui/format";
@@ -504,17 +504,17 @@ interface TemplateSaved {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
-export async function renderTemplate(): Promise<void> {
+export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
-    app,
+    root,
     html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`,
   );
-  const bodyEl = $("#tplBody");
+  const bodyEl = $("#tplBody", root);
   let data: SettingsResponse;
   try {
-    data = await api<SettingsResponse>("/api/settings");
+    data = await api<SettingsResponse>("/api/settings", { signal });
   } catch (e) {
-    renderError(bodyEl, message(e), renderTemplate);
+    renderError(bodyEl, message(e), () => mount(renderTemplate));
     return;
   }
   const s = data.settings;
@@ -646,7 +646,7 @@ export async function renderTemplate(): Promise<void> {
   // {{ email.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
-  const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate });
+  const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate }, signal);
 
   function refreshDirty() {
     paintEditor();
