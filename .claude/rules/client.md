@@ -49,6 +49,7 @@ paths:
 - Every client spec starts with the real admin shell in the document: `client/test_setup.ts` loads the body of `public/dashboard/index.html` before the spec's imports, because the shell module reads its roots at import time.
 - A view test runs the real view over a scripted API: `fakeApi(routes)` from `client/test_support.ts` replaces the global `fetch` (the only network the editor has), so `api()` itself runs, with its credential and its error shaping. Render, `settle()`, query the DOM, click, assert; assert `fake.unhandled` is empty. `views/drafts.spec.ts` is the pattern.
 - Nothing in a client spec reaches the Worker or its bindings; `test_support.ts` is imported by specs only and never enters the bundle.
+- The editor's timing and concurrency decisions are pure modules with their own specs: `autosave.ts` (the idle and hard-cap timers), `dirty.ts` (what is saved is what was sent), `revisions.ts` (the base revision, and what a 409 or a freshness poll means against it). The view wires them; a change to how saving behaves starts there, under test.
 
 ## Markup
 
