@@ -8,10 +8,12 @@
  *                   (JSON). The SPA renders them natively with a scroll-spy rail.
  */
 
+import type { DocsResponse } from "../../shared/docs";
 import { renderDocs } from "../docs";
 import { json } from "../lib/errors";
 import type { RequestContext } from "../router";
 
 export function list(_c: RequestContext): Response {
-  return json({ docs: renderDocs() });
+  const body: DocsResponse = { docs: renderDocs() };
+  return json(body);
 }

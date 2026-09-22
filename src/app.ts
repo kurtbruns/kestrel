@@ -14,6 +14,7 @@
  * relative positions. Keep new routes grouped with their tier.
  */
 
+import type { ReferenceResponse } from "../shared/reference";
 import { buildInfo } from "./build";
 import { json } from "./lib/errors";
 import { buildReference } from "./reference";
@@ -114,7 +115,12 @@ export function createRouter(archiveBasePath: string): Router {
       summary: "Every route, generated from the registration so it can't drift.",
       // Returned as data (the SPA renders it natively as a sidebar plus sections, no iframe);
       // it's also a machine-readable listing of the surface for Claude and tooling.
-      handler: () => json({ groups: buildReference(r.routes.map((route) => route.def)) }),
+      handler: () => {
+        const body: ReferenceResponse = {
+          groups: buildReference(r.routes.map((route) => route.def)),
+        };
+        return json(body);
+      },
     },
 
     // --- app settings (authed; runtime preferences, never secrets) ---

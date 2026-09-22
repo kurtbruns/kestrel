@@ -2,17 +2,13 @@
 // contents rail, and the surface switch.
 
 import { buildRefParts } from "./build_ref";
-import { type Html, html, unsafeHtml } from "./html";
+import { type Html, html } from "./html";
 import { icon } from "./icons";
 import { app } from "./shell";
 import { appState } from "./state";
 
 /** The two surfaces the room switches between. */
 export type RoomSurface = "docs" | "reference";
-
-// A string is accepted from the surfaces not yet on the html tag and vouched for as the
-// markup they assembled; that branch goes with the last of them.
-const asMarkup = (m: Html | string): Html => (typeof m === "string" ? unsafeHtml(m) : m);
 
 /**
  * The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
@@ -26,11 +22,7 @@ const asMarkup = (m: Html | string): Html => (typeof m === "string" ? unsafeHtml
  * back). The body stacks, and each rail decides its own mobile shape (a folded "On this
  * page", or a chip row; see the surfaces).
  */
-export function roomShell(
-  active: RoomSurface,
-  rail: Html | string | null,
-  main: Html | string,
-): Html {
+export function roomShell(active: RoomSurface, rail: Html | null, main: Html): Html {
   const tab = (view: RoomSurface, label: string) =>
     active === view
       ? html`<a href="#/${view}" data-room="${view}" data-text="${label}" aria-current="page">${label}</a>`
@@ -61,8 +53,8 @@ export function roomShell(
     : null;
   const body =
     rail == null
-      ? html`<div class="room-body norail"><div class="room-main">${asMarkup(main)}</div></div>`
-      : html`<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${asMarkup(rail)}${railFoot}</div></nav><div class="room-main">${asMarkup(main)}</div></div>`;
+      ? html`<div class="room-body norail"><div class="room-main">${main}</div></div>`
+      : html`<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${rail}${railFoot}</div></nav><div class="room-main">${main}</div></div>`;
   return html`<div class="room">
     <header class="room-bar">
       <a class="room-back" href="#/dashboard" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span class="room-back-label">Dashboard</span></a>

@@ -11,26 +11,12 @@
  * Served read-only through the authed `/api/reference` route (see routes/docs.ts
  * for the sibling docs surface it mirrors).
  */
-import type { Access, QueryParam, RouteDef } from "../router";
+import type { Access, ReferenceEntry, ReferenceGroup } from "../../shared/reference";
+import type { RouteDef } from "../router";
 
-/** One route as the reference shows it: the manifest metadata, without handler or middleware. */
-export interface ReferenceEntry {
-  method: string;
-  path: string;
-  access: Access;
-  summary: string;
-  description?: string;
-  query?: QueryParam[];
-  example?: { request?: unknown; response?: unknown };
-}
-
-/** The routes of one access tier, with a short heading for the tier. */
-export interface ReferenceGroup {
-  access: Access;
-  title: string;
-  blurb: string;
-  routes: ReferenceEntry[];
-}
+// The entry and group shapes live in shared/ so the editor reads the same definitions;
+// re-exported here as the reference's own.
+export type { ReferenceEntry, ReferenceGroup };
 
 /** Tier order + copy for the reference. Mirrors the public/admin/webhook split app.ts draws;
  * the titles are the tiers' own names, short enough to sit as a chip row on a phone. */

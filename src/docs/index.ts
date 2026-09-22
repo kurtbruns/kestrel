@@ -20,6 +20,7 @@ import sendingDomain from "../../docs/setup/04-sending-domain-dns.md";
 import archiveWebsite from "../../docs/setup/05-archive-website.md";
 import verify from "../../docs/setup/06-verify.md";
 import connectClaude from "../../docs/setup/07-connect-claude.md";
+import type { DocFragment } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
 
@@ -48,12 +49,9 @@ function extractTitle(markdown: string, slug: string): string {
 
 const DOCS = SOURCES.map((s) => ({ ...s, title: extractTitle(s.markdown, s.slug) }));
 
-/** One doc as the SPA consumes it: its slug, title, and a sanitized HTML fragment. */
-export interface DocFragment {
-  slug: string;
-  title: string;
-  html: string;
-}
+// The fragment shape lives in shared/ so the editor reads the same definition; re-exported
+// here as the guide's own.
+export type { DocFragment };
 
 /** Render one doc's markdown to a sanitized HTML fragment (no page wrapper). Docs
  *  carry no post images, so the image map is empty and the media base is unused. */
