@@ -7,6 +7,53 @@ describe("html", () => {
     expect(html`<p title="${evil}">${evil}</p>`.markup).toBe(
       `<p title="&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;">&lt;img src=x onerror=&quot;alert(&#39;x&#39;)&quot;&gt;&amp;</p>`,
     );
+    expect(html`<p title='${'it\'s "x"'}'></p>`.markup).toBe(
+      `<p title='it&#39;s &quot;x&quot;'></p>`,
+    );
+  });
+
+  it("refuses an interpolation in an unquoted attribute value, where escaping cannot help", () => {
+    const cls = "a onmouseover=alert(1)";
+    expect(() => html`<div class=${cls}></div>`).toThrow(/unquoted attribute/);
+    expect(() => html`<div class= ${cls}></div>`).toThrow(/unquoted attribute/);
+    expect(html`<div class="${cls}"></div>`.markup).toBe(
+      `<div class="a onmouseover=alert(1)"></div>`,
+    );
+    // Markup after `=` is the caller's own doing (an attribute spelled as markup), not text.
+    expect(html`<b${html` disabled`}></b>`.markup).toBe("<b disabled></b>");
+  });
+
+  it("throws on a literal with an invalid escape sequence instead of dropping the text", () => {
+    expect(() => html`<code>C:\users</code>`).toThrow(/invalid escape sequence/);
+  });
+
+  it("does not make a URL or a handler safe: that is a scheme check, not escaping", () => {
+    // Documented limit, pinned so the contract cannot drift silently.
+    expect(html`<a href="${"javascript:alert(1)"}">x</a>`.markup).toBe(
+      `<a href="javascript:alert(1)">x</a>`,
+    );
+  });
+
+  it("is nominal: a look-alike object is not markup, at compile time or at runtime", () => {
+    const fake = { markup: "<img src=x onerror=alert(1)>" };
+    const el = document.createElement("div");
+    // @ts-expect-error a plain object with a markup field is not Html
+    expect(() => setHtml(el, fake)).toThrow(/expected Html/);
+    // @ts-expect-error a string is not Html
+    expect(() => setHtml(el, "<b>x</b>")).toThrow(/expected Html/);
+    expect(html`<div>${fake as unknown as string}</div>`.markup).toBe("<div>[object Object]</div>");
+  });
+
+  it("admits false but not true, so a bare boolean in markup is a compile error", () => {
+    const on = Math.random() < 2;
+    // @ts-expect-error true is not an Interpolation
+    html`${on}`;
+    expect(html`${on && html`<b>on</b>`}`.markup).toBe("<b>on</b>");
+  });
+
+  it("is frozen once built", () => {
+    const m = html`<b>x</b>`;
+    expect(Object.isFrozen(m)).toBe(true);
   });
 
   it("passes markup through untouched and never escapes it twice", () => {

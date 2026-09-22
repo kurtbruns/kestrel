@@ -33,9 +33,11 @@ export interface ToolbarConfig {
   failures?: boolean;
 }
 
-// Build the query string for a list request from the view state. `sort`/`dir` are sent
-// only once a column is chosen (state.sort set), so a view keeps its endpoint's bespoke
-// default order (e.g. posts' scheduled-first) until the reader sorts.
+/**
+ * Build the query string for a list request from the view state. `sort`/`dir` are sent
+ * only once a column is chosen (state.sort set), so a view keeps its endpoint's bespoke
+ * default order (e.g. posts' scheduled-first) until the reader sorts.
+ */
 export function listQuery(state: ListState): string {
   const p = new URLSearchParams();
   if (state.status) {
@@ -60,18 +62,20 @@ export function listQuery(state: ListState): string {
   return p.toString();
 }
 
-// A filter/search toolbar: search on the left, the status filter pinned right.
-// `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
-// separate "Suppressed only" toggle — suppression is a deliverability flag, not a
-// consent status, so it's its own control (an independent axis you can combine with a
-// status), never an option inside the status dropdown.
-// `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
-// filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
-// two draft-side statuses rather than reaching sent posts. Omit `cfg.statuses` for a
-// search-only toolbar (the Sent list is single-status, so it carries no status filter).
-// `cfg.failures` adds the Sent list's "With delivery failures" flag — a filter, not a sort: it keeps
-// the newest-first order the operator scans by and needs no severity weighting (a summed
-// sort would rank 25 retried unsent recipients above one spam complaint).
+/**
+ * A filter/search toolbar: search on the left, the status filter pinned right.
+ * `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
+ * separate "Suppressed only" toggle — suppression is a deliverability flag, not a
+ * consent status, so it's its own control (an independent axis you can combine with a
+ * status), never an option inside the status dropdown.
+ * `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
+ * filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
+ * two draft-side statuses rather than reaching sent posts. Omit `cfg.statuses` for a
+ * search-only toolbar (the Sent list is single-status, so it carries no status filter).
+ * `cfg.failures` adds the Sent list's "With delivery failures" flag — a filter, not a sort: it keeps
+ * the newest-first order the operator scans by and needs no severity weighting (a summed
+ * sort would rank 25 retried unsent recipients above one spam complaint).
+ */
 export function listToolbar(cfg: ToolbarConfig): Html {
   const statusSel = cfg.statuses?.length
     ? html`<select class="lt-status" aria-label="Filter by status"><option value="${cfg.allValue || ""}">All statuses</option>${cfg.statuses.map(
@@ -90,9 +94,11 @@ export function listToolbar(cfg: ToolbarConfig): Html {
   </div>`;
 }
 
-// Wire the toolbar controls (within `root`) to the view's reload, seeding their values
-// from state so a deep-linked filter shows selected. Search is debounced; any change
-// resets to the first page. Status and the suppression toggle are independent axes.
+/**
+ * Wire the toolbar controls (within `root`) to the view's reload, seeding their values
+ * from state so a deep-linked filter shows selected. Search is debounced; any change
+ * resets to the first page. Status and the suppression toggle are independent axes.
+ */
 export function wireToolbar(root: ParentNode, state: ListState, reload: () => void): void {
   const search = root.querySelector<HTMLInputElement>(".lt-search");
   const status = root.querySelector<HTMLSelectElement>(".lt-status");
@@ -136,9 +142,11 @@ export function wireToolbar(root: ParentNode, state: ListState, reload: () => vo
   }
 }
 
-// A table header cell. A sortable column (given a `key`) renders a button that toggles
-// asc/desc and shows the active direction; other columns are plain labels. `cls` adds a
-// column class (e.g. "num" for right-aligned numeric columns).
+/**
+ * A table header cell. A sortable column (given a `key`) renders a button that toggles
+ * asc/desc and shows the active direction; other columns are plain labels. `cls` adds a
+ * column class (e.g. "num" for right-aligned numeric columns).
+ */
 export function th(label: string, key: string | null, state: ListState, cls?: string): Html {
   if (!key) {
     return cls ? html`<th class="${cls}">${label}</th>` : html`<th>${label}</th>`;
@@ -151,8 +159,10 @@ export function th(label: string, key: string | null, state: ListState, cls?: st
   return html`<th class="${klass}"><button type="button" class="th-sort" data-sort="${key}">${label}<span class="th-arrow" aria-hidden="true">${arrow}</span></button></th>`;
 }
 
-// Wire the sortable headers inside a freshly-rendered table. Clicking a column sorts by
-// it (default desc), or flips direction if it is already the sort key; resets to page 1.
+/**
+ * Wire the sortable headers inside a freshly-rendered table. Clicking a column sorts by
+ * it (default desc), or flips direction if it is already the sort key; resets to page 1.
+ */
 export function wireSort(container: ParentNode, state: ListState, reload: () => void): void {
   for (const b of container.querySelectorAll<HTMLButtonElement>(".th-sort")) {
     b.onclick = () => {
@@ -169,7 +179,9 @@ export function wireSort(container: ParentNode, state: ListState, reload: () => 
   }
 }
 
-// Offset pager: "a–b of N" with Prev/Next. Renders nothing when one page covers all.
+/**
+ * Offset pager: "a–b of N" with Prev/Next. Renders nothing when one page covers all.
+ */
 export function renderPager(
   el: Element,
   state: ListState,
@@ -182,7 +194,7 @@ export function renderPager(
     setHtml(el, html``);
     return;
   }
-  const from = page.total === 0 ? 0 : page.offset + 1;
+  const from = page.offset + 1;
   const to = Math.min(page.offset + limit, page.total);
   const hasPrev = page.offset > 0;
   const hasNext = page.offset + limit < page.total;

@@ -20,6 +20,10 @@ describe("listQuery", () => {
     );
   });
 
+  it("sends dir=desc when a column is chosen without a direction", () => {
+    expect(listQuery(base({ sort: "subject" }))).toBe("sort=subject&dir=desc&limit=50&offset=0");
+  });
+
   it("carries the two independent axes as their own params", () => {
     expect(listQuery(base({ suppressed: "only", failures: "only" }))).toBe(
       "suppressed=only&failures=only&limit=50&offset=0",
@@ -71,6 +75,34 @@ describe("wireToolbar", () => {
     expect(state.suppressed).toBe("only");
     vi.useRealTimers();
   });
+
+  it("coalesces a burst of typing into one reload, and wires status and failures too", () => {
+    vi.useFakeTimers();
+    const root = document.createElement("div");
+    setHtml(root, listToolbar({ statuses: [{ value: "draft", label: "Draft" }], failures: true }));
+    const state = base({ offset: 75 });
+    const reload = vi.fn();
+    wireToolbar(root, state, reload);
+    const search = root.querySelector<HTMLInputElement>(".lt-search")!;
+    for (const v of ["h", "ha", "haw"]) {
+      search.value = v;
+      search.oninput?.(new Event("input"));
+      vi.advanceTimersByTime(100);
+    }
+    vi.advanceTimersByTime(300);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(state.search).toBe("haw");
+    const status = root.querySelector<HTMLSelectElement>(".lt-status")!;
+    status.value = "draft";
+    status.onchange?.(new Event("change"));
+    expect(state).toMatchObject({ status: "draft", offset: 0 });
+    const failures = root.querySelector<HTMLInputElement>(".lt-failures")!;
+    failures.checked = true;
+    failures.onchange?.(new Event("change"));
+    expect(state.failures).toBe("only");
+    expect(reload).toHaveBeenCalledTimes(3);
+    vi.useRealTimers();
+  });
 });
 
 describe("th + wireSort", () => {
@@ -82,6 +114,9 @@ describe("th + wireSort", () => {
     expect(sorted).toContain(`data-sort="subject"`);
     expect(sorted).toContain("↑");
     expect(th("<b>", "b", base()).markup).toContain("&lt;b&gt;");
+    expect(th("Count", "count", base({ sort: "count", dir: "desc" }), "num").markup).toContain(
+      `class="num sortable sorted"`,
+    );
   });
 
   it("sorts desc first, flips on the same column, and resets to page one", () => {
@@ -96,6 +131,15 @@ describe("th + wireSort", () => {
     btn.click();
     expect(state.dir).toBe("asc");
     expect(reload).toHaveBeenCalledTimes(2);
+  });
+
+  it("switching to another column starts that column desc", () => {
+    const table = document.createElement("table");
+    const state = base({ sort: "subject", dir: "asc" });
+    setHtml(table, html`<tr>${th("Subject", "subject", state)}${th("Date", "date", state)}</tr>`);
+    wireSort(table, state, vi.fn());
+    table.querySelectorAll<HTMLButtonElement>(".th-sort")[1]!.click();
+    expect(state).toMatchObject({ sort: "date", dir: "desc" });
   });
 });
 
