@@ -22,21 +22,17 @@
  * an already-`accepted` recipient is never re-mailed by any of this (I4).
  */
 
+import type { ResolveResponse, StuckResolution } from "../../shared/sends";
 import type { SendRow } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { conflict, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 
-export type StuckResolution = "unsent" | "accepted";
-
-export interface ResolveResult {
-  send: SendRow;
-  /** Number of ambiguous (`dispatched`) rows this action adjudicated. */
-  resolved: number;
-  /** Whether the send reached its completion gate and finished. */
-  completed: boolean;
-}
+// The shapes live in shared/ so the editor reads the same definitions; the names here
+// are the Worker's own.
+export type { StuckResolution };
+export type ResolveResult = ResolveResponse;
 
 /** Adjudicate the ambiguous (`dispatched`) rows of a wedged send. */
 export async function resolveStuckSend(

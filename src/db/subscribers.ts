@@ -1,30 +1,19 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
+import type {
+  SubscribeAction,
+  Subscriber,
+  SubscriberCounts,
+  SubscriberStatus,
+} from "../../shared/subscribers";
 import { newId, newToken } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
 
-export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
-
-export interface SubscriberRow {
-  id: string;
-  email: string;
-  status: SubscriberStatus;
-  /**
-   * One-shot double opt-in token. Rotated each time a pending/unsubscribed row
-   * re-arms (see `subscribe`), so an old confirmation link dies on re-subscribe.
-   * Nullable in the schema; always set by this module on insert and re-arm.
-   */
-  confirm_token: string | null;
-  /**
-   * Durable per-subscriber token embedded in delivered mail's unsubscribe link.
-   * Minted once and NEVER rotated — not even across an unsubscribe→resubscribe
-   * cycle — so one-click unsubscribe in already-sent posts never breaks (I2).
-   */
-  unsub_token: string;
-  created_at: number;
-  confirmed_at: number | null;
-  unsubscribed_at: number | null;
-}
+// The row shapes live in shared/ so the editor reads the same definitions; the names
+// here are the Worker's own.
+export type { SubscribeAction, SubscriberStatus };
+export type SubscriberRow = Subscriber;
+export type Counts = SubscriberCounts;
 
 export interface SuppressionRow {
   email: string;
@@ -32,15 +21,6 @@ export interface SuppressionRow {
   detail: string | null;
   created_at: number;
 }
-
-export interface Counts {
-  pending: number;
-  confirmed: number;
-  unsubscribed: number;
-  suppressed: number;
-}
-
-export type SubscribeAction = "created" | "resubscribed" | "pending_resent" | "already_confirmed";
 
 export function normalizeEmail(email: string): string {
   return email.trim().toLowerCase();

@@ -11,6 +11,7 @@
  * keeps absorbing events after the send is "sent."
  */
 
+import type { SendPhase, SendProgress } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
@@ -27,43 +28,7 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
  *   - `complete`        dispatched and every accepted recipient has a delivery receipt.
  *   - `canceled`        terminal, non-sent outcome.
  */
-export type SendPhase =
-  | "scheduled"
-  | "progressing"
-  | "retrying"
-  | "backing-off"
-  | "needs-attention"
-  | "settling"
-  | "complete"
-  | "canceled";
-
-export interface SendProgress {
-  state: SendStatus;
-  phase: SendPhase;
-  /** The frozen audience size — the materialized total, or the schedule-time estimate
-   *  before any recipient rows exist. */
-  total: number;
-  counts: SendCounts;
-  /** Provider hand-off: how far the send loop has gotten. */
-  dispatch: {
-    /** Recipients the loop has finished with (accepted, unsent, or skipped). */
-    done: number;
-    percent: number;
-    /** Recipients accepted per minute since the send started (null when not sending). */
-    rate_per_min: number | null;
-    /** Rough time to finish dispatch from the average rate (null when not computable). */
-    eta_ms: number | null;
-  };
-  /** Delivery confirmation, which lags acceptance (§6). */
-  delivery: {
-    /** Accepted recipients with a delivery receipt (delivered / bounced / complained). */
-    confirmed: number;
-    percent_of_accepted: number;
-  };
-  provider: { name: string };
-  /** The loud conditions (§12) the watch surfaces — Resolve appears when `wedged`. */
-  attention: { wedged: boolean; wedged_count: number; stuck: boolean; missed: boolean };
-}
+export type { SendPhase, SendProgress };
 
 function derivePhase(
   status: SendStatus,

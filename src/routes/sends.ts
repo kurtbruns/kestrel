@@ -1,5 +1,11 @@
 /** Send status surface: list, detail, cancel. Authed. */
 
+import type {
+  DeliveryListResponse,
+  SendActionResponse,
+  SendListResponse,
+  SendResponse,
+} from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { badRequest, json, notFound } from "../lib/errors";
@@ -34,7 +40,8 @@ export async function list(c: RequestContext): Promise<Response> {
   // every Sent-page load and every ~3s active-send poll — is exactly what the counters
   // (`sends.c_*`) make redundant, so it is gone (#166). `deliveries` stays the source
   // of truth; the counters are its rebuildable cache (SPEC §8).
-  return json({ sends: rows, page: listPage(total, page) });
+  const body: SendListResponse = { sends: rows, page: listPage(total, page) };
+  return json(body);
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -54,14 +61,15 @@ export async function get(c: RequestContext): Promise<Response> {
   // the c_* counters so this detail read no longer runs the redundant deliveryRollup
   // aggregate (#166); it decides nothing and mails no one (I3).
   const progress = buildSendProgress(send, c.config.provider, hasRetries, Date.now());
-  return json({
+  const body: SendResponse = {
     send,
     progress,
     outcomes,
     slug: post?.slug ?? null, // the archive slug — names the CSV export the same way the CSV endpoint does
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
-  });
+  };
+  return json(body);
 }
 
 /**
@@ -121,7 +129,8 @@ export async function deliveries(c: RequestContext): Promise<Response> {
     sends.countDeliveriesFiltered(c.env.DB, send.id, view, search),
     sends.listDeliveriesPage(c.env.DB, send.id, view, page, search),
   ]);
-  return json({ deliveries: rows, view, page: listPage(total, page) });
+  const body: DeliveryListResponse = { deliveries: rows, view, page: listPage(total, page) };
+  return json(body);
 }
 
 /** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */
@@ -168,7 +177,8 @@ export async function deliveriesCsv(c: RequestContext): Promise<Response> {
 
 export async function cancel(c: RequestContext): Promise<Response> {
   const send = await cancelSend(c.env, param(c, "id"));
-  return json({ send });
+  const body: SendActionResponse = { send };
+  return json(body);
 }
 
 /**
@@ -187,7 +197,8 @@ export async function reschedule(c: RequestContext): Promise<Response> {
   }
   const fireAt = parseFutureFireAt(body.fire_at);
   const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
-  return json({ send });
+  const response: SendActionResponse = { send };
+  return json(response);
 }
 
 /**

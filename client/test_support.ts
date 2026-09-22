@@ -108,25 +108,8 @@ export function resetShell(): void {
   }
 }
 
-/** The one element a selector matches, or a loud failure naming it. */
-export function $<T extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = document,
-): T {
-  const el = root.querySelector<T>(selector);
-  if (!el) {
-    throw new Error(`no element matches ${selector}`);
-  }
-  return el;
-}
-
-/** Every element a selector matches, as an array. */
-export function $$<T extends Element = HTMLElement>(
-  selector: string,
-  root: ParentNode = document,
-): T[] {
-  return [...root.querySelectorAll<T>(selector)];
-}
+// The same DOM helpers the modules use, re-exported so a spec reads like the code it tests.
+export { $, $$ } from "./dom";
 
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */
 export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
