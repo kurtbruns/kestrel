@@ -10,9 +10,12 @@
  * is the scale-up path if a list ever grows large.
  */
 
+import type { PageMeta, SortDir } from "../../shared/list";
 import { unwrap } from "./unwrap";
 
-export type SortDir = "asc" | "desc";
+// The envelope's types live in shared/ so the editor reads the same definition; re-exported
+// here so the Worker's list code keeps one import for the whole model.
+export type { PageMeta, SortDir };
 
 /**
  * A list endpoint's sort contract: the public sort keys mapped to the SQL column
@@ -41,15 +44,6 @@ export interface ListParams {
   /** Whether the request supplied a valid `sort` (vs. falling back to the default) —
    *  lets an endpoint keep a bespoke default ordering until the reader picks a column. */
   sortExplicit: boolean;
-}
-
-/** The pagination envelope attached to every list response. */
-export interface PageMeta {
-  total: number;
-  limit: number;
-  offset: number;
-  sort: string;
-  dir: SortDir;
 }
 
 const DEFAULT_LIMIT = 50;
