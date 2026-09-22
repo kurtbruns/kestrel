@@ -1,16 +1,24 @@
-// @ts-nocheck
 // The app shell: the sidebar's drawer and collapse modes, the DOM roots every view
 // renders into.
 
-export const app = document.getElementById("app");
-export const identity = document.getElementById("identity");
-export const toasts = document.getElementById("toasts");
+/** A root the page always carries (public/dashboard/index.html); missing means the wrong page. */
+function root(id: string): HTMLElement {
+  const el = document.getElementById(id);
+  if (!el) {
+    throw new Error(`the admin page has no #${id}`);
+  }
+  return el;
+}
+
+export const app = root("app");
+export const identity = root("identity");
+export const toasts = root("toasts");
 
 // Mobile nav drawer: the hamburger slides the sidebar in; the scrim or any nav
 // click closes it. On desktop the sidebar is always in view and these are inert.
 const navToggle = document.getElementById("navToggle");
 const navScrim = document.getElementById("navScrim");
-export function setNavOpen(open) {
+export function setNavOpen(open: boolean): void {
   document.body.classList.toggle("nav-open", open);
   navToggle?.setAttribute("aria-expanded", open ? "true" : "false");
   if (navScrim) {
@@ -22,7 +30,7 @@ navToggle?.addEventListener("click", () =>
 );
 navScrim?.addEventListener("click", () => setNavOpen(false));
 document.querySelector(".sidebar")?.addEventListener("click", (e) => {
-  if (e.target.closest("a")) {
+  if (e.target instanceof Element && e.target.closest("a")) {
     setNavOpen(false);
   }
 });
@@ -37,8 +45,8 @@ document.querySelector(".sidebar")?.addEventListener("click", (e) => {
 // off-canvas overlay driven by the hamburger instead.
 const navCollapse = document.getElementById("navCollapse");
 // null = follow the width; "collapsed" / "expanded" = manual override for this load.
-let navOverride = null;
-function computeNavMode() {
+let navOverride: "collapsed" | "expanded" | null = null;
+function computeNavMode(): "full" | "rail" {
   if (window.innerWidth < 540) {
     return "full";
   }
@@ -50,7 +58,7 @@ function computeNavMode() {
   }
   return window.innerWidth <= 1024 ? "rail" : "full";
 }
-function applyNavMode() {
+function applyNavMode(): void {
   const mode = computeNavMode();
   document.documentElement.dataset.nav = mode;
   if (!navCollapse) {

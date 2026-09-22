@@ -20,6 +20,13 @@
  * (`remake`), and the response says what was re-made.
  */
 
+import type {
+  DeploymentView,
+  InUseView,
+  PublicationView,
+  SettingsResponse,
+  SettingsView,
+} from "../../shared/settings";
 import { buildInfo } from "../build";
 import { listScheduledSends } from "../db/sends";
 import {
@@ -54,7 +61,7 @@ const ALLOWED_LOGO_TYPES = new Set([
 ]);
 
 /** The non-secret, deploy-time facts the editor shows read-only. */
-function deploymentView(cfg: Config) {
+function deploymentView(cfg: Config): DeploymentView {
   return {
     provider: cfg.provider,
     fromAddress: cfg.fromAddress,
@@ -76,7 +83,7 @@ function deploymentView(cfg: Config) {
 /** The publication identity as the clients consume it: the stored fields plus a
  *  resolved absolute `logoUrl` (cache-busted). The raw logo metadata (R2 version)
  *  is an implementation detail. */
-function publicationView(settings: AppSettings, cfg: Config) {
+function publicationView(settings: AppSettings, cfg: Config): PublicationView {
   const p = settings.publication;
   return {
     name: p.name,
@@ -86,7 +93,7 @@ function publicationView(settings: AppSettings, cfg: Config) {
   };
 }
 
-function settingsView(settings: AppSettings, cfg: Config) {
+function settingsView(settings: AppSettings, cfg: Config): SettingsView {
   return {
     testRecipients: settings.testRecipients,
     publication: publicationView(settings, cfg),
@@ -103,7 +110,7 @@ function settingsView(settings: AppSettings, cfg: Config) {
 /** The scheduled sends a template or identity change would re-make (SPEC §9), the
  *  moment after which a save stops being refused for the lead, and the identity fields
  *  the current template renders: what a client reads before it saves. */
-async function inUseView(db: D1Database, settings: AppSettings, cfg: Config) {
+async function inUseView(db: D1Database, settings: AppSettings, cfg: Config): Promise<InUseView> {
   const sends = await listScheduledSends(db);
   return {
     sends,
@@ -114,11 +121,12 @@ async function inUseView(db: D1Database, settings: AppSettings, cfg: Config) {
 
 export async function get(c: RequestContext): Promise<Response> {
   const settings = await getSettings(c.env.DB);
-  return json({
+  const body: SettingsResponse = {
     settings: settingsView(settings, c.config),
     deployment: deploymentView(c.config),
     inUse: await inUseView(c.env.DB, settings, c.config),
-  });
+  };
+  return json(body);
 }
 
 /** The acknowledged send ids from a JSON body's `remake` (a list of strings), or null. */

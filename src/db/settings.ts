@@ -11,6 +11,7 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
+import type { ConfirmationEmailCopy } from "../../shared/settings";
 import { HttpError } from "../lib/errors";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
@@ -36,29 +37,17 @@ export interface PublicationSettings {
 }
 
 /**
- * The double opt-in confirmation email's editable copy (SPEC §7). Kestrel owns the
- * layout, inserts the confirm link, and derives BOTH the HTML and plain-text bodies
- * from these words — so editing copy can never remove the link that records consent
- * (I1). A blank required field resolves to the built-in default at send time (see
- * `resolveConfirmationEmail`), so the email is never wordless; the reassurance line
- * may be blank, which simply drops it. Transactional, so it does not use the post
- * `emailTemplate` and carries no unsubscribe link.
- *
- * There is no layout choice: the email always leads with the publication masthead
- * (logo + name + tagline) — a transactional first-touch opens with who it is before
- * the ask — and that masthead degrades to nothing when no identity is set, so one
- * built-in layout serves a branded and an unbranded publication alike.
+ * The confirmation email's copy: the shape lives in shared/ (the settings surface reflects
+ * it), the rules here. Kestrel owns the layout, inserts the confirm link, and derives BOTH
+ * the HTML and plain-text bodies from these words, so editing copy can never remove the
+ * link that records consent (I1). A blank required field resolves to the built-in default
+ * at send time (see `resolveConfirmationEmail`), so the email is never wordless; the
+ * reassurance line may be blank, which simply drops it. Transactional, so it does not use
+ * the post `emailTemplate` and carries no unsubscribe link. There is no layout choice: the
+ * email always leads with the publication masthead, which degrades to nothing when no
+ * identity is set.
  */
-export interface ConfirmationEmailCopy {
-  /** The email subject. */
-  subject: string;
-  /** The message shown above the confirm button. */
-  body: string;
-  /** The confirm button's label (the link itself is app-generated, never authored). */
-  buttonLabel: string;
-  /** A quiet footer for anyone who didn't sign up; "" omits the line. */
-  reassurance: string;
-}
+export type { ConfirmationEmailCopy };
 
 /** Editable, non-secret preferences. Extend here (not the schema) to add one. */
 export interface AppSettings {

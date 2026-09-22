@@ -33,9 +33,6 @@ export function authHeaders(): Record<string, string> {
  * the sign-out link, or the local-dev marker when there is no edge.
  */
 export function renderIdentity(): void {
-  if (!identity) {
-    return;
-  }
   const session = appState.session;
   if (session?.auth.mode === "access") {
     const p = session.principal;

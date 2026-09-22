@@ -719,7 +719,7 @@ export async function renderEditor(id) {
       kind: "applied",
       subject: scheduled.id,
       version: scheduled.remade_at,
-      html: appliedNoticeHtml(scheduled.remade_at, 1, true),
+      markup: appliedNoticeHtml(scheduled.remade_at, 1, true),
     });
   }
 

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // The hash router: route() tears the previous view down (timers, editor guards) and
 // mounts the next; the leave guards live here.
 
@@ -16,7 +15,8 @@ import { renderSettings } from "./views/settings";
 import { renderSubscribers } from "./views/subscribers";
 import { renderTemplate } from "./views/template";
 
-export function route() {
+/** Mount the view the hash names, tearing the previous one down first. */
+export function route(): unknown {
   stopPollers();
   clearAutosaveTimers();
   appState.isEditorDirty = false;
@@ -37,13 +37,13 @@ export function route() {
   document.body.classList.toggle("tool-mode", toolMode);
   // Mark the active nav item across both sidebar navs (primary + tools) so the
   // reader can see where they are (aria-current also styles it).
-  document.querySelectorAll(".sidebar a[data-view]").forEach((a) => {
+  for (const a of document.querySelectorAll<HTMLAnchorElement>(".sidebar a[data-view]")) {
     if (a.dataset.view === view) {
       a.setAttribute("aria-current", "page");
     } else {
       a.removeAttribute("aria-current");
     }
-  });
+  }
   // The reference room's surface switch is marked at render time (roomShell). Close
   // the mobile nav drawer on any navigation.
   setNavOpen(false);

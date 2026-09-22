@@ -1,6 +1,7 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
  *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
 
+import type { ScheduledSendRef } from "../../shared/settings";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 
 export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
@@ -584,13 +585,7 @@ export function insertScheduledSendStmt(
 
 /** A scheduled send as the settings surface lists it: what a template or identity
  *  change would re-make, and what the client acknowledges by id. */
-export interface ScheduledSendRef {
-  id: string;
-  post_id: string;
-  subject: string;
-  fire_at: number;
-  remade_at: number | null;
-}
+export type { ScheduledSendRef };
 
 /** Every `scheduled` send, soonest first: the set "in use" by the template and the
  *  identity. A `sending` send is past the window and a `sent` one is the record;

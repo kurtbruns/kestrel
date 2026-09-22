@@ -287,7 +287,7 @@ function paintAppliedNotice(scheduled) {
   notice(slot, {
     kind: "applied",
     members: remade.map((s) => ({ subject: s.id, version: s.remade_at })),
-    html: appliedNoticeHtml(at, remade.length, false),
+    markup: appliedNoticeHtml(at, remade.length, false),
   });
 }
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the

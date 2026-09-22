@@ -1,9 +1,9 @@
-// @ts-nocheck
 // Small view helpers: toasts, escaping, badges, dates, address parsing, and the modal.
 
+import { type Html, html, unsafeHtml } from "./html";
 import { toasts } from "./shell";
 
-export function toast(msg) {
+export function toast(msg: string): void {
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
@@ -14,15 +14,24 @@ export function toast(msg) {
   setTimeout(() => t.classList.remove("show"), 3600);
   setTimeout(() => t.remove(), 3900);
 }
-export const esc = (s) =>
+
+/**
+ * Escape for a plain template literal. For the modules not yet on the html tag; a
+ * converted module interpolates the raw value and lets the tag escape it.
+ */
+export const esc = (s: unknown): string =>
   s == null
     ? ""
     : String(s).replace(
         /[&<>"]/g,
-        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c,
       );
-export const badge = (status) => `<span class="badge ${status}">${status}</span>`;
-export const fmt = (ms) =>
+
+/** A status pill; the status doubles as its class. */
+export const badge = (status: string): Html => html`<span class="badge ${status}">${status}</span>`;
+
+/** A short local date-time, or an em dash for none. */
+export const fmt = (ms: number | null | undefined): string =>
   ms
     ? new Date(ms).toLocaleString(undefined, {
         month: "short",
@@ -32,14 +41,16 @@ export const fmt = (ms) =>
       })
     : "—";
 
-// Split a free-text recipient list (newlines or commas) into unique addresses.
-// Server-side validation is authoritative; this just tidies the Send-test input.
-export function parseAddresses(text) {
-  const seen = new Set(),
-    out = [];
+/**
+ * Split a free-text recipient list (newlines or commas) into unique addresses.
+ * Server-side validation is authoritative; this just tidies the Send-test input.
+ */
+export function parseAddresses(text: string | null | undefined): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
   for (const part of String(text || "").split(/[\n,]+/)) {
     const a = part.trim();
-    if (!a?.includes("@")) {
+    if (!a.includes("@")) {
       continue;
     }
     const key = a.toLowerCase();
@@ -52,15 +63,19 @@ export function parseAddresses(text) {
   return out;
 }
 
-export function toLocalInput(d) {
-  const p = (n) => String(n).padStart(2, "0");
+/** A Date as the value of a `datetime-local` input, in local time. */
+export function toLocalInput(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
 }
-// A countdown that gets coarser the further out the fire time is: it ticks seconds
-// only inside the last few minutes (the imminent / send-now cancel window), then
-// counts down by the minute, by the hour within a day, and by whole days beyond —
-// so a send scheduled days away reads "Sends in 2 days", not a ticking "47h 47m".
-export function untilStr(fireAt) {
+
+/**
+ * A countdown that gets coarser the further out the fire time is: it ticks seconds
+ * only inside the last few minutes (the imminent / send-now cancel window), then
+ * counts down by the minute, by the hour within a day, and by whole days beyond, so
+ * a send scheduled days away reads "Sends in 2 days", not a ticking "47h 47m".
+ */
+export function untilStr(fireAt: number): string {
   const d = fireAt - Date.now();
   if (d <= 0) {
     return "Sending now…";
@@ -81,10 +96,22 @@ export function untilStr(fireAt) {
   const days = Math.round(hr / 24);
   return `Sends in ${days} day${days === 1 ? "" : "s"}`;
 }
-export function modal(html) {
+
+export interface Modal {
+  el: HTMLElement;
+  close: () => void;
+}
+
+/**
+ * A modal over a backdrop; a click outside or Escape closes it. The content is markup.
+ * A string is accepted from the modules not yet on the html tag, and vouched for as the
+ * markup they assembled; that branch goes with the last of them.
+ */
+export function modal(content: Html | string): Modal {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
-  back.innerHTML = `<div class="modal" role="dialog" aria-modal="true">${html}</div>`;
+  const markup = typeof content === "string" ? unsafeHtml(content) : content;
+  back.innerHTML = html`<div class="modal" role="dialog" aria-modal="true">${markup}</div>`.markup;
   document.body.appendChild(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => {

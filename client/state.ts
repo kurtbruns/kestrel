@@ -8,23 +8,19 @@ export interface Session {
   auth: { mode: "access" | "dev" };
 }
 
-/**
- * The last GET /api/settings payload, fetched at boot so the sidebar brand and the
- * dashboard's publication and setup cards can read the origins and the From-address
- * fallback without re-fetching on every render. Its inner shapes are the API's own and
- * are typed loosely here until the wire types live in shared/ for both clients to import.
- */
-export interface AppConfig {
-  settings: Record<string, unknown>;
-  deployment: Record<string, unknown>;
-}
+import type { SettingsResponse } from "../shared/settings";
 
 export interface AppState {
   /** The dev token (local dev only; deployed envs authenticate at the edge). */
   token: string;
   /** Set once booted. */
   session: Session | null;
-  appConfig: AppConfig | null;
+  /**
+   * The last GET /api/settings payload, fetched at boot so the sidebar brand and the
+   * dashboard's publication and setup cards can read the origins and the From-address
+   * fallback without re-fetching on every render.
+   */
+  appConfig: SettingsResponse | null;
   /** Countdown interval on the sent list, cleared on navigation. */
   statusTimer: number | null;
   /** Freshness poll while the editor is open, cleared on navigation. */

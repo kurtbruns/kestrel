@@ -17,6 +17,7 @@
  * half. The settings routes are its only caller.
  */
 
+import type { RemakeRequiredError } from "../../shared/settings";
 import { getPost } from "../db/posts";
 import {
   listScheduledSends,
@@ -59,11 +60,13 @@ export function insideLead(
 
 function remakeRequired(sends: ScheduledSendRef[]): HttpError {
   const n = sends.length;
+  // The body the editor reads (shared/settings.ts); the error and message fields are HttpError's.
+  const details: Omit<RemakeRequiredError, "error" | "message"> = { sends };
   return new HttpError(
     409,
     "remake_required",
     `saving this change re-makes ${n} scheduled email${n === 1 ? "" : "s"}; pass their ids in \`remake\` to confirm`,
-    { sends },
+    details,
   );
 }
 

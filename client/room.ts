@@ -1,45 +1,69 @@
-// @ts-nocheck
 // The reference room shell shared by Docs and the API reference: the top bar, the
 // contents rail, and the surface switch.
 
 import { buildRefParts } from "./build_ref";
-import { esc } from "./helpers";
+import { type Html, html, unsafeHtml } from "./html";
 import { icon } from "./icons";
 import { app } from "./shell";
 import { appState } from "./state";
 
-// The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
-// the Kestrel mark, the surface switch) over a two-column grid whose left column — the
-// contents rail — lines up exactly under "← Dashboard". Pass railHtml = null for a
-// surface with no contents rail.
-//
-// On mobile (≤720px, styles.css) the same markup collapses to one --bar-h row — a square
-// back arrow, the mark, the tabs — so the bar never grows past the height the in-page
-// anchors and the sticky rail are calibrated for; the ✕ drops there (← is the one way
-// back). The body stacks, and each rail decides its own mobile shape (a folded "On this
-// page", or a chip row — see the surfaces below).
-export function roomShell(active, railHtml, mainHtml) {
-  const tab = (view, label) =>
-    `<a href="#/${view}" data-room="${view}" data-text="${esc(label)}"${active === view ? ' aria-current="page"' : ""}>${esc(label)}</a>`;
-  // The running build (SPEC §9) as quiet metadata — version → release, sha → commit —
+/** The two surfaces the room switches between. */
+export type RoomSurface = "docs" | "reference";
+
+// A string is accepted from the surfaces not yet on the html tag and vouched for as the
+// markup they assembled; that branch goes with the last of them.
+const asMarkup = (m: Html | string): Html => (typeof m === "string" ? unsafeHtml(m) : m);
+
+/**
+ * The reference room shell shared by Docs / API: a top bar (a rail-width "← Dashboard",
+ * the Kestrel mark, the surface switch) over a two-column grid whose left column, the
+ * contents rail, lines up exactly under "← Dashboard". Pass rail = null for a surface
+ * with no contents rail.
+ *
+ * On mobile (≤720px, styles.css) the same markup collapses to one --bar-h row (a square
+ * back arrow, the mark, the tabs) so the bar never grows past the height the in-page
+ * anchors and the sticky rail are calibrated for; the ✕ drops there (← is the one way
+ * back). The body stacks, and each rail decides its own mobile shape (a folded "On this
+ * page", or a chip row; see the surfaces).
+ */
+export function roomShell(
+  active: RoomSurface,
+  rail: Html | string | null,
+  main: Html | string,
+): Html {
+  const tab = (view: RoomSurface, label: string) =>
+    active === view
+      ? html`<a href="#/${view}" data-room="${view}" data-text="${label}" aria-current="page">${label}</a>`
+      : html`<a href="#/${view}" data-room="${view}" data-text="${label}">${label}</a>`;
+  // The running build (SPEC §9) as quiet metadata (version → release, sha → commit),
   // pinned to the rail's bottom-left corner on every surface, so the bar stays identity +
   // nav. On mobile the rail is no longer a column, so the same stamp is the room's foot
-  // instead (styles.css shows one or the other). "" until a build is known; the build time
-  // rides the tooltip. Build info lives in the app's own room (and at GET /api/version),
-  // never in the publisher-facing dashboard.
+  // instead (styles.css shows one or the other). Nothing until a build is known; the build
+  // time rides the tooltip. Build info lives in the app's own room (and at GET
+  // /api/version), never in the publisher-facing dashboard.
   const parts = buildRefParts();
-  const bt = appState.appConfig?.deployment?.build?.buildTime;
+  const bt = appState.appConfig?.deployment.build.buildTime;
   const built = bt
-    ? ` title="Built ${esc(new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }))}"`
-    : "";
-  const stamp = parts ? `${parts.version} <span aria-hidden="true">·</span> ${parts.sha}` : "";
-  const railFoot = stamp ? `<div class="rail-foot"${built}>${stamp}</div>` : "";
-  const foot = stamp ? `<footer class="room-foot"${built}>${stamp}</footer>` : "";
+    ? `Built ${new Date(bt).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}`
+    : null;
+  const stamp = parts
+    ? html`${parts.version} <span aria-hidden="true">·</span> ${parts.sha}`
+    : null;
+  const railFoot = stamp
+    ? built
+      ? html`<div class="rail-foot" title="${built}">${stamp}</div>`
+      : html`<div class="rail-foot">${stamp}</div>`
+    : null;
+  const foot = stamp
+    ? built
+      ? html`<footer class="room-foot" title="${built}">${stamp}</footer>`
+      : html`<footer class="room-foot">${stamp}</footer>`
+    : null;
   const body =
-    railHtml == null
-      ? `<div class="room-body norail"><div class="room-main">${mainHtml}</div></div>`
-      : `<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${railHtml}${railFoot}</div></nav><div class="room-main">${mainHtml}</div></div>`;
-  return `<div class="room">
+    rail == null
+      ? html`<div class="room-body norail"><div class="room-main">${asMarkup(main)}</div></div>`
+      : html`<div class="room-body"><nav class="room-rail" aria-label="Contents"><div class="rail-inner">${asMarkup(rail)}${railFoot}</div></nav><div class="room-main">${asMarkup(main)}</div></div>`;
+  return html`<div class="room">
     <header class="room-bar">
       <a class="room-back" href="#/dashboard" aria-label="Back to dashboard"><span aria-hidden="true">←</span><span class="room-back-label">Dashboard</span></a>
       <div class="room-nav">
@@ -52,6 +76,7 @@ export function roomShell(active, railHtml, mainHtml) {
     ${foot}
   </div>`;
 }
+
 // A room-bar link to the page you're already on (the active tab, or the wordmark on the
 // docs index) sets the hash to what it already is, so no hashchange fires and nothing
 // re-renders or scrolls. Make it the "back to the top" it reads as, so the bar behaves
@@ -59,7 +84,7 @@ export function roomShell(active, railHtml, mainHtml) {
 // in-page move here (the "On this page" links) and like a cross-page click landing at
 // the top of its page. Delegated once on #app, so it survives every re-render of the room.
 app.addEventListener("click", (ev) => {
-  const a = ev.target.closest(".room-bar a[href^='#/']");
+  const a = ev.target instanceof Element ? ev.target.closest(".room-bar a[href^='#/']") : null;
   if (!a || a.getAttribute("href") !== location.hash) {
     return;
   }

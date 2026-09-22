@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Kestrel editor — a small vanilla SPA over the same HTTP API Claude uses.
 // Auth is edge-centric: in production Cloudflare Access gates this surface, so the
 // browser's Access session cookie authenticates every same-origin call and there is
@@ -30,22 +29,23 @@ import "./highlight";
 import "./views/docs";
 import "./views/reference";
 import "./views/dashboard";
+import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { showReauth } from "./build_ref";
 import { startDevReload } from "./dev_reload";
 import { route } from "./router";
-import { appState } from "./state";
+import { appState, type Session } from "./state";
 
-async function boot() {
+async function boot(): Promise<unknown> {
   // Mint a dev token into localStorage. Returns false in prod, where the endpoint
   // 404s (or is unreachable) and the Access cookie authenticates instead.
-  async function mintDevToken() {
+  async function mintDevToken(): Promise<boolean> {
     try {
       const r = await fetch("/api/dev/token?kind=human");
       if (r.ok) {
-        setToken((await r.json()).token);
+        setToken(((await r.json()) as { token: string }).token);
         return true;
       }
     } catch {
@@ -55,7 +55,7 @@ async function boot() {
   }
   // Probe identity. A network error or an opaque Access redirect can't be recovered
   // here, so surface it as a null result (→ re-login screen).
-  async function whoami() {
+  async function whoami(): Promise<Response | null> {
     try {
       return await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
     } catch {
@@ -77,13 +77,13 @@ async function boot() {
     }
   }
   if (res?.ok) {
-    appState.session = await res.json();
+    appState.session = (await res.json()) as Session;
     document.body.classList.remove("signed-out");
     renderIdentity();
     // Load the publication identity for the sidebar brand. Non-fatal: on failure the
     // brand keeps its "Kestrel" placeholder and routing still proceeds.
     try {
-      appState.appConfig = await api("/api/settings");
+      appState.appConfig = await api<SettingsResponse>("/api/settings");
     } catch {
       /* keep the placeholder brand */
     }

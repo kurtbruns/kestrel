@@ -1,11 +1,33 @@
-// @ts-nocheck
 // The shared unsaved-changes bar, info tips, menus, and the poller teardown route()
 // runs on every navigation.
 
-import { esc } from "./helpers";
+import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";
 import { busy } from "./notice";
 import { appState } from "./state";
+
+/** A control the page always carries (public/dashboard/index.html); missing means the wrong page. */
+function control<T extends HTMLElement>(id: string): T {
+  const el = document.getElementById(id);
+  if (!el) {
+    throw new Error(`the admin page has no #${id}`);
+  }
+  return el as T;
+}
+
+export interface SavebarOptions {
+  /** Runs inside busy() on the shared Save button; call setDirty(false) on success or showError() on a rejection. */
+  onSave: () => unknown;
+  onDiscard: () => void;
+  saveLabel?: string;
+  discardLabel?: string;
+}
+
+/** What a mounted page drives the bar with; inert once another page has attached. */
+export interface SavebarHandle {
+  setDirty(dirty: boolean): void;
+  showError(text: string): void;
+}
 
 // One full-width banner fixed to the bottom of the viewport (markup in index.html),
 // shared by every surface with an explicit save + a revertible baseline: Settings
@@ -16,17 +38,18 @@ import { appState } from "./state";
 // its own autosave + conflict model (see renderEditor) and deliberately does not use
 // this — a "Save / Discard against a baseline" bar doesn't fit continuous autosave.
 export const savebar = (() => {
-  const el = document.getElementById("savebar");
+  const el = control<HTMLElement>("savebar");
   const msgEl = el.querySelector(".savebar-msg");
-  const saveBtn = document.getElementById("savebarSave");
-  const discardBtn = document.getElementById("savebarDiscard");
+  const saveBtn = control<HTMLButtonElement>("savebarSave");
+  const discardBtn = control<HTMLButtonElement>("savebarDiscard");
   // Bumped on every attach/detach so a stale async handler (a save that resolves
   // after the user navigated away) can never drive a bar a new page now owns.
   let token = 0;
 
-  const setMsg = (text) => {
-    msgEl.innerHTML = `<span class="savebar-dot"></span><span></span>`;
-    msgEl.lastChild.textContent = text;
+  const setMsg = (text: string) => {
+    if (msgEl) {
+      setHtml(msgEl, html`<span class="savebar-dot"></span><span>${text}</span>`);
+    }
   };
   const reveal = () => {
     el.hidden = false;
@@ -38,7 +61,7 @@ export const savebar = (() => {
     el.classList.add("show");
   };
 
-  function detach() {
+  function detach(): void {
     token++;
     el.classList.remove("show", "is-error");
     el.hidden = true;
@@ -48,11 +71,13 @@ export const savebar = (() => {
     document.body.classList.remove("has-savebar");
   }
 
-  // Mount the bar for the current page; returns the handle the page drives. onSave
-  // runs inside busy() on the shared Save button, so the page's callback is a plain
-  // async function (it should call handle.setDirty(false) on success, or
-  // handle.showError(msg) on a rejected save).
-  function attach({ onSave, onDiscard, saveLabel = "Save changes", discardLabel = "Discard" }) {
+  /** Mount the bar for the current page; returns the handle the page drives. */
+  function attach({
+    onSave,
+    onDiscard,
+    saveLabel = "Save changes",
+    discardLabel = "Discard",
+  }: SavebarOptions): SavebarHandle {
     const mine = ++token;
     saveBtn.textContent = saveLabel;
     discardBtn.textContent = discardLabel;
@@ -99,7 +124,7 @@ export const savebar = (() => {
 // re-renders; with JS off the tip falls back to left:0. Vertical placement stays in
 // CSS (the .tip-below variant) — which icons sit near the top is static, not dynamic.
 const TIP_GUTTER = 8;
-function positionInfoTip(el) {
+function positionInfoTip(el: HTMLElement): void {
   // Measure the rendered tip (laid out even while hidden) so this stays in step
   // with the CSS max-width/padding rather than duplicating them here.
   const tip = getComputedStyle(el, "::after");
@@ -118,7 +143,7 @@ function positionInfoTip(el) {
 // latter is how keyboard (Tab) and touch (tap focuses the span) reach it.
 for (const type of ["pointerover", "focusin"]) {
   document.addEventListener(type, (e) => {
-    const el = e.target.closest?.(".info");
+    const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".info") : null;
     if (el) {
       positionInfoTip(el);
     }
@@ -127,37 +152,46 @@ for (const type of ["pointerover", "focusin"]) {
 // Escape dismisses a focus-shown tip without tabbing away (the pointer tip just
 // needs the mouse to leave).
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && document.activeElement?.classList.contains("info")) {
-    document.activeElement.blur();
+  const active = document.activeElement;
+  if (e.key === "Escape" && active instanceof HTMLElement && active.classList.contains("info")) {
+    active.blur();
   }
 });
 
-// The ⓘ affordance whose explanation shows as a tooltip. Focusable and
-// role/aria-labelled so it's reachable by keyboard and touch (the tip shows on
-// :focus, not only :hover) and read by screen readers — the aria-label mirrors the
-// visible tip. `below` drops the tip under the icon (for icons near the page top).
-export function infoTip(tip, { below = false } = {}) {
-  const t = esc(tip);
-  return `<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${t}" data-tip="${t}">${icon("info-filled")}</span>`;
+/**
+ * The ⓘ affordance whose explanation shows as a tooltip. Focusable and role/aria-labelled
+ * so it's reachable by keyboard and touch (the tip shows on :focus, not only :hover) and
+ * read by screen readers — the aria-label mirrors the visible tip. `below` drops the tip
+ * under the icon (for icons near the page top).
+ */
+export function infoTip(tip: string, { below = false }: { below?: boolean } = {}): Html {
+  return html`<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${tip}" data-tip="${tip}">${icon("info-filled")}</span>`;
+}
+
+export interface MenuItem {
+  label: string;
+  danger?: boolean;
+  onClick: () => void;
 }
 
 // popover menu for row actions (⋯). A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
-let menuEls = [];
-function closeMenu() {
-  menuEls.forEach((e) => {
+let menuEls: HTMLElement[] = [];
+function closeMenu(): void {
+  for (const e of menuEls) {
     e.remove();
-  });
+  }
   menuEls = [];
 }
-export function openMenu(anchor, items) {
+/** Open a row-action menu under an anchor; any outside click or a pick closes it. */
+export function openMenu(anchor: Element, items: MenuItem[]): void {
   closeMenu();
   const overlay = document.createElement("div");
   overlay.className = "menu-overlay";
   overlay.onclick = closeMenu;
   const m = document.createElement("div");
   m.className = "menu";
-  items.forEach((it) => {
+  for (const it of items) {
     const b = document.createElement("button");
     b.type = "button";
     b.className = `menu-item${it.danger ? " danger-item" : ""}`;
@@ -167,7 +201,7 @@ export function openMenu(anchor, items) {
       it.onClick();
     };
     m.appendChild(b);
-  });
+  }
   document.body.appendChild(overlay);
   document.body.appendChild(m);
   menuEls = [overlay, m];
@@ -176,12 +210,14 @@ export function openMenu(anchor, items) {
   m.style.left = `${r.right + window.scrollX - m.offsetWidth}px`;
 }
 
-// Stop every background poller and invalidate any poll whose fetch is already in flight.
-// Shared by route() (on every navigation) and showReauth() — a walled tab must go quiet
-// instead of hammering the API on a dead token every few seconds. Clearing a timer only
-// stops the pending tick, not a poll already mid-await, so bumping navGeneration makes that
-// callback bail instead of rescheduling (see navGeneration).
-export function stopPollers() {
+/**
+ * Stop every background poller and invalidate any poll whose fetch is already in flight.
+ * Shared by route() (on every navigation) and showReauth(): a walled tab must go quiet
+ * instead of hammering the API on a dead token every few seconds. Clearing a timer only
+ * stops the pending tick, not a poll already mid-await, so bumping navGeneration makes
+ * that callback bail instead of rescheduling (see navGeneration).
+ */
+export function stopPollers(): void {
   if (appState.statusTimer) {
     clearInterval(appState.statusTimer);
     appState.statusTimer = null;
