@@ -1,5 +1,10 @@
 /** Authed subscriber admin routes. */
 
+import type {
+  SubscribeResponse,
+  SubscriberListResponse,
+  SubscriberResponse,
+} from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { badRequest, json, notFound } from "../lib/errors";
@@ -20,7 +25,8 @@ export async function create(c: RequestContext): Promise<Response> {
     throw badRequest("a valid email is required");
   }
   const { subscriber, action } = await requestSubscription(c, email);
-  return json({ subscriber, action }, action === "created" ? 201 : 200);
+  const response: SubscribeResponse = { subscriber, action };
+  return json(response, action === "created" ? 201 : 200);
 }
 
 export async function list(c: RequestContext): Promise<Response> {
@@ -66,7 +72,12 @@ export async function list(c: RequestContext): Promise<Response> {
       suppression_detail: sup?.detail ?? null,
     };
   });
-  return json({ counts, subscribers: annotated, page: listPage(total, page) });
+  const body: SubscriberListResponse = {
+    counts,
+    subscribers: annotated,
+    page: listPage(total, page),
+  };
+  return json(body);
 }
 
 export async function get(c: RequestContext): Promise<Response> {
@@ -74,10 +85,11 @@ export async function get(c: RequestContext): Promise<Response> {
   if (!subscriber) {
     throw notFound("subscriber");
   }
-  return json({
+  const body: SubscriberResponse = {
     subscriber,
     suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
-  });
+  };
+  return json(body);
 }
 
 /** Authed admin unsubscribe by id — immediate and idempotent (I2). */
@@ -86,8 +98,9 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
   if (!subscriber) {
     throw notFound("subscriber");
   }
-  return json({
+  const body: SubscriberResponse = {
     subscriber,
     suppressed: await subscribers.isSuppressed(c.env.DB, subscriber.email),
-  });
+  };
+  return json(body);
 }

@@ -1,51 +1,24 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
  *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
 
+import type {
+  DeliveryOutcomes,
+  DeliveryRecord,
+  DeliveryView,
+  Send,
+  SendCounts,
+  SendStatus,
+  SendSummary,
+} from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 
-export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
+// The row shapes live in shared/ so the editor reads the same definitions; the names
+// here are the Worker's own.
+export type { SendStatus };
+export type SendRow = Send;
 
-export interface SendRow {
-  id: string;
-  post_id: string;
-  status: SendStatus;
-  fire_at: number;
-  rendered_html: string;
-  rendered_text: string;
-  subject: string;
-  recipient_count: number;
-  locked_until: number | null;
-  scheduled_at: number;
-  started_at: number | null;
-  completed_at: number | null;
-  /** When a template or identity change last re-made the frozen render while the send
-   *  was scheduled (SPEC §6); null if never. The sign-off reset a publisher sees. */
-  remade_at: number | null;
-  // Denormalized progress counters (the `c_*` columns on `sends`). A rebuildable cache of the
-  // `deliveries` bucketing, maintained in the same transactions as each recipient
-  // transition so `GET /sends/:id/progress` is a single-row read (SPEC §8).
-  c_pending: number;
-  c_in_flight: number;
-  c_accepted: number;
-  c_delivered: number;
-  c_bounced: number;
-  c_complained: number;
-  c_skipped: number;
-  c_unsent: number;
-}
-
-/** The eight denormalized progress counters on a `sends` row. */
-export interface SendCounts {
-  pending: number;
-  in_flight: number;
-  accepted: number;
-  delivered: number;
-  bounced: number;
-  complained: number;
-  skipped: number;
-  unsent: number;
-}
+export type { SendCounts };
 
 /** Read the counter columns off a send row into the API-facing `SendCounts` shape. */
 export function countsOf(send: SendRow): SendCounts {
@@ -163,8 +136,7 @@ export async function hasActiveRetries(db: D1Database, sendId: string): Promise<
   return row != null;
 }
 
-/** List view — omits the large frozen bodies. */
-export type SendSummary = Omit<SendRow, "rendered_html" | "rendered_text">;
+export type { SendSummary };
 
 export function getSend(db: D1Database, id: string): Promise<SendRow | null> {
   return db.prepare("SELECT * FROM sends WHERE id = ?").bind(id).first<SendRow>();
@@ -317,20 +289,7 @@ export async function deliveryRollup(
  * has landed on yet, so every recipient lands in exactly one bucket and the totals
  * reconcile. It reflects the record read-only (I3) — it decides nothing and mails no one.
  */
-export interface DeliveryOutcomes {
-  recipients: number;
-  delivered: number;
-  bounced: number;
-  complained: number;
-  /** Never accepted by the provider (transport-level; does not itself suppress). */
-  unsent: number;
-  /** Excluded at send time (unsubscribed or suppressed after the audience froze). */
-  skipped: number;
-  /** Accepted by the provider, with no delivery event yet (a provider may emit none). */
-  accepted: number;
-  /** Still pending or dispatched — nonzero only while sending or wedged (§12). */
-  in_flight: number;
-}
+export type { DeliveryOutcomes };
 
 export async function deliveryOutcomes(db: D1Database, sendId: string): Promise<DeliveryOutcomes> {
   const row = await db
@@ -407,8 +366,8 @@ export const DELIVERY_VIEWS = [
   "skipped",
   "accepted",
   "in_flight",
-] as const;
-export type DeliveryView = (typeof DELIVERY_VIEWS)[number];
+] as const satisfies readonly DeliveryView[];
+export type { DeliveryView };
 
 /** The sortable columns exposed by `GET /sends/:id/deliveries`. Default `email` asc
  *  matches the CSV order, so the in-app list and the export read the same. */
@@ -428,19 +387,7 @@ export const DELIVERY_LIST_SPEC: ListSpec = {
  *  provider detail/error, and — for a bounce — the frozen soft/hard `bounce_kind`
  *  recorded when the event landed (SPEC §8). The split is a fact of THIS send, so it
  *  never drifts with the global, clearable `suppressions` table. */
-export interface DeliveryRecordRow {
-  email: string;
-  status: string;
-  event: string | null;
-  event_detail: string | null;
-  event_at: number | null;
-  error: string | null;
-  attempts: number;
-  /** For a bounced row: `hard` | `soft` as the provider reported it on this send, or
-   *  null when the kind is unknown (a bounce recorded without a hard/soft signal) —
-   *  rendered then as a plain "Bounce". */
-  bounce_kind: string | null;
-}
+export type DeliveryRecordRow = DeliveryRecord;
 
 /** The WHERE fragment for one `view`, bucketed exactly as `deliveryOutcomes` (the
  *  webhook `event` winning over the send-loop `status`). Empty string = `all`. */
