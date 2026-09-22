@@ -62,7 +62,14 @@ export async function renderEditor(
 ): Promise<ViewHandle | undefined> {
   // Reload, cancel-schedule, and error-retry re-enter through mount(), which tears this
   // mount down (its autosave, its freshness poll) before the next one starts.
-  const remount = () => mount((r, s) => renderEditor(id, r, s));
+  // (A retry or reload click reaches this from a live root; a re-entry after a write the
+  // reader did not stay to watch, such as a cancel that landed after they left, must not
+  // mount the editor over wherever they went.)
+  const remount = () => {
+    if (!signal.aborted) {
+      mount((r, s) => renderEditor(id, r, s));
+    }
+  };
   setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: PostResponse;
   try {
@@ -702,6 +709,9 @@ export async function renderEditor(
       }
       try {
         const fresh = await api<PostResponse>(`/posts/${id}`, { signal });
+        if (signal.aborted) {
+          return; // a redirect must not hijack where the reader went meanwhile
+        }
         if (fresh.sending) {
           location.hash = `#/sent/${fresh.sending.id}`;
         } else if (fresh.post.status === "sent") {

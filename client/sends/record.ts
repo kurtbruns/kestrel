@@ -39,7 +39,11 @@ export async function renderSentRecord(
 ): Promise<void> {
   // The watch re-enters here when dispatch ends, and the record when it resumes; each is
   // a fresh mount (its own root and signal), so the poll that noticed ends with its own.
-  const remount = () => mount((r, s) => renderSentRecord(id, r, s));
+  const remount = () => {
+    if (!signal.aborted) {
+      mount((r, s) => renderSentRecord(id, r, s)); // never over wherever the reader went since
+    }
+  };
   setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: SendResponse;
   try {

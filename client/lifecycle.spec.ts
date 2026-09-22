@@ -85,7 +85,7 @@ describe("lifecycle", () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it("poll: never overlaps, survives a failed tick, stops on false, and ends with the signal", async () => {
+  it("poll: never overlaps, survives a refused read, stops on false, and ends with the signal", async () => {
     const c = new AbortController();
     const ticks: string[] = [];
     let n = 0;
@@ -97,7 +97,7 @@ describe("lifecycle", () => {
         await new Promise((r) => setTimeout(r, 500)); // a slow read
         ticks.push(`end${n}`);
         if (n === 2) {
-          throw new Error("transient");
+          throw Object.assign(new Error("refused"), { name: "ApiError" }); // what api() throws on a non-2xx
         }
         if (n === 4) {
           return false;
@@ -126,6 +126,29 @@ describe("lifecycle", () => {
     d.abort();
     await vi.advanceTimersByTimeAsync(5000);
     expect(m).toBe(1);
+  });
+
+  it("poll: reports a tick that fails for any other reason, and keeps going", async () => {
+    const report = vi.fn();
+    vi.stubGlobal("reportError", report);
+    const c = new AbortController();
+    let n = 0;
+    poll(
+      1000,
+      async () => {
+        n += 1;
+        if (n === 1) {
+          throw new Error("a paint bug");
+        }
+      },
+      c.signal,
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(report).toHaveBeenCalledTimes(1);
+    expect(report.mock.calls[0]?.[0]).toMatchObject({ message: "a paint bug" });
+    expect(n).toBe(2); // the poll went on
+    c.abort();
+    vi.unstubAllGlobals();
   });
 
   it("onAbort: runs on abort, or at once for a signal already aborted", () => {

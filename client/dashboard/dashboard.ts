@@ -114,7 +114,11 @@ interface Tile {
 }
 
 export async function renderDashboard(view: HTMLElement, signal: AbortSignal): Promise<void> {
-  const remount = () => mount(renderDashboard);
+  const remount = () => {
+    if (!signal.aborted) {
+      mount(renderDashboard); // never over wherever the reader went since
+    }
+  };
   setHtml(view, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
   const root = $("#dash", view);
   let posts: PostListItem[];

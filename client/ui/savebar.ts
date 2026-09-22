@@ -1,6 +1,5 @@
 // The shared unsaved-changes bar.
 
-import { onAbort } from "../lifecycle";
 import { html, setHtml } from "./html";
 import { busy } from "./widgets";
 
@@ -74,12 +73,19 @@ export const savebar = (() => {
     { onSave, onDiscard, saveLabel = "Save changes", discardLabel = "Discard" }: SavebarOptions,
     signal: AbortSignal,
   ): SavebarHandle {
+    if (signal.aborted) {
+      return { setDirty() {}, showError() {} }; // the page is already gone: nothing to drive
+    }
     const mine = ++token;
-    onAbort(signal, () => {
-      if (token === mine) {
-        detach();
-      }
-    });
+    signal.addEventListener(
+      "abort",
+      () => {
+        if (token === mine) {
+          detach();
+        }
+      },
+      { once: true },
+    );
     saveBtn.textContent = saveLabel;
     discardBtn.textContent = discardLabel;
     el.classList.remove("show", "is-error");

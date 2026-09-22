@@ -102,8 +102,10 @@ type Again = boolean | void;
 /**
  * A repeating read that never overlaps itself: `tick` runs `ms` after the previous one
  * finished, until the signal aborts or a tick answers `false`. A tick's own reads take
- * the signal, so one in flight is cut off by navigation; a tick that throws (transient,
- * or cut off) simply yields to the next.
+ * the signal, so one in flight is cut off by navigation; a tick that throws yields to the
+ * next. A cut-off read and a refused one (the API answered non-2xx) are the expected
+ * failures and stay quiet; anything else is a bug in the tick and is reported, so a
+ * broken paint cannot hide inside a poll that keeps retrying.
  */
 export function poll(ms: number, tick: () => Promise<Again>, signal: AbortSignal): void {
   const arm = () => {
@@ -116,8 +118,10 @@ export function poll(ms: number, tick: () => Promise<Again>, signal: AbortSignal
       let again: boolean | undefined = true;
       try {
         again = (await tick()) ?? true;
-      } catch {
-        again = true;
+      } catch (e) {
+        if (!isExpectedFailure(e)) {
+          reportError(e);
+        }
       }
       if (again !== false) {
         arm();
@@ -137,7 +141,9 @@ export function onAbort(signal: AbortSignal, fn: () => void): void {
   signal.addEventListener("abort", fn, { once: true });
 }
 
-/** The DOMException an aborted read rejects with; a view's catch checks this before it reports an error. */
-export function isAbort(e: unknown): boolean {
-  return e instanceof DOMException && e.name === "AbortError";
+// A read cut off by the signal (the DOMException fetch rejects with), or one the API
+// refused (client/api.ts's ApiError, matched by name: importing it here would put
+// lifecycle on a cycle through api and auth).
+function isExpectedFailure(e: unknown): boolean {
+  return e instanceof Error && (e.name === "AbortError" || e.name === "ApiError");
 }
