@@ -162,7 +162,12 @@ describe("dashboard", () => {
       "https://app.birds.example",
       "https://birds.example/archive",
     ]);
-    expect($(".pub-cta a").textContent).toBe("Connect Claude →"); // no service author yet
+    // No service author yet: the guide leads, both links at one weight, each led by its glyph.
+    expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
+      "Connect Claude →",
+      "API reference →",
+    ]);
+    expect($$(".pub-links a svg").length).toBe(2);
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -171,6 +176,12 @@ describe("dashboard", () => {
     await renderDashboard();
     await vi.advanceTimersByTimeAsync(10);
     expect($(".conn-status").textContent).toBe("Claude is connected.");
+    // The same two links, same shape, once connected: the reference first, each with its glyph.
+    expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
+      "API reference →",
+      "Connection guide →",
+    ]);
+    expect($$(".pub-links a svg").length).toBe(2);
     expect($("#dashScheduled").textContent).toBe("Nothing scheduled.");
     expect($$(".dash-section").find((s) => s.textContent?.startsWith("Sent"))?.textContent).toMatch(
       /No sends yet\./,
@@ -225,7 +236,7 @@ describe("dashboard", () => {
     expect(document.querySelector(".tiles")).toBeNull();
     expect($(".setup-url").textContent).toBe("https://app.birds.example/subscribe");
     expect($(".setup [data-nav='#/settings']").textContent).toBe("Settings");
-    expect($(".pub-cta a").textContent).toBe("Connect Claude →");
+    expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
     $(".setup [data-act='new-post']").click();
     await vi.advanceTimersByTimeAsync(10);
     expect(fake.calls.find((c) => c.method === "POST")?.body).toBe(`{"subject":"Untitled"}`);
