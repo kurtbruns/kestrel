@@ -8,7 +8,7 @@ import type {
   StuckResolution,
 } from "../../shared/sends";
 import { api } from "../api";
-import { noEmailProvider } from "../build_ref";
+import { noEmailProvider } from "../deployment";
 import { $, $$ } from "../dom";
 import { fmt, modal, toast, toLocalInput, untilStr } from "../helpers";
 import { type Html, html, setHtml } from "../html";
@@ -21,9 +21,9 @@ import {
   wireSort,
   wireToolbar,
 } from "../list_controls";
-import { busy, renderError } from "../notice";
 import { app } from "../shell";
 import { appState } from "../state";
+import { busy, renderError } from "../widgets";
 import { clampPct, fmtDuration } from "./sent";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

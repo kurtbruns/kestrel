@@ -14,30 +14,24 @@ import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { type Autosave, createAutosave } from "../autosave";
-import { withNoProviderNote } from "../build_ref";
+import { createAutosave } from "../autosave";
+import { withNoProviderNote } from "../deployment";
 import { DirtyTracker } from "../dirty";
 import { $, $$ } from "../dom";
 import { fmt, modal, parseAddresses, toast, toLocalInput } from "../helpers";
 import { highlightMarkdown } from "../highlight";
 import { html, setHtml } from "../html";
 import { type IconName, icon } from "../icons";
-import { busy, notice, renderError } from "../notice";
+import { notice } from "../notice";
 import { appliedNoticeHtml } from "../remake";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "../revisions";
-import { infoTip } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
+import { busy, infoTip, renderError } from "../widgets";
 import { openRescheduleModal } from "./sends";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-// The mounted editor's autosave (client/autosave.ts), held here so the router can cancel
-// it on navigation; renderEditor replaces it on each mount.
-let autosave: Autosave | null = null;
-export function clearAutosaveTimers(): void {
-  autosave?.cancel();
-}
 export const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
 
 const TOOLBAR: [IconName, string][][] = [
@@ -65,11 +59,13 @@ const ARIA_DISABLED = html` aria-disabled="true"`;
 type ComposerTab = "edit" | "preview";
 
 export async function renderEditor(id: string): Promise<void> {
-  clearAutosaveTimers();
   // Reload (and cancel-schedule / error-retry) re-enter renderEditor directly, without
-  // going through route(), so clear the previous mount's freshness poll here too — an
-  // orphaned interval would keep firing on a stale baseRevision closure and wrongly
-  // flip editorConflict, silently blocking saves in the fresh editor.
+  // going through route(), so cancel the previous mount's autosave and clear its
+  // freshness poll here too — an orphaned interval would keep firing on a stale
+  // baseRevision closure and wrongly flip editorConflict, silently blocking saves in the
+  // fresh editor.
+  appState.editorAutosave?.cancel();
+  appState.editorAutosave = null;
   if (appState.editorPollTimer) {
     clearInterval(appState.editorPollTimer);
     appState.editorPollTimer = null;
@@ -487,10 +483,11 @@ export async function renderEditor(id: string): Promise<void> {
   // Autosave (client/autosave.ts): save after a quiet pause, but never let an edit sit
   // unsaved longer than the hard cap. Manual Save + ⌘S stays the primary path; this is
   // the safety net. Failures surface as a toast, never silently.
+  // Held in appState so route() and the re-auth wall can cancel it without reaching in.
   const mine = createAutosave(() => {
     saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
   });
-  autosave = mine;
+  appState.editorAutosave = mine;
   function scheduleAutosave() {
     mine.touch();
   }
@@ -521,7 +518,7 @@ export async function renderEditor(id: string): Promise<void> {
     if (appState.editorConflict) {
       return null; // paused until the out-of-date banner is resolved
     }
-    clearAutosaveTimers(); // a save is starting — cancel any pending autosave trigger
+    mine.cancel(); // a save is starting — cancel any pending autosave trigger
     saving = true;
     renderSaveStatus(); // reflect Saving… right away; the finally re-renders when done
     // What this save sends is what it saves: an edit typed while it is in flight stays
@@ -572,7 +569,7 @@ export async function renderEditor(id: string): Promise<void> {
   // payload NOW (the router tears down the DOM right after) and send it through
   // the chain so it can't overlap an in-flight save.
   appState.editorLeaveFlush = () => {
-    clearAutosaveTimers();
+    mine.cancel();
     if (locked || !dirty.dirty) {
       return;
     }

@@ -1,17 +1,10 @@
-// Cross-view helpers over the deployment reflection: the build reference, new-post
-// creation, copy, the archive URL, the no-provider notes, and re-auth.
+// Reads of the deployment reflection (appState.appConfig.deployment; SPEC §9), fetched once
+// at boot: the build reference, the archive URL, and the no-provider notes.
 
 import { archivePostUrl } from "../shared/archive_url";
-import type { PostSavedResponse } from "../shared/posts";
 import type { DeploymentView } from "../shared/settings";
-import { api } from "./api";
-import { toast } from "./helpers";
-import { type Html, html, setHtml } from "./html";
-import { busy } from "./notice";
-import { stopPollers } from "./savebar";
-import { app } from "./shell";
+import { type Html, html } from "./html";
 import { appState } from "./state";
-import { clearAutosaveTimers } from "./views/editor";
 
 /** The build reference as two link fragments: the version (to its release) and the sha (to its commit). */
 export interface BuildRefParts {
@@ -41,33 +34,6 @@ export function buildRefParts(): BuildRefParts | null {
     ? html`<a class="build-link" href="${b.commitUrl}" target="_blank" rel="noopener">${b.sha}</a>`
     : html`${b.sha}`;
   return { version, sha };
-}
-
-/**
- * Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
- * and the setup checklist so the "New post" affordance behaves identically everywhere.
- */
-export function createNewPost(btn: HTMLButtonElement): Promise<void> {
-  return busy(btn, "Creating…", async () => {
-    try {
-      const { post } = await api<PostSavedResponse>("/posts", {
-        method: "POST",
-        json: { subject: "Untitled" },
-      });
-      location.hash = `#/edit/${post.id}`;
-    } catch (err) {
-      toast(err instanceof Error ? err.message : String(err));
-    }
-  });
-}
-
-export async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("Copied");
-  } catch {
-    toast("Couldn't copy to clipboard");
-  }
 }
 
 /**
@@ -102,27 +68,4 @@ export function noEmailProvider(): boolean {
  */
 export function withNoProviderNote(msg: string): string {
   return noEmailProvider() ? `${msg} (no email provider configured — nothing is delivered)` : msg;
-}
-
-/**
- * Access sessions expire at the edge (the request never reaches the app), so the only
- * recovery is a fresh document load that re-triggers the Access login. In dev this
- * shouldn't happen, but a reload re-mints, so the same affordance is safe.
- */
-export function showReauth(): void {
-  // A dead token means every background poll (and a pending editor autosave) now 401s —
-  // which is what routed us here. Stop them so a walled tab goes quiet instead of re-hitting
-  // the API on its timers until reload.
-  stopPollers();
-  clearAutosaveTimers();
-  // No identity yet — hide the publication chrome so the wall stands alone.
-  document.body.classList.add("signed-out");
-  setHtml(
-    app,
-    html`<div class="card auth-wall"><h2>Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth">Sign in</button></div>`,
-  );
-  const b = document.getElementById("reauth");
-  if (b) {
-    b.onclick = () => location.reload();
-  }
 }

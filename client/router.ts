@@ -1,13 +1,13 @@
 // The hash router: route() tears the previous view down (timers, editor guards) and
 // mounts the next; the leave guards live here.
 
-import { savebar, stopPollers } from "./savebar";
+import { savebar } from "./savebar";
 import { setNavOpen } from "./shell";
-import { appState } from "./state";
+import { appState, stopTimers } from "./state";
 import { renderDashboard } from "./views/dashboard";
 import { renderDocs } from "./views/docs";
 import { renderDrafts } from "./views/drafts";
-import { clearAutosaveTimers, LEAVE_MSG, renderEditor } from "./views/editor";
+import { LEAVE_MSG, renderEditor } from "./views/editor";
 import { renderReference } from "./views/reference";
 import { renderSent } from "./views/sends";
 import { renderSentRecord } from "./views/sent";
@@ -17,8 +17,7 @@ import { renderTemplate } from "./views/template";
 
 /** Mount the view the hash names, tearing the previous one down first. */
 export function route(): unknown {
-  stopPollers();
-  clearAutosaveTimers();
+  stopTimers();
   appState.isEditorDirty = false;
   appState.editorSaveFailed = false;
   appState.editorConflict = false;

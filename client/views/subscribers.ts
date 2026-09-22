@@ -18,9 +18,8 @@ import {
   wireSort,
   wireToolbar,
 } from "../list_controls";
-import { busy, renderError } from "../notice";
-import { infoTip, openMenu } from "../savebar";
 import { app } from "../shell";
+import { busy, infoTip, openMenu, renderError } from "../widgets";
 import { confirmUnsubscribe } from "./dashboard";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
