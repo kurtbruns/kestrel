@@ -1,4 +1,4 @@
-// Icons as files: client/icons/*.svg, each a complete, viewable SVG that the build imports
+// Icons as files: client/ui/icons/*.svg, each a complete, viewable SVG that the build imports
 // as text and the editor serves inline, so an icon can be opened, previewed, and diffed as
 // the drawing it is. One registry, one renderer; the sidebar's static sprite in index.html
 // is separate because it paints before any script runs.

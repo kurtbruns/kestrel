@@ -306,7 +306,7 @@ export async function renderEditor(id: string): Promise<void> {
     });
   }
 
-  // Autosave (client/autosave.ts): save after a quiet pause, but never let an edit sit
+  // Autosave (./autosave.ts): save after a quiet pause, but never let an edit sit
   // unsaved longer than the hard cap. Manual Save + ⌘S stays the primary path; this is
   // the safety net. Failures surface as a toast, never silently. Held in appState so
   // route() and the re-auth wall can cancel it without reaching in. Declared before any
