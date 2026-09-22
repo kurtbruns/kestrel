@@ -1,5 +1,6 @@
 /** Post send actions: schedule for a future time, or send now (buffered). Authed. */
 
+import type { ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
@@ -72,7 +73,8 @@ export async function schedule(c: RequestContext): Promise<Response> {
   rejectStrayTemplateChoice(body);
   const fireAt = parseFutureFireAt(body.fire_at, true);
   const send = await freeze(c.env, c.config, post, fireAt);
-  return json({ send }, 201);
+  const frozen: ScheduleResponse = { send };
+  return json(frozen, 201);
 }
 
 export async function sendNow(c: RequestContext): Promise<Response> {
@@ -95,9 +97,11 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // Idempotent: if a send is already in flight for this post, return it.
   const active = await getActiveSendForPost(c.env.DB, post.id);
   if (active) {
-    return json({ send: active, idempotent: true });
+    const repeat: ScheduleResponse = { send: active, idempotent: true };
+    return json(repeat);
   }
 
   const send = await freeze(c.env, c.config, post, Date.now() + SEND_NOW_BUFFER_MS);
-  return json({ send }, 201);
+  const frozen: ScheduleResponse = { send };
+  return json(frozen, 201);
 }

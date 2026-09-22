@@ -51,10 +51,39 @@ export interface PostResponse {
   sent: { id: string } | null;
 }
 
+/**
+ * What POST /posts and PUT /posts/:id accept: any subset of the fields, and the revision
+ * the editor loaded, which the server checks before it writes (optimistic concurrency).
+ */
+export interface PostEditBody {
+  subject?: string;
+  slug?: string;
+  markdown?: string;
+  base_revision?: string | null;
+}
+
 /** POST /posts and PUT /posts/:id: the post as saved, and the revision the save wrote. */
 export interface PostSavedResponse {
   post: Post;
   revision_id: string;
+}
+
+/** GET /posts/:id/preview: where the rendered page is, and whether it is a frozen send's copy. */
+export interface PreviewResponse {
+  url: string;
+  subject: string;
+  warnings: string[];
+  frozen: boolean;
+}
+
+/** POST /posts/:id/test: one test delivery through the same render as a real send (I5). */
+export interface TestSendResponse {
+  sent: boolean;
+  provider: string;
+  to: string;
+  subject: string;
+  warnings: string[];
+  frozen: boolean;
 }
 
 /** The 409 a save gets when its base revision is no longer the newest. */

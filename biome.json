@@ -36,14 +36,6 @@
           "suspicious": { "noExplicitAny": "off" }
         }
       }
-    },
-    {
-      "includes": ["client/**"],
-      "linter": {
-        "rules": {
-          "suspicious": { "noImplicitAnyLet": "off" }
-        }
-      }
     }
   ]
 }

@@ -26,6 +26,19 @@ function remakeRequired(e: unknown): RemakeRequiredError | null {
 }
 
 /**
+ * The other re-make refusal (SPEC §9): a scheduled send is about to fire, so the save
+ * waits until it has sent. A surface shows this one where it blocks (the save bar, the
+ * logo's field error), never as a passing toast.
+ */
+export function isRemakeTooClose(e: unknown): boolean {
+  if (!(e instanceof ApiError) || e.status !== 409) {
+    return false;
+  }
+  const d = e.data as { error?: unknown } | null;
+  return d?.error === "remake_too_close";
+}
+
+/**
  * A template or identity change reaches every scheduled email, and the server refuses
  * such a save until the client has acknowledged those sends by id (409 remake_required,
  * listing them). The flow is server-driven so the dashboard never decides which fields

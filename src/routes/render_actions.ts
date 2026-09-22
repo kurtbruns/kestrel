@@ -10,6 +10,8 @@
  * Every path runs the one render() (I5), or serves what it froze.
  */
 
+import type { PreviewResponse, TestSendResponse } from "../../shared/posts";
+import type { TemplateTestResponse } from "../../shared/settings";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
@@ -89,12 +91,13 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
 
 export async function preview(c: RequestContext): Promise<Response> {
   const { input, email, warnings, frozen } = await loadPostEmail(c);
-  return json({
+  const body: PreviewResponse = {
     url: `${c.config.appOrigin}/posts/${input.post.id}/preview`,
     subject: email.subject,
     warnings,
     frozen: frozen !== null,
-  });
+  };
+  return json(body);
 }
 
 export async function previewPage(c: RequestContext): Promise<Response> {
@@ -137,7 +140,7 @@ export async function test(c: RequestContext): Promise<Response> {
     idempotencyKeyPrefix: `test-${input.post.id}`,
   });
 
-  return json({
+  const result: TestSendResponse = {
     sent: res?.accepted === true,
     provider: provider.name,
     to,
@@ -145,7 +148,8 @@ export async function test(c: RequestContext): Promise<Response> {
     warnings,
     // Which copy went: a scheduled or sent post's frozen render, or the draft's live one.
     frozen: frozen !== null,
-  });
+  };
+  return json(result);
 }
 
 // --- template test-send ----------------------------------------------------------
@@ -269,14 +273,15 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   );
   const sent = results.filter((r) => r.accepted).length;
 
-  return json({
+  const report: TemplateTestResponse = {
     sent,
     total: recipients.length,
     provider: provider.name,
     recipients,
     subject: result.subject,
     warnings: result.warnings,
-  });
+  };
+  return json(report);
 }
 
 export async function devOutbox(c: RequestContext): Promise<Response> {

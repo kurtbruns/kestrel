@@ -1,18 +1,27 @@
-// @ts-nocheck
 // The email template page: the sample preview, the example menu, and the template
 // editor.
 
+import type {
+  SettingsPatchBody,
+  SettingsResponse,
+  SettingsSavedResponse,
+  TemplateTestResponse,
+} from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName } from "../brand";
 import { copyText, withNoProviderNote } from "../build_ref";
-import { esc, modal, parseAddresses, toast } from "../helpers";
+import { $, $$ } from "../dom";
+import { modal, parseAddresses, toast } from "../helpers";
 import { highlightTemplate } from "../highlight";
+import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../html";
 import { icon } from "../icons";
 import { busy, renderError } from "../notice";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "../remake";
 import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
+
+const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
@@ -27,8 +36,16 @@ let exampleMenuDismissBound = false;
 // per send, I3/I5) and saved template variables come later; conceptually both run
 // through the single render path (SPEC §5, I5) this preview stands in for.
 
+interface TemplateVar {
+  token: string;
+  desc: string;
+}
+interface TemplateVarGroup {
+  group: string;
+  vars: TemplateVar[];
+}
 // The variables a template can drop in, grouped for the reference panel.
-const EMAIL_TEMPLATE_VARS = [
+const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
   {
     group: "Post",
     vars: [
@@ -71,7 +88,12 @@ const EMAIL_TEMPLATE_VARS = [
 // only for what inline can't express, like dark mode). The preview renders the
 // template as-is in an isolated iframe, so a <style> block behaves exactly as a mail
 // client — or the view-in-browser page — would show it.
-const EMAIL_TEMPLATE_EXAMPLES = {
+interface TemplateExample {
+  label: string;
+  html: string;
+}
+type ExampleKey = "signed" | "signedAddress" | "plain";
+const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   signed: {
     label: "Signed",
     html: `<style>
@@ -334,6 +356,7 @@ const EMAIL_TEMPLATE_EXAMPLES = {
 </div>`,
   },
 };
+const isExampleKey = (k: string): k is ExampleKey => Object.hasOwn(EMAIL_TEMPLATE_EXAMPLES, k);
 
 // Sample post body for the preview — representative prose inside a called-out slot,
 // so it's unmistakable where a real post's rendered Markdown lands. Its typography
@@ -349,27 +372,35 @@ const EMAIL_TEMPLATE_SAMPLE_BODY =
 
 // Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
 // raw HTML (the rendered Markdown); every other value is escaped, so a stray < or "
-// in a name can't break the surrounding markup. An unknown token renders empty.
-function fillEmailTemplate(html, ctx) {
-  return String(html).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key) =>
-    key === "post.body" ? ctx["post.body"] || "" : esc(ctx[key]),
+// in a name can't break the surrounding markup. An unknown token renders empty. A string
+// builder by nature: the template is the publisher's own HTML, filled in and vouched for
+// at the preview's boundary (mountSampleEmailPreview).
+function fillEmailTemplate(template: string, ctx: Record<string, string>): string {
+  return String(template).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
+    key === "post.body" ? ctx["post.body"] || "" : escapeHtml(ctx[key] ?? ""),
   );
 }
 
 // A neutral placeholder logo (a monogram tile) for the preview when no real logo is
 // set, so a signed sign-off still renders. Fully URL-encoded so it carries no raw
 // <,>," and survives the template's attribute escaping.
-function sampleLogoDataUri(name) {
+function sampleLogoDataUri(name: string): string {
   const ch = (String(name || "").trim()[0] || "K").toUpperCase();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" rx="9" fill="#e4e4e7"/><text x="22" y="29" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#52525b" text-anchor="middle">${ch}</text></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
+/** The identity a sample preview binds: the live or loaded publication fields. */
+export interface TemplateIdentity {
+  name: string;
+  tagline: string;
+  logoUrl: string;
+  address: string;
+}
+
 // Sample values the template preview binds — mirrors the render path's context, with
-// email.* standing in for per-recipient values. `identity` is { name, tagline,
-// logoUrl, address } from the live or loaded settings.
-function templateSampleCtx(identity) {
-  const id = identity || {};
+// email.* standing in for per-recipient values.
+function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
   return {
     "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
     "post.subject": "The starlings are back",
@@ -395,11 +426,21 @@ const TEMPLATE_FRAME_DOC =
   ".kestrel-email img{max-width:100%}</style></head>" +
   '<body><div class="kestrel-email"></div></body></html>';
 
-// Mount a sample-email preview into an <iframe>, kept sized to its content. Returns
-// { repaint } — call after the template or identity changes. getTemplate() returns
-// the current template HTML; getIdentity() the { name, tagline, logoUrl, address }.
-// Shared by the Template page (live editor preview) and Settings (a read-only one).
-export function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
+/** A mounted sample-email preview; call `repaint` after the template or identity changes. */
+export interface SampleEmailPreview {
+  repaint(): void;
+}
+
+/**
+ * Mount a sample-email preview into an <iframe>, kept sized to its content. getTemplate()
+ * returns the current template HTML; getIdentity() the live identity. Shared by the
+ * Template page (live editor preview) and Settings (a read-only one).
+ */
+export function mountSampleEmailPreview(
+  iframe: HTMLIFrameElement,
+  getTemplate: () => string,
+  getIdentity: () => TemplateIdentity,
+): SampleEmailPreview {
   let ready = false;
   const size = () => {
     try {
@@ -418,8 +459,9 @@ export function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
     if (!slot) {
       return;
     }
-    // innerHTML (not srcdoc per keystroke): flicker-free, and any <script> stays inert.
-    slot.innerHTML = fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()));
+    // Set as markup (not srcdoc per keystroke): flicker-free, and any <script> stays
+    // inert. The publisher's own template, filled with sample values, in its own frame.
+    setHtml(slot, unsafeHtml(fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()))));
     size();
   };
   iframe.addEventListener("load", () => {
@@ -440,16 +482,20 @@ export function mountSampleEmailPreview(iframe, getTemplate, getIdentity) {
 }
 
 // The grouped variable reference (a <details> body), shared by both surfaces.
-function templateVarsHtml() {
-  return EMAIL_TEMPLATE_VARS.map(
+function templateVarsHtml(): Html {
+  return html`${EMAIL_TEMPLATE_VARS.map(
     (g) =>
-      `<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars
-        .map(
-          (v) =>
-            `<div class="set-tpl-var"><code>${esc(v.token)}</code><span class="set-tpl-var-desc">${esc(v.desc)}</span></div>`,
-        )
-        .join("")}</div>`,
-  ).join("");
+      html`<div class="set-tpl-vargroup"><h4>${g.group}</h4>${g.vars.map(
+        (v) =>
+          html`<div class="set-tpl-var"><code>${v.token}</code><span class="set-tpl-var-desc">${v.desc}</span></div>`,
+      )}</div>`,
+  )}`;
+}
+
+/** What a save of the template reports: the advisory warnings and the sends it re-made. */
+interface TemplateSaved {
+  warnings: string[];
+  remade: SettingsSavedResponse["remade"];
 }
 
 /**
@@ -458,21 +504,23 @@ function templateVarsHtml() {
  * examples, a variable reference, and its own validated Save). Editing lives here,
  * not in Settings, so each surface has a single, unambiguous save.
  */
-
-export async function renderTemplate() {
-  app.innerHTML = `<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`;
-  const bodyEl = document.getElementById("tplBody");
-  let data;
+export async function renderTemplate(): Promise<void> {
+  setHtml(
+    app,
+    html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`,
+  );
+  const bodyEl = $("#tplBody");
+  let data: SettingsResponse;
   try {
-    data = await api("/api/settings");
+    data = await api<SettingsResponse>("/api/settings");
   } catch (e) {
-    renderError(bodyEl, e.message, renderTemplate);
+    renderError(bodyEl, message(e), renderTemplate);
     return;
   }
   const s = data.settings;
   const d = data.deployment;
-  const p = s.publication || {};
-  const identity = {
+  const p = s.publication;
+  const identity: TemplateIdentity = {
     name: p.name || parseFromName(d.fromAddress) || "",
     tagline: p.tagline || "",
     logoUrl: p.logoUrl || "",
@@ -481,9 +529,11 @@ export async function renderTemplate() {
   let templateBaseline = s.emailTemplate || "";
   const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
   // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §3).
-  document.getElementById("tplInUse").innerHTML = inUseChip(data.inUse);
+  setHtml($("#tplInUse"), inUseChip(data.inUse));
 
-  bodyEl.innerHTML = `
+  setHtml(
+    bodyEl,
+    html`
     <div class="set-preview set-tpl-sample">
       <div class="set-preview-bar">
         <span class="set-preview-titles">
@@ -545,28 +595,29 @@ export async function renderTemplate() {
         </div>
         <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
       </div>
-    </div>`;
+    </div>`,
+  );
 
-  const tplEditor = document.getElementById("tplEditor");
+  const tplEditor = $<HTMLTextAreaElement>("#tplEditor");
   const preview = mountSampleEmailPreview(
-    document.getElementById("tplPreview"),
+    $<HTMLIFrameElement>("#tplPreview"),
     () => tplEditor.value,
     () => identity,
   );
-  const tplMsgsEl = document.getElementById("tplMsgs");
-  const tplTestEl = document.getElementById("tplTest");
-  const tplTestLbl = document.getElementById("tplTestLbl");
+  const tplMsgsEl = $("#tplMsgs");
+  const tplTestEl = $<HTMLButtonElement>("#tplTest");
+  const tplTestLbl = $("#tplTestLbl");
   const isDirty = () => tplEditor.value !== templateBaseline;
 
   // Syntax-highlight overlay (issue #123): a transparent <textarea> over a highlighted
   // <pre>, plus a line-number gutter, kept in scroll sync. Vanilla, no dependency.
-  const tplHl = document.getElementById("tplHl");
-  const tplHlCode = tplHl.querySelector("code");
-  const tplGutter = document.getElementById("tplGutter");
+  const tplHl = $("#tplHl");
+  const tplHlCode = $("code", tplHl);
+  const tplGutter = $("#tplGutter");
   const paintEditor = () => {
     const src = tplEditor.value;
     // Trailing newline so the last line renders and the overlay height matches the textarea.
-    tplHlCode.innerHTML = `${highlightTemplate(src)}\n`;
+    setHtml(tplHlCode, html`${highlightTemplate(src)}\n`);
     let g = "";
     const lines = src.split("\n").length;
     for (let i = 1; i <= lines; i++) {
@@ -583,8 +634,8 @@ export async function renderTemplate() {
 
   // The two blocking-required tokens, predicted live in the toolbar pills: green when
   // present, red when missing — so a rejected save is visible before you press Save.
-  const reqBodyEl = document.getElementById("reqBody");
-  const reqUnsubEl = document.getElementById("reqUnsub");
+  const reqBodyEl = $("#reqBody");
+  const reqUnsubEl = $("#reqUnsub");
   const paintReq = () => {
     reqBodyEl.className = `set-req-pill ${/\{\{\s*post\.body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
     reqUnsubEl.className = `set-req-pill ${/\{\{\s*email\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
@@ -612,15 +663,15 @@ export async function renderTemplate() {
   // Advisory warnings for the template that was just saved; blocking errors go to the
   // save bar instead (bar.showError), so the bar owns the blocking state and this owns
   // the post-save advisory state.
-  function showWarnings(msgs) {
+  function showWarnings(msgs: string[]) {
     if (!msgs.length) {
       tplMsgsEl.hidden = true;
-      tplMsgsEl.innerHTML = "";
+      setHtml(tplMsgsEl, html``);
       return;
     }
     tplMsgsEl.hidden = false;
     tplMsgsEl.className = "set-tpl-msgs warn";
-    tplMsgsEl.innerHTML = msgs.map((m) => `<div>${esc(m)}</div>`).join("");
+    setHtml(tplMsgsEl, html`${msgs.map((m) => html`<div>${m}</div>`)}`);
   }
   function revertTemplate() {
     tplEditor.value = templateBaseline;
@@ -629,28 +680,27 @@ export async function renderTemplate() {
     refreshDirty();
   }
   // Persist the current editor content, confirming first when the save would apply to
-  // scheduled emails (withRemakeConfirm). Returns { warnings, remade }, or null when
-  // the publisher declined the confirmation (nothing was saved; the page stays dirty).
-  // THROWS on a rejected template (no unsubscribe link → 400) or a send about to fire
-  // (409 remake_too_close), so callers decide what to do. Shared by the save bar's
+  // scheduled emails (withRemakeConfirm). Returns the warnings and what was re-made, or
+  // null when the publisher declined the confirmation (nothing was saved; the page stays
+  // dirty). THROWS on a rejected template (no unsubscribe link → 400) or a send about to
+  // fire (409 remake_too_close), so callers decide what to do. Shared by the save bar's
   // Save and Save-&-send-test.
-  async function saveTemplate() {
+  async function saveTemplate(): Promise<TemplateSaved | null> {
     const value = tplEditor.value;
-    const r = await withRemakeConfirm(
-      (ack) =>
-        api("/api/settings", {
-          method: "PUT",
-          json: ack ? { emailTemplate: value, remake: ack } : { emailTemplate: value },
-        }),
-      REMAKE_TEMPLATE,
-    );
+    const r = await withRemakeConfirm((ack) => {
+      const body: SettingsPatchBody = ack
+        ? { emailTemplate: value, remake: ack }
+        : { emailTemplate: value };
+      return api<SettingsSavedResponse>("/api/settings", { method: "PUT", json: body });
+    }, REMAKE_TEMPLATE);
     if (!r) {
       return null;
     }
     // The server may resolve "" to the default — reflect what was actually stored.
     templateBaseline = r.settings.emailTemplate;
     tplEditor.value = templateBaseline;
-    appState.appConfig = { ...(appState.appConfig || {}), settings: r.settings };
+    // The cached config the sidebar reads: this page's own response, with the saved half.
+    appState.appConfig = { ...data, settings: r.settings };
     preview.repaint();
     refreshDirty(); // clean now — slides the bar away
     return { warnings: Array.isArray(r.warnings) ? r.warnings : [], remade: r.remade || [] };
@@ -673,12 +723,12 @@ export async function renderTemplate() {
     } catch (err) {
       // The bar owns the blocking error (it stays up and says why). No toast — a
       // bottom-center toast would sit on top of the bar and hide the very message.
-      bar.showError(err.message);
+      bar.showError(message(err));
     }
   }
 
-  const loadExample = (key) => {
-    const ex = EMAIL_TEMPLATE_EXAMPLES[key] || EMAIL_TEMPLATE_EXAMPLES.signed;
+  const loadExample = (key: string) => {
+    const ex = EMAIL_TEMPLATE_EXAMPLES[isExampleKey(key) ? key : "signed"];
     tplEditor.value = ex.html;
     showWarnings([]);
     preview.repaint();
@@ -690,8 +740,8 @@ export async function renderTemplate() {
   });
   // Examples: a "Start from example" dropdown menu (a compact, secondary action —
   // loading one is destructive, so it isn't a permanent fixture on the page).
-  const exBtn = document.getElementById("tplExamplesBtn");
-  const exList = document.getElementById("tplExamplesList");
+  const exBtn = $<HTMLButtonElement>("#tplExamplesBtn");
+  const exList = $("#tplExamplesList");
   const closeExamples = () => {
     exList.hidden = true;
     exBtn.setAttribute("aria-expanded", "false");
@@ -702,9 +752,9 @@ export async function renderTemplate() {
     exList.hidden = !willOpen;
     exBtn.setAttribute("aria-expanded", String(willOpen));
   };
-  for (const b of exList.querySelectorAll("[data-example]")) {
+  for (const b of $$<HTMLButtonElement>("[data-example]", exList)) {
     b.onclick = () => {
-      loadExample(b.dataset.example);
+      loadExample(b.dataset.example ?? "");
       closeExamples();
     };
   }
@@ -717,7 +767,8 @@ export async function renderTemplate() {
     document.addEventListener("click", (e) => {
       const wrap = document.getElementById("tplExamples");
       const list = document.getElementById("tplExamplesList");
-      if (wrap && list && !list.hidden && !wrap.contains(e.target)) {
+      const inside = e.target instanceof Node && wrap?.contains(e.target);
+      if (wrap && list && !list.hidden && !inside) {
         list.hidden = true;
         document.getElementById("tplExamplesBtn")?.setAttribute("aria-expanded", "false");
       }
@@ -725,10 +776,10 @@ export async function renderTemplate() {
   }
 
   // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
-  const frameEl = document.getElementById("tplPreview");
-  for (const wb of bodyEl.querySelectorAll(".wtog-btn")) {
+  const frameEl = $<HTMLIFrameElement>("#tplPreview");
+  for (const wb of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
     wb.onclick = () => {
-      for (const o of bodyEl.querySelectorAll(".wtog-btn")) {
+      for (const o of $$<HTMLButtonElement>(".wtog-btn", bodyEl)) {
         o.setAttribute("aria-pressed", String(o === wb));
       }
       frameEl.style.maxWidth = `${wb.dataset.w}px`;
@@ -738,9 +789,9 @@ export async function renderTemplate() {
 
   // Line numbers: hidden by default; the toolbar toggle shows them and the choice is
   // remembered per browser (a lightweight convenience — safe to lose).
-  const editorWrap = document.getElementById("tplEditorWrap");
-  const lineNumsBtn = document.getElementById("tplLineNums");
-  const setLineNums = (on) => {
+  const editorWrap = $("#tplEditorWrap");
+  const lineNumsBtn = $<HTMLButtonElement>("#tplLineNums");
+  const setLineNums = (on: boolean) => {
     editorWrap.classList.toggle("show-lines", on);
     lineNumsBtn.setAttribute("aria-pressed", String(on));
     syncScroll();
@@ -759,8 +810,8 @@ export async function renderTemplate() {
   };
 
   // Copy the whole template to the clipboard.
-  const copyAllBtn = document.getElementById("tplCopyAll");
-  const copyAllLbl = document.getElementById("tplCopyLbl");
+  const copyAllBtn = $<HTMLButtonElement>("#tplCopyAll");
+  const copyAllLbl = $("#tplCopyLbl");
   copyAllBtn.onclick = async () => {
     await copyText(tplEditor.value);
     copyAllBtn.classList.add("copied");
@@ -779,26 +830,27 @@ export async function renderTemplate() {
   tplTestEl.onclick = () => {
     const dirty = isDirty();
     const m = modal(
-      `<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
+      html`<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
         dirty
-          ? `<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
-          : ""
+          ? html`<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
+          : null
       }<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p><div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
-        dirty ? "Save &amp; send test" : "Send test"
+        dirty ? "Save & send test" : "Send test"
       }</button></div>`,
     );
-    const to = m.el.querySelector("#tplTestTo");
+    const to = $<HTMLTextAreaElement>("#tplTestTo", m.el);
     to.focus();
     // Pre-fill from the saved default test recipients (don't clobber typed input).
     if (defaultRecipients.length && !to.value.trim()) {
       to.value = defaultRecipients.join("\n");
-      const hint = m.el.querySelector("#tplTestHint");
+      const hint = $("#tplTestHint", m.el);
       hint.textContent = "Pre-filled from your default test recipients (Settings).";
       hint.hidden = false;
     }
-    m.el.querySelector("#ttCancel").onclick = m.close;
-    m.el.querySelector("#ttGo").onclick = () =>
-      busy(m.el.querySelector("#ttGo"), isDirty() ? "Saving…" : "Sending…", async () => {
+    const go = $<HTMLButtonElement>("#ttGo", m.el);
+    $("#ttCancel", m.el).onclick = m.close;
+    go.onclick = () =>
+      busy(go, isDirty() ? "Saving…" : "Sending…", async () => {
         const addrs = parseAddresses(to.value);
         if (!addrs.length) {
           toast("Enter at least one email address");
@@ -818,13 +870,13 @@ export async function renderTemplate() {
             // The save failed, so the test can't send what would ship. The bar shows
             // why (and stays up); closing the dialog returns you to it. No toast — it
             // would overlay the bar and hide the reason.
-            bar.showError(err.message);
+            bar.showError(message(err));
             m.close();
             return;
           }
         }
         try {
-          const r = await api("/api/settings/template/test", {
+          const r = await api<TemplateTestResponse>("/api/settings/template/test", {
             method: "POST",
             json: { to: addrs },
           });
@@ -837,7 +889,7 @@ export async function renderTemplate() {
             ),
           );
         } catch (e) {
-          toast(e.message);
+          toast(message(e));
         }
       });
   };
