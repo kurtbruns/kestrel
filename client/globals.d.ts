@@ -9,3 +9,9 @@ declare module "*.svg" {
   const markup: string;
   export default markup;
 }
+
+// Vite's raw import, used by the client test setup to load the real admin shell.
+declare module "*?raw" {
+  const text: string;
+  export default text;
+}
