@@ -38,7 +38,7 @@
       }
     },
     {
-      "includes": ["client/main.ts"],
+      "includes": ["client/**"],
       "linter": {
         "rules": {
           "suspicious": { "noImplicitAnyLet": "off" }
