@@ -4,12 +4,11 @@
 
 ## What it enforces (on the default branch)
 
-- No branch deletion, no force-push, linear history required.
-- Changes land via pull request; squash and rebase are the allowed merge methods (both preserve the required linear history — merge commits are not).
+- No branch deletion, no force-push.
+- Changes land via pull request; merge, squash, and rebase are all allowed (the repo's history is merge commits).
 - All PR review threads must be resolved before merge.
+- The `gate` status check must pass: the quality gate workflow (`.github/workflows/gate.yml`) runs `npm run typecheck`, `npm test`, and `npm run ci` on every pull request. `integration_id` 15368 is GitHub Actions, so only the workflow can satisfy it. The branch need not be up to date with `main` first (`strict_required_status_checks_policy` is off).
 - No bypass actors.
-
-There is **no required status check**: this repo has no CI — the quality gate (`npm test`, `npm run typecheck`, `npm run check`) is run by hand before merge (see `CLAUDE.md`). If CI is added later, add a `required_status_checks` rule here pinned to its check context and re-apply.
 
 ## Re-apply / update
 
