@@ -10,11 +10,12 @@
  * those two paths immutably, and a changed asset is always a new URL. The browser still
  * receives one framework-free, dependency-free, plain-JS asset.
  *
- * Stable names with a `?v=`, not esbuild's content-hashed filenames, on purpose: under
- * `wrangler dev` a file added to the assets directory after startup is never served (its
- * path manifest is built once; only the content of files it already knows is read live),
- * so a new filename per rebuild would 404 until the next restart and kill the dev loop.
- * A rewritten app.js is served fresh on the next request.
+ * Stable names with a `?v=`, not esbuild's content-hashed filenames, on purpose: observed
+ * under wrangler 4.129, `wrangler dev` never serves a file added to the assets directory
+ * after startup (a rewritten file is served fresh; a new one 404s until restart), so a new
+ * filename per rebuild would kill the dev loop. Wrangler has an assets watcher meant to
+ * cover exactly that, so this is its bug rather than its design; stable names are the
+ * right production cache shape regardless, so nothing here waits on a fix.
  *
  * Flavors. Production (the default, and what wrangler's build.command produces for a
  * deploy) is minified with `__DEV__` false, so dev-only code such as the live reload is
@@ -28,6 +29,16 @@
  *   --watch    keep rebuilding: client/ edits through esbuild's incremental context (~10ms),
  *              public/ edits by re-emitting the copied and generated files. Errors are loud
  *              and the previous output stays in place.
+ *   --check    prove the tree builds without writing it (the bundle in memory, the source
+ *              index.html's asset references verified). For pretest: a second terminal
+ *              running the gate beside a live `npm run dev` must not overwrite the dev
+ *              tree with the production flavor, which would reload the open editor onto a
+ *              bundle with no live reload in it.
+ *
+ * Only an explicit build (or a deploy) writes the production flavor over a live tree.
+ * `wrangler types` runs build.command too, for no reason this script serves (type
+ * generation never reads the tree), so it is a no-op here: wrangler names its command in
+ * WRANGLER_COMMAND for every custom build.
  */
 import { createHash } from "node:crypto";
 import { cpSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
@@ -40,9 +51,14 @@ const SRC = join(ROOT, "public");
 const OUT = join(ROOT, "dist", "public");
 const ADMIN = "dashboard";
 
+if (process.env.WRANGLER_COMMAND === "types") {
+  process.exit(0);
+}
+
 const args = process.argv.slice(2);
 const dev = args.includes("--dev") || process.env.KESTREL_CLIENT_DEV === "1";
 const watchMode = args.includes("--watch");
+const checkMode = args.includes("--check");
 
 /** Content fingerprint of a served asset: first 8 hex of its SHA-256. */
 const fingerprint = (bytes) => createHash("sha256").update(bytes).digest("hex").slice(0, 8);
@@ -50,21 +66,28 @@ const fingerprint = (bytes) => createHash("sha256").update(bytes).digest("hex").
 /** The assets index.html references with a `?v=`, by the exact reference form it uses. */
 const STAMPED = ["app.js", "styles.css"];
 
+/** The source index.html, checked: a template that lost an asset reference would serve a stale asset in production. */
+function sourceIndex() {
+  const html = readFileSync(join(SRC, ADMIN, "index.html"), "utf8");
+  for (const name of STAMPED) {
+    if (!html.includes(`./${name}`)) {
+      throw new Error(`index.html no longer references ./${name}; the served copy would be wrong`);
+    }
+  }
+  return html;
+}
+
 /**
  * Copy public/ through and generate index.html with each stamped asset's `?v=`. Runs after
  * esbuild has written app.js. The exact reference form (`./app.js`) is rewritten, so a
- * prose mention of app.js in a comment is left alone; a template that lost a reference
- * fails loud here rather than serve a stale asset in production.
+ * prose mention of app.js in a comment is left alone.
  */
 function emitServedTree() {
   mkdirSync(join(OUT, ADMIN), { recursive: true });
   cpSync(SRC, OUT, { recursive: true, filter: (src) => src !== join(SRC, ADMIN, "index.html") });
-  let html = readFileSync(join(SRC, ADMIN, "index.html"), "utf8");
+  let html = sourceIndex();
   for (const name of STAMPED) {
     const ref = `./${name}`;
-    if (!html.includes(ref)) {
-      throw new Error(`index.html no longer references ${ref}; the served copy would be wrong`);
-    }
     html = html.replaceAll(ref, `${ref}?v=${fingerprint(readFileSync(join(OUT, ADMIN, name)))}`);
   }
   writeFileSync(join(OUT, ADMIN, "index.html"), html);
@@ -107,7 +130,11 @@ const options = {
   ],
 };
 
-if (watchMode) {
+if (checkMode) {
+  sourceIndex();
+  await esbuild.build({ ...options, write: false, plugins: [], logLevel: "silent" });
+  console.log("[client] served tree builds (checked, nothing written)");
+} else if (watchMode) {
   const ctx = await esbuild.context(options);
   await ctx.watch();
 
