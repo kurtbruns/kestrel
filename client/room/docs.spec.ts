@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocFragment } from "../../shared/docs";
 import type { SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
-import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test_support";
+import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test/support";
 import { renderDocs } from "./docs";
 
 // The guide as the Worker serves it: sanitized fragments with no ids on the headings.

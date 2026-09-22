@@ -15,11 +15,11 @@ import { copyText, modal, parseAddresses, toast } from "../helpers";
 import { highlightTemplate } from "../highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../html";
 import { icon } from "../icons";
-import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "../remake";
 import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
 import { busy, renderError } from "../widgets";
+import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError } from "./api";
+import { ApiError } from "../api";
 import { conflictFromError, RevisionTracker } from "./revisions";
 
 describe("conflictFromError", () => {

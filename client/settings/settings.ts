@@ -16,17 +16,17 @@ import { $, $$ } from "../dom";
 import { copyText, toast } from "../helpers";
 import { escapeHtml, type Html, html, setHtml } from "../html";
 import { type IconName, icon } from "../icons";
+import { savebar } from "../savebar";
+import { app } from "../shell";
+import { appState } from "../state";
+import { busy, renderError } from "../widgets";
 import {
   inUseChip,
   isRemakeTooClose,
   remakeIdentity,
   savedToast,
   withRemakeConfirm,
-} from "../remake";
-import { savebar } from "../savebar";
-import { app } from "../shell";
-import { appState } from "../state";
-import { busy, renderError } from "../widgets";
+} from "./remake";
 import { mountSampleEmailPreview } from "./template";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

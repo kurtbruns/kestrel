@@ -8,7 +8,7 @@ import {
   resetShell,
   settle,
   typeInto,
-} from "../test_support";
+} from "../test/support";
 import { renderDrafts } from "./drafts";
 
 const page = { total: 2, limit: 50, offset: 0, sort: "", dir: "desc" };

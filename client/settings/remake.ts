@@ -1,11 +1,11 @@
 // The re-make confirmation (SPEC §6, §9; DESIGN §5): the in-use chip, the applied
 // notice, and the confirm-then-save flow the Template and Settings pages share.
 
-import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../shared/settings";
-import { ApiError } from "./api";
-import { fmt, modal } from "./helpers";
-import { type Html, html } from "./html";
-import { icon } from "./icons";
+import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
+import { ApiError } from "../api";
+import { fmt, modal } from "../helpers";
+import { type Html, html } from "../html";
+import { icon } from "../icons";
 
 /** The words a re-make confirmation uses for the commit: { action: "Save", gerund: "Saving", lead(n) }. */
 export interface RemakeVerb {

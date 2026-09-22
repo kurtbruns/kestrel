@@ -9,7 +9,7 @@ import {
   jsonResponse,
   resetShell,
   typeInto,
-} from "../test_support";
+} from "../test/support";
 import { renderEditor } from "./editor";
 
 type Draft = {
@@ -252,7 +252,7 @@ describe("editor view", () => {
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "half-typed");
-    expect(appState.editorAutosave?.pending).toBe(true);
+    expect($("#saveStatus").textContent).toBe("Unsaved changes"); // an autosave is armed
     // What route() and the re-auth wall run: the armed save must not fire after it.
     stopTimers();
     expect(appState.editorAutosave).toBeNull();

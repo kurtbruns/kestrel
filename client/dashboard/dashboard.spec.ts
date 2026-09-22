@@ -4,8 +4,9 @@ import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
-import { $, $$, type FakeApi, fakeApi, resetShell } from "../test_support";
-import { confirmUnsubscribe, renderDashboard } from "./dashboard";
+import { confirmUnsubscribe } from "../subscribers/dialogs";
+import { $, $$, type FakeApi, fakeApi, resetShell } from "../test/support";
+import { renderDashboard } from "./dashboard";
 
 const NOW = 1_700_000_000_000;
 const page = { total: 0, limit: 200, offset: 0, sort: "", dir: "desc" };

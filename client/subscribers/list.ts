@@ -1,13 +1,9 @@
-// The subscribers list and the add-subscriber modal.
+// The subscribers list: the by-status composition and the filterable roster.
 
-import type {
-  SubscribeResponse,
-  SubscriberListItem,
-  SubscriberListResponse,
-} from "../../shared/subscribers";
+import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { $, $$ } from "../dom";
-import { badge, fmt, modal, toast } from "../helpers";
+import { badge, fmt } from "../helpers";
 import { type Html, html, setHtml } from "../html";
 import {
   type ListState,
@@ -19,8 +15,8 @@ import {
   wireToolbar,
 } from "../list_controls";
 import { app } from "../shell";
-import { busy, infoTip, openMenu, renderError } from "../widgets";
-import { confirmUnsubscribe } from "./dashboard";
+import { infoTip, openMenu, renderError } from "../widgets";
+import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -152,38 +148,4 @@ function renderSubTable(
       ]);
     };
   }
-}
-
-/** Add subscriber → the normal double opt-in (never an auto-confirm). */
-export function addSubscriberModal(onDone?: () => void): void {
-  const m = modal(
-    html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
-  );
-  const input = $<HTMLInputElement>("#addEmail", m.el);
-  const go = $<HTMLButtonElement>("#aGo", m.el);
-  input.focus();
-  $("#aCancel", m.el).onclick = m.close;
-  go.onclick = () =>
-    busy(go, "Adding…", async () => {
-      const addr = input.value.trim();
-      if (!addr.includes("@")) {
-        toast("Enter a valid email");
-        return;
-      }
-      try {
-        const r = await api<SubscribeResponse>("/subscribers", {
-          method: "POST",
-          json: { email: addr },
-        });
-        m.close();
-        toast(
-          r.action === "already_confirmed"
-            ? `${addr} is already confirmed`
-            : `Confirmation sent to ${addr}`,
-        );
-        onDone?.();
-      } catch (e) {
-        toast(e instanceof Error ? e.message : String(e));
-      }
-    });
 }

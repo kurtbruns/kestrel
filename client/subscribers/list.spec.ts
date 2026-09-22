@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { $, $$, type FakeApi, fakeApi, resetShell, settle, typeInto } from "../test_support";
-import { addSubscriberModal, renderSubscribers } from "./subscribers";
+import { $, $$, type FakeApi, fakeApi, resetShell, settle, typeInto } from "../test/support";
+import { addSubscriberModal } from "./dialogs";
+import { renderSubscribers } from "./list";
 
 const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
 const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1 };

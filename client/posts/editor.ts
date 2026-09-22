@@ -14,21 +14,21 @@ import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { createAutosave } from "../autosave";
 import { withNoProviderNote } from "../deployment";
-import { DirtyTracker } from "../dirty";
 import { $, $$ } from "../dom";
 import { fmt, modal, parseAddresses, toast, toLocalInput } from "../helpers";
 import { highlightMarkdown } from "../highlight";
 import { html, setHtml } from "../html";
 import { type IconName, icon } from "../icons";
 import { notice } from "../notice";
-import { appliedNoticeHtml } from "../remake";
-import { type Author, type Conflict, conflictFromError, RevisionTracker } from "../revisions";
+import { openRescheduleModal } from "../sends/dialogs";
+import { appliedNoticeHtml } from "../settings/remake";
 import { app } from "../shell";
 import { appState } from "../state";
 import { busy, infoTip, renderError } from "../widgets";
-import { openRescheduleModal } from "./sends";
+import { createAutosave } from "./autosave";
+import { DirtyTracker } from "./dirty";
+import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

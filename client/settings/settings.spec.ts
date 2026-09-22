@@ -11,7 +11,7 @@ import {
   jsonResponse,
   resetShell,
   typeInto,
-} from "../test_support";
+} from "../test/support";
 import { renderSettings } from "./settings";
 
 const DEFAULT_COPY = {

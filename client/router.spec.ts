@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { installRouter } from "./router";
 import { appState } from "./state";
-import { $, type FakeApi, fakeApi, resetShell, settle } from "./test_support";
+import { $, type FakeApi, fakeApi, resetShell, settle } from "./test/support";
 
 // The router's listeners are installed once by boot; here once per file, which is what a
 // page gets. hashchange is dispatched by hand so the spec does not depend on whether the

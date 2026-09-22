@@ -11,7 +11,7 @@ import {
   jsonResponse,
   resetShell,
   typeInto,
-} from "../test_support";
+} from "../test/support";
 import { renderTemplate } from "./template";
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;

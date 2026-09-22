@@ -1,11 +1,11 @@
 // The reference room shell shared by Docs and the API reference: the top bar, the
 // contents rail, and the surface switch; installRoomBar() wires the bar's one delegate.
 
-import { buildRefParts } from "./deployment";
-import { type Html, html } from "./html";
-import { icon } from "./icons";
-import { app } from "./shell";
-import { appState } from "./state";
+import { buildRefParts } from "../deployment";
+import { type Html, html } from "../html";
+import { icon } from "../icons";
+import { app } from "../shell";
+import { appState } from "../state";
 
 /** The two surfaces the room switches between. */
 export type RoomSurface = "docs" | "reference";

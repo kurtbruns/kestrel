@@ -1,19 +1,19 @@
 // The hash router: route() tears the previous view down (timers, editor guards) and
 // mounts the next; the leave guards live here, wired by installRouter() when boot calls it.
 
+import { renderDashboard } from "./dashboard/dashboard";
+import { renderDrafts } from "./posts/drafts";
+import { LEAVE_MSG, renderEditor } from "./posts/editor";
+import { renderDocs } from "./room/docs";
+import { renderReference } from "./room/reference";
 import { savebar } from "./savebar";
+import { renderSent } from "./sends/list";
+import { renderSentRecord } from "./sends/record";
+import { renderSettings } from "./settings/settings";
+import { renderTemplate } from "./settings/template";
 import { setNavOpen } from "./shell";
 import { appState, stopTimers } from "./state";
-import { renderDashboard } from "./views/dashboard";
-import { renderDocs } from "./views/docs";
-import { renderDrafts } from "./views/drafts";
-import { LEAVE_MSG, renderEditor } from "./views/editor";
-import { renderReference } from "./views/reference";
-import { renderSent } from "./views/sends";
-import { renderSentRecord } from "./views/sent";
-import { renderSettings } from "./views/settings";
-import { renderSubscribers } from "./views/subscribers";
-import { renderTemplate } from "./views/template";
+import { renderSubscribers } from "./subscribers/list";
 
 /** Mount the view the hash names, tearing the previous one down first. */
 export function route(): unknown {

@@ -3,7 +3,7 @@
 // whose base is not the newest revision (409) rather than clobber another writer's; the
 // editor's job is to tell the publisher, not to decide for them.
 
-import { ApiError } from "./api";
+import { ApiError } from "../api";
 
 /** Who wrote a revision: an email, "service" for Claude, or unknown. */
 export type Author = string | null;

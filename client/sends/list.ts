@@ -1,17 +1,12 @@
-// The sent list and the send actions: countdowns, the wedged-send resolution, and
-// rescheduling.
+// The sent list: scheduled sends with their countdowns, the active send, and the record
+// of what has gone out.
 
-import type {
-  ResolveResponse,
-  SendListResponse,
-  SendSummary,
-  StuckResolution,
-} from "../../shared/sends";
+import type { SendListResponse, SendSummary } from "../../shared/sends";
 import { api } from "../api";
 import { noEmailProvider } from "../deployment";
 import { $, $$ } from "../dom";
-import { fmt, modal, toast, toLocalInput, untilStr } from "../helpers";
-import { type Html, html, setHtml } from "../html";
+import { fmt, toast } from "../helpers";
+import { html, setHtml } from "../html";
 import {
   type ListState,
   listQuery,
@@ -24,201 +19,10 @@ import {
 import { app } from "../shell";
 import { appState } from "../state";
 import { busy, renderError } from "../widgets";
-import { clampPct, fmtDuration } from "./sent";
+import { openRescheduleModal, openResolveModal } from "./dialogs";
+import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
-
-export function startCountdowns(): void {
-  // Clear any prior interval first: reloadAll() re-runs loadScheduled (and this) on
-  // every cancel/resolve, so without this each refresh would leak a 1s interval.
-  if (appState.statusTimer) {
-    clearInterval(appState.statusTimer);
-  }
-  const tick = () => {
-    for (const el of $$<HTMLElement>("[data-fire]")) {
-      el.textContent = untilStr(Number(el.dataset.fire));
-    }
-  };
-  tick();
-  appState.statusTimer = setInterval(tick, 1000);
-}
-
-/**
- * A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending, but
- * one or more in-flight recipients whose fate a transport error left unknown (SPEC §12).
- * This is the state the sweep flags and the operator must adjudicate; it can't clear on
- * its own without risking a double-mail (I4). Read straight off the row's denormalized
- * counters, the same signals the server derives `wedged` from, so the list and the
- * watch agree. The lease check is essential: while the loop is actively working a send
- * it holds the lease (`locked_until` in the future), so a normal send's final dispatched
- * batch (pending 0, in flight > 0) is not a wedge, just work in progress. A genuine wedge
- * has released the lease.
- */
-export function isWedged(s: SendSummary): boolean {
-  const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
-  return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
-}
-
-/**
- * The one manual step for a wedged send: decide whether the ambiguous batch went out or
- * not. Both outcomes are safe for I4 (neither re-mails this post), so the modal explains
- * the trade-off (record accuracy) rather than warning of a double-send.
- */
-export function openResolveModal(send: SendSummary, reload: () => void): void {
-  const n = send.c_in_flight || 0;
-  const noun = n === 1 ? "delivery" : "deliveries";
-  const m = modal(
-    html`<h3>Resolve ${n} ambiguous ${noun}</h3>
-      <p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so we can't know if it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this post.</p>
-      <p class="hint"><strong>Assume not sent</strong> — recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>
-      <p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>
-      <div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rUnsent">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
-  );
-  $("#rCancel", m.el).onclick = m.close;
-  const doResolve = (btn: HTMLButtonElement, resolution: StuckResolution, verb: string) =>
-    busy(btn, "Resolving…", async () => {
-      try {
-        const res = await api<ResolveResponse>(`/sends/${send.id}/resolve`, {
-          method: "POST",
-          json: { resolution },
-        });
-        m.close();
-        toast(res.completed ? "Send completed" : `Marked ${verb}`);
-        reload();
-      } catch (e) {
-        toast(message(e));
-      }
-    });
-  const unsent = $<HTMLButtonElement>("#rUnsent", m.el);
-  const accepted = $<HTMLButtonElement>("#rAccepted", m.el);
-  unsent.onclick = () => doResolve(unsent, "unsent", "not sent");
-  accepted.onclick = () => doResolve(accepted, "accepted", "sent");
-}
-
-/**
- * Move a scheduled send's fire time without canceling or re-editing: the content stays
- * frozen (I3) and the cancelable review window is preserved (I6); only fire_at moves,
- * via POST /sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule
- * modal, prefilled with the current fire time and floored at the minimum lead. Shared
- * by the editor's scheduled banner and the Sent page's scheduled card (SPEC §8), so
- * `onDone` re-renders whichever surface opened it.
- */
-export function openRescheduleModal(
-  sendId: string,
-  currentFireAt: number,
-  onDone: () => void,
-): void {
-  const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
-  const cur = toLocalInput(new Date(currentFireAt));
-  const m = modal(
-    html`<h3 id="rsHead">Reschedule this post</h3>
-      <p class="hint">Move when it sends (at least 5 minutes out). The content stays frozen and the cancelable window is kept — only the time changes.</p>
-      <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
-      <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
-  );
-  const box = $(".modal", m.el);
-  box.setAttribute("aria-labelledby", "rsHead");
-  const go = $<HTMLButtonElement>("#rsGo", box);
-  const when = $<HTMLInputElement>("#rsWhen", box);
-  $("#rsCancel", box).onclick = m.close;
-  go.onclick = () =>
-    busy(go, "Rescheduling…", async () => {
-      const v = when.value;
-      const t = v ? new Date(v).getTime() : Number.NaN;
-      if (Number.isNaN(t)) {
-        toast("Pick a valid date & time");
-        return;
-      }
-      try {
-        await api(`/sends/${sendId}/reschedule`, {
-          method: "POST",
-          json: { fire_at: new Date(t).toISOString() },
-        });
-        m.close();
-        toast("Rescheduled");
-        onDone();
-      } catch (e) {
-        toast(message(e));
-      }
-    });
-  when.focus();
-}
-
-// Dispatch/delivery numbers from a `/sends` list row's denormalized counters, so the
-// active-send row and the dashboard widget need no per-send /progress read. `done` is
-// the dispatch fraction (accepted vs the frozen total), matching the watch's dispatch bar.
-function listRowCounts(s: SendSummary) {
-  const total =
-    (s.c_pending || 0) +
-    (s.c_in_flight || 0) +
-    (s.c_accepted || 0) +
-    (s.c_delivered || 0) +
-    (s.c_bounced || 0) +
-    (s.c_complained || 0) +
-    (s.c_skipped || 0) +
-    (s.c_unsent || 0);
-  const t = total > 0 ? total : s.recipient_count || 0;
-  const done =
-    (s.c_accepted || 0) + (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
-  const confirmed = (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
-  const pct = t > 0 ? Math.round((100 * done) / t) : 0;
-  // Rough ETA from the average rate since the send started — the same cumulative
-  // estimate /progress reports, computed here off the list row so no extra read is needed.
-  let etaMs: number | null = null;
-  if (s.started_at && done > 0 && t > done) {
-    const elapsed = Date.now() - s.started_at;
-    if (elapsed > 0) {
-      etaMs = ((t - done) * elapsed) / done;
-    }
-  }
-  return { total: t, accepted: done, confirmed, pct, etaMs };
-}
-
-/**
- * A `/sends` list row's "Delivered" cell, from its denormalized counters. It reports TRUE
- * delivered (webhook-confirmed `c_delivered`, not provider-`accepted`), so the Sent list
- * and dashboard recent-sends agree with the record view's "Delivered" for the same send,
- * and a bounced/complained recipient is never miscounted as delivered. Any bounce /
- * complaint / unsent shows as a muted delivery-failure note beneath the count, worst
- * first, so a bad send reads as one at a glance. A clean send prints nothing.
- */
-export function deliveredCell(s: SendSummary): Html {
-  const delivered = s.c_delivered || 0;
-  const kinds: string[] = [];
-  if (s.c_complained) {
-    kinds.push(`${s.c_complained.toLocaleString()} complained`);
-  }
-  if (s.c_bounced) {
-    kinds.push(`${s.c_bounced.toLocaleString()} bounced`);
-  }
-  if (s.c_unsent) {
-    kinds.push(`${s.c_unsent.toLocaleString()} unsent`);
-  }
-  // Each kind is one unbreakable unit, so a wrap lands between kinds, never inside one.
-  const note = kinds.length
-    ? html`<span class="muted delivered-note">${kinds.map((text, i) => html`${i ? ", " : ""}<span class="delivered-kind">${text}</span>`)}</span>`
-    : null;
-  return html`<span class="n">${delivered.toLocaleString()}</span>${note}`;
-}
-
-/**
- * One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
- * The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
- */
-export function activeRowHtml(s: SendSummary): Html {
-  const c = listRowCounts(s);
-  const eta = c.etaMs != null ? ` · ~${fmtDuration(c.etaMs)} left` : "";
-  return html`<div class="card spread clickable active-card" data-watch="${s.id}">
-      <div class="active-main">
-        <a class="card-link active-subj" href="#/sent/${s.id}">${s.subject || html`<em>untitled</em>`}</a>
-        <div class="active-bar"><div class="active-fill" style="width:${clampPct(c.pct)}%"></div></div>
-        <div class="muted active-stat">Sending — ${c.accepted.toLocaleString()} of ${c.total.toLocaleString()} accepted${
-          c.confirmed ? ` · ${c.confirmed.toLocaleString()} confirmed` : ""
-        }${eta}</div>
-      </div>
-      <a class="ghost-link" href="#/sent/${s.id}">Watch&nbsp;→</a>
-    </div>`;
-}
 
 export async function renderSent(): Promise<void> {
   // The dispatch side: the still-cancelable Scheduled queue on top, then the frozen Sent

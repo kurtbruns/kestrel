@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeliveryOutcomes, Send, SendProgress } from "../../shared/sends";
 import { appState } from "../state";
-import { $, $$, type FakeApi, fakeApi, resetShell } from "../test_support";
-import { clampPct, fmtDuration, renderSentRecord } from "./sent";
+import { $, $$, type FakeApi, fakeApi, resetShell } from "../test/support";
+import { clampPct, fmtDuration } from "./progress";
+import { renderSentRecord } from "./record";
 
 const send = (over: Partial<Send> = {}): Send => ({
   id: "x1",

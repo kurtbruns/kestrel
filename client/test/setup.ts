@@ -4,7 +4,7 @@
 // inline scripts are dropped: they set a sidebar mode before first paint, nothing a spec
 // asserts on.
 
-import page from "../public/dashboard/index.html?raw";
+import page from "../../public/dashboard/index.html?raw";
 
 const body = page.slice(page.indexOf("<body>") + "<body>".length, page.lastIndexOf("</body>"));
 document.body.innerHTML = body.replace(/<script[\s\S]*?<\/script>/g, "");

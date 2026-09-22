@@ -20,7 +20,8 @@ import { type ListState, renderPager, th, wireSort } from "../list_controls";
 import { app } from "../shell";
 import { appState } from "../state";
 import { busy, renderError } from "../widgets";
-import { openResolveModal } from "./sends";
+import { openResolveModal } from "./dialogs";
+import { clampPct, fmtDuration } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -80,10 +81,6 @@ function phasePill(phase: SendPhase): Html {
   return html`<span class="phase-pill tone-${m.tone}">${m.label}</span>`;
 }
 
-/** A percentage clamped to 0–100 and rounded. */
-export const clampPct = (n: number | null | undefined): number =>
-  Math.max(0, Math.min(100, Math.round(n || 0)));
-
 // A labeled progress bar: `tone` picks the fill color, `sub` is a muted sub-line.
 function progressBar(
   tone: string,
@@ -120,22 +117,6 @@ function deliveryBar(
       </div>
       <div class="wbar-sub muted">${sub}</div>
     </div>`;
-}
-
-/** A rough duration, coarsening with size: "45s", "12 min", "3 hr"; an em dash for none. */
-export function fmtDuration(ms: number | null | undefined): string {
-  if (ms == null || !Number.isFinite(ms) || ms <= 0) {
-    return "—";
-  }
-  const s = Math.round(ms / 1000);
-  if (s < 90) {
-    return `${s}s`;
-  }
-  const m = Math.round(s / 60);
-  if (m < 90) {
-    return `${m} min`;
-  }
-  return `${Math.round(m / 60)} hr`;
 }
 
 // The counts grid mirrors the eight denormalized buckets; each swatch reuses the record

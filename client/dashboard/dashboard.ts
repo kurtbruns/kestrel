@@ -4,26 +4,22 @@
 import type { PostListItem, PostListResponse } from "../../shared/posts";
 import type { SendListResponse, SendSummary } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
-import type {
-  Subscriber,
-  SubscriberCounts,
-  SubscriberListResponse,
-} from "../../shared/subscribers";
+import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor } from "../deployment";
 import { $, $$ } from "../dom";
-import { badge, copyText, fmt, modal, toast } from "../helpers";
+import { badge, copyText, fmt } from "../helpers";
 import { type Html, html, setHtml } from "../html";
 import { icon } from "../icons";
 import { notice } from "../notice";
-import { appliedNoticeHtml } from "../remake";
+import { createNewPost } from "../posts/drafts";
+import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "../sends/progress";
+import { appliedNoticeHtml } from "../settings/remake";
 import { app } from "../shell";
 import { appState } from "../state";
-import { busy, renderError } from "../widgets";
-import { createNewPost } from "./drafts";
-import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./sends";
-import { addSubscriberModal } from "./subscribers";
+import { addSubscriberModal } from "../subscribers/dialogs";
+import { renderError } from "../widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
 // from existing authed endpoints — GET /posts, /sends, /subscribers, and the cached
@@ -480,23 +476,4 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
       <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button data-copy="${subscribeUrl}">Copy</button></li>
     </ol>
   </div>`;
-}
-
-export function confirmUnsubscribe(sub: Subscriber, onDone: () => void): void {
-  const m = modal(
-    html`<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${sub.email}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
-  );
-  const go = $<HTMLButtonElement>("#uGo", m.el);
-  $("#uCancel", m.el).onclick = m.close;
-  go.onclick = () =>
-    busy(go, "Unsubscribing…", async () => {
-      try {
-        await api(`/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
-        m.close();
-        toast(`Unsubscribed ${sub.email}`);
-        onDone();
-      } catch (e) {
-        toast(e instanceof Error ? e.message : String(e));
-      }
-    });
 }

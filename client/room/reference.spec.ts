@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReferenceGroup } from "../../shared/reference";
-import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test_support";
+import { $, $$, type FakeApi, fakeApi, jsonResponse, resetShell, settle } from "../test/support";
 import { renderReference } from "./reference";
 
 // Two tiers as the Worker groups them from its manifest; the webhook tier is absent, as it
