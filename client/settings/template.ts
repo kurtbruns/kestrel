@@ -10,15 +10,15 @@ import type {
 import { api } from "../api";
 import { parseFromName } from "../brand";
 import { withNoProviderNote } from "../deployment";
-import { $, $$ } from "../dom";
-import { copyText, modal, parseAddresses, toast } from "../helpers";
-import { highlightTemplate } from "../highlight";
-import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../html";
-import { icon } from "../icons";
-import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
-import { busy, renderError } from "../widgets";
+import { $, $$ } from "../ui/dom";
+import { parseAddresses } from "../ui/format";
+import { highlightTemplate } from "../ui/highlight";
+import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
+import { icon } from "../ui/icons";
+import { savebar } from "../ui/savebar";
+import { busy, copyText, modal, renderError, toast } from "../ui/widgets";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

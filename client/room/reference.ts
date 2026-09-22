@@ -7,10 +7,10 @@ import type {
   ReferenceResponse,
 } from "../../shared/reference";
 import { api } from "../api";
-import { $, $$ } from "../dom";
-import { type Html, html, setHtml } from "../html";
 import { app } from "../shell";
-import { renderError } from "../widgets";
+import { $, $$ } from "../ui/dom";
+import { type Html, html, setHtml } from "../ui/html";
+import { renderError } from "../ui/widgets";
 import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest

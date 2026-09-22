@@ -3,10 +3,10 @@
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
 import { api } from "../api";
-import { $ } from "../dom";
-import { modal, toast, toLocalInput } from "../helpers";
-import { html } from "../html";
-import { busy } from "../widgets";
+import { $ } from "../ui/dom";
+import { toLocalInput } from "../ui/format";
+import { html } from "../ui/html";
+import { busy, modal, toast } from "../ui/widgets";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

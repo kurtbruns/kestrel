@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsResponse, SettingsView } from "../../shared/settings";
-import { savebar } from "../savebar";
 import { appState } from "../state";
 import {
   $,
@@ -12,6 +11,7 @@ import {
   resetShell,
   typeInto,
 } from "../test/support";
+import { savebar } from "../ui/savebar";
 import { renderSettings } from "./settings";
 
 const DEFAULT_COPY = {

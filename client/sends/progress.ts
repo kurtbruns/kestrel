@@ -2,10 +2,10 @@
 // wedge test, the list row's cells, the countdowns, and the small number formats.
 
 import type { SendSummary } from "../../shared/sends";
-import { $$ } from "../dom";
-import { untilStr } from "../helpers";
-import { type Html, html } from "../html";
 import { appState } from "../state";
+import { $$ } from "../ui/dom";
+import { untilStr } from "../ui/format";
+import { type Html, html } from "../ui/html";
 
 /** A percentage clamped to 0–100 and rounded. */
 export const clampPct = (n: number | null | undefined): number =>

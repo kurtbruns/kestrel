@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsResponse } from "../../shared/settings";
-import { savebar } from "../savebar";
 import { appState } from "../state";
 import {
   $,
@@ -12,6 +11,7 @@ import {
   resetShell,
   typeInto,
 } from "../test/support";
+import { savebar } from "../ui/savebar";
 import { renderTemplate } from "./template";
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;

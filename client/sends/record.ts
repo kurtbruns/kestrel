@@ -13,13 +13,13 @@ import type {
 } from "../../shared/sends";
 import { api, apiText } from "../api";
 import { noEmailProvider } from "../deployment";
-import { $, $$ } from "../dom";
-import { fmt, toast } from "../helpers";
-import { type Html, html, setHtml } from "../html";
-import { type ListState, renderPager, th, wireSort } from "../list_controls";
 import { app } from "../shell";
 import { appState } from "../state";
-import { busy, renderError } from "../widgets";
+import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
+import { type Html, html, setHtml } from "../ui/html";
+import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
+import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
 import { clampPct, fmtDuration } from "./progress";
 

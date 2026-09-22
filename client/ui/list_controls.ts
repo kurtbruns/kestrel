@@ -1,6 +1,6 @@
 // Shared list controls: the query model, toolbar, sortable headers, and pager.
 
-import type { PageMeta, SortDir } from "../shared/list";
+import type { PageMeta, SortDir } from "../../shared/list";
 import { type Html, html, setHtml } from "./html";
 
 // One convention for the admin list views (Posts, Subscribers, Sends): a search-left

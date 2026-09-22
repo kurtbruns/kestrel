@@ -3,10 +3,9 @@
 
 import type { SubscribeResponse, Subscriber } from "../../shared/subscribers";
 import { api } from "../api";
-import { $ } from "../dom";
-import { modal, toast } from "../helpers";
-import { html } from "../html";
-import { busy } from "../widgets";
+import { $ } from "../ui/dom";
+import { html } from "../ui/html";
+import { busy, modal, toast } from "../ui/widgets";
 
 /** Add subscriber → the normal double opt-in (never an auto-confirm). */
 export function addSubscriberModal(onDone?: () => void): void {

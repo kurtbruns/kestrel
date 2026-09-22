@@ -109,7 +109,7 @@ export function resetShell(): void {
 }
 
 // The same DOM helpers the modules use, re-exported so a spec reads like the code it tests.
-export { $, $$ } from "../dom";
+export { $, $$ } from "../ui/dom";
 
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */
 export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {

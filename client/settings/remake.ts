@@ -3,9 +3,10 @@
 
 import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
 import { ApiError } from "../api";
-import { fmt, modal } from "../helpers";
-import { type Html, html } from "../html";
-import { icon } from "../icons";
+import { fmt } from "../ui/format";
+import { type Html, html } from "../ui/html";
+import { icon } from "../ui/icons";
+import { modal } from "../ui/widgets";
 
 /** The words a re-make confirmation uses for the commit: { action: "Save", gerund: "Saving", lead(n) }. */
 export interface RemakeVerb {

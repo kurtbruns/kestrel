@@ -48,7 +48,7 @@ export default defineConfig(async () => {
           },
         },
         {
-          // The build inlines client/icons/*.svg as text (esbuild's text loader); Vite would
+          // The build inlines client/ui/icons/*.svg as text (esbuild's text loader); Vite would
           // hand a spec a URL for the same import, so this hands it the text too.
           plugins: [
             {

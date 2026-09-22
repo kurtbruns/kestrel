@@ -1,31 +1,5 @@
-// Small view helpers: toasts, badges, dates, address parsing, the clipboard, and the modal.
-
-import { type Html, html, setHtml } from "./html";
-import { toasts } from "./shell";
-
-export function toast(msg: string): void {
-  const t = document.createElement("div");
-  t.className = "toast";
-  t.textContent = msg;
-  toasts.appendChild(t);
-  requestAnimationFrame(() => t.classList.add("show"));
-  // Linger long enough to read a sentence-length confirmation ("Test sent to 2
-  // addresses") before it fades; the removal trails the fade-out transition.
-  setTimeout(() => t.classList.remove("show"), 3600);
-  setTimeout(() => t.remove(), 3900);
-}
-
-export async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("Copied");
-  } catch {
-    toast("Couldn't copy to clipboard");
-  }
-}
-
-/** A status pill; the status doubles as its class. */
-export const badge = (status: string): Html => html`<span class="badge ${status}">${status}</span>`;
+// Pure formatting and parsing, with no DOM: dates, countdowns, the datetime-local value,
+// and the recipient list.
 
 /** A short local date-time, or an em dash for none. */
 export const fmt = (ms: number | null | undefined): string =>
@@ -92,30 +66,4 @@ export function untilStr(fireAt: number): string {
   }
   const days = Math.round(hr / 24);
   return `Sends in ${days} day${days === 1 ? "" : "s"}`;
-}
-
-export interface Modal {
-  el: HTMLElement;
-  close: () => void;
-}
-
-/** A modal over a backdrop; a click outside or Escape closes it. The content is markup. */
-export function modal(content: Html): Modal {
-  const back = document.createElement("div");
-  back.className = "modal-backdrop";
-  setHtml(back, html`<div class="modal" role="dialog" aria-modal="true">${content}</div>`);
-  document.body.appendChild(back);
-  const close = () => back.remove();
-  back.addEventListener("click", (e) => {
-    if (e.target === back) {
-      close();
-    }
-  });
-  document.addEventListener("keydown", function onEsc(e) {
-    if (e.key === "Escape") {
-      close();
-      document.removeEventListener("keydown", onEsc);
-    }
-  });
-  return { el: back, close };
 }

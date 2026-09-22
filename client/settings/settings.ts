@@ -12,14 +12,13 @@ import type {
 } from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName, renderSidebarBrand } from "../brand";
-import { $, $$ } from "../dom";
-import { copyText, toast } from "../helpers";
-import { escapeHtml, type Html, html, setHtml } from "../html";
-import { type IconName, icon } from "../icons";
-import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
-import { busy, renderError } from "../widgets";
+import { $, $$ } from "../ui/dom";
+import { escapeHtml, type Html, html, setHtml } from "../ui/html";
+import { type IconName, icon } from "../ui/icons";
+import { savebar } from "../ui/savebar";
+import { busy, copyText, renderError, toast } from "../ui/widgets";
 import {
   inUseChip,
   isRemakeTooClose,

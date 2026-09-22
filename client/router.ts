@@ -6,7 +6,6 @@ import { renderDrafts } from "./posts/drafts";
 import { LEAVE_MSG, renderEditor } from "./posts/editor";
 import { renderDocs } from "./room/docs";
 import { renderReference } from "./room/reference";
-import { savebar } from "./savebar";
 import { renderSent } from "./sends/list";
 import { renderSentRecord } from "./sends/record";
 import { renderSettings } from "./settings/settings";
@@ -14,6 +13,7 @@ import { renderTemplate } from "./settings/template";
 import { setNavOpen } from "./shell";
 import { appState, stopTimers } from "./state";
 import { renderSubscribers } from "./subscribers/list";
+import { savebar } from "./ui/savebar";
 
 /** Mount the view the hash names, tearing the previous one down first. */
 export function route(): unknown {

@@ -2,8 +2,8 @@
 // fallback.
 
 import type { SettingsResponse } from "../shared/settings";
-import { html, setHtml } from "./html";
 import { appState } from "./state";
+import { html, setHtml } from "./ui/html";
 
 /** "Display Name <addr@domain>" → "Display Name"; a bare address has no display name. */
 export function parseFromName(fromAddress: string | null | undefined): string | null {

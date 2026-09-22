@@ -4,9 +4,11 @@
 import type { SendListResponse, SendSummary } from "../../shared/sends";
 import { api } from "../api";
 import { noEmailProvider } from "../deployment";
-import { $, $$ } from "../dom";
-import { fmt, toast } from "../helpers";
-import { html, setHtml } from "../html";
+import { app } from "../shell";
+import { appState } from "../state";
+import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
+import { html, setHtml } from "../ui/html";
 import {
   type ListState,
   listQuery,
@@ -15,10 +17,8 @@ import {
   th,
   wireSort,
   wireToolbar,
-} from "../list_controls";
-import { app } from "../shell";
-import { appState } from "../state";
-import { busy, renderError } from "../widgets";
+} from "../ui/list_controls";
+import { busy, renderError, toast } from "../ui/widgets";
 import { openRescheduleModal, openResolveModal } from "./dialogs";
 import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./progress";
 

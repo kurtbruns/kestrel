@@ -2,9 +2,10 @@
 
 import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
-import { $, $$ } from "../dom";
-import { badge, fmt } from "../helpers";
-import { type Html, html, setHtml } from "../html";
+import { app } from "../shell";
+import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
+import { type Html, html, setHtml } from "../ui/html";
 import {
   type ListState,
   listQuery,
@@ -13,9 +14,8 @@ import {
   th,
   wireSort,
   wireToolbar,
-} from "../list_controls";
-import { app } from "../shell";
-import { infoTip, openMenu, renderError } from "../widgets";
+} from "../ui/list_controls";
+import { badge, infoTip, openMenu, renderError } from "../ui/widgets";
 import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,

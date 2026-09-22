@@ -2,9 +2,10 @@
 
 import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
 import { api } from "../api";
-import { $, $$ } from "../dom";
-import { badge, fmt, modal, toast } from "../helpers";
-import { html, setHtml } from "../html";
+import { app } from "../shell";
+import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
+import { html, setHtml } from "../ui/html";
 import {
   type ListState,
   listQuery,
@@ -13,9 +14,8 @@ import {
   th,
   wireSort,
   wireToolbar,
-} from "../list_controls";
-import { app } from "../shell";
-import { busy, type MenuItem, openMenu, renderError } from "../widgets";
+} from "../ui/list_controls";
+import { badge, busy, type MenuItem, modal, openMenu, renderError, toast } from "../ui/widgets";
 
 // The writing side: draft + scheduled only — a sent post is a frozen record and lives in
 // Sent. "All statuses" is scoped to those two, so it never reaches sent.

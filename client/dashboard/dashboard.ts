@@ -8,18 +8,18 @@ import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subs
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor } from "../deployment";
-import { $, $$ } from "../dom";
-import { badge, copyText, fmt } from "../helpers";
-import { type Html, html, setHtml } from "../html";
-import { icon } from "../icons";
-import { notice } from "../notice";
 import { createNewPost } from "../posts/drafts";
 import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { app } from "../shell";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
-import { renderError } from "../widgets";
+import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
+import { type Html, html, setHtml } from "../ui/html";
+import { icon } from "../ui/icons";
+import { notice } from "../ui/notice";
+import { badge, copyText, renderError } from "../ui/widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
 // from existing authed endpoints — GET /posts, /sends, /subscribers, and the cached
