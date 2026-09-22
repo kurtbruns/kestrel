@@ -4,12 +4,11 @@
 
 ## What it enforces (on the default branch)
 
-- No branch deletion, no force-push, linear history required.
-- Changes land via pull request; squash and rebase are the allowed merge methods (both preserve the required linear history — merge commits are not).
+- No branch deletion, no force-push.
+- Changes land via pull request. All three merge methods stay allowed so the exceptions need no JSON edit; the policy (squash by default) lives in `.claude/CLAUDE.md`, where the method is chosen.
 - All PR review threads must be resolved before merge.
+- The `gate` status check must pass: the quality gate workflow (`.github/workflows/gate.yml`) runs `npm run typecheck`, `npm test`, and `npm run ci` on every pull request. `integration_id` 15368 is GitHub Actions, so only the workflow can satisfy it. The branch need not be up to date with `main` first (`strict_required_status_checks_policy` is off).
 - No bypass actors.
-
-There is **no required status check**: this repo has no CI — the quality gate (`npm test`, `npm run typecheck`, `npm run check`) is run by hand before merge (see `CLAUDE.md`). If CI is added later, add a `required_status_checks` rule here pinned to its check context and re-apply.
 
 ## Re-apply / update
 
@@ -22,3 +21,11 @@ gh api --method PUT repos/kurtbruns/kestrel/rulesets/<id> --input .github/rulese
 ```
 
 If you edit the ruleset in the GitHub UI, re-export it here so this file stays the source of truth (drift is not detected automatically).
+
+## Repository settings
+
+A squash lands the pull request's title as the commit subject and its description as the body, so the reasoning reaches `main`'s history in the one commit that represents the change. Set once, recorded here so it is reproducible:
+
+```bash
+gh api --method PATCH repos/kurtbruns/kestrel -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+```

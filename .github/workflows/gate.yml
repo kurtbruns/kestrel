@@ -1,0 +1,36 @@
+# The quality gate, on every pull request to main and on main itself: exactly what
+# CLAUDE.md asks for by hand (npm test, npm run typecheck, biome ci), so a green local
+# gate is a green CI gate. Self-contained: the tests run on the fake transport and need
+# no secret, and nothing here deploys or migrates. The Protect main ruleset requires the
+# `gate` check before a merge (.github/rulesets/).
+name: Quality gate
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall stamps the build (version, sha) into src/generated/, which the Worker imports.
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run ci
