@@ -461,7 +461,10 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     logoPh.hidden = has;
     logoRemove.hidden = !has;
     logoReplace.textContent = has ? "Replace" : "Upload";
+    // Both previews that render the logo, so an upload or a removal reaches the
+    // confirmation email's masthead at once rather than on the next identity edit.
     templatePreview.repaint();
+    repaintConfirmation();
   };
   logoReplace.onclick = () => logoInput.click();
   logoTile.addEventListener("click", () => logoInput.click());

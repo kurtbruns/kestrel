@@ -311,15 +311,16 @@ describe("settings view", () => {
     expect($("#logoTile").style.backgroundImage).toContain("branding/logo?v=1");
     expect($("#logoRemove").hidden).toBe(false);
     expect($("#toasts").textContent).toMatch(/Logo updated/);
-    // The confirmation preview's masthead picks the logo up on its next repaint (an
-    // identity or wording edit), as it always has; the tile and template preview at once.
-    typeInto($<HTMLInputElement>("#setTagline"), "Owls");
+    // Every surface that renders the logo moves at once, the confirmation email's
+    // masthead included — no second edit needed to bring it along.
     expect($("#cePvMastLogo img").getAttribute("src")).toContain("branding/logo?v=1");
-    $("#savebarDiscard").click();
     $("#logoRemove").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($("#logoTile").classList.contains("has-img")).toBe(false);
     expect($("#logoRemove").hidden).toBe(true);
+    // …and drops it from the masthead at once too: the cell goes, the way the email's
+    // masthead omits it when there is no logo (src/emails/system.ts).
+    expect($("#cePvMastLogo").hidden).toBe(true);
     expect($("#toasts").textContent).toMatch(/Logo removed/);
     expect(bar().classList.contains("show")).toBe(false); // the logo never dirties the bar
   });

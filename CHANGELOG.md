@@ -8,6 +8,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Fixed
+
+- Uploading or removing the publication logo now updates the confirmation email's preview at once, instead of leaving the old logo there until another field is edited.
+
 ## [0.2.0] - 2026-09-21
 
 ### Changed
