@@ -2,14 +2,14 @@
 // The sent list and the send actions: countdowns, the wedged-send resolution, and
 // rescheduling.
 
-import { api } from "./api";
-import { noEmailProvider } from "./build_ref";
-import { esc, fmt, modal, toast, toLocalInput, untilStr } from "./helpers";
-import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "./list_controls";
-import { busy, renderError } from "./notice";
+import { api } from "../api";
+import { noEmailProvider } from "../build_ref";
+import { esc, fmt, modal, toast, toLocalInput, untilStr } from "../helpers";
+import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "../list_controls";
+import { busy, renderError } from "../notice";
+import { app } from "../shell";
+import { appState } from "../state";
 import { clampPct, fmtDuration } from "./sent";
-import { app } from "./shell";
-import { appState } from "./state";
 
 export function startCountdowns() {
   // Clear any prior interval first: reloadAll() re-runs loadScheduled (and this) on

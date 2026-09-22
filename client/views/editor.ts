@@ -2,19 +2,19 @@
 // The post editor: subject/slug, the Markdown composer, autosave with its idle and
 // hard-cap timers, the freshness poll, images, and the schedule / send-now dialogs.
 
-import { slugify } from "../shared/slug";
-import { api, apiText } from "./api";
-import { withNoProviderNote } from "./build_ref";
-import { esc, fmt, modal, parseAddresses, toast, toLocalInput } from "./helpers";
-import { highlightMarkdown } from "./highlight";
-import { icon } from "./icons";
-import { busy, notice, renderError } from "./notice";
-import { appliedNoticeHtml } from "./remake";
-import { infoTip } from "./savebar";
+import { slugify } from "../../shared/slug";
+import { api, apiText } from "../api";
+import { withNoProviderNote } from "../build_ref";
+import { esc, fmt, modal, parseAddresses, toast, toLocalInput } from "../helpers";
+import { highlightMarkdown } from "../highlight";
+import { icon } from "../icons";
+import { busy, notice, renderError } from "../notice";
+import { appliedNoticeHtml } from "../remake";
+import { infoTip } from "../savebar";
+import { app } from "../shell";
+import { appState } from "../state";
 import { openRescheduleModal } from "./sends";
 import { SET_ICON } from "./settings";
-import { app } from "./shell";
-import { appState } from "./state";
 
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.

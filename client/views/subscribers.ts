@@ -1,13 +1,13 @@
 // @ts-nocheck
 // The subscribers list and the add-subscriber modal.
 
-import { api } from "./api";
+import { api } from "../api";
+import { badge, esc, fmt, modal, toast } from "../helpers";
+import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "../list_controls";
+import { busy, renderError } from "../notice";
+import { infoTip, openMenu } from "../savebar";
+import { app } from "../shell";
 import { confirmUnsubscribe } from "./dashboard";
-import { badge, esc, fmt, modal, toast } from "./helpers";
-import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "./list_controls";
-import { busy, renderError } from "./notice";
-import { infoTip, openMenu } from "./savebar";
-import { app } from "./shell";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate

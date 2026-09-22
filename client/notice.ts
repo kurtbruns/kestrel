@@ -2,7 +2,7 @@
 // The dismissible notice (DESIGN §2), the busy state, and the error view.
 
 import { esc } from "./helpers";
-import { SET_ICON } from "./settings";
+import { SET_ICON } from "./views/settings";
 
 // An event, with a time, that the reader could not otherwise know happened: shown once
 // per event, cleared by the reader, asking nothing. Never a tip, a standing state (the

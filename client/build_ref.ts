@@ -4,12 +4,12 @@
 
 import { archivePostUrl } from "../shared/archive_url";
 import { api } from "./api";
-import { clearAutosaveTimers } from "./editor";
 import { esc, toast } from "./helpers";
 import { busy } from "./notice";
 import { stopPollers } from "./savebar";
 import { app } from "./shell";
 import { appState } from "./state";
+import { clearAutosaveTimers } from "./views/editor";
 
 // { version, sha } from the read-only deployment reflection (appConfig.deployment.build,
 // resolved at build in src/build.ts): version → its release (only when this build IS that

@@ -1,14 +1,14 @@
 // @ts-nocheck
 // The sent record view and the live in-flight watch.
 
-import { api, apiText } from "./api";
-import { noEmailProvider } from "./build_ref";
-import { esc, fmt, toast } from "./helpers";
-import { renderPager, th, wireSort } from "./list_controls";
-import { busy, renderError } from "./notice";
+import { api, apiText } from "../api";
+import { noEmailProvider } from "../build_ref";
+import { esc, fmt, toast } from "../helpers";
+import { renderPager, th, wireSort } from "../list_controls";
+import { busy, renderError } from "../notice";
+import { app } from "../shell";
+import { appState } from "../state";
 import { openResolveModal } from "./sends";
-import { app } from "./shell";
-import { appState } from "./state";
 
 // A sent post is a frozen record (I3), not an editable object, so it opens this instead
 // of a locked editor: how the send went over the frozen audience, with a link to the

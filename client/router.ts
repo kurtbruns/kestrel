@@ -2,19 +2,19 @@
 // The hash router: route() tears the previous view down (timers, editor guards) and
 // mounts the next; the leave guards live here.
 
-import { renderDashboard } from "./dashboard";
-import { renderDocs } from "./docs";
-import { renderDrafts } from "./drafts";
-import { clearAutosaveTimers, LEAVE_MSG, renderEditor } from "./editor";
-import { renderReference } from "./reference";
 import { savebar, stopPollers } from "./savebar";
-import { renderSent } from "./sends";
-import { renderSentRecord } from "./sent";
-import { renderSettings } from "./settings";
 import { setNavOpen } from "./shell";
 import { appState } from "./state";
-import { renderSubscribers } from "./subscribers";
-import { renderTemplate } from "./template";
+import { renderDashboard } from "./views/dashboard";
+import { renderDocs } from "./views/docs";
+import { renderDrafts } from "./views/drafts";
+import { clearAutosaveTimers, LEAVE_MSG, renderEditor } from "./views/editor";
+import { renderReference } from "./views/reference";
+import { renderSent } from "./views/sends";
+import { renderSentRecord } from "./views/sent";
+import { renderSettings } from "./views/settings";
+import { renderSubscribers } from "./views/subscribers";
+import { renderTemplate } from "./views/template";
 
 export function route() {
   stopPollers();

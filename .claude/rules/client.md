@@ -40,7 +40,8 @@ paths:
 ## Types and tests
 
 - `client/tsconfig.json` extends the root with the DOM lib and no Worker or Vitest types; `npm run typecheck` runs it as a second program.
-- The modules under `client/` are the former app.js split along its sections, still under `// @ts-nocheck`; `main.ts` is the entry (imports every module, runs `boot()`). `state.ts`, `dev_reload.ts`, and every new module are strict from their first line. Lift a pragma per module, with the wire types from `shared/`.
+- Layout: `client/views/` holds one module per routed view, the things `router.ts` mounts (and where the view lifecycle work lands); everything else, the app around them (shell, router, api, auth, the shared UI pieces), stays flat in `client/`. Specs sit beside their module.
+- The modules are the former app.js split along its sections, still under `// @ts-nocheck`; `main.ts` is the entry (imports every module, runs `boot()`). `state.ts`, `dev_reload.ts`, and every new module are strict from their first line. Lift a pragma per module, with the wire types from `shared/`.
 - While any pragma stands, `client/` skips biome's `noImplicitAnyLet` (an override in `biome.json`; tsc enforces the same on lifted modules, so it ends with the last pragma).
 - State more than one module reads or writes lives in `appState` (`client/state.ts`), so every cross-module write is visible in one place. A `let` only one module touches stays in that module; never export a mutable `let` (ES modules cannot assign another module's binding).
 - No top-level statement may read another module's value at load time: esbuild hoists module scopes into one, so under an import cycle that read sees `undefined`. Functions are fine (hoisted); `shell`'s DOM roots are fine because `shell` imports nothing but `state`.

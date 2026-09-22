@@ -1,12 +1,12 @@
 // @ts-nocheck
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
-import { api } from "./api";
-import { esc, toast } from "./helpers";
-import { roomShell } from "./icons";
-import { renderError } from "./notice";
-import { app } from "./shell";
-import { appState } from "./state";
+import { api } from "../api";
+import { esc, toast } from "../helpers";
+import { roomShell } from "../icons";
+import { renderError } from "../notice";
+import { app } from "../shell";
+import { appState } from "../state";
 
 // The setup guide, authored in docs/setup/*.md and served read-only by the authed
 // GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over a

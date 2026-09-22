@@ -1,13 +1,13 @@
 // @ts-nocheck
 // The drafts list (draft + scheduled).
 
-import { api } from "./api";
-import { createNewPost } from "./build_ref";
-import { badge, esc, fmt, modal, toast } from "./helpers";
-import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "./list_controls";
-import { busy, renderError } from "./notice";
-import { openMenu } from "./savebar";
-import { app } from "./shell";
+import { api } from "../api";
+import { createNewPost } from "../build_ref";
+import { badge, esc, fmt, modal, toast } from "../helpers";
+import { listQuery, listToolbar, renderPager, th, wireSort, wireToolbar } from "../list_controls";
+import { busy, renderError } from "../notice";
+import { openMenu } from "../savebar";
+import { app } from "../shell";
 
 // The writing side (#147): draft + scheduled only — a sent post is a frozen record and
 // lives in Sent. "All statuses" is scoped to those two, so it never reaches sent.

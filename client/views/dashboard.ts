@@ -2,15 +2,15 @@
 // The dashboard (home): counts, the active send widget, drafts and sent tables, the
 // setup checklist, and quick actions.
 
-import { api } from "./api";
-import { derivePublication } from "./brand";
-import { archiveUrlFor, copyText, createNewPost } from "./build_ref";
-import { badge, esc, fmt, modal, toast } from "./helpers";
-import { busy, notice, renderError } from "./notice";
-import { appliedNoticeHtml } from "./remake";
+import { api } from "../api";
+import { derivePublication } from "../brand";
+import { archiveUrlFor, copyText, createNewPost } from "../build_ref";
+import { badge, esc, fmt, modal, toast } from "../helpers";
+import { busy, notice, renderError } from "../notice";
+import { appliedNoticeHtml } from "../remake";
+import { app } from "../shell";
+import { appState } from "../state";
 import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./sends";
-import { app } from "./shell";
-import { appState } from "./state";
 import { addSubscriberModal } from "./subscribers";
 
 // The post-login landing and the brand's target (the default route). Built entirely

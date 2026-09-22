@@ -2,15 +2,15 @@
 // The Settings page: publication identity, sending, confirmation wording, test
 // recipients, and the deployment reflection.
 
-import { api } from "./api";
-import { parseFromName, renderSidebarBrand } from "./brand";
-import { copyText } from "./build_ref";
-import { esc, toast } from "./helpers";
-import { busy, renderError } from "./notice";
-import { inUseChip, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
-import { savebar } from "./savebar";
-import { app } from "./shell";
-import { appState } from "./state";
+import { api } from "../api";
+import { parseFromName, renderSidebarBrand } from "../brand";
+import { copyText } from "../build_ref";
+import { esc, toast } from "../helpers";
+import { busy, renderError } from "../notice";
+import { inUseChip, remakeIdentity, savedToast, withRemakeConfirm } from "../remake";
+import { savebar } from "../savebar";
+import { app } from "../shell";
+import { appState } from "../state";
 import { mountSampleEmailPreview } from "./template";
 
 // Runtime preferences (editable) + a read-only reflection of the deploy-time

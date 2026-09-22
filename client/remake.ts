@@ -3,7 +3,7 @@
 // notice, and the confirm-then-save flow the Template and Settings pages share.
 
 import { esc, fmt, modal } from "./helpers";
-import { SET_ICON } from "./settings";
+import { SET_ICON } from "./views/settings";
 
 // A template or identity change reaches every scheduled email, and the server refuses
 // such a save until the client has acknowledged those sends by id (409

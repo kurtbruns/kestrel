@@ -2,17 +2,17 @@
 // The email template page: the sample preview, the example menu, and the template
 // editor.
 
-import { api } from "./api";
-import { parseFromName } from "./brand";
-import { copyText, withNoProviderNote } from "./build_ref";
-import { esc, modal, parseAddresses, toast } from "./helpers";
-import { highlightTemplate } from "./highlight";
-import { busy, renderError } from "./notice";
-import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
-import { savebar } from "./savebar";
+import { api } from "../api";
+import { parseFromName } from "../brand";
+import { copyText, withNoProviderNote } from "../build_ref";
+import { esc, modal, parseAddresses, toast } from "../helpers";
+import { highlightTemplate } from "../highlight";
+import { busy, renderError } from "../notice";
+import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "../remake";
+import { savebar } from "../savebar";
+import { app } from "../shell";
+import { appState } from "../state";
 import { SET_ICON } from "./settings";
-import { app } from "./shell";
-import { appState } from "./state";
 
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
