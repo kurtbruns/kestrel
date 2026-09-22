@@ -22,7 +22,7 @@
     "client:watch": "node scripts/build-client.mjs --dev --watch",
     "version:build": "node scripts/stamp-version.mjs",
     "check:tokens": "node scripts/check-css-tokens.mjs",
-    "pretest": "node scripts/stamp-version.mjs --if-changed && node scripts/build-client.mjs && node scripts/check-css-tokens.mjs",
+    "pretest": "node scripts/stamp-version.mjs --if-changed && node scripts/build-client.mjs --check && node scripts/check-css-tokens.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "biome format --write .",

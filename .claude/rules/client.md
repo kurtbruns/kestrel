@@ -21,7 +21,7 @@ paths:
 - `client/main.ts` bundled to one framework-free, dependency-free, plain-JS `app.js`.
 - `index.html` generated from its source with each asset's content hash as its `?v=`. If the source loses a `./app.js` or `./styles.css` reference the build fails loud rather than serve a stale asset.
 - `public/_headers` caches those two paths immutably, so a changed asset is always a new URL.
-- Stable filenames with a `?v=`, not esbuild's hashed filenames: under `wrangler dev` a file added to the assets directory after startup is never served (its path manifest is built once; only the content of files it already knows is read live). A new filename per rebuild would 404 until restart. This is also why `_headers` is a plain static file.
+- Stable filenames with a `?v=`, not esbuild's hashed filenames: observed under wrangler 4.129, `wrangler dev` never serves a file added to the assets directory after startup (a rewritten file is served fresh; a new one 404s until restart), so a new filename per rebuild would kill the dev loop. Wrangler's own assets watcher is meant to cover that, so this is its bug, not its design; stable names are the right production cache shape regardless. This is also why `_headers` is a plain static file.
 
 ## Flavors
 
@@ -34,8 +34,8 @@ paths:
 
 - `npm run dev`: the watch, which rebuilds on `client/` edits (~10 ms) and re-emits on `public/` edits.
 - Wrangler's `build.command`, so a bare `wrangler deploy` can never ship a stale tree. `watch_dir` is pinned to `src/` so `wrangler dev` does not double-build client edits.
-- `pretest`, so the gate proves the tree still builds. The tests never load it.
-- `wrangler types` runs `build.command` too, so a typecheck rebuilds `dist/`. Harmless.
+- `pretest`, as `--check`: the bundle is built in memory and the source `index.html`'s asset references verified, nothing written. The tests never load the tree, and a gate run in a second terminal beside a live `npm run dev` must not overwrite the dev tree with the production flavor (the open editor would reload onto a bundle with no live reload in it).
+- `wrangler types` runs `build.command` too; the script exits at once when `WRANGLER_COMMAND` is `types`, for the same reason. Only an explicit `npm run client:build` or a deploy writes the production flavor.
 
 ## Types and tests
 
