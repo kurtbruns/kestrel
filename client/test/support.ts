@@ -3,6 +3,8 @@
 // attached, 401 routed, errors shaped) and a view test exercises the same code the browser
 // does, with only the network replaced. Imported by specs only; never part of the bundle.
 
+import { unmount } from "../lifecycle";
+
 /** One request the script saw. `url` is absolute against a placeholder origin. */
 export interface FakeCall {
   method: string;
@@ -35,8 +37,6 @@ export interface FakeApi {
   /** Put the real fetch back. */
   restore(): void;
 }
-
-import { unmount } from "../lifecycle";
 
 const ORIGIN = "http://kestrel.test";
 

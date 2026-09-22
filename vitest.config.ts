@@ -42,7 +42,7 @@ export default defineConfig(async () => {
           test: {
             name: "worker",
             include: ["test/**/*.spec.ts"],
-            setupFiles: ["./test/apply-migrations.ts"],
+            setupFiles: ["./test/apply_migrations.ts"],
             // Don't discover specs inside git worktrees under .claude/ (task copies).
             exclude: [...configDefaults.exclude, "**/.claude/**"],
           },
