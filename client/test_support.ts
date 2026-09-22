@@ -16,7 +16,11 @@ export interface FakeRequest extends FakeCall {
   json(): unknown;
 }
 
-/** A scripted endpoint: method (GET by default) + path (exact, or a pattern) → what it answers. */
+/**
+ * A scripted endpoint: method (GET by default) + path (exact, or a pattern) → what it
+ * answers, as a value (sent as JSON), a Response, or a promise of either (to hold a reply
+ * open while the spec does something mid-flight).
+ */
 export interface FakeRoute {
   method?: string;
   path: string | RegExp;
@@ -25,9 +29,9 @@ export interface FakeRoute {
 
 export interface FakeApi {
   /** Every request, in order, whether or not a route matched. */
-  calls: FakeCall[];
+  calls: FakeRequest[];
   /** Requests no route matched; they were answered 404. Assert this is empty. */
-  unhandled: FakeCall[];
+  unhandled: FakeRequest[];
   /** Put the real fetch back. */
   restore(): void;
 }
@@ -48,14 +52,20 @@ export function jsonResponse(data: unknown, status = 200): Response {
  */
 export function fakeApi(routes: FakeRoute[]): FakeApi {
   const previous = globalThis.fetch;
-  const calls: FakeCall[] = [];
-  const unhandled: FakeCall[] = [];
+  const calls: FakeRequest[] = [];
+  const unhandled: FakeRequest[] = [];
   globalThis.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const raw = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
     const url = new URL(raw, ORIGIN);
     const method = (init?.method ?? "GET").toUpperCase();
     const body = typeof init?.body === "string" ? init.body : null;
-    const call: FakeCall = { method, url, headers: new Headers(init?.headers), body };
+    const call: FakeRequest = {
+      method,
+      url,
+      headers: new Headers(init?.headers),
+      body,
+      json: () => (body ? JSON.parse(body) : null),
+    };
     calls.push(call);
     const route = routes.find(
       (r) =>
@@ -66,7 +76,7 @@ export function fakeApi(routes: FakeRoute[]): FakeApi {
       unhandled.push(call);
       return jsonResponse({ error: `no fake route for ${method} ${url.pathname}` }, 404);
     }
-    const out = route.reply({ ...call, json: () => (body ? JSON.parse(body) : null) });
+    const out = await route.reply(call);
     return out instanceof Response ? out : jsonResponse(out);
   };
   return {

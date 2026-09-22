@@ -21,6 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- An edit typed while the editor was saving in the background read as saved without having been sent, and leaving the page then could lose it. It now stays unsaved and goes with the next save.
 - A test or preview of a scheduled post sends its frozen copy, exactly as it will fire, and of a sent post its record, instead of a live render that could differ from either (SPEC §5).
 - Two settings writers at once (the identity fields and the logo, or the editor and Claude) no longer overwrite each other's change.
 - In the reference room, the tab for the page you are already on (and the Kestrel wordmark on the docs index) now scrolls back to the top instead of doing nothing.
