@@ -1,7 +1,6 @@
-// @ts-nocheck
 // The dismissible notice (DESIGN §2), the busy state, and the error view.
 
-import { esc } from "./helpers";
+import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";
 
 // An event, with a time, that the reader could not otherwise know happened: shown once
@@ -24,23 +23,44 @@ import { icon } from "./icons";
 // Server-side "seen" state (per principal) is deliberately not this.
 const NOTICE_KEY = "kestrel.notices";
 const NOTICE_CAP = 100;
-function readDismissed() {
+
+type Dismissed = Record<string, { v: string; t: number }>;
+
+function readDismissed(): Dismissed {
   try {
-    const parsed = JSON.parse(localStorage.getItem(NOTICE_KEY) || "{}");
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    const parsed: unknown = JSON.parse(localStorage.getItem(NOTICE_KEY) || "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Dismissed)
+      : {};
   } catch {
     return {};
   }
 }
-function writeDismissed(map) {
+function writeDismissed(map: Dismissed): void {
   try {
     localStorage.setItem(NOTICE_KEY, JSON.stringify(map));
   } catch {
     /* storage blocked or full: the notice simply shows again next time */
   }
 }
-const noticeMemberKey = (kind, subject) => `${kind}|${subject}`;
-function recordDismissed(kind, members) {
+
+/** One subject a notice is about, at the version of the event. */
+export interface NoticeMember {
+  subject: string;
+  version: string | number;
+}
+
+export interface NoticeSpec {
+  kind: string;
+  subject?: string;
+  version?: string | number;
+  /** An aggregate over several subjects, instead of one `subject` + `version`. */
+  members?: NoticeMember[];
+  markup: Html;
+}
+
+const noticeMemberKey = (kind: string, subject: string) => `${kind}|${subject}`;
+function recordDismissed(kind: string, members: NoticeMember[]): void {
   const map = readDismissed();
   const now = Date.now();
   for (const { subject, version } of members) {
@@ -55,20 +75,29 @@ function recordDismissed(kind, members) {
   }
   writeDismissed(map);
 }
-// Returns the rendered element, or null when every member is already dismissed (or there
-// is none: an aggregate with no members clears any prior one). A slot holds one notice per
-// subject and one aggregate per kind, so a surface can call this from a poll: the same
-// events rendered again leave the element as it is (a live region announces on change,
-// and a repaint must not pull focus off the dismiss), and a changed set of events, or a
-// new version, replaces it rather than stacking a duplicate.
-export function notice(slot, { kind, subject, version, members, html }) {
+
+/**
+ * Render a notice into a slot. Returns the element, or null when every member is
+ * already dismissed (or there is none: an aggregate with no members clears any prior
+ * one). A slot holds one notice per subject and one aggregate per kind, so a surface
+ * can call this from a poll: the same events rendered again leave the element as it is
+ * (a live region announces on change, and a repaint must not pull focus off the
+ * dismiss), and a changed set of events, or a new version, replaces it rather than
+ * stacking a duplicate.
+ */
+export function notice(slot: Element | null, spec: NoticeSpec): HTMLElement | null {
   if (!slot) {
     return null;
   }
-  const all = members || [{ subject, version }];
-  const id = members ? `${kind}|*` : `${kind}|${subject}`;
+  const { kind, members, markup } = spec;
+  const all: NoticeMember[] = members ?? [
+    { subject: spec.subject ?? "", version: spec.version ?? "" },
+  ];
+  const id = members ? `${kind}|*` : `${kind}|${spec.subject ?? ""}`;
   const events = all.map((m) => `${m.subject}@${m.version}`).join(",");
-  const prior = Array.from(slot.children).find((c) => c.dataset.notice === id);
+  const prior = [...slot.children].find(
+    (c): c is HTMLElement => c instanceof HTMLElement && c.dataset.notice === id,
+  );
   const map = readDismissed();
   if (all.every((m) => map[noticeMemberKey(kind, m.subject)]?.v === String(m.version))) {
     prior?.remove();
@@ -82,17 +111,22 @@ export function notice(slot, { kind, subject, version, members, html }) {
   el.setAttribute("role", "status");
   el.dataset.notice = id;
   el.dataset.noticeEvents = events;
-  el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${icon("x")}</button>`;
-  const dismiss = el.querySelector(".notice-dismiss");
-  dismiss.onclick = () => {
-    recordDismissed(kind, all);
-    el.remove(); // nothing to animate: the reader clicked it away
-  };
+  setHtml(
+    el,
+    html`<span class="notice-text">${markup}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${icon("x")}</button>`,
+  );
+  const dismiss = el.querySelector<HTMLButtonElement>(".notice-dismiss");
+  if (dismiss) {
+    dismiss.onclick = () => {
+      recordDismissed(kind, all);
+      el.remove(); // nothing to animate: the reader clicked it away
+    };
+  }
   if (prior) {
     const refocus = prior.querySelector(".notice-dismiss") === document.activeElement;
     prior.replaceWith(el);
     if (refocus) {
-      dismiss.focus();
+      dismiss?.focus();
     }
   } else {
     slot.appendChild(el);
@@ -100,7 +134,12 @@ export function notice(slot, { kind, subject, version, members, html }) {
   return el;
 }
 
-export async function busy(btn, label, fn) {
+/** Run an action with the button disabled and relabeled, restoring it after, if it is still in the page. */
+export async function busy<T>(
+  btn: HTMLButtonElement,
+  label: string | null,
+  fn: () => Promise<T>,
+): Promise<T> {
   const orig = btn.textContent;
   btn.disabled = true;
   if (label) {
@@ -115,9 +154,14 @@ export async function busy(btn, label, fn) {
     }
   }
 }
-export function renderError(container, msg, retryFn) {
-  container.innerHTML = `<div class="error"><span>${esc(msg)}</span><button class="ghost" data-retry>Retry</button></div>`;
-  const b = container.querySelector("[data-retry]");
+
+/** The error view with a retry, in place of what failed to load. */
+export function renderError(container: Element, msg: string, retryFn: () => void): void {
+  setHtml(
+    container,
+    html`<div class="error"><span>${msg}</span><button class="ghost" data-retry>Retry</button></div>`,
+  );
+  const b = container.querySelector<HTMLButtonElement>("[data-retry]");
   if (b) {
     b.onclick = retryFn;
   }

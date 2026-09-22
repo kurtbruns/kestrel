@@ -1,5 +1,11 @@
 /** Post CRUD + revision history. All routes are authed (admin surface). */
 
+import type {
+  PostListResponse,
+  PostResponse,
+  PostSavedResponse,
+  StaleRevisionError,
+} from "../../shared/posts";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
@@ -68,7 +74,8 @@ async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
 export async function createPost(c: RequestContext): Promise<Response> {
   const { input } = await readBody(c);
   const { post, revision } = await posts.createPost(c.env.DB, input, author(c));
-  return json({ post, revision_id: revision.id }, 201, revisionHeaders(post));
+  const body: PostSavedResponse = { post, revision_id: revision.id };
+  return json(body, 201, revisionHeaders(post));
 }
 
 const POST_STATUSES: posts.PostStatus[] = ["draft", "scheduled", "sent"];
@@ -99,7 +106,8 @@ export async function listPosts(c: RequestContext): Promise<Response> {
     posts.countPosts(c.env.DB, filter),
     posts.listPosts(c.env.DB, filter, page),
   ]);
-  return json({ posts: rows, page: listPage(total, page) });
+  const body: PostListResponse = { posts: rows, page: listPage(total, page) };
+  return json(body);
 }
 
 export async function getPost(c: RequestContext): Promise<Response> {
@@ -116,23 +124,20 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // A sent post no longer opens the editor (#147): the editor uses this send id to
   // redirect to the sent record view (#/sent/:id).
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
-  return json(
-    {
-      post,
-      markdown: revision?.markdown ?? "",
-      author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
-      // `remade_at`: when a template or identity change last re-made the frozen email
-      // (SPEC §8), so the editor can say the earlier test no longer stands.
-      scheduled:
-        active && active.status === "scheduled"
-          ? { id: active.id, fire_at: active.fire_at, remade_at: active.remade_at }
-          : null,
-      sending: active && active.status === "sending" ? { id: active.id } : null,
-      sent: sent ? { id: sent.id } : null,
-    },
-    200,
-    revisionHeaders(post),
-  );
+  const body: PostResponse = {
+    post,
+    markdown: revision?.markdown ?? "",
+    author: revision?.author ?? null, // who wrote the current revision — the freshness poll names them
+    // `remade_at`: when a template or identity change last re-made the frozen email
+    // (SPEC §8), so the editor can say the earlier test no longer stands.
+    scheduled:
+      active && active.status === "scheduled"
+        ? { id: active.id, fire_at: active.fire_at, remade_at: active.remade_at }
+        : null,
+    sending: active && active.status === "sending" ? { id: active.id } : null,
+    sent: sent ? { id: sent.id } : null,
+  };
+  return json(body, 200, revisionHeaders(post));
 }
 
 /**
@@ -149,20 +154,18 @@ export async function updatePost(c: RequestContext): Promise<Response> {
   const base = baseRevision(c, body);
   if (base && post.current_revision && base !== post.current_revision) {
     const current = await posts.getCurrentRevision(c.env.DB, post);
-    return json(
-      {
-        error: "stale_revision",
-        message: "this draft changed since you loaded it",
-        current_revision: post.current_revision,
-        updated_at: post.updated_at,
-        author: current?.author ?? null,
-      },
-      409,
-      revisionHeaders(post),
-    );
+    const stale: StaleRevisionError = {
+      error: "stale_revision",
+      message: "this draft changed since you loaded it",
+      current_revision: post.current_revision,
+      updated_at: post.updated_at,
+      author: current?.author ?? null,
+    };
+    return json(stale, 409, revisionHeaders(post));
   }
   const { post: updated, revision } = await posts.updatePost(c.env.DB, post, body.input, author(c));
-  return json({ post: updated, revision_id: revision.id }, 200, revisionHeaders(updated));
+  const saved: PostSavedResponse = { post: updated, revision_id: revision.id };
+  return json(saved, 200, revisionHeaders(updated));
 }
 
 export async function deletePost(c: RequestContext): Promise<Response> {

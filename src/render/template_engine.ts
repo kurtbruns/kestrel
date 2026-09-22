@@ -23,6 +23,7 @@
 
 import { initWasm, inline } from "@css-inline/css-inline-wasm";
 import wasmModule from "@css-inline/css-inline-wasm/index_bg.wasm";
+import type { IdentityField } from "../../shared/settings";
 import type { AppSettings } from "../db/settings";
 import { BRANDING_LOGO_KEY } from "../db/settings";
 import type { Config } from "../env";
@@ -166,8 +167,7 @@ export function templateTokens(html: string): Set<string> {
   return tokens;
 }
 
-/** The identity fields an email can carry, named as the settings surface names them. */
-export type IdentityField = "name" | "tagline" | "logoUrl" | "address";
+export type { IdentityField };
 
 const IDENTITY_TOKENS: ReadonlyArray<[token: string, field: IdentityField]> = [
   ["publication.name", "name"],

@@ -1,21 +1,15 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 
+import type { Post, PostListItem, PostStatus } from "../../shared/posts";
 import { slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
 
-export type PostStatus = "draft" | "scheduled" | "sent";
-
-export interface PostRow {
-  id: string;
-  slug: string;
-  subject: string;
-  status: PostStatus;
-  current_revision: string | null;
-  created_at: number;
-  updated_at: number;
-}
+// The row shapes live in shared/ so the editor reads the same definitions; the names here
+// are the Worker's own.
+export type { PostStatus };
+export type PostRow = Post;
 
 export interface RevisionRow {
   id: string;
@@ -59,18 +53,7 @@ export function getBySlug(db: D1Database, slug: string): Promise<PostRow | null>
   return db.prepare("SELECT * FROM posts WHERE slug = ?").bind(slug).first<PostRow>();
 }
 
-/** A post plus its active send, if any. `fire_at` is the send's fire time; `active_send_*`
- *  identify it and — crucially — carry its status, so a post whose send is in flight
- *  (`sending`) can be told apart from one still merely `scheduled` even though the post's
- *  own status is `scheduled` for both until the send completes (SPEC §6). */
-export interface PostListRow extends PostRow {
-  fire_at: number | null;
-  active_send_id: string | null;
-  active_send_status: "scheduled" | "sending" | null;
-  /** The current revision's author ("Claude" surfaces as `service`; SPEC §4). Lets the
-   *  dashboard tell whether the agent has edited here without a per-post revision fetch. */
-  author: string | null;
-}
+export type PostListRow = PostListItem;
 
 /** Narrow the post list by `status` (one status, or a set — the Drafts view passes
  *  `['draft','scheduled']`) and a subject contains-search. */

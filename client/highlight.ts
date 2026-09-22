@@ -1,18 +1,19 @@
-// @ts-nocheck
 // Syntax highlighting for the template editor (HTML/CSS with template tokens) and the
-// post composer (Markdown).
+// post composer (Markdown). String assembly by nature: the source is escaped first, then
+// the escaped text is decorated with spans, so the result is vouched for as markup at
+// the boundary rather than built with the html tag.
 
-import { esc } from "./helpers";
+import { escapeHtml as esc, type Html, unsafeHtml } from "./html";
 
-// --- template syntax highlighting (issue #123) ---
+// --- template syntax highlighting ---
 // A small tokenizer for the overlay editor: colors the {{ tokens }}, HTML tags and
 // attribute strings, and — inside the <style> block — CSS selectors, properties,
 // colors and at-rules. Logic-less templates need nothing heavier, so this stays
 // inside the dashboard's framework-free, no-build ethos (no CodeMirror, no bundler).
-function hlTokens(s) {
+function hlTokens(s: string): string {
   return s.replace(/\{\{\s*[\w.]+\s*\}\}/g, (m) => `<span class="cx-var">${m}</span>`);
 }
-function hlHtml(raw) {
+function hlHtml(raw: string): string {
   let s = esc(raw);
   s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
   s = s.replace(
@@ -22,7 +23,7 @@ function hlHtml(raw) {
   s = s.replace(/(\/?)&gt;/g, (_m, sl) => `<span class="cx-punct">${sl}&gt;</span>`);
   return hlTokens(s);
 }
-function hlCss(raw) {
+function hlCss(raw: string): string {
   let s = esc(raw);
   s = s.replace(/&quot;[^&]*?&quot;/g, (m) => `<span class="cx-str">${m}</span>`);
   s = s.replace(/#[0-9a-fA-F]{3,8}\b/g, (m) => `<span class="cx-num">${m}</span>`);
@@ -37,20 +38,23 @@ function hlCss(raw) {
   );
   return hlTokens(s);
 }
-export function highlightTemplate(src) {
-  return String(src)
-    .split(/(<style>[\s\S]*?<\/style>)/)
-    .map((seg) => {
-      const m = seg.match(/^<style>([\s\S]*?)<\/style>$/);
-      if (m) {
-        return `<span class="cx-punct">&lt;</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>${hlCss(m[1])}<span class="cx-punct">&lt;/</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>`;
-      }
-      return hlHtml(seg);
-    })
-    .join("");
+/** The template source as highlighted markup for the overlay editor. */
+export function highlightTemplate(src: string): Html {
+  return unsafeHtml(
+    String(src)
+      .split(/(<style>[\s\S]*?<\/style>)/)
+      .map((seg) => {
+        const m = seg.match(/^<style>([\s\S]*?)<\/style>$/);
+        if (m) {
+          return `<span class="cx-punct">&lt;</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>${hlCss(m[1] ?? "")}<span class="cx-punct">&lt;/</span><span class="cx-tag">style</span><span class="cx-punct">&gt;</span>`;
+        }
+        return hlHtml(seg);
+      })
+      .join(""),
+  );
 }
 
-// --- post (Markdown) syntax highlighting (issue #138) ---
+// --- post (Markdown) syntax highlighting ---
 // highlightTemplate()'s counterpart for the post editor: the same transparent-textarea-
 // over-highlighted-<pre> overlay, tokenizing Markdown instead of HTML/CSS, in the same
 // framework-free, no-build spirit. The scheme is deliberately minimal (Sublime-style): it
@@ -66,7 +70,7 @@ export function highlightTemplate(src) {
 // text stays plain and only its URL is treated; inline `code` sits on a chip. Order at a given
 // position: `code`, then [links]/images, then **strong** before *em*. Single-underscore _em_ is
 // guarded by \b so intra-word underscores (snake_case, price_1) stay literal, not emphasized.
-function hlMdInline(raw) {
+function hlMdInline(raw: string): string {
   return esc(raw).replace(
     /(`[^`\n]+`)|(!?)(\[[^\]\n]*\])\(([^)\n]*)\)|(\*\*|__)([^\n]+?)\5|\*([^*\n]+?)\*|\b_([^_\n]+?)_\b/g,
     (_m, code, bang, ltext, lurl, bd, btext, aem, uem) => {
@@ -88,11 +92,11 @@ function hlMdInline(raw) {
 }
 // One line's block-level construct. Marks are colored and the text stays plain (still inline-
 // tokenized). Falls through to a plain inline pass for prose.
-function renderMdLine(line) {
+function renderMdLine(line: string): string {
   // ATX heading: crimson # marks, heading text in the font color (bold for hierarchy).
   const h = line.match(/^(\s{0,3}#{1,6})(\s.*)?$/);
   if (h) {
-    return `<span class="cx-md-hmark">${esc(h[1])}</span><span class="cx-md-htext">${esc(h[2] || "")}</span>`;
+    return `<span class="cx-md-hmark">${esc(h[1] ?? "")}</span><span class="cx-md-htext">${esc(h[2] || "")}</span>`;
   }
   // Thematic break: --- *** ___ (three or more of one mark), alone on the line.
   if (/^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/.test(line)) {
@@ -101,40 +105,43 @@ function renderMdLine(line) {
   // Blockquote: > markers colored, the quoted text plain (still inline-tokenized).
   const q = line.match(/^(\s{0,3})((?:>\s?)+)(.*)$/);
   if (q) {
-    return `${esc(q[1])}<span class="cx-md-bmark">${esc(q[2])}</span>${hlMdInline(q[3])}`;
+    return `${esc(q[1] ?? "")}<span class="cx-md-bmark">${esc(q[2] ?? "")}</span>${hlMdInline(q[3] ?? "")}`;
   }
   // List item: -, *, + (unordered) or 1. / 1) (ordered); colored marker, plain text.
   const li = line.match(/^(\s*)([-*+]|\d{1,9}[.)])(\s+)(.*)$/);
   if (li) {
-    return `${li[1]}<span class="cx-md-bmark">${esc(li[2])}</span>${li[3]}${hlMdInline(li[4])}`;
+    return `${li[1]}<span class="cx-md-bmark">${esc(li[2] ?? "")}</span>${li[3]}${hlMdInline(li[4] ?? "")}`;
   }
   return hlMdInline(line);
 }
-export function highlightMarkdown(src) {
+/** The post's Markdown as highlighted markup for the composer overlay, one block row per line. */
+export function highlightMarkdown(src: string): Html {
   let inFence = false;
-  return String(src)
-    .split("\n")
-    .map((line) => {
-      let html;
-      let band = false;
-      // Fenced code block: a ``` or ~~~ line toggles the fence. The backticks stay plain and
-      // only the language after them is colored. The fence lines themselves stay off the band —
-      // only the code between the fences carries the background.
-      const fence = line.match(/^(\s*)(```+|~~~+)(.*)$/);
-      if (fence) {
-        inFence = !inFence;
-        const lang = fence[3] ? `<span class="cx-md-bmark">${esc(fence[3])}</span>` : "";
-        html = `${fence[1]}${esc(fence[2])}${lang}`;
-      } else if (inFence) {
-        band = true;
-        html = esc(line);
-      } else {
-        html = renderMdLine(line);
-      }
-      // Each source line is its own block row, so the caret aligns line-for-line with the
-      // textarea and consecutive fenced rows' backgrounds abut into one continuous band. An
-      // empty row is held open to one line by .cx-md-ln's min-height (CSS), not a filler glyph.
-      return `<span class="cx-md-ln${band ? " cx-md-band" : ""}">${html}</span>`;
-    })
-    .join("");
+  return unsafeHtml(
+    String(src)
+      .split("\n")
+      .map((line) => {
+        let html: string;
+        let band = false;
+        // Fenced code block: a ``` or ~~~ line toggles the fence. The backticks stay plain and
+        // only the language after them is colored. The fence lines themselves stay off the band —
+        // only the code between the fences carries the background.
+        const fence = line.match(/^(\s*)(```+|~~~+)(.*)$/);
+        if (fence) {
+          inFence = !inFence;
+          const lang = fence[3] ? `<span class="cx-md-bmark">${esc(fence[3])}</span>` : "";
+          html = `${fence[1]}${esc(fence[2] ?? "")}${lang}`;
+        } else if (inFence) {
+          band = true;
+          html = esc(line);
+        } else {
+          html = renderMdLine(line);
+        }
+        // Each source line is its own block row, so the caret aligns line-for-line with the
+        // textarea and consecutive fenced rows' backgrounds abut into one continuous band. An
+        // empty row is held open to one line by .cx-md-ln's min-height (CSS), not a filler glyph.
+        return `<span class="cx-md-ln${band ? " cx-md-band" : ""}">${html}</span>`;
+      })
+      .join(""),
+  );
 }
