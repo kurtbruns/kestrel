@@ -9,9 +9,9 @@ import type {
 import { api } from "../api";
 import { $, $$ } from "../dom";
 import { type Html, html, setHtml } from "../html";
-import { renderError } from "../notice";
 import { roomShell } from "../room";
 import { app } from "../shell";
+import { renderError } from "../widgets";
 
 // Every route the app and Claude can call, generated from the route manifest
 // (src/app.ts) and served as JSON by the authed /api/reference route. The SPA

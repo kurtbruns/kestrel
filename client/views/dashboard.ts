@@ -11,15 +11,17 @@ import type {
 } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
-import { archiveUrlFor, copyText, createNewPost } from "../build_ref";
+import { archiveUrlFor } from "../deployment";
 import { $, $$ } from "../dom";
-import { badge, fmt, modal, toast } from "../helpers";
+import { badge, copyText, fmt, modal, toast } from "../helpers";
 import { type Html, html, setHtml } from "../html";
 import { icon } from "../icons";
-import { busy, notice, renderError } from "../notice";
+import { notice } from "../notice";
 import { appliedNoticeHtml } from "../remake";
 import { app } from "../shell";
 import { appState } from "../state";
+import { busy, renderError } from "../widgets";
+import { createNewPost } from "./drafts";
 import { activeRowHtml, deliveredCell, isWedged, startCountdowns } from "./sends";
 import { addSubscriberModal } from "./subscribers";
 

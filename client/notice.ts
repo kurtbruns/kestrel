@@ -1,4 +1,4 @@
-// The dismissible notice (DESIGN §2), the busy state, and the error view.
+// The dismissible notice (DESIGN §2).
 
 import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";
@@ -132,37 +132,4 @@ export function notice(slot: Element | null, spec: NoticeSpec): HTMLElement | nu
     slot.appendChild(el);
   }
   return el;
-}
-
-/** Run an action with the button disabled and relabeled, restoring it after, if it is still in the page. */
-export async function busy<T>(
-  btn: HTMLButtonElement,
-  label: string | null,
-  fn: () => Promise<T>,
-): Promise<T> {
-  const orig = btn.textContent;
-  btn.disabled = true;
-  if (label) {
-    btn.textContent = label;
-  }
-  try {
-    return await fn();
-  } finally {
-    if (btn.isConnected) {
-      btn.disabled = false;
-      btn.textContent = orig;
-    }
-  }
-}
-
-/** The error view with a retry, in place of what failed to load. */
-export function renderError(container: Element, msg: string, retryFn: () => void): void {
-  setHtml(
-    container,
-    html`<div class="error"><span>${msg}</span><button class="ghost" data-retry>Retry</button></div>`,
-  );
-  const b = container.querySelector<HTMLButtonElement>("[data-retry]");
-  if (b) {
-    b.onclick = retryFn;
-  }
 }

@@ -12,12 +12,10 @@ import type {
 } from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName, renderSidebarBrand } from "../brand";
-import { copyText } from "../build_ref";
 import { $, $$ } from "../dom";
-import { toast } from "../helpers";
+import { copyText, toast } from "../helpers";
 import { escapeHtml, type Html, html, setHtml } from "../html";
 import { type IconName, icon } from "../icons";
-import { busy, renderError } from "../notice";
 import {
   inUseChip,
   isRemakeTooClose,
@@ -28,6 +26,7 @@ import {
 import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
+import { busy, renderError } from "../widgets";
 import { mountSampleEmailPreview } from "./template";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));

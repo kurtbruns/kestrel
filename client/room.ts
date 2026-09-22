@@ -1,7 +1,7 @@
 // The reference room shell shared by Docs and the API reference: the top bar, the
 // contents rail, and the surface switch.
 
-import { buildRefParts } from "./build_ref";
+import { buildRefParts } from "./deployment";
 import { type Html, html } from "./html";
 import { icon } from "./icons";
 import { app } from "./shell";

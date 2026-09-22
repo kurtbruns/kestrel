@@ -1,8 +1,10 @@
-// Auth on the client: the dev token, the bearer header, and the identity chip.
+// Auth on the client: the dev token, the bearer header, the identity chip, and the
+// re-auth wall a dead session lands on.
 
+import { $ } from "./dom";
 import { html, setHtml } from "./html";
-import { identity } from "./shell";
-import { appState, TOKEN_KEY } from "./state";
+import { app, identity } from "./shell";
+import { appState, stopTimers, TOKEN_KEY } from "./state";
 
 /** Remember the dev token; an empty one forgets it, so the next boot mints instead of probing with a dead value. */
 export function setToken(t: string | null | undefined): void {
@@ -47,4 +49,23 @@ export function renderIdentity(): void {
       html`<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`,
     );
   }
+}
+
+/**
+ * Access sessions expire at the edge (the request never reaches the app), so the only
+ * recovery is a fresh document load that re-triggers the Access login. In dev this
+ * shouldn't happen, but a reload re-mints, so the same affordance is safe.
+ */
+export function showReauth(): void {
+  // A dead token means every background poll (and a pending editor autosave) now 401s —
+  // which is what routed us here. Stop them so a walled tab goes quiet instead of re-hitting
+  // the API on its timers until reload.
+  stopTimers();
+  // No identity yet — hide the publication chrome so the wall stands alone.
+  document.body.classList.add("signed-out");
+  setHtml(
+    app,
+    html`<div class="card auth-wall"><h2>Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth">Sign in</button></div>`,
+  );
+  $("#reauth", app).onclick = () => location.reload();
 }

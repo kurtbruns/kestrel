@@ -1,18 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { ApiError, api, apiText } from "./api";
 import { setToken } from "./auth";
-import { type FakeApi, fakeApi, jsonResponse } from "./test_support";
-
-vi.mock("./build_ref", () => ({ showReauth: vi.fn() }));
-
-import { showReauth } from "./build_ref";
+import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test_support";
 
 describe("api", () => {
   let fake: FakeApi;
   afterEach(() => {
     fake?.restore();
     setToken("");
-    vi.mocked(showReauth).mockClear();
+    resetShell();
+    document.body.classList.remove("signed-out");
   });
 
   it("attaches the dev token as a bearer, and sends none without one", async () => {
@@ -65,7 +62,9 @@ describe("api", () => {
   it("routes a 401 to re-auth and throws", async () => {
     fake = fakeApi([{ path: "/posts", reply: () => new Response("", { status: 401 }) }]);
     await expect(api("/posts")).rejects.toMatchObject({ status: 401, message: /sign in again/ });
-    expect(showReauth).toHaveBeenCalledTimes(1);
+    // The real wall, not a mock: the chrome hides and the page offers the one recovery.
+    expect(document.body.classList.contains("signed-out")).toBe(true);
+    expect($("#app .auth-wall #reauth").textContent).toBe("Sign in");
   });
 
   it("apiText returns the raw text with the same guards", async () => {

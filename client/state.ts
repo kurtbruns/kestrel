@@ -1,6 +1,7 @@
 // The editor's module-scope state: every value more than one module reads or writes, in one
-// object (`appState`) so each cross-module write is visible here. The view lifecycle work
-// dissolves most of this into per-view state; until then this is the whole shared surface.
+// object (`appState`) so each cross-module write is visible here, and the teardown that
+// stops its timers. The view lifecycle work dissolves most of this into per-view state;
+// until then this is the whole shared surface.
 
 /** The boot probe's answer (GET /api/whoami): who we are and which auth mode gates this surface. */
 export interface Session {
@@ -9,6 +10,7 @@ export interface Session {
 }
 
 import type { SettingsResponse } from "../shared/settings";
+import type { Autosave } from "./autosave";
 
 export interface AppState {
   /** The dev token (local dev only; deployed envs authenticate at the edge). */
@@ -49,6 +51,8 @@ export interface AppState {
   editorLeaveFlush: (() => void) | null;
   /** ⌘S / Ctrl-S handler for the mounted editor. */
   editorManualSave: (() => void) | null;
+  /** The mounted editor's pending autosave, so teardown can cancel it without reaching into the view. */
+  editorAutosave: Autosave | null;
 }
 
 /** localStorage key of the dev token. */
@@ -68,4 +72,31 @@ export const appState: AppState = {
   editorHash: null,
   editorLeaveFlush: null,
   editorManualSave: null,
+  editorAutosave: null,
 };
+
+/**
+ * Stop every timer-driven background task (the three pollers and the editor's pending
+ * autosave) and invalidate any poll whose fetch is already in flight. Shared by route()
+ * (on every navigation) and showReauth(): a walled tab must go quiet instead of hammering
+ * the API on a dead token every few seconds. Clearing a timer only stops the pending tick,
+ * not a poll already mid-await, so bumping navGeneration makes that callback bail instead
+ * of rescheduling (see navGeneration).
+ */
+export function stopTimers(): void {
+  if (appState.statusTimer) {
+    clearInterval(appState.statusTimer);
+    appState.statusTimer = null;
+  }
+  if (appState.editorPollTimer) {
+    clearInterval(appState.editorPollTimer);
+    appState.editorPollTimer = null;
+  }
+  if (appState.progressTimer) {
+    clearInterval(appState.progressTimer);
+    appState.progressTimer = null;
+  }
+  appState.editorAutosave?.cancel();
+  appState.editorAutosave = null;
+  appState.navGeneration++;
+}

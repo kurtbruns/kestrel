@@ -5,10 +5,10 @@ import { api } from "../api";
 import { $, $$ } from "../dom";
 import { toast } from "../helpers";
 import { type Html, html, setHtml, unsafeHtml } from "../html";
-import { renderError } from "../notice";
 import { roomShell } from "../room";
 import { app } from "../shell";
 import { appState } from "../state";
+import { renderError } from "../widgets";
 
 // The setup guide, authored in docs/setup/*.md and served read-only by the authed
 // GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over a

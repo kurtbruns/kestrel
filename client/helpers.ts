@@ -1,4 +1,4 @@
-// Small view helpers: toasts, badges, dates, address parsing, and the modal.
+// Small view helpers: toasts, badges, dates, address parsing, the clipboard, and the modal.
 
 import { type Html, html, setHtml } from "./html";
 import { toasts } from "./shell";
@@ -13,6 +13,15 @@ export function toast(msg: string): void {
   // addresses") before it fades; the removal trails the fade-out transition.
   setTimeout(() => t.classList.remove("show"), 3600);
   setTimeout(() => t.remove(), 3900);
+}
+
+export async function copyText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast("Copied");
+  } catch {
+    toast("Couldn't copy to clipboard");
+  }
 }
 
 /** A status pill; the status doubles as its class. */

@@ -9,17 +9,17 @@ import type {
 } from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName } from "../brand";
-import { copyText, withNoProviderNote } from "../build_ref";
+import { withNoProviderNote } from "../deployment";
 import { $, $$ } from "../dom";
-import { modal, parseAddresses, toast } from "../helpers";
+import { copyText, modal, parseAddresses, toast } from "../helpers";
 import { highlightTemplate } from "../highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../html";
 import { icon } from "../icons";
-import { busy, renderError } from "../notice";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "../remake";
 import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
+import { busy, renderError } from "../widgets";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 

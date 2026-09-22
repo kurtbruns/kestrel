@@ -2,8 +2,7 @@
 // attach the credential and route a 401 to re-auth. They call the global fetch, so a spec
 // stands in for the API by scripting fetch and the real functions run over it.
 
-import { authHeaders } from "./auth";
-import { showReauth } from "./build_ref";
+import { authHeaders, showReauth } from "./auth";
 
 /** What a request may carry. `json` sets the body and its content type; `body` is sent as is. */
 export interface ApiOptions {

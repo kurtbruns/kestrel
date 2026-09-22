@@ -1,8 +1,7 @@
 // The drafts list (draft + scheduled).
 
-import type { PostListResponse } from "../../shared/posts";
+import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
 import { api } from "../api";
-import { createNewPost } from "../build_ref";
 import { $, $$ } from "../dom";
 import { badge, fmt, modal, toast } from "../helpers";
 import { html, setHtml } from "../html";
@@ -15,9 +14,8 @@ import {
   wireSort,
   wireToolbar,
 } from "../list_controls";
-import { busy, renderError } from "../notice";
-import { type MenuItem, openMenu } from "../savebar";
 import { app } from "../shell";
+import { busy, type MenuItem, openMenu, renderError } from "../widgets";
 
 // The writing side: draft + scheduled only — a sent post is a frozen record and lives in
 // Sent. "All statuses" is scoped to those two, so it never reaches sent.
@@ -26,6 +24,24 @@ const DRAFT_STATUSES = [
   { value: "scheduled", label: "Scheduled" },
 ];
 const DRAFTS_SCOPE = "draft,scheduled";
+
+/**
+ * Create a draft and jump into the editor — shared by the Posts list, the Dashboard,
+ * and the setup checklist so the "New post" affordance behaves identically everywhere.
+ */
+export function createNewPost(btn: HTMLButtonElement): Promise<void> {
+  return busy(btn, "Creating…", async () => {
+    try {
+      const { post } = await api<PostSavedResponse>("/posts", {
+        method: "POST",
+        json: { subject: "Untitled" },
+      });
+      location.hash = `#/edit/${post.id}`;
+    } catch (err) {
+      toast(err instanceof Error ? err.message : String(err));
+    }
+  });
+}
 
 export async function renderDrafts(): Promise<void> {
   // Default sort left empty so the server keeps its scheduled-first order until the
