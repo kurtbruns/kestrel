@@ -48,7 +48,7 @@ export default defineConfig(async () => {
           },
         },
         {
-          // The build inlines client/icons/*.svg as text (esbuild's text loader); Vite would
+          // The build inlines client/ui/icons/*.svg as text (esbuild's text loader); Vite would
           // hand a spec a URL for the same import, so this hands it the text too.
           plugins: [
             {
@@ -68,7 +68,7 @@ export default defineConfig(async () => {
             environment: "happy-dom",
             // Every client spec starts with the real admin shell in the document (the
             // shell module reads its roots at import time) and a scripted fetch at hand.
-            setupFiles: ["./client/test_setup.ts"],
+            setupFiles: ["./client/test/setup.ts"],
             // happy-dom loads an inserted <link rel=stylesheet> / <script src> for real by
             // default, so a swap test would do DNS + TCP; these are DOM tests, not fetch tests.
             environmentOptions: {

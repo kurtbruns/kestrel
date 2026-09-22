@@ -10,7 +10,6 @@ export interface Session {
 }
 
 import type { SettingsResponse } from "../shared/settings";
-import type { Autosave } from "./autosave";
 
 export interface AppState {
   /** The dev token (local dev only; deployed envs authenticate at the edge). */
@@ -51,8 +50,8 @@ export interface AppState {
   editorLeaveFlush: (() => void) | null;
   /** ⌘S / Ctrl-S handler for the mounted editor. */
   editorManualSave: (() => void) | null;
-  /** The mounted editor's pending autosave, so teardown can cancel it without reaching into the view. */
-  editorAutosave: Autosave | null;
+  /** The mounted editor's pending autosave (posts/autosave.ts), as the one thing teardown does to it. */
+  editorAutosave: { cancel(): void } | null;
 }
 
 /** localStorage key of the dev token. */

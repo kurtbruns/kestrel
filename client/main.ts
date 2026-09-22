@@ -11,11 +11,11 @@ import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { startDevReload } from "./dev_reload";
-import { installRoomBar } from "./room";
+import { installRoomBar } from "./room/shell";
 import { installRouter, route } from "./router";
 import { installShell } from "./shell";
 import { appState, type Session } from "./state";
-import { installTooltips } from "./widgets";
+import { installTooltips } from "./ui/widgets";
 
 async function boot(): Promise<unknown> {
   // Wire the app before anything asynchronous, in one visible sequence: no module does

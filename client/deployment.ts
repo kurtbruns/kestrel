@@ -3,8 +3,8 @@
 
 import { archivePostUrl } from "../shared/archive_url";
 import type { DeploymentView } from "../shared/settings";
-import { type Html, html } from "./html";
 import { appState } from "./state";
+import { type Html, html } from "./ui/html";
 
 /** The build reference as two link fragments: the version (to its release) and the sha (to its commit). */
 export interface BuildRefParts {

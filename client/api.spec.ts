@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { ApiError, api, apiText } from "./api";
 import { setToken } from "./auth";
-import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test_support";
+import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test/support";
 
 describe("api", () => {
   let fake: FakeApi;

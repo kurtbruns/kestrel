@@ -1,10 +1,10 @@
 // Auth on the client: the dev token, the bearer header, the identity chip, and the
 // re-auth wall a dead session lands on.
 
-import { $ } from "./dom";
-import { html, setHtml } from "./html";
 import { app, identity } from "./shell";
 import { appState, stopTimers, TOKEN_KEY } from "./state";
+import { $ } from "./ui/dom";
+import { html, setHtml } from "./ui/html";
 
 /** Remember the dev token; an empty one forgets it, so the next boot mints instead of probing with a dead value. */
 export function setToken(t: string | null | undefined): void {
