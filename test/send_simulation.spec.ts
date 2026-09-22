@@ -76,7 +76,12 @@ describe("simulationActive gating", () => {
   });
 });
 
-describe("drainSimulatedWebhooks (delayed synthetic receipts through the real ingest)", () => {
+// Each drain here ingests hundreds of synthetic receipts through the real webhook path,
+// row by row in D1: about a second locally and five on a shared CI runner, right at the
+// default. Real work, not waiting, so the suite gets the time it needs.
+describe("drainSimulatedWebhooks (delayed synthetic receipts through the real ingest)", {
+  timeout: 30_000,
+}, () => {
   const simConfig = () => ({ ...getConfig(env), simulateSends: true });
 
   it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §10)", async () => {
