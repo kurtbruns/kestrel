@@ -1,5 +1,5 @@
 // The hash router: route() tears the previous view down (timers, editor guards) and
-// mounts the next; the leave guards live here.
+// mounts the next; the leave guards live here, wired by installRouter() when boot calls it.
 
 import { savebar } from "./savebar";
 import { setNavOpen } from "./shell";
@@ -72,44 +72,48 @@ export function route(): unknown {
   }
   return renderDashboard();
 }
-// Navigating away from a dirty editor saves in the background rather than
-// prompting — hashchange fires after the hash has already moved, so the flush
-// captures the payload before route() tears down the DOM. The exception is when
-// the last save FAILED: silently flushing could lose work, so we fall back to a
-// confirm() (synchronous, unlike the modal helper) and, on cancel, restore the
-// editor's hash and swallow the echo.
 let revertingHash = false;
-window.addEventListener("hashchange", () => {
-  if (revertingHash) {
-    revertingHash = false;
-    return;
-  }
-  if (appState.isEditorDirty && appState.editorHash && location.hash !== appState.editorHash) {
-    if (appState.editorSaveFailed || appState.editorConflict) {
-      // A silent flush would fail (or clobber) — prompt so the user decides.
-      if (!confirm(LEAVE_MSG)) {
-        revertingHash = true;
-        location.hash = appState.editorHash;
-        return;
-      }
-    } else if (appState.editorLeaveFlush) {
-      appState.editorLeaveFlush();
+
+/** Wire navigation and the editor's guards: hashchange, the unload prompt, and ⌘S. Boot calls this once. */
+export function installRouter(): void {
+  // Navigating away from a dirty editor saves in the background rather than
+  // prompting — hashchange fires after the hash has already moved, so the flush
+  // captures the payload before route() tears down the DOM. The exception is when
+  // the last save FAILED: silently flushing could lose work, so we fall back to a
+  // confirm() (synchronous, unlike the modal helper) and, on cancel, restore the
+  // editor's hash and swallow the echo.
+  window.addEventListener("hashchange", () => {
+    if (revertingHash) {
+      revertingHash = false;
+      return;
     }
-  }
-  route();
-});
-// Tab close / reload / external navigation: can't reliably finish an async save,
-// so fall back to the browser's own generic unsaved-changes prompt.
-window.addEventListener("beforeunload", (e) => {
-  if (appState.isEditorDirty) {
-    e.preventDefault();
-    e.returnValue = "";
-  }
-});
-// ⌘S / Ctrl-S saves the mounted editor (registered once; no-op elsewhere).
-window.addEventListener("keydown", (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && appState.editorManualSave) {
-    e.preventDefault();
-    appState.editorManualSave();
-  }
-});
+    if (appState.isEditorDirty && appState.editorHash && location.hash !== appState.editorHash) {
+      if (appState.editorSaveFailed || appState.editorConflict) {
+        // A silent flush would fail (or clobber) — prompt so the user decides.
+        if (!confirm(LEAVE_MSG)) {
+          revertingHash = true;
+          location.hash = appState.editorHash;
+          return;
+        }
+      } else if (appState.editorLeaveFlush) {
+        appState.editorLeaveFlush();
+      }
+    }
+    route();
+  });
+  // Tab close / reload / external navigation: can't reliably finish an async save,
+  // so fall back to the browser's own generic unsaved-changes prompt.
+  window.addEventListener("beforeunload", (e) => {
+    if (appState.isEditorDirty) {
+      e.preventDefault();
+      e.returnValue = "";
+    }
+  });
+  // ⌘S / Ctrl-S saves the mounted editor (registered once; no-op elsewhere).
+  window.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && appState.editorManualSave) {
+      e.preventDefault();
+      appState.editorManualSave();
+    }
+  });
+}

@@ -6,37 +6,24 @@
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
 
-import "./shell";
-import "./icons";
-import "./auth";
-import "./brand";
-import "./api";
-import "./helpers";
-import "./notice";
-import "./remake";
-import "./savebar";
-import "./router";
-import "./list_controls";
-import "./views/drafts";
-import "./views/editor";
-import "./views/sends";
-import "./views/sent";
-import "./views/subscribers";
-import "./views/settings";
-import "./views/template";
-import "./highlight";
-import "./views/docs";
-import "./views/reference";
-import "./views/dashboard";
 import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { startDevReload } from "./dev_reload";
-import { route } from "./router";
+import { installRoomBar } from "./room";
+import { installRouter, route } from "./router";
+import { installShell } from "./shell";
 import { appState, type Session } from "./state";
+import { installTooltips } from "./widgets";
 
 async function boot(): Promise<unknown> {
+  // Wire the app before anything asynchronous, in one visible sequence: no module does
+  // anything at load but define things, so what the app does at boot is read from here.
+  installShell();
+  installTooltips();
+  installRoomBar();
+  installRouter();
   // Mint a dev token into localStorage. Returns false in prod, where the endpoint
   // 404s (or is unreachable) and the Access cookie authenticates instead.
   async function mintDevToken(): Promise<boolean> {

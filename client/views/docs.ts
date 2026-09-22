@@ -111,8 +111,9 @@ function renderDocsIndex(docs: DocFragment[]): void {
 // follows the layout, not the width at render time: crossing 720px (a rotation, a resized
 // window) re-opens it on desktop — where nothing else could, the summary being inert —
 // and takes the summary out of the tab order there, so a keyboard user can't collapse a
-// list no pointer can reopen. One listener for the app's lifetime; it finds the fold that
-// is in the DOM, if any.
+// list no pointer can reopen. One listener for the app's lifetime, registered by the first
+// doc page rendered (the view's own, so not boot's); it finds the fold that is in the DOM,
+// if any.
 const mobileMq = matchMedia("(max-width: 720px)");
 function syncFold(fold: HTMLDetailsElement | null): void {
   if (!fold) {
@@ -124,7 +125,14 @@ function syncFold(fold: HTMLDetailsElement | null): void {
 }
 // The fold is only in the DOM on a doc page, so a nullable lookup is the right one here.
 const findFold = () => document.querySelector<HTMLDetailsElement>("details#tocOnPage");
-mobileMq.addEventListener("change", () => syncFold(findFold()));
+let foldFollowsLayout = false;
+function followLayout(): void {
+  if (foldFollowsLayout) {
+    return;
+  }
+  foldFollowsLayout = true;
+  mobileMq.addEventListener("change", () => syncFold(findFold()));
+}
 
 interface DocSection {
   id: string;
@@ -237,6 +245,7 @@ function renderDocPage(docs: DocFragment[], slug: string): void {
   // is measured.
   const onPageEl = findFold();
   syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
+  followLayout();
   const markActive = (id: string) => {
     if (!onPageEl) {
       return;

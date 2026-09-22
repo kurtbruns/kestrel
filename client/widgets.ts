@@ -1,6 +1,6 @@
 // Small shared widgets, each independent of the others: the info tooltip, the row-action
-// menu, the busy state on a button, and the error view with its retry. Importing this
-// module installs the tooltip's document listeners.
+// menu, the busy state on a button, and the error view with its retry. The tooltip's
+// document listeners are wired by installTooltips() when boot calls it.
 
 import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";
@@ -27,24 +27,27 @@ function positionInfoTip(el: HTMLElement): void {
   const shift = Math.min(0, Math.max(vw - TIP_GUTTER - tipW - iconLeft, TIP_GUTTER - iconLeft));
   el.style.setProperty("--tip-x", `${Math.round(shift)}px`);
 }
-// Position before the tip shows on either trigger: pointer hover, or focus — the
-// latter is how keyboard (Tab) and touch (tap focuses the span) reach it.
-for (const type of ["pointerover", "focusin"]) {
-  document.addEventListener(type, (e) => {
-    const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".info") : null;
-    if (el) {
-      positionInfoTip(el);
+/** Wire the tooltip's positioning and dismissal, delegated on the document; boot calls this once. */
+export function installTooltips(): void {
+  // Position before the tip shows on either trigger: pointer hover, or focus — the
+  // latter is how keyboard (Tab) and touch (tap focuses the span) reach it.
+  for (const type of ["pointerover", "focusin"]) {
+    document.addEventListener(type, (e) => {
+      const el = e.target instanceof Element ? e.target.closest<HTMLElement>(".info") : null;
+      if (el) {
+        positionInfoTip(el);
+      }
+    });
+  }
+  // Escape dismisses a focus-shown tip without tabbing away (the pointer tip just
+  // needs the mouse to leave).
+  document.addEventListener("keydown", (e) => {
+    const active = document.activeElement;
+    if (e.key === "Escape" && active instanceof HTMLElement && active.classList.contains("info")) {
+      active.blur();
     }
   });
 }
-// Escape dismisses a focus-shown tip without tabbing away (the pointer tip just
-// needs the mouse to leave).
-document.addEventListener("keydown", (e) => {
-  const active = document.activeElement;
-  if (e.key === "Escape" && active instanceof HTMLElement && active.classList.contains("info")) {
-    active.blur();
-  }
-});
 
 /**
  * The ⓘ affordance whose explanation shows as a tooltip. Focusable and role/aria-labelled
