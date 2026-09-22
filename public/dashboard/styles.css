@@ -1,5 +1,8 @@
 /* Design tokens as CSS custom properties; automatic light/dark via
-   prefers-color-scheme (see the dark block below). */
+   prefers-color-scheme (see the dark block below). This is the admin surface's own
+   palette — independent of, and never loaded alongside, the reader/email-card
+   `TOKENS` in src/lib/page.ts. The two reuse names like --muted and --bg with
+   different values on purpose; don't assume they share meaning. */
 :root {
   color-scheme: light dark;
   /* Layering — one named z-index ladder (DESIGN §4). Every fixed or floating surface
@@ -36,6 +39,9 @@
   --ok-fg: #15803d;
   --ok-bg: #dcfce7;
   --ok-line: #bbf7d0;
+  /* Info — a fourth feedback hue, blue, for a neutral fact that isn't good/bad/warning
+     (the API reference's POST badge). No bg/line pair yet: nothing else needs one. */
+  --info-fg: #1d4ed8;
   --ring: #2563eb;
   --banner-bg: #eff6ff;
   --banner-line: #bfdbfe;
@@ -111,6 +117,7 @@
     --ok-fg: #4ade80;
     --ok-bg: #14532d;
     --ok-line: #15803d;
+    --info-fg: #60a5fa;
     --ring: #60a5fa;
     --banner-bg: #1e293b;
     --banner-line: #334155;
@@ -3198,16 +3205,16 @@ button.notice-dismiss svg {
   color: #fff;
 }
 .api-method.m-GET {
-  background: #15803d;
+  background: var(--ok-fg);
 }
 .api-method.m-POST {
-  background: #1d4ed8;
+  background: var(--info-fg);
 }
 .api-method.m-PUT {
-  background: #b45309;
+  background: var(--warn-fg);
 }
 .api-method.m-DELETE {
-  background: #b91c1c;
+  background: var(--danger-fg);
 }
 .api-path {
   font: 14px var(--mono);
