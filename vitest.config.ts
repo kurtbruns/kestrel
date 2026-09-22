@@ -48,6 +48,21 @@ export default defineConfig(async () => {
           },
         },
         {
+          // The build inlines client/icons/*.svg as text (esbuild's text loader); Vite would
+          // hand a spec a URL for the same import, so this hands it the text too.
+          plugins: [
+            {
+              name: "svg-as-text",
+              enforce: "pre" as const,
+              async load(id: string) {
+                if (!id.split("?")[0]?.endsWith(".svg")) {
+                  return null;
+                }
+                const { readFile } = await import("node:fs/promises");
+                return `export default ${JSON.stringify(await readFile(id.split("?")[0] ?? id, "utf8"))};`;
+              },
+            },
+          ],
           test: {
             name: "client",
             environment: "happy-dom",

@@ -138,7 +138,7 @@ document.addEventListener("keydown", (e) => {
 // visible tip. `below` drops the tip under the icon (for icons near the page top).
 export function infoTip(tip, { below = false } = {}) {
   const t = esc(tip);
-  return `<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${t}" data-tip="${t}">${icon("info")}</span>`;
+  return `<span class="info${below ? " tip-below" : ""}" role="img" tabindex="0" aria-label="${t}" data-tip="${t}">${icon("info-filled")}</span>`;
 }
 
 // popover menu for row actions (⋯). A transparent full-screen overlay (behind

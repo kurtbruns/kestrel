@@ -3,7 +3,7 @@
 // notice, and the confirm-then-save flow the Template and Settings pages share.
 
 import { esc, fmt, modal } from "./helpers";
-import { SET_ICON } from "./views/settings";
+import { icon } from "./icons";
 
 // A template or identity change reaches every scheduled email, and the server refuses
 // such a save until the client has acknowledged those sends by id (409
@@ -105,10 +105,10 @@ export const remakeIdentity = (action, gerund) => ({
 export function inUseChip(inUse, forIdentity = false) {
   const sends = inUse?.sends || [];
   if (forIdentity && !(inUse?.identityFields || []).length) {
-    return `<span class="set-chip" title="The email template doesn't use your name, tagline, address, or logo.">${SET_ICON.info}Not used by the email template</span>`;
+    return `<span class="set-chip" title="The email template doesn't use your name, tagline, address, or logo.">${icon("info")}Not used by the email template</span>`;
   }
   if (!sends.length) {
-    return `<span class="set-chip">${SET_ICON.info}No posts scheduled</span>`;
+    return `<span class="set-chip">${icon("info")}No posts scheduled</span>`;
   }
   const n = sends.length;
   const title = inUse.retry_after

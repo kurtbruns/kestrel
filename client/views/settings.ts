@@ -6,6 +6,7 @@ import { api } from "../api";
 import { parseFromName, renderSidebarBrand } from "../brand";
 import { copyText } from "../build_ref";
 import { esc, toast } from "../helpers";
+import { icon } from "../icons";
 import { busy, renderError } from "../notice";
 import { inUseChip, remakeIdentity, savedToast, withRemakeConfirm } from "../remake";
 import { savebar } from "../savebar";
@@ -16,27 +17,6 @@ import { mountSampleEmailPreview } from "./template";
 // Runtime preferences (editable) + a read-only reflection of the deploy-time
 // config. Secrets never come down this wire (see routes/settings.ts).
 const PROVIDER_LABELS = { fake: "Fake (dev, dead-end)", ses: "Amazon SES", resend: "Resend" };
-
-// Small inline icons for the intent chips, read-only notes, and controls.
-export const SET_ICON = {
-  preview:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg>',
-  editable:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
-  readonly:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>',
-  copyout:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
-  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 16v-4M12 8h.01"/></svg>',
-  upload:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4M8 8l4-4 4 4"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>',
-  x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
-  check:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
-  send: '<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 3 11 14M22 3l-7 18-4-7-7-4 18-7z"/></svg>',
-  lines:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11M4 6h1M4 12h1M4 18h1"/></svg>',
-};
 
 export async function renderSettings() {
   app.innerHTML = `<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`;
@@ -122,7 +102,7 @@ export async function renderSettings() {
     );
   };
 
-  const chip = (kind, label) => `<span class="set-chip ${kind}">${SET_ICON[kind]}${label}</span>`;
+  const chip = (kind, label) => `<span class="set-chip ${kind}">${icon(kind)}${label}</span>`;
   const secHead = (title, chipHtml, extra = "") =>
     `<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 
@@ -157,7 +137,7 @@ export async function renderSettings() {
         <div class="set-id-grid">
           <div class="set-logo-slot">
             <div class="set-logo-tile${state.logoUrl ? " has-img" : ""}" id="logoTile" role="button" tabindex="0" aria-label="Upload logo"${state.logoUrl ? ` style="background-image:url('${esc(state.logoUrl)}')"` : ""}>
-              <span class="set-logo-ph" id="logoPh"${state.logoUrl ? " hidden" : ""}>${SET_ICON.upload}Upload</span>
+              <span class="set-logo-ph" id="logoPh"${state.logoUrl ? " hidden" : ""}>${icon("upload")}Upload</span>
             </div>
             <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
             <div class="set-logo-actions">
@@ -185,7 +165,7 @@ export async function renderSettings() {
             </div>
           </div>
         </div>
-        <div class="set-note">${SET_ICON.info}<span>${esc(identityNote)}</span></div>
+        <div class="set-note">${icon("info")}<span>${esc(identityNote)}</span></div>
       </div>
     </section>`;
 
@@ -207,7 +187,7 @@ export async function renderSettings() {
     <section class="set-sec">
       ${secHead("Email sender", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${SET_ICON.readonly}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
+        <div class="set-ro-note">${icon("readonly")}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
         <div class="set-preview-bar" style="background:transparent">
           <span class="set-preview-lbl">Inbox preview</span>
           <span class="set-preview-dot">How readers see the sender</span>
@@ -286,8 +266,8 @@ export async function renderSettings() {
       <div class="set-preview">
         <div class="set-preview-bar set-ce-bar">
           <div class="set-ce-modetog" role="group" aria-label="Confirmation email view">
-            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true">${SET_ICON.preview}Preview</button>
-            <button type="button" class="set-ce-modebtn" id="ceTabEdit" aria-pressed="false">${SET_ICON.editable}Edit</button>
+            <button type="button" class="set-ce-modebtn" id="ceTabPreview" aria-pressed="true">${icon("preview")}Preview</button>
+            <button type="button" class="set-ce-modebtn" id="ceTabEdit" aria-pressed="false">${icon("editable")}Edit</button>
           </div>
         </div>
         <div id="cePreviewBody">
@@ -327,7 +307,7 @@ export async function renderSettings() {
             <div class="set-field">
               <label for="ceButton">Button label</label>
               <input id="ceButton" value="${esc(state.confirmation.buttonLabel)}" maxlength="80" autocomplete="off">
-              <p class="field-hint set-ce-lock">${SET_ICON.readonly}<span>Kestrel fills in the confirmation link — you set the words, never the URL.</span></p>
+              <p class="field-hint set-ce-lock">${icon("readonly")}<span>Kestrel fills in the confirmation link — you set the words, never the URL.</span></p>
             </div>
             <div class="set-field">
               <label for="ceFooter">Reassurance line</label>
@@ -350,13 +330,13 @@ export async function renderSettings() {
     <section class="set-sec">
       ${secHead("Instance", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${SET_ICON.info}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs">setup guide</a> to change them.</span></div>
+        <div class="set-ro-note">${icon("info")}<span>Deploy-time infrastructure, shown for reference. These live in your Worker config and never pass through the API. See the <a class="set-link" href="#/docs">setup guide</a> to change them.</span></div>
         <div class="set-kv">
           <div class="set-kv-k">App origin</div><div class="set-kv-v"><span class="mono">${esc(d.appOrigin)}</span></div>
           <div class="set-kv-k">Archive URL base</div><div class="set-kv-v"><span class="mono">${esc(archiveBase)}</span>${archiveIsDefault ? '<span class="set-pill">default: app origin</span>' : ""}</div>
           <div class="set-kv-k">Image URL base</div><div class="set-kv-v"><span class="mono">${esc(d.mediaPublicBase)}</span></div>
           <div class="set-kv-k">Auth mode</div><div class="set-kv-v">${d.authMode === "access" ? "Cloudflare Access" : "Local dev token"}</div>
-          <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.accessConfigured ? `<span class="set-pill ok">${SET_ICON.check}Configured</span>` : '<span class="set-pill">Not configured</span>'}</div>
+          <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.accessConfigured ? `<span class="set-pill ok">${icon("check")}Configured</span>` : '<span class="set-pill">Not configured</span>'}</div>
         </div>
       </div>
     </section>`;
@@ -588,7 +568,7 @@ export async function renderSettings() {
     recipChips.innerHTML = state.recipients
       .map(
         (addr, i) =>
-          `<span class="set-recip-chip">${esc(addr)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(addr)}">${SET_ICON.x}</button></span>`,
+          `<span class="set-recip-chip">${esc(addr)}<button type="button" data-rm="${i}" aria-label="Remove ${esc(addr)}">${icon("x")}</button></span>`,
       )
       .join("");
   };

@@ -59,6 +59,13 @@ paths:
 - Convert a module to the tag when its pragma is lifted, dropping its `esc()` calls as you go: an `esc()` result interpolated into `html` is escaped twice. `esc` in `helpers.ts` stays for the modules not yet lifted.
 - A module still under `@ts-nocheck` may interpolate an `Html` value into a plain template literal; it renders as its markup.
 
+## Icons
+
+- An icon is a file: `client/icons/<name>.svg`, a complete SVG (`xmlns`, its own `viewBox`, `aria-hidden="true"`, `currentColor` where it should follow the text) that opens in any viewer and diffs as a drawing.
+- `client/icons.ts` is the registry: it imports every file as text and `icon(name)` returns it as `Html`. Add an icon by adding the file and one import + entry there; `IconName` then knows it.
+- The build inlines the files (esbuild's `text` loader); the client test project mirrors that with the `svg-as-text` plugin in `vitest.config.ts`, so a spec that imports a module using icons gets the same markup. Keep the two in step.
+- The sidebar's sprite in `public/dashboard/index.html` is the one exception: it paints before any script runs. A generated image (the letter avatar) is code, not an icon.
+
 ## Live reload in the dev flavor
 
 - `client/dev_reload.ts` polls the served `index.html` once a second and compares its `?v=` stamps to the ones the page loaded with.

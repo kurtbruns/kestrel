@@ -102,6 +102,8 @@ const options = {
   format: "iife",
   target: "es2022",
   sourcemap: true,
+  // Icons are files under client/icons/, inlined as text (the client test project mirrors this).
+  loader: { ".svg": "text" },
   minify: !dev,
   define: { __DEV__: String(dev) },
   logLevel: "info",
