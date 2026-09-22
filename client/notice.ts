@@ -2,7 +2,7 @@
 // The dismissible notice (DESIGN §2), the busy state, and the error view.
 
 import { esc } from "./helpers";
-import { SET_ICON } from "./views/settings";
+import { icon } from "./icons";
 
 // An event, with a time, that the reader could not otherwise know happened: shown once
 // per event, cleared by the reader, asking nothing. Never a tip, a standing state (the
@@ -82,7 +82,7 @@ export function notice(slot, { kind, subject, version, members, html }) {
   el.setAttribute("role", "status");
   el.dataset.notice = id;
   el.dataset.noticeEvents = events;
-  el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${SET_ICON.x}</button>`;
+  el.innerHTML = `<span class="notice-text">${html}</span><button type="button" class="icon notice-dismiss" aria-label="Dismiss">${icon("x")}</button>`;
   const dismiss = el.querySelector(".notice-dismiss");
   dismiss.onclick = () => {
     recordDismissed(kind, all);

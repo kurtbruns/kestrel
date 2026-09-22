@@ -3,8 +3,8 @@
 
 import { api } from "../api";
 import { esc } from "../helpers";
-import { roomShell } from "../icons";
 import { renderError } from "../notice";
+import { roomShell } from "../room";
 import { app } from "../shell";
 
 // Every route the app and Claude can call, generated from the route manifest

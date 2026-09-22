@@ -7,12 +7,12 @@ import { parseFromName } from "../brand";
 import { copyText, withNoProviderNote } from "../build_ref";
 import { esc, modal, parseAddresses, toast } from "../helpers";
 import { highlightTemplate } from "../highlight";
+import { icon } from "../icons";
 import { busy, renderError } from "../notice";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "../remake";
 import { savebar } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
-import { SET_ICON } from "./settings";
 
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against
@@ -495,7 +495,7 @@ export async function renderTemplate() {
             <button type="button" class="wtog-btn" data-w="640" aria-pressed="true">640</button>
             <button type="button" class="wtog-btn" data-w="375" aria-pressed="false">375</button>
           </span>
-          <button type="button" class="secondary" id="tplTest">${SET_ICON.send}<span id="tplTestLbl">Send test email</span></button>
+          <button type="button" class="secondary" id="tplTest">${icon("send")}<span id="tplTestLbl">Send test email</span></button>
         </span>
       </div>
       <div class="set-email-stage" id="tplStage">
@@ -517,8 +517,8 @@ export async function renderTemplate() {
                   <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
                 </div>
               </div>
-              <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${SET_ICON.lines}</button>
-              <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${SET_ICON.copyout}<span id="tplCopyLbl">Copy</span></button>
+              <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${icon("lines")}</button>
+              <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${icon("copyout")}<span id="tplCopyLbl">Copy</span></button>
             </div>
             <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
@@ -534,7 +534,7 @@ export async function renderTemplate() {
           <div class="set-tpl-msgs" id="tplMsgs" hidden></div>
         </div>
       </div>
-      <div class="set-note">${SET_ICON.info}<span>Kestrel uses this one template for every post, starting from a sensible default. Saving a change while posts are scheduled applies it to their emails too, after you confirm, so nothing scheduled goes out on an older look; their content stays as it was. Sent emails are archived exactly as they went out and never change. Save and Discard are in the bar at the bottom of the page.</span></div>
+      <div class="set-note">${icon("info")}<span>Kestrel uses this one template for every post, starting from a sensible default. Saving a change while posts are scheduled applies it to their emails too, after you confirm, so nothing scheduled goes out on an older look; their content stays as it was. Sent emails are archived exactly as they went out and never change. Save and Discard are in the bar at the bottom of the page.</span></div>
     </div>
 
     <div class="set-card set-tpl-varcard">

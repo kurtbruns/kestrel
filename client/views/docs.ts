@@ -3,8 +3,8 @@
 
 import { api } from "../api";
 import { esc, toast } from "../helpers";
-import { roomShell } from "../icons";
 import { renderError } from "../notice";
+import { roomShell } from "../room";
 import { app } from "../shell";
 import { appState } from "../state";
 

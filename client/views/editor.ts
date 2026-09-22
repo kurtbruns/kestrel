@@ -14,7 +14,6 @@ import { infoTip } from "../savebar";
 import { app } from "../shell";
 import { appState } from "../state";
 import { openRescheduleModal } from "./sends";
-import { SET_ICON } from "./settings";
 
 // Autosave uses two timers (see scheduleAutosave): save after a short idle pause,
 // but never let an edit sit unsaved longer than the hard cap even while typing.
@@ -147,8 +146,8 @@ export async function renderEditor(id) {
       <div class="composer">
         <div class="composer-head">
           <div class="ctabs" role="tablist">
-            <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${SET_ICON.editable}Edit</span></button>
-            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${SET_ICON.preview}Preview</span></button>
+            <button type="button" class="ctab active" data-tab="edit" data-text="Edit" role="tab" aria-selected="true"><span class="ctab-label">${icon("editable")}Edit</span></button>
+            <button type="button" class="ctab" data-tab="preview" data-text="Preview" role="tab" aria-selected="false"><span class="ctab-label">${icon("preview")}Preview</span></button>
           </div>
           <div class="toolbar" role="toolbar" aria-label="Formatting">${toolbarHtml}</div>
         </div>
@@ -159,7 +158,7 @@ export async function renderEditor(id) {
         </div>
         ${
           locked
-            ? `<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${SET_ICON.readonly}<span>Cancel the schedule to edit</span></div>`
+            ? `<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
             : `<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
         }
         <input type="file" id="imgInput" accept="image/*" multiple hidden>
@@ -169,13 +168,13 @@ export async function renderEditor(id) {
       <div class="actions-bar">
         ${
           locked
-            ? `<div class="row"><button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button></div>`
+            ? `<div class="row"><button type="button" class="secondary" id="testBtn">${icon("send")}<span>Send test email</span></button></div>`
             : `<div class="row">
                  <button type="button" class="ghost" id="saveBtn">Save draft</button>
                  <span class="save-status" id="saveStatus" aria-live="polite"></span>
                </div>
                <div class="row">
-                 <button type="button" class="secondary" id="testBtn">${SET_ICON.send}<span>Send test email</span></button>
+                 <button type="button" class="secondary" id="testBtn">${icon("send")}<span>Send test email</span></button>
                  <button type="button" class="primary" id="scheduleBtn">Schedule</button>
                </div>`
         }
