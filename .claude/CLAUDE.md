@@ -69,6 +69,7 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 
 - **TypeScript, `strict`.** Prefer real types over `any`. Run `npm run typecheck` before finishing.
 - **Keep the module boundaries** (above): SQL in `db/`, the one render path in `render/`, provider-specific code behind the `providers/` seam, the send state machine in `send/`, the admin SPA's source in `client/` and `public/` (never the generated `dist/`), and code both runtimes need in `shared/`, which imports nothing outside itself.
+- **Landing a pull request: squash by default.** One gated commit per PR, with the PR's title and description as its message (a repository setting; `.github/rulesets/README.md` records it). Rebase-merge a branch whose commits were shaped on purpose: each a coherent change with its own message, no sync merges. A merge commit only when a branch's merges cannot be replayed and its commits are worth keeping anyway; it puts every sync merge into `main` forever, so rare and deliberate. A stack is a review shape, not a merge shape: build it with rebases, land it in order, squash each, and rebase the next onto the new `main`.
 - **Secrets** live in `.dev.vars` locally (gitignored; copy `.dev.vars.example`) and in `wrangler secret put` when deployed. Never commit `.dev.vars`.
 - **The safety rules are the invariants:** never widen the audience or skip the review window automatically, never add a render path that could differ from the send, never let a retry re-mail an accepted recipient. When in doubt, check `docs/SPEC.md`.
 
