@@ -13,6 +13,7 @@
  * share a `RequestContext`. All errors funnel through `toErrorResponse`, so
  * handlers can just `throw new HttpError(...)`.
  */
+import type { Access, QueryParam, RouteExample } from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
@@ -51,24 +52,11 @@ export function param(c: RequestContext, name: string): string {
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
-/**
- * The access tier a route is served at. `admin` is gated by `requireAuth`;
- * `public` (reader/subscribe/archive/media) and `webhook` (provider callbacks,
- * verified inside the adapter) carry no auth middleware.
- */
-export type Access = "admin" | "public" | "webhook";
-
-/** A worked request/response pair for the API reference. Hand-authored, co-located with the route. */
-export interface RouteExample {
-  request?: unknown;
-  response?: unknown;
-}
-
-/** A documented query parameter, for list routes with filter/sort/pagination. */
-export interface QueryParam {
-  name: string;
-  description: string;
-}
+// The access tier (`admin` is gated by `requireAuth`; `public` and `webhook` carry no auth
+// middleware), the worked example, and the documented query parameter are what the API
+// reference projects from a route, so they live in shared/ where the editor reads the
+// same definitions; re-exported here under the manifest's names.
+export type { Access, QueryParam, RouteExample };
 
 /**
  * A route declared as data. `method` / `path` / `access` are accurate by

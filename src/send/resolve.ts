@@ -23,7 +23,6 @@
  */
 
 import type { ResolveResponse, StuckResolution } from "../../shared/sends";
-import type { SendRow } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { conflict, notFound } from "../lib/errors";

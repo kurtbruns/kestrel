@@ -1,8 +1,10 @@
-// @ts-nocheck
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
+import type { DocFragment, DocsResponse } from "../../shared/docs";
 import { api } from "../api";
-import { esc, toast } from "../helpers";
+import { $, $$ } from "../dom";
+import { toast } from "../helpers";
+import { type Html, html, setHtml, unsafeHtml } from "../html";
 import { renderError } from "../notice";
 import { roomShell } from "../room";
 import { app } from "../shell";
@@ -14,13 +16,14 @@ import { appState } from "../state";
 // plus that doc's "On this page" (never a tree of all docs). No iframe: the content is
 // trusted (repo markdown, hygiene-passed), so injecting the fragments is safe. Fetched once
 // and cached (the bundle never changes at runtime), so paging is instant.
-let docsCache = null;
+let docsCache: DocFragment[] | null = null;
 
 // A doc card's blurb on the index: the doc's own first paragraph, condensed. Derived here
 // (docs carry no front-matter description) so it stays in sync with the doc itself.
-function docDescription(doc) {
+function docDescription(doc: DocFragment): string {
   const tmp = document.createElement("div");
-  tmp.innerHTML = doc.html || "";
+  // The API's rendered HTML, parsed only to read its first paragraph; never attached.
+  setHtml(tmp, unsafeHtml(doc.html || ""));
   const raw = (tmp.querySelector("p")?.textContent || "").trim().replace(/\s+/g, " ");
   // A paragraph that leads into a list ends in ":" — on a card that reads as a cut-off
   // sentence, so it ends in an ellipsis like a truncated blurb does.
@@ -33,11 +36,10 @@ function docDescription(doc) {
   return leadsIn ? `${text}…` : text;
 }
 
-export async function renderDocs(slug) {
-  app.innerHTML = roomShell(
-    "docs",
-    null,
-    `<div class="docs-index"><p class="muted">Loading…</p></div>`,
+export async function renderDocs(slug?: string): Promise<void> {
+  setHtml(
+    app,
+    roomShell("docs", null, html`<div class="docs-index"><p class="muted">Loading…</p></div>`),
   );
   if (!docsCache) {
     // The first visit fetches; everything below rewrites the whole view, so if the route
@@ -45,10 +47,12 @@ export async function renderDocs(slug) {
     // render is stale and must not paint over the one that replaced it.
     const wanted = location.hash;
     try {
-      ({ docs: docsCache } = await api("/api/docs"));
+      docsCache = (await api<DocsResponse>("/api/docs")).docs;
     } catch (e) {
       if (location.hash === wanted) {
-        renderError(document.querySelector(".room-main"), e.message, () => renderDocs(slug));
+        renderError($(".room-main"), e instanceof Error ? e.message : String(e), () =>
+          renderDocs(slug),
+        );
       }
       return;
     }
@@ -57,11 +61,8 @@ export async function renderDocs(slug) {
     }
   }
   const docs = docsCache;
-  if (!docs?.length) {
-    const el = document.querySelector(".room-main");
-    if (el) {
-      el.innerHTML = `<p class="muted">No documentation.</p>`;
-    }
+  if (!docs.length) {
+    setHtml($(".room-main"), html`<p class="muted">No documentation.</p>`);
     return;
   }
   if (slug) {
@@ -75,27 +76,12 @@ export async function renderDocs(slug) {
 // room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
 // holds the project's external links — the reference room is about Kestrel itself, so this
 // is where getkestrel.dev and the source live.
-function renderDocsIndex(docs) {
-  const cards = docs
-    .map((d, i) => {
-      const desc = docDescription(d);
-      return (
-        `<li><a class="doc-card" href="#/docs/${esc(d.slug)}">` +
-        `<span class="doc-card-n">${String(i + 1).padStart(2, "0")}</span>` +
-        `<span class="doc-card-main">` +
-        `<span class="doc-card-t">${esc(d.title)} <span class="doc-card-go" aria-hidden="true">→</span></span>` +
-        (desc ? `<span class="doc-card-d">${esc(desc)}</span>` : "") +
-        `</span></a></li>`
-      );
-    })
-    .join("");
-  const main =
-    `<div class="docs-index">` +
-    `<p class="eyebrow">Documentation</p>` +
-    `<h1>Set up &amp; operate Kestrel</h1>` +
-    `<p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p>` +
-    `<ol class="doc-cards">${cards}</ol>` +
-    `</div>`;
+function renderDocsIndex(docs: DocFragment[]): void {
+  const cards = docs.map((d, i) => {
+    const desc = docDescription(d);
+    return html`<li><a class="doc-card" href="#/docs/${d.slug}"><span class="doc-card-n">${String(i + 1).padStart(2, "0")}</span><span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
+  });
+  const main = html`<div class="docs-index"><p class="eyebrow">Documentation</p><h1>Set up &amp; operate Kestrel</h1><p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p><ol class="doc-cards">${cards}</ol></div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
@@ -103,18 +89,15 @@ function renderDocsIndex(docs) {
   // absent when no repo is known.
   // Each link carries a short form for the mobile chip row (styles.css swaps which span
   // shows); the full label stays the accessible name at every width.
-  const repoUrl = appState.appConfig?.deployment?.build?.repoUrl || "";
-  const out = (href, label, short = label) =>
-    `<a class="rail-link" href="${esc(href)}" target="_blank" rel="noopener" aria-label="${esc(label)}">` +
-    `<span class="rail-link-full">${esc(label)}</span><span class="rail-link-short" aria-hidden="true">${esc(short)}</span>` +
-    ` <span aria-hidden="true">↗</span></a>`;
-  const rail =
-    `<div class="toc-label">Kestrel</div>` +
-    out("https://getkestrel.dev", "Project site", "Project") +
-    (repoUrl
-      ? out(repoUrl, "Source on GitHub", "Source") + out(`${repoUrl}/blob/HEAD/LICENSE`, "License")
-      : "");
-  app.innerHTML = roomShell("docs", rail, main);
+  const repoUrl = appState.appConfig?.deployment.build.repoUrl || "";
+  const out = (href: string, label: string, short = label): Html =>
+    html`<a class="rail-link" href="${href}" target="_blank" rel="noopener" aria-label="${label}"><span class="rail-link-full">${label}</span><span class="rail-link-short" aria-hidden="true">${short}</span> <span aria-hidden="true">↗</span></a>`;
+  const rail = html`<div class="toc-label">Kestrel</div>${out("https://getkestrel.dev", "Project site", "Project")}${
+    repoUrl
+      ? [out(repoUrl, "Source on GitHub", "Source"), out(`${repoUrl}/blob/HEAD/LICENSE`, "License")]
+      : null
+  }`;
+  setHtml(app, roomShell("docs", rail, main));
   window.scrollTo(0, 0);
 }
 
@@ -131,56 +114,71 @@ function renderDocsIndex(docs) {
 // list no pointer can reopen. One listener for the app's lifetime; it finds the fold that
 // is in the DOM, if any.
 const mobileMq = matchMedia("(max-width: 720px)");
-function syncFold(fold) {
+function syncFold(fold: HTMLDetailsElement | null): void {
   if (!fold) {
     return;
   }
   const mobile = mobileMq.matches;
   fold.open = !mobile;
-  fold.querySelector("summary").tabIndex = mobile ? 0 : -1;
+  $("summary", fold).tabIndex = mobile ? 0 : -1;
 }
-mobileMq.addEventListener("change", () => syncFold(document.getElementById("tocOnPage")));
-function renderDocPage(docs, slug) {
+// The fold is only in the DOM on a doc page, so a nullable lookup is the right one here.
+const findFold = () => document.querySelector<HTMLDetailsElement>("details#tocOnPage");
+mobileMq.addEventListener("change", () => syncFold(findFold()));
+
+interface DocSection {
+  id: string;
+  title: string;
+}
+
+function renderDocPage(docs: DocFragment[], slug: string): void {
   const at = docs.findIndex((d) => d.slug === slug);
-  if (at === -1) {
+  const cur = docs[at];
+  if (!cur) {
     // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
     toast(`No doc named “${slug}” — showing the index.`);
     history.replaceState(history.state, "", "#/docs");
     renderDocsIndex(docs);
     return;
   }
-  const cur = docs[at];
   const prev = docs[at - 1];
   const next = docs[at + 1];
   // Compact Prev/Next on the title line, right of the H1 — no titles (the foot pager
   // carries those; each link's aria-label names its target). On mobile the words drop
   // and the arrows alone remain, so the row still fits beside a wrapping title.
-  const topLink = (doc, dir) =>
-    `<a href="#/docs/${esc(doc.slug)}" aria-label="${esc(`${dir}: ${doc.title}`)}">` +
-    (dir === "Previous"
-      ? `<span aria-hidden="true">←</span><span class="doc-topnav-word">Previous</span>`
-      : `<span class="doc-topnav-word">Next</span><span aria-hidden="true">→</span>`) +
-    `</a>`;
+  const topLink = (doc: DocFragment, dir: "Previous" | "Next"): Html =>
+    html`<a href="#/docs/${doc.slug}" aria-label="${dir}: ${doc.title}">${
+      dir === "Previous"
+        ? html`<span aria-hidden="true">←</span><span class="doc-topnav-word">Previous</span>`
+        : html`<span class="doc-topnav-word">Next</span><span aria-hidden="true">→</span>`
+    }</a>`;
   const topNav =
     prev || next
-      ? `<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? topLink(prev, "Previous") : ""}${next ? topLink(next, "Next") : ""}</nav>`
-      : "";
+      ? html`<nav class="doc-topnav" aria-label="Adjacent docs">${prev ? topLink(prev, "Previous") : null}${next ? topLink(next, "Next") : null}</nav>`
+      : null;
   // The rail gets a slot, filled once the sections are known (below) — the slot, not the
   // whole rail, so the build stamp roomShell set under it stays.
-  app.innerHTML = roomShell(
-    "docs",
-    `<div id="docToc"></div>`,
-    `<article class="doc" id="docsMain"></article>`,
+  setHtml(
+    app,
+    roomShell(
+      "docs",
+      html`<div id="docToc"></div>`,
+      html`<article class="doc" id="docsMain"></article>`,
+    ),
   );
-  const navEl = document.getElementById("docToc");
-  const mainEl = document.getElementById("docsMain");
-  mainEl.innerHTML = `<section class="doc-part" id="doc-${esc(cur.slug)}">${cur.html}</section>`;
+  const navEl = $("#docToc");
+  const mainEl = $("#docsMain");
+  // The API's rendered HTML: the repo's own Markdown, hygiene-passed by the Worker.
+  setHtml(
+    mainEl,
+    html`<section class="doc-part" id="doc-${cur.slug}">${unsafeHtml(cur.html)}</section>`,
+  );
 
   // The fragment carries no ids — assign them to the current part's H1 and its H2s, and
   // collect the sections for "On this page". The H1 leads so there's a way back to the top.
-  const sec = mainEl.querySelector("section.doc-part");
+  const sec = $("section.doc-part", mainEl);
   const h1 = sec.querySelector("h1");
-  const sections = [];
+  const sections: DocSection[] = [];
   if (h1) {
     h1.id = `part-${cur.slug}`;
     sections.push({ id: h1.id, title: h1.textContent || cur.title });
@@ -190,73 +188,80 @@ function renderDocPage(docs, slug) {
   if (topNav) {
     const head = document.createElement("div");
     head.className = "doc-head";
+    setHtml(head, topNav);
     if (h1) {
       h1.before(head);
-      head.append(h1);
+      head.prepend(h1);
     } else {
       sec.prepend(head);
     }
-    head.insertAdjacentHTML("beforeend", topNav);
   }
-  sec.querySelectorAll("h2").forEach((h2, i) => {
+  for (const [i, h2] of $$<HTMLHeadingElement>("h2", sec).entries()) {
     const id = `sec-${cur.slug}-${i + 1}`;
     h2.id = id;
     sections.push({ id, title: h2.textContent || "" });
-  });
+  }
 
   // Previous / Next at the foot — with titles, the sequential path through the guide.
   const pager = document.createElement("nav");
   pager.className = "doc-pager";
-  pager.innerHTML =
-    (prev
-      ? `<a class="doc-pager-btn prev" href="#/docs/${esc(prev.slug)}"><span class="doc-pager-dir">← Previous</span><span class="doc-pager-title">${esc(prev.title)}</span></a>`
-      : `<span></span>`) +
-    (next
-      ? `<a class="doc-pager-btn next" href="#/docs/${esc(next.slug)}"><span class="doc-pager-dir">Next →</span><span class="doc-pager-title">${esc(next.title)}</span></a>`
-      : `<span></span>`);
+  setHtml(
+    pager,
+    html`${
+      prev
+        ? html`<a class="doc-pager-btn prev" href="#/docs/${prev.slug}"><span class="doc-pager-dir">← Previous</span><span class="doc-pager-title">${prev.title}</span></a>`
+        : html`<span></span>`
+    }${
+      next
+        ? html`<a class="doc-pager-btn next" href="#/docs/${next.slug}"><span class="doc-pager-dir">Next →</span><span class="doc-pager-title">${next.title}</span></a>`
+        : html`<span></span>`
+    }`,
+  );
   mainEl.appendChild(pager);
 
   // Rail: this doc's "On this page" only (scroll-spy-tracked). No back-link (the "Docs" tab
   // returns to the index) and no rail pager (Prev/Next is the title line + the article
   // foot). A <details>, open unless this is mobile (the header comment says why).
-  const onPage = sections
-    .map(
-      (s) =>
-        `<a class="toc-sub" href="#${esc(s.id)}" data-target="${esc(s.id)}">${esc(s.title)}</a>`,
-    )
-    .join("");
-  navEl.innerHTML = sections.length
-    ? `<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
-    : "";
+  const onPage = sections.map(
+    (s) => html`<a class="toc-sub" href="#${s.id}" data-target="${s.id}">${s.title}</a>`,
+  );
+  setHtml(
+    navEl,
+    sections.length
+      ? html`<details class="toc-onpage" id="tocOnPage"><summary class="toc-label">On this page</summary>${onPage}</details>`
+      : html``,
+  );
 
   // "On this page" links jump within the current doc and highlight at once. On mobile the
   // fold closes first, so the page height above the target is settled before the scroll
   // is measured.
-  const onPageEl = document.getElementById("tocOnPage");
+  const onPageEl = findFold();
   syncFold(onPageEl); // open + inert on desktop, closed + tappable on mobile (before paint)
-  const markActive = (id) => {
+  const markActive = (id: string) => {
     if (!onPageEl) {
       return;
     }
-    for (const a of onPageEl.querySelectorAll(".toc-sub")) {
+    for (const a of $$(".toc-sub", onPageEl)) {
       a.classList.toggle("on", a.dataset.target === id);
     }
   };
   navEl.addEventListener("click", (ev) => {
-    const a = ev.target.closest("a[data-target]");
-    if (!a) {
+    const a =
+      ev.target instanceof Element ? ev.target.closest<HTMLElement>("a[data-target]") : null;
+    const target = a?.dataset.target;
+    if (!target) {
       return;
     }
     ev.preventDefault();
-    markActive(a.dataset.target);
+    markActive(target);
     if (onPageEl && mobileMq.matches) {
       onPageEl.open = false;
     }
-    document.getElementById(a.dataset.target)?.scrollIntoView({ block: "start" });
+    document.getElementById(target)?.scrollIntoView({ block: "start" });
   });
 
   // Copy buttons on the guide's shell / DNS code blocks.
-  for (const pre of mainEl.querySelectorAll("pre")) {
+  for (const pre of $$<HTMLPreElement>("pre", mainEl)) {
     pre.classList.add("has-copy");
     const btn = document.createElement("button");
     btn.type = "button";
@@ -280,20 +285,22 @@ function renderDocPage(docs, slug) {
   // Scroll-spy: the active section is the last heading scrolled above a line just under the
   // sticky room bar; at the bottom the last heading wins so a short final section still
   // highlights. One document.onscroll slot, self-cleared once this doc leaves the DOM.
-  if (onPageEl && sections.length) {
-    const ids = sections.map((s) => s.id);
+  const ids = sections.map((s) => s.id);
+  const first = ids[0];
+  if (onPageEl && first) {
+    const last = ids[ids.length - 1] ?? first;
     // Just under the sticky bar. Measured, not assumed: the bar is --bar-h at every width
     // (see roomShell), but large-text zoom can push it taller, and the spy should follow.
     const barH = document.querySelector(".room-bar")?.getBoundingClientRect().height || 54;
     const line = barH + 26;
     const spy = () => {
-      if (!document.getElementById(ids[0])) {
+      if (!document.getElementById(first)) {
         document.onscroll = null;
         return;
       }
-      let active = ids[0];
+      let active = first;
       if (Math.ceil(window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight) {
-        active = ids[ids.length - 1];
+        active = last;
       } else {
         for (const id of ids) {
           if (

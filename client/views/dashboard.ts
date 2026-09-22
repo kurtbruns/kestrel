@@ -1,11 +1,20 @@
-// @ts-nocheck
 // The dashboard (home): counts, the active send widget, drafts and sent tables, the
 // setup checklist, and quick actions.
 
+import type { PostListItem, PostListResponse } from "../../shared/posts";
+import type { SendListResponse, SendSummary } from "../../shared/sends";
+import type { DeploymentView } from "../../shared/settings";
+import type {
+  Subscriber,
+  SubscriberCounts,
+  SubscriberListResponse,
+} from "../../shared/subscribers";
 import { api } from "../api";
-import { derivePublication } from "../brand";
+import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor, copyText, createNewPost } from "../build_ref";
-import { badge, esc, fmt, modal, toast } from "../helpers";
+import { $, $$ } from "../dom";
+import { badge, fmt, modal, toast } from "../helpers";
+import { type Html, html, setHtml } from "../html";
 import { busy, notice, renderError } from "../notice";
 import { appliedNoticeHtml } from "../remake";
 import { app } from "../shell";
@@ -27,11 +36,17 @@ import { addSubscriberModal } from "./subscribers";
 const BOUNCE_SPIKE_RATE = 0.05;
 const BOUNCE_SPIKE_MIN = 3;
 
+/** One line of the health block: red needs a decision, amber a look. */
+interface HealthAlert {
+  level: "red" | "amber";
+  text: string;
+}
+
 // Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case,
 // loud only when something needs attention. Derived from GET /sends.
-function computeHealth(sends) {
+function computeHealth(sends: SendSummary[]): HealthAlert[] {
   const now = Date.now();
-  const alerts = [];
+  const alerts: HealthAlert[] = [];
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
   if (missed.length) {
     alerts.push({
@@ -90,40 +105,51 @@ function computeHealth(sends) {
   return alerts;
 }
 
-export async function renderDashboard() {
-  app.innerHTML = `<div class="dash" id="dash"><p class="muted">Loading…</p></div>`;
-  const root = document.getElementById("dash");
-  let posts, sends, counts;
+/** A subscriber-count tile; each deep-links into the roster on its own filter. */
+interface Tile {
+  label: string;
+  emph?: boolean;
+  v: number;
+  filter: string;
+  sub?: string;
+}
+
+export async function renderDashboard(): Promise<void> {
+  setHtml(app, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
+  const root = $("#dash");
+  let posts: PostListItem[];
+  let sends: SendSummary[];
+  let counts: SubscriberCounts;
   try {
     // The health line scans every send and the archive-link slug map needs every post,
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
     const [p, s, subs] = await Promise.all([
-      api("/posts?limit=200"),
-      api("/sends?limit=200"),
-      api("/subscribers"),
+      api<PostListResponse>("/posts?limit=200"),
+      api<SendListResponse>("/sends?limit=200"),
+      api<SubscriberListResponse>("/subscribers"),
     ]);
     posts = p.posts;
     sends = s.sends;
     counts = subs.counts;
   } catch (e) {
-    renderError(root, e.message, renderDashboard);
+    renderError(root, e instanceof Error ? e.message : String(e), renderDashboard);
     return;
   }
   const pub = derivePublication(appState.appConfig);
-  const deployment = appState.appConfig?.deployment || {};
+  const deployment = appState.appConfig?.deployment ?? null;
   const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
 
   // First run — nothing written and no one on the list: replace the body with the
   // onboarding checklist (the shared Getting-started component) rather than a wall
   // of empty tiles.
   if (!posts.length && totalSubs === 0) {
-    root.innerHTML =
-      `<div class="dash-head"><div><h1>${esc(pub.name)}</h1>${
-        pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""
-      }<p class="muted">Let's get your first post out the door.</p></div></div>` +
-      setupChecklistHtml(pub, deployment) +
-      `<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`;
+    setHtml(
+      root,
+      html`<div class="dash-head"><div><h1>${pub.name}</h1>${
+        pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
+      }<p class="muted">Let's get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+    );
     wireDashActions(root, renderDashboard);
     return;
   }
@@ -133,10 +159,10 @@ export async function renderDashboard() {
   const health = computeHealth(sends);
   const level = health.some((i) => i.level === "red") ? "red" : "amber";
   const healthHtml = health.length
-    ? `<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health
-        .map((i) => `<div>${esc(i.text)}</div>`)
-        .join("")}</div></div>`
-    : "";
+    ? html`<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health.map(
+        (i) => html`<div>${i.text}</div>`,
+      )}</div></div>`
+    : null;
 
   // Active-send widget: when a send is in flight (and not wedged — that's a red health
   // line above), show it with a live mini dispatch bar, an ETA, and a Watch link into the
@@ -147,7 +173,7 @@ export async function renderDashboard() {
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
-  const tiles = [
+  const tiles: Tile[] = [
     {
       label: "Confirmed",
       emph: true,
@@ -158,55 +184,54 @@ export async function renderDashboard() {
     { label: "Unsubscribed", v: counts.unsubscribed, filter: "unsubscribed" },
     { label: "Suppressed", v: counts.suppressed, filter: "suppressed" },
   ];
-  const tilesHtml = `<div class="tiles">${tiles
-    .map(
-      (t) =>
-        `<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers/${t.filter}"><span class="tile-n">${t.v}</span><span class="tile-label">${esc(t.label)}${
-          t.sub ? `<span class="tile-sub">${esc(t.sub)}</span>` : ""
-        }</span></a>`,
-    )
-    .join("")}</div>`;
+  const tilesHtml = html`<div class="tiles">${tiles.map(
+    (t) =>
+      html`<a class="tile${t.emph ? " tile-emph" : ""}" href="#/subscribers/${t.filter}"><span class="tile-n">${t.v}</span><span class="tile-label">${t.label}${
+        t.sub ? html`<span class="tile-sub">${t.sub}</span>` : null
+      }</span></a>`,
+  )}</div>`;
 
   const scheduled = sends
     .filter((s) => s.status === "scheduled")
     .sort((a, b) => a.fire_at - b.fire_at);
   const nextUpHtml = dashScheduledHtml(scheduled);
 
-  const slugById = new Map(posts.map((p) => [p.id, p.slug]));
+  const slugById = new Map(posts.map((p) => [p.id, p.slug] as const));
   const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
   const recentHtml = recent.length
-    ? `<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent
-        .map((s) => {
+    ? html`<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
+        (s) => {
           const slug = slugById.get(s.post_id);
           const url = slug ? archiveUrlFor(deployment, slug) : null;
           // A sent row opens its record view (#148); the subject is the keyboard target.
           const isSent = s.status === "sent";
-          const subj = isSent ? `<a href="#/sent/${s.id}">${esc(s.subject)}</a>` : esc(s.subject);
-          return `<tr${isSent ? ` class="clickable" data-send="${s.id}"` : ""}><td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
+          const subj = isSent ? html`<a href="#/sent/${s.id}">${s.subject}</a>` : s.subject;
+          const cells = html`<td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
             url && isSent
-              ? `<a class="ghost-link" href="${esc(url)}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
-              : ""
-          }</td></tr>`;
-        })
-        .join("")}</tbody></table></div>`
-    : `<p class="muted">No sends yet.</p>`;
+              ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
+              : null
+          }</td>`;
+          return isSent
+            ? html`<tr class="clickable" data-send="${s.id}">${cells}</tr>`
+            : html`<tr>${cells}</tr>`;
+        },
+      )}</tbody></table></div>`
+    : html`<p class="muted">No sends yet.</p>`;
 
   const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
   const draftsHtml = drafts.length
-    ? `<div class="table-wrap"><table><tbody>${drafts
-        .map(
-          (p) =>
-            `<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${esc(p.subject) || "<em>untitled</em>"}</a></td><td class="muted">edited ${fmt(p.updated_at)}</td></tr>`,
-        )
-        .join("")}</tbody></table></div>`
-    : `<p class="muted">No drafts in progress.</p>`;
+    ? html`<div class="table-wrap"><table><tbody>${drafts.map(
+        (p) =>
+          html`<tr class="clickable" data-id="${p.id}"><td><a href="#/edit/${p.id}">${p.subject || html`<em>untitled</em>`}</a></td><td class="muted">edited ${fmt(p.updated_at)}</td></tr>`,
+      )}</tbody></table></div>`
+    : html`<p class="muted">No drafts in progress.</p>`;
 
-  const appOrigin = deployment.appOrigin || location.origin;
+  const appOrigin = deployment?.appOrigin || location.origin;
   const archiveBase =
-    (deployment.archiveOrigin || location.origin) + (deployment.archiveBasePath || "");
-  const pubCardHtml = `<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${esc(appOrigin)}</code><button class="ghost" data-copy="${esc(appOrigin)}">Copy</button></div>
-    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${esc(archiveBase)}</code><button class="ghost" data-copy="${esc(archiveBase)}">Copy</button></div>
+    (deployment?.archiveOrigin || location.origin) + (deployment?.archiveBasePath || "");
+  const pubCardHtml = html`<div class="card pub-card">
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code><button class="ghost" data-copy="${appOrigin}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code><button class="ghost" data-copy="${archiveBase}">Copy</button></div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
@@ -219,11 +244,13 @@ export async function renderDashboard() {
   // The notice slot (#dashNotices, DESIGN §2 home ⑥) sits above the Scheduled section: a
   // problem (the health block) outranks news, and the notices that exist are about
   // scheduled sends, so the eye lands on the queue right after reading one.
-  const quickHtml = `<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
+  const quickHtml = html`<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
-  root.innerHTML = `
+  setHtml(
+    root,
+    html`
     <div class="dash-head">
-      <div><h1>${esc(pub.name)}</h1>${pub.tagline ? `<p class="muted dash-tagline">${esc(pub.tagline)}</p>` : ""}</div>
+      <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
     ${healthHtml}
@@ -239,26 +266,29 @@ export async function renderDashboard() {
     <div class="dash-cols">
       <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
       <section class="dash-section"><h2>API access</h2>${apiCardHtml}</section>
-    </div>`;
+    </div>`,
+  );
 
   wireDashActions(root, renderDashboard);
   // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
-  root.querySelectorAll("tr[data-id]").forEach((tr) => {
+  for (const tr of $$<HTMLTableRowElement>("tr[data-id]", root)) {
     tr.onclick = (e) => {
-      if (e.target.tagName !== "A" && !e.target.closest("button")) {
+      const t = e.target;
+      if (t instanceof Element && t.tagName !== "A" && !t.closest("button")) {
         location.hash = `#/edit/${tr.dataset.id}`;
       }
     };
-  });
+  }
   // Recent-sends rows carry a SEND id (not a post id) and open the record view.
-  root.querySelectorAll("tr[data-send]").forEach((tr) => {
+  for (const tr of $$<HTMLTableRowElement>("tr[data-send]", root)) {
     tr.onclick = (e) => {
-      if (e.target.tagName !== "A") {
+      const t = e.target;
+      if (t instanceof Element && t.tagName !== "A") {
         location.hash = `#/sent/${tr.dataset.send}`;
       }
     };
-  });
+  }
   wireDashActiveCards();
   wireDashScheduledCards();
   paintAppliedNotice(scheduled);
@@ -277,60 +307,61 @@ export async function renderDashboard() {
 // clears them there, and clearing every post hides it here. Re-painted with the
 // queue: notice() keeps one aggregate per slot, replaces it when the set changes (a
 // re-made send fired or was canceled), and clears it when the set is empty.
-function paintAppliedNotice(scheduled) {
+function paintAppliedNotice(scheduled: SendSummary[]): void {
+  // Nullable on purpose: the poll repaints after an await, when the reader may have left.
   const slot = document.getElementById("dashNotices");
   if (!slot) {
     return;
   }
-  const remade = scheduled.filter((s) => s.remade_at);
-  const at = remade.length ? Math.max(...remade.map((s) => s.remade_at)) : 0;
+  const remade = scheduled.flatMap((s) => (s.remade_at ? [{ id: s.id, at: s.remade_at }] : []));
+  const at = remade.length ? Math.max(...remade.map((r) => r.at)) : 0;
   notice(slot, {
     kind: "applied",
-    members: remade.map((s) => ({ subject: s.id, version: s.remade_at })),
+    members: remade.map((r) => ({ subject: r.id, version: r.at })),
     markup: appliedNoticeHtml(at, remade.length, false),
   });
 }
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
  *  the review window needs (SPEC §8). */
-function dashScheduledHtml(scheduled) {
+function dashScheduledHtml(scheduled: SendSummary[]): Html {
   if (!scheduled.length) {
-    return `<p class="muted">Nothing scheduled.</p>`;
+    return html`<p class="muted">Nothing scheduled.</p>`;
   }
-  return scheduled
-    .map(
-      (s) =>
-        `<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${esc(s.subject)}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
-    )
-    .join("");
+  return html`${scheduled.map(
+    (s) =>
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
+  )}`;
 }
-function wireDashScheduledCards() {
-  document.querySelectorAll("#dashScheduled .nextup").forEach((card) => {
+function wireDashScheduledCards(): void {
+  for (const card of $$("#dashScheduled .nextup")) {
     card.onclick = (e) => {
-      if (e.target.tagName !== "A") {
+      const t = e.target;
+      if (t instanceof Element && t.tagName !== "A") {
         location.hash = `#/edit/${card.dataset.post}`;
       }
     };
-  });
+  }
 }
 
-/** The dashboard active-send section (empty string when nothing is in flight). */
-function dashActiveHtml(active) {
+/** The dashboard active-send section (nothing when nothing is in flight). */
+function dashActiveHtml(active: SendSummary[]): Html {
   if (!active.length) {
-    return "";
+    return html``;
   }
-  return `<section class="dash-section"><h2>Active send${active.length === 1 ? "" : "s"}</h2>${active
-    .map(activeRowHtml)
-    .join("")}</section>`;
+  return html`<section class="dash-section"><h2>Active send${active.length === 1 ? "" : "s"}</h2>${active.map(
+    activeRowHtml,
+  )}</section>`;
 }
-function wireDashActiveCards() {
-  document.querySelectorAll("#dashActive .active-card[data-watch]").forEach((card) => {
+function wireDashActiveCards(): void {
+  for (const card of $$("#dashActive .active-card[data-watch]")) {
     card.onclick = (e) => {
-      if (e.target.tagName !== "A") {
+      const t = e.target;
+      if (t instanceof Element && t.tagName !== "A") {
         location.hash = `#/sent/${card.dataset.watch}`;
       }
     };
-  });
+  }
 }
 // Poll the in-flight set (~3s) and repaint ONLY the widget container in place — it slides
 // in as a send starts, advances, and clears when it finishes, with no full-page re-render
@@ -338,12 +369,12 @@ function wireDashActiveCards() {
 // Sent table is a glance snapshot that refreshes on navigation. A recursive setTimeout, so
 // a slow read never overlaps; `progressTimer` holds it so navigation clears it.
 let dashActiveSig = "";
-function scheduleDashActivePoll() {
+function scheduleDashActivePoll(): void {
   const gen = appState.navGeneration;
   appState.progressTimer = setTimeout(async () => {
-    let sends;
+    let sends: SendSummary[];
     try {
-      ({ sends } = await api("/sends?status=sending&limit=200"));
+      ({ sends } = await api<SendListResponse>("/sends?status=sending&limit=200"));
     } catch {
       if (gen === appState.navGeneration) {
         scheduleDashActivePoll();
@@ -358,7 +389,7 @@ function scheduleDashActivePoll() {
     const active = sends.filter((s) => !isWedged(s));
     const el = document.getElementById("dashActive");
     if (el) {
-      el.innerHTML = dashActiveHtml(active);
+      setHtml(el, dashActiveHtml(active));
       wireDashActiveCards();
     }
     // On a transition (a send started or finished) the scheduled queue changed — a fired
@@ -374,14 +405,16 @@ function scheduleDashActivePoll() {
     scheduleDashActivePoll();
   }, 3000);
 }
-async function refreshDashScheduled() {
+async function refreshDashScheduled(): Promise<void> {
   const el = document.getElementById("dashScheduled");
   if (!el) {
     return;
   }
   try {
-    const { sends } = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=200");
-    el.innerHTML = dashScheduledHtml(sends);
+    const { sends } = await api<SendListResponse>(
+      "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
+    );
+    setHtml(el, dashScheduledHtml(sends));
     wireDashScheduledCards();
     paintAppliedNotice(sends);
     startCountdowns(); // re-arm the countdown ticker over the refreshed cards
@@ -392,21 +425,21 @@ async function refreshDashScheduled() {
 
 // Controls shared by the Dashboard and the Getting-started view: hash navigation,
 // "New post", "Add subscriber", and copy buttons.
-function wireDashActions(root, reload) {
-  root.querySelectorAll("[data-nav]").forEach((b) => {
+function wireDashActions(root: HTMLElement, reload: () => void): void {
+  for (const b of $$("[data-nav]", root)) {
     b.onclick = () => {
-      location.hash = b.dataset.nav;
+      location.hash = b.dataset.nav ?? "";
     };
-  });
-  root.querySelectorAll("[data-act='new-post']").forEach((b) => {
+  }
+  for (const b of $$<HTMLButtonElement>("[data-act='new-post']", root)) {
     b.onclick = () => createNewPost(b);
-  });
-  root.querySelectorAll("[data-act='add-sub']").forEach((b) => {
+  }
+  for (const b of $$("[data-act='add-sub']", root)) {
     b.onclick = () => addSubscriberModal(reload);
-  });
-  root.querySelectorAll("[data-copy]").forEach((b) => {
-    b.onclick = () => copyText(b.dataset.copy);
-  });
+  }
+  for (const b of $$("[data-copy]", root)) {
+    b.onclick = () => copyText(b.dataset.copy ?? "");
+  }
 }
 
 // The onboarding checklist, shared by the first-run dashboard and Getting-started.
@@ -417,56 +450,48 @@ function wireDashActions(root, reload) {
 // required setup step. Typography-led with no base-URL field: the operator already knows
 // their own origin (it's the Publication card's URL right beside this one), and the
 // connect guide is where that URL is actually used.
-function apiConnectCard(connected) {
+function apiConnectCard(connected: boolean): Html {
   if (connected) {
-    return `<div class="card pub-card">
+    return html`<div class="card pub-card">
     <p class="conn-status"><span class="conn-dot" aria-hidden="true"></span>Claude is connected.</p>
     <div class="pub-foot pub-links"><a href="#/reference">API reference →</a><a href="#/docs/connect-claude">Connection guide →</a></div>
   </div>`;
   }
-  return `<div class="card pub-card">
+  return html`<div class="card pub-card">
     <p class="pub-note">Let Claude draft, proofread, and schedule your posts.</p>
     <p class="pub-cta"><a href="#/docs/connect-claude">Connect Claude →</a></p>
     <p class="pub-foot"><a href="#/reference">API reference →</a></p>
   </div>`;
 }
 
-function setupChecklistHtml(pub, deployment) {
-  const subscribeUrl = `${deployment.appOrigin || location.origin}/subscribe`;
-  return `<div class="card setup">
+function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
+  const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
+  return html`<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
-      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${esc(pub.name)}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs">Docs</button></li>
-      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${esc(subscribeUrl)}</code></div><button data-copy="${esc(subscribeUrl)}">Copy</button></li>
+      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button data-copy="${subscribeUrl}">Copy</button></li>
     </ol>
   </div>`;
 }
 
-export function confirmUnsubscribe(sub, onDone) {
+export function confirmUnsubscribe(sub: Subscriber, onDone: () => void): void {
   const m = modal(
-    `<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${esc(sub.email)}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
+    html`<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${sub.email}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
   );
-  m.el.querySelector("#uCancel").onclick = m.close;
-  m.el.querySelector("#uGo").onclick = () =>
-    busy(m.el.querySelector("#uGo"), "Unsubscribing…", async () => {
+  const go = $<HTMLButtonElement>("#uGo", m.el);
+  $("#uCancel", m.el).onclick = m.close;
+  go.onclick = () =>
+    busy(go, "Unsubscribing…", async () => {
       try {
         await api(`/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
         m.close();
         toast(`Unsubscribed ${sub.email}`);
-        onDone?.();
+        onDone();
       } catch (e) {
-        toast(e.message);
+        toast(e instanceof Error ? e.message : String(e));
       }
     });
 }
-
-// Boot: establish who we are before routing.
-// - dev: no valid token yet → mint one from the dev-only endpoint (404 in prod).
-// - a stored token can be stale (signed with an old dev secret, or expired). In dev
-//   we recover silently — drop it, re-mint, probe once more — so a leftover token
-//   never dead-ends the editor on "Session expired". In Access mode the dev endpoint
-//   is absent, so re-minting is a no-op and we fall through to the re-login screen.
-// - probe /api/whoami with redirect:"manual" so an Access edge bounce surfaces as
-//   an opaque redirect (→ re-login) distinct from the app's own clean 401.

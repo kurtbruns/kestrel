@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendSummary } from "../../shared/sends";
-import { $, $$, type FakeApi, fakeApi, resetShell, settle } from "../test_support";
+import { $, $$, type FakeApi, fakeApi, resetShell } from "../test_support";
 import { deliveredCell, isWedged, renderSent } from "./sends";
 
 const page = { total: 1, limit: 50, offset: 0, sort: "fire", dir: "desc" };
