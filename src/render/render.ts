@@ -7,6 +7,7 @@
  * (preview/archive). Both go through the one token engine (render/template_engine.ts).
  */
 
+import { archivePostUrl } from "../../shared/archive_url";
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import type { Config } from "../env";
@@ -70,8 +71,9 @@ function derivePreheader(bodyText: string): string {
   return bodyText.replace(/\s+/g, " ").trim().slice(0, 140);
 }
 
+/** The canonical archive URL of a post under this deployment (the formula lives in shared/). */
 export function archiveUrl(config: Config, slug: string): string {
-  return `${config.archiveOrigin}${config.archiveBasePath}/${slug}`;
+  return archivePostUrl(config.archiveOrigin, config.archiveBasePath, slug);
 }
 
 export async function render(

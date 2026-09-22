@@ -10,6 +10,8 @@ import { configDefaults, defineConfig } from "vitest/config";
 //            https://developers.cloudflare.com/workers/testing/vitest-integration/
 //   client — the admin SPA's suite (client/**), run under happy-dom: pure client logic
 //            against a DOM, with no Worker, no bindings, and nothing of the pool above.
+//   shared — the suite for code both of them import (shared/**), run in plain Node: no
+//            DOM and no Worker, which is the contract that code must keep.
 //
 // The split is what lets client/ be tested at all — the workerd pool can't load browser
 // code — while keeping that pool exactly as it was for the Worker.
@@ -62,6 +64,14 @@ export default defineConfig(async () => {
               },
             },
             include: ["client/**/*.spec.ts"],
+            exclude: [...configDefaults.exclude, "**/.claude/**"],
+          },
+        },
+        {
+          test: {
+            name: "shared",
+            environment: "node",
+            include: ["shared/**/*.spec.ts"],
             exclude: [...configDefaults.exclude, "**/.claude/**"],
           },
         },

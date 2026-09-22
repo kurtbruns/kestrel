@@ -29,7 +29,7 @@
   },
   "overrides": [
     {
-      "includes": ["test/**", "client/**/*.spec.ts"],
+      "includes": ["test/**", "client/**/*.spec.ts", "shared/**/*.spec.ts"],
       "linter": {
         "rules": {
           "style": { "noNonNullAssertion": "off" },

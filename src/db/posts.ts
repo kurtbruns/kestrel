@@ -1,7 +1,8 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
+
+import { slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
-import { slugify } from "../lib/slug";
 import { unwrap } from "../lib/unwrap";
 
 export type PostStatus = "draft" | "scheduled" | "sent";
