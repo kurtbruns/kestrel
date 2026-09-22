@@ -48,6 +48,14 @@ paths:
 - Client specs (`client/**/*.spec.ts`) run in the `client` Vitest project under happy-dom with file loading off, since an inserted `<link>` would otherwise be fetched for real. The Worker suite is the `worker` project on the workerd pool, untouched.
 - Test pure logic against a DOM; nothing here can reach the Worker or its bindings.
 
+## Markup
+
+- Build markup with the `html` tag (`client/html.ts`). Every interpolation is escaped unless it is already `Html`; arrays flatten; `null`, `undefined`, and `false` render nothing. Interpolate only in text or a quoted attribute value.
+- A function that returns markup returns `Html`, never `string`, so it composes without double escaping and the checker rejects a plain string where markup is expected.
+- Markup reaches the document through `setHtml(el, markup)`, the one place strings meet `innerHTML` in converted code.
+- `unsafeHtml(s)` is the only way in for markup the tag did not build (server-rendered HTML from the API, or a module still assembling strings by hand). Grep for it when auditing.
+- Convert a module to the tag when its pragma is lifted, dropping its `esc()` calls as you go (`esc` in `helpers.ts` stays for the modules not yet lifted; an `esc()` result interpolated into `html` is escaped twice). A module still under `@ts-nocheck` may interpolate an `Html` value into a plain template literal; it renders as its markup.
+
 ## Live reload in the dev flavor
 
 - `client/dev_reload.ts` polls the served `index.html` once a second and compares its `?v=` stamps to the ones the page loaded with.
