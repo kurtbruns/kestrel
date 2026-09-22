@@ -46,7 +46,9 @@ paths:
 - State more than one module reads or writes lives in `appState` (`client/state.ts`), so every cross-module write is visible in one place. A `let` only one module touches stays in that module; never export a mutable `let` (ES modules cannot assign another module's binding).
 - No top-level statement may read another module's value at load time: esbuild hoists module scopes into one, so under an import cycle that read sees `undefined`. Functions are fine (hoisted); `shell`'s DOM roots are fine because `shell` imports nothing but `state`.
 - Client specs (`client/**/*.spec.ts`) run in the `client` Vitest project under happy-dom with file loading off, since an inserted `<link>` would otherwise be fetched for real. The Worker suite is the `worker` project on the workerd pool, untouched.
-- Test pure logic against a DOM; nothing here can reach the Worker or its bindings.
+- Every client spec starts with the real admin shell in the document: `client/test_setup.ts` loads the body of `public/dashboard/index.html` before the spec's imports, because the shell module reads its roots at import time.
+- A view test runs the real view over a scripted API: `fakeApi(routes)` from `client/test_support.ts` replaces the global `fetch` (the only network the editor has), so `api()` itself runs, with its credential and its error shaping. Render, `settle()`, query the DOM, click, assert; assert `fake.unhandled` is empty. `views/drafts.spec.ts` is the pattern.
+- Nothing in a client spec reaches the Worker or its bindings; `test_support.ts` is imported by specs only and never enters the bundle.
 
 ## Markup
 

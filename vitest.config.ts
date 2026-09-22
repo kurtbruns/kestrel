@@ -66,6 +66,9 @@ export default defineConfig(async () => {
           test: {
             name: "client",
             environment: "happy-dom",
+            // Every client spec starts with the real admin shell in the document (the
+            // shell module reads its roots at import time) and a scripted fetch at hand.
+            setupFiles: ["./client/test_setup.ts"],
             // happy-dom loads an inserted <link rel=stylesheet> / <script src> for real by
             // default, so a swap test would do DNS + TCP; these are DOM tests, not fetch tests.
             environmentOptions: {
