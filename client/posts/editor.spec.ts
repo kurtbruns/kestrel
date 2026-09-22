@@ -90,6 +90,7 @@ describe("editor view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -410,6 +411,60 @@ describe("editor view", () => {
     expect($("#toasts").textContent).toMatch(/Scheduled for/);
     expect($(".banner-scheduled").textContent).toMatch(/cancelable until it sends/);
     expect(body().readOnly).toBe(true);
+  });
+
+  it("does not freeze another writer's revision when the pre-schedule save is refused", async () => {
+    const server = draftServer();
+    let theirs: string | null = null;
+    await open([
+      { path: "/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/posts/p1",
+        // Claude saved first, so every save of ours against the older base is refused.
+        reply: (req) =>
+          server.put(req, () => {
+            theirs ??= server.elsewhere("service");
+            return jsonResponse(
+              {
+                error: "stale_revision",
+                message: "changed",
+                current_revision: theirs,
+                author: "service",
+              },
+              409,
+            );
+          }),
+      },
+      { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
+      { method: "POST", path: "/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
+      { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+    ]);
+    // happy-dom has no layout, so scrollIntoView is only observable as a call.
+    const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    typeInto(body(), "mine, not theirs");
+    $("#scheduleBtn").click();
+    $<HTMLInputElement>("#schWhen").value = "2026-09-25T15:00";
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // The save was refused, so nothing was frozen; the dialog is gone and the
+    // out-of-date banner it was covering is the next step.
+    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/schedule")).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#freshnessBanner").hidden).toBe(false);
+    expect($("#freshnessBanner").textContent).toMatch(/changed elsewhere/);
+    expect(intoView).toHaveBeenCalledTimes(1); // and the publisher is looking at it
+    // Send now is the same door, and refuses the same way.
+    $("#scheduleBtn").click();
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#snGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    // Our edit is still here, unsaved and undisturbed: the banner decides what happens to it.
+    expect(body().value).toBe("mine, not theirs");
+    expect(handle().dirty()).toBe(true);
   });
 
   it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {

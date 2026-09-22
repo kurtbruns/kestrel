@@ -3,7 +3,6 @@
 
 import type { ImageUploadResponse } from "../../shared/images";
 import type {
-  Post,
   PostEditBody,
   PostResponse,
   PostSavedResponse,
@@ -54,6 +53,15 @@ const READONLY = html` readonly`;
 const ARIA_DISABLED = html` aria-disabled="true"`;
 
 type ComposerTab = "edit" | "preview";
+
+/**
+ * How a save ended. `saved` and `unchanged` both mean the server holds what the editor
+ * shows. `refused` means it does not: another writer's revision is newer, so the save was
+ * rejected (or is paused behind the out-of-date banner), and an action that would freeze
+ * the content — schedule, send now (SPEC §6, I3) — must not proceed on the publisher's
+ * behalf. A plain failure throws instead of answering.
+ */
+type SaveResult = "saved" | "unchanged" | "refused";
 
 export async function renderEditor(
   id: string,
@@ -305,9 +313,9 @@ export async function renderEditor(
 
   // Autosave (./autosave.ts): save after a quiet pause, but never let an edit sit
   // unsaved longer than the hard cap. Manual Save + ⌘S stays the primary path; this is
-  // the safety net. Failures surface as a toast, never silently. Held in appState so
-  // route() and the re-auth wall can cancel it without reaching in. Declared before any
-  // path that can save (the Preview tab saves first), since saveDraft cancels it.
+  // the safety net. Failures surface as a toast, never silently. Cancelled with the mount,
+  // so a navigation or the re-auth wall ends it. Declared before any path that can save
+  // (the Preview tab saves first), since saveDraft cancels it.
   const mine = createAutosave(() => {
     saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
   });
@@ -509,17 +517,17 @@ export async function renderEditor(
   // Saves are chained so an autosave and an explicit save can never overlap; a
   // silent save with nothing pending is skipped.
   let saveChain: Promise<unknown> = Promise.resolve();
-  function saveDraft(silent: boolean): Promise<Post | null> {
+  function saveDraft(silent: boolean): Promise<SaveResult> {
     const next = saveChain.catch(() => {}).then(() => doSaveDraft(silent));
     saveChain = next;
     return next;
   }
-  async function doSaveDraft(silent: boolean): Promise<Post | null> {
+  async function doSaveDraft(silent: boolean): Promise<SaveResult> {
     if (silent && !dirty.dirty) {
-      return null; // nothing changed since the last save
+      return "unchanged"; // nothing changed since the last save
     }
     if (conflicted) {
-      return null; // paused until the out-of-date banner is resolved
+      return "refused"; // paused until the out-of-date banner is resolved
     }
     mine.cancel(); // a save is starting — cancel any pending autosave trigger
     saving = true;
@@ -545,14 +553,14 @@ export async function renderEditor(
       if (!silent) {
         toast("Saved");
       }
-      return u;
+      return "saved";
     } catch (e) {
       // A stale-revision 409 isn't a plain failure: another writer got there first.
       // Surface the out-of-date banner (notify, don't clobber) instead of an error toast.
       const conflict = conflictFromError(e);
       if (conflict) {
         showConflict(conflict);
-        return null;
+        return "refused";
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
       throw e;
@@ -953,6 +961,16 @@ export async function renderEditor(
       const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
+      // A refused save closes the dialog, and the out-of-date banner it was covering is
+      // the whole answer — so make sure the publisher is actually looking at it: they
+      // clicked Schedule at the foot of the post and the banner sits at its head. Only
+      // here, never in showConflict: the freshness poll raises the same banner on its own
+      // every ten seconds, and scrolling the page out from under someone mid-sentence to
+      // announce it would be its own bug. `nearest` leaves an already-visible banner alone.
+      const refused = () => {
+        m.close();
+        freshnessEl.scrollIntoView({ block: "nearest" });
+      };
 
       const doSchedule = () =>
         busy($<HTMLButtonElement>("#schGo", box), "Scheduling…", async () => {
@@ -963,7 +981,13 @@ export async function renderEditor(
             return;
           }
           try {
-            await saveDraft(true);
+            // A refused save means the server holds another writer's newer revision, so
+            // scheduling now would freeze content the publisher never saw (SPEC §6).
+            // Close the dialog and let the out-of-date banner behind it be the next step.
+            if ((await saveDraft(true)) === "refused") {
+              refused();
+              return;
+            }
             await api<ScheduleResponse>(`/posts/${id}/schedule`, {
               method: "POST",
               json: { fire_at: new Date(t).toISOString() },
@@ -981,7 +1005,11 @@ export async function renderEditor(
       const doSendNow = () =>
         busy($<HTMLButtonElement>("#snGo", box), "Queuing…", async () => {
           try {
-            await saveDraft(true);
+            // As in doSchedule: a refused save must not become a frozen send.
+            if ((await saveDraft(true)) === "refused") {
+              refused();
+              return;
+            }
             await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
             m.close();
             toast(withNoProviderNote("Sends in 5 minutes, cancelable until then."));
