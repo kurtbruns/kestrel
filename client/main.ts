@@ -11,6 +11,8 @@
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
 
+import { archivePostUrl } from "../shared/archive_url";
+import { slugify } from "../shared/slug";
 import { startDevReload } from "./dev_reload";
 
 const TOKEN_KEY = "kestrel_token";
@@ -362,12 +364,15 @@ async function copyText(text) {
     toast("Couldn't copy to clipboard");
   }
 }
-// The canonical archive URL for a slug, from the read-only deployment reflection
-// (mirrors src/render/render.ts archiveUrl; falls back to this origin if unset).
+// The canonical archive URL for a slug, from the read-only deployment reflection; the
+// formula is the Worker's own (shared/), only the fallbacks are the editor's: this origin
+// and no base path when the reflection hasn't loaded.
 function archiveUrlFor(deployment, slug) {
-  const origin = deployment?.archiveOrigin || location.origin;
-  const base = deployment?.archiveBasePath || "";
-  return `${origin}${base}/${slug}`;
+  return archivePostUrl(
+    deployment?.archiveOrigin || location.origin,
+    deployment?.archiveBasePath || "",
+    slug,
+  );
 }
 
 // True when no real email provider is configured — internally the dev `fake` transport,
@@ -497,18 +502,6 @@ function parseAddresses(text) {
     out.push(a);
   }
   return out;
-}
-
-// Client-side slug (mirrors src/lib/slug.ts) for the linked Subject → Slug field.
-function clientSlugify(s) {
-  return s
-    .toLowerCase()
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80)
-    .replace(/-+$/g, "");
 }
 
 function toLocalInput(d) {
@@ -1596,7 +1589,7 @@ async function renderEditor(id) {
     const subjectEl = document.getElementById("f-subject");
     const slugEl = document.getElementById("f-slug");
     const autoEl = document.getElementById("f-slug-auto");
-    const derive = () => clientSlugify(subjectEl.value);
+    const derive = () => slugify(subjectEl.value);
 
     // Infer the starting mode: auto when the slug is empty, equals the derived
     // slug, or is a deduped variant of it (base-2, base-3, …). A hand-written

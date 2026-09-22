@@ -15,6 +15,6 @@
     "verbatimModuleSyntax": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src", "test", "worker-configuration.d.ts"],
+  "include": ["src", "shared", "test", "worker-configuration.d.ts"],
   "exclude": ["node_modules"]
 }
