@@ -78,7 +78,7 @@ A token means one thing, and a color has one job; a second token for a color tha
 | Token(s) | Role | Notes |
 | --- | --- | --- |
 | `--danger` · `--warn` · `--ok` | Semantic feedback — a `{fg, bg, line}` triple each: red · amber · green | One scale per meaning. `--danger` serves both a solid-button fill and the soft alert: one red, not two. |
-| `--info-fg` | A fourth feedback hue, blue — the API reference's `POST` method badge | `fg` only: the badge supplies its own white text and solid fill, so there's no soft alert to back with a `bg`/`line`. |
+| `--info-fg` (+ `--info-on`) | A fourth feedback hue, blue — the API reference's `POST` method badge | `fg` + `on` only, no `bg`/`line`: there's no soft alert to back, just a solid-fill badge, the same `fg`/`on` pairing `--danger` uses for `button.danger`. `-on` flips light/dark so the badge text stays readable once `-fg` turns light in dark mode — `--ok-fg` and `--warn-fg` gained the same `-on` pairing for this. |
 | `--accent` (+ `--accent-on`, `--accent-soft`) | The one **action** hue — a fixed slate-blue | Primary + Secondary buttons only, never a status. Independent of the reader-surface theme (SPEC §9) — the app's own chrome, not the newsletter's. |
 | `--ink` | Strong near-black/near-white **text** — headings, strong labels | Never a button fill. There is one accent, and it is blue. |
 | `--status-draft` · `--status-scheduled` · `--status-sending` · `--status-sent` | Lifecycle badge hues — gray · violet · blue · green | Facts, not warnings; distinct from the feedback scales. `--status-sending`'s blue is its own shade, **not** the action `--accent`. Full state→hue map below. |

@@ -36,12 +36,16 @@
   --warn-fg: #b45309;
   --warn-bg: #fef3c7;
   --warn-line: #fde68a;
+  --warn-on: #ffffff;
   --ok-fg: #15803d;
   --ok-bg: #dcfce7;
   --ok-line: #bbf7d0;
+  --ok-on: #ffffff;
   /* Info — a fourth feedback hue, blue, for a neutral fact that isn't good/bad/warning
-     (the API reference's POST badge). No bg/line pair yet: nothing else needs one. */
+     (the API reference's POST badge). No bg/line pair yet: nothing else needs one, but
+     it does need an on-color (like danger/warn/ok above) since the badge is a solid fill. */
   --info-fg: #1d4ed8;
+  --info-on: #ffffff;
   --ring: #2563eb;
   --banner-bg: #eff6ff;
   --banner-line: #bfdbfe;
@@ -114,10 +118,13 @@
     --warn-fg: #fbbf24;
     --warn-bg: #45350f;
     --warn-line: #b45309;
+    --warn-on: #18181b;
     --ok-fg: #4ade80;
     --ok-bg: #14532d;
     --ok-line: #15803d;
+    --ok-on: #18181b;
     --info-fg: #60a5fa;
+    --info-on: #18181b;
     --ring: #60a5fa;
     --banner-bg: #1e293b;
     --banner-line: #334155;
@@ -3202,19 +3209,24 @@ button.notice-dismiss svg {
   letter-spacing: 0.03em;
   padding: 2px 8px;
   border-radius: 5px;
-  color: #fff;
 }
+/* Solid fill: each pairs its -fg with its -on (DESIGN §3), the same pattern
+   button.danger uses, so the text stays readable once -fg turns light in dark mode. */
 .api-method.m-GET {
   background: var(--ok-fg);
+  color: var(--ok-on);
 }
 .api-method.m-POST {
   background: var(--info-fg);
+  color: var(--info-on);
 }
 .api-method.m-PUT {
   background: var(--warn-fg);
+  color: var(--warn-on);
 }
 .api-method.m-DELETE {
   background: var(--danger-fg);
+  color: var(--danger-on);
 }
 .api-path {
   font: 14px var(--mono);
