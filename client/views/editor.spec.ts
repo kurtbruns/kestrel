@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { appState } from "../state";
+import { appState, stopTimers } from "../state";
 import {
   $,
   type FakeApi,
@@ -243,6 +243,21 @@ describe("editor view", () => {
     expect(appState.isEditorDirty).toBe(false);
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()[0]?.json()).toMatchObject({ markdown: "leaving", base_revision: "r1" });
+  });
+
+  it("cancels a pending autosave when the app tears the editor down", async () => {
+    const server = draftServer();
+    await mount([
+      { path: "/posts/p1", reply: server.get },
+      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    typeInto(body(), "half-typed");
+    expect(appState.editorAutosave?.pending).toBe(true);
+    // What route() and the re-auth wall run: the armed save must not fire after it.
+    stopTimers();
+    expect(appState.editorAutosave).toBeNull();
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toEqual([]);
   });
 
   it("redirects a sent post to its record and a post in flight to the live watch", async () => {

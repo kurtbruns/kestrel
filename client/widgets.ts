@@ -1,5 +1,6 @@
 // Small shared widgets, each independent of the others: the info tooltip, the row-action
-// menu, the busy state on a button, and the error view with its retry.
+// menu, the busy state on a button, and the error view with its retry. Importing this
+// module installs the tooltip's document listeners.
 
 import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";

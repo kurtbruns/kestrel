@@ -306,6 +306,16 @@ export async function renderEditor(id: string): Promise<void> {
     });
   }
 
+  // Autosave (client/autosave.ts): save after a quiet pause, but never let an edit sit
+  // unsaved longer than the hard cap. Manual Save + ⌘S stays the primary path; this is
+  // the safety net. Failures surface as a toast, never silently. Held in appState so
+  // route() and the re-auth wall can cancel it without reaching in. Declared before any
+  // path that can save (the Preview tab saves first), since saveDraft cancels it.
+  const mine = createAutosave(() => {
+    saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
+  });
+  appState.editorAutosave = mine;
+
   // --- tabs ---
   const tabs = $$<HTMLButtonElement>(".ctab", app);
   function showTab(name: ComposerTab) {
@@ -480,14 +490,6 @@ export async function renderEditor(id: string): Promise<void> {
     renderSaveStatus();
   }
   renderSaveStatus(); // paint the initial state (Saved on a fresh draft; empty if locked)
-  // Autosave (client/autosave.ts): save after a quiet pause, but never let an edit sit
-  // unsaved longer than the hard cap. Manual Save + ⌘S stays the primary path; this is
-  // the safety net. Failures surface as a toast, never silently.
-  // Held in appState so route() and the re-auth wall can cancel it without reaching in.
-  const mine = createAutosave(() => {
-    saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
-  });
-  appState.editorAutosave = mine;
   function scheduleAutosave() {
     mine.touch();
   }

@@ -1,6 +1,7 @@
 // Auth on the client: the dev token, the bearer header, the identity chip, and the
 // re-auth wall a dead session lands on.
 
+import { $ } from "./dom";
 import { html, setHtml } from "./html";
 import { app, identity } from "./shell";
 import { appState, stopTimers, TOKEN_KEY } from "./state";
@@ -66,8 +67,5 @@ export function showReauth(): void {
     app,
     html`<div class="card auth-wall"><h2>Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth">Sign in</button></div>`,
   );
-  const b = document.getElementById("reauth");
-  if (b) {
-    b.onclick = () => location.reload();
-  }
+  $("#reauth", app).onclick = () => location.reload();
 }
