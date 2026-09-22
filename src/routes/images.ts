@@ -5,6 +5,7 @@
  * `/media` route is the local-dev equivalent (and any Worker-proxied serving).
  */
 
+import type { ImageListResponse, ImageUploadResponse, PostImage } from "../../shared/images";
 import type { ImageRow } from "../db/images";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
@@ -23,7 +24,7 @@ function baseName(name: string): string {
   return parts[parts.length - 1] ?? "";
 }
 
-function publicImage(c: RequestContext, row: ImageRow) {
+function publicImage(c: RequestContext, row: ImageRow): PostImage {
   return {
     filename: row.filename,
     content_type: row.content_type,
@@ -89,7 +90,8 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     width: dims?.width ?? null,
     height: dims?.height ?? null,
   });
-  return json({ image: publicImage(c, row) }, 201);
+  const body: ImageUploadResponse = { image: publicImage(c, row) };
+  return json(body, 201);
 }
 
 export async function listImages(c: RequestContext): Promise<Response> {
@@ -98,7 +100,8 @@ export async function listImages(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
   const rows = await images.listImages(c.env.DB, post.id);
-  return json({ images: rows.map((r) => publicImage(c, r)) });
+  const body: ImageListResponse = { images: rows.map((r) => publicImage(c, r)) };
+  return json(body);
 }
 
 export async function deleteImage(c: RequestContext): Promise<Response> {

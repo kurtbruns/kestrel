@@ -1,6 +1,6 @@
-// Small view helpers: toasts, escaping, badges, dates, address parsing, and the modal.
+// Small view helpers: toasts, badges, dates, address parsing, and the modal.
 
-import { type Html, html, unsafeHtml } from "./html";
+import { type Html, html, setHtml } from "./html";
 import { toasts } from "./shell";
 
 export function toast(msg: string): void {
@@ -14,18 +14,6 @@ export function toast(msg: string): void {
   setTimeout(() => t.classList.remove("show"), 3600);
   setTimeout(() => t.remove(), 3900);
 }
-
-/**
- * Escape for a plain template literal. For the modules not yet on the html tag; a
- * converted module interpolates the raw value and lets the tag escape it.
- */
-export const esc = (s: unknown): string =>
-  s == null
-    ? ""
-    : String(s).replace(
-        /[&<>"]/g,
-        (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c,
-      );
 
 /** A status pill; the status doubles as its class. */
 export const badge = (status: string): Html => html`<span class="badge ${status}">${status}</span>`;
@@ -102,16 +90,11 @@ export interface Modal {
   close: () => void;
 }
 
-/**
- * A modal over a backdrop; a click outside or Escape closes it. The content is markup.
- * A string is accepted from the modules not yet on the html tag, and vouched for as the
- * markup they assembled; that branch goes with the last of them.
- */
-export function modal(content: Html | string): Modal {
+/** A modal over a backdrop; a click outside or Escape closes it. The content is markup. */
+export function modal(content: Html): Modal {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
-  const markup = typeof content === "string" ? unsafeHtml(content) : content;
-  back.innerHTML = html`<div class="modal" role="dialog" aria-modal="true">${markup}</div>`.markup;
+  setHtml(back, html`<div class="modal" role="dialog" aria-modal="true">${content}</div>`);
   document.body.appendChild(back);
   const close = () => back.remove();
   back.addEventListener("click", (e) => {

@@ -11,7 +11,7 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
-import type { ConfirmationEmailCopy } from "../../shared/settings";
+import type { ConfirmationEmailCopy, SettingsPatchBody } from "../../shared/settings";
 import { HttpError } from "../lib/errors";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
@@ -98,13 +98,12 @@ const MAX_CE_BODY = 1000;
 const MAX_CE_BUTTON = 80;
 const MAX_CE_REASSURANCE = 400;
 
-/** A patch the API accepts. Logo is set through the dedicated upload route, not here. */
-export interface SettingsPatch {
-  testRecipients?: string[];
-  publication?: Partial<Pick<PublicationSettings, "name" | "tagline" | "address">>;
-  emailTemplate?: string;
-  confirmationEmail?: Partial<ConfirmationEmailCopy>;
-}
+/**
+ * A patch the API accepts: the editable fields of a save, as the wire body carries them
+ * (shared/settings.ts) minus the acknowledgement, which the route consumes before the
+ * patch reaches the store. The logo is set through the dedicated upload route, not here.
+ */
+export type SettingsPatch = Omit<SettingsPatchBody, "remake">;
 
 function coercePublication(raw: unknown): PublicationSettings {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;

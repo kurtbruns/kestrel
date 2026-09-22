@@ -41,8 +41,7 @@ paths:
 
 - `client/tsconfig.json` extends the root with the DOM lib and no Worker or Vitest types; `npm run typecheck` runs it as a second program.
 - Layout: `client/views/` holds one module per routed view, the things `router.ts` mounts (and where the view lifecycle work lands); everything else, the app around them (shell, router, api, auth, the shared UI pieces), stays flat in `client/`. Specs sit beside their module.
-- The app, the list views, the dashboard, and the reference room (`docs`, `reference`) are strict; `editor`, `settings`, and `template` still carry `// @ts-nocheck` from the split. `main.ts` is the entry (imports every module, runs `boot()`). Lift a pragma per module, with the wire types from `shared/`: a route's response shape is defined there and the Worker route is typed against it in the same change, so the compiler holds both ends.
-- While any pragma stands, `client/` skips biome's `noImplicitAnyLet` (an override in `biome.json`; tsc enforces the same on lifted modules, so it ends with the last pragma).
+- Every module is strict; nothing carries `// @ts-nocheck`. `main.ts` is the entry (imports every module, runs `boot()`). A new route's response shape is defined in `shared/` and the Worker route is typed against it in the same change, so the compiler holds both ends.
 - State more than one module reads or writes lives in `appState` (`client/state.ts`), so every cross-module write is visible in one place. A `let` only one module touches stays in that module; never export a mutable `let` (ES modules cannot assign another module's binding).
 - No top-level statement may read another module's value at load time: esbuild hoists module scopes into one, so under an import cycle that read sees `undefined`. Functions are fine (hoisted); `shell`'s DOM roots are fine because `shell` imports nothing but `state`.
 - Client specs (`client/**/*.spec.ts`) run in the `client` Vitest project under happy-dom with file loading off, since an inserted `<link>` would otherwise be fetched for real. The Worker suite is the `worker` project on the workerd pool, untouched.
@@ -58,9 +57,9 @@ paths:
 - Escaping does nothing for a value that is code or a URL. Not `href`, `src`, `action`, `formaction` (a `javascript:` URL has no character to escape; check the scheme before interpolating one from publisher or subscriber data), not `srcdoc`, `style`, or an `on*` handler, and never inside `<script>` or `<style>`, an attribute name, or a tag name.
 - A function that returns markup returns `Html`, never `string`, so it composes without double escaping and the checker rejects a plain string where markup is expected. `Html` is nominal: a look-alike object is rejected at compile time and at runtime.
 - Markup reaches the document through `setHtml(el, markup)`, the one place strings meet `innerHTML` in converted code. It throws on anything that is not `Html`.
-- `unsafeHtml(s)` is the only way in for markup the tag did not build (server-rendered HTML from the API, or a module still assembling strings by hand). Grep for it when auditing.
-- Convert a module to the tag when its pragma is lifted, dropping its `esc()` calls as you go: an `esc()` result interpolated into `html` is escaped twice. `esc` in `helpers.ts` stays for the modules not yet lifted.
-- A module still under `@ts-nocheck` may interpolate an `Html` value into a plain template literal; it renders as its markup.
+- `unsafeHtml(s)` is the only way in for markup the tag did not build: server-rendered HTML from the API (the docs), or markup a module builds by string (the highlighters, the sample-email preview, which escape first and decorate after). Grep for it when auditing.
+- A bare attribute (`disabled`, `hidden`, `readonly`) is markup, not text: spell it once as `html\` disabled\`` and interpolate that, never a string.
+- Never interpolate an `escapeHtml()` result into `html`: it is escaped twice. `escapeHtml` is for text that will land in a page the tag does not build (the embed snippet a publisher pastes into their own site).
 
 ## Icons
 

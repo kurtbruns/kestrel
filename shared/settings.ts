@@ -75,9 +75,53 @@ export interface SettingsResponse {
   inUse: InUseView;
 }
 
+/**
+ * PUT /api/settings: any subset of the editable preferences, plus `remake`, the ids of the
+ * scheduled sends the client acknowledges the save will re-make (SPEC §9).
+ */
+export interface SettingsPatchBody {
+  testRecipients?: string[];
+  publication?: Partial<Pick<PublicationView, "name" | "tagline" | "address">>;
+  emailTemplate?: string;
+  confirmationEmail?: Partial<ConfirmationEmailCopy>;
+  remake?: string[];
+}
+
+/** PUT /api/settings: the settings as stored, the template's advisory warnings, and the scheduled sends the save re-made. */
+export interface SettingsSavedResponse {
+  settings: SettingsView;
+  warnings: string[];
+  remade: ScheduledSendRef[];
+}
+
+/** POST and DELETE /api/settings/logo: the settings as stored and the scheduled sends the change re-made. */
+export interface LogoResponse {
+  settings: SettingsView;
+  remade: ScheduledSendRef[];
+}
+
+/** POST /api/settings/template/test: a sample post through the saved template, to each recipient. */
+export interface TemplateTestResponse {
+  sent: number;
+  total: number;
+  provider: string;
+  recipients: string[];
+  subject: string;
+  warnings: string[];
+}
+
 /** The 409 a template or identity save gets until the client acknowledges the sends it re-makes (SPEC §9). */
 export interface RemakeRequiredError {
   error: "remake_required";
   message: string;
+  sends: ScheduledSendRef[];
+}
+
+/** The 409 a template or identity save gets while a scheduled send is about to fire (SPEC §9). */
+export interface RemakeTooCloseError {
+  error: "remake_too_close";
+  message: string;
+  /** When a save stops being refused (ms since epoch). */
+  retry_after: number;
   sends: ScheduledSendRef[];
 }

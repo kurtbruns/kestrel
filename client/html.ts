@@ -101,10 +101,10 @@ export function unsafeHtml(markup: string): Html {
 }
 
 /**
- * Put markup in an element. In converted code this is the one place strings reach
- * innerHTML. The runtime check is for callers the type checker does not see yet (modules
- * still under `@ts-nocheck`): a string here is a bug, and it fails loud rather than render
- * the word "undefined".
+ * Put markup in an element: the one place strings reach innerHTML. The runtime check
+ * holds the line where the type checker cannot see (a spec's cast, a value that crossed
+ * an `unknown`): a string here is a bug, and it fails loud rather than render the word
+ * "undefined".
  */
 export function setHtml(el: Element, markup: Html): void {
   if (!(markup instanceof Html)) {

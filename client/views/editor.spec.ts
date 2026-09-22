@@ -12,7 +12,12 @@ import {
 } from "../test_support";
 import { renderEditor } from "./editor";
 
-type Draft = { post: Record<string, unknown>; markdown: string; author: string | null };
+type Draft = {
+  post: Record<string, unknown>;
+  markdown: string;
+  author: string | null;
+  scheduled?: { id: string; fire_at: number; remade_at: number | null } | null;
+};
 
 const draft = (over: Record<string, unknown> = {}): Draft => ({
   post: {
@@ -56,6 +61,10 @@ function draftServer(initial = draft()) {
       n += 1;
       state = { ...state, post: { ...state.post, current_revision: `r${n}` }, author };
       return `r${n}`;
+    },
+    /** The send that soft-locks the post, or null once canceled. */
+    scheduled(send: Draft["scheduled"]) {
+      state = { ...state, scheduled: send };
     },
   };
   return server;
@@ -236,6 +245,190 @@ describe("editor view", () => {
     expect(puts()[0]?.json()).toMatchObject({ markdown: "leaving", base_revision: "r1" });
   });
 
+  it("redirects a sent post to its record and a post in flight to the live watch", async () => {
+    await mount([
+      { path: "/posts/p1", reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }) },
+    ]);
+    expect(location.hash).toBe("#/sent/x9");
+    location.hash = "#/edit/p1";
+    fake.restore();
+    await mount([{ path: "/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
+    expect(location.hash).toBe("#/sent/x8");
+    expect(document.querySelector("#f-markdown")).toBeNull(); // never mounted
+  });
+
+  it("shows the error with a retry that mounts the draft", async () => {
+    let failures = 1;
+    await mount([
+      {
+        path: "/posts/p1",
+        reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : draft()),
+      },
+    ]);
+    expect($("#app .error").textContent).toMatch(/down/);
+    $("[data-retry]").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
+  });
+
+  it("derives the slug from the subject until the slug is hand-set, and never leaves it empty", async () => {
+    await mount([{ path: "/posts/p1", reply: () => draft() }]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    const slug = $<HTMLInputElement>("#f-slug");
+    const auto = $<HTMLInputElement>("#f-slug-auto");
+    expect(auto.checked).toBe(true); // "owls" is what "Owls" derives to
+    typeInto(subject, "Night owls & co");
+    expect(slug.value).toBe("night-owls-co");
+    typeInto(slug, "custom");
+    expect(auto.checked).toBe(false);
+    typeInto(subject, "Something else");
+    expect(slug.value).toBe("custom"); // hand-set: the subject no longer drives it
+    typeInto(slug, "");
+    slug.dispatchEvent(new Event("blur"));
+    expect(slug.value).toBe("something-else");
+    expect(auto.checked).toBe(true);
+  });
+
+  it("formats the selection from the toolbar and by shortcut, and marks the draft dirty", async () => {
+    await mount([{ path: "/posts/p1", reply: () => draft() }]);
+    const ta = body();
+    ta.setSelectionRange(2, 6); // "Owls"
+    $(".tb[data-fmt='bold']").click();
+    expect(ta.value).toBe("# **Owls**\n\nHoot.");
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.dispatchEvent(new KeyboardEvent("keydown", { key: "k", metaKey: true, bubbles: true }));
+    expect(ta.value).toMatch(/\[link text\]\(https:\/\/\)$/);
+    $(".tb[data-fmt='quote']").click();
+    expect(ta.value.split("\n").at(-1)).toMatch(/^> /);
+  });
+
+  it("opens the preview: a silent save, then the rendered email into the frame", async () => {
+    const server = draftServer();
+    await mount([
+      { path: "/posts/p1", reply: server.get },
+      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      {
+        path: "/posts/p1/preview",
+        reply: () => new Response("<p>rendered</p>", { headers: { "content-type": "text/html" } }),
+      },
+    ]);
+    typeInto(body(), "changed");
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1); // the preview is of what is saved
+    const frame = $<HTMLIFrameElement>("#previewFrame");
+    expect(frame.hidden).toBe(false);
+    expect(frame.srcdoc).toBe("<p>rendered</p>");
+    expect(body().hidden).toBe(true);
+  });
+
+  it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {
+    await mount([
+      { path: "/posts/p1", reply: () => draft() },
+      {
+        path: "/api/settings",
+        reply: () => ({ settings: { testRecipients: ["me@b.c", "you@b.c"] } }),
+      },
+      {
+        method: "POST",
+        path: "/posts/p1/test",
+        reply: () => ({ sent: true, warnings: ["An image has no alt text."] }),
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const to = $<HTMLTextAreaElement>("#testTo");
+    expect(to.value).toBe("me@b.c\nyou@b.c");
+    expect($("#testDefaultsHint").hidden).toBe(false);
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const tests = fake.calls.filter((c) => c.url.pathname === "/posts/p1/test");
+    expect(tests.map((c) => c.json())).toEqual([{ to: "me@b.c" }, { to: "you@b.c" }]);
+    expect($("#toasts").textContent).toMatch(/Test sent to 2 addresses/);
+    expect($("#warnings").textContent).toMatch(/Warnings: An image has no alt text\./);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
+    const server = draftServer(draft({ subject: "" }));
+    await mount([
+      { path: "/posts/p1", reply: server.get },
+      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      {
+        method: "POST",
+        path: "/posts/p1/schedule",
+        reply: (req) => {
+          const fireAt = (req.json() as { fire_at: string }).fire_at;
+          server.apply({ json: () => ({ status: "scheduled" }) } as FakeRequest);
+          server.scheduled({ id: "s1", fire_at: new Date(fireAt).getTime(), remade_at: null });
+          return { send: { id: "s1" } };
+        },
+      },
+    ]);
+    $("#scheduleBtn").click();
+    expect($("#f-subject").classList.contains("is-invalid")).toBe(true);
+    expect($("#f-subject-error").hidden).toBe(false);
+    expect(document.querySelector(".modal")).toBeNull();
+    typeInto($<HTMLInputElement>("#f-subject"), "Owls");
+    expect($("#f-subject-error").hidden).toBe(true);
+    $("#scheduleBtn").click();
+    const when = $<HTMLInputElement>("#schWhen");
+    expect(when.value).not.toBe("");
+    when.value = "2026-09-25T15:00";
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const scheduled = fake.calls.find((c) => c.url.pathname === "/posts/p1/schedule");
+    expect(scheduled?.json()).toEqual({ fire_at: new Date("2026-09-25T15:00").toISOString() });
+    expect($("#toasts").textContent).toMatch(/Scheduled for/);
+    expect($(".banner-scheduled").textContent).toMatch(/cancelable until it sends/);
+    expect(body().readOnly).toBe(true);
+  });
+
+  it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {
+    const server = draftServer();
+    await mount([
+      { path: "/posts/p1", reply: server.get },
+      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
+      { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+    ]);
+    $("#scheduleBtn").click();
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#snWho").textContent).toBe("42 confirmed subscribers");
+    $("#toSchedule").click();
+    expect($("#schGo")).toBeTruthy(); // back to the schedule view, re-wired
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#snGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(true);
+    expect($("#toasts").textContent).toMatch(/Sends in 5 minutes/);
+    expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  it("uploads a picked image and inserts it at the caret", async () => {
+    await mount([
+      { path: "/posts/p1", reply: () => draft() },
+      {
+        method: "POST",
+        path: "/posts/p1/images",
+        reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
+      },
+    ]);
+    body().setSelectionRange(0, 0); // the caret is where the snippet lands
+    const input = $<HTMLInputElement>("#imgInput");
+    const file = new File(["png"], "owl.png", { type: "image/png" });
+    Object.defineProperty(input, "files", { value: [file], configurable: true });
+    input.dispatchEvent(new Event("change"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(body().value).toMatch(/^\n!\[owl\.png\]\(owl\.png\)\n# Owls/);
+    expect($("#toasts").textContent).toMatch(/Image added/);
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
   it("mounts a scheduled post read-only, with no autosave", async () => {
     await mount([
       {
@@ -251,5 +444,35 @@ describe("editor view", () => {
     typeInto(body(), "nope");
     await vi.advanceTimersByTimeAsync(30000);
     expect(puts()).toHaveLength(0);
+  });
+
+  it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
+    const server = draftServer(draft({ status: "scheduled" }));
+    server.scheduled({ id: "s1", fire_at: 1_800_000_000_000, remade_at: 1_790_000_000_000 });
+    await mount([
+      { path: "/posts/p1", reply: server.get },
+      {
+        method: "POST",
+        path: "/sends/s1/cancel",
+        reply: () => {
+          server.apply({ json: () => ({ status: "draft" }) } as FakeRequest);
+          server.scheduled(null);
+          return { send: { id: "s1", status: "canceled" } };
+        },
+      },
+    ]);
+    expect($("#editorNotices .notice").textContent).toMatch(/was applied to this post/);
+    body().dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    await vi.advanceTimersByTimeAsync(16);
+    expect($("#lockFoot").classList.contains("nudge")).toBe(true);
+    await vi.advanceTimersByTimeAsync(900);
+    expect($("#lockFoot").classList.contains("nudge")).toBe(false);
+    $("#cancelSchedule").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/sends/s1/cancel")).toBe(true);
+    expect($("#toasts").textContent).toMatch(/Schedule canceled/);
+    expect(document.querySelector(".banner-scheduled")).toBeNull();
+    expect(body().readOnly).toBe(false);
+    expect($("#saveStatus").textContent).toBe("Saved");
   });
 });

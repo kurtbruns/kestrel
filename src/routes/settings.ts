@@ -23,8 +23,10 @@
 import type {
   DeploymentView,
   InUseView,
+  LogoResponse,
   PublicationView,
   SettingsResponse,
+  SettingsSavedResponse,
   SettingsView,
 } from "../../shared/settings";
 import { buildInfo } from "../build";
@@ -190,7 +192,12 @@ export async function update(c: RequestContext): Promise<Response> {
     (current) => applyPatch(current, patch),
     ack,
   );
-  return json({ settings: settingsView(settings, c.config), warnings, remade });
+  const saved: SettingsSavedResponse = {
+    settings: settingsView(settings, c.config),
+    warnings,
+    remade,
+  };
+  return json(saved);
 }
 
 /** Store the uploaded logo bytes under the reserved R2 key, then bump its version. */
@@ -232,7 +239,8 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
       await c.env.MEDIA.put(BRANDING_LOGO_KEY, bytes, { httpMetadata: { contentType: type } });
     },
   );
-  return json({ settings: settingsView(settings, c.config), remade });
+  const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
+  return json(body);
 }
 
 export async function deleteLogo(c: RequestContext): Promise<Response> {
@@ -244,7 +252,8 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
     ack,
     () => c.env.MEDIA.delete(BRANDING_LOGO_KEY),
   );
-  return json({ settings: settingsView(settings, c.config), remade });
+  const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
+  return json(body);
 }
 
 /** Pick only the known editable keys off the request body. */

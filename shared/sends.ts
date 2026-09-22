@@ -173,3 +173,12 @@ export interface ResolveResponse {
 export interface SendActionResponse {
   send: Send;
 }
+
+/**
+ * POST /posts/:id/schedule and /send: the send that was frozen (SPEC §6). A second
+ * send-now for a post already in its window answers with that send and `idempotent`.
+ */
+export interface ScheduleResponse {
+  send: Send;
+  idempotent?: boolean;
+}
