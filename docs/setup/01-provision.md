@@ -105,4 +105,27 @@ npm run deploy -- --env production
 
 The Cron Trigger that drives the send sweep (`"crons": ["* * * * *"]`, once a minute) is declared per environment in `wrangler.jsonc` and is registered automatically on deploy — there is nothing extra to create. Confirm it after the first deploy under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
+## 5. Rate-limit the subscribe form
+
+The subscribe form is public, so bound how often one client can submit it. The app already sends each address at most one confirmation in any 15 minutes and answers every address the same way (`docs/SPEC.md` §7); the per-client limit is the edge's job, so there is nothing in the app to configure for it.
+
+In the Cloudflare dashboard, open the zone for `newsletter.example.com` → **Security rules** → **Create rule** → **Rate limiting rules**:
+
+- **If incoming requests match:** a custom expression on the path,
+
+  ```
+  (http.request.uri.path eq "/subscribe")
+  ```
+
+  On the Free and Pro plans a rate-limiting rule can match only on the path, so this also counts loads of the form page, which is harmless at this rate. On Business and above you can narrow it to submissions with `and http.request.method eq "POST"`.
+- **With the same characteristics:** IP.
+- **When rate exceeds:** 5 requests per 10 seconds. That is the Free plan's only period; on a paid plan a longer one fits the form better, such as 10 requests per minute.
+- **Then take action:** Block, for the shortest duration the plan offers (10 seconds on Free).
+
+The Free plan allows one rate-limiting rule, and this is the one to spend it on.
+
+The rule applies only on the zone's own hostname. A Worker also answers on its `*.workers.dev` address unless that is turned off, and a request there skips the rule. Once the custom domain serves the app, turn the `workers.dev` route off in the Worker's **Settings** → **Domains & Routes** (or set `"workers_dev": false` in that environment in `wrangler.jsonc`).
+
+To check it, submit the form rapidly from one machine: after the limit, Cloudflare answers with its own block page instead of the app's.
+
 At this point the Worker is live but **not yet gated** and **cannot send email**. Do not point real subscribers at it until you have completed "Access" and "Connect an email sender." Continue with Access next.

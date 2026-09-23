@@ -1,12 +1,18 @@
 /** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. */
 
+import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { json } from "../lib/errors";
-import { escapeHtml } from "../lib/html";
+import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { htmlPage, readerPage } from "../lib/page";
 import type { RequestContext } from "../router";
-import { requestSubscription } from "../services/subscriptions";
+import {
+  type ConfirmLinkState,
+  confirmLinkState,
+  confirmSubscription,
+  requestSubscription,
+} from "../services/subscriptions";
 import { readerIdentity } from "./archive";
 
 function wantsHtml(c: RequestContext): boolean {
@@ -113,35 +119,80 @@ export async function subscribe(c: RequestContext): Promise<Response> {
       subscribeFormHtml();
     return subscribePage(c, identity, main, 400);
   }
-  const { subscriber, action } = await requestSubscription(c, email);
+  // Subscribing, and any confirmation, happen after the answer has gone: the answer, and
+  // how long it takes, must not depend on the address's state (SPEC §7). A refusal is
+  // logged and changes nothing, so the reader can simply submit again.
+  c.ctx.waitUntil(
+    requestSubscription(c, email).catch((err: unknown) => {
+      console.error("subscribe failed", err instanceof Error ? err.message : String(err));
+    }),
+  );
+  // One answer for every address, so a request can't learn whether it is subscribed,
+  // pending, suppressed, or new.
   if (!wantsHtml(c)) {
-    return json({ status: subscriber.status, action });
+    const body: PublicSubscribeResponse = { status: "check_inbox" };
+    return json(body);
   }
   const identity = await readerIdentity(c, c.config);
-  const [heading, lead] =
-    action === "already_confirmed"
-      ? ["You’re already subscribed", `You’re on the list for ${escapeHtml(identity.name)}.`]
-      : ["Almost there", "Check your inbox for a confirmation link to finish subscribing."];
-  const main = `<p class="r-ey">Newsletter</p><h1 class="r-h1">${heading}</h1><p class="r-lead">${lead}</p>`;
+  const main =
+    `<p class="r-ey">Newsletter</p><h1 class="r-h1">Almost there</h1>` +
+    `<p class="r-lead">If that address isn’t subscribed yet, a confirmation link is on its way. Check your inbox to finish subscribing.</p>`;
   return subscribePage(c, identity, main);
 }
 
-export async function confirm(c: RequestContext): Promise<Response> {
+/** Opening a confirm link shows a Confirm button and changes nothing: mail scanners open
+ *  every link in a message, and only the owner's click is consent (I1, SPEC §7). */
+export async function confirmLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
-  const row = await subscribers.confirm(c.env.DB, token);
-  if (!row) {
-    return htmlPage(
-      "Invalid link",
-      `<h1 style="margin-top:0;">This link is invalid or expired</h1><p>Try subscribing again.</p>`,
-      400,
-    );
+  return confirmStatePage(await confirmLinkState(c.env.DB, token), token);
+}
+
+/** The Confirm button's POST: the one request that records consent. */
+export async function confirm(c: RequestContext): Promise<Response> {
+  const token = await readToken(c);
+  return confirmStatePage(await confirmSubscription(c.env.DB, token), token);
+}
+
+function confirmStatePage(state: ConfirmLinkState, token: string): Response {
+  switch (state.kind) {
+    case "ready":
+      return htmlPage(
+        "Confirm your subscription",
+        `<h1 style="margin-top:0;">Confirm your subscription</h1><p>Start sending the newsletter to <strong>${escapeHtml(
+          state.subscriber.email,
+        )}</strong>?</p>
+<form method="post" action="/confirm">
+<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">
+<button type="submit" class="btn">Confirm subscription</button>
+</form>`,
+      );
+    case "confirmed":
+      return htmlPage(
+        "Subscribed",
+        `<h1 style="margin-top:0;">You're subscribed 🎉</h1><p>Thanks for confirming <strong>${escapeHtml(
+          state.subscriber.email,
+        )}</strong>. You'll hear from us soon.</p>`,
+      );
+    case "expired":
+      // A fresh link goes through the ordinary subscribe path, cooldown and all.
+      return htmlPage(
+        "Link expired",
+        `<h1 style="margin-top:0;">This link has expired</h1><p>Confirmation links only work for a limited time. We can send a new one to <strong>${escapeHtml(
+          state.subscriber.email,
+        )}</strong>.</p>
+<form method="post" action="/subscribe">
+<input type="hidden" name="email" value="${escapeHtmlAttr(state.subscriber.email)}">
+<button type="submit" class="btn">Send a new link</button>
+</form>`,
+        410,
+      );
+    case "invalid":
+      return htmlPage(
+        "Invalid link",
+        `<h1 style="margin-top:0;">This link is invalid</h1><p><a href="/subscribe">Subscribe again</a> to get a new one.</p>`,
+        400,
+      );
   }
-  return htmlPage(
-    "Subscribed",
-    `<h1 style="margin-top:0;">You're subscribed 🎉</h1><p>Thanks for confirming <strong>${escapeHtml(
-      row.email,
-    )}</strong>. You'll hear from us soon.</p>`,
-  );
 }
 
 export async function unsubscribeLanding(c: RequestContext): Promise<Response> {

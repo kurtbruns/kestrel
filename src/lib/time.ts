@@ -49,4 +49,12 @@ export const MAX_NOTIFY_ATTEMPTS = 5;
 /** Per-recipient retry cap before a delivery is marked unsent so the send can complete. */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
+// --- subscribing (SPEC §7) ---
+/** At most one confirmation per address in this long, however often it is subscribed, so
+ *  the public form can't be used to flood a stranger's inbox. */
+export const CONFIRM_COOLDOWN_MS = 15 * 60 * 1000;
+/** How long a confirmation link stays good after it was sent. An older one offers to send
+ *  a fresh link instead, so a months-old email can't record consent. */
+export const CONFIRM_LINK_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 export const now = (): number => Date.now();

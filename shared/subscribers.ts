@@ -12,6 +12,10 @@ export interface Subscriber {
   status: SubscriberStatus;
   /** One-shot double opt-in token, rotated on each re-arm; null once spent. */
   confirm_token: string | null;
+  /** When the confirmation carrying `confirm_token` went out; null if none has. */
+  confirm_sent_at: number | null;
+  /** When a confirmation was last attempted, the per-address cooldown's clock. */
+  confirm_attempt_at: number | null;
   /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2). */
   unsub_token: string;
   created_at: number;
@@ -40,13 +44,33 @@ export interface SubscriberListResponse {
   page: PageMeta;
 }
 
-/** What adding an address did: SPEC §7's double opt-in never re-confirms a confirmed one. */
-export type SubscribeAction = "created" | "resubscribed" | "pending_resent" | "already_confirmed";
+/**
+ * What adding an address did (SPEC §7). The first three sent a confirmation. The rest sent
+ * none: double opt-in never re-confirms a confirmed address, a suppressed one is never
+ * mailed, and an address sent a confirmation a moment ago waits out the cooldown.
+ */
+export type SubscribeAction =
+  | "created"
+  | "resubscribed"
+  | "pending_resent"
+  | "already_confirmed"
+  | "suppressed"
+  | "recently_sent";
 
-/** POST /subscribers */
+/** POST /subscribers. `subscriber` is null when the address has no row: a suppressed
+ *  address that was never on the list. */
 export interface SubscribeResponse {
-  subscriber: Subscriber;
+  subscriber: Subscriber | null;
   action: SubscribeAction;
+}
+
+/**
+ * POST /subscribe, the public form, as JSON. One answer whatever the address's state, given
+ * before any confirmation is sent, so neither the reply nor its timing says who is on the
+ * list (SPEC §7).
+ */
+export interface PublicSubscribeResponse {
+  status: "check_inbox";
 }
 
 /** GET /subscribers/:id */

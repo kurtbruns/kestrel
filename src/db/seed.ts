@@ -15,6 +15,8 @@ export interface SeedSubscriber {
   email: string;
   status: SubscriberStatus;
   confirm_token: string;
+  /** When the confirmation carrying `confirm_token` went out (also the cooldown's clock). */
+  confirm_sent_at: number;
   unsub_token: string;
   created_at: number;
   confirmed_at: number | null;
@@ -126,13 +128,15 @@ export async function insertSubscribers(db: D1Database, rows: SeedSubscriber[]):
       group.map((r) =>
         db
           .prepare(
-            "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO subscribers (id, email, status, confirm_token, confirm_sent_at, confirm_attempt_at, unsub_token, created_at, confirmed_at, unsubscribed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           )
           .bind(
             r.id,
             r.email,
             r.status,
             r.confirm_token,
+            r.confirm_sent_at,
+            r.confirm_sent_at,
             r.unsub_token,
             r.created_at,
             r.confirmed_at,

@@ -223,7 +223,13 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 
 ### Joining
 
-Someone subscribes through a public form, which creates a **pending** subscriber and sends a confirmation email. Clicking the link **confirms** them (double opt-in). Only confirmed subscribers are ever mailed (I1). Double opt-in is a deliberate cost: it's the record that consent was given, it keeps the list clean, and it protects sending reputation.
+Someone subscribes through a public form, which creates a **pending** subscriber and sends a confirmation email. The link in it opens a page with a Confirm button, and pressing it **confirms** them (double opt-in). Only confirmed subscribers are ever mailed (I1). Double opt-in is a deliberate cost: it's the record that consent was given, it keeps the list clean, and it protects sending reputation.
+
+Consent is recorded only by a deliberate action of the address's owner. Opening the link records nothing, because mail scanners open every link in a message before a person sees it, and a fetch by a scanner is not the owner agreeing to anything. A confirmation link is also valid for a limited time, a fixed number of days after it was sent; an older link records nothing and offers to send a fresh one instead, so a long-forgotten email can't put someone on the list.
+
+The form is public, so it must not become a way to learn who subscribes or to flood a stranger's inbox. **A subscribe request never reveals list membership:** it gets the same answer, just as quickly, whether the address is new, pending, confirmed, unsubscribed, or suppressed, because the answer comes before any confirmation is sent. **Confirmations are rate-limited per address:** one goes out only when it is due, never to an address already confirmed, never to a suppressed one, and at most once per address in a fixed interval of minutes, however often the address is submitted; a repeat inside that interval sends nothing. How often any one client may submit the form is a limit set at the edge when the app is deployed, not in the app.
+
+A confirmation that was due can still fail to go, when the email provider refuses it. The requester has already been told to check their inbox, and telling them otherwise would give away that the address was not on the list, so nothing about the address changes instead: a new address is not left pending, an existing one keeps the last link that did arrive, and no interval starts, so a reader whose email never comes can simply submit again. When the provider gives no answer at all, the email may have arrived, so its link is kept and the per-address interval still applies. A publisher adding someone by hand is told of a refusal as it happens, and, since the admin surface is theirs, why no confirmation went out when none was due.
 
 The confirmation email's **wording** (its subject, the line above the button, the button's label, and an optional reassurance footer) is the publisher's to edit, a runtime preference (§9). Its structure is not: it always opens with the publication identity as a masthead, because a first-touch email says who it is before the ask, and the masthead degrades to nothing when no identity is set. The confirm link is inserted by the app and always present, a required field left blank falls back to a built-in default, and the HTML and plain-text bodies are generated together, so no edit can produce a confirmation email that is wordless, misshapen, or missing the link that records consent (I1). It is transactional, not a post: it does not use the post template and carries no unsubscribe link.
 
@@ -233,7 +239,7 @@ Every email carries an unsubscribe link and the one-click header that bulk mail 
 
 ### Two tokens, two jobs
 
-A subscriber carries two independent unguessable tokens, one per job, and neither can do the other's. The **confirm token** drives double opt-in and is one-shot: it is rotated whenever a pending or unsubscribed address subscribes again, so a stale confirmation link can't be replayed. The **unsubscribe token** is durable and never rotated, not even across an unsubscribe and a resubscribe, because it is embedded in the one-click link of every post already delivered: a returning subscriber can still leave from mail that has sat in their inbox since before they last left (I2). One token doing both jobs would go dead in delivered mail the moment it rotated.
+A subscriber carries two independent unguessable tokens, one per job, and neither can do the other's. The **confirm token** drives double opt-in and is one-shot: it is replaced each time a new confirmation is sent, so only the newest link confirms and a stale one can't be replayed, and it is valid only for a limited time (Joining, above). The **unsubscribe token** is durable and never rotated, not even across an unsubscribe and a resubscribe, because it is embedded in the one-click link of every post already delivered: a returning subscriber can still leave from mail that has sat in their inbox since before they last left (I2). One token doing both jobs would go dead in delivered mail the moment it rotated.
 
 ### Deferred: topics and segmentation
 
@@ -421,6 +427,9 @@ An index of what was decided and the alternative each choice was made over, in t
 - **"Sent" means dispatch complete**, over waiting for every delivery receipt (§6).
 - **A reconciling sweep**, over per-post alarms (§6).
 - **Double opt-in**, accepted as a deliberate cost, over single opt-in (§7).
+- **Consent is a press of the Confirm button**, over confirming when the link is opened (§7).
+- **One answer to every subscribe request**, over telling the requester what state the address is in (§7).
+- **The per-client limit on subscribing is set at the edge**, over building one into the app (§7).
 - **Two subscriber tokens, one per job**, over one token doing both (§7).
 - **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§3, §10).
 - **The publisher is told of each event once**, over loud meaning only the status surface, and over a reminder repeated while a condition lasts (§8, §12).

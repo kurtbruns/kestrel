@@ -2,7 +2,7 @@
 // dashboard's quick actions) and unsubscribing one (the list's row menu, the dashboard).
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
-import type { SubscribeResponse, Subscriber } from "../../shared/subscribers";
+import type { SubscribeAction, SubscribeResponse, Subscriber } from "../../shared/subscribers";
 import { api } from "../api";
 import { $ } from "../ui/dom";
 import { html } from "../ui/html";
@@ -30,16 +30,27 @@ export function addSubscriberModal(onDone?: () => void): void {
           json: { email: addr },
         });
         m.close();
-        toast(
-          r.action === "already_confirmed"
-            ? `${addr} is already confirmed`
-            : `Confirmation sent to ${addr}`,
-        );
+        toast(addedMessage(addr, r.action));
         onDone?.();
       } catch (e) {
         toast(e instanceof Error ? e.message : String(e));
       }
     });
+}
+
+/** What the Add told the admin: a confirmation went, or why none was due. A refused
+ *  confirmation is an API error, shown by the caller as it is. */
+function addedMessage(addr: string, action: SubscribeAction): string {
+  switch (action) {
+    case "already_confirmed":
+      return `${addr} is already confirmed`;
+    case "suppressed":
+      return `${addr} is suppressed, so no confirmation was sent`;
+    case "recently_sent":
+      return `A confirmation went to ${addr} a few minutes ago; try again later`;
+    default:
+      return `Confirmation sent to ${addr}`;
+  }
 }
 
 export function confirmUnsubscribe(sub: Subscriber, onDone: () => void): void {

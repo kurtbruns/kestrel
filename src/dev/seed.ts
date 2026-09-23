@@ -520,6 +520,8 @@ function buildAudience(t: Timeline): BuiltAudience {
       status,
       // Two independent long, unguessable tokens (confirm is one-shot; unsub is durable).
       confirm_token: newToken(),
+      // The confirmation went out when they signed up, so a pending link ages from then.
+      confirm_sent_at: createdAt,
       unsub_token: newToken(),
       created_at: createdAt,
       confirmed_at: confirmedAt,
@@ -720,6 +722,8 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
       email,
       status,
       confirm_token: newToken(),
+      // The confirmation went out when they signed up, so a pending link ages from then.
+      confirm_sent_at: createdAt,
       unsub_token: newToken(),
       created_at: createdAt,
       confirmed_at: confirmedAt,
