@@ -7,7 +7,9 @@ import * as subscribers from "../db/subscribers";
 import { confirmationEmail } from "../emails/system";
 import { newToken } from "../lib/ids";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../lib/time";
-import { getProvider, perRecipient } from "../providers";
+import { unwrap } from "../lib/unwrap";
+import { getProvider } from "../providers";
+import type { RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 
@@ -31,8 +33,9 @@ export type SubscriptionOutcome =
 /**
  * Subscribe `email` through double opt-in, sending it a confirmation if one is due. Never
  * confirms anyone (I1). A confirmation the provider refuses changes nothing: a new address
- * leaves no row, and an existing one keeps the last link that did arrive. One that got no
- * answer is treated as sent, so its link works if it arrived and the cooldown still holds.
+ * leaves no row, and an existing one keeps the last link that did arrive. One whose fate is
+ * unknown (no answer, or a halt after which it may have gone) is treated as sent, so its
+ * link works if it arrived and the cooldown still holds.
  */
 export async function requestSubscription(
   c: RequestContext,
@@ -46,6 +49,10 @@ export async function requestSubscription(
   if (await subscribers.blocksConfirmation(db, email)) {
     return { kind: "skipped", subscriber: existing, action: "suppressed" };
   }
+  // Everything that can fail before the provider is asked happens before the claim, so
+  // such a failure changes nothing and is never mistaken for a send.
+  const token = newToken();
+  const message = await confirmationMessage(c, token);
   const { subscriber, created } = await subscribers.ensureSubscriber(db, email);
   const now = Date.now();
   if (!(await subscribers.claimConfirmation(db, subscriber.id, now, now - CONFIRM_COOLDOWN_MS))) {
@@ -63,64 +70,83 @@ export async function requestSubscription(
       ? "resubscribed"
       : "pending_resent";
 
-  const token = newToken();
-  let refusal: string | null;
-  try {
-    refusal = await sendConfirmation(c, subscriber, token, now);
-  } catch (err) {
-    // No answer at all: the confirmation may have gone. Arm its link so it works if it
-    // did, and keep the claim, so a retry can't turn an outage into a flood.
-    await subscribers.armConfirmation(db, subscriber.id, token, now);
-    const error = err instanceof Error ? err.message : String(err);
-    console.error("confirmation email: no answer from the provider", error);
-    return { kind: "failed", delivered: "unknown", error };
-  }
-  if (refusal !== null) {
+  const sent = await sendConfirmation(c, message, subscriber, now);
+  if (sent.delivered === "no") {
     // Nothing went out, so nothing changes: the claim is released (a refusal is not a
     // send, and the reader may try again at once), and a row made for this request goes.
-    await subscribers.releaseConfirmation(db, subscriber.id, now, subscriber.confirm_sent_at);
-    if (created) {
-      await subscribers.dropUnarmed(db, subscriber.id);
-    }
-    console.error("confirmation email refused by the provider", refusal);
-    return { kind: "failed", delivered: "no", error: refusal };
+    await subscribers.releaseConfirmation(
+      db,
+      subscriber.id,
+      now,
+      subscriber.confirm_attempt_at,
+      created,
+    );
+    console.error("confirmation email refused by the provider", sent.error);
+    return { kind: "failed", delivered: "no", error: sent.error };
   }
-  await subscribers.armConfirmation(db, subscriber.id, token, now);
-  const armed = await subscribers.getById(db, subscriber.id);
-  return { kind: "sent", subscriber: armed ?? subscriber, action };
+  // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
+  // so a retry can't turn an outage into a flood.
+  const armed = await subscribers.armConfirmation(db, subscriber.id, token, now, subscriber.status);
+  if (!armed) {
+    // The subscriber confirmed or unsubscribed while this was being sent; that stands, so
+    // the link just sent is not armed and does nothing.
+    const current = await subscribers.getById(db, subscriber.id);
+    return {
+      kind: "skipped",
+      subscriber: current,
+      action: current?.status === "confirmed" ? "already_confirmed" : "recently_sent",
+    };
+  }
+  if (sent.delivered === "unknown") {
+    console.error("confirmation email: fate unknown", sent.error);
+    return { kind: "failed", delivered: "unknown", error: sent.error };
+  }
+  return {
+    kind: "sent",
+    subscriber: unwrap(await subscribers.getById(db, subscriber.id), "subscriber"),
+    action,
+  };
 }
 
-/** Send one confirmation carrying `token`. Returns the provider's refusal, or null once it
- *  took the message; throws only when there was no answer. */
-async function sendConfirmation(
-  c: RequestContext,
-  subscriber: subscribers.SubscriberRow,
-  token: string,
-  sentAt: number,
-): Promise<string | null> {
-  const provider = getProvider(c.config, c.env);
+/** The confirmation email carrying `token`, in the publisher's wording and identity. */
+async function confirmationMessage(c: RequestContext, token: string): Promise<RenderedEmail> {
   const settings = await getSettings(c.env.DB);
   const copy = resolveConfirmationEmail(settings);
   // The branded layout reuses the same publication identity the post render does
   // (name falls back to the From display name), so the two never drift.
   const branding = resolveBranding(settings, c.config);
   const identity = { name: branding.name, tagline: branding.tagline, logoUrl: branding.logoUrl };
-  const confirmUrl = `${c.config.appOrigin}/confirm?token=${token}`;
+  return confirmationEmail(`${c.config.appOrigin}/confirm?token=${token}`, copy, identity);
+}
+
+/** Hand one confirmation to the provider and say whether it went: `yes`, `no` (refused,
+ *  nothing sent), or `unknown` (no answer, or a halt after which it may have gone). */
+async function sendConfirmation(
+  c: RequestContext,
+  message: RenderedEmail,
+  subscriber: subscribers.SubscriberRow,
+  attemptAt: number,
+): Promise<{ delivered: "yes" } | { delivered: "no" | "unknown"; error: string }> {
+  const provider = getProvider(c.config, c.env);
   const recipients = [{ email: subscriber.email, unsubscribeUrl: "" }];
-  const result = await provider.sendBatch(
-    confirmationEmail(confirmUrl, copy, identity),
-    recipients,
-    {
+  let result: SendBatchResult;
+  try {
+    result = await provider.sendBatch(message, recipients, {
       // One key per confirmation sent, never reused: a provider that dedupes by key
       // would otherwise swallow a deliberate resend as a repeat of the first.
-      idempotencyKeyPrefix: `confirm-${subscriber.id}-${sentAt}`,
-    },
-  );
-  const [answer] = perRecipient(result, recipients);
-  if (!answer) {
-    return "the provider gave no answer for the recipient";
+      idempotencyKeyPrefix: `confirm-${subscriber.id}-${attemptAt}`,
+    });
+  } catch (err) {
+    return { delivered: "unknown", error: err instanceof Error ? err.message : String(err) };
   }
-  return answer.accepted ? null : answer.error;
+  if (result.kind === "halted") {
+    return { delivered: result.halt.mayHaveSent ? "unknown" : "no", error: result.halt.error };
+  }
+  const [answer] = result.results;
+  if (!answer) {
+    return { delivered: "unknown", error: "the provider gave no answer for the recipient" };
+  }
+  return answer.accepted ? { delivered: "yes" } : { delivered: "no", error: answer.error };
 }
 
 /** Where a confirm link stands: good to confirm, confirmed already, too old, or not one. */

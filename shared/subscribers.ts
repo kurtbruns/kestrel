@@ -12,8 +12,10 @@ export interface Subscriber {
   status: SubscriberStatus;
   /** One-shot double opt-in token, rotated on each re-arm; null once spent. */
   confirm_token: string | null;
-  /** When the last confirmation email went out; null if none has. */
+  /** When the confirmation carrying `confirm_token` went out; null if none has. */
   confirm_sent_at: number | null;
+  /** When a confirmation was last attempted, the per-address cooldown's clock. */
+  confirm_attempt_at: number | null;
   /** Durable per-subscriber token in every delivered mail's unsubscribe link; never rotated (I2). */
   unsub_token: string;
   created_at: number;

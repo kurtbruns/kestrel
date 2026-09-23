@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import * as settings from "../src/db/settings";
 import * as subs from "../src/db/subscribers";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
@@ -76,17 +77,25 @@ async function confirmationsTo(email: string): Promise<number> {
 /** Move the address's last confirmation `ms` into the past, as if that long had gone by. */
 async function ageConfirmation(email: string, ms: number): Promise<void> {
   await env.DB.prepare(
-    "UPDATE subscribers SET confirm_sent_at = confirm_sent_at - ? WHERE email = ?",
+    "UPDATE subscribers SET confirm_sent_at = confirm_sent_at - ?, confirm_attempt_at = confirm_attempt_at - ? WHERE email = ?",
   )
-    .bind(ms, email)
+    .bind(ms, ms, email)
     .run();
 }
 
 /** A pending row whose confirmation went out, without going through a route. */
 async function addPending(email: string): Promise<subs.SubscriberRow> {
   const { subscriber } = await subs.ensureSubscriber(env.DB, email);
-  const token = `tok-${subscriber.id}`;
-  await subs.armConfirmation(env.DB, subscriber.id, token, Date.now());
+  const now = Date.now();
+  expect(await subs.claimConfirmation(env.DB, subscriber.id, now, now)).toBe(true);
+  const armed = await subs.armConfirmation(
+    env.DB,
+    subscriber.id,
+    `tok-${subscriber.id}`,
+    now,
+    subscriber.status,
+  );
+  expect(armed).toBe(true);
   return (await subs.getById(env.DB, subscriber.id))!;
 }
 
@@ -231,8 +240,10 @@ describe("confirming: only the owner's click records consent (I1)", () => {
     const res = await confirmToken(token);
     expect(res.status).toBe(410);
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("pending");
+    const beforeGet = await subs.getByEmail(env.DB, email);
     const page = await SELF.fetch(`${base}/confirm?token=${token}`);
     expect(page.status).toBe(410);
+    expect(await subs.getByEmail(env.DB, email)).toEqual(beforeGet);
     const html = await page.text();
     expect(html).toContain(`action="/subscribe"`);
     expect(html).toContain(`name="email" value="${email}"`);
@@ -250,6 +261,38 @@ describe("confirming: only the owner's click records consent (I1)", () => {
 });
 
 describe("subscribing: no flood, and no reveal of who is on the list", () => {
+  it("racing subscribes for one address send one confirmation between them", async () => {
+    const email = uniqueEmail();
+    const answers = await Promise.all([1, 2, 3, 4].map(() => publicSubscribe(email)));
+    expect(answers.map((r) => r.status)).toEqual([200, 200, 200, 200]);
+    expect(await confirmationsTo(email)).toBe(1);
+  });
+
+  it("a link left pending and then unsubscribed no longer confirms", async () => {
+    const email = uniqueEmail();
+    const pending = await addPending(email);
+    await subs.unsubscribeById(env.DB, pending.id);
+    expect((await confirmToken(pending.confirm_token!)).status).toBe(400);
+    expect((await subs.getByEmail(env.DB, email))?.status).toBe("unsubscribed");
+  });
+
+  it("a bounce or complaint on an erased address replaces the marker and blocks confirmations", async () => {
+    const email = uniqueEmail();
+    await subs.addSuppression(env.DB, email, subs.ERASED);
+    await subs.addSuppression(env.DB, email, "bounce", "hard bounce");
+    expect((await subs.listSuppressions(env.DB)).find((r) => r.email === email)?.reason).toBe(
+      "bounce",
+    );
+    await publicSubscribe(email);
+    expect(await confirmationsTo(email)).toBe(0);
+
+    // And the reverse: a later erased marker never overwrites a bounce.
+    await subs.addSuppression(env.DB, email, subs.ERASED);
+    expect((await subs.listSuppressions(env.DB)).find((r) => r.email === email)?.reason).toBe(
+      "bounce",
+    );
+  });
+
   it("repeated subscribes inside the cooldown send one confirmation, and keep its link", async () => {
     const email = uniqueEmail();
     for (let i = 0; i < 5; i++) {
@@ -282,6 +325,10 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
       expect(await confirmationsTo(email)).toBe(0);
     }
     expect(await subs.getByEmail(env.DB, neverListed)).toBeNull();
+    expect(await readJson(await adminAdd(neverListed))).toEqual({
+      subscriber: null,
+      action: "suppressed",
+    });
     expect((await subs.getByEmail(env.DB, leftAndBounced))?.status).toBe("unsubscribed");
   });
 
@@ -338,7 +385,9 @@ describe("a confirmation the provider does not take is not reported as sent", ()
   });
 
   /** A transport that answers every confirmation with `answer`, or throws when it's null. */
-  function stubProvider(answer: (to: string) => SendBatchResult | null): { calls: string[] } {
+  function stubProvider(
+    answer: (to: string) => SendBatchResult | null | Promise<SendBatchResult>,
+  ): { calls: string[] } {
     const calls: string[] = [];
     const stub: EmailProvider = {
       name: "resend",
@@ -347,7 +396,7 @@ describe("a confirmation the provider does not take is not reported as sent", ()
       async sendBatch(_rendered, recipients) {
         const to = recipients[0]!.email;
         calls.push(to);
-        const result = answer(to);
+        const result = await answer(to);
         if (!result) {
           throw new Error("socket hang up");
         }
@@ -407,6 +456,46 @@ describe("a confirmation the provider does not take is not reported as sent", ()
 
     vi.restoreAllMocks();
     expect((await confirmToken(before.confirm_token!)).status).toBe(200);
+  });
+
+  it("a halt after which the confirmation may have gone keeps its link and the cooldown", async () => {
+    const stub = stubProvider(() => ({
+      kind: "halted",
+      halt: { reason: "unavailable", cause: "outage", error: "502 bad gateway", mayHaveSent: true },
+    }));
+    const email = uniqueEmail();
+    expect((await publicSubscribe(email)).status).toBe(503);
+    expect((await subs.getByEmail(env.DB, email))?.confirm_token).not.toBeNull();
+    expect((await publicSubscribe(email)).status).toBe(200);
+    expect(stub.calls).toHaveLength(1);
+  });
+
+  it("a failure before the provider is asked changes nothing", async () => {
+    const email = uniqueEmail();
+    await addPending(email);
+    await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+    const before = await subs.getByEmail(env.DB, email);
+    const stub = stubProvider(refused(false));
+    vi.spyOn(settings, "getSettings").mockRejectedValue(new Error("settings are corrupt"));
+
+    expect((await publicSubscribe(email)).status).toBe(500);
+    expect(await subs.getByEmail(env.DB, email)).toEqual(before);
+    expect(stub.calls).toHaveLength(0);
+  });
+
+  it("an unsubscribe that lands while the confirmation is sent stands (I2)", async () => {
+    const email = uniqueEmail();
+    const pending = await addPending(email);
+    await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
+    stubProvider(async (to) => {
+      // The owner leaves (by an old link, say) while the provider is taking the email.
+      await subs.unsubscribeById(env.DB, pending.id);
+      return { kind: "answered", results: [{ email: to, accepted: true, providerId: "p1" }] };
+    });
+    await publicSubscribe(email);
+    const after = (await subs.getByEmail(env.DB, email))!;
+    expect(after.status).toBe("unsubscribed");
+    expect(after.confirm_token).toBe(pending.confirm_token);
   });
 
   it("a halted batch is a refusal too", async () => {

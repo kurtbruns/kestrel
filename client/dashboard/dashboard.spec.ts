@@ -420,6 +420,7 @@ describe("confirmUnsubscribe", () => {
     status: "confirmed" as const,
     confirm_token: null,
     confirm_sent_at: 1,
+    confirm_attempt_at: 1,
     unsub_token: "t",
     created_at: 1,
     confirmed_at: 2,

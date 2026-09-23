@@ -127,7 +127,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
       return json(
         {
           error: "confirmation_not_sent",
-          message: "the confirmation email could not be sent; try again in a few minutes",
+          message: "the confirmation email could not be sent; try again later",
         },
         503,
       );
@@ -136,7 +136,7 @@ export async function subscribe(c: RequestContext): Promise<Response> {
     const main =
       `<p class="r-ey">Newsletter</p>` +
       `<h1 class="r-h1">We couldn’t send your confirmation</h1>` +
-      `<p class="r-lead">Something went wrong sending the email. Please try again in a few minutes.</p>` +
+      `<p class="r-lead">Something went wrong sending the email. If it hasn’t arrived, please try again later.</p>` +
       subscribeFormHtml();
     return subscribePage(c, identity, main, 503);
   }
@@ -157,30 +157,28 @@ export async function subscribe(c: RequestContext): Promise<Response> {
  *  every link in a message, and only the owner's click is consent (I1, SPEC §7). */
 export async function confirmLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
-  const state = await confirmLinkState(c.env.DB, token);
-  if (state.kind !== "ready") {
-    return confirmStatePage(state);
-  }
-  return htmlPage(
-    "Confirm your subscription",
-    `<h1>Confirm your subscription</h1><p>Start sending the newsletter to <strong>${escapeHtml(
-      state.subscriber.email,
-    )}</strong>?</p>
-<form method="post" action="/confirm">
-<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">
-<button type="submit" class="btn">Confirm subscription</button>
-</form>`,
-  );
+  return confirmStatePage(await confirmLinkState(c.env.DB, token), token);
 }
 
 /** The Confirm button's POST: the one request that records consent. */
 export async function confirm(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
-  return confirmStatePage(await confirmSubscription(c.env.DB, token));
+  return confirmStatePage(await confirmSubscription(c.env.DB, token), token);
 }
 
-function confirmStatePage(state: ConfirmLinkState): Response {
+function confirmStatePage(state: ConfirmLinkState, token: string): Response {
   switch (state.kind) {
+    case "ready":
+      return htmlPage(
+        "Confirm your subscription",
+        `<h1 style="margin-top:0;">Confirm your subscription</h1><p>Start sending the newsletter to <strong>${escapeHtml(
+          state.subscriber.email,
+        )}</strong>?</p>
+<form method="post" action="/confirm">
+<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">
+<button type="submit" class="btn">Confirm subscription</button>
+</form>`,
+      );
     case "confirmed":
       return htmlPage(
         "Subscribed",
@@ -201,7 +199,7 @@ function confirmStatePage(state: ConfirmLinkState): Response {
 </form>`,
         410,
       );
-    default:
+    case "invalid":
       return htmlPage(
         "Invalid link",
         `<h1 style="margin-top:0;">This link is invalid</h1><p><a href="/subscribe">Subscribe again</a> to get a new one.</p>`,

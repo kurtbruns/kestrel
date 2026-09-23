@@ -100,6 +100,26 @@ describe("subscribers view", () => {
     expect(document.querySelector(".modal")).toBeNull();
   });
 
+  for (const [action, said] of [
+    ["suppressed", /new@b\.c is suppressed, so no confirmation was sent/],
+    ["recently_sent", /A confirmation went to new@b\.c a few minutes ago/],
+    ["created", /Confirmation sent to new@b\.c/],
+  ] as const) {
+    it(`says what the Add did when the API answers ${action}`, async () => {
+      fake = fakeApi([
+        { path: "/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+        { method: "POST", path: "/subscribers", reply: () => ({ subscriber: null, action }) },
+      ]);
+      await mount((r, s) => renderSubscribers(undefined, r, s));
+      await settle();
+      $("#addSub").click();
+      typeInto($<HTMLInputElement>("#addEmail"), "new@b.c");
+      $("#aGo").click();
+      await settle();
+      expect($("#toasts").textContent).toMatch(said);
+    });
+  }
+
   it("refuses an address without an @ before asking the API", () => {
     fake = fakeApi([]);
     addSubscriberModal();
