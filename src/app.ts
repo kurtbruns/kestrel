@@ -38,6 +38,10 @@ import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
 
+// The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
+const JSON_BODY = ["application/json"];
+const FORM_UPLOAD = ["multipart/form-data"];
+
 /** A halt's retry schedule in words for the reference, read off `HALT_BACKOFF_MS` so the
  *  two can't drift: "after 1, 2, and 5 minutes and then every 15 minutes". */
 function retrySchedule(steps: readonly number[]): string {
@@ -187,6 +191,7 @@ export function createRouter({
       method: "PUT",
       path: "/api/settings",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "settings",
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
@@ -214,6 +219,7 @@ export function createRouter({
       method: "POST",
       path: "/api/settings/logo",
       access: "admin",
+      accepts: FORM_UPLOAD,
       resource: "settings",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
@@ -237,6 +243,7 @@ export function createRouter({
       method: "POST",
       path: "/api/settings/template/test",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "settings",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
@@ -266,6 +273,7 @@ export function createRouter({
       method: "POST",
       path: "/posts",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "posts",
       summary: "Create a draft post.",
       example: {
@@ -315,6 +323,7 @@ export function createRouter({
       method: "PUT",
       path: "/posts/:id",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "posts",
       summary:
         "Update a draft. Send `base_revision` (or If-Match) for optimistic concurrency (409 on conflict).",
@@ -361,6 +370,7 @@ export function createRouter({
       method: "POST",
       path: "/posts/:id/images",
       access: "admin",
+      accepts: [...FORM_UPLOAD, ...imageRoutes.POST_IMAGE_TYPES],
       resource: "posts",
       summary: "Upload an image to a post (multipart form field `file`).",
       handler: imageRoutes.uploadImage,
@@ -408,6 +418,7 @@ export function createRouter({
       method: "POST",
       path: "/posts/:id/test",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "posts",
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
@@ -439,6 +450,7 @@ export function createRouter({
         method: "POST",
         path: "/api/dev/seed",
         access: "admin",
+        accepts: FORM_UPLOAD,
         resource: "dev",
         summary: "Load the local demo dataset (local dev only).",
         handler: devRoutes.seed,
@@ -458,6 +470,7 @@ export function createRouter({
       method: "POST",
       path: "/posts/:id/schedule",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "posts",
       summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
       description:
@@ -472,6 +485,7 @@ export function createRouter({
       method: "POST",
       path: "/posts/:id/send",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "posts",
       summary:
         "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post.",
@@ -622,6 +636,7 @@ export function createRouter({
       method: "POST",
       path: "/sends/:id/reschedule",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "sends",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
@@ -636,6 +651,7 @@ export function createRouter({
       method: "POST",
       path: "/sends/:id/resolve",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "sends",
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
@@ -653,6 +669,7 @@ export function createRouter({
       method: "POST",
       path: "/subscribers",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "subscribers",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       example: { request: { email: "reader@example.com" } },
@@ -718,6 +735,7 @@ export function createRouter({
       method: "POST",
       path: "/suppressions",
       access: "admin",
+      accepts: JSON_BODY,
       resource: "suppressions",
       summary: "Suppress an address manually.",
       example: {

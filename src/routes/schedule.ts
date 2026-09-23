@@ -4,7 +4,7 @@ import type { ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
-import { HttpError, json, notFound } from "../lib/errors";
+import { json, notFound } from "../lib/errors";
 import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -80,17 +80,9 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   if (!post) {
     throw notFound("post");
   }
-  // Send-now needs no body; one is read only to refuse a stray template choice.
-  if ((c.req.headers.get("content-type") ?? "").includes("application/json")) {
-    try {
-      rejectStrayTemplateChoice(await c.req.json());
-    } catch (err) {
-      if (err instanceof HttpError) {
-        throw err;
-      }
-      // Unparseable JSON on a route that needs none is ignored, as before.
-    }
-  }
+  // Send-now needs no body, so an empty one needs no content type; one that is sent is
+  // read like any other JSON body, only to refuse a stray template choice.
+  rejectStrayTemplateChoice(await readJsonObject(c, { optional: true }));
 
   // Idempotent: if a send is already in flight for this post, return it.
   const active = await getActiveSendForPost(c.env.DB, post.id);

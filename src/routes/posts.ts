@@ -75,10 +75,9 @@ async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
 }
 
 export async function createPost(c: RequestContext): Promise<Response> {
-  // A create with no JSON body is the "new blank draft" case; one that sends JSON is
-  // held to the same field rules as an edit.
-  const isJson = (c.req.headers.get("content-type") ?? "").includes("application/json");
-  const { input } = isJson ? await readBody(c, { optional: true }) : { input: {} };
+  // A create with an empty body, which needs no content type, is the "new blank draft"
+  // case; one that sends a body is held to the same JSON and field rules as an edit.
+  const { input } = await readBody(c, { optional: true });
   const { post, revision } = await posts.createPost(c.env.DB, input, author(c));
   const body: PostSavedResponse = { post, revision_id: revision.id };
   return json(body, 201, revisionHeaders(post));

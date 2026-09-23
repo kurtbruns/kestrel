@@ -53,6 +53,15 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
   );
   return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
+// The body types a write accepts, from the registration the router enforces them by. A
+// route that takes no body lists none.
+function apiAcceptsHtml(accepts: readonly string[] | undefined): Html | null {
+  if (!accepts?.length) {
+    return null;
+  }
+  const rows = accepts.map((t) => html`<tr><td><code>${t}</code></td></tr>`);
+  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Content-Type</span></div><table class="api-query api-accepts"><tbody>${rows}</tbody></table></div>`;
+}
 /**
  * The path as a URL path to type (the curl command's own, without the router's pattern
  * syntax), with its parameters marked so the variable parts read at a glance.
@@ -76,6 +85,7 @@ function apiRouteHtml(r: ReferenceEntry): Html {
         <p class="api-summary">${r.summary}</p>
         ${r.description ? html`<p class="api-desc muted">${r.description}</p>` : null}
         ${apiQueryHtml(r.query)}
+        ${apiAcceptsHtml(r.accepts)}
         ${apiExample("Request", r.example?.request)}
         ${apiExample("Response", r.example?.response)}
         ${apiCurl(r)}

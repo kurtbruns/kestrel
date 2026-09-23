@@ -9,10 +9,14 @@
  * that quietly ignored it. Absent optional fields stay absent. The domain rules above
  * this layer (a valid email, `fire_at` far enough out, a template with an unsubscribe
  * link) stay with their routes.
+ *
+ * A body is read as JSON only when it says it is (a 415 otherwise): a browser form can
+ * post JSON-shaped text as `text/plain`, and it can never post `application/json` to
+ * another origin without a preflight the app never grants (SPEC §11).
  */
 
 import type { RequestContext } from "../router";
-import { badRequest } from "./errors";
+import { badRequest, unsupportedMediaType } from "./errors";
 
 /** A parsed JSON body (or a nested object within one): known to be a plain object. */
 export type JsonObject = Record<string, unknown>;
@@ -27,9 +31,19 @@ function isObject(v: unknown): v is JsonObject {
 }
 
 /**
+ * The bare media type a request's `Content-Type` declares (`Application/JSON; charset=utf-8`
+ * is `application/json`), or `undefined` when it declares none.
+ */
+export function mediaTypeOf(req: Request): string | undefined {
+  const declared = req.headers.get("content-type");
+  return declared ? (declared.split(";")[0] ?? "").trim().toLowerCase() || undefined : undefined;
+}
+
+/**
  * Read the request body as a JSON object, or throw a 400 naming what is wrong with it.
  * `optional` lets an empty body stand for `{}`, for the routes that have a sensible
- * default when nothing is sent; a body that is present must still be a JSON object.
+ * default when nothing is sent; that empty body needs no content type. A body that is
+ * present must say it is `application/json` (a 415 otherwise) and be a JSON object.
  */
 export async function readJsonObject(
   c: RequestContext,
@@ -41,6 +55,9 @@ export async function readJsonObject(
       return {};
     }
     throw badRequest("a JSON body is required");
+  }
+  if (mediaTypeOf(c.req) !== "application/json") {
+    throw unsupportedMediaType("a JSON body must be sent with Content-Type: application/json");
   }
   let parsed: unknown;
   try {

@@ -6,7 +6,9 @@
  * `admin` attaches `requireAuth`, `public`/`webhook` attach nothing (a webhook is
  * verified inside its adapter). Because the same field is what the generated API
  * reference reads (see src/reference/), the documented tier and the enforced gate
- * cannot disagree.
+ * cannot disagree. The admin gate also refuses a write another site's page could have
+ * made the publisher's browser send (`refuseForeignWrite`), against the body types the
+ * route declares in `accepts`, which the reference shows too.
  *
  * Middleware run in order; the first one to return a `Response` short-circuits
  * (this is how auth returns 401 before the handler runs). Handlers and middleware
@@ -17,7 +19,8 @@ import type { Access, QueryParam, Resource, RouteExample } from "../shared/refer
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
-import { badRequest, type HttpError, json, toErrorResponse } from "./lib/errors";
+import { mediaTypeOf } from "./lib/body";
+import { badRequest, HttpError, json, toErrorResponse, unsupportedMediaType } from "./lib/errors";
 
 export interface Principal {
   /** `human` = interactive login (Access, has email); `service` = token (Claude / bearer). */
@@ -97,15 +100,85 @@ export interface RouteDef {
   description?: string;
   /** Query parameters, documented from the registration so the reference can't drift. */
   query?: QueryParam[];
+  /**
+   * The media types the request body may carry (`application/json`, `multipart/form-data`,
+   * or a raw upload's own types). Absent on a route that takes no body. On an admin write
+   * a request declaring any other type is refused before the handler runs.
+   */
+  accepts?: readonly string[];
   example?: RouteExample;
   handler: Handler;
   /** Extra middleware beyond the access-derived gate. Rare; composed after the gate. */
   middleware?: Middleware[];
 }
 
-/** The one place the access tier maps to a gate — so the tier can't drift from it. */
-function gateFor(access: Access): Middleware[] {
-  return access === "admin" ? [requireAuth] : [];
+const UNSAFE_METHODS: ReadonlySet<string> = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/**
+ * What a browser says of a request it sends from the admin's own pages (`same-origin`) or
+ * one the person typed (`none`); any other value means a page elsewhere started it.
+ * A client that isn't a browser (Claude's service token, curl, the tests) sends none.
+ */
+const OWN_FETCH_SITES: ReadonlySet<string> = new Set(["same-origin", "none"]);
+
+/**
+ * Whether a browser started this request from a page other than the admin's own. A current
+ * browser says so in `Sec-Fetch-Site`, which a page can't forge. An older one doesn't send
+ * it but does send `Origin` on a POST, so that decides instead: an origin other than the
+ * request's own (or `null`, an opaque one) is foreign. The request's own origin, not
+ * `APP_ORIGIN`, so an instance reachable on two hostnames never refuses its own editor.
+ * With neither header it is not a browser, and passes.
+ */
+function isForeignBrowserRequest(c: RequestContext): boolean {
+  const site = c.req.headers.get("sec-fetch-site");
+  if (site !== null) {
+    return !OWN_FETCH_SITES.has(site.toLowerCase());
+  }
+  const origin = c.req.headers.get("origin");
+  return origin !== null && origin !== c.url.origin;
+}
+
+/**
+ * Refuse a write another site's page could have made the publisher's browser send with
+ * their session (SPEC §11): one a browser marks as foreign (`isForeignBrowserRequest`),
+ * and one declaring a body type the route doesn't take, since a plain HTML form can only
+ * send a form encoding or `text/plain` and a page can't send any other type across
+ * origins without a preflight the app never grants. A request that declares no type
+ * passes the second check; the route's reader decides whether a body without one is
+ * acceptable (`readJsonObject` refuses one that is not empty).
+ */
+function refuseForeignWrite(accepts: readonly string[]): Middleware {
+  return (c) => {
+    if (isForeignBrowserRequest(c)) {
+      throw new HttpError(
+        403,
+        "cross_site_request",
+        "a page on another site can't act on the admin API",
+      );
+    }
+    const type = mediaTypeOf(c.req);
+    if (type !== undefined && !accepts.includes(type)) {
+      throw unsupportedMediaType(
+        accepts.length === 0
+          ? `this route takes no body, so no Content-Type (got ${type})`
+          : `this route accepts ${accepts.join(" or ")}, not ${type}`,
+      );
+    }
+    return undefined;
+  };
+}
+
+/**
+ * The one place the access tier maps to a gate, so the tier can't drift from it: an
+ * admin route requires auth, and an admin write also refuses a cross-site request.
+ */
+function gateFor(def: RouteDef): Middleware[] {
+  if (def.access !== "admin") {
+    return [];
+  }
+  return UNSAFE_METHODS.has(def.method)
+    ? [requireAuth, refuseForeignWrite(def.accepts ?? [])]
+    : [requireAuth];
 }
 
 /**
@@ -135,7 +208,7 @@ export class Router {
 
   /** Register a route from its manifest entry; the `access` tier decides the gate. */
   register(def: RouteDef): this {
-    const gate = gateFor(def.access);
+    const gate = gateFor(def);
     const middleware = def.middleware ? [...gate, ...def.middleware] : gate;
     this.compiled.push({ def, pattern: new URLPattern({ pathname: def.path }), middleware });
     return this;
