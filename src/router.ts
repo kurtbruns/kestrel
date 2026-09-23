@@ -17,7 +17,7 @@ import type { Access, QueryParam, RouteExample } from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
-import { badRequest, json, toErrorResponse } from "./lib/errors";
+import { badRequest, type HttpError, json, toErrorResponse } from "./lib/errors";
 
 export interface Principal {
   /** `human` = interactive login (Access, has email); `service` = token (Claude / bearer). */
@@ -50,12 +50,27 @@ export function param(c: RequestContext, name: string): string {
   return v;
 }
 
-function decodePathParam(name: string, raw: string): string {
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    throw badRequest(`path parameter ${name} is not validly percent-encoded`);
+/**
+ * Decode a route's path parameters. A malformed escape (`/archive/%E0`) is the
+ * client's mistake, so it comes back as a 400 to throw rather than an uncaught
+ * URIError; it is returned, not thrown, so the caller can run the gate first.
+ */
+function decodePathParams(groups: Record<string, string | undefined>): {
+  params: Record<string, string>;
+  error?: HttpError;
+} {
+  const params: Record<string, string> = {};
+  for (const [k, v] of Object.entries(groups)) {
+    if (v === undefined) {
+      continue;
+    }
+    try {
+      params[k] = decodeURIComponent(v);
+    } catch {
+      return { params, error: badRequest(`path parameter ${k} is not validly percent-encoded`) };
+    }
   }
+  return { params };
 }
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
@@ -130,21 +145,19 @@ export class Router {
         continue;
       }
 
-      const params: Record<string, string> = {};
+      const { params, error: badParam } = decodePathParams(match.pathname.groups);
       const c: RequestContext = { req, env, ctx, url, params, config };
       try {
-        // Decoded inside the try: a malformed escape (`/archive/%E0`) is the client's
-        // mistake, so it is a 400 like any other bad input, not an uncaught URIError.
-        for (const [k, v] of Object.entries(match.pathname.groups)) {
-          if (v !== undefined) {
-            params[k] = decodePathParam(k, v);
-          }
-        }
         for (const mw of route.middleware) {
           const short = await mw(c);
           if (short) {
             return short;
           }
+        }
+        // Refused only after the gate, so an admin route answers an unauthenticated
+        // request with its 401 whatever the path holds.
+        if (badParam) {
+          throw badParam;
         }
         return await route.def.handler(c);
       } catch (err) {

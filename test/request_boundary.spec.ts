@@ -240,4 +240,9 @@ describe("a malformed percent-escape in a path is a 400", () => {
     const res = await SELF.fetch(`${base}/posts/%E0%A4`, { headers: AUTH });
     await expect400(res);
   });
+
+  it("only after the gate: an unauthenticated admin request is still a 401", async () => {
+    const res = await SELF.fetch(`${base}/posts/%E0%A4`);
+    expect(res.status).toBe(401);
+  });
 });
