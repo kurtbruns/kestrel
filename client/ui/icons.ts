@@ -20,6 +20,7 @@ import lines from "./icons/lines.svg";
 import link from "./icons/link.svg";
 import ol from "./icons/ol.svg";
 import paperclip from "./icons/paperclip.svg";
+import plus from "./icons/plus.svg";
 import preview from "./icons/preview.svg";
 import quote from "./icons/quote.svg";
 import readonly from "./icons/readonly.svg";
@@ -48,6 +49,7 @@ const ICONS = {
   link: unsafeHtml(link),
   ol: unsafeHtml(ol),
   paperclip: unsafeHtml(paperclip),
+  plus: unsafeHtml(plus),
   preview: unsafeHtml(preview),
   quote: unsafeHtml(quote),
   readonly: unsafeHtml(readonly),

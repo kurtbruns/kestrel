@@ -64,7 +64,7 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
       { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, if set." },
       {
         token: "{{ publication.address }}",
-        desc: "Your mailing address, for the compliance footer.",
+        desc: "Your mailing address, if you’ve added one in Settings; empty otherwise. Keep it in the footer if you send promotional email.",
       },
     ],
   },
@@ -92,108 +92,10 @@ interface TemplateExample {
   label: string;
   html: string;
 }
-type ExampleKey = "signed" | "signedAddress" | "plain";
-const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
+type ExampleKey = "signed" | "plain";
+export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   signed: {
     label: "Signed",
-    html: `<style>
-  .email {
-    font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    color: #18181b;
-  }
-  .email h1,
-  .email h2,
-  .email h3 {
-    font-family: Georgia, 'Times New Roman', serif;
-    line-height: 1.2;
-  }
-  .email a {
-    color: #3355cc;
-  }
-  .email .rule {
-    border: 0;
-    border-top: 1px solid #e4e4e7;
-    margin: 28px 0;
-  }
-  .signoff td {
-    vertical-align: middle;
-  }
-  .signoff .logo-cell {
-    padding-right: 14px;
-  }
-  .signoff .logo {
-    display: block;
-    border-radius: 9px;
-  }
-  .signoff .name {
-    font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
-  }
-  .signoff .tagline {
-    font-size: 13px;
-    color: #52525b;
-    margin-top: 2px;
-  }
-  .footer {
-    margin-top: 22px;
-    font-size: 12px;
-    line-height: 1.7;
-    color: #8a8a93;
-  }
-  .footer a {
-    color: #8a8a93;
-    text-decoration: underline;
-  }
-  @media (prefers-color-scheme: dark) {
-    .email {
-      color: #ededed !important;
-    }
-    .email a {
-      color: #93c5fd !important;
-    }
-    .email .rule {
-      border-color: #2e2e33 !important;
-    }
-    .signoff .name {
-      color: #ededed !important;
-    }
-    .signoff .tagline {
-      color: #a1a1aa !important;
-    }
-    .footer {
-      color: #a1a1aa !important;
-    }
-    .footer a {
-      color: #a1a1aa !important;
-    }
-  }
-</style>
-
-<div class="email">
-  {{ post.body }}
-
-  <hr class="rule" />
-
-  <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
-    <tr>
-      <td class="logo-cell">
-        <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
-      </td>
-      <td>
-        <div class="name">{{ publication.name }}</div>
-        <div class="tagline">{{ publication.tagline }}</div>
-      </td>
-    </tr>
-  </table>
-
-  <div class="footer">
-    Powered by Kestrel ·
-    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
-  </div>
-</div>`,
-  },
-  signedAddress: {
-    label: "Signed + address",
     html: `<style>
   .email {
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -324,6 +226,9 @@ const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     color: #8a8a93;
     text-decoration: underline;
   }
+  .footer .address {
+    margin-top: 6px;
+  }
   @media (prefers-color-scheme: dark) {
     .email {
       color: #ededed !important;
@@ -352,6 +257,7 @@ const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
     Powered by Kestrel ·
     <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
     <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
+    <div class="address">{{ publication.address }}</div>
   </div>
 </div>`,
   },
@@ -407,11 +313,16 @@ function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
     "publication.name": id.name || "Your publication",
     "publication.tagline": id.tagline || "Your tagline",
     "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
-    "publication.address": id.address || "123 Main Street, City, State Zip Code",
+    "publication.address": id.address,
     "email.sentTo": "you@example.com",
     "email.unsubscribeUrl": "#unsubscribe",
     "email.viewInBrowserUrl": "#view-in-browser",
   };
+}
+
+/** A template filled with the preview's sample values: what the sample email shows. */
+export function sampleEmailHtml(template: string, id: TemplateIdentity): string {
+  return fillEmailTemplate(template, templateSampleCtx(id));
 }
 
 // The isolated preview document: a white (dark in dark mode) email canvas whose
@@ -461,7 +372,7 @@ export function mountSampleEmailPreview(
     }
     // Set as markup (not srcdoc per keystroke): flicker-free, and any <script> stays
     // inert. The publisher's own template, filled with sample values, in its own frame.
-    setHtml(slot, unsafeHtml(fillEmailTemplate(getTemplate(), templateSampleCtx(getIdentity()))));
+    setHtml(slot, unsafeHtml(sampleEmailHtml(getTemplate(), getIdentity())));
     size();
   };
   iframe.addEventListener("load", () => {
@@ -562,9 +473,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
               <div class="set-menu" id="tplExamples">
                 <button type="button" class="ghost set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
                 <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
-                  <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just the body and the required footer links.</span></button>
-                  <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Adds a sign-off with your logo, name, and tagline.</span></button>
-                  <button type="button" role="menuitem" data-example="signedAddress"><span class="set-menu-name">Signed + address</span><span class="set-menu-desc">Adds your postal mailing address — what bulk-mail rules require.</span></button>
+                  <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Your post, then your logo, name, and tagline as a sign-off. Your mailing address sits in the footer once you add one.</span></button>
+                  <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just your post and the footer links. Your mailing address sits in the footer once you add one.</span></button>
                 </div>
               </div>
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${icon("lines")}</button>

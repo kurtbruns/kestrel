@@ -35,7 +35,7 @@ export interface PublicationLogo {
 export interface PublicationSettings {
   name: string;
   tagline: string;
-  /** Physical mailing address for the email compliance footer ("" = unset). */
+  /** Postal mailing address, optional; printed where the template puts `{{ publication.address }}` ("" = none). */
   address: string;
   logo: PublicationLogo | null;
 }

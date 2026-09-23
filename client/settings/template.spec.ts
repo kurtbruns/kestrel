@@ -12,7 +12,7 @@ import {
   resetShell,
   typeInto,
 } from "../test/support";
-import { renderTemplate } from "./template";
+import { EMAIL_TEMPLATE_EXAMPLES, renderTemplate, sampleEmailHtml } from "./template";
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
 
@@ -55,6 +55,29 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
 
 const bar = () => $("#savebar");
 const editor = () => $<HTMLTextAreaElement>("#tplEditor");
+
+describe("starting templates", () => {
+  // The footer's address line in a filled template, or undefined when there is none.
+  const addressLine = (filled: string) => {
+    const doc = new DOMParser().parseFromString(filled, "text/html");
+    return doc.querySelector(".footer .address")?.textContent;
+  };
+  const id = { name: "Birds Weekly", tagline: "", logoUrl: "", address: "" };
+
+  it("offers Signed and Plain, each printing the address once set and nothing while blank", () => {
+    expect(Object.values(EMAIL_TEMPLATE_EXAMPLES).map((ex) => ex.label)).toEqual([
+      "Signed",
+      "Plain",
+    ]);
+    for (const ex of Object.values(EMAIL_TEMPLATE_EXAMPLES)) {
+      // A blank address previews as blank, never as a placeholder the email won't have.
+      expect(addressLine(sampleEmailHtml(ex.html, id))).toBe("");
+      expect(addressLine(sampleEmailHtml(ex.html, { ...id, address: "PO Box 1142" }))).toBe(
+        "PO Box 1142",
+      );
+    }
+  });
+});
 
 describe("template view", () => {
   let fake: FakeApi;
@@ -187,12 +210,16 @@ describe("template view", () => {
     await open();
     $("#tplExamplesBtn").click();
     expect($("#tplExamplesList").hidden).toBe(false);
+    expect($$<HTMLButtonElement>("[data-example]").map((b) => b.dataset.example)).toEqual([
+      "signed",
+      "plain",
+    ]);
     document.body.click();
     expect($("#tplExamplesList").hidden).toBe(true);
     $("#tplExamplesBtn").click();
     $("[data-example='plain']").click();
     expect($("#tplExamplesList").hidden).toBe(true);
-    expect(editor().value).toContain("Powered by Kestrel");
+    expect(editor().value).toBe(EMAIL_TEMPLATE_EXAMPLES.plain.html);
     expect(editor().value).not.toContain("signoff");
     expect(bar().classList.contains("show")).toBe(true);
     $("#savebarDiscard").click();

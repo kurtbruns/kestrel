@@ -167,7 +167,7 @@ export function createRouter(archiveBasePath: string): Router {
               },
             ],
             retry_after: null,
-            identityFields: ["name", "tagline", "logoUrl"],
+            identityFields: ["name", "tagline", "logoUrl", "address"],
           },
         },
       },
@@ -181,7 +181,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
-        "Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test.",
+        "Saving a changed template, or an identity field the template renders, re-makes every scheduled send's email at once (SPEC §6, §9), and is refused until the client acknowledges those sends by id in `remake` (409 `remake_required`, listing them) or while any of them is inside the minimum lead (409 `remake_too_close`, with `retry_after`); a save that leaves the email's inputs unchanged asks nothing. `GET /api/settings` lists them under `inUse` beforehand; the response's `remade` says what was re-made, and each of those sends then needs a fresh test. `warnings` is advice that never blocks the save: likely template mistakes, and a mailing address the template leaves out.",
       example: {
         request: { emailTemplate: "<style>…</style>…", remake: ["s_xyz789"] },
         response: {

@@ -4098,6 +4098,44 @@ button.api-copy.copied svg {
 .set-field + .set-field {
   margin-top: 16px;
 }
+/* An optional field (the mailing address, SPEC §9): closed, it is an Add button over its
+   hint; open, its label row carries Remove, and a warning sits under the input while
+   what it holds doesn't reach the email. The warning takes the amber `warn` scale. */
+.set-addr-add {
+  align-items: flex-start;
+}
+.set-field-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 6px;
+}
+.set-field-head > label {
+  margin: 0;
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 13px;
+}
+button.set-field-remove {
+  min-height: 0;
+  font-size: 12px;
+  padding: 3px 9px;
+}
+.set-field-warn {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.set-field-warn a {
+  color: inherit;
+  text-decoration: underline;
+}
 .set-id-fields {
   min-width: 0;
   display: flex;

@@ -180,8 +180,7 @@ const IDENTITY_TOKENS: ReadonlyArray<[token: string, field: IdentityField]> = [
  * The identity fields `template` renders. The identity reaches the frozen bytes only
  * through the `publication.*` tokens, so a field the template does not reference is
  * not an input to the email: changing it alters no scheduled send, and the re-make
- * guard (SPEC §9) leaves it alone. The built-in template renders the logo, name, and
- * tagline, and not the address.
+ * guard (SPEC §9) leaves it alone. The built-in template renders all four.
  */
 export function identityFieldsInUse(template: string): IdentityField[] {
   const tokens = templateTokens(template);
@@ -292,7 +291,8 @@ export function defaultBranding(): EmailBranding {
 }
 
 /** The built-in template — a signed sign-off (logo, name, tagline) over a "Powered by
- *  Kestrel · Unsubscribe · View in browser" footer. Authored with a `<style>` block;
+ *  Kestrel · Unsubscribe · View in browser" footer, with the mailing address under it
+ *  (an empty line while none is set). Authored with a `<style>` block;
  *  the render path inlines it. Sent out of the box when the operator sets no template. */
 export const DEFAULT_EMAIL_TEMPLATE = `<style>
   .email {
@@ -341,6 +341,9 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
     color: #8a8a93;
     text-decoration: underline;
   }
+  .footer .address {
+    margin-top: 6px;
+  }
   @media (prefers-color-scheme: dark) {
     .email {
       color: #ededed !important;
@@ -387,5 +390,6 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
     Powered by Kestrel ·
     <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
     <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
+    <div class="address">{{ publication.address }}</div>
   </div>
 </div>`;
