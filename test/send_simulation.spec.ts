@@ -56,6 +56,7 @@ async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<v
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM deliveries"),
+    env.DB.prepare("DELETE FROM notifications"),
     env.DB.prepare("DELETE FROM sends"),
     env.DB.prepare("DELETE FROM posts"),
     env.DB.prepare("DELETE FROM suppressions"),

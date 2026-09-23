@@ -28,6 +28,15 @@ export interface PublicationView {
 /** The identity fields an email template can carry, named as the settings surface names them. */
 export type IdentityField = "name" | "tagline" | "logoUrl" | "address";
 
+/**
+ * Where the notifications that tell the publisher about their sends go (SPEC §8). An
+ * address only, never a credential: the channel and its sender are deploy config.
+ */
+export interface NotificationPrefs {
+  /** The publisher's address, or "" for no notifications. */
+  to: string;
+}
+
 /** The editable preferences, resolved: a concrete template and confirmation copy, never a blank. */
 export interface SettingsView {
   testRecipients: string[];
@@ -35,6 +44,7 @@ export interface SettingsView {
   emailTemplate: string;
   confirmationEmail: ConfirmationEmailCopy;
   confirmationEmailDefault: ConfirmationEmailCopy;
+  notifications: NotificationPrefs;
 }
 
 /** The deploy-time configuration, reflected read-only: origins, provider, and whether Access gates the surface. Never a secret. */
@@ -50,6 +60,29 @@ export interface DeploymentView {
   accessConfigured: boolean;
   authMode: "access" | "dev";
   build: BuildInfo;
+  /** How notifications reach the publisher: Cloudflare's own email, the newsletter's provider, or the dev fake that delivers nothing. */
+  notifyChannel: "cloudflare" | "provider" | "fake";
+  /** The `From:` a notification carries. */
+  notifyFrom: string;
+}
+
+/** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */
+export type NotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
+
+/** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). */
+export type NotificationStatusKind = NotificationKind | "test";
+
+/** How notifications have gone lately, so a channel that stopped working is visible where the destination is set. */
+export interface NotificationStatusView {
+  /** The last notification delivered (a test counts), or null if none has been. */
+  lastSent: { kind: NotificationStatusKind; subject: string; at: number } | null;
+  /** The last failed try, when newer than the last delivered one; null otherwise. */
+  lastFailure: {
+    kind: NotificationStatusKind;
+    subject: string;
+    at: number;
+    error: string;
+  } | null;
 }
 
 /** A scheduled send a template or identity change would re-make (SPEC §6, §9). */
@@ -73,6 +106,7 @@ export interface SettingsResponse {
   settings: SettingsView;
   deployment: DeploymentView;
   inUse: InUseView;
+  notificationStatus: NotificationStatusView;
 }
 
 /**
@@ -84,6 +118,7 @@ export interface SettingsPatchBody {
   publication?: Partial<Pick<PublicationView, "name" | "tagline" | "address">>;
   emailTemplate?: string;
   confirmationEmail?: Partial<ConfirmationEmailCopy>;
+  notifications?: Partial<NotificationPrefs>;
   remake?: string[];
 }
 
@@ -108,6 +143,12 @@ export interface TemplateTestResponse {
   recipients: string[];
   subject: string;
   warnings: string[];
+}
+
+/** POST /api/settings/notifications/test: a sample notification to the saved address, through the live channel. */
+export interface NotificationTestResponse {
+  to: string;
+  channel: DeploymentView["notifyChannel"];
 }
 
 /** The 409 a template or identity save gets until the client acknowledges the sends it re-makes (SPEC §9). */

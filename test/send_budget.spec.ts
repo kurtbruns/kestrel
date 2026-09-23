@@ -5,6 +5,7 @@ import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { DEFAULT_SUBREQUEST_BUDGET, getConfig, MIN_SUBREQUEST_BUDGET } from "../src/env";
 import { HALT_BACKOFF_MS, LEASE_TTL_MS } from "../src/lib/time";
+import { NOTIFY_RESERVE } from "../src/notify/notify";
 import * as providers from "../src/providers";
 import { Budget } from "../src/send/budget";
 import { MIN_RUN_COST, runSend } from "../src/send/loop";
@@ -50,6 +51,7 @@ let resend: ResendLikeProvider;
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM deliveries"),
+    env.DB.prepare("DELETE FROM notifications"),
     env.DB.prepare("DELETE FROM sends"),
     env.DB.prepare("DELETE FROM images"),
     env.DB.prepare("DELETE FROM post_revisions"),
@@ -131,8 +133,8 @@ describe("SUBREQUEST_BUDGET", () => {
     expect(budgetFor("1000")).toBe(1000);
     expect(budgetFor("10")).toBe(MIN_SUBREQUEST_BUDGET);
     // The floor has to cover a tick's own queries (the anomaly checks, due and resumable
-    // sends) plus one run's opening, one batch, and its close.
-    expect(MIN_SUBREQUEST_BUDGET).toBeGreaterThanOrEqual(MIN_RUN_COST + 4);
+    // sends) and its notification reserve, plus one run's opening, one batch, and its close.
+    expect(MIN_SUBREQUEST_BUDGET).toBeGreaterThanOrEqual(MIN_RUN_COST + 4 + NOTIFY_RESERVE);
   });
 });
 

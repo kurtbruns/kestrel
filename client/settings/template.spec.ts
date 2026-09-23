@@ -23,6 +23,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     emailTemplate: TEMPLATE,
     confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
     confirmationEmailDefault: { subject: "s", body: "b", buttonLabel: "c", reassurance: "" },
+    notifications: { to: "" },
   },
   deployment: {
     provider: "fake",
@@ -35,6 +36,8 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     awsRegion: "",
     accessConfigured: false,
     authMode: "dev",
+    notifyChannel: "fake",
+    notifyFrom: "Birds <hello@birds.example>",
     build: {
       version: "",
       sha: "dev",
@@ -45,6 +48,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
       tagUrl: "",
     },
   },
+  notificationStatus: { lastSent: null, lastFailure: null },
   inUse: { sends: [], retry_after: null, identityFields: ["name"] },
   ...over,
 });

@@ -32,6 +32,12 @@ export const HALT_BACKOFF_MS: Record<HaltReason, readonly number[]> = {
   unavailable: [1, 2, 5, 15, 30, 60].map((m) => m * 60 * 1000),
   account: [5, 15, 30, 60].map((m) => m * 60 * 1000),
 };
+/** How far back a finished or late send is still news: the sweep records a notification
+ *  only for one that finished or fired within this, so the first tick after notifications
+ *  are set up never mails the publisher about the whole history. */
+export const NOTIFY_HORIZON_MS = 24 * 60 * 60 * 1000;
+/** Tries a notification gets before it is recorded failed (one a tick). */
+export const MAX_NOTIFY_ATTEMPTS = 5;
 /** Per-recipient retry cap before a delivery is marked unsent so the send can complete. */
 export const MAX_DELIVERY_ATTEMPTS = 5;
 
