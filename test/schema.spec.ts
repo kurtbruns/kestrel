@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
 describe("schema (0001_init)", () => {
-  it("creates all eight tables", async () => {
+  it("creates all nine tables", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
     ).all<{ name: string }>();
@@ -16,6 +16,7 @@ describe("schema (0001_init)", () => {
       "settings",
       "sends",
       "deliveries",
+      "notifications",
     ]) {
       expect(names).toContain(t);
     }

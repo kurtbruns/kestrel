@@ -42,6 +42,11 @@ Then check:
 
 - [ ] Scheduling (or Send now) creates a visible, **cancelable** Send before any mail leaves, and canceling it stops the send (I6). Nothing fires the instant it is requested.
 
+## 6. Notifications
+
+- [ ] Under **Settings → Notifications**, **Send a test notification** arrives at your address, and **Sent through** names the channel you meant (Cloudflare's email once the `NOTIFY` binding is declared).
+- [ ] The first send that goes out brings a **Sent:** notification with its numbers and a link to its record (`docs/SPEC.md` §8).
+
 ---
 
 When every box is checked on production, the instance is ready for a real send to your confirmed subscribers.

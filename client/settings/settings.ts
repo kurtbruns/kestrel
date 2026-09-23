@@ -1,10 +1,12 @@
-// The Settings page: publication identity, sending, confirmation wording, test
-// recipients, and the deployment reflection.
+// The Settings page: publication identity, sending, notifications, confirmation wording,
+// test recipients, and the deployment reflection.
 
 import type {
   ConfirmationEmailCopy,
   IdentityField,
   LogoResponse,
+  NotificationKind,
+  NotificationTestResponse,
   SettingsPatchBody,
   SettingsResponse,
   SettingsSavedResponse,
@@ -15,6 +17,7 @@ import { parseFromName, renderSidebarBrand } from "../brand";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
 import { escapeHtml, type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
@@ -45,6 +48,8 @@ interface SettingsBaseline {
   address: string;
   recipients: string[];
   confirmation: ConfirmationEmailCopy;
+  /** Where notifications about sends go (SPEC §8); "" for none. */
+  notifyTo: string;
 }
 
 /** The page's live, in-memory state: the baseline fields plus what saves on its own. */
@@ -100,6 +105,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       buttonLabel: ce.buttonLabel || "",
       reassurance: ce.reassurance || "",
     },
+    notifyTo: s.notifications.to || "",
   };
   let baseline: SettingsBaseline = {
     name: state.name,
@@ -107,6 +113,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     address: state.address,
     recipients: [...state.recipients],
     confirmation: { ...state.confirmation },
+    notifyTo: state.notifyTo,
   };
 
   const monogram = (v: string) => (String(v || fromName).trim()[0] || "K").toUpperCase();
@@ -261,6 +268,30 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       </div>
     </section>`;
 
+  // Notifications (SPEC §8): where they go is a preference; how they get there, and from
+  // whom, is deploy config, shown read-only beside it with how the last one went.
+  const notifySection = html`
+    <section class="set-sec">
+      ${secHead("Notifications", chip("editable", "Editable"))}
+      <p class="set-lede">Kestrel emails you when a send finishes, and right away when one needs you: the provider refusing your account, a send in flight too long, one waiting for you to resolve it, or a send that missed its fire time.</p>
+      <div class="set-card">
+        <div class="set-recip">
+          <div class="set-field" style="margin:0">
+            <label for="notifyTo">Send notifications to</label>
+            <input type="email" id="notifyTo" value="${state.notifyTo}" placeholder="you@example.com" autocomplete="off">
+            <p class="field-hint">One address. Leave blank for no notifications.</p>
+          </div>
+          <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
+        </div>
+        <div class="set-kv" style="border-top:1px solid var(--line)">
+          <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notifyChannel, PROVIDER_LABELS[d.provider] || d.provider)}</div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notifyFrom}</span></div>
+          <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(data.notificationStatus)}</div>
+        </div>
+        <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notifyChannel === "provider" ? "Notifications go through your newsletter's own provider, so one about the provider refusing your account cannot reach you; Cloudflare's email avoids that. " : ""}See the <a class="set-link" href="#/docs">setup guide</a>.</span></div>
+      </div>
+    </section>`;
+
   const recipSection = html`
     <section class="set-sec">
       ${secHead("Default test recipients", chip("editable", "Editable"))}
@@ -395,7 +426,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
 
   setHtml(
     body,
-    html`${identitySection}${templateSection}${senderSection}${recipSection}${subscribeSection}${confirmationSection}${instanceSection}`,
+    html`${identitySection}${templateSection}${senderSection}${notifySection}${recipSection}${subscribeSection}${confirmationSection}${instanceSection}`,
   );
 
   // Keep the cached config + sidebar brand in step after a save (the sidebar brand
@@ -425,9 +456,11 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     state.tagline !== baseline.tagline ||
     state.address !== baseline.address ||
     !sameList(state.recipients, baseline.recipients) ||
-    !sameCopy(state.confirmation, baseline.confirmation);
+    !sameCopy(state.confirmation, baseline.confirmation) ||
+    state.notifyTo !== baseline.notifyTo;
   const refreshDirty = () => {
     bar.setDirty(isDirty());
+    refreshNotifyTest();
   };
 
   // --- email template: a read-only compact preview of the current template plus a
@@ -651,6 +684,40 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     }
   });
 
+  // --- notifications: the address rides the save bar; the test goes to the SAVED address
+  // only (the server never takes one from the request), so it waits for a save.
+  const notifyToEl = $<HTMLInputElement>("#notifyTo");
+  const notifyTest = $<HTMLButtonElement>("#notifyTest");
+  const notifyTestHint = $("#notifyTestHint");
+  notifyToEl.addEventListener("input", () => {
+    state.notifyTo = notifyToEl.value.trim().toLowerCase();
+    refreshDirty();
+  });
+  function refreshNotifyTest() {
+    const reason = !baseline.notifyTo
+      ? "Save an address to send a test."
+      : state.notifyTo !== baseline.notifyTo
+        ? "Save first: the test goes to the saved address."
+        : "";
+    notifyTest.disabled = Boolean(reason);
+    notifyTestHint.textContent = reason;
+  }
+  notifyTest.onclick = () =>
+    busy(notifyTest, "Sending…", async () => {
+      try {
+        const r = await api<NotificationTestResponse>("/api/settings/notifications/test", {
+          method: "POST",
+        });
+        toast(
+          r.channel === "fake"
+            ? `Test notification recorded for ${r.to} (no email provider configured — nothing is delivered)`
+            : `Test notification sent to ${r.to}`,
+        );
+      } catch (err) {
+        toast(message(err));
+      }
+    });
+
   // --- copy buttons (subscribe URL).
   for (const b of $$("[data-copy]", body)) {
     b.onclick = () => copyText(b.dataset.copy ?? "");
@@ -764,6 +831,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
         publication: { name: state.name, tagline: state.tagline, address: state.address },
         testRecipients: state.recipients,
         confirmationEmail: state.confirmation,
+        notifications: { to: state.notifyTo },
       };
       const r = await withRemakeConfirm(
         (ack) =>
@@ -783,6 +851,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       state.address = ns.publication.address;
       state.recipients = [...ns.testRecipients];
       state.confirmation = { ...ns.confirmationEmail };
+      state.notifyTo = ns.notifications.to;
+      notifyToEl.value = state.notifyTo;
       nameEl.value = state.name;
       taglineEl.value = state.tagline;
       addressEl.value = state.address;
@@ -793,6 +863,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
         address: state.address,
         recipients: [...state.recipients],
         confirmation: { ...state.confirmation },
+        notifyTo: state.notifyTo,
       };
       applySettings(ns);
       renderRecipChips();
@@ -816,6 +887,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     state.address = baseline.address;
     state.recipients = [...baseline.recipients];
     state.confirmation = { ...baseline.confirmation };
+    state.notifyTo = baseline.notifyTo;
+    notifyToEl.value = state.notifyTo;
     nameEl.value = state.name;
     taglineEl.value = state.tagline;
     addressEl.value = state.address;
@@ -833,4 +906,39 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   templatePreview.repaint();
   repaintConfirmation();
   refreshDirty();
+}
+
+/** How the deploy-time notification channel reads to the publisher. */
+function notifyChannelLabel(
+  channel: SettingsResponse["deployment"]["notifyChannel"],
+  provider: string,
+): string {
+  switch (channel) {
+    case "cloudflare":
+      return "Cloudflare Email, separate from your newsletter's provider";
+    case "provider":
+      return `Your email provider (${provider})`;
+    default:
+      return "No email provider configured — nothing is delivered";
+  }
+}
+
+const NOTIFICATION_KINDS: Record<NotificationKind, string> = {
+  finished: "finished",
+  refused: "provider refusing",
+  stuck: "in flight too long",
+  wedged: "waiting to be resolved",
+  missed: "missed fire time",
+};
+
+/** The last delivered notification, and a newer failure when the channel has stopped working. */
+function notificationStatusHtml(status: SettingsResponse["notificationStatus"]): Html {
+  const { lastSent, lastFailure } = status;
+  if (lastFailure) {
+    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${lastFailure.subject} (${NOTIFICATION_KINDS[lastFailure.kind]}): ${lastFailure.error}</span>`;
+  }
+  if (lastSent) {
+    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${fmt(lastSent.at)}, ${lastSent.subject} (${NOTIFICATION_KINDS[lastSent.kind]})</span>`;
+  }
+  return html`<span class="muted">None yet</span>`;
 }

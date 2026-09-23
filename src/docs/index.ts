@@ -17,9 +17,10 @@ import provision from "../../docs/setup/01-provision.md";
 import access from "../../docs/setup/02-access.md";
 import emailSender from "../../docs/setup/03-email-sender.md";
 import sendingDomain from "../../docs/setup/04-sending-domain-dns.md";
-import archiveWebsite from "../../docs/setup/05-archive-website.md";
-import verify from "../../docs/setup/06-verify.md";
-import connectClaude from "../../docs/setup/07-connect-claude.md";
+import notifications from "../../docs/setup/05-notifications.md";
+import archiveWebsite from "../../docs/setup/06-archive-website.md";
+import verify from "../../docs/setup/07-verify.md";
+import connectClaude from "../../docs/setup/08-connect-claude.md";
 import type { DocFragment } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
@@ -36,6 +37,7 @@ const SOURCES: DocSource[] = [
   { slug: "access", markdown: access },
   { slug: "email-sender", markdown: emailSender },
   { slug: "sending-domain", markdown: sendingDomain },
+  { slug: "notifications", markdown: notifications },
   { slug: "archive-website", markdown: archiveWebsite },
   { slug: "verify", markdown: verify },
   { slug: "connect-claude", markdown: connectClaude },

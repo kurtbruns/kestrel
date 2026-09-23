@@ -21,6 +21,27 @@ export type HaltReason = "unavailable" | "account";
  */
 export type HaltCause = "credentials" | "sender" | "quota" | "suspended" | "rate_limit" | "outage";
 
+/**
+ * What to do about the provider refusing the account, by what the refusal is about
+ * (SPEC §12). The fix is always outside the app: nothing in it can change a credential or
+ * the provider's view of the account (SPEC §9). One wording for the watch and the notification
+ * that tells the publisher, so the two never advise differently.
+ */
+export function refusalAdvice(cause: HaltCause | null): string {
+  switch (cause) {
+    case "credentials":
+      return "Replace the provider's API key or credentials in the deployment's secrets.";
+    case "sender":
+      return "Verify the sending domain or from-address with the provider.";
+    case "quota":
+      return "Wait for the provider's sending quota to reset, or raise it on your plan.";
+    case "suspended":
+      return "Settle the account's standing with the provider (for SES, in the SES console).";
+    default:
+      return "Fix the account with the provider.";
+  }
+}
+
 /** The provider's standing refusal of a send, as the watch reports it. */
 export interface SendHalt {
   reason: HaltReason;

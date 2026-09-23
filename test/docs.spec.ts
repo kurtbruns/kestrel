@@ -12,6 +12,7 @@ describe("docs registry (bundled from docs/setup/*.md)", () => {
       "access",
       "email-sender",
       "sending-domain",
+      "notifications",
       "archive-website",
       "verify",
       "connect-claude",

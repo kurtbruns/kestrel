@@ -50,11 +50,38 @@ export interface OptionalVars {
    * may make. Unset means the Workers Free plan's 50; raise it on Workers Paid.
    */
   SUBREQUEST_BUDGET?: string;
+  /**
+   * The `From:` of the notifications that email the publisher through Cloudflare (SPEC §8): an
+   * address on a domain onboarded to Cloudflare's email sending. Unset means
+   * `kestrel@` the app's own hostname.
+   */
+  NOTIFY_FROM?: string;
 }
 
-export type AppEnv = Env & Secrets & OptionalVars;
+/**
+ * Optional bindings, declared by hand because the development config never carries them,
+ * so `wrangler types` does not generate them into `Env`.
+ */
+export interface OptionalBindings {
+  /**
+   * Cloudflare's `send_email` binding, the channel that tells the publisher when a send
+   * finishes or needs them (SPEC §8). Deploy-time infrastructure (SPEC §9): its presence
+   * picks the channel, and it is never declared for development, where notifications go to the
+   * in-memory fake.
+   */
+  NOTIFY?: SendEmail;
+}
+
+export type AppEnv = Env & Secrets & OptionalVars & OptionalBindings;
 
 export type ProviderName = "fake" | "ses" | "resend";
+
+/**
+ * How notifications reach the publisher (SPEC §8): Cloudflare's own email when the `NOTIFY`
+ * binding is declared, the newsletter's provider otherwise, and the in-memory fake in a
+ * dev-shaped env whatever is bound, so development can never reach a real inbox.
+ */
+export type NotifyChannel = "fake" | "cloudflare" | "provider";
 
 export interface Config {
   provider: ProviderName;
@@ -110,14 +137,19 @@ export interface Config {
    * deployment is correct on any plan; Workers Paid allows 1,000 D1 queries.
    */
   subrequestBudget: number;
+  /** The channel notifications to the publisher go through (see `NotifyChannel`). */
+  notifyChannel: NotifyChannel;
+  /** The `From:` a notification carries: `NOTIFY_FROM` on the Cloudflare channel, else the
+   *  newsletter's own `From:`, the only sender its provider will take. */
+  notifyFrom: string;
 }
 
 /** The Workers Free plan's per-invocation subrequest limit, the default budget. */
 export const DEFAULT_SUBREQUEST_BUDGET = 50;
-/** The least a sweep tick needs to find a send and deliver one batch of it. A lower
- *  `SUBREQUEST_BUDGET` would start nothing and stall every send silently, so it is
- *  raised to this. */
-export const MIN_SUBREQUEST_BUDGET = 25;
+/** The least a sweep tick needs to find a send and deliver one batch of it, beside what it
+ *  holds back for its own checks and one notification. A lower `SUBREQUEST_BUDGET` would
+ *  start nothing and stall every send silently, so it is raised to this. */
+export const MIN_SUBREQUEST_BUDGET = 30;
 
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
@@ -146,6 +178,7 @@ export function getConfig(env: AppEnv): Config {
   // what `devMode` keys on, so "this is local dev" has a single source.
   const devShaped = provider === "fake" && !accessTeamDomain;
   const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
+  const notifyChannel: NotifyChannel = devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     provider,
     appOrigin,
@@ -170,7 +203,21 @@ export function getConfig(env: AppEnv): Config {
       MIN_SUBREQUEST_BUDGET,
       parsePositiveInt(env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
     ),
+    notifyChannel,
+    notifyFrom:
+      notifyChannel === "cloudflare"
+        ? (orUndefined(env.NOTIFY_FROM) ?? `Kestrel <kestrel@${hostOf(appOrigin)}>`)
+        : env.FROM_ADDRESS,
   };
+}
+
+/** The hostname of an origin, or the origin itself when it does not parse. */
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).hostname;
+  } catch {
+    return origin;
+  }
 }
 
 /** Treat the usual "on" spellings as truthy for a dev opt-in flag. */
