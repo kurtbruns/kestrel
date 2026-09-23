@@ -11,7 +11,7 @@
 
 import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedPosts } from "../db/sends";
-import { BRANDING_LOGO_KEY, getSettings } from "../db/settings";
+import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
 import {
   ARCHIVE_POST_HEAD,
@@ -40,9 +40,10 @@ function fromDisplayName(fromAddress: string): string {
 }
 
 /** The resolved publication identity for a reader page: the operator's settings,
- *  falling back to the `From:` display name for the name (shape in `lib/page.ts`). */
+ *  falling back to the `From:` display name for the name (shape in `lib/page.ts`). A
+ *  corrupt settings row reads as the defaults, so a reader page never fails on it. */
 export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
-  const { publication: p } = await getSettings(c.env.DB);
+  const { publication: p } = await getSettingsForDisplay(c.env.DB);
   return {
     name: p.name || fromDisplayName(config.fromAddress),
     tagline: p.tagline,

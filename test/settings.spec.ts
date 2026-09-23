@@ -470,7 +470,7 @@ describe("a corrupt settings row", () => {
     ["unparseable JSON", '{"publication": {"name": "Birds'],
     ["JSON that is not an object", "null"],
   ] as const) {
-    it(`fails reads and writes and leaves the row as it is: ${what}`, async () => {
+    it(`fails the API's reads and writes, keeps the reader pages up, and leaves the row as it is: ${what}`, async () => {
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
       const before = await readRow();
@@ -481,6 +481,12 @@ describe("a corrupt settings row", () => {
         expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
         expect((await putLogo(PNG_1x1, "image/png")).status).toBe(500);
+        // The reader pages only show the identity, so they stay up on the defaults.
+        for (const path of ["/", "/archive", "/subscribe"]) {
+          const page = await SELF.fetch(`${BASE}${path}`, { headers: { accept: "text/html" } });
+          expect(page.status, path).toBe(200);
+          expect(await page.text(), path).not.toContain("Before");
+        }
         // Nothing saved over it: the defaults never reach the row (byte for byte).
         expect(await readRow()).toEqual(before);
         expect(errors.mock.calls.some((call) => call[0] === "SETTINGS_CORRUPT")).toBe(true);

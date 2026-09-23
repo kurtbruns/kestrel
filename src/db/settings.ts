@@ -248,6 +248,23 @@ export async function getSettings(db: D1Database): Promise<AppSettings> {
 }
 
 /**
+ * The settings for a surface that only shows them, never saves them: the reader pages.
+ * A corrupt row reads as the defaults here, so the public site stays up while the
+ * editor and the API fail loud. It is safe only because nothing read here is ever
+ * written back; the loss `parseStored` guards against is a default saved over the row.
+ */
+export async function getSettingsForDisplay(db: D1Database): Promise<AppSettings> {
+  try {
+    return await getSettings(db);
+  } catch (err) {
+    if (err instanceof HttpError && err.code === "settings_corrupt") {
+      return structuredClone(DEFAULT_SETTINGS); // parseStored has already logged it
+    }
+    throw err;
+  }
+}
+
+/**
  * Make sure the singleton row exists, so every write is an UPDATE with one shape
  * (a compare-and-swap on `updated_at`, plus any guard the caller adds). A fresh
  * install has no row; a blank blob at version 0 reads exactly as no row does.
