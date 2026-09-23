@@ -18,6 +18,9 @@ const send = (over: Partial<Send> = {}): Send => ({
   started_at: 1_000_000,
   completed_at: 1_001_000,
   remade_at: null,
+  halt_reason: null,
+  halt_error: null,
+  halted_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,
@@ -55,8 +58,8 @@ const progress = (over: Partial<SendProgress> = {}): SendProgress => ({
   },
   dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: 10_000 },
   delivery: { confirmed: 0, percent_of_accepted: 0 },
-  provider: { name: "fake" },
-  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false },
+  provider: { name: "fake", halt: null },
+  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
   ...over,
 });
 const page = { total: 2, limit: 50, offset: 0, sort: "email", dir: "asc" };
@@ -214,6 +217,39 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect(document.querySelector(".watch-card")).toBeNull();
     expect($(".rec-card")).toBeTruthy(); // the frozen record now
+  });
+
+  it("puts the provider's refusal of the account at the top of the watch", async () => {
+    const refused = progress({
+      phase: "needs-attention",
+      provider: {
+        name: "resend",
+        halt: { reason: "account", error: "resend batch 403: API key is not active", since: 1_000 },
+      },
+      attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: true },
+    });
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: send({ status: "sending" }),
+          progress: refused,
+          outcomes: outcomes({ accepted: 0 }),
+          slug: "owls",
+          archive_url: null,
+          published: false,
+        }),
+      },
+      { path: "/sends/x1/progress", reply: () => refused },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".phase-pill").textContent).toBe("Needs attention");
+    const alert = $("#watchBody .health.red");
+    expect(alert.textContent).toContain("The provider is refusing this account");
+    expect(alert.textContent).toContain("resend batch 403: API key is not active");
+    expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
+    expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
   });
 
   it("stops polling when the reader navigates away, even with a tick's read in flight", async () => {

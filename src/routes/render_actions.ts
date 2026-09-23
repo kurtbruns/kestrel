@@ -20,7 +20,7 @@ import { getSettings } from "../db/settings";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
-import { getProvider } from "../providers";
+import { getProvider, perRecipient } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
   type RenderedEmail,
@@ -130,9 +130,11 @@ export async function test(c: RequestContext): Promise<Response> {
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
-  const [res] = await provider.sendBatch(email, [{ email: to, unsubscribeUrl }], {
-    idempotencyKeyPrefix: `test-${input.post.id}`,
-  });
+  const recipients = [{ email: to, unsubscribeUrl }];
+  const [res] = perRecipient(
+    await provider.sendBatch(email, recipients, { idempotencyKeyPrefix: `test-${input.post.id}` }),
+    recipients,
+  );
 
   const result: TestSendResponse = {
     sent: res?.accepted === true,
@@ -256,10 +258,12 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   // A deliberate manual test is a fresh send each press (not a retry), so the
   // idempotency key is unique per request — an idempotent provider won't fold two
   // intentional tests into one.
-  const results = await provider.sendBatch(
-    result,
-    recipients.map((email) => ({ email, unsubscribeUrl })),
-    { idempotencyKeyPrefix: `template-test-${Date.now()}` },
+  const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
+  const results = perRecipient(
+    await provider.sendBatch(result, batch, {
+      idempotencyKeyPrefix: `template-test-${Date.now()}`,
+    }),
+    batch,
   );
   const sent = results.filter((r) => r.accepted).length;
 

@@ -201,9 +201,11 @@ describe("SimProvider.sendBatch", () => {
       email: `r${i}@example.com`,
       unsubscribeUrl: `https://x/u?token=t${i}`,
     }));
-    const results = await provider.sendBatch(rendered, recipients, {
+    const answer = await provider.sendBatch(rendered, recipients, {
       idempotencyKeyPrefix: "sim-batch",
     });
+    expect(answer.kind).toBe("answered");
+    const results = answer.kind === "answered" ? answer.results : [];
 
     expect(results).toHaveLength(40);
     const accepted = results.filter((r) => r.accepted);

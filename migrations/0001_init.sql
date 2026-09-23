@@ -137,6 +137,11 @@ CREATE TABLE sends (
   completed_at    INTEGER,
   remade_at       INTEGER,                     -- when a template or identity change last
                                                -- re-made the frozen render while scheduled
+  halt_reason     TEXT                         -- the provider refused the last batch as a
+                    CHECK (halt_reason IN ('unavailable', 'account')),  -- whole; null once
+                                               -- a batch is answered
+  halt_error      TEXT,                        -- the provider's words for that refusal
+  halted_at       INTEGER,                     -- when refusals of this reason began
   c_pending       INTEGER NOT NULL DEFAULT 0,
   c_in_flight     INTEGER NOT NULL DEFAULT 0,
   c_accepted      INTEGER NOT NULL DEFAULT 0,

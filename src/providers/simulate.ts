@@ -43,6 +43,7 @@ import type {
   Recipient,
   RenderedEmail,
   SendBatchOptions,
+  SendBatchResult,
   WebhookResult,
 } from "./types";
 
@@ -255,14 +256,14 @@ export class SimProvider implements EmailProvider {
     rendered: RenderedEmail,
     recipients: Recipient[],
     opts: SendBatchOptions,
-  ): Promise<PerRecipientResult[]> {
+  ): Promise<SendBatchResult> {
     const sendId = opts.idempotencyKeyPrefix;
 
     // Wall-clock budget, scoped to one invocation: a gap since the last batch means a new
     // sweep tick, so start a fresh window; otherwise, once this run has spent
-    // PACE_BUDGET_MS handing off, throw so the loop returns this chunk unanswered and
-    // releases the lease — the send re-sends it on the next tick (phase `backing-off`),
-    // exercising resume.
+    // PACE_BUDGET_MS handing off, answer as a rate-limited provider would, which halts the
+    // run and releases the lease: the send re-sends this chunk on the next tick (phase
+    // `backing-off`), exercising resume.
     const now = Date.now();
     const st = paceState.get(sendId);
     if (st == null || now - st.lastCallAt > NEW_RUN_GAP_MS) {
@@ -273,7 +274,13 @@ export class SimProvider implements EmailProvider {
       // something you'd read off a real send. How a send is *going* is observed through
       // the API (GET /sends/:id/progress) — never through these logs.
       console.log("[sim] injected rate-limit pause; requeueing until the next tick", { sendId });
-      throw new Error("simulated rate limit — pausing until the next tick");
+      return {
+        kind: "halted",
+        halt: {
+          reason: "unavailable",
+          error: "simulated rate limit (429); pausing until the next tick",
+        },
+      };
     } else {
       st.lastCallAt = now;
     }
@@ -281,7 +288,7 @@ export class SimProvider implements EmailProvider {
     // Pace: a real batch takes time. This is what makes the dispatch bar fill live.
     await sleep(LATENCY_MS);
 
-    return recipients.map((r): PerRecipientResult => {
+    const results = recipients.map((r): PerRecipientResult => {
       const key = `${sendId}:${r.email}`;
       const rand = recipientRand(sendId, r.email);
       const transientDraw = rand();
@@ -317,6 +324,7 @@ export class SimProvider implements EmailProvider {
       });
       return { email: r.email, accepted: true, providerId: `sim-${key}` };
     });
+    return { kind: "answered", results };
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {

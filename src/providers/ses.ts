@@ -10,6 +10,10 @@
  * honors this flag and leaves such rows for a human). At-most-once (I4) is
  * upheld by never re-dispatching, not by dedupe.
  *
+ * Failures: SES answers each recipient's request on its own, so an error that is about
+ * SES or the account rather than the recipient (`classifySesError`) halts the batch at
+ * that request instead of being repeated, identically, for everyone after it.
+ *
  * Webhook: `parseWebhook` verifies the SNS signature, then confirms a
  * subscription or normalizes an SES bounce/complaint/delivery into events. It
  * has no idea about the database — the route applies the returned events.
@@ -24,16 +28,51 @@ import { substituteRecipient } from "../render/render";
 import { base64Utf8, buildRawMessage } from "./ses_mime";
 import { isSnsHost, mapSesNotification, type SnsEnvelope, verifySnsSignature } from "./sns";
 import type {
+  BatchHalt,
   EmailProvider,
+  HaltReason,
   PerRecipientResult,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
+  SendBatchResult,
   WebhookResult,
 } from "./types";
 
 function textResponse(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
+}
+
+/** Error types that are about the account or its credentials, never a recipient. */
+const ACCOUNT_ERROR_TYPES = new Set([
+  // AWS paused the account's sending (it does so on bounce or complaint trouble) or
+  // restricted it for good; either way, until the operator acts in the SES console.
+  "SendingPausedException",
+  "AccountSuspendedException",
+  "MailFromDomainNotVerifiedException",
+  // The credentials themselves: unknown, wrongly signed, expired, or not permitted.
+  "UnrecognizedClientException",
+  "InvalidClientTokenId",
+  "SignatureDoesNotMatch",
+  "ExpiredTokenException",
+  "AccessDeniedException",
+]);
+
+/**
+ * Whether an SES error response halts the batch, and why; null when it is about this
+ * recipient's message (a bad address, a rejected message), which is permanent for it
+ * alone. The account-level types, and any 401 or 403, need the operator. Throttling (a
+ * 429, or a throttling type on a 400) and a 5xx are SES being unavailable: the next
+ * recipient would get the same answer, so the batch waits for the next tick instead.
+ */
+export function classifySesError(status: number, type: string): HaltReason | null {
+  if (status === 401 || status === 403 || ACCOUNT_ERROR_TYPES.has(type)) {
+    return "account";
+  }
+  if (status === 429 || status >= 500 || /throttl|toomany/i.test(type)) {
+    return "unavailable";
+  }
+  return null;
 }
 
 export class SesProvider implements EmailProvider {
@@ -72,16 +111,31 @@ export class SesProvider implements EmailProvider {
     rendered: RenderedEmail,
     recipients: Recipient[],
     _opts: SendBatchOptions,
-  ): Promise<PerRecipientResult[]> {
+  ): Promise<SendBatchResult> {
     const out: PerRecipientResult[] = [];
     // maxBatch is 1, but stay correct if the loop ever passes more.
-    for (const r of recipients) {
-      out.push(await this.sendOne(rendered, r));
+    for (const [i, r] of recipients.entries()) {
+      const result = await this.sendOne(rendered, r);
+      if ("reason" in result) {
+        if (out.length === 0) {
+          return { kind: "halted", halt: result };
+        }
+        // Some were already accepted, so the batch can't be refused as a whole: the rest
+        // are simply not sent this time, and wait for the next tick.
+        for (const rest of recipients.slice(i)) {
+          out.push({ email: rest.email, accepted: false, retryable: true, error: result.error });
+        }
+        break;
+      }
+      out.push(result);
     }
-    return out;
+    return { kind: "answered", results: out };
   }
 
-  private async sendOne(rendered: RenderedEmail, r: Recipient): Promise<PerRecipientResult> {
+  private async sendOne(
+    rendered: RenderedEmail,
+    r: Recipient,
+  ): Promise<PerRecipientResult | BatchHalt> {
     const final = substituteRecipient(rendered, {
       "email.unsubscribeUrl": r.unsubscribeUrl,
       "email.sentTo": r.email,
@@ -129,17 +183,14 @@ export class SesProvider implements EmailProvider {
 
     const bodyText = await res.text().catch(() => "");
     const { type, message } = parseSesError(bodyText);
-    // Throttling (429, or a Throttling/TooManyRequests type on a 400) and 5xx are
-    // transient; every other 4xx (bad address, rejected message, ...) is permanent.
-    const throttled = res.status === 429 || /throttl|toomany/i.test(type);
-    const retryable = throttled || res.status >= 500;
     const detail = [type, message].filter(Boolean).join(": ");
-    return {
-      email: r.email,
-      accepted: false,
-      retryable,
-      error: `ses ${res.status}${detail ? ` ${detail}` : ""}`,
-    };
+    const error = `ses ${res.status}${detail ? ` ${detail}` : ""}`;
+    const reason = classifySesError(res.status, type);
+    if (reason) {
+      return { reason, error };
+    }
+    // Every other 4xx (a bad address, a rejected message, ...) is this recipient's alone.
+    return { email: r.email, accepted: false, retryable: false, error };
   }
 
   async parseWebhook(req: Request, _env: AppEnv): Promise<WebhookResult> {

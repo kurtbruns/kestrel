@@ -7,7 +7,10 @@
  *                  List-Unsubscribe headers. The Idempotency-Key is the send
  *                  loop's dispatch key, saved with the batch and re-sent with it
  *                  unchanged, so Resend dedupes a re-sent batch instead of
- *                  double-mailing (idempotentRetry).
+ *                  double-mailing (idempotentRetry). Resend answers a batch as a
+ *                  whole, so an error response is a halt when it is about Resend
+ *                  or the account (`classifyResendError`), and otherwise a
+ *                  permanent failure for every recipient in it.
  *   parseWebhook — verify the Svix signature over the raw body, then normalize
  *                  Resend events (delivered / bounced / complained) into the
  *                  provider-agnostic DeliveryEvent[] the record applies.
@@ -21,10 +24,11 @@ import { substituteRecipient } from "../render/render";
 import type {
   DeliveryEvent,
   EmailProvider,
-  PerRecipientResult,
+  HaltReason,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
+  SendBatchResult,
   WebhookResult,
 } from "./types";
 
@@ -33,6 +37,33 @@ const BATCH_URL = "https://api.resend.com/emails/batch";
 const MAX_BATCH = 100;
 /** Reject a webhook whose Svix timestamp is more than this far from now. */
 const WEBHOOK_TOLERANCE_S = 5 * 60;
+/** Error names that are about the API key rather than the request, whatever the status. */
+const ACCOUNT_ERROR_NAMES = new Set([
+  "missing_api_key",
+  "invalid_api_key",
+  "restricted_api_key",
+  "suspended_api_key",
+  "invalid_permission",
+]);
+
+/**
+ * Whether a Resend error response halts the batch, and why; null when it is a permanent
+ * failure of this batch's own content. Every 401 and 403 is about the key or the sending
+ * domain (a missing, revoked, restricted, or suspended key; an unverified domain, which
+ * Resend reports as a 403 `validation_error`), so no recipient is to blame and no retry
+ * helps until the operator fixes it. A 429 (a rate limit or a spent quota), a 5xx, and a
+ * concurrent request under the same idempotency key are Resend being unavailable, and the
+ * same batch goes again later.
+ */
+export function classifyResendError(status: number, name: string): HaltReason | null {
+  if (status === 401 || status === 403 || ACCOUNT_ERROR_NAMES.has(name)) {
+    return "account";
+  }
+  if (status === 429 || status >= 500 || name === "concurrent_idempotent_requests") {
+    return "unavailable";
+  }
+  return null;
+}
 
 interface ResendBatchElement {
   from: string;
@@ -62,7 +93,7 @@ export class ResendProvider implements EmailProvider {
     rendered: RenderedEmail,
     recipients: Recipient[],
     opts: SendBatchOptions,
-  ): Promise<PerRecipientResult[]> {
+  ): Promise<SendBatchResult> {
     const elements: ResendBatchElement[] = recipients.map((r) => {
       const final = substituteRecipient(rendered, {
         "email.unsubscribeUrl": r.unsubscribeUrl,
@@ -98,32 +129,46 @@ export class ResendProvider implements EmailProvider {
     });
 
     if (!res.ok) {
-      // 429 / 5xx are transient (retry next tick); other 4xx are permanent.
-      const retryable = res.status === 429 || res.status >= 500;
-      const error = `resend batch ${res.status}: ${await safeText(res)}`;
-      return recipients.map((r) => ({
-        email: r.email,
-        accepted: false as const,
-        retryable,
-        error,
-      }));
+      const text = this.redact(await safeText(res));
+      const error = `resend batch ${res.status}: ${text}`;
+      const reason = classifyResendError(res.status, errorName(text));
+      if (reason) {
+        return { kind: "halted", halt: { reason, error } };
+      }
+      return {
+        kind: "answered",
+        results: recipients.map((r) => ({
+          email: r.email,
+          accepted: false as const,
+          retryable: false,
+          error,
+        })),
+      };
     }
 
     const body = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> };
     const data = Array.isArray(body.data) ? body.data : [];
-    return recipients.map((r, i) => {
-      const id = data[i]?.id;
-      if (id) {
-        return { email: r.email, accepted: true as const, providerId: id };
-      }
-      // A 2xx without a matching id is ambiguous — let the next tick retry.
-      return {
-        email: r.email,
-        accepted: false as const,
-        retryable: true,
-        error: "resend batch: missing id in response",
-      };
-    });
+    return {
+      kind: "answered",
+      results: recipients.map((r, i) => {
+        const id = data[i]?.id;
+        if (id) {
+          return { email: r.email, accepted: true as const, providerId: id };
+        }
+        // A 2xx without a matching id is ambiguous — let the next tick retry.
+        return {
+          email: r.email,
+          accepted: false as const,
+          retryable: true,
+          error: "resend batch: missing id in response",
+        };
+      }),
+    };
+  }
+
+  /** An error body is shown to the operator, so it never carries the key, even echoed. */
+  private redact(text: string): string {
+    return this.apiKey ? text.split(this.apiKey).join("[redacted]") : text;
   }
 
   async parseWebhook(req: Request, _env: AppEnv): Promise<WebhookResult> {
@@ -150,6 +195,16 @@ export class ResendProvider implements EmailProvider {
 
 function reject(status: number, message: string): WebhookResult {
   return { events: [], response: new Response(message, { status }) };
+}
+
+/** The `name` of a Resend error body (best effort; empty when there is none). */
+function errorName(text: string): string {
+  try {
+    const name = (JSON.parse(text) as { name?: unknown }).name;
+    return typeof name === "string" ? name : "";
+  } catch {
+    return "";
+  }
 }
 
 async function safeText(res: Response): Promise<string> {

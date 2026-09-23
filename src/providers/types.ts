@@ -1,8 +1,10 @@
 /** The two-method provider seam. Everything provider-specific lives behind it. */
+
+import type { HaltReason } from "../../shared/sends";
 import type { AppEnv } from "../env";
 import type { RenderedEmail } from "../render/render";
 
-export type { RenderedEmail };
+export type { HaltReason, RenderedEmail };
 
 export interface Recipient {
   email: string;
@@ -13,6 +15,29 @@ export interface Recipient {
 export type PerRecipientResult =
   | { email: string; accepted: true; providerId: string }
   | { email: string; accepted: false; retryable: boolean; error: string };
+
+/**
+ * A batch refused as a whole, for a reason about the provider or the account, never
+ * about the recipients in it: nothing in it was accepted. `unavailable`: it cannot take
+ * mail right now (an outage, a 5xx, a rate limit), so the same batch is simply tried
+ * again later. `account`: it refuses this account (a bad or revoked key, an unverified
+ * sending domain, a paused or suspended account), so no retry helps until the operator
+ * fixes it.
+ */
+export interface BatchHalt {
+  reason: HaltReason;
+  /** The provider's own words, for the operator. Never carries a credential. */
+  error: string;
+}
+
+/**
+ * A provider's answer to one batch: per-recipient results, or a halt that speaks for the
+ * whole batch. Only the adapter can tell the two apart, since only it knows what the
+ * provider's error means, so the classification stays behind the seam.
+ */
+export type SendBatchResult =
+  | { kind: "answered"; results: PerRecipientResult[] }
+  | { kind: "halted"; halt: BatchHalt };
 
 export type DeliveryEvent =
   | { type: "delivered"; providerId?: string; email?: string }
@@ -46,11 +71,12 @@ export interface EmailProvider {
   /** true = safe to re-send a stuck `dispatched` row (deduped by idempotency key). */
   readonly idempotentRetry: boolean;
 
+  /** Throws only when the request got no answer at all, whose fate is then unknown. */
   sendBatch(
     rendered: RenderedEmail,
     recipients: Recipient[],
     opts: SendBatchOptions,
-  ): Promise<PerRecipientResult[]>;
+  ): Promise<SendBatchResult>;
 
   parseWebhook(req: Request, env: AppEnv): Promise<WebhookResult>;
 }

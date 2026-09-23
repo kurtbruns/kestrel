@@ -11,7 +11,7 @@
  * keeps absorbing events after the send is "sent."
  */
 
-import type { SendPhase, SendProgress } from "../../shared/sends";
+import type { SendHalt, SendPhase, SendProgress } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
@@ -23,7 +23,9 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
  *                       ticks (a rate-limit pause or retry backoff waiting for the next tick).
  *   - `needs-attention` wedged: nothing left to hand off, but recipients stuck in flight
- *                       whose fate a transport error left unknown (§12) — awaiting Resolve.
+ *                       whose fate a transport error left unknown (§12) — awaiting Resolve;
+ *                       or refused: the provider refuses the account, which the operator
+ *                       must fix before the send can go on.
  *   - `settling`        dispatch complete; delivery receipts still arriving.
  *   - `complete`        dispatched and every accepted recipient has a delivery receipt.
  *   - `canceled`        terminal, non-sent outcome.
@@ -35,6 +37,7 @@ function derivePhase(
   counts: SendCounts,
   hasRetries: boolean,
   wedged: boolean,
+  refused: boolean,
 ): SendPhase {
   switch (status) {
     case "scheduled":
@@ -46,8 +49,10 @@ function derivePhase(
       return counts.accepted > 0 ? "settling" : "complete";
     default: {
       // sending
-      if (wedged) {
-        return "needs-attention"; // dispatched rows stuck in flight, no lease, nothing left to send
+      if (wedged || refused) {
+        // dispatched rows stuck in flight with no lease and nothing left to send, or the
+        // provider refusing the account
+        return "needs-attention";
       }
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
@@ -120,15 +125,21 @@ export function buildSendProgress(
     send.started_at != null &&
     now - send.started_at > STUCK_THRESHOLD_MS;
   const missed = send.status === "scheduled" && send.fire_at < now - MISSED_THRESHOLD_MS;
+  // The provider's standing refusal, while the send is still open to be retried.
+  const halt: SendHalt | null =
+    send.status === "sending" && send.halt_reason
+      ? { reason: send.halt_reason, error: send.halt_error ?? "", since: send.halted_at ?? now }
+      : null;
+  const refused = halt?.reason === "account";
 
   return {
     state: send.status,
-    phase: derivePhase(send.status, counts, hasRetries, wedged),
+    phase: derivePhase(send.status, counts, hasRetries, wedged, refused),
     total,
     counts,
     dispatch: { done, percent: dispatchPercent, rate_per_min: ratePerMin, eta_ms: etaMs },
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
-    provider: { name: providerName },
-    attention: { wedged, wedged_count: wedged ? counts.in_flight : 0, stuck, missed },
+    provider: { name: providerName, halt },
+    attention: { wedged, wedged_count: wedged ? counts.in_flight : 0, stuck, missed, refused },
   };
 }

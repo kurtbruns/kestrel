@@ -37,6 +37,9 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   started_at: NOW - 3_600_000,
   completed_at: NOW - 3_500_000,
   remade_at: null,
+  halt_reason: null,
+  halt_error: null,
+  halted_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,
@@ -213,6 +216,39 @@ describe("dashboard", () => {
       "A send has been in progress over 10 minutes — it may be retrying.",
     ]);
     expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["st1"]);
+  });
+
+  it("raises one red line with the provider's words for a refused account, and keeps the send out of the active widget", async () => {
+    const refused = (id: string) =>
+      send({
+        id,
+        status: "sending",
+        c_pending: 40,
+        halt_reason: "account",
+        halt_error: "resend batch 401: API key is invalid",
+        halted_at: NOW - 60_000,
+      });
+    const sends = [
+      refused("r1"),
+      refused("r2"),
+      send({
+        id: "u1",
+        status: "sending",
+        c_pending: 5,
+        started_at: NOW - 60_000,
+        halt_reason: "unavailable",
+      }),
+    ];
+    fake = world([post()], () => sends);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    const health = $(".health");
+    expect(health.classList.contains("red")).toBe(true);
+    expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
+      "The email provider is refusing this account, pausing 2 sends: resend batch 401: API key is invalid. Fix it with the provider; sending resumes on its own.",
+    ]);
+    // Only unavailable, which retries on its own: still an ordinary in-progress send.
+    expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["u1"]);
   });
 
   it("flags an elevated bounce rate on a recent send, amber", async () => {

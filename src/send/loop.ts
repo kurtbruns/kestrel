@@ -11,6 +11,12 @@
  * retryables go back to `pending` (on an idempotent provider, still under their key)
  * and wait for the next sweep tick (the backoff).
  *
+ * A failure that is the provider's or the account's rather than a recipient's (the
+ * adapter's halt, or a request with no answer) halts the run, not the recipients: the
+ * batch goes back to `pending` with no attempt spent, the send records the halt and stays
+ * open, and the next tick tries the same batch again, however long that takes (SPEC §12).
+ * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
+ *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
  * starting batches while it can still close cleanly; the next tick continues.
  */
@@ -22,7 +28,12 @@ import { getConfig } from "../env";
 import { LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
-import type { PerRecipientResult } from "../providers/types";
+import type {
+  BatchHalt,
+  HaltReason,
+  PerRecipientResult,
+  SendBatchResult,
+} from "../providers/types";
 import { Budget, metered } from "./budget";
 
 export interface SendLoopResult {
@@ -33,6 +44,8 @@ export interface SendLoopResult {
   unsent: number;
   requeued: number;
   finished: boolean;
+  /** Why the run stopped at a halted batch, or null if it did not. */
+  halt: HaltReason | null;
 }
 
 /** The most recipients in one batch, whatever the provider allows. */
@@ -45,7 +58,8 @@ const MAX_CHUNK = 500;
  *  unanswered batches and the fresh rows. */
 const OPEN_COST = 6;
 /** One batch: read its rows, close any no longer to be mailed (2), renew the lease,
- *  hand off (2), the provider request, record the outcomes (2). */
+ *  hand off (2), the provider request, record the outcomes (2). A halted batch records
+ *  its hold in 3 instead, but then only releases the lease, which fits the close. */
 const CHUNK_COST = 9;
 /** Closing: count what is left, then complete the send (3) or release the lease. */
 const CLOSE_COST = 4;
@@ -82,6 +96,7 @@ export async function runSend(
     unsent: 0,
     requeued: 0,
     finished: false,
+    halt: null,
   };
   if (!budget.affords(MIN_RUN_COST)) {
     return empty;
@@ -126,12 +141,22 @@ export async function runSend(
   const result: SendLoopResult = { ...empty, leased: true };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
 
+  /** Put a halted batch back in the queue, no attempt spent, and record the halt. */
+  const hold = async (key: string, halt: BatchHalt, members: number): Promise<void> => {
+    await sends.holdBatch(db, sendId, lease, key, provider.idempotentRetry, halt, Date.now());
+    result.requeued += members;
+    result.halt = halt.reason;
+    if (halt.reason === "account") {
+      console.error("PROVIDER_REFUSED", { sendId, provider: provider.name, error: halt.error });
+    }
+  };
+
   /**
    * Send one handed-off batch under its key and record the answer in one write. False
-   * when the request itself failed (no answer), which ends the run: on an idempotent
-   * provider the batch goes back to `pending` under its key, to be re-sent as-is next
-   * tick; on any other it stays `dispatched`, the ambiguous case that waits for Resolve
-   * (§12).
+   * when the batch got no per-recipient answer, which ends the run. A halt goes back to
+   * the queue (`hold`). So does a request with no answer at all on an idempotent
+   * provider, under its key, to be re-sent as-is next tick; on any other it stays
+   * `dispatched`, the ambiguous case that waits for Resolve (§12).
    */
   const deliver = async (key: string, members: DeliveryWork[]): Promise<boolean> => {
     const outcomes: DeliveryOutcome[] = [];
@@ -154,18 +179,23 @@ export async function runSend(
     let results: PerRecipientResult[] = [];
     if (recipients.length > 0) {
       budget.spend(); // the provider request, which counts whether or not it answers
+      let answer: SendBatchResult;
       try {
-        results = await provider.sendBatch(rendered, recipients, {
+        answer = await provider.sendBatch(rendered, recipients, {
           idempotencyKeyPrefix: sendId,
           idempotencyKey: key,
         });
       } catch (err) {
         if (provider.idempotentRetry) {
-          await sends.returnUnanswered(db, sendId, lease, key, errorText(err), Date.now());
-          result.requeued += members.length;
+          await hold(key, { reason: "unavailable", error: errorText(err) }, members.length);
         }
         return false;
       }
+      if (answer.kind === "halted") {
+        await hold(key, answer.halt, members.length);
+        return false;
+      }
+      results = answer.results;
     }
 
     for (const r of results) {

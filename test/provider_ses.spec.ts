@@ -178,9 +178,10 @@ describe("SesProvider.sendBatch", () => {
     );
 
     // Response mapping: 200 → accepted with the SES MessageId as providerId.
-    expect(results).toEqual([
-      { email: "reader@example.com", accepted: true, providerId: "0100-msgid-abc" },
-    ]);
+    expect(results).toEqual({
+      kind: "answered",
+      results: [{ email: "reader@example.com", accepted: true, providerId: "0100-msgid-abc" }],
+    });
 
     // Request shape.
     expect(captured).toBeDefined();
@@ -211,7 +212,7 @@ describe("SesProvider.sendBatch", () => {
     expect(text).not.toContain(UNSUB_SENTINEL);
   });
 
-  it("maps a 429 throttle to a retryable failure", async () => {
+  it("halts a 429 throttle as unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -223,14 +224,14 @@ describe("SesProvider.sendBatch", () => {
         },
       ),
     );
-    const [r] = await newProvider().sendBatch(
+    const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       {
         idempotencyKeyPrefix: "send-1",
       },
     );
-    expect(r).toMatchObject({ email: "reader@example.com", accepted: false, retryable: true });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
   });
 
   it("maps a permanent 400 (bad address) to a non-retryable failure", async () => {
@@ -245,26 +246,49 @@ describe("SesProvider.sendBatch", () => {
         },
       ),
     );
-    const [r] = await newProvider().sendBatch(
+    const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }],
       {
         idempotencyKeyPrefix: "send-1",
       },
     );
-    expect(r).toMatchObject({ accepted: false, retryable: false });
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [{ accepted: false, retryable: false }],
+    });
   });
 
-  it("maps a 5xx to a retryable failure", async () => {
+  it("halts a 5xx as unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<internal>", { status: 500 }));
-    const [r] = await newProvider().sendBatch(
+    const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       {
         idempotencyKeyPrefix: "send-1",
       },
     );
-    expect(r).toMatchObject({ accepted: false, retryable: true });
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
+  });
+
+  it.each([
+    [400, "SendingPausedException", "Account is paused"],
+    [400, "AccountSuspendedException", "Account is suspended"],
+    [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified"],
+    [403, "UnrecognizedClientException", "The security token included in the request is invalid"],
+  ])("halts a %i %s as an account refusal, carrying SES's words", async (status, type, message) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ __type: type, message }), { status }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: { reason: "account", error: `ses ${status} ${type}: ${message}` },
+    });
   });
 
   it("lets an ambiguous transport error throw (I4: no blind re-send)", async () => {

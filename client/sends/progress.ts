@@ -58,6 +58,22 @@ export function isWedged(s: SendSummary): boolean {
   return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
 }
 
+/**
+ * A send the provider refuses at the account level (a bad or revoked key, an unverified
+ * domain, a paused account; SPEC §12): still `sending`, nobody consumed, retried every
+ * tick, and unable to go on until the operator fixes the account. Read off the row, the
+ * same field the server derives `attention.refused` from.
+ */
+export function isRefused(s: SendSummary): boolean {
+  return s.status === "sending" && s.halt_reason === "account";
+}
+
+/** A send that needs the operator rather than patience, so its home is the attention
+ *  block, not the in-progress rows. */
+export function needsOperator(s: SendSummary): boolean {
+  return isWedged(s) || isRefused(s);
+}
+
 // Dispatch/delivery numbers from a `/sends` list row's denormalized counters, so the
 // active-send row and the dashboard widget need no per-send /progress read. `done` is
 // the dispatch fraction (accepted vs the frozen total), matching the watch's dispatch bar.

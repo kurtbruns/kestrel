@@ -10,7 +10,14 @@ import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor } from "../deployment";
 import { mount, poll } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
-import { activeRowHtml, countdowns, deliveredCell, isWedged } from "../sends/progress";
+import {
+  activeRowHtml,
+  countdowns,
+  deliveredCell,
+  isRefused,
+  isWedged,
+  needsOperator,
+} from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
@@ -65,10 +72,21 @@ function computeHealth(sends: SendSummary[]): HealthAlert[] {
       text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve on the Sent page.`,
     });
   }
+  // The provider refusing the account stops every send it touches until the operator
+  // fixes the account (SPEC §12): one red line, carrying the provider's own words.
+  const refused = sending.filter(isRefused);
+  const [firstRefused] = refused;
+  if (firstRefused) {
+    const noun = refused.length === 1 ? "a send" : `${refused.length} sends`;
+    alerts.push({
+      level: "red",
+      text: `The email provider is refusing this account, pausing ${noun}: ${firstRefused.halt_error ?? "no detail given"}. Fix it with the provider; sending resumes on its own.`,
+    });
+  }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
   // its home (a bar + a Watch link, kept live by the poll). The health line is loud-only,
   // so it keeps just the *stuck* case: a send that's been running unusually long.
-  const active = sending.filter((s) => !isWedged(s));
+  const active = sending.filter((s) => !needsOperator(s));
   const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
   if (stuck.length) {
     alerts.push({
@@ -173,7 +191,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // record view's live watch (#154). A glanceable entry point sitting with the health area.
   // It lives in its own `#dashActive` container and is polled live (below), so its bar
   // advances and it appears/clears without a manual reload.
-  const activeSends = sends.filter((s) => s.status === "sending" && !isWedged(s));
+  const activeSends = sends.filter((s) => s.status === "sending" && !needsOperator(s));
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -380,7 +398,7 @@ function liveSendSections(
       const { sends } = await api<SendListResponse>("/sends?status=sending&limit=200", {
         signal,
       });
-      const active = sends.filter((s) => !isWedged(s));
+      const active = sends.filter((s) => !needsOperator(s));
       setHtml($("#dashActive", root), dashActiveHtml(active));
       wireDashActiveCards(root);
       // On a transition (a send started or finished) the scheduled queue changed — a fired

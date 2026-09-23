@@ -4,7 +4,7 @@ import { FakeProvider } from "./fake";
 import { ResendProvider } from "./resend";
 import { SesProvider } from "./ses";
 import { SimProvider } from "./simulate";
-import type { EmailProvider } from "./types";
+import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } from "./types";
 
 export function getProvider(config: Config, env: AppEnv): EmailProvider {
   switch (config.provider) {
@@ -20,4 +20,25 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
     default:
       return new FakeProvider();
   }
+}
+
+/**
+ * A batch answer as one result per recipient, for the one-off callers (test sends,
+ * confirmations) that report a recipient's fate and have no send to hold open. A halt
+ * becomes the same failure for everyone in the batch; only the send loop acts on it.
+ */
+export function perRecipient(
+  result: SendBatchResult,
+  recipients: Recipient[],
+): PerRecipientResult[] {
+  if (result.kind === "answered") {
+    return result.results;
+  }
+  const { reason, error } = result.halt;
+  return recipients.map((r) => ({
+    email: r.email,
+    accepted: false as const,
+    retryable: reason === "unavailable",
+    error,
+  }));
 }

@@ -77,10 +77,13 @@ describe("ResendProvider.sendBatch", () => {
     expect(e0.headers["List-Unsubscribe-Post"]).toBe("List-Unsubscribe=One-Click");
 
     // --- response mapping ---
-    expect(results).toEqual([
-      { email: "a@example.com", accepted: true, providerId: "re_1" },
-      { email: "b@example.com", accepted: true, providerId: "re_2" },
-    ]);
+    expect(results).toEqual({
+      kind: "answered",
+      results: [
+        { email: "a@example.com", accepted: true, providerId: "re_1" },
+        { email: "b@example.com", accepted: true, providerId: "re_2" },
+      ],
+    });
   });
 
   it("derives a stable Idempotency-Key per chunk (same recipients => same key)", async () => {
@@ -100,26 +103,53 @@ describe("ResendProvider.sendBatch", () => {
     expect(key1["Idempotency-Key"]).toBe(key2["Idempotency-Key"]);
   });
 
-  it("maps a 429 to retryable failures", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("slow down", { status: 429 }));
-    const results = await makeProvider().sendBatch(
-      rendered,
-      [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }],
-      { idempotencyKeyPrefix: "send-1" },
-    );
-    expect(results[0]).toMatchObject({ email: "a@example.com", accepted: false, retryable: true });
+  const one = [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }];
+
+  it.each([
+    [429, { name: "rate_limit_exceeded", message: "Too many requests." }],
+    [429, { name: "daily_quota_exceeded", message: "You have exceeded your daily quota." }],
+    [500, { name: "application_error", message: "An unexpected error occurred." }],
+    [503, { name: "service_unavailable", message: "API is temporarily unavailable" }],
+    [409, { name: "concurrent_idempotent_requests", message: "Another request is in progress." }],
+  ])("halts the batch as unavailable on a %i %o", async (status, body) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
+    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    expect(result).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
   });
 
-  it("maps a 422 validation error to a non-retryable failure", async () => {
+  it.each([
+    [401, { name: "missing_api_key", message: "Missing API key in the authorization header." }],
+    [403, { name: "restricted_api_key", message: "API key is not active" }],
+    [403, { name: "suspended_api_key", message: "This API key is suspended" }],
+    [403, { name: "validation_error", message: "The example.com domain is not verified." }],
+    [400, { name: "invalid_api_key", message: "API key is invalid" }],
+  ])("halts the batch as an account refusal on a %i %o", async (status, body) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
+    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    expect(result).toMatchObject({ kind: "halted", halt: { reason: "account" } });
+    expect(result.kind === "halted" && result.halt.error).toContain(body.message);
+  });
+
+  it("never carries the API key in a halt's error, even when Resend echoes it", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({ name: "invalid_api_key", message: "API key re_test_key is invalid" }, 403),
+    );
+    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    expect(result.kind).toBe("halted");
+    expect(JSON.stringify(result)).not.toContain("re_test_key");
+  });
+
+  it("maps a 422 validation error to a non-retryable failure for each recipient", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       cannedResponse({ name: "validation_error", message: "bad" }, 422),
     );
-    const results = await makeProvider().sendBatch(
-      rendered,
-      [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }],
-      { idempotencyKeyPrefix: "send-1" },
-    );
-    expect(results[0]).toMatchObject({ email: "a@example.com", accepted: false, retryable: false });
+    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    expect(result.kind).toBe("answered");
+    expect(result.kind === "answered" && result.results[0]).toMatchObject({
+      email: "a@example.com",
+      accepted: false,
+      retryable: false,
+    });
   });
 });
 
