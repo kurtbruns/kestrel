@@ -1,7 +1,9 @@
 import { SELF } from "cloudflare:test";
+import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
 import { requireAuth } from "../src/auth/middleware";
+import { type AppEnv, getConfig } from "../src/env";
 import { buildReference } from "../src/reference";
 import { type RouteDef, Router } from "../src/router";
 import { adminAuth } from "./support/auth";
@@ -11,7 +13,7 @@ import { adminAuth } from "./support/auth";
 // tier that actually gates it, and a newly registered route shows up for free.
 
 describe("API reference is generated from the route registration", () => {
-  const router = createRouter("/archive");
+  const router = createRouter(getConfig(env as AppEnv));
   const defs = router.routes.map((r) => r.def);
 
   it("lists every registered route, each tagged with its own tier", () => {

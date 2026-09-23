@@ -12,10 +12,14 @@
  * Order is significant: the router returns the first matching pattern, so the
  * archive `${archiveBasePath}/:slug`, `/media/:key(.*)`, and `/` routes keep their
  * relative positions. Keep new routes grouped with their tier.
+ *
+ * The `/api/dev/*` routes are registered only when `devMode` holds, so a deployed env
+ * has no such routes at all (a 404 by absence, not by check) and its reference omits them.
  */
 
 import type { ReferenceResponse } from "../shared/reference";
 import { buildInfo } from "./build";
+import type { Config } from "./env";
 import { json } from "./lib/errors";
 import { HALT_BACKOFF_MS } from "./lib/time";
 import { buildReference } from "./reference";
@@ -49,9 +53,15 @@ function retrySchedule(steps: readonly number[]): string {
 /**
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
  * `getConfig`) drives the archive route so it can't drift from the emitted
- * archive URL — see the archive route below and SPEC §11.
+ * archive URL (see the archive route below and SPEC §11); `devMode` decides whether
+ * the dev routes exist.
  */
-export function createRouter(archiveBasePath: string): Router {
+export function createRouter({
+  archiveBasePath,
+  devMode,
+}: Pick<Config, "archiveBasePath" | "devMode">): Router {
+  /** The given routes in a dev-shaped env, none anywhere else. */
+  const devOnly = (...defs: RouteDef[]): RouteDef[] => (devMode ? defs : []);
   const r = new Router();
 
   const manifest: RouteDef[] = [
@@ -102,16 +112,16 @@ export function createRouter(archiveBasePath: string): Router {
       },
       handler: () => json(buildInfo()),
     },
-    {
+    ...devOnly({
       // Dev-only bootstrap that hands out the local admin token, so it must be public
-      // (there is no credential yet). 404s once deployed — see routes/dev.ts.
+      // (there is no credential yet). Absent once deployed, like every dev route.
       method: "GET",
       path: "/api/dev/token",
       access: "public",
       resource: "dev",
-      summary: "Mint a local dev admin token. 404s once deployed (Access-only).",
+      summary: "Mint a local dev admin token (local dev only).",
       handler: devRoutes.token,
-    },
+    }),
 
     // --- setup guide (authed; read-only, bundled from docs/) ---
     // Under /api so the same Access application that gates the authoring API
@@ -416,32 +426,32 @@ export function createRouter(archiveBasePath: string): Router {
       },
       handler: renderRoutes.test,
     },
-    {
-      method: "GET",
-      path: "/api/dev/outbox",
-      access: "admin",
-      resource: "dev",
-      summary: "Inspect the fake transport's outbox (dev only).",
-      handler: renderRoutes.devOutbox,
-    },
-    {
-      // Load the local demo dataset (fake transport only; 404s on a real provider).
-      method: "POST",
-      path: "/api/dev/seed",
-      access: "admin",
-      resource: "dev",
-      summary: "Load the local demo dataset (fake transport only).",
-      handler: devRoutes.seed,
-    },
-    {
-      // Wipe the local database back to a fresh install (fake transport only).
-      method: "POST",
-      path: "/api/dev/reset",
-      access: "admin",
-      resource: "dev",
-      summary: "Reset the local database to a fresh install (fake transport only).",
-      handler: devRoutes.reset,
-    },
+    ...devOnly(
+      {
+        method: "GET",
+        path: "/api/dev/outbox",
+        access: "admin",
+        resource: "dev",
+        summary: "Inspect the fake transport's outbox (local dev only).",
+        handler: renderRoutes.devOutbox,
+      },
+      {
+        method: "POST",
+        path: "/api/dev/seed",
+        access: "admin",
+        resource: "dev",
+        summary: "Load the local demo dataset (local dev only).",
+        handler: devRoutes.seed,
+      },
+      {
+        method: "POST",
+        path: "/api/dev/reset",
+        access: "admin",
+        resource: "dev",
+        summary: "Reset the local database to a fresh install (local dev only).",
+        handler: devRoutes.reset,
+      },
+    ),
 
     // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
     {

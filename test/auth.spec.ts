@@ -5,6 +5,7 @@ import { mintDevToken, verifyDevToken } from "../src/auth/dev_token";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import { adminAuth, DEV_SECRET } from "./support/auth";
+import { SES_DEPLOY } from "./support/deploy";
 
 describe("Access admin allowlist", () => {
   it("admits anyone when no allowlist is configured", () => {
@@ -78,17 +79,12 @@ describe("dev-token bootstrap endpoint", () => {
 
 describe("dev credential is inert in a deployed-shaped env", () => {
   const deployed = {
-    PROVIDER: "ses",
+    ...SES_DEPLOY,
     ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
     ACCESS_AUD: "aud-tag",
     DEV_AUTH_SECRET: DEV_SECRET,
-    APP_ORIGIN: "https://newsletter.example.com",
-    ARCHIVE_ORIGIN: "https://example.com",
+    APP_ORIGIN: "https://newsletter.birds.example",
     ARCHIVE_BASE_PATH: "/archive",
-    MEDIA_PUBLIC_BASE: "https://media.example.com",
-    SENDING_DOMAIN: "send.example.com",
-    FROM_ADDRESS: "News <news@send.example.com>",
-    AWS_REGION: "us-east-1",
   } as unknown as AppEnv;
 
   it("does not resolve devAuthSecret when provider is real and Access is configured", () => {
@@ -106,14 +102,31 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     expect(getConfig(halfDeployed).devAuthSecret).toBeUndefined();
   });
 
-  it("resolves devAuthSecret only in a dev-shaped env (fake + no Access)", () => {
+  it("resolves devAuthSecret only in a dev-shaped env (fake + no Access + loopback origin)", () => {
     const dev = {
       ...deployed,
       PROVIDER: "fake",
       ACCESS_TEAM_DOMAIN: undefined,
       ACCESS_AUD: undefined,
+      APP_ORIGIN: "http://localhost:8787",
     } as unknown as AppEnv;
     expect(getConfig(dev).devAuthSecret).toBe(DEV_SECRET);
+    const loopback = { ...dev, APP_ORIGIN: "http://127.0.0.1:8787" } as unknown as AppEnv;
+    expect(getConfig(loopback).devAuthSecret).toBe(DEV_SECRET);
+  });
+
+  // The development config deployed as-is, with `.dev.vars` uploaded as secrets: fake and
+  // no Access, so only the origin says it is not this machine. Without that check the
+  // public token route would hand out admin tokens.
+  it("does not resolve devAuthSecret for the fake transport served from a public origin", () => {
+    const pushedDev = {
+      ...deployed,
+      PROVIDER: "fake",
+      ACCESS_TEAM_DOMAIN: undefined,
+      ACCESS_AUD: undefined,
+    } as unknown as AppEnv;
+    expect(getConfig(pushedDev).devAuthSecret).toBeUndefined();
+    expect(getConfig(pushedDev).devMode).toBe(false);
   });
 
   it("still verifies a token in isolation (guard lives in config, not the verifier)", async () => {

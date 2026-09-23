@@ -19,6 +19,7 @@ import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
+import { SES_DEPLOY } from "./support/deploy";
 
 const config = () => getConfig(env);
 
@@ -27,7 +28,7 @@ const config = () => getConfig(env);
 const sesEnv = () =>
   ({
     ...env,
-    PROVIDER: "ses",
+    ...SES_DEPLOY,
     AWS_ACCESS_KEY_ID: "AKIARESOLVETEST",
     AWS_SECRET_ACCESS_KEY: "resolve-secret-key",
   }) as unknown as AppEnv;

@@ -285,8 +285,8 @@ export async function templateTest(c: RequestContext): Promise<Response> {
 }
 
 export async function devOutbox(c: RequestContext): Promise<Response> {
-  if (c.config.provider !== "fake") {
-    throw notFound("not available for this transport");
+  if (!c.config.devMode) {
+    throw notFound("only available in local development");
   }
   return json({ messages: fakeOutbox(), notifications: fakeNotifications() });
 }

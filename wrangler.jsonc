@@ -19,7 +19,9 @@
   // the Vitest pool). Its mail transport is the in-memory `fake` adapter, so dev
   // can never reach a real inbox. Named environments below (staging/production)
   // must REDECLARE bindings and vars — wrangler does not inherit them.
-  // Placeholder ids/domains are filled per-deployment; this is a generic template.
+  // Placeholder ids/domains are filled per-deployment; this is a generic template. A
+  // real provider refuses to start while any origin or FROM_ADDRESS is still on
+  // example.com (getConfig), so the placeholders can't ship by accident.
   // ---------------------------------------------------------------------------
 
   "triggers": { "crons": ["* * * * *"] },
@@ -52,8 +54,8 @@
   // Self-contained by default: ARCHIVE_ORIGIN defaults to APP_ORIGIN and
   // MEDIA_PUBLIC_BASE to `${APP_ORIGIN}/media`, both resolved in getConfig, so
   // they're omitted here. Set them only to opt into an apex archive or a media
-  // custom domain (see production below). ARCHIVE_BASE_PATH drives both the
-  // archive URL and the route that serves it.
+  // custom domain (docs/setup/06-archive-website.md). ARCHIVE_BASE_PATH drives both
+  // the archive URL and the route that serves it.
   "vars": {
     "PROVIDER": "fake",
     "APP_ORIGIN": "http://localhost:8787",
@@ -102,18 +104,13 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
-      // Shows both optional enhancements (SPEC §11). Drop ARCHIVE_ORIGIN and
-      // MEDIA_PUBLIC_BASE to stay self-contained like staging.
-      //   ARCHIVE_ORIGIN: surface the archive on the website apex — only if that
-      //     apex is a Cloudflare zone routing <APP_ORIGIN base path>/* to this Worker.
-      //   MEDIA_PUBLIC_BASE: serve images from a media. custom domain instead of
-      //     the Worker's own /media route.
+      // Self-contained, like staging. ARCHIVE_ORIGIN (the archive on a website apex) and
+      // MEDIA_PUBLIC_BASE (images from a media custom domain) are opt-in enhancements
+      // (SPEC §11); docs/setup/06-archive-website.md shows how to add them here.
       "vars": {
         "PROVIDER": "ses",
         "APP_ORIGIN": "https://newsletter.example.com",
-        "ARCHIVE_ORIGIN": "https://example.com",
         "ARCHIVE_BASE_PATH": "/archive",
-        "MEDIA_PUBLIC_BASE": "https://media.example.com",
         "SENDING_DOMAIN": "send.example.com",
         "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
         "AWS_REGION": "us-east-1"

@@ -17,6 +17,7 @@ import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
+import { RESEND_DEPLOY } from "./support/deploy";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
@@ -486,18 +487,18 @@ describe("the channel is deploy config", () => {
   });
 
   it("deployed: Cloudflare when bound, from kestrel@ the app's host unless NOTIFY_FROM says", () => {
-    const deployed = { PROVIDER: "resend", APP_ORIGIN: "https://newsletter.example.com" };
+    const deployed = { ...RESEND_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
     expect(cfg({ ...deployed, NOTIFY: binding })).toMatchObject({
       notifyChannel: "cloudflare",
-      notifyFrom: "Kestrel <kestrel@newsletter.example.com>",
+      notifyFrom: "Kestrel <kestrel@newsletter.birds.example>",
     });
     expect(
-      cfg({ ...deployed, NOTIFY: binding, NOTIFY_FROM: "alerts@newsletter.example.com" })
+      cfg({ ...deployed, NOTIFY: binding, NOTIFY_FROM: "alerts@newsletter.birds.example" })
         .notifyFrom,
-    ).toBe("alerts@newsletter.example.com");
+    ).toBe("alerts@newsletter.birds.example");
     expect(cfg(deployed)).toMatchObject({
       notifyChannel: "provider",
-      notifyFrom: env.FROM_ADDRESS,
+      notifyFrom: RESEND_DEPLOY.FROM_ADDRESS,
     });
   });
 });

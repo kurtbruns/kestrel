@@ -7,7 +7,7 @@
  *
  *   - the send loop (`runSend`) selecting the configured provider via `getConfig`
  *     + `getProvider`, chunking to `maxBatch`, and recording `provider_id`;
- *   - the actual router (`createRouter(basePath).handle`) dispatching `POST /webhooks/*`
+ *   - the actual router (`createRouter(config).handle`) dispatching `POST /webhooks/*`
  *     to that same provider and applying the normalized events;
  *   - the full loop: send -> provider id recorded -> signed webhook bounce ->
  *     suppression -> the address is dropped from the NEXT send's audience (I2).
@@ -32,13 +32,14 @@ import { base64Bytes } from "../src/providers/ses_mime";
 import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
 import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
+import { RESEND_DEPLOY, SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 
 // --- env overrides ----------------------------------------------------------
 
 const sesEnv = () =>
   ({
     ...env,
-    PROVIDER: "ses",
+    ...SES_DEPLOY,
     AWS_ACCESS_KEY_ID: "AKIAINTEGTEST",
     AWS_SECRET_ACCESS_KEY: "integ-secret-key",
     SES_CONFIGURATION_SET: "kestrel-events",
@@ -49,7 +50,7 @@ const WHSEC = `whsec_${btoa("integration-svix-signing-key-0123456789")}`;
 const resendEnv = () =>
   ({
     ...env,
-    PROVIDER: "resend",
+    ...RESEND_DEPLOY,
     RESEND_API_KEY: "re_integ_key",
     RESEND_WEBHOOK_SECRET: WHSEC,
   }) as unknown as AppEnv;
@@ -157,7 +158,7 @@ async function signedSnsBounce(
   const base: SnsEnvelope = {
     Type: "Notification",
     MessageId: crypto.randomUUID(),
-    TopicArn: "arn:aws:sns:us-east-1:123456789012:kestrel-ses",
+    TopicArn: SNS_TOPIC_ARN,
     Message: message,
     Timestamp: new Date().toISOString(),
     SignatureVersion: "2",
@@ -194,7 +195,7 @@ async function signedResendWebhook(payload: unknown): Promise<Request> {
 /** Dispatch a request through the real router with a given env. */
 async function route(req: Request, e: AppEnv): Promise<Response> {
   const ctx = createExecutionContext();
-  const res = await createRouter(getConfig(e).archiveBasePath).handle(req, e, ctx);
+  const res = await createRouter(getConfig(e)).handle(req, e, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }

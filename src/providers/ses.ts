@@ -14,9 +14,10 @@
  * SES or the account rather than the recipient (`classifySesError`) halts the batch at
  * that request instead of being repeated, identically, for everyone after it.
  *
- * Webhook: `parseWebhook` verifies the SNS signature, then confirms a
- * subscription or normalizes an SES bounce/complaint/delivery into events. It
- * has no idea about the database — the route applies the returned events.
+ * Webhook: `parseWebhook` verifies the SNS signature and that the message came from
+ * this deployment's `SNS_TOPIC_ARN`, then confirms a subscription or normalizes an SES
+ * bounce/complaint/delivery into events. It has no idea about the database: the
+ * route applies the returned events.
  *
  * SigV4 note: SESv2 signs under the service name `ses` (not `sesv2`), and the
  * endpoint host `email.{region}.amazonaws.com` would otherwise be misread as the
@@ -213,7 +214,14 @@ export class SesProvider implements EmailProvider {
     return { email: r.email, accepted: false, retryable: false, error };
   }
 
-  async parseWebhook(req: Request, _env: AppEnv): Promise<WebhookResult> {
+  async parseWebhook(req: Request, env: AppEnv): Promise<WebhookResult> {
+    // Fail closed: without the expected topic, no message can be told apart from one a
+    // stranger's topic sent, so nothing is accepted (getConfig also refuses to run so).
+    const expectedTopic = env.SNS_TOPIC_ARN?.trim();
+    if (!expectedTopic) {
+      return { events: [], response: textResponse("webhook topic not configured", 403) };
+    }
+
     let msg: SnsEnvelope;
     try {
       msg = JSON.parse(await req.text()) as SnsEnvelope;
@@ -224,6 +232,13 @@ export class SesProvider implements EmailProvider {
     // Signature first: the route is public, so nothing acts on an unverified msg.
     if (!(await verifySnsSignature(msg))) {
       return { events: [], response: textResponse("invalid signature", 403) };
+    }
+    // SNS signs for every topic in every account, so a valid signature proves only that
+    // SNS sent it. The topic proves it is ours, and is checked before any handling, a
+    // subscription confirmation included, so a foreign topic can neither subscribe this
+    // endpoint nor suppress the list with forged bounces (I1).
+    if (msg.TopicArn !== expectedTopic) {
+      return { events: [], response: textResponse("unexpected topic", 403) };
     }
 
     switch (msg.Type) {
