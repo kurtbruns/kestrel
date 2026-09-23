@@ -13,7 +13,7 @@ import { withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
-import { parseAddresses } from "../ui/format";
+import { invalidAddressesMessage, parseAddresses } from "../ui/format";
 import { highlightTemplate } from "../ui/highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
@@ -851,7 +851,12 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     $("#ttCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, isDirty() ? "Saving…" : "Sending…", async () => {
-        const addrs = parseAddresses(to.value);
+        const { valid: addrs, invalid } = parseAddresses(to.value);
+        const notAddresses = invalidAddressesMessage(invalid);
+        if (notAddresses) {
+          toast(notAddresses);
+          return;
+        }
         if (!addrs.length) {
           toast("Enter at least one email address");
           return;

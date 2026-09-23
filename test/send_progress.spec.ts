@@ -5,6 +5,7 @@ import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
+import { STUCK_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { buildSendProgress } from "../src/send/progress";
@@ -189,6 +190,28 @@ describe("GET /sends/:id/progress", () => {
     expect(body.state).toBe("sending");
     expect(body.phase).toBe("backing-off"); // work remains, nothing in flight
     expect(body.counts.pending).toBe(1);
+  });
+
+  it("flags a send in flight too long as stuck, the same on its list row as on its progress", async () => {
+    await seedConfirmed("s1@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    failFakeSendBatch(1);
+    await runSend(env, send.id); // left sending, with the recipient back in the queue
+    const read = async () => {
+      const list = (await (
+        await SELF.fetch(`${base}/sends?status=sending`, { headers: AUTH })
+      ).json()) as any;
+      const progress = (await (
+        await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })
+      ).json()) as any;
+      return [list.sends.find((r: any) => r.id === send.id).stuck, progress.attention.stuck];
+    };
+    expect(await read()).toEqual([false, false]);
+    // Started past the stuck threshold (SPEC §12): both surfaces say so.
+    await env.DB.prepare("UPDATE sends SET started_at = ? WHERE id = ?")
+      .bind(Date.now() - STUCK_THRESHOLD_MS - 60_000, send.id)
+      .run();
+    expect(await read()).toEqual([true, true]);
   });
 
   it("404s an unknown send and 401s without auth", async () => {

@@ -105,9 +105,22 @@ export interface Send {
 /** The list view's send: everything but the large frozen bodies. */
 export type SendSummary = Omit<Send, "rendered_html" | "rendered_text">;
 
+/**
+ * How long a send may stay `sending` before it is flagged as in flight too long (SPEC
+ * §12): long enough that an ordinary outage's retries never alarm, short enough to be
+ * told the same afternoon. The server decides the flag; the editor only words it.
+ */
+export const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
+
+/** A `GET /sends` row: the send, plus the flags the server derives for it. */
+export type SendListItem = SendSummary & {
+  /** In flight too long: the same flag as the send's progress `attention.stuck`. */
+  stuck: boolean;
+};
+
 /** GET /sends */
 export interface SendListResponse {
-  sends: SendSummary[];
+  sends: SendListItem[];
   page: PageMeta;
 }
 
