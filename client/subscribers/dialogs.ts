@@ -1,6 +1,7 @@
 // The subscriber actions taken from more than one surface: adding one (the list, the
 // dashboard's quick actions) and unsubscribing one (the list's row menu, the dashboard).
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SubscribeResponse, Subscriber } from "../../shared/subscribers";
 import { api } from "../api";
 import { $ } from "../ui/dom";
@@ -18,8 +19,8 @@ export function addSubscriberModal(onDone?: () => void): void {
   $("#aCancel", m.el).onclick = m.close;
   go.onclick = () =>
     busy(go, "Adding…", async () => {
-      const addr = input.value.trim();
-      if (!addr.includes("@")) {
+      const addr = normalizeEmail(input.value);
+      if (!isValidEmail(addr)) {
         toast("Enter a valid email");
         return;
       }

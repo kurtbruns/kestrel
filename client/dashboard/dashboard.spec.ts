@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostListItem } from "../../shared/posts";
-import type { SendSummary } from "../../shared/sends";
+import type { SendListItem } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
@@ -25,7 +25,7 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   author: "human",
   ...over,
 });
-const send = (over: Partial<SendSummary> = {}): SendSummary => ({
+const send = (over: Partial<SendListItem> = {}): SendListItem => ({
   id: "x1",
   post_id: "p3",
   status: "sent",
@@ -51,6 +51,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   c_complained: 0,
   c_skipped: 0,
   c_unsent: 0,
+  stuck: false,
   ...over,
 });
 const counts: SubscriberCounts = { pending: 3, confirmed: 40, unsubscribed: 2, suppressed: 1 };
@@ -80,7 +81,7 @@ const config = (): SettingsResponse =>
 
 // A stateful fake: the sends list filters on `status` like the Worker does, so the poll and
 // the queue refresh read the same world as the first render.
-function world(posts: PostListItem[], sends: () => SendSummary[], subs = counts) {
+function world(posts: PostListItem[], sends: () => SendListItem[], subs = counts) {
   return fakeApi([
     { path: "/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
     {
@@ -199,12 +200,16 @@ describe("dashboard", () => {
     const sends = [
       send({ id: "m1", status: "scheduled", fire_at: NOW - 1_000, started_at: null }),
       send({ id: "w1", status: "sending", c_pending: 0, c_in_flight: 2, locked_until: null }),
+      // The server's stuck flag decides, not a clock of the dashboard's own: eleven
+      // minutes in is not in flight too long (SPEC §12), and a send the server flags is.
+      send({ id: "ok1", status: "sending", c_pending: 5, started_at: NOW - 11 * 60_000 }),
       send({
         id: "st1",
         status: "sending",
         c_pending: 5,
         c_in_flight: 1,
-        started_at: NOW - 11 * 60_000,
+        started_at: NOW - 31 * 60_000,
+        stuck: true,
       }),
     ];
     fake = world([post()], () => sends);
@@ -216,9 +221,9 @@ describe("dashboard", () => {
     expect(lines).toEqual([
       "1 scheduled send passed the fire time without going out.",
       "2 ambiguous deliveries need a decision — resolve on the Sent page.",
-      "A send has been in progress over 10 minutes — it may be retrying.",
+      "A send has been in progress over 30 minutes — it may be retrying.",
     ]);
-    expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["st1"]);
+    expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["ok1", "st1"]);
   });
 
   it("raises one red line with the provider's words for a refused account, and keeps the send out of the active widget", async () => {

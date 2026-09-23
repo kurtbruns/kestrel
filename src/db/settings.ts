@@ -11,13 +11,14 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
+
+import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type {
   ConfirmationEmailCopy,
   NotificationPrefs,
   SettingsPatchBody,
 } from "../../shared/settings";
 import { HttpError } from "../lib/errors";
-import { isValidEmail, normalizeEmail } from "./subscribers";
 
 /**
  * The publication's identity. It themes the reader surface and the admin, and rides

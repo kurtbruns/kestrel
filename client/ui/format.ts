@@ -1,6 +1,8 @@
 // Pure formatting and parsing, with no DOM: dates, countdowns, the datetime-local value,
 // and the recipient list.
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
+
 /** A short local date-time, or an em dash for none. */
 export const fmt = (ms: number | null | undefined): string =>
   ms
@@ -13,25 +15,19 @@ export const fmt = (ms: number | null | undefined): string =>
     : "—";
 
 /**
- * Split a free-text recipient list (newlines or commas) into unique addresses.
- * Server-side validation is authoritative; this just tidies the Send-test input.
+ * Split a free-text recipient list (newlines or commas) into unique, normalized
+ * addresses, dropping any the server would refuse. Server-side validation is still
+ * authoritative; this just tidies the Send-test input.
  */
 export function parseAddresses(text: string | null | undefined): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+  const out = new Set<string>();
   for (const part of String(text || "").split(/[\n,]+/)) {
-    const a = part.trim();
-    if (!a.includes("@")) {
-      continue;
+    const a = normalizeEmail(part);
+    if (isValidEmail(a)) {
+      out.add(a);
     }
-    const key = a.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(a);
   }
-  return out;
+  return [...out];
 }
 
 /** A Date as the value of a `datetime-local` input, in local time. */

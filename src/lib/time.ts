@@ -15,8 +15,9 @@ export const SEND_NOW_BUFFER_MS = 5 * 60 * 1000; // 5 minutes
 export const LEASE_TTL_MS = 5 * 60 * 1000;
 /** A scheduled send later than this past its fire time is flagged MISSED_FIRE (still delivered). */
 export const MISSED_THRESHOLD_MS = 5 * 60 * 1000;
-/** A send stuck in `sending` longer than this is flagged STUCK_SEND. */
-export const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
+/** A send stuck in `sending` longer than this is flagged STUCK_SEND. In shared/, so the
+ *  editor words the flag with the same number the server raises it at. */
+export { STUCK_THRESHOLD_MS } from "../../shared/sends";
 /**
  * How long a halted send waits before each retry, by the reason it halted (SPEC §12): the
  * n-th halt in a row waits the n-th step, and the last step repeats for as long as the halt
