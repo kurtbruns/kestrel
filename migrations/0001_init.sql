@@ -100,7 +100,10 @@ CREATE TABLE settings (
 -- A send is created at schedule time and holds the frozen render (I3). Its status is
 -- scheduled -> sending -> sent, or canceled during the review window; a send never
 -- fails — it keeps retrying, and the one ambiguous case waits for a human (SPEC §12).
--- locked_until is the send-loop lease (overlap guard).
+-- locked_until is the send-loop lease (overlap guard), and lease_token names the run
+-- that holds it: every lease write and every delivery hand-off is conditioned on the
+-- token, so a run whose lease expired under it can neither release a successor's lease
+-- nor hand off rows the successor now owns.
 --
 -- A scheduled send's frozen render is made again in place when the template or the
 -- identity changes (SPEC §6, §9): the rendered columns are rewritten under a
@@ -128,6 +131,7 @@ CREATE TABLE sends (
   recipient_count INTEGER NOT NULL DEFAULT 0,  -- schedule-time snapshot for display; the
                                                -- audience is resolved when the send fires
   locked_until    INTEGER,                     -- send-loop lease (overlap guard)
+  lease_token     TEXT,                        -- the run holding the lease
   scheduled_at    INTEGER NOT NULL,
   started_at      INTEGER,
   completed_at    INTEGER,
@@ -172,6 +176,12 @@ CREATE UNIQUE INDEX idx_sends_one_active_per_post
 -- `bounce_kind` freezes the hard/soft split as a fact of THIS send, recorded when the
 -- event landed (I3, SPEC §8), rather than derived later from the global, clearable
 -- `suppressions` table — which would let a "frozen" record drift after the fact.
+--
+-- `dispatch_key` is the idempotency key a batch of recipients was handed off under. It
+-- is set when the rows move to `dispatched` and kept while their fate is unknown (still
+-- `dispatched`, or back in `pending` after a request that got no answer), so a resumed
+-- send re-sends exactly that batch under exactly that key and the provider dedupes it
+-- (I4). Recording the outcome clears it, which keeps its partial index small.
 CREATE TABLE deliveries (
   id           TEXT PRIMARY KEY,
   send_id      TEXT NOT NULL REFERENCES sends (id),
@@ -186,7 +196,9 @@ CREATE TABLE deliveries (
   event_detail TEXT,                           -- bounce subtype / complaint feedback / diagnostic
   event_at     INTEGER,                        -- when the event was applied (epoch ms)
   bounce_kind  TEXT CHECK (bounce_kind IN ('hard', 'soft')),
+  dispatch_key TEXT,                           -- the hand-off's idempotency key, while unanswered
   UNIQUE (send_id, email)
 );
 CREATE INDEX idx_deliveries_send_status ON deliveries (send_id, status);
 CREATE INDEX idx_deliveries_provider ON deliveries (provider_id);
+CREATE INDEX idx_deliveries_dispatch_key ON deliveries (dispatch_key) WHERE dispatch_key IS NOT NULL;

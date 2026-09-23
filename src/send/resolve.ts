@@ -65,7 +65,7 @@ export async function resolveStuckSend(
   const stillDispatched = await sends.countDeliveries(env.DB, sendId, "dispatched");
   let completed = false;
   if (pending === 0 && stillDispatched === 0) {
-    await sends.completeSend(env.DB, sendId, send.post_id, now);
+    await sends.completeSend(env.DB, sendId, send.post_id, now, null);
     completed = true;
   }
 

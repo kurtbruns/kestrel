@@ -74,6 +74,8 @@ While you are here, set each environment's public `vars` (these are **not** secr
 
 `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` are **optional** — leave them unset to stay self-contained (archives and images serve on `APP_ORIGIN`). They are the opt-in enhancements covered in "Wire the archive to a website."
 
+`SUBREQUEST_BUDGET` is **optional** too. Cloudflare caps how many D1 queries and outbound requests one Worker invocation may make, and each minute's send sweep is one invocation, so a large send is delivered over several ticks, each stopping before the cap. Unset, the budget is 50, the Workers Free plan's limit, which is correct on any plan. On Workers Paid, which allows 1,000 D1 queries per invocation, set `"SUBREQUEST_BUDGET": "1000"` in that environment's `vars` so each tick delivers about twenty times as much. Never set it above your plan's limit: a tick that hits the cap is cut off mid-batch, and the send stalls until its lease expires.
+
 > **Pick `ARCHIVE_BASE_PATH` before your first send.** Archive URLs are permanent (I3): every post you send carries its `<base>/<slug>` link forever. Changing the prefix later orphans the links already mailed under the old one. The default is `/archive`; if you are migrating an install that already sent `/newsletter/…` links, set `ARCHIVE_BASE_PATH=/newsletter` to keep them alive.
 
 After editing `wrangler.jsonc`, regenerate the binding types and typecheck:

@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- A send through Resend to 100 or more subscribers now goes out; before, it never left `sending`. Until 1.0.0 the database baseline is edited in place, and this change touches it: stop `wrangler dev`, delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.
+- A large send now spans several sweep ticks, each staying inside Cloudflare's per-invocation limits, instead of being cut off partway through a batch; a Resend batch interrupted after it was accepted is re-sent under the same idempotency key, so no one is mailed twice. The default fits the Workers Free plan; on Workers Paid, set `SUBREQUEST_BUDGET` to 1000 for faster sends (see the setup guide's Provision step).
 - Scheduling a post, or sending it now, no longer goes ahead when the save it runs first was refused because the draft had changed elsewhere; it would have frozen the other writer's version. The dialog closes on the out-of-date banner instead, and your unsaved edits are left as they were.
 - Uploading or removing the publication logo now updates the confirmation email's preview at once, instead of leaving the old logo there until another field is edited.
 - The API reference's method badges (GET/POST/PUT/DELETE) now follow dark mode instead of staying their light-mode colors.

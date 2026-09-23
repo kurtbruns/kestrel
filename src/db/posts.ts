@@ -83,8 +83,8 @@ function postWhere(filter: PostFilter): { clause: string; binds: unknown[] } {
     where.push("p.status = ?");
     binds.push(statuses[0]);
   } else if (statuses.length > 1) {
-    where.push(`p.status IN (${statuses.map(() => "?").join(", ")})`);
-    binds.push(...statuses);
+    where.push("p.status IN (SELECT value FROM json_each(?))");
+    binds.push(JSON.stringify(statuses));
   }
   const term = filter.search?.trim().toLowerCase();
   if (term) {

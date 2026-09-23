@@ -4,8 +4,10 @@
  * with the unsubscribe sentinel already substituted — exactly what a real
  * provider would send — so tests can assert the delivered bytes.
  *
- * `idempotentRetry` is true, so it dedupes on the per-recipient idempotency key
- * (send id : email): re-sending after a crash records each recipient once (I4).
+ * `idempotentRetry` is true, so it dedupes per recipient under the batch's key (the
+ * send loop's dispatch key, else the caller's prefix): re-sending a batch after a crash
+ * records each recipient once (I4), and a recipient re-sent under a different key would
+ * show up twice, as it would at a real provider.
  * `failFakeSendBatch(n)` makes the next n sendBatch calls throw at the start
  * (a transient-outage stand-in) so the resume path is testable.
  */
@@ -63,13 +65,14 @@ export class FakeProvider implements EmailProvider {
       throw new Error("fake transient failure");
     }
     return recipients.map((r) => {
-      const key = `${opts.idempotencyKeyPrefix}:${r.email}`;
+      const key = `${opts.idempotencyKey ?? opts.idempotencyKeyPrefix}:${r.email}`;
       const existing = sentKeys.get(key);
       if (existing) {
         // Deduped: a real idempotent provider would not re-deliver.
         return { email: r.email, accepted: true, providerId: existing };
       }
-      const providerId = `fake-${key}`;
+      // Named by the caller and address, not the key, so a test can predict it.
+      const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
       const final = substituteRecipient(rendered, {
         "email.unsubscribeUrl": r.unsubscribeUrl,
         "email.sentTo": r.email,
