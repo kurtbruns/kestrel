@@ -76,7 +76,7 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 
 ## GitHub issues
 
-An issue's body is the whole, current statement of the work, since whoever picks it up often reads only the body. To add to or change what an issue asks for, rewrite the body; do not comment.
+In this repo's tracker (`kurtbruns/kestrel`), an issue's body is the whole, current statement of the work, since whoever picks it up often reads only the body. To add to or change what an issue asks for, rewrite the body; do not comment.
 
 - **Body or comment.** Would someone who reads only the body do the work wrong or incompletely without this? Then it goes in the body. Status notes, questions for the author, discussion replies, and PR pointers stay comments. For an issue someone else wrote, propose the change in a comment unless the user asks you to edit the body.
 - **Rewriting.** Read the body into a scratch file, integrate the change where it belongs (replace what it makes stale; don't append), show the user the diff and wait for a yes, re-read the body in case it changed, then save with `gh issue edit <n> --body-file <file>`. Confirm every rewrite, including on issues you wrote.
