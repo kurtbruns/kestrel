@@ -46,3 +46,5 @@ By default images serve from the Worker's `/media` route. To serve them from a d
 ```
 
 New renders then resolve image URLs to that host. This is purely cosmetic/CDN convenience; the self-contained default is fully functional without it.
+
+**Add the `/media` route's headers to that host.** The Worker's `/media` route serves every file with `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff`, so an uploaded file can never run as a page. A bucket custom domain serves the bytes without them. Post images are limited to PNG, JPEG, WebP, and GIF, but the logo may be an SVG, which a browser runs as a page when opened directly. Set the same two headers on the media host with a Response Header Transform Rule (your zone → Rules → Transform Rules → Modify Response Header), matching `http.host eq "media.example.com"`, setting `Content-Security-Policy` to `sandbox` and `X-Content-Type-Options` to `nosniff`.

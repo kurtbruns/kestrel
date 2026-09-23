@@ -173,7 +173,7 @@ export async function renderEditor(
             ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
             : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
         }
-        <input type="file" id="imgInput" accept="image/*" multiple hidden>
+        <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
       </div>
       <div id="warnings"></div>
 
