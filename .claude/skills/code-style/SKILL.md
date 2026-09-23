@@ -1,5 +1,5 @@
 ---
-name: Code style
+name: code-style
 description: Kestrel's TypeScript conventions, covering module shape (header, then imports, then code), naming, and the worker/client differences, plus a repeatable audit to check the tree against them. Use when writing a new module, deciding function-declaration vs arrow or how to shape exports, reviewing a diff for style drift, or auditing the whole codebase for consistency.
 ---
 
@@ -36,7 +36,7 @@ Never restate these in a review; `npm run check` and `npm run typecheck` decide 
 
 ## Worker only (`src/`)
 
-- An operator-visible condition logs one line, `console.error("TAG", { ids })`: an uppercase tag, then the identifiers someone would grep by. `src/send/sweep.ts` is the pattern. Nothing else in `src/` writes to the console except the unhandled-error fallback in `lib/errors.ts` and the dev-only send simulation.
+- An operator-visible condition logs one line, `console.error("TAG", { ids })`: an uppercase tag, then the identifiers someone would grep by. `src/send/sweep.ts` is the pattern. Nothing else in `src/` writes to the console except the unhandled-error fallback in `lib/errors.ts` and the dev-only send simulation (`providers/simulate.ts`).
 - An API route reports a failure by throwing an `HttpError` through the constructors in `src/lib/errors.ts`; `toErrorResponse` shapes the body once. The reader surface (`routes/public.ts`, `routes/archive.ts`) renders a page and picks its own status, since a subscriber sees a page, not JSON.
 - Module headers are `/** … */`.
 
@@ -83,7 +83,7 @@ find src client shared test -name '*.ts' | xargs -n1 basename | grep -E '[A-Z]|-
 grep -rn 'from "\.\./src\|from "\.\./\.\./src' client shared --include='*.ts'
 
 # 7. console.* in src/ outside the allowed spots
-grep -rn "console\." src --include='*.ts' --exclude='*.spec.ts' | grep -v "^src/dev/"
+grep -rn "console\." src --include='*.ts' --exclude='*.spec.ts' | grep -vE "^src/(send/sweep|lib/errors|providers/simulate)\.ts:"
 
 # 8. Hand-built error Responses in API routes (should throw HttpError instead)
 grep -rnE "new Response\(.*(4[0-9]{2}|5[0-9]{2})|status: (4|5)[0-9]{2}" src/routes/*.ts | grep -v "src/routes/public.ts\|src/routes/archive.ts"
