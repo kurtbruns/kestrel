@@ -84,9 +84,7 @@ describe("settings view", () => {
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
     // Nothing scheduled: the note says where the identity shows up, and no more.
-    expect($(".set-note span").textContent).toBe(
-      "Shown in every email; your template leaves out your tagline and mailing address.",
-    );
+    expect($(".set-note span").textContent).toBe("Shown in every email.");
     expect($$(".set-inbox-from")[0]?.textContent).toBe("Birds");
     expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());

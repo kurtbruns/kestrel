@@ -3,7 +3,6 @@
 
 import type {
   ConfirmationEmailCopy,
-  IdentityField,
   LogoResponse,
   SettingsPatchBody,
   SettingsResponse,
@@ -158,30 +157,10 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   // rest, at the moment it matters, so the standing note stays one or two short lines.
   const inUse = data.inUse;
   const identityNote = (() => {
-    const names: Record<IdentityField, string> = {
-      name: "name",
-      tagline: "tagline",
-      address: "mailing address",
-      logoUrl: "logo",
-    };
-    const all: IdentityField[] = ["name", "tagline", "address", "logoUrl"];
-    const used = all.filter((f) => (inUse.identityFields || []).includes(f));
-    const unused = all.filter((f) => !used.includes(f));
-    // "logo", "tagline and logo", or "name, tagline, and logo".
-    const list = (fs: IdentityField[]) => {
-      const words = fs.map((f) => names[f]);
-      const last = words.pop() ?? "";
-      if (!words.length) {
-        return last;
-      }
-      return words.length === 1 ? `${words[0]} and ${last}` : `${words.join(", ")}, and ${last}`;
-    };
-    if (!used.length) {
+    if (!(inUse.identityFields || []).length) {
       return "Your email template doesn’t show any of these.";
     }
-    const shown = unused.length
-      ? `Shown in every email; your template leaves out your ${list(unused)}.`
-      : "Shown in every email.";
+    const shown = "Shown in every email.";
     const n = inUse.sends.length;
     if (!n) {
       return shown;
