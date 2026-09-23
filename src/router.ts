@@ -13,7 +13,7 @@
  * share a `RequestContext`. All errors funnel through `toErrorResponse`, so
  * handlers can just `throw new HttpError(...)`.
  */
-import type { Access, QueryParam, RouteExample } from "../shared/reference";
+import type { Access, QueryParam, Resource, RouteExample } from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
@@ -68,6 +68,8 @@ export interface RouteDef {
   method: Method;
   path: string;
   access: Access;
+  /** What the route acts on; the reference groups by it within the tier. */
+  resource: Resource;
   summary: string;
   description?: string;
   /** Query parameters, documented from the registration so the reference can't drift. */

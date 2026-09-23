@@ -61,6 +61,31 @@ describe("API reference is generated from the route registration", () => {
     expect(groups.map((g) => g.access)).toEqual(["admin", "public", "webhook"]);
   });
 
+  it("groups each tier by the resource every route declares, publication work first", () => {
+    const groups = buildReference(defs);
+    const admin = groups.find((g) => g.access === "admin");
+    expect(admin?.resources.map((res) => res.key)).toEqual([
+      "posts",
+      "sends",
+      "subscribers",
+      "suppressions",
+      "settings",
+      "system",
+      "dev",
+    ]);
+    expect(admin?.resources.find((res) => res.key === "posts")?.title).toBe("Posts");
+    // Each route carries the resource it declared, and a tier's routes run resource by
+    // resource in the order its resources are listed.
+    const declared = new Map(defs.map((d) => [`${d.method} ${d.path}`, d.resource]));
+    for (const g of groups) {
+      for (const r of g.routes) {
+        expect(r.resource).toBe(declared.get(`${r.method} ${r.path}`));
+      }
+      const runs = g.routes.map((r) => r.resource).filter((k, i, all) => k !== all[i - 1]);
+      expect(runs).toEqual(g.resources.map((res) => res.key));
+    }
+  });
+
   it("documents the declared tier as the tier that actually gates the route", () => {
     // `access` DRIVES the gate: admin ⇒ requireAuth present; public/webhook ⇒ absent.
     for (const route of router.routes) {
@@ -90,6 +115,7 @@ describe("API reference is generated from the route registration", () => {
       method: "POST",
       path: "/demo/thing",
       access: "admin",
+      resource: "posts",
       summary: "A freshly registered admin route.",
       handler: () => new Response("ok"),
     };
@@ -98,6 +124,7 @@ describe("API reference is generated from the route registration", () => {
       method: "GET",
       path: "/demo/public",
       access: "public",
+      resource: "archive",
       summary: "A freshly registered public route.",
       handler: () => new Response("ok"),
     });

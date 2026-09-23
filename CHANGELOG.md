@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Added
+
+- `GET /api/reference` now tags each route with the resource it acts on (posts, sends, subscribers, and so on) and lists each tier's resources, so a client can group the routes the way the reference does.
+
+### Changed
+
+- The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter to the rail (press `/` to focus it).
+
 ### Fixed
 
 - Scheduling a post, or sending it now, no longer goes ahead when the save it runs first was refused because the draft had changed elsewhere; it would have frozen the other writer's version. The dialog closes on the out-of-date banner instead, and your unsaved edits are left as they were.

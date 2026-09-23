@@ -47,6 +47,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/health",
       access: "public",
+      resource: "system",
       summary: "Liveness probe.",
       handler: () => json({ status: "ok", service: "kestrel" }),
     },
@@ -56,6 +57,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/whoami",
       access: "admin",
+      resource: "system",
       summary: "The authenticated principal and the auth mode (access or dev).",
       handler: (c) =>
         json({
@@ -71,6 +73,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/version",
       access: "admin",
+      resource: "system",
       summary:
         "The running build: version, short SHA, release tag (if this build is one), build time, and repo links.",
       example: {
@@ -92,6 +95,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/dev/token",
       access: "public",
+      resource: "dev",
       summary: "Mint a local dev admin token. 404s once deployed (Access-only).",
       handler: devRoutes.token,
     },
@@ -103,6 +107,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/docs",
       access: "admin",
+      resource: "system",
       summary: "The setup guide as sanitized HTML fragments, in reading order (JSON).",
       handler: docsRoutes.list,
     },
@@ -112,6 +117,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/reference",
       access: "admin",
+      resource: "system",
       summary: "Every route, generated from the registration so it can't drift.",
       // Returned as data (the SPA renders it natively as a sidebar plus sections, no iframe);
       // it's also a machine-readable listing of the surface for Claude and tooling.
@@ -128,6 +134,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/settings",
       access: "admin",
+      resource: "settings",
       summary:
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
       description:
@@ -157,6 +164,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "PUT",
       path: "/api/settings",
       access: "admin",
+      resource: "settings",
       summary:
         "Update runtime preferences: test recipients, the publication identity, the email template, the confirmation email wording.",
       description:
@@ -183,6 +191,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/api/settings/logo",
       access: "admin",
+      resource: "settings",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
         "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out.",
@@ -192,6 +201,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "DELETE",
       path: "/api/settings/logo",
       access: "admin",
+      resource: "settings",
       summary: "Remove the publication logo.",
       description:
         "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead.",
@@ -204,6 +214,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/api/settings/template/test",
       access: "admin",
+      resource: "settings",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
       description:
@@ -220,6 +231,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts",
       access: "admin",
+      resource: "posts",
       summary: "Create a draft post.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
@@ -234,6 +246,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts",
       access: "admin",
+      resource: "posts",
       summary:
         "List posts. Filter, sort, and paginate via query params; returns a `page` envelope.",
       query: [
@@ -258,6 +271,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id",
       access: "admin",
+      resource: "posts",
       summary:
         "One post with its current markdown and any active schedule; `scheduled.remade_at` says when a template or identity change last re-made its email.",
       handler: postRoutes.getPost,
@@ -266,6 +280,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "PUT",
       path: "/posts/:id",
       access: "admin",
+      resource: "posts",
       summary:
         "Update a draft. Send `base_revision` (or If-Match) for optimistic concurrency (409 on conflict).",
       description:
@@ -285,6 +300,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "DELETE",
       path: "/posts/:id",
       access: "admin",
+      resource: "posts",
       summary: "Delete a draft and its revisions (drafts only).",
       handler: postRoutes.deletePost,
     },
@@ -292,6 +308,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id/revisions",
       access: "admin",
+      resource: "posts",
       summary: "The post's revision history.",
       handler: postRoutes.listRevisions,
     },
@@ -299,6 +316,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id/revisions/:n",
       access: "admin",
+      resource: "posts",
       summary: "One revision by its number.",
       handler: postRoutes.getRevision,
     },
@@ -308,6 +326,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/images",
       access: "admin",
+      resource: "posts",
       summary: "Upload an image to a post (multipart form field `file`).",
       handler: imageRoutes.uploadImage,
     },
@@ -315,6 +334,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id/images",
       access: "admin",
+      resource: "posts",
       summary: "List a post's images.",
       handler: imageRoutes.listImages,
     },
@@ -322,6 +342,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "DELETE",
       path: "/posts/:id/images/:filename",
       access: "admin",
+      resource: "posts",
       summary: "Delete one image from a post.",
       handler: imageRoutes.deleteImage,
     },
@@ -331,6 +352,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/preview",
       access: "admin",
+      resource: "posts",
       summary:
         "Render the post to its email (returns the hosted URL, subject, warnings, and `frozen`).",
       description:
@@ -341,6 +363,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/posts/:id/preview",
       access: "admin",
+      resource: "posts",
       summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
@@ -350,6 +373,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/test",
       access: "admin",
+      resource: "posts",
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
       description:
@@ -371,6 +395,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/api/dev/outbox",
       access: "admin",
+      resource: "dev",
       summary: "Inspect the fake transport's outbox (dev only).",
       handler: renderRoutes.devOutbox,
     },
@@ -379,6 +404,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/api/dev/seed",
       access: "admin",
+      resource: "dev",
       summary: "Load the local demo dataset (fake transport only).",
       handler: devRoutes.seed,
     },
@@ -387,6 +413,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/api/dev/reset",
       access: "admin",
+      resource: "dev",
       summary: "Reset the local database to a fresh install (fake transport only).",
       handler: devRoutes.reset,
     },
@@ -396,6 +423,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/schedule",
       access: "admin",
+      resource: "posts",
       summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400.",
@@ -409,6 +437,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/posts/:id/send",
       access: "admin",
+      resource: "posts",
       summary:
         "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post.",
       description:
@@ -422,6 +451,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends",
       access: "admin",
+      resource: "sends",
       summary:
         "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled.",
       query: [
@@ -449,6 +479,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends/:id",
       access: "admin",
+      resource: "sends",
       summary:
         "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent).",
       handler: sendRoutes.get,
@@ -457,6 +488,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends/:id/progress",
       access: "admin",
+      resource: "sends",
       summary:
         "Live in-flight progress: a single-row read off the counters — dispatch/delivery bars, derived phase, and attention flags. The poll target for the watch view.",
       example: {
@@ -486,6 +518,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends/:id/deliveries",
       access: "admin",
+      resource: "sends",
       summary:
         "The send's per-recipient delivery rows (JSON), filtered by outcome view and paginated; returns a `page` envelope. Reads the delivery rows directly (the source of truth), not the progress counters — heavier than `/progress`, so it is not a poll target.",
       query: [
@@ -524,6 +557,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/sends/:id/deliveries.csv",
       access: "admin",
+      resource: "sends",
       summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
       handler: sendRoutes.deliveriesCsv,
     },
@@ -531,6 +565,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/sends/:id/cancel",
       access: "admin",
+      resource: "sends",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       handler: sendRoutes.cancel,
     },
@@ -538,6 +573,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/sends/:id/reschedule",
       access: "admin",
+      resource: "sends",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
         "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. Same minimum lead as scheduling.",
@@ -551,6 +587,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/sends/:id/resolve",
       access: "admin",
+      resource: "sends",
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
@@ -567,6 +604,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/subscribers",
       access: "admin",
+      resource: "subscribers",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
       handler: subscriberRoutes.create,
     },
@@ -574,6 +612,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/subscribers",
       access: "admin",
+      resource: "subscribers",
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
       description:
@@ -603,6 +642,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/subscribers/:id",
       access: "admin",
+      resource: "subscribers",
       summary: "One subscriber.",
       handler: subscriberRoutes.get,
     },
@@ -610,6 +650,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/subscribers/:id/unsubscribe",
       access: "admin",
+      resource: "subscribers",
       summary: "Unsubscribe a subscriber (admin-initiated).",
       handler: subscriberRoutes.unsubscribe,
     },
@@ -619,6 +660,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/suppressions",
       access: "admin",
+      resource: "suppressions",
       summary: "List suppressed addresses (bounced or complained, never mailed).",
       handler: suppressionRoutes.list,
     },
@@ -626,6 +668,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/suppressions",
       access: "admin",
+      resource: "suppressions",
       summary: "Suppress an address manually.",
       handler: suppressionRoutes.add,
     },
@@ -633,6 +676,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "DELETE",
       path: "/suppressions/:email",
       access: "admin",
+      resource: "suppressions",
       summary: "Clear a suppression for an address.",
       handler: suppressionRoutes.clear,
     },
@@ -642,6 +686,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/webhooks/ses",
       access: "webhook",
+      resource: "delivery",
       summary: "SES/SNS bounce + complaint notifications (SNS-signature-verified in the adapter).",
       handler: webhookRoutes.ses,
     },
@@ -654,6 +699,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/",
       access: "public",
+      resource: "archive",
       summary:
         "The newsletter's public landing page: identity, the latest post, and a subscribe call to action.",
       handler: archiveRoutes.landing,
@@ -662,6 +708,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/subscribe",
       access: "public",
+      resource: "subscriptions",
       summary: "The public subscribe form (HTML).",
       handler: publicRoutes.subscribeForm,
     },
@@ -669,6 +716,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/subscribe",
       access: "public",
+      resource: "subscriptions",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       example: {
         request: { email: "you@example.com" },
@@ -680,6 +728,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/confirm",
       access: "public",
+      resource: "subscriptions",
       summary: "Confirm a subscription from the emailed link (`?token=`).",
       handler: publicRoutes.confirm,
     },
@@ -687,6 +736,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/unsubscribe",
       access: "public",
+      resource: "subscriptions",
       summary: "Unsubscribe landing page (`?token=`).",
       handler: publicRoutes.unsubscribeLanding,
     },
@@ -694,6 +744,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/unsubscribe",
       access: "public",
+      resource: "subscriptions",
       summary: "Process a one-click / form unsubscribe (`?token=`).",
       handler: publicRoutes.unsubscribe,
     },
@@ -703,6 +754,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "POST",
       path: "/webhooks/resend",
       access: "webhook",
+      resource: "delivery",
       summary: "Resend delivery + bounce + complaint events (signature-verified in the adapter).",
       handler: webhookRoutes.resend,
     },
@@ -718,6 +770,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: `${archiveBasePath}{/}?`,
       access: "public",
+      resource: "archive",
       summary: "The public archive index: every sent post, newest first.",
       handler: archiveRoutes.archiveIndex,
     },
@@ -725,6 +778,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: `${archiveBasePath}/:slug`,
       access: "public",
+      resource: "archive",
       summary: "A frozen post's archive page / view-in-browser (I3).",
       handler: archiveRoutes.archivePage,
     },
@@ -734,6 +788,7 @@ export function createRouter(archiveBasePath: string): Router {
       method: "GET",
       path: "/media/:key(.*)",
       access: "public",
+      resource: "media",
       summary: "Serve image bytes from storage (public; readers + archive load these).",
       handler: imageRoutes.serveMedia,
     },
