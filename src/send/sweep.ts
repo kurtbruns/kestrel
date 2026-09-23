@@ -19,7 +19,7 @@
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import { Budget, metered } from "./budget";
@@ -52,7 +52,9 @@ export async function sweep(env: AppEnv): Promise<void> {
   // 2) Resume interrupted sends whose lease has expired (and halted ones whose next retry
   // is due), if the budget still has room
   // for one run after the query that finds them.
-  const resumable = budget.affords(1 + MIN_RUN_COST) ? await sends.resumableSends(db, now) : [];
+  const resumable = budget.affords(1 + MIN_RUN_COST)
+    ? await sends.resumableSends(db, now, now + HALT_RETRY_SLACK_MS)
+    : [];
   for (const s of resumable) {
     if (handled.has(s.id)) {
       continue;

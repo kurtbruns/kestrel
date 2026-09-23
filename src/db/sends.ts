@@ -604,15 +604,19 @@ export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> 
 }
 
 /** Sends left mid-flight whose lease has expired, and whose halt, if they carry one, is
- *  due its next retry (SPEC §12): resume them. A send still waiting out its backoff costs
- *  the sweep nothing past this query. */
-export async function resumableSends(db: D1Database, now: number): Promise<SendRow[]> {
+ *  due its next retry by `retryDueBy` (SPEC §12): resume them. A send still waiting out its
+ *  backoff costs the sweep nothing past this query. */
+export async function resumableSends(
+  db: D1Database,
+  now: number,
+  retryDueBy: number,
+): Promise<SendRow[]> {
   const { results } = await db
     .prepare(
       `SELECT * FROM sends WHERE status = 'sending' AND (locked_until IS NULL OR locked_until < ?)
           AND (halt_retry_at IS NULL OR halt_retry_at <= ?) ORDER BY started_at ASC`,
     )
-    .bind(now, now)
+    .bind(now, retryDueBy)
     .all<SendRow>();
   return results;
 }

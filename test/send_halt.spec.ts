@@ -258,12 +258,15 @@ describe("the provider refusing the account", () => {
 describe("the halt's backoff", () => {
   const MIN = 60_000;
 
-  /** Record the clock at every provider request, as minutes since the first. */
+  /** Record the clock at every provider request, as minutes since the first. Each request
+   *  takes a second to answer, as a real one does, so the halt is stamped a moment after the
+   *  tick began and not exactly on it. */
   function requestMinutes(provider: ResendLikeProvider): () => number[] {
     const at: number[] = [];
     const send = provider.sendBatch.bind(provider);
     vi.spyOn(provider, "sendBatch").mockImplementation((...args) => {
       at.push(Date.now());
+      vi.setSystemTime(Date.now() + 1000);
       return send(...args);
     });
     return () => at.map((t) => Math.round((t - at[0]!) / MIN));
@@ -283,9 +286,12 @@ describe("the halt's backoff", () => {
       resend.rateLimit = 1_000;
     }
 
+    // Ticks on the cron's own minutes, however long each request took.
+    const start = Date.now();
     let retries = 0;
-    for (let i = 0; i < 180; i++) {
-      await minute();
+    for (let i = 1; i <= 180; i++) {
+      vi.setSystemTime(start + i * MIN);
+      await sweep(capped());
       const now = (await sends.getSend(env.DB, send.id))!;
       if (now.halt_retries > retries) {
         // Each halt schedules the next retry by the schedule's next step, capped at its last.

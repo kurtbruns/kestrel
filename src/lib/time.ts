@@ -32,6 +32,13 @@ export const HALT_BACKOFF_MS: Record<HaltReason, readonly number[]> = {
   unavailable: [1, 2, 5, 15, 30, 60].map((m) => m * 60 * 1000),
   account: [5, 15, 30, 60].map((m) => m * 60 * 1000),
 };
+/**
+ * How early a halted send's retry may run. The halt is stamped after the provider answered,
+ * a moment into the tick, and cron ticks drift by a little either way, so a retry due at
+ * exactly one step from the halt would fall just after the tick meant to run it and wait a
+ * whole extra tick. Half a tick of slack makes each step land on the tick it names.
+ */
+export const HALT_RETRY_SLACK_MS = 30 * 1000;
 /** How far back a finished or late send is still news: the sweep records a notification
  *  only for one that finished or fired within this, so the first tick after notifications
  *  are set up never mails the publisher about the whole history. */
