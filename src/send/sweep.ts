@@ -3,7 +3,7 @@
  *   1. fire due sends (and loudly flag any that missed their fire time),
  *   2. resume sends left mid-flight by a crash (expired lease),
  *   3. flag anomalies (stuck sends, ambiguous in-flight deliveries),
- *   4. notify the publisher of what finished or needs them (`notify/notify.ts`).
+ *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`).
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
  * timeliness problem, not a correctness one — but it is never silent (§12).

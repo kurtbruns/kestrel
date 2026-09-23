@@ -56,7 +56,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
     }
     case "refused":
       return message(
-        `Needs you: the provider is refusing to send ${title}`,
+        `Problem with ${title}: the provider is refusing your account`,
         [
           `The email provider is refusing this account, so ${title} is paused where it is. The provider said: ${n.halt_error || "no detail given"}`,
           refusalAdvice(n.halt_cause),
@@ -66,7 +66,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       );
     case "stuck":
       return message(
-        `Needs you: ${title} has been sending for over ${minutes(STUCK_THRESHOLD_MS)} minutes`,
+        `Problem with ${title}: still sending after ${minutes(STUCK_THRESHOLD_MS)} minutes`,
         [
           `${title} started sending${n.started_at ? ` at ${when(n.started_at)}` : ""} and is still going: ${n.c_pending + n.c_in_flight} recipients have not been handed to the provider yet.`,
           "It keeps retrying on its own. If it stays like this, check the provider's status and the send's page.",
@@ -75,7 +75,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       );
     case "wedged":
       return message(
-        `Needs you: ${title} is waiting for you to resolve it`,
+        `Problem with ${title}: waiting for you to resolve it`,
         [
           `${title} has handed off everyone it can, but the provider never answered for ${n.c_in_flight} recipients, so whether they were mailed is unknown. Sending them again could mail them twice, so the send waits for you.`,
           "Open the send and choose Resolve: assume they were not sent, or that they were, once you have checked the provider's console.",
@@ -88,7 +88,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
           ? `${title} was due at ${when(n.fire_at)} and has not gone out.`
           : `${title} was due at ${when(n.fire_at)} and went out ${minutes((n.started_at ?? n.fire_at) - n.fire_at)} minutes late.`;
       return message(
-        `Late: ${title} missed its fire time`,
+        `Problem with ${title}: it missed its fire time`,
         [
           late,
           "A send only goes out late when the minute-by-minute sweep that fires it was not running or failed on it, so check the Worker's cron trigger and logs.",
@@ -99,12 +99,12 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
   }
 }
 
-/** A sample, for the settings surface's test, so the channel can be proved before a send needs it. */
+/** A sample, for the settings surface's test, so the channel can be proved before a send runs into a problem. */
 export function sampleNotification(config: Config): RenderedEmail {
   return message(
     "Test: notifications from Kestrel",
     [
-      "This is a test of the notifications that tell you when a send finishes or needs you.",
+      "This is a test of the notifications that tell you when a send goes out, and right away if a send runs into a problem.",
       "If it arrived, the channel works; nothing else was sent.",
     ],
     `${config.appOrigin}/dashboard/#/settings`,

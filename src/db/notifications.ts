@@ -1,6 +1,6 @@
 /**
- * The notifications that tell the publisher, by email, when a send finishes or needs them
- * (SPEC §8): recording each event once, and the delivery record the sweep keeps for them.
+ * The notifications that tell the publisher, by email, when a send goes out or runs into a
+ * problem (SPEC §8): recording each event once, and the delivery record the sweep keeps for them.
  *
  * Every read of the send here is of the record the send path already keeps, and nothing
  * here writes a send or a delivery: the table is downstream of the send path, never part

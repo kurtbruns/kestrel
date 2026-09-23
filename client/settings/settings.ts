@@ -273,7 +273,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   const notifySection = html`
     <section class="set-sec">
       ${secHead("Notifications", chip("editable", "Editable"))}
-      <p class="set-lede">Kestrel emails you when a send finishes, and right away when one needs you: the provider refusing your account, a send in flight too long, one waiting for you to resolve it, or a send that missed its fire time.</p>
+      <p class="set-lede">Kestrel emails you when a send goes out, and right away if a send runs into a problem.</p>
       <div class="set-card">
         <div class="set-recip">
           <div class="set-field" style="margin:0">

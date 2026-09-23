@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Kestrel now emails you when a send finishes (how many the provider accepted, how many are unsent or skipped, and a link to the record) and right away when one needs you: the provider refusing your account, a send in flight too long, one waiting for Resolve, or a missed fire time (SPEC §8). Each event is one email. Set the address under Settings → Notifications, where you can send a test and see how the last one went. Declare a `send_email` binding named `NOTIFY` so notifications go through Cloudflare's own email and still arrive when your provider refuses the account; without it they go through your provider (see the setup guide's new Notifications step). This touches the database baseline, so rebuild the database as described in the first Fixed entry below.
+- Kestrel now emails you when a send goes out (how many the provider accepted, how many are unsent or skipped, and a link to the record), and right away if a send runs into a problem (SPEC §8). Each event is one email. Set the address under Settings → Notifications, where you can send a test and see how the last one went. Declare a `send_email` binding named `NOTIFY` so notifications go through Cloudflare's own email and still arrive when your provider refuses the account; without it they go through your provider (see the setup guide's new Notifications step). This touches the database baseline, so rebuild the database as described in the first Fixed entry below.
 - `GET /api/reference` now tags each route with the resource it acts on (posts, sends, subscribers, and so on) and lists each tier's resources, so a client can group the routes the way the reference does.
 
 ### Changed

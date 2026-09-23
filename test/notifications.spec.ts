@@ -18,7 +18,7 @@ import { adminAuth } from "./support/auth";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
-// The publisher is told, by email, when a send finishes or needs them (SPEC §8): once per
+// The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
 // event, however many ticks the condition lasts, through a channel that is the fake here
 // (the test env is dev-shaped), and never at a cost to any send (I1 to I6).
 
@@ -148,7 +148,9 @@ describe("a send that needs the publisher", () => {
 
     await ticks(1);
     const [refused] = fakeNotifications();
-    expect(refused!.subject).toBe('Needs you: the provider is refusing to send "Owls in winter"');
+    expect(refused!.subject).toBe(
+      'Problem with "Owls in winter": the provider is refusing your account',
+    );
     expect(refused!.text).toContain("API key is invalid");
     expect(refused!.text).toContain("Replace the provider's API key");
     expect(refused!.text).toContain("No one has been marked unsent");
@@ -161,7 +163,7 @@ describe("a send that needs the publisher", () => {
     await ticks(3);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(fakeNotifications().map((n) => n.subject)).toEqual([
-      'Needs you: the provider is refusing to send "Owls in winter"',
+      'Problem with "Owls in winter": the provider is refusing your account',
       "Sent: Owls in winter",
     ]);
   });
@@ -238,9 +240,9 @@ describe("a send that needs the publisher", () => {
 
     await ticks(3);
     const subjects = fakeNotifications().map((n) => n.subject);
-    expect(subjects).toContain('Late: "Late one" missed its fire time');
+    expect(subjects).toContain('Problem with "Late one": it missed its fire time');
     expect(subjects).toContain("Sent: Late one");
-    expect(fakeNotifications().find((n) => n.subject.startsWith("Late"))!.text).toContain(
+    expect(fakeNotifications().find((n) => n.subject.startsWith("Problem"))!.text).toContain(
       "minutes late",
     );
     expect((await rows(late.id)).map((r) => r.kind).sort()).toEqual(["finished", "missed"]);

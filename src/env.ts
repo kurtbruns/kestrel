@@ -65,7 +65,7 @@ export interface OptionalVars {
 export interface OptionalBindings {
   /**
    * Cloudflare's `send_email` binding, the channel that tells the publisher when a send
-   * finishes or needs them (SPEC §8). Deploy-time infrastructure (SPEC §9): its presence
+   * goes out or runs into a problem (SPEC §8). Deploy-time infrastructure (SPEC §9): its presence
    * picks the channel, and it is never declared for development, where notifications go to the
    * in-memory fake.
    */

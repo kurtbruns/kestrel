@@ -1,14 +1,8 @@
 # Notifications
 
-Kestrel emails you when a send finishes, and right away when one needs you, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12):
+Kestrel emails you when a send goes out, and right away if a send runs into a problem, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12). The first carries the numbers from the send's record and a link to it; the second says what went wrong, with the provider's own words when the provider is the problem, and links to the send.
 
-- **A send finished:** the numbers from its record (accepted by the provider, unsent, skipped) and a link to it.
-- **The provider is refusing your account:** at once, with the provider's own message and what it points to (the key, the sender, the quota, or the account's standing).
-- **A send has been in flight too long:** more than 30 minutes.
-- **A send is waiting for you to resolve it:** recipients whose fate is unknown, which only you can settle with Resolve.
-- **A send missed its fire time:** it went out late, or has not gone out.
-
-Each event is one email. A condition that lasts, like a refusal that goes on for hours, is not repeated; the dashboard keeps showing it until it clears. A refusal that clears and later returns is a new event, and gets a new email.
+Each problem is one email. One that lasts is not repeated; the dashboard keeps showing it until it clears. A problem that clears and later returns is a new one, and gets a new email.
 
 Two things decide where the email goes and how it gets there, and they sit on opposite sides of the line between preferences and deploy config (`docs/SPEC.md` §9):
 
