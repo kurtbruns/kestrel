@@ -1,6 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
 import { adminAuth } from "./support/auth";
@@ -415,4 +415,37 @@ describe("two writers on the one settings row", () => {
     expect(body.settings.publication.tagline).toBe(`tagline-${marker}`);
     expect(body.settings.publication.logoUrl).toContain("/media/branding/logo?v=42");
   });
+});
+
+describe("a corrupt settings row", () => {
+  const readRow = () =>
+    env.DB.prepare("SELECT data, updated_at FROM settings WHERE id = 1").first<{
+      data: string;
+      updated_at: number;
+    }>();
+
+  for (const [what, data] of [
+    ["unparseable JSON", '{"publication": {"name": "Birds'],
+    ["JSON that is not an object", "null"],
+  ] as const) {
+    it(`fails reads and writes and leaves the row as it is: ${what}`, async () => {
+      await putSettings({ publication: { name: "Before" } });
+      await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
+      const before = await readRow();
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      try {
+        const got = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
+        expect(got.status).toBe(500);
+        expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
+        expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
+        expect((await putLogo(PNG_1x1, "image/png")).status).toBe(500);
+        // Nothing saved over it: the defaults never reach the row (byte for byte).
+        expect(await readRow()).toEqual(before);
+        expect(errors.mock.calls.some((call) => call[0] === "SETTINGS_CORRUPT")).toBe(true);
+      } finally {
+        errors.mockRestore();
+        await env.DB.prepare("UPDATE settings SET data = '{}' WHERE id = 1").run();
+      }
+    });
+  }
 });

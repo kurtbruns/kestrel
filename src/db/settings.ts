@@ -209,11 +209,37 @@ export async function readSettings(db: D1Database): Promise<SettingsSnapshot> {
   if (!row) {
     return { settings: structuredClone(DEFAULT_SETTINGS), version: null };
   }
+  return { settings: coerce(parseStored(row.data)), version: row.updated_at };
+}
+
+/**
+ * The stored blob, which must be a JSON object. Anything else is corruption, and it
+ * fails loud instead of reading as the defaults: every write is a read-merge-write, so
+ * defaults read here would be saved over the publisher's template and identity by the
+ * next save of any field. Throwing fails every read and so every write, which leaves the
+ * row untouched for a person to repair by hand.
+ */
+function parseStored(data: string): Record<string, unknown> {
+  let parsed: unknown;
+  let problem = "is not a JSON object";
   try {
-    return { settings: coerce(JSON.parse(row.data)), version: row.updated_at };
-  } catch {
-    return { settings: structuredClone(DEFAULT_SETTINGS), version: row.updated_at };
+    parsed = JSON.parse(data);
+  } catch (err) {
+    problem = `is not valid JSON (${err instanceof Error ? err.message : String(err)})`;
   }
+  if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+    return parsed as Record<string, unknown>;
+  }
+  console.error(
+    "SETTINGS_CORRUPT",
+    `the settings row (settings.id = 1) ${problem}; reads and writes of settings fail until it is repaired by hand`,
+    { length: data.length, head: data.slice(0, 80) },
+  );
+  throw new HttpError(
+    500,
+    "settings_corrupt",
+    "The stored settings can't be read, so they are left as they are and nothing will save over them. The server log (SETTINGS_CORRUPT) says what's wrong.",
+  );
 }
 
 export async function getSettings(db: D1Database): Promise<AppSettings> {

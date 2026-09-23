@@ -239,17 +239,33 @@ export function validateEmailTemplate(html: string): TemplateValidation {
 }
 
 // --- CSS inlining (css-inline, WASM) ---------------------------------------------
-// initWasm is async (it instantiates the module); cache the promise so it runs once
-// per isolate and callers just await inlineEmailCss.
-let inlinerReady: Promise<void> | null = null;
+
+/**
+ * Run `init` once and share its promise, but forget a rejection so the next call tries
+ * again. A cached rejection would outlive its cause: one transient failure to load the
+ * inliner would fail every render (preview, test, and send) until the isolate recycled.
+ */
+export function onceUntilRejected(init: () => Promise<void>): () => Promise<void> {
+  let ready: Promise<void> | null = null;
+  return () => {
+    if (!ready) {
+      ready = init().catch((err: unknown) => {
+        ready = null;
+        throw err;
+      });
+    }
+    return ready;
+  };
+}
+
+// initWasm is async (it instantiates the module), so it runs once per isolate, or again
+// after a failure, and callers just await inlineEmailCss.
+const inlinerReady = onceUntilRejected(() => initWasm(wasmModule));
 
 /** Inline the `<style>` rules onto elements and keep un-inlinable `@media` rules in a
  *  `<style>` block. Deterministic: same input → same output (holds I5). */
 export async function inlineEmailCss(html: string): Promise<string> {
-  if (!inlinerReady) {
-    inlinerReady = initWasm(wasmModule);
-  }
-  await inlinerReady;
+  await inlinerReady();
   return inline(html, { keepAtRules: true });
 }
 
