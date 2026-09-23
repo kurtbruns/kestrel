@@ -4132,10 +4132,6 @@ button.set-field-remove {
   font-size: 12.5px;
   line-height: 1.5;
 }
-.set-field-warn a {
-  color: inherit;
-  text-decoration: underline;
-}
 .set-id-fields {
   min-width: 0;
   display: flex;

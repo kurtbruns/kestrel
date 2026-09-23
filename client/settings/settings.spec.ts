@@ -156,8 +156,9 @@ describe("settings view", () => {
     $("#addrAddBtn").click();
     typeInto($<HTMLInputElement>("#setAddress"), "PO Box 1142");
     expect($("#addrWarn").hidden).toBe(false);
-    expect($("#addrWarn").textContent).toMatch(/^Your emails don’t include this address/);
-    expect($<HTMLAnchorElement>("#addrWarn a").getAttribute("href")).toBe("#/template");
+    expect($("#addrWarn").textContent).toBe(
+      "Your template doesn’t print this address. If you send promotional email, update the template to include it.",
+    );
     typeInto($<HTMLInputElement>("#setAddress"), "");
     expect($("#addrWarn").hidden).toBe(true);
   });
