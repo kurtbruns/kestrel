@@ -30,7 +30,7 @@ import { isSnsHost, mapSesNotification, type SnsEnvelope, verifySnsSignature } f
 import type {
   BatchHalt,
   EmailProvider,
-  HaltReason,
+  HaltCause,
   PerRecipientResult,
   Recipient,
   RenderedEmail,
@@ -44,33 +44,46 @@ function textResponse(body: string, status: number): Response {
 }
 
 /** Error types that are about the account or its credentials, never a recipient. */
-const ACCOUNT_ERROR_TYPES = new Set([
+/** Error types that are about the account or its credentials, never a recipient, by
+ *  what the operator has to fix. */
+const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // AWS paused the account's sending (it does so on bounce or complaint trouble) or
   // restricted it for good; either way, until the operator acts in the SES console.
-  "SendingPausedException",
-  "AccountSuspendedException",
-  "MailFromDomainNotVerifiedException",
+  ["SendingPausedException", "suspended"],
+  ["AccountSuspendedException", "suspended"],
+  ["MailFromDomainNotVerifiedException", "sender"],
   // The credentials themselves: unknown, wrongly signed, expired, or not permitted.
-  "UnrecognizedClientException",
-  "InvalidClientTokenId",
-  "SignatureDoesNotMatch",
-  "ExpiredTokenException",
-  "AccessDeniedException",
+  ["UnrecognizedClientException", "credentials"],
+  ["InvalidClientTokenId", "credentials"],
+  ["SignatureDoesNotMatch", "credentials"],
+  ["ExpiredTokenException", "credentials"],
+  ["AccessDeniedException", "credentials"],
 ]);
 
 /**
  * Whether an SES error response halts the batch, and why; null when it is about this
  * recipient's message (a bad address, a rejected message), which is permanent for it
- * alone. The account-level types, and any 401 or 403, need the operator. Throttling (a
- * 429, or a throttling type on a 400) and a 5xx are SES being unavailable: the next
- * recipient would get the same answer, so the batch waits for the next tick instead.
+ * alone. The account-level types, any 401 or 403, and a rejection because the sender's
+ * own identity is not verified (`senderUnverified`, which the caller works out from the
+ * message) need the operator. Throttling (a 429, or a throttling type on a 400) and a 5xx
+ * are SES being unavailable: the next recipient would get the same answer, so the batch
+ * waits for the next tick instead. An SES error response always means SES did not accept
+ * the message, so none of these leaves the fate unknown.
  */
-export function classifySesError(status: number, type: string): HaltReason | null {
-  if (status === 401 || status === 403 || ACCOUNT_ERROR_TYPES.has(type)) {
-    return "account";
+export function classifySesError(
+  status: number,
+  type: string,
+  senderUnverified = false,
+): Omit<BatchHalt, "error"> | null {
+  const cause = ACCOUNT_ERROR_TYPES.get(type) ?? (senderUnverified ? "sender" : undefined);
+  if (cause || status === 401 || status === 403) {
+    return { reason: "account", cause: cause ?? "credentials", mayHaveSent: false };
   }
-  if (status === 429 || status >= 500 || /throttl|toomany/i.test(type)) {
-    return "unavailable";
+  if (status === 429 || /throttl|toomany/i.test(type)) {
+    return { reason: "unavailable", cause: "rate_limit", mayHaveSent: false };
+  }
+  if (status >= 500) {
+    return { reason: "unavailable", cause: "outage", mayHaveSent: false };
   }
   return null;
 }
@@ -113,7 +126,8 @@ export class SesProvider implements EmailProvider {
     _opts: SendBatchOptions,
   ): Promise<SendBatchResult> {
     const out: PerRecipientResult[] = [];
-    // maxBatch is 1, but stay correct if the loop ever passes more.
+    // maxBatch is 1, so the send loop passes one recipient; only a one-off caller (a
+    // template test to several addresses) passes more.
     for (const [i, r] of recipients.entries()) {
       const result = await this.sendOne(rendered, r);
       if ("reason" in result) {
@@ -182,12 +196,18 @@ export class SesProvider implements EmailProvider {
     }
 
     const bodyText = await res.text().catch(() => "");
-    const { type, message } = parseSesError(bodyText);
+    const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
     const detail = [type, message].filter(Boolean).join(": ");
     const error = `ses ${res.status}${detail ? ` ${detail}` : ""}`;
-    const reason = classifySesError(res.status, type);
-    if (reason) {
-      return { reason, error };
+    // A sandbox account, or a sending identity that lapsed, is rejected as MessageRejected
+    // naming the identities that failed; it is the operator's only when the sender is one.
+    const senderUnverified =
+      type === "MessageRejected" &&
+      /not verified/i.test(message) &&
+      message.toLowerCase().includes(bareAddress(this.from));
+    const halt = classifySesError(res.status, type, senderUnverified);
+    if (halt) {
+      return { ...halt, error };
     }
     // Every other 4xx (a bad address, a rejected message, ...) is this recipient's alone.
     return { email: r.email, accepted: false, retryable: false, error };
@@ -251,15 +271,29 @@ async function confirmSubscription(subscribeUrl: string | undefined): Promise<bo
   }
 }
 
-/** Pull a type + message out of an SESv2 JSON error body (best effort). */
-function parseSesError(text: string): { type: string; message: string } {
+/**
+ * Pull a type + message out of an SESv2 error (best effort). The REST API names the type
+ * in the `x-amzn-ErrorType` header (`Type:namespace-url`), and the body may carry only
+ * the message, so the header is the fallback when the body names no type.
+ */
+function parseSesError(
+  text: string,
+  headerType: string | null = null,
+): { type: string; message: string } {
+  const fromHeader = (headerType ?? "").split(":")[0]?.trim() ?? "";
   try {
     const j = JSON.parse(text) as Record<string, unknown>;
     const rawType = String(j.__type ?? j.code ?? j.type ?? "");
-    const type = rawType.split("#").pop() ?? rawType;
+    const type = (rawType.split("#").pop() ?? rawType) || fromHeader;
     const message = String(j.message ?? j.Message ?? "");
     return { type, message };
   } catch {
-    return { type: "", message: text.slice(0, 200) };
+    return { type: fromHeader, message: text.slice(0, 200) };
   }
+}
+
+/** The bare address of a `Name <addr>` from-line, lowercased. */
+function bareAddress(from: string): string {
+  const angle = /<([^>]+)>/.exec(from);
+  return (angle?.[1] ?? from).trim().toLowerCase();
 }

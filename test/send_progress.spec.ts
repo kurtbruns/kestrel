@@ -214,6 +214,7 @@ describe("buildSendProgress — derived phase", () => {
       completed_at: null,
       remade_at: null,
       halt_reason: null,
+      halt_cause: null,
       halt_error: null,
       halted_at: null,
       c_pending: 0,
@@ -261,6 +262,7 @@ describe("buildSendProgress — derived phase", () => {
         status: "sending",
         c_pending: 5,
         halt_reason: "account",
+        halt_cause: "credentials",
         halt_error: "resend batch 403: API key is not active",
         halted_at: since,
       }),
@@ -273,6 +275,7 @@ describe("buildSendProgress — derived phase", () => {
     expect(prog.attention.wedged).toBe(false);
     expect(prog.provider.halt).toEqual({
       reason: "account",
+      cause: "credentials",
       error: "resend batch 403: API key is not active",
       since,
     });

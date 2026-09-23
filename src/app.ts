@@ -454,6 +454,8 @@ export function createRouter(archiveBasePath: string): Router {
       resource: "sends",
       summary:
         "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled.",
+      description:
+        "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. `unavailable` is an outage or a rate limit: the send retries every sweep on its own, and is worth raising only once its progress reads `attention.stuck`. `account` is the provider refusing the account itself; `halt_cause` names what (`credentials`, `sender`, `quota`, or `suspended`) and `halt_error` is the provider's own message. Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself on the next sweep, so it is never rescheduled or sent again.",
       query: [
         {
           name: "status",
@@ -491,6 +493,8 @@ export function createRouter(archiveBasePath: string): Router {
       resource: "sends",
       summary:
         "Live in-flight progress: a single-row read off the counters — dispatch/delivery bars, derived phase, and attention flags. The poll target for the watch view.",
+      description:
+        "`phase` `needs-attention` has two causes, told apart by `attention`. `wedged` is recipients whose delivery is unknown, which the publisher settles with `POST /sends/:id/resolve`. `refused` is the provider refusing the account, with `provider.halt` carrying its `reason`, `cause` (`credentials`, `sender`, `quota`, or `suspended`), `error` (the provider's message), and `since`; there is no API action for it, so tell the publisher the cause and the fix, and that the send resumes on its own once the account is fixed and has consumed no one. `provider.halt` with reason `unavailable` is an outage or a rate limit that retries every sweep; `attention.stuck` is when it has lasted long enough to raise.",
       example: {
         response: {
           state: "sending",

@@ -19,6 +19,7 @@ const send = (over: Partial<Send> = {}): Send => ({
   completed_at: 1_001_000,
   remade_at: null,
   halt_reason: null,
+  halt_cause: null,
   halt_error: null,
   halted_at: null,
   c_pending: 0,
@@ -224,7 +225,12 @@ describe("sent record", () => {
       phase: "needs-attention",
       provider: {
         name: "resend",
-        halt: { reason: "account", error: "resend batch 403: API key is not active", since: 1_000 },
+        halt: {
+          reason: "account",
+          cause: "credentials",
+          error: "resend batch 403: API key is not active",
+          since: 1_000,
+        },
       },
       attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: true },
     });
@@ -248,6 +254,7 @@ describe("sent record", () => {
     const alert = $("#watchBody .health.red");
     expect(alert.textContent).toContain("The provider is refusing this account");
     expect(alert.textContent).toContain("resend batch 403: API key is not active");
+    expect(alert.textContent).toContain("Replace the provider's API key or credentials");
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
   });

@@ -26,6 +26,7 @@ import {
   isRefused,
   isWedged,
   needsOperator,
+  refusalAdvice,
 } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -100,7 +101,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       stuckEl,
       html`${refused.map(
         (s) =>
-          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${s.subject}</strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${s.halt_error ?? "no detail given"}. No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
+          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${s.halt_error ?? "no detail given"}. ${refusalAdvice(s.halt_cause)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
       )}${wedged.map((s) => {
         const n = s.c_in_flight || 0;
         const noun = n === 1 ? "delivery" : "deliveries";

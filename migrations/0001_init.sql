@@ -140,6 +140,8 @@ CREATE TABLE sends (
   halt_reason     TEXT                         -- the provider refused the last batch as a
                     CHECK (halt_reason IN ('unavailable', 'account')),  -- whole; null once
                                                -- a batch is answered
+  halt_cause      TEXT,                        -- what the refusal is about (a key, the
+                                               -- sender, a quota, ...), for the advice shown
   halt_error      TEXT,                        -- the provider's words for that refusal
   halted_at       INTEGER,                     -- when refusals of this reason began
   c_pending       INTEGER NOT NULL DEFAULT 0,
@@ -202,6 +204,8 @@ CREATE TABLE deliveries (
   event_at     INTEGER,                        -- when the event was applied (epoch ms)
   bounce_kind  TEXT CHECK (bounce_kind IN ('hard', 'soft')),
   dispatch_key TEXT,                           -- the hand-off's idempotency key, while unanswered
+  keyed_at     INTEGER,                        -- when that key was first sent, for the
+                                               -- provider's idempotency window
   UNIQUE (send_id, email)
 );
 CREATE INDEX idx_deliveries_send_status ON deliveries (send_id, status);

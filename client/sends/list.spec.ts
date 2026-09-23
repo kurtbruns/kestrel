@@ -18,6 +18,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   completed_at: 1_001_000,
   remade_at: null,
   halt_reason: null,
+  halt_cause: null,
   halt_error: null,
   halted_at: null,
   c_pending: 0,
@@ -120,6 +121,7 @@ describe("sent view", () => {
       c_pending: 90,
       subject: "Paused one",
       halt_reason: "account",
+      halt_cause: "suspended",
       halt_error: "ses 400 SendingPausedException: Account is paused",
       halted_at: Date.now() - 60_000,
       completed_at: null,
@@ -140,6 +142,8 @@ describe("sent view", () => {
     expect(cards).toHaveLength(1);
     expect(cards[0]!.textContent).toContain("Paused one");
     expect(cards[0]!.textContent).toContain("ses 400 SendingPausedException: Account is paused");
+    expect(cards[0]!.textContent).toContain("in the SES console");
+    expect(cards[0]!.querySelector("a")!.getAttribute("href")).toBe("#/sent/ref");
     expect(cards[0]!.querySelector("button")).toBeNull(); // nothing in the app to press
     expect(document.querySelector(".active-card")).toBeNull();
   });

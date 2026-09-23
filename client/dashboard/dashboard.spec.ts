@@ -38,6 +38,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   completed_at: NOW - 3_500_000,
   remade_at: null,
   halt_reason: null,
+  halt_cause: null,
   halt_error: null,
   halted_at: null,
   c_pending: 0,
@@ -225,7 +226,8 @@ describe("dashboard", () => {
         status: "sending",
         c_pending: 40,
         halt_reason: "account",
-        halt_error: "resend batch 401: API key is invalid",
+        halt_cause: "credentials",
+        halt_error: "Resend 401 invalid_api_key: API key is invalid",
         halted_at: NOW - 60_000,
       });
     const sends = [
@@ -245,8 +247,10 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "The email provider is refusing this account, pausing 2 sends: resend batch 401: API key is invalid. Fix it with the provider; sending resumes on its own.",
+      "The email provider is refusing this account, pausing 2 sends: Resend 401 invalid_api_key: API key is invalid. Replace the provider's API key or credentials in the deployment's secrets. Sending resumes on its own.",
     ]);
+    // Several refused sends link to the Sent page that lists them; one links to its watch.
+    expect($("a", health).getAttribute("href")).toBe("#/sent");
     // Only unavailable, which retries on its own: still an ordinary in-progress send.
     expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["u1"]);
   });

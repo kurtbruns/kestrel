@@ -22,6 +22,8 @@ export class ResendLikeProvider implements EmailProvider {
   readonly name = "resend" as const;
   readonly maxBatch: number = 100;
   readonly idempotentRetry: boolean = true;
+  /** Resend remembers a key for 24 hours; the adapter allows 23. */
+  readonly idempotencyWindowMs: number | undefined = 23 * 60 * 60 * 1000;
 
   /** Every message actually mailed. */
   readonly mailed: { to: string; key: string }[] = [];
@@ -33,6 +35,9 @@ export class ResendLikeProvider implements EmailProvider {
   outage = 0;
   /** Answer the next n batches with a 429, mailing no one. */
   rateLimit = 0;
+  /** Answer the next n batches with a 503 after mailing them, as a 5xx that came after the
+   *  work was done would: the batch's fate is unknown to the loop. */
+  failAfterSending = 0;
   /** While set, refuse every batch for this account-level reason (a revoked key, say). */
   refuse: string | null = null;
 
@@ -52,13 +57,21 @@ export class ResendLikeProvider implements EmailProvider {
       throw new Error("connection refused");
     }
     if (this.refuse) {
-      return { kind: "halted", halt: { reason: "account", error: this.refuse } };
+      return {
+        kind: "halted",
+        halt: { reason: "account", cause: "credentials", error: this.refuse, mayHaveSent: false },
+      };
     }
     if (this.rateLimit > 0) {
       this.rateLimit -= 1;
       return {
         kind: "halted",
-        halt: { reason: "unavailable", error: "resend batch 429: rate_limit_exceeded" },
+        halt: {
+          reason: "unavailable",
+          cause: "rate_limit",
+          error: "resend batch 429: rate_limit_exceeded",
+          mayHaveSent: false,
+        },
       };
     }
     const key = opts.idempotencyKey ?? `${opts.idempotencyKeyPrefix}:${recipients.length}`;
@@ -83,6 +96,13 @@ export class ResendLikeProvider implements EmailProvider {
       return { email: r.email, accepted: true, providerId: `re_${this.mailed.length}` };
     });
     this.seen.set(key, { payload, results });
+    if (this.failAfterSending > 0) {
+      this.failAfterSending -= 1;
+      return {
+        kind: "halted",
+        halt: { reason: "unavailable", cause: "outage", error: "Resend 503", mayHaveSent: true },
+      };
+    }
     if (this.loseAnswers > 0) {
       this.loseAnswers -= 1;
       throw new Error("connection reset after the batch was accepted");

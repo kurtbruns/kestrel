@@ -1,10 +1,10 @@
 /** The two-method provider seam. Everything provider-specific lives behind it. */
 
-import type { HaltReason } from "../../shared/sends";
+import type { HaltCause, HaltReason } from "../../shared/sends";
 import type { AppEnv } from "../env";
 import type { RenderedEmail } from "../render/render";
 
-export type { HaltReason, RenderedEmail };
+export type { HaltCause, HaltReason, RenderedEmail };
 
 export interface Recipient {
   email: string;
@@ -26,8 +26,15 @@ export type PerRecipientResult =
  */
 export interface BatchHalt {
   reason: HaltReason;
+  cause: HaltCause;
   /** The provider's own words, for the operator. Never carries a credential. */
   error: string;
+  /**
+   * Whether the provider may have accepted some of the batch anyway (a 5xx can come after
+   * the work was done). Only then must a re-send go under the same key; a refusal that
+   * proves nothing was accepted lets the batch be made again from scratch.
+   */
+  mayHaveSent: boolean;
 }
 
 /**
@@ -70,6 +77,10 @@ export interface EmailProvider {
   readonly maxBatch: number;
   /** true = safe to re-send a stuck `dispatched` row (deduped by idempotency key). */
   readonly idempotentRetry: boolean;
+  /** How long the provider remembers an idempotency key, when it forgets at all. A batch
+   *  whose fate is unknown is only re-sent inside this window; after it, a re-send is no
+   *  longer deduped, so the batch waits for Resolve instead. */
+  readonly idempotencyWindowMs?: number;
 
   /** Throws only when the request got no answer at all, whose fate is then unknown. */
   sendBatch(

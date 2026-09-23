@@ -14,9 +14,17 @@ export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
  */
 export type HaltReason = "unavailable" | "account";
 
+/**
+ * What a refusal is about, so the advice can name the fix: the API key or credentials,
+ * the sender (an unverified domain or from-address), a spent sending quota, the account
+ * paused or suspended by the provider, a rate limit, or the provider itself failing.
+ */
+export type HaltCause = "credentials" | "sender" | "quota" | "suspended" | "rate_limit" | "outage";
+
 /** The provider's standing refusal of a send, as the watch reports it. */
 export interface SendHalt {
   reason: HaltReason;
+  cause: HaltCause | null;
   error: string;
   since: number;
 }
@@ -51,6 +59,8 @@ export interface Send {
   remade_at: number | null;
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
   halt_reason: HaltReason | null;
+  /** What that refusal is about, for the advice shown with it. */
+  halt_cause: HaltCause | null;
   /** The provider's own words for that refusal. */
   halt_error: string | null;
   /** When refusals for this reason began. */

@@ -22,9 +22,10 @@ import type { AppEnv, Config } from "../env";
 import { timingSafeEqual } from "../lib/constant_time";
 import { substituteRecipient } from "../render/render";
 import type {
+  BatchHalt,
   DeliveryEvent,
   EmailProvider,
-  HaltReason,
+  HaltCause,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
@@ -37,30 +38,58 @@ const BATCH_URL = "https://api.resend.com/emails/batch";
 const MAX_BATCH = 100;
 /** Reject a webhook whose Svix timestamp is more than this far from now. */
 const WEBHOOK_TOLERANCE_S = 5 * 60;
+/** How long Resend remembers an idempotency key (24 hours), less a margin for clock skew
+ *  and a slow tick. */
+const IDEMPOTENCY_WINDOW_MS = 23 * 60 * 60 * 1000;
 /** Error names that are about the API key rather than the request, whatever the status. */
-const ACCOUNT_ERROR_NAMES = new Set([
+const CREDENTIAL_ERROR_NAMES = new Set([
   "missing_api_key",
   "invalid_api_key",
   "restricted_api_key",
-  "suspended_api_key",
   "invalid_permission",
 ]);
+/** A spent sending quota: it may lift on its own (daily) or not (monthly), but either way
+ *  the operator should know the newsletter is waiting on it. */
+const QUOTA_ERROR_NAMES = new Set(["daily_quota_exceeded", "monthly_quota_exceeded"]);
 
 /**
  * Whether a Resend error response halts the batch, and why; null when it is a permanent
- * failure of this batch's own content. Every 401 and 403 is about the key or the sending
- * domain (a missing, revoked, restricted, or suspended key; an unverified domain, which
- * Resend reports as a 403 `validation_error`), so no recipient is to blame and no retry
- * helps until the operator fixes it. A 429 (a rate limit or a spent quota), a 5xx, and a
- * concurrent request under the same idempotency key are Resend being unavailable, and the
- * same batch goes again later.
+ * failure of this batch's own content, recorded against its recipients.
+ *
+ * Needs the operator: every 401 and 403, which are about the key (missing, revoked,
+ * restricted, suspended) or the sender (an unverified domain, or sandbox sending, which
+ * Resend reports as a 403 `validation_error`); a 422 `invalid_from_address`, a sender
+ * misconfigured in the deployment; and a spent daily or monthly quota. Only waiting
+ * helps: any other 429 (a rate limit), a 5xx, and a concurrent request under the same
+ * idempotency key. Of those, only the 5xx and the concurrent request may come after
+ * Resend did the work, so only they leave the batch's fate unknown.
  */
-export function classifyResendError(status: number, name: string): HaltReason | null {
-  if (status === 401 || status === 403 || ACCOUNT_ERROR_NAMES.has(name)) {
-    return "account";
+export function classifyResendError(
+  status: number,
+  name: string,
+  message = "",
+): Omit<BatchHalt, "error"> | null {
+  const account = (cause: HaltCause) => ({ reason: "account" as const, cause, mayHaveSent: false });
+  if (QUOTA_ERROR_NAMES.has(name)) {
+    return account("quota");
   }
-  if (status === 429 || status >= 500 || name === "concurrent_idempotent_requests") {
-    return "unavailable";
+  if (name === "suspended_api_key") {
+    return account("suspended");
+  }
+  if (CREDENTIAL_ERROR_NAMES.has(name) || status === 401) {
+    return account("credentials");
+  }
+  if (name === "invalid_from_address" || (status === 403 && name === "validation_error")) {
+    return account("sender");
+  }
+  if (status === 403) {
+    return account(/domain|testing emails/i.test(message) ? "sender" : "credentials");
+  }
+  if (status === 429) {
+    return { reason: "unavailable", cause: "rate_limit", mayHaveSent: false };
+  }
+  if (status >= 500 || name === "concurrent_idempotent_requests") {
+    return { reason: "unavailable", cause: "outage", mayHaveSent: true };
   }
   return null;
 }
@@ -78,6 +107,7 @@ export class ResendProvider implements EmailProvider {
   readonly name = "resend" as const;
   readonly maxBatch = MAX_BATCH;
   readonly idempotentRetry = true;
+  readonly idempotencyWindowMs = IDEMPOTENCY_WINDOW_MS;
 
   private readonly apiKey: string;
   private readonly webhookSecret: string;
@@ -130,10 +160,14 @@ export class ResendProvider implements EmailProvider {
 
     if (!res.ok) {
       const text = this.redact(await safeText(res));
-      const error = `resend batch ${res.status}: ${text}`;
-      const reason = classifyResendError(res.status, errorName(text));
-      if (reason) {
-        return { kind: "halted", halt: { reason, error } };
+      const { name, message } = parseResendError(text);
+      // The operator reads this, so it is Resend's name and message, not its raw JSON.
+      const error = message
+        ? `Resend ${res.status}${name ? ` ${name}` : ""}: ${message}`
+        : `Resend ${res.status}: ${text}`;
+      const halt = classifyResendError(res.status, name, message);
+      if (halt) {
+        return { kind: "halted", halt: { ...halt, error } };
       }
       return {
         kind: "answered",
@@ -197,13 +231,16 @@ function reject(status: number, message: string): WebhookResult {
   return { events: [], response: new Response(message, { status }) };
 }
 
-/** The `name` of a Resend error body (best effort; empty when there is none). */
-function errorName(text: string): string {
+/** The `name` and `message` of a Resend error body (best effort; empty when absent). */
+function parseResendError(text: string): { name: string; message: string } {
   try {
-    const name = (JSON.parse(text) as { name?: unknown }).name;
-    return typeof name === "string" ? name : "";
+    const body = JSON.parse(text) as { name?: unknown; message?: unknown };
+    return {
+      name: typeof body.name === "string" ? body.name : "",
+      message: typeof body.message === "string" ? body.message : "",
+    };
   } catch {
-    return "";
+    return { name: "", message: "" };
   }
 }
 

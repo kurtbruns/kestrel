@@ -278,7 +278,9 @@ export class SimProvider implements EmailProvider {
         kind: "halted",
         halt: {
           reason: "unavailable",
+          cause: "rate_limit",
           error: "simulated rate limit (429); pausing until the next tick",
+          mayHaveSent: false,
         },
       };
     } else {

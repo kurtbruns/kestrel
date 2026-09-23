@@ -17,6 +17,7 @@ import {
   isRefused,
   isWedged,
   needsOperator,
+  refusalAdvice,
 } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { appState } from "../state";
@@ -45,7 +46,7 @@ const BOUNCE_SPIKE_MIN = 3;
 /** One line of the health block: red needs a decision, amber a look. */
 interface HealthAlert {
   level: "red" | "amber";
-  text: string;
+  text: string | Html;
 }
 
 // Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case,
@@ -77,10 +78,14 @@ function computeHealth(sends: SendSummary[]): HealthAlert[] {
   const refused = sending.filter(isRefused);
   const [firstRefused] = refused;
   if (firstRefused) {
-    const noun = refused.length === 1 ? "a send" : `${refused.length} sends`;
+    // One send links to its watch; several, to the Sent page that lists them all.
+    const which =
+      refused.length === 1
+        ? html`<a href="#/sent/${firstRefused.id}">${firstRefused.subject}</a>`
+        : html`<a href="#/sent">${refused.length} sends</a>`;
     alerts.push({
       level: "red",
-      text: `The email provider is refusing this account, pausing ${noun}: ${firstRefused.halt_error ?? "no detail given"}. Fix it with the provider; sending resumes on its own.`,
+      text: html`The email provider is refusing this account, pausing ${which}: ${firstRefused.halt_error ?? "no detail given"}. ${refusalAdvice(firstRefused.halt_cause)} Sending resumes on its own.`,
     });
   }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is

@@ -20,7 +20,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
-import { clampPct, fmtDuration } from "./progress";
+import { clampPct, fmtDuration, refusalAdvice } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -182,7 +182,7 @@ function watchBodyHtml(prog: SendProgress): Html {
   return html`
     ${
       halt
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent: fix the account (its API key, sending domain, or standing with the provider) and the send resumes on the next sweep.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent, and the send resumes on the next sweep once this is fixed.</div></div></div>`
         : null
     }
     <div class="wbars">

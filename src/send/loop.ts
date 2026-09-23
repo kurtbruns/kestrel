@@ -141,9 +141,23 @@ export async function runSend(
   const result: SendLoopResult = { ...empty, leased: true };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
 
-  /** Put a halted batch back in the queue, no attempt spent, and record the halt. */
-  const hold = async (key: string, halt: BatchHalt, members: number): Promise<void> => {
-    await sends.holdBatch(db, sendId, lease, key, provider.idempotentRetry, halt, Date.now());
+  /**
+   * Put a halted batch back in the queue, no attempt spent, and record the halt. It keeps
+   * its key only while its fate is unknown: this attempt may have been accepted, or an
+   * earlier one may have (a batch is only ever re-sent under its key because an earlier
+   * attempt left its fate unknown). A batch refused on its first attempt provably reached
+   * no one, so it goes back as fresh rows, which re-checks each recipient's consent when
+   * it is handed off again (I2) and leaves nothing under a key for another provider to
+   * mistake for an ambiguous delivery.
+   */
+  const hold = async (
+    key: string,
+    halt: BatchHalt,
+    members: number,
+    firstAttempt: boolean,
+  ): Promise<void> => {
+    const keepKey = provider.idempotentRetry && (halt.mayHaveSent || !firstAttempt);
+    await sends.holdBatch(db, sendId, lease, key, keepKey, halt, Date.now());
     result.requeued += members;
     result.halt = halt.reason;
     if (halt.reason === "account") {
@@ -156,9 +170,14 @@ export async function runSend(
    * when the batch got no per-recipient answer, which ends the run. A halt goes back to
    * the queue (`hold`). So does a request with no answer at all on an idempotent
    * provider, under its key, to be re-sent as-is next tick; on any other it stays
-   * `dispatched`, the ambiguous case that waits for Resolve (§12).
+   * `dispatched`, the ambiguous case that waits for Resolve (§12). `firstAttempt` is
+   * whether this is the batch's first request under its key.
    */
-  const deliver = async (key: string, members: DeliveryWork[]): Promise<boolean> => {
+  const deliver = async (
+    key: string,
+    members: DeliveryWork[],
+    firstAttempt: boolean,
+  ): Promise<boolean> => {
     const outcomes: DeliveryOutcome[] = [];
     const byAddress = new Map<string, string>();
     const recipients = [];
@@ -187,12 +206,18 @@ export async function runSend(
         });
       } catch (err) {
         if (provider.idempotentRetry) {
-          await hold(key, { reason: "unavailable", error: errorText(err) }, members.length);
+          const halt: BatchHalt = {
+            reason: "unavailable",
+            cause: "outage",
+            error: errorText(err),
+            mayHaveSent: true,
+          };
+          await hold(key, halt, members.length, firstAttempt);
         }
         return false;
       }
       if (answer.kind === "halted") {
-        await hold(key, answer.halt, members.length);
+        await hold(key, answer.halt, members.length, firstAttempt);
         return false;
       }
       results = answer.results;
@@ -219,7 +244,15 @@ export async function runSend(
         result.unsent += 1;
       }
     }
-    await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now());
+    await sends.settleDeliveries(
+      db,
+      sendId,
+      lease,
+      "dispatched",
+      outcomes,
+      Date.now(),
+      recipients.length > 0,
+    );
     return true;
   };
 
@@ -232,27 +265,38 @@ export async function runSend(
   // whole, under its own key, before anything new. Its recipients were handed off
   // already, so consent is not re-checked for them (I2 covers recipients not yet handed
   // off), and re-sending a batch with someone removed would not be the same batch to the
-  // provider. Only an idempotent provider dedupes a re-send; on any other (say the
-  // provider was switched mid-send) a batch waiting in the queue under its key goes
-  // back in flight, the ambiguous case that waits for Resolve (§12), rather than
-  // sitting where nothing sends or resolves it. Batches already in flight there are left
-  // exactly as they are, so they neither eat this run's budget nor look freshly touched
-  // to the sweep's stale-delivery flag.
-  for (const key of await sends.unansweredDispatchKeys(db, sendId, !provider.idempotentRetry)) {
+  // provider. Only an idempotent provider dedupes a re-send, and only while it still
+  // remembers the key. On any other (say the provider was switched mid-send), or once
+  // the key is older than the provider's memory of it, a batch waiting in the queue
+  // under its key goes back in flight, the ambiguous case that waits for Resolve (§12),
+  // rather than sitting where nothing sends or resolves it. Batches already in flight
+  // there are left exactly as they are, so they neither eat this run's budget nor look
+  // freshly touched to the sweep's stale-delivery flag.
+  const keyWindow = provider.idempotencyWindowMs;
+  const keyedBefore = keyWindow === undefined ? null : Date.now() - keyWindow;
+  const unanswered = await sends.unansweredDispatchKeys(
+    db,
+    sendId,
+    !provider.idempotentRetry,
+    keyedBefore,
+  );
+  for (const { key, keyedAt } of unanswered) {
     if (!canStartBatch()) {
       break;
     }
     if (!(await keepLease())) {
       return result;
     }
-    const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now()));
+    const forgotten = keyedBefore !== null && keyedAt !== null && keyedAt < keyedBefore;
+    const toResolve = !provider.idempotentRetry || forgotten;
+    const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now(), toResolve));
     if (moved.size === 0) {
       if (!(await stillLeased())) {
         return result;
       }
       continue;
     }
-    if (!provider.idempotentRetry) {
+    if (toResolve) {
       continue;
     }
     const members = (await sends.fetchDispatchGroup(db, sendId, key))
@@ -275,7 +319,7 @@ export async function runSend(
       result.unsent += members.length;
       continue;
     }
-    if (!(await deliver(key, members))) {
+    if (!(await deliver(key, members, false))) {
       return release();
     }
   }
@@ -334,7 +378,7 @@ export async function runSend(
       continue;
     }
     const members = live.filter((l) => moved.has(l.id)).sort(byEmail);
-    if (!(await deliver(key, members))) {
+    if (!(await deliver(key, members, true))) {
       return release();
     }
   }

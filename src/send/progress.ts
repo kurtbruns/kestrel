@@ -128,7 +128,12 @@ export function buildSendProgress(
   // The provider's standing refusal, while the send is still open to be retried.
   const halt: SendHalt | null =
     send.status === "sending" && send.halt_reason
-      ? { reason: send.halt_reason, error: send.halt_error ?? "", since: send.halted_at ?? now }
+      ? {
+          reason: send.halt_reason,
+          cause: send.halt_cause,
+          error: send.halt_error ?? "",
+          since: send.halted_at ?? now,
+        }
       : null;
   const refused = halt?.reason === "account";
 

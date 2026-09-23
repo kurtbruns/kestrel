@@ -236,6 +236,117 @@ describe("the provider refusing the account", () => {
   });
 });
 
+describe("a refused batch and its key", () => {
+  const keysOf = async (sendId: string) =>
+    (
+      await env.DB.prepare(
+        "SELECT DISTINCT dispatch_key AS k FROM deliveries WHERE send_id = ? AND dispatch_key IS NOT NULL",
+      )
+        .bind(sendId)
+        .all<{ k: string }>()
+    ).results;
+
+  it("drops the key of a batch refused on its first attempt, so it is made again from scratch", async () => {
+    await seedConfirmed(addresses(3));
+    const send = await dueSend();
+    resend.refuse = "resend batch 401: API key is invalid";
+    await sweep(capped());
+    expect(await keysOf(send.id)).toEqual([]);
+    resend.rateLimit = 1; // a definite 429 on a first attempt, likewise
+    resend.refuse = null;
+    await sweep(capped());
+    expect(await keysOf(send.id)).toEqual([]);
+  });
+
+  it("honors an unsubscribe that lands while the account is refused (I2)", async () => {
+    const emails = addresses(3);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    resend.refuse = "resend batch 401: API key is invalid";
+    await ticks(2);
+    const leaving = emails[1]!;
+    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+      .bind(leaving)
+      .run();
+
+    resend.refuse = null;
+    await untilSent(send.id);
+
+    expect(resend.timesMailed(leaving)).toBe(0);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 2, skipped: 1 });
+  });
+
+  it("keeps the key of a batch whose fate was unknown when a refusal follows, mailing no one twice", async () => {
+    const emails = addresses(3);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    resend.failAfterSending = 1; // a 5xx after the batch went out
+    await sweep(capped());
+    expect(await keysOf(send.id)).toHaveLength(1);
+    resend.refuse = "resend batch 401: API key is invalid";
+    await ticks(2);
+    expect(await keysOf(send.id)).toHaveLength(1); // the refusal proves nothing about the first try
+
+    resend.refuse = null;
+    await untilSent(send.id);
+    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
+  });
+
+  it("sends a batch of unknown fate to Resolve once the provider has forgotten its key (I4)", async () => {
+    const emails = addresses(3);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    resend.loseAnswers = 1; // accepted, the answer lost
+    await sweep(capped());
+    resend.refuse = "resend batch 401: API key is invalid";
+    await ticks(2);
+    // A day later the key is fixed, but Resend no longer remembers the batch's key.
+    await env.DB.prepare(
+      "UPDATE deliveries SET keyed_at = keyed_at - 24 * 60 * 60 * 1000 WHERE send_id = ?",
+    )
+      .bind(send.id)
+      .run();
+    resend.refuse = null;
+    const before = resend.requests;
+    await ticks(3);
+
+    expect(resend.requests).toBe(before); // never re-sent under a key it can't dedupe
+    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 3 });
+    const prog = buildSendProgress(
+      (await sends.getSend(env.DB, send.id))!,
+      "resend",
+      false,
+      Date.now(),
+    );
+    expect(prog.attention.wedged).toBe(true);
+  });
+
+  it("delivers to everyone after a switch to a provider without idempotency, nothing left for Resolve", async () => {
+    const emails = addresses(3);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    resend.refuse = "resend batch 401: API key is invalid";
+    await ticks(2);
+
+    // The operator moves the deployment to an SES-shaped provider.
+    const ses = new (class extends ResendLikeProvider {
+      override readonly maxBatch: number = 1;
+      override readonly idempotentRetry: boolean = false;
+      override readonly idempotencyWindowMs: number | undefined = undefined;
+    })();
+    vi.mocked(providers.getProvider).mockReturnValue(ses);
+    await untilSent(send.id);
+
+    expect(emails.every((e) => ses.timesMailed(e) === 1)).toBe(true);
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.halt_reason).toBeNull();
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
+  });
+});
+
 describe("the real adapters, end to end through the loop", () => {
   const resendEnv = { ...env, RESEND_API_KEY: "re_live_key" } as AppEnv;
   const resendAdapter = () => new ResendProvider(getConfig(env), resendEnv);

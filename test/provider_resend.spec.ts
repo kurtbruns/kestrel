@@ -106,28 +106,68 @@ describe("ResendProvider.sendBatch", () => {
   const one = [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }];
 
   it.each([
-    [429, { name: "rate_limit_exceeded", message: "Too many requests." }],
-    [429, { name: "daily_quota_exceeded", message: "You have exceeded your daily quota." }],
-    [500, { name: "application_error", message: "An unexpected error occurred." }],
-    [503, { name: "service_unavailable", message: "API is temporarily unavailable" }],
-    [409, { name: "concurrent_idempotent_requests", message: "Another request is in progress." }],
-  ])("halts the batch as unavailable on a %i %o", async (status, body) => {
+    [429, { name: "rate_limit_exceeded", message: "Too many requests." }, "rate_limit", false],
+    [500, { name: "application_error", message: "An unexpected error occurred." }, "outage", true],
+    [
+      503,
+      { name: "service_unavailable", message: "API is temporarily unavailable" },
+      "outage",
+      true,
+    ],
+    [409, { name: "concurrent_idempotent_requests", message: "In progress." }, "outage", true],
+  ])("halts the batch as unavailable on a %i %o", async (status, body, cause, mayHaveSent) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
     const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
-    expect(result).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
+    expect(result).toMatchObject({
+      kind: "halted",
+      halt: { reason: "unavailable", cause, mayHaveSent },
+    });
   });
 
   it.each([
-    [401, { name: "missing_api_key", message: "Missing API key in the authorization header." }],
-    [403, { name: "restricted_api_key", message: "API key is not active" }],
-    [403, { name: "suspended_api_key", message: "This API key is suspended" }],
-    [403, { name: "validation_error", message: "The example.com domain is not verified." }],
-    [400, { name: "invalid_api_key", message: "API key is invalid" }],
-  ])("halts the batch as an account refusal on a %i %o", async (status, body) => {
+    [
+      401,
+      { name: "missing_api_key", message: "Missing API key in the authorization header." },
+      "credentials",
+    ],
+    [403, { name: "restricted_api_key", message: "API key is not active" }, "credentials"],
+    [403, { name: "suspended_api_key", message: "This API key is suspended" }, "suspended"],
+    [
+      403,
+      { name: "validation_error", message: "The example.com domain is not verified." },
+      "sender",
+    ],
+    [
+      403,
+      {
+        name: "validation_error",
+        message: "You can only send testing emails to your own email address.",
+      },
+      "sender",
+    ],
+    [400, { name: "invalid_api_key", message: "API key is invalid" }, "credentials"],
+    [
+      429,
+      { name: "daily_quota_exceeded", message: "You have exceeded your daily quota." },
+      "quota",
+    ],
+    [
+      429,
+      { name: "monthly_quota_exceeded", message: "You have exceeded your monthly quota." },
+      "quota",
+    ],
+    [422, { name: "invalid_from_address", message: "Invalid `from` field." }, "sender"],
+  ])("halts the batch as an account refusal on a %i %o", async (status, body, cause) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
     const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
-    expect(result).toMatchObject({ kind: "halted", halt: { reason: "account" } });
-    expect(result.kind === "halted" && result.halt.error).toContain(body.message);
+    expect(result).toMatchObject({
+      kind: "halted",
+      halt: { reason: "account", cause, mayHaveSent: false },
+    });
+    // Resend's own name and words, not its raw JSON.
+    expect(result.kind === "halted" && result.halt.error).toBe(
+      `Resend ${status} ${body.name}: ${body.message}`,
+    );
   });
 
   it("never carries the API key in a halt's error, even when Resend echoes it", async () => {
