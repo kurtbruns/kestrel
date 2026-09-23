@@ -745,9 +745,11 @@ export function createRouter(archiveBasePath: string): Router {
       access: "public",
       resource: "subscriptions",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
+      description:
+        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), so the reply never reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A 503 `confirmation_not_sent` means the email provider did not take the confirmation; try again later.",
       example: {
         request: { email: "you@example.com" },
-        response: { status: "pending", action: "created" },
+        response: { status: "check_inbox" },
       },
       handler: publicRoutes.subscribe,
     },
@@ -756,7 +758,9 @@ export function createRouter(archiveBasePath: string): Router {
       path: "/confirm",
       access: "public",
       resource: "subscriptions",
-      summary: "Confirm a subscription from the emailed link (`?token=`).",
+      summary: "Confirmation landing page (`?token=`): a Confirm button, and no change.",
+      description:
+        "Opening the link records nothing, since mail scanners open every link; the page's button POSTs the token. An expired link's page offers to send a fresh one instead.",
       query: [
         {
           name: "token",
@@ -764,6 +768,14 @@ export function createRouter(archiveBasePath: string): Router {
           required: true,
         },
       ],
+      handler: publicRoutes.confirmLanding,
+    },
+    {
+      method: "POST",
+      path: "/confirm",
+      access: "public",
+      resource: "subscriptions",
+      summary: "Confirm a subscription: the landing page's button (form field `token`).",
       handler: publicRoutes.confirm,
     },
     {

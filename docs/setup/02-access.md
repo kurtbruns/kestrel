@@ -80,3 +80,23 @@ curl https://newsletter.example.com/api/whoami \
 ```
 
 `GET /api/whoami` returning `{"principal":{"kind":"human"},"auth":{"mode":"access"}}` (or `"kind":"service"`) confirms the gate and the in-app verifier agree. A 401 with no Access headers confirms the surface is closed.
+
+## 6. Rate-limit the subscribe form
+
+The subscribe form is public, so bound how often one client can submit it. The app already sends each address at most one confirmation in any 15 minutes and never answers in a way that reveals who is on the list (`docs/SPEC.md` §7); the per-client limit is the edge's job, so there is nothing in the app to configure for it.
+
+In the Cloudflare dashboard, open the zone for `newsletter.example.com` → **Security → WAF → Rate limiting rules → Create rule**:
+
+- **If incoming requests match:** a custom expression,
+
+  ```
+  (http.request.uri.path eq "/subscribe" and http.request.method eq "POST")
+  ```
+
+- **With the same characteristics:** IP.
+- **When rate exceeds:** 5 requests per 10 seconds. That is the Free plan's only period; on a paid plan a longer one fits the form better, such as 10 requests per minute.
+- **Then take action:** Block, for the shortest duration the plan offers (10 seconds on Free).
+
+The Free plan allows one rate-limiting rule, and this is the one to spend it on. The rule applies only on the zone's own hostname (`newsletter.example.com`), so it does not cover a `*.workers.dev` address the Worker may also answer on.
+
+To check it, submit the form rapidly from one machine: after the limit, Cloudflare answers with its own block page instead of the app's.

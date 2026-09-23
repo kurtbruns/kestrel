@@ -54,7 +54,9 @@ CREATE INDEX idx_images_post ON images (post_id);
 
 -- Two tokens, two jobs (SPEC §7). The confirm token is one-shot double opt-in and is
 -- rotated when a pending/unsubscribed address re-subscribes; its single-use property
--- comes from confirm() gating on status = 'pending', not from clearing it. The
+-- comes from confirm() gating on status = 'pending', not from clearing it. It is only
+-- good for a fixed window after confirm_sent_at, the last time a confirmation carrying
+-- it went out, which also paces how often an address can be sent one. The
 -- unsubscribe token is durable and NEVER rotated, not even across an unsubscribe →
 -- resubscribe cycle, because it is embedded in the one-click unsubscribe link of every
 -- post already delivered: a returning subscriber can still leave from mail that has
@@ -66,6 +68,7 @@ CREATE TABLE subscribers (
   status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'confirmed', 'unsubscribed')),
   confirm_token   TEXT UNIQUE,                 -- one-shot double opt-in; rotated on re-arm
+  confirm_sent_at INTEGER,                     -- last confirmation sent: the resend cooldown and the token's age
   unsub_token     TEXT NOT NULL UNIQUE,        -- durable; embedded in delivered mail; never rotated
   created_at      INTEGER NOT NULL,
   confirmed_at    INTEGER,

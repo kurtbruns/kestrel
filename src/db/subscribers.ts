@@ -55,57 +55,110 @@ export function getByUnsubToken(db: D1Database, token: string): Promise<Subscrib
 }
 
 /**
- * Idempotent subscribe (double opt-in). Creates a pending subscriber, or re-arms
- * a pending/unsubscribed one. A confirmed subscriber is a no-op. Never
- * auto-confirms — that only happens via the emailed confirm token (I1).
- *
- * Re-arming rotates ONLY the one-shot `confirm_token` (so a stale confirmation
- * link can't be replayed); `unsub_token` is deliberately left untouched so the
- * unsubscribe link already delivered in past posts keeps working (I2).
+ * The subscriber row an address's confirmation is sent from: the existing one, or a new
+ * pending row with no confirm token yet (none is armed until a confirmation carrying one
+ * is accepted, see `armConfirmation`). `created` says whether this call made it, so a
+ * refused first confirmation can take it back out (`dropUnarmed`). Never auto-confirms (I1).
  */
-export async function subscribe(
+export async function ensureSubscriber(
   db: D1Database,
   email: string,
-): Promise<{ subscriber: SubscriberRow; action: SubscribeAction }> {
-  const existing = await getByEmail(db, email);
-  const now = Date.now();
-
-  if (existing) {
-    if (existing.status === "confirmed") {
-      return { subscriber: existing, action: "already_confirmed" };
-    }
-    const confirmToken = newToken();
-    await db
-      .prepare(
-        "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirmed_at = NULL, unsubscribed_at = NULL WHERE id = ?",
-      )
-      .bind(confirmToken, existing.id)
-      .run();
-    const subscriber = unwrap(await getById(db, existing.id), "subscriber");
-    return {
-      subscriber,
-      action: existing.status === "unsubscribed" ? "resubscribed" : "pending_resent",
-    };
-  }
-
-  const id = newId();
-  const confirmToken = newToken();
-  const unsubToken = newToken();
-  await db
+): Promise<{ subscriber: SubscriberRow; created: boolean }> {
+  const res = await db
     .prepare(
-      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?, ?)",
+      "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES (?, ?, 'pending', ?, ?) ON CONFLICT (email) DO NOTHING",
     )
-    .bind(id, email, confirmToken, unsubToken, now)
+    .bind(newId(), email, newToken(), Date.now())
     .run();
-  return { subscriber: unwrap(await getById(db, id), "subscriber"), action: "created" };
+  return {
+    subscriber: unwrap(await getByEmail(db, email), "subscriber"),
+    created: (res.meta.changes ?? 0) > 0,
+  };
 }
 
-/** Confirm a pending subscriber by their confirm token (double opt-in). Idempotent
- *  for an already-confirmed token; refuses to confirm an unsubscribed one. The
- *  one-shot property comes from the `status = 'pending'` guard below, so the token
- *  is left in place (not cleared) and a double-click still lands on the confirmed
- *  page rather than an "invalid link". */
-export async function confirm(db: D1Database, token: string): Promise<SubscriberRow | null> {
+/**
+ * Claim the right to send this subscriber a confirmation now: stamps `confirm_sent_at`
+ * only if the last one went out at or before `quietSince`, and never for a confirmed
+ * subscriber. One conditional write, so two requests racing inside the cooldown send one
+ * confirmation between them. False means another went out too recently.
+ */
+export async function claimConfirmation(
+  db: D1Database,
+  id: string,
+  now: number,
+  quietSince: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare(
+      "UPDATE subscribers SET confirm_sent_at = ? WHERE id = ? AND status <> 'confirmed' AND (confirm_sent_at IS NULL OR confirm_sent_at <= ?)",
+    )
+    .bind(now, id, quietSince)
+    .run();
+  return (res.meta.changes ?? 0) > 0;
+}
+
+/**
+ * Arm the confirm token a confirmation carried once the provider took it: the address is
+ * pending again, and only this newest link confirms it. Rotating only here, never before
+ * the send, means a refused confirmation leaves the last link that did arrive working.
+ * `unsub_token` is deliberately left untouched so the unsubscribe link already delivered
+ * in past posts keeps working (I2). A subscriber who confirmed meanwhile stays confirmed.
+ */
+export async function armConfirmation(
+  db: D1Database,
+  id: string,
+  token: string,
+  sentAt: number,
+): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE subscribers SET status = 'pending', confirm_token = ?, confirm_sent_at = ?, confirmed_at = NULL, unsubscribed_at = NULL WHERE id = ? AND status <> 'confirmed'",
+    )
+    .bind(token, sentAt, id)
+    .run();
+}
+
+/** Undo a `claimConfirmation` whose confirmation never went out, so the cooldown counts
+ *  only confirmations that were sent. A no-op if a later claim has stamped it since. */
+export async function releaseConfirmation(
+  db: D1Database,
+  id: string,
+  claimedAt: number,
+  previous: number | null,
+): Promise<void> {
+  await db
+    .prepare("UPDATE subscribers SET confirm_sent_at = ? WHERE id = ? AND confirm_sent_at = ?")
+    .bind(previous, id, claimedAt)
+    .run();
+}
+
+/** Remove a row `ensureSubscriber` just made whose first confirmation was refused, so no
+ *  pending subscriber is left holding a link nobody received. */
+export async function dropUnarmed(db: D1Database, id: string): Promise<void> {
+  await db
+    .prepare(
+      "DELETE FROM subscribers WHERE id = ? AND status = 'pending' AND confirm_token IS NULL",
+    )
+    .bind(id)
+    .run();
+}
+
+/**
+ * Confirm a pending subscriber by their confirm token (double opt-in), if the link was sent
+ * after `sentAfter`, since a link is only good for a limited time. Idempotent for an
+ * already-confirmed token; refuses an unsubscribed one. The one-shot property comes from
+ * the `status = 'pending'` guard, so the token is left in place (not cleared) and a
+ * double-click still lands on the confirmed page rather than an "invalid link".
+ *
+ * Confirming also lifts an `erased` suppression on the address: a person whose data was
+ * erased may come back, and their own confirmation is what brings them (SPEC §7). Any
+ * other suppression is the publisher's to clear and is left alone.
+ */
+export async function confirm(
+  db: D1Database,
+  token: string,
+  sentAfter: number,
+): Promise<SubscriberRow | null> {
   const row = await getByConfirmToken(db, token);
   if (!row) {
     return null;
@@ -113,15 +166,21 @@ export async function confirm(db: D1Database, token: string): Promise<Subscriber
   if (row.status === "confirmed") {
     return row;
   }
-  if (row.status !== "pending") {
+  if (
+    row.status !== "pending" ||
+    row.confirm_sent_at === null ||
+    row.confirm_sent_at <= sentAfter
+  ) {
     return null;
   }
-  await db
-    .prepare(
-      "UPDATE subscribers SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'pending'",
-    )
-    .bind(Date.now(), row.id)
-    .run();
+  await db.batch([
+    db
+      .prepare(
+        "UPDATE subscribers SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'pending'",
+      )
+      .bind(Date.now(), row.id),
+    db.prepare("DELETE FROM suppressions WHERE email = ? AND reason = ?").bind(row.email, ERASED),
+  ]);
   return getById(db, row.id);
 }
 
@@ -271,6 +330,24 @@ export async function audienceEmails(db: D1Database): Promise<string[]> {
 
 export async function isSuppressed(db: D1Database, email: string): Promise<boolean> {
   const row = await db.prepare("SELECT 1 FROM suppressions WHERE email = ?").bind(email).first();
+  return row !== null;
+}
+
+/**
+ * The suppression reason that marks an erased person (SPEC §7): the address is kept only
+ * so it is never mailed by accident, and the person may still come back by subscribing
+ * again. The erase action that records it is not built yet; the subscribe and confirm
+ * paths already honor it, so it works the day it lands.
+ */
+export const ERASED = "erased";
+
+/** Whether a suppression forbids sending this address a confirmation. Every reason does
+ *  except `erased`, whose person may subscribe again and whose confirmation lifts it. */
+export async function blocksConfirmation(db: D1Database, email: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 FROM suppressions WHERE email = ? AND reason <> ?")
+    .bind(email, ERASED)
+    .first();
   return row !== null;
 }
 

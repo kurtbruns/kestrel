@@ -8,7 +8,7 @@ import type {
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { fieldError, optString, readJsonObject } from "../lib/body";
-import { json, notFound } from "../lib/errors";
+import { HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -20,9 +20,18 @@ export async function create(c: RequestContext): Promise<Response> {
   if (!email || !isValidEmail(email)) {
     throw fieldError("email", "a valid email is required");
   }
-  const { subscriber, action } = await requestSubscription(c, email);
-  const response: SubscribeResponse = { subscriber, action };
-  return json(response, action === "created" ? 201 : 200);
+  const outcome = await requestSubscription(c, email);
+  if (outcome.kind === "failed") {
+    throw new HttpError(
+      502,
+      "confirmation_not_sent",
+      outcome.delivered === "unknown"
+        ? `No answer from the email provider, so the confirmation may not have reached ${email}: ${outcome.error}`
+        : `The email provider refused the confirmation to ${email}: ${outcome.error}`,
+    );
+  }
+  const response: SubscribeResponse = { subscriber: outcome.subscriber, action: outcome.action };
+  return json(response, outcome.action === "created" ? 201 : 200);
 }
 
 export async function list(c: RequestContext): Promise<Response> {
