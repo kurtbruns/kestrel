@@ -137,8 +137,15 @@ export async function test(c: RequestContext): Promise<Response> {
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
   const recipients = [{ email: to, unsubscribeUrl }];
+  // Each press is a deliberate new send, never a retry of the last one, so it carries a
+  // key of its own. A key derived from the post and recipient would be the same on every
+  // test within the provider's memory of it (Resend: a day), so a second test would be
+  // deduped into nothing, or refused outright once the post had changed.
   const [res] = perRecipient(
-    await provider.sendBatch(email, recipients, { idempotencyKeyPrefix: `test-${input.post.id}` }),
+    await provider.sendBatch(email, recipients, {
+      idempotencyKeyPrefix: `test-${input.post.id}`,
+      idempotencyKey: `test-${input.post.id}-${crypto.randomUUID()}`,
+    }),
     recipients,
   );
 
@@ -261,13 +268,17 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
   const provider = getProvider(c.config, c.env);
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
-  // A deliberate manual test is a fresh send each press (not a retry), so the
-  // idempotency key is unique per request — an idempotent provider won't fold two
+  // A deliberate manual test is a fresh send each press (not a retry), so it carries a
+  // key of its own, as a post test does: an idempotent provider won't fold two
   // intentional tests into one.
+  // The prefix names the send too (the dev simulation keys its rolls on it), so it is as
+  // fresh as the key.
+  const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const results = perRecipient(
     await provider.sendBatch(result, batch, {
-      idempotencyKeyPrefix: `template-test-${Date.now()}`,
+      idempotencyKeyPrefix: testId,
+      idempotencyKey: testId,
     }),
     batch,
   );
