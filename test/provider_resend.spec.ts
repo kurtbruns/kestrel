@@ -103,6 +103,27 @@ describe("ResendProvider.sendBatch", () => {
     expect(key1["Idempotency-Key"]).toBe(key2["Idempotency-Key"]);
   });
 
+  it("sends a caller's own Idempotency-Key verbatim (a test send's key, unique per press)", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(cannedResponse({ data: [{ id: "re_1" }] }));
+    const recipients: Recipient[] = [
+      { email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" },
+    ];
+    await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "test-p1",
+      idempotencyKey: "test-p1-first",
+    });
+    await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "test-p1",
+      idempotencyKey: "test-p1-second",
+    });
+    const keys = spy.mock.calls.map(
+      (call) => ((call[1] as RequestInit).headers as Record<string, string>)["Idempotency-Key"],
+    );
+    expect(keys).toEqual(["test-p1-first", "test-p1-second"]);
+  });
+
   const one = [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }];
 
   it.each([

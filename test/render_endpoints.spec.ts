@@ -80,6 +80,35 @@ describe("preview + test endpoints", () => {
     expect(msg.html).toContain("/unsubscribe?test=1");
   });
 
+  it("POST /test sends again on every press, including after an edit (each test has its own key)", async () => {
+    const id = await draftWithImage("Test Twice");
+    const to = `twice-${id}@example.com`;
+    const test = () =>
+      SELF.fetch(`${base}/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      });
+    expect((await test()).status).toBe(200);
+    // The same test again: an idempotent provider would fold a reused key into nothing.
+    expect((await test()).status).toBe(200);
+    // An edited post: a reused key would be refused (Resend's 409 on a changed payload).
+    await SELF.fetch(`${base}/posts/${id}`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ subject: "Subject: Test Twice, edited" }),
+    });
+    expect((await test()).status).toBe(200);
+
+    const outbox = await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }));
+    const subjects = outbox.messages.filter((m: any) => m.to === to).map((m: any) => m.subject);
+    expect(subjects).toEqual([
+      "Subject: Test Twice",
+      "Subject: Test Twice",
+      "Subject: Test Twice, edited",
+    ]);
+  });
+
   it("a scheduled post's test and preview are its frozen copy, not a live render (SPEC §5)", async () => {
     // Once the re-make rule holds, the frozen copy differs from a live render only by
     // a direct edit of the send's bytes, which is exactly what makes this test honest:
