@@ -51,6 +51,8 @@ export interface ReferenceEntry {
   summary: string;
   description?: string;
   query?: QueryParam[];
+  /** The media types the request body may carry; absent when the route takes no body. */
+  accepts?: readonly string[];
   example?: RouteExample;
 }
 

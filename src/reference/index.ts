@@ -77,6 +77,7 @@ function entry(r: RouteDef): ReferenceEntry {
     summary: r.summary,
     description: r.description,
     query: r.query,
+    accepts: r.accepts,
     example: r.example,
   };
 }

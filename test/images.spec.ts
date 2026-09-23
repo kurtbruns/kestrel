@@ -78,13 +78,13 @@ describe("images", () => {
     const tooBig = await send(new File([big], "huge.png", { type: "image/png" }));
     expect(tooBig.status).toBe(400);
     expect((await readJson(tooBig)).message).toMatch(/5 MB or smaller/);
-    // A raw-body upload is held to the same rule.
+    // A raw-body upload declares its type, so one the route doesn't take is refused as such.
     const raw = await SELF.fetch(`${base}/posts/${id}/images?filename=x.svg`, {
       method: "POST",
       headers: { ...AUTH, "content-type": "image/svg+xml" },
       body: "<svg/>",
     });
-    expect(raw.status).toBe(400);
+    expect(raw.status).toBe(415);
     const list = await readJson(await SELF.fetch(`${base}/posts/${id}/images`, { headers: AUTH }));
     expect(list.images).toEqual([]);
   });

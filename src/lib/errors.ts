@@ -24,6 +24,8 @@ export const unauthorized = (message?: string) => new HttpError(401, "unauthoriz
 export const forbidden = (message?: string) => new HttpError(403, "forbidden", message);
 export const notFound = (message?: string) => new HttpError(404, "not_found", message);
 export const conflict = (message?: string) => new HttpError(409, "conflict", message);
+export const unsupportedMediaType = (message?: string) =>
+  new HttpError(415, "unsupported_media_type", message);
 
 /** JSON response helper. */
 export function json(data: unknown, status = 200, headers?: HeadersInit): Response {

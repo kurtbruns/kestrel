@@ -45,10 +45,15 @@ async function newDraft(markdown = "v1"): Promise<{ id: string; revision_id: str
   return { id: body.post.id, revision_id: body.revision_id };
 }
 
-function ctxFor(body: string): RequestContext {
-  return {
-    req: new Request(base, { method: "POST", body }),
-  } as unknown as RequestContext;
+function ctxFor(body: string, contentType: string | null = "application/json"): RequestContext {
+  const req = new Request(base, { method: "POST", body });
+  // A string body is typed text/plain by default; null stands for a client that sends none.
+  if (contentType === null) {
+    req.headers.delete("content-type");
+  } else {
+    req.headers.set("content-type", contentType);
+  }
+  return { req } as unknown as RequestContext;
 }
 
 async function refusal(p: Promise<unknown> | (() => unknown)): Promise<HttpError> {
@@ -69,6 +74,23 @@ describe("readJsonObject", () => {
   it("refuses an absent body unless it is optional", async () => {
     expect((await refusal(readJsonObject(ctxFor("")))).status).toBe(400);
     expect(await readJsonObject(ctxFor(""), { optional: true })).toEqual({});
+  });
+
+  it("refuses a body that doesn't say it is JSON (415), even when optional", async () => {
+    for (const type of ["text/plain", "application/x-www-form-urlencoded", null]) {
+      const e = await refusal(readJsonObject(ctxFor('{"a":1}', type), { optional: true }));
+      expect([e.status, e.code], String(type)).toEqual([415, "unsupported_media_type"]);
+    }
+  });
+
+  it("takes an empty optional body with no content type as {}", async () => {
+    expect(await readJsonObject(ctxFor("", null), { optional: true })).toEqual({});
+  });
+
+  it("reads the declared type by its media type", async () => {
+    expect(await readJsonObject(ctxFor('{"a":1}', "Application/JSON; charset=utf-8"))).toEqual({
+      a: 1,
+    });
   });
 
   it("refuses a body that is not JSON, even when optional", async () => {
@@ -170,9 +192,10 @@ describe("PUT /posts/:id refuses a wrong shape instead of dropping it", () => {
     expect(res.status).toBe(200);
   });
 
-  it("a body that is not JSON is a 400, not a 200 no-op", async () => {
+  it("a body that is not JSON is refused, not a 200 no-op", async () => {
     const { id, revision_id } = await newDraft();
-    await expect400(await send("PUT", `/posts/${id}`, "markdown=v2", "text/plain"));
+    await expect400(await send("PUT", `/posts/${id}`, "markdown=v2"));
+    expect((await send("PUT", `/posts/${id}`, "markdown=v2", "text/plain")).status).toBe(415);
     const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
     expect(got.post.current_revision).toBe(revision_id);
   });

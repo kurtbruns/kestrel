@@ -15,7 +15,12 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 
 /** The raster formats a post image may be: what mail clients show, and none that runs. */
-const POST_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+export const POST_IMAGE_TYPES: readonly string[] = [
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+  "image/gif",
+];
 /** Generous for a photo, still small enough to send: every recipient downloads it. */
 const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
 
@@ -92,7 +97,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   // public media bucket domain serves them without the /media route's sandbox headers,
   // so an SVG or HTML upload would run as a live page there. An email image has no need
   // to be either.
-  if (!POST_IMAGE_TYPES.has(contentType)) {
+  if (!POST_IMAGE_TYPES.includes(contentType)) {
     throw badRequest("an image must be a PNG, JPEG, WebP, or GIF");
   }
   if (bytes.byteLength === 0) {

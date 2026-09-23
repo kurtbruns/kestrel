@@ -215,6 +215,41 @@ describe("reference room", () => {
     }
   });
 
+  it("lists the body types a write accepts, and none for a route that takes no body", async () => {
+    const withBodies: ReferenceGroup[] = [
+      {
+        ...groups[0]!,
+        resources: [{ key: "posts", title: "Posts" }],
+        routes: [
+          {
+            method: "POST",
+            path: "/posts/:id/images",
+            access: "admin",
+            resource: "posts",
+            summary: "Upload an image.",
+            accepts: ["multipart/form-data", "image/png"],
+          },
+          {
+            method: "DELETE",
+            path: "/posts/:id",
+            access: "admin",
+            resource: "posts",
+            summary: "Delete a draft.",
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withBodies }) }]);
+    await mount(renderReference);
+    await settle();
+    const [upload, del] = $$(".api-route");
+    expect($$(".api-accepts code", upload!).map((c) => c.textContent)).toEqual([
+      "multipart/form-data",
+      "image/png",
+    ]);
+    expect(del!.querySelector(".api-accepts")).toBeNull();
+  });
+
   it("marks a query parameter the route can't do without", async () => {
     const withToken: ReferenceGroup[] = [
       {

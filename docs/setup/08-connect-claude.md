@@ -82,7 +82,13 @@ Kestrel ships no separate MCP server — Claude Code is a client of the HTTP API
 kctl() { curl -s -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" "$KESTREL_URL$1" "${@:2}"; }
 ```
 
-Then tell Claude the base URL and that `GET /api/reference` lists every route — method, path, access tier, and worked examples, generated from the route registration so it can't drift. Claude discovers and drives the whole app from there.
+A call that sends a body names its type, and each route takes only the types the reference lists for it; a JSON body sent without `Content-Type: application/json` is refused. For example, to add a subscriber:
+
+```bash
+kctl /subscribers -X POST -H "Content-Type: application/json" -d '{"email":"reader@example.com"}'
+```
+
+Then tell Claude the base URL and that `GET /api/reference` lists every route — method, path, access tier, the body types it accepts, and worked examples, generated from the route registration so it can't drift. Claude discovers and drives the whole app from there.
 
 ## 5. Keep the credential healthy
 
