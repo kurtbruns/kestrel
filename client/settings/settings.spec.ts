@@ -157,7 +157,7 @@ describe("settings view", () => {
     typeInto($<HTMLInputElement>("#setAddress"), "PO Box 1142");
     expect($("#addrWarn").hidden).toBe(false);
     expect($("#addrWarn").textContent).toBe(
-      "Your template doesn’t print this address. If you send promotional email, update the template to include it.",
+      "Your email template currently doesn’t include this field. If you send promotional email, add it to the template.",
     );
     typeInto($<HTMLInputElement>("#setAddress"), "");
     expect($("#addrWarn").hidden).toBe(true);

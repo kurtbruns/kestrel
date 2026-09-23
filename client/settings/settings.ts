@@ -224,7 +224,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
                 <button type="button" class="danger-subtle set-field-remove" id="addrRemove">Remove</button>
               </div>
               <input id="setAddress" value="${state.address}" placeholder="PO Box 123, City, ST 00000" maxlength="300" autocomplete="off">
-              <p class="set-field-warn" id="addrWarn" hidden>Your template doesn’t print this address. If you send promotional email, update the template to include it.</p>
+              <p class="set-field-warn" id="addrWarn" hidden>Your email template currently doesn’t include this field. If you send promotional email, add it to the template.</p>
             </div>
           </div>
         </div>
