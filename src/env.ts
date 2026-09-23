@@ -296,7 +296,7 @@ function requireRealProviderConfig(
     ["FROM_ADDRESS", emailDomain("FROM_ADDRESS", env.FROM_ADDRESS)],
   ];
   if (orUndefined(env.SENDING_DOMAIN)) {
-    hosts.push(["SENDING_DOMAIN", env.SENDING_DOMAIN]);
+    hosts.push(["SENDING_DOMAIN", env.SENDING_DOMAIN.trim()]);
   }
   for (const [name, host] of hosts) {
     if (isPlaceholderHost(host)) {
@@ -310,7 +310,9 @@ function requireRealProviderConfig(
 
 /** The domain of a `From:` value, `Name <local@domain>` or a bare address. */
 function emailDomain(name: string, from: string): string {
-  const address = /<([^>]*)>/.exec(from)?.[1] ?? from;
+  // The address is the last `<…>`, so a display name that itself contains angle brackets
+  // is not mistaken for it.
+  const address = /<([^<>]*)>\s*$/.exec(from)?.[1] ?? from;
   const at = address.lastIndexOf("@");
   if (at < 1 || at === address.length - 1) {
     throw new ConfigError(name, `must be an email address, optionally with a name, not "${from}"`);
@@ -325,7 +327,13 @@ function isPlaceholderHost(host: string): boolean {
 
 function isLoopbackOrigin(origin: string): boolean {
   const host = new URL(origin).hostname;
-  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/** A URL value as it may appear in an error, which is a public 500 and a log line: any
+ *  `user:password@` it carries is hidden, so a credential never leaves in a message. */
+function redactUserinfo(raw: string): string {
+  return raw.replace(/\/\/[^/?#]*@/, "//…@");
 }
 
 /** An http(s) URL with no credentials, query, or fragment. */
@@ -334,7 +342,7 @@ function parseHttpUrl(name: string, raw: string): URL {
   try {
     url = new URL(raw);
   } catch {
-    throw new ConfigError(name, `must be an http(s) URL, not "${raw}"`);
+    throw new ConfigError(name, `must be an http(s) URL, not "${redactUserinfo(raw)}"`);
   }
   if (
     (url.protocol !== "http:" && url.protocol !== "https:") ||
@@ -343,7 +351,7 @@ function parseHttpUrl(name: string, raw: string): URL {
     url.search ||
     url.hash
   ) {
-    throw new ConfigError(name, `must be a plain http(s) URL, not "${raw}"`);
+    throw new ConfigError(name, `must be a plain http(s) URL, not "${redactUserinfo(raw)}"`);
   }
   return url;
 }
@@ -359,7 +367,7 @@ function readOrigin(name: string, v: string | undefined): string | undefined {
   if (!/^\/*$/.test(url.pathname)) {
     throw new ConfigError(
       name,
-      `must be an origin with no path, like https://newsletter.your-domain, not "${raw}"`,
+      `must be an origin (scheme and host, no path), not "${redactUserinfo(raw)}"`,
     );
   }
   return url.origin;

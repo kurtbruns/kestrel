@@ -9,6 +9,9 @@ import * as posts from "../src/db/posts";
 import { type AppEnv, ConfigError, getConfig } from "../src/env";
 import worker from "../src/index";
 import { clearFakeOutbox } from "../src/providers/fake";
+import type { RequestContext } from "../src/router";
+import * as devRoutes from "../src/routes/dev";
+import * as renderRoutes from "../src/routes/render_actions";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
@@ -177,6 +180,24 @@ describe("getConfig — deploy config is validated", () => {
     );
     refuses({ ...SES_DEPLOY, SENDING_DOMAIN: "send.example.com" }, "SENDING_DOMAIN");
     refuses({ ...SES_DEPLOY, FROM_ADDRESS: "no address here" }, "FROM_ADDRESS");
+    refuses({ ...SES_DEPLOY, SENDING_DOMAIN: " send.example.com " }, "SENDING_DOMAIN");
+  });
+
+  it("takes the From address from the last angle brackets, not a bracketed display name", () => {
+    const from = '"Birds <weekly>" <news@send.birds.example>';
+    expect(getConfig(envWith({ ...SES_DEPLOY, FROM_ADDRESS: from })).fromAddress).toBe(from);
+  });
+
+  it("never echoes a URL's credentials in the error, which is a public 500", () => {
+    let message = "";
+    try {
+      getConfig(envWith({ MEDIA_PUBLIC_BASE: "https://user:s3cret@cdn.birds.example/media" }));
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/^MEDIA_PUBLIC_BASE /);
+    expect(message).not.toContain("s3cret");
+    expect(message).not.toContain("user:");
   });
 
   it("leaves the placeholders alone on the fake transport, which mails no one", () => {
@@ -255,6 +276,38 @@ describe("the dev routes exist only in local development", () => {
 
   it("404s on a real provider", async () => {
     await expectAbsent({ ...env, ...SES_DEPLOY } as unknown as AppEnv);
+  });
+
+  // Defense in depth: a handler reached through a router built for another config (the
+  // router cache keyed wrong, say) still refuses outside local dev.
+  it("each handler refuses on its own outside local dev", async () => {
+    const e = {
+      ...env,
+      PROVIDER: "fake",
+      APP_ORIGIN: "https://newsletter.birds.example",
+    } as unknown as AppEnv;
+    const context = (path: string, method: string): RequestContext => {
+      const req = new Request(`https://k.test${path}`, { method });
+      return {
+        req,
+        env: e,
+        ctx: createExecutionContext(),
+        url: new URL(req.url),
+        params: {},
+        config: getConfig(e),
+      } as unknown as RequestContext;
+    };
+    const handlers: [string, string, (c: RequestContext) => Promise<Response>][] = [
+      ["GET", "/api/dev/token", devRoutes.token],
+      ["POST", "/api/dev/seed", devRoutes.seed],
+      ["POST", "/api/dev/reset", devRoutes.reset],
+      ["GET", "/api/dev/outbox", renderRoutes.devOutbox],
+    ];
+    for (const [method, path, handler] of handlers) {
+      await expect(handler(context(path, method)), path).rejects.toMatchObject({ status: 404 });
+    }
+    // The reset refused before touching anything: the suite's own database still answers.
+    expect(await env.DB.prepare("SELECT 1 AS ok").first()).toEqual({ ok: 1 });
   });
 
   it("is registered in local development (the suite's own env)", () => {

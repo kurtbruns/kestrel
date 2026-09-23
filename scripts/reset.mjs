@@ -34,7 +34,7 @@ async function devToken(base) {
   }
   if (res.status === 404) {
     console.error(
-      "[reset] /api/dev/token is unavailable — reset only works under the fake transport.",
+      "[reset] /api/dev/token is unavailable: reset only works on a local dev server (fake transport, no Access, APP_ORIGIN on localhost).",
     );
     process.exit(1);
   }
