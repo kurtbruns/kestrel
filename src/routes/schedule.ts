@@ -3,7 +3,8 @@
 import type { ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
-import { badRequest, HttpError, json, notFound } from "../lib/errors";
+import { fieldError, readJsonObject } from "../lib/body";
+import { HttpError, json, notFound } from "../lib/errors";
 import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -24,7 +25,7 @@ function parseFireAt(input: unknown): number {
       return n;
     }
   }
-  throw badRequest("fire_at must be an ISO-8601 timestamp or epoch milliseconds");
+  throw fieldError("fire_at", "fire_at must be an ISO-8601 timestamp or epoch milliseconds");
 }
 
 /**
@@ -37,7 +38,8 @@ export function parseFutureFireAt(input: unknown, immediateHint = false): number
   const fireAt = parseFireAt(input);
   if (fireAt < Date.now() + SEND_NOW_BUFFER_MS) {
     const hint = immediateHint ? "; use POST /posts/:id/send for immediate delivery" : "";
-    throw badRequest(
+    throw fieldError(
+      "fire_at",
       `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future${hint}`,
     );
   }
@@ -52,7 +54,8 @@ export function parseFutureFireAt(input: unknown, immediateHint = false): number
  */
 function rejectStrayTemplateChoice(body: unknown): void {
   if (body && typeof body === "object" && "template_revision" in body) {
-    throw badRequest(
+    throw fieldError(
+      "template_revision",
       "template_revision is not a field: a send is made with the template and identity as they stand, and a later change re-makes it",
     );
   }
@@ -64,12 +67,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
     throw notFound("post");
   }
 
-  let body: { fire_at?: unknown };
-  try {
-    body = (await c.req.json()) as { fire_at?: unknown };
-  } catch {
-    throw badRequest("JSON body with 'fire_at' is required");
-  }
+  const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
   const fireAt = parseFutureFireAt(body.fire_at, true);
   const send = await freeze(c.env, c.config, post, fireAt);

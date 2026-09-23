@@ -18,6 +18,7 @@ import * as posts from "../db/posts";
 import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
+import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { getProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
@@ -120,16 +121,9 @@ export async function previewPage(c: RequestContext): Promise<Response> {
  * current template, and the current identity, through the one render path (I5).
  */
 export async function test(c: RequestContext): Promise<Response> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    throw badRequest("JSON body with a 'to' address is required");
-  }
-  const to =
-    typeof (body as { to?: unknown })?.to === "string" ? (body as { to: string }).to.trim() : "";
+  const to = (optString(await readJsonObject(c), "to") ?? "").trim();
   if (!to.includes("@")) {
-    throw badRequest("'to' must be an email address");
+    throw fieldError("to", "to must be an email address");
   }
 
   const { input, email, warnings, frozen } = await loadPostEmail(c);
@@ -203,8 +197,8 @@ function sampleRenderInput(): RenderInput {
 /** Resolve the recipient list: the body's `to` (a string or array), or — when it's
  *  omitted — the saved default test recipients. Normalizes, validates, and dedupes;
  *  throws a 400 that names a bad address. */
-function resolveTestRecipients(body: unknown, defaults: string[]): string[] {
-  const raw = (body as { to?: unknown } | null)?.to;
+function resolveTestRecipients(body: JsonObject, defaults: string[]): string[] {
+  const raw = body.to;
   let input: unknown[];
   if (raw === undefined || raw === null) {
     input = defaults;
@@ -217,7 +211,7 @@ function resolveTestRecipients(body: unknown, defaults: string[]): string[] {
   const out: string[] = [];
   for (const item of input) {
     if (typeof item !== "string") {
-      throw badRequest("each recipient must be an email address");
+      throw fieldError("to", "each recipient must be an email address");
     }
     const email = normalizeEmail(item);
     if (!email) {
@@ -244,12 +238,8 @@ function resolveTestRecipients(body: unknown, defaults: string[]): string[] {
  */
 export async function templateTest(c: RequestContext): Promise<Response> {
   const settings = await getSettings(c.env.DB);
-  let body: unknown = null;
-  try {
-    body = await c.req.json();
-  } catch {
-    // An empty/absent body is fine — fall back to the saved default recipients.
-  }
+  // An empty body is fine: it falls back to the saved default recipients.
+  const body = await readJsonObject(c, { optional: true });
   const recipients = resolveTestRecipients(body, settings.testRecipients);
   if (recipients.length === 0) {
     throw badRequest(

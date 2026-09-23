@@ -3,7 +3,8 @@
 
 import * as subscribers from "../db/subscribers";
 import { normalizeEmail } from "../db/subscribers";
-import { badRequest, json } from "../lib/errors";
+import { fieldError, optString, readJsonObject } from "../lib/body";
+import { json } from "../lib/errors";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -12,18 +13,13 @@ export async function list(c: RequestContext): Promise<Response> {
 }
 
 export async function add(c: RequestContext): Promise<Response> {
-  let body: { email?: unknown; reason?: unknown; detail?: unknown };
-  try {
-    body = (await c.req.json()) as { email?: unknown; reason?: unknown; detail?: unknown };
-  } catch {
-    throw badRequest("JSON body with an 'email' is required");
-  }
-  const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+  const body = await readJsonObject(c);
+  const email = normalizeEmail(optString(body, "email") ?? "");
   if (!email) {
-    throw badRequest("email is required");
+    throw fieldError("email", "email is required");
   }
-  const reason = typeof body.reason === "string" ? body.reason : "manual";
-  const detail = typeof body.detail === "string" ? body.detail : undefined;
+  const reason = optString(body, "reason") ?? "manual";
+  const detail = optString(body, "detail");
   await subscribers.addSuppression(c.env.DB, email, reason, detail);
   return json({ suppressed: email, reason }, 201);
 }

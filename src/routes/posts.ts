@@ -9,6 +9,7 @@ import type {
 import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import { optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
@@ -24,21 +25,23 @@ interface EditBody {
   base_revision: string | null;
 }
 
-async function readBody(c: RequestContext): Promise<EditBody> {
-  const ct = c.req.headers.get("content-type") ?? "";
-  if (!ct.includes("application/json")) {
-    return { input: {}, base_revision: null };
-  }
-  try {
-    const raw = (await c.req.json()) as Record<string, unknown>;
-    const pick = (k: string) => (typeof raw[k] === "string" ? (raw[k] as string) : undefined);
-    return {
-      input: { subject: pick("subject"), slug: pick("slug"), markdown: pick("markdown") },
-      base_revision: pick("base_revision") ?? null,
-    };
-  } catch {
-    throw badRequest("invalid JSON body");
-  }
+/**
+ * Read an edit body. Every field is optional, and one that is present must be a
+ * string: a wrong type is a 400 naming it, never dropped, so a save can't report
+ * success for a field it ignored. `base_revision` also takes `null` ("no base"), and
+ * nothing else, so a malformed one can't turn into a save that skips the concurrency
+ * check.
+ */
+async function readBody(c: RequestContext, opts: { optional?: boolean } = {}): Promise<EditBody> {
+  const raw = await readJsonObject(c, opts);
+  return {
+    input: {
+      subject: optString(raw, "subject"),
+      slug: optString(raw, "slug"),
+      markdown: optString(raw, "markdown"),
+    },
+    base_revision: optStringOrNull(raw, "base_revision") ?? null,
+  };
 }
 
 /**
@@ -72,7 +75,10 @@ async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
 }
 
 export async function createPost(c: RequestContext): Promise<Response> {
-  const { input } = await readBody(c);
+  // A create with no JSON body is the "new blank draft" case; one that sends JSON is
+  // held to the same field rules as an edit.
+  const isJson = (c.req.headers.get("content-type") ?? "").includes("application/json");
+  const { input } = isJson ? await readBody(c, { optional: true }) : { input: {} };
   const { post, revision } = await posts.createPost(c.env.DB, input, author(c));
   const body: PostSavedResponse = { post, revision_id: revision.id };
   return json(body, 201, revisionHeaders(post));
