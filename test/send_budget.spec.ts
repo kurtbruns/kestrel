@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
-import { DEFAULT_SUBREQUEST_BUDGET, getConfig, MIN_SUBREQUEST_BUDGET } from "../src/env";
+import {
+  ConfigError,
+  DEFAULT_SUBREQUEST_BUDGET,
+  getConfig,
+  MIN_SUBREQUEST_BUDGET,
+} from "../src/env";
 import { HALT_BACKOFF_MS, LEASE_TTL_MS } from "../src/lib/time";
 import { NOTIFY_RESERVE } from "../src/notify/notify";
 import * as providers from "../src/providers";
@@ -129,9 +134,11 @@ describe("SUBREQUEST_BUDGET", () => {
 
   it("defaults to the Workers Free limit, takes a raise, and is never set too low to send", () => {
     expect(budgetFor(undefined)).toBe(DEFAULT_SUBREQUEST_BUDGET);
-    expect(budgetFor("not a number")).toBe(DEFAULT_SUBREQUEST_BUDGET);
     expect(budgetFor("1000")).toBe(1000);
     expect(budgetFor("10")).toBe(MIN_SUBREQUEST_BUDGET);
+    // A typo is refused, never taken for the default.
+    expect(() => budgetFor("not a number")).toThrow(ConfigError);
+    expect(() => budgetFor("0")).toThrow(/SUBREQUEST_BUDGET/);
     // The floor has to cover a tick's own queries (the anomaly checks, due and resumable
     // sends) and its notification reserve, plus one run's opening, one batch, and its close.
     expect(MIN_SUBREQUEST_BUDGET).toBeGreaterThanOrEqual(MIN_RUN_COST + 4 + NOTIFY_RESERVE);

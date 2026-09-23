@@ -17,8 +17,13 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
       return new SesProvider(config, env);
     case "resend":
       return new ResendProvider(config, env);
-    default:
-      return new FakeProvider();
+    default: {
+      // getConfig admits only known names, so this is unreachable; the `never` makes a new
+      // name a compile error here, and the throw keeps it from ever falling through to a
+      // transport that would record every recipient accepted and mail no one.
+      const unknown: never = config.provider;
+      throw new Error(`no transport for provider "${String(unknown)}"`);
+    }
   }
 }
 

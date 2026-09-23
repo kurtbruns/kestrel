@@ -2,7 +2,7 @@ import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
-import type { AppEnv } from "../src/env";
+import { type AppEnv, getConfig } from "../src/env";
 import {
   oneOf,
   optObject,
@@ -224,7 +224,11 @@ describe("PUT /api/settings keeps a database failure out of the 400", () => {
       headers: { ...AUTH, "content-type": "application/json" },
       body: JSON.stringify({ publication: { name: "Fine" } }),
     });
-    const res = await createRouter("/archive").handle(req, broken, createExecutionContext());
+    const res = await createRouter(getConfig(env as AppEnv)).handle(
+      req,
+      broken,
+      createExecutionContext(),
+    );
     expect(res.status).toBe(500);
     expect(await readJson(res)).toEqual({ error: "internal_error" });
   });

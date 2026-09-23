@@ -68,7 +68,7 @@ async function devToken(base) {
   }
   if (res.status === 404) {
     console.error(
-      "[seed] /api/dev/token is unavailable — seeding only works under the fake transport.",
+      "[seed] /api/dev/token is unavailable: seeding only works on a local dev server (fake transport, no Access, APP_ORIGIN on localhost).",
     );
     process.exit(1);
   }

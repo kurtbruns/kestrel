@@ -1,7 +1,9 @@
 /**
- * Dev-only tooling routes. Gated to a dev-shaped env: on any real provider
- * (staging/production) these 404, so they can never touch a provisioned database,
- * a real inbox, or mint a credential once Access is the gate.
+ * Dev-only tooling routes. `app.ts` registers them only when `config.devMode` holds (the
+ * one "this is local dev" predicate, see `getConfig`), so in any deployed env they do not
+ * exist and can never touch a provisioned database, a real inbox, or mint a credential
+ * once Access is the gate. Each handler checks `devMode` again, so reaching one through a
+ * router built for another config still 404s.
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
  *   POST /api/dev/seed  → reset the DB and load the local "Windbreak" dataset.
@@ -18,16 +20,24 @@ import { parseSeedSize, seedDatabase } from "../dev/seed";
 import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 
+/** 404 unless this is local dev. */
+function requireDevMode(c: RequestContext): void {
+  if (!c.config.devMode) {
+    throw notFound("only available in local development");
+  }
+}
+
 /**
- * Bootstrap credential for local dev. Public by necessity — it is the thing that
- * hands out the admin token — but inert once deployed: `devAuthSecret` is resolved
- * only in a dev-shaped env and the secret is never committed (it lives in the
- * gitignored `.dev.vars`), so this 404s the moment Access is the gate. A token with
- * no `email` is a `service` principal, mirroring Claude in production.
+ * Bootstrap credential for local dev. Public by necessity (it is the thing that hands
+ * out the admin token) but absent once deployed: `devAuthSecret` is resolved only in a
+ * dev-shaped env and the secret is never committed (it lives in the gitignored
+ * `.dev.vars`). A token with no `email` is a `service` principal, mirroring Claude in
+ * production.
  */
 export async function token(c: RequestContext): Promise<Response> {
+  requireDevMode(c);
   if (!c.config.devAuthSecret) {
-    throw notFound("not available for this transport");
+    throw notFound("only available in local development");
   }
   const service = c.url.searchParams.get("kind") === "service";
   const jwt = await mintDevToken(c.config.devAuthSecret, service ? {} : { email: "dev@localhost" });
@@ -35,9 +45,7 @@ export async function token(c: RequestContext): Promise<Response> {
 }
 
 export async function seed(c: RequestContext): Promise<Response> {
-  if (c.config.provider !== "fake") {
-    throw notFound("not available for this transport");
-  }
+  requireDevMode(c);
 
   let kestrelFile: { bytes: ArrayBuffer; contentType: string; filename: string } | undefined;
   let logoFile: { bytes: ArrayBuffer; contentType: string } | undefined;
@@ -79,12 +87,10 @@ export async function seed(c: RequestContext): Promise<Response> {
  * The reverse of the seed: wipe the local database back to a fresh install — no
  * posts, no subscribers, and default settings (so the publication identity resets
  * too) — for viewing the first-run dashboard and setup checklist. Dev-only, like
- * the seed: 404s on any real provider so it can never wipe a provisioned database.
+ * the seed, so it can never wipe a provisioned database.
  */
 export async function reset(c: RequestContext): Promise<Response> {
-  if (c.config.provider !== "fake") {
-    throw notFound("not available for this transport");
-  }
+  requireDevMode(c);
   await resetAll(c.env.DB); // clears every D1 table, the settings singleton included
   // resetAll can't reach R2, so drop the one global branding asset here too — a fresh
   // reset then shows the From-name fallback and no logo.

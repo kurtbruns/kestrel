@@ -5,7 +5,7 @@
  * on anything (confirming a subscription, or applying delivery events), because
  * the webhook route is public. Verification:
  *   - fetch the signing certificate from `SigningCertURL`, whose host is pinned
- *     to `sns.*.amazonaws.com` (an attacker cannot host a cert there);
+ *     to `sns.<region>.amazonaws.com[.cn]` (an attacker cannot host a cert there);
  *   - rebuild the canonical string per the SNS rules (field order depends on
  *     message type; `Subject` is included only when present);
  *   - RSA-verify `Signature` over it. SignatureVersion "1" is SHA-1, "2" is
@@ -32,10 +32,12 @@ export interface SnsEnvelope {
   Token?: string;
 }
 
-/** Pin a URL to the SNS host family: `https://sns.<region>.amazonaws.com/...`. */
+/** AWS's documented SNS endpoint pattern: one region label, then `amazonaws.com` (or `.cn`). */
+const SNS_HOST = /^sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$/;
+
+/** Pin a URL to the SNS host family: `https://sns.<region>.amazonaws.com[.cn]/...`. */
 export function isSnsHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  return h.startsWith("sns.") && h.endsWith(".amazonaws.com");
+  return SNS_HOST.test(hostname.toLowerCase());
 }
 
 // The fields that make up the string-to-sign, in the exact order SNS uses.

@@ -6,6 +6,8 @@ Every post has a permanent archive URL — its "view in browser" link and every 
 
 Out of the box, `ARCHIVE_ORIGIN` defaults to `APP_ORIGIN` and `MEDIA_PUBLIC_BASE` to `${APP_ORIGIN}/media` (resolved in `src/env.ts`). So archive URLs are `https://newsletter.example.com/archive/{slug}` and images serve from the Worker's own origin. A newsletter works end to end whether or not you have a separate website, and wherever that website is hosted. If that is fine, skip this section.
 
+Neither override ships in the `wrangler.jsonc` template; add the ones you want to that environment's `vars` as shown below. With a real provider, the app refuses an override still on `example.com`, so the placeholders here cannot go out in an email.
+
 ## Optional — surface the archive on your website's apex
 
 If your website's apex is a **Cloudflare** zone, you can present the archive under your main domain — `example.com/archive/*` — so links carry your primary domain's trust and rank with the rest of your site.
@@ -21,7 +23,7 @@ This is a routing concern on the apex zone, not a second app:
    "ARCHIVE_BASE_PATH": "/archive"
    ```
 
-3. **Pick a base path that doesn't collide.** `ARCHIVE_BASE_PATH` drives *both* the emitted URL and the route the Worker serves (`createRouter(basePath)` in `src/app.ts`), so the two can never drift. Choose a prefix your site does not already use for a real page — `/archive` (the default), `/newsletter`, `/issues` — and set the same value in the Worker route in step 1.
+3. **Pick a base path that doesn't collide.** `ARCHIVE_BASE_PATH` drives *both* the emitted URL and the route the Worker serves (`createRouter` in `src/app.ts`), so the two can never drift. Choose a prefix your site does not already use for a real page, such as `/archive` (the default), `/newsletter`, or `/issues`, and set the same value in the Worker route in step 1.
 
 > **Pages-vs-Worker-route precedence caveat.** If the apex is served by Cloudflare **Pages**, a Worker route and the Pages project can both match a path. A Worker route takes precedence over Pages for the paths it matches, but confirm it: after adding the route, load `https://example.com/archive/<a-sent-slug>` and check it serves the post (the Worker), not a Pages 404. Make sure the base path does not shadow a real page or a Pages Function you depend on.
 

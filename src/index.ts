@@ -9,30 +9,67 @@
 
 import { createRouter } from "./app";
 import type { AppEnv } from "./env";
-import { getConfig } from "./env";
+import { ConfigError, getConfig } from "./env";
+import { json } from "./lib/errors";
 import type { Router } from "./router";
 import { sweep } from "./send/sweep";
 
-// The archive route is config-driven (ARCHIVE_BASE_PATH), and bindings are only
-// available per-request — so build the router lazily and cache it per base path.
+// The archive route is config-driven (ARCHIVE_BASE_PATH), and whether the dev routes exist
+// follows devMode, but bindings are only available per-request, so build the router lazily
+// and cache it per (base path, dev mode).
 const routers = new Map<string, Router>();
 function routerFor(env: AppEnv): Router {
-  const basePath = getConfig(env).archiveBasePath;
-  let router = routers.get(basePath);
+  const config = getConfig(env);
+  const key = `${config.archiveBasePath}|${config.devMode}`;
+  let router = routers.get(key);
   if (!router) {
-    router = createRouter(basePath);
-    routers.set(basePath, router);
+    router = createRouter(config);
+    routers.set(key, router);
   }
   return router;
+}
+
+// The last deploy-config error logged, so a broken deployment logs its cause once per
+// isolate rather than on every request and every sweep tick.
+let reportedConfigError: string | undefined;
+
+/** Log a deploy-config error the first time it is seen. */
+function reportConfigError(err: ConfigError): void {
+  if (reportedConfigError !== err.message) {
+    reportedConfigError = err.message;
+    console.error(`kestrel: invalid deploy config: ${err.message}`);
+  }
 }
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     const appEnv = env as AppEnv;
-    return routerFor(appEnv).handle(request, appEnv, ctx);
+    let router: Router;
+    try {
+      router = routerFor(appEnv);
+    } catch (err) {
+      if (!(err instanceof ConfigError)) {
+        throw err;
+      }
+      // Refuse every request, naming the variable to fix, rather than run on config that
+      // would do the wrong thing quietly.
+      reportConfigError(err);
+      return json({ error: "invalid_config", message: err.message, variable: err.variable }, 500);
+    }
+    return router.handle(request, appEnv, ctx);
   },
 
   async scheduled(_controller, env, ctx): Promise<void> {
-    ctx.waitUntil(sweep(env as AppEnv));
+    const appEnv = env as AppEnv;
+    try {
+      getConfig(appEnv);
+    } catch (err) {
+      if (err instanceof ConfigError) {
+        reportConfigError(err); // the sweep would only fail the same way, every minute
+        return;
+      }
+      throw err;
+    }
+    ctx.waitUntil(sweep(appEnv));
   },
 } satisfies ExportedHandler<Env>;

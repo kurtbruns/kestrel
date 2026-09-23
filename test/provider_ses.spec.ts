@@ -6,10 +6,11 @@ import { getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { SesProvider } from "../src/providers/ses";
 import { base64Bytes } from "../src/providers/ses_mime";
-import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
+import { _clearKeyCache, canonicalString, isSnsHost, type SnsEnvelope } from "../src/providers/sns";
 import type { RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { SNS_TOPIC_ARN } from "./support/deploy";
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -20,7 +21,11 @@ const sesEnv = {
   AWS_ACCESS_KEY_ID: "AKIATESTTESTTEST",
   AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
   SES_CONFIGURATION_SET: "kestrel-events",
+  SNS_TOPIC_ARN,
 } as unknown as AppEnv;
+
+/** A topic in someone else's account: SNS signs its messages just as validly. */
+const FOREIGN_TOPIC_ARN = "arn:aws:sns:us-east-1:999999999999:not-ours";
 
 function newProvider(): SesProvider {
   return new SesProvider(getConfig(env), sesEnv);
@@ -429,11 +434,11 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     });
   }
 
-  function notification(signer: Signer, message: string): SnsEnvelope {
+  function notification(signer: Signer, message: string, topicArn = SNS_TOPIC_ARN): SnsEnvelope {
     return {
       Type: "Notification",
       MessageId: crypto.randomUUID(),
-      TopicArn: "arn:aws:sns:us-east-1:123456789012:kestrel-ses",
+      TopicArn: topicArn,
       Message: message,
       Timestamp: new Date().toISOString(),
       SignatureVersion: "2",
@@ -520,22 +525,15 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(await subscribers.isSuppressed(env.DB, "softbounce@example.com")).toBe(false);
   });
 
-  it("confirms an SNS subscription by GETting the SubscribeURL", async () => {
-    const signer = await makeSigner();
-    const subscribeUrl = `https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&Token=${crypto.randomUUID()}`;
-    let subscribeFetched = false;
-    const spy = mockCert(signer, (url) => {
-      if (url === subscribeUrl) {
-        subscribeFetched = true;
-        return new Response("<ConfirmSubscriptionResponse/>", { status: 200 });
-      }
-      return undefined;
-    });
-
-    const base: SnsEnvelope = {
+  function subscriptionConfirmation(
+    signer: Signer,
+    subscribeUrl: string,
+    topicArn = SNS_TOPIC_ARN,
+  ): SnsEnvelope {
+    return {
       Type: "SubscriptionConfirmation",
       MessageId: crypto.randomUUID(),
-      TopicArn: "arn:aws:sns:us-east-1:123456789012:kestrel-ses",
+      TopicArn: topicArn,
       Message: "You have chosen to subscribe to the topic.",
       Timestamp: new Date().toISOString(),
       SignatureVersion: "2",
@@ -544,13 +542,93 @@ describe("SesProvider.parseWebhook (SNS)", () => {
       SubscribeURL: subscribeUrl,
       Token: "a-token",
     };
-    const envelope = await signEnvelope(base, signer);
+  }
+
+  /** Mock the cert, and record whether the SubscribeURL was fetched. */
+  function mockSubscribe(signer: Signer, subscribeUrl: string) {
+    const fetched = { subscribe: false };
+    const spy = mockCert(signer, (url) => {
+      if (url === subscribeUrl) {
+        fetched.subscribe = true;
+        return new Response("<ConfirmSubscriptionResponse/>", { status: 200 });
+      }
+      return undefined;
+    });
+    return { spy, fetched };
+  }
+
+  const newSubscribeUrl = () =>
+    `https://sns.us-east-1.amazonaws.com/?Action=ConfirmSubscription&Token=${crypto.randomUUID()}`;
+
+  it("confirms an SNS subscription by GETting the SubscribeURL", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    const { spy, fetched } = mockSubscribe(signer, subscribeUrl);
+
+    const envelope = await signEnvelope(subscriptionConfirmation(signer, subscribeUrl), signer);
     const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
 
     expect(result.response.status).toBe(200);
     expect(result.events).toHaveLength(0);
-    expect(subscribeFetched).toBe(true);
+    expect(fetched.subscribe).toBe(true);
     expect(spy.mock.calls.some((c) => reqUrl(c[0]) === subscribeUrl)).toBe(true);
+  });
+
+  // A valid SNS signature proves only that SNS sent the message; any AWS account's topic
+  // could have. The configured topic is what makes it this deployment's.
+  it("refuses a correctly signed subscription from another topic, never fetching its SubscribeURL", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    const { fetched } = mockSubscribe(signer, subscribeUrl);
+
+    const envelope = await signEnvelope(
+      subscriptionConfirmation(signer, subscribeUrl, FOREIGN_TOPIC_ARN),
+      signer,
+    );
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(403);
+    expect(result.events).toHaveLength(0);
+    expect(fetched.subscribe).toBe(false);
+  });
+
+  it("refuses a correctly signed bounce from another topic and suppresses no one", async () => {
+    const signer = await makeSigner();
+    mockCert(signer);
+    await seedDelivery("listed@example.com", "msg-foreign-1");
+
+    const envelope = await signEnvelope(
+      notification(
+        signer,
+        bounceMessage("listed@example.com", "msg-foreign-1", "Permanent"),
+        FOREIGN_TOPIC_ARN,
+      ),
+      signer,
+    );
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(403);
+    expect(result.events).toHaveLength(0);
+    expect(await subscribers.isSuppressed(env.DB, "listed@example.com")).toBe(false);
+  });
+
+  it("refuses everything when SNS_TOPIC_ARN is unset (fails closed)", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    const { fetched } = mockSubscribe(signer, subscribeUrl);
+    const unset = { ...sesEnv, SNS_TOPIC_ARN: undefined } as unknown as AppEnv;
+
+    const confirm = await signEnvelope(subscriptionConfirmation(signer, subscribeUrl), signer);
+    const bounce = await signEnvelope(
+      notification(signer, bounceMessage("a@example.com", "msg-unset-1", "Permanent")),
+      signer,
+    );
+    for (const envelope of [confirm, bounce]) {
+      const result = await newProvider().parseWebhook(webhookRequest(envelope), unset);
+      expect(result.response.status).toBe(403);
+      expect(result.events).toHaveLength(0);
+    }
+    expect(fetched.subscribe).toBe(false);
   });
 
   it("rejects a forged signature and mutates nothing", async () => {
@@ -592,6 +670,17 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(spy.mock.calls.some((c) => reqUrl(c[0]) === "https://evil.example.com/cert.pem")).toBe(
       false,
     );
+  });
+
+  it("pins the signing-cert host to AWS's SNS endpoint pattern", () => {
+    expect(isSnsHost("sns.us-east-1.amazonaws.com")).toBe(true);
+    expect(isSnsHost("sns.cn-north-1.amazonaws.com.cn")).toBe(true);
+    expect(isSnsHost("SNS.EU-WEST-1.AMAZONAWS.COM")).toBe(true);
+    // Shapes the old prefix/suffix check let through.
+    expect(isSnsHost("sns.evil.example.amazonaws.com")).toBe(false);
+    expect(isSnsHost("sns..amazonaws.com")).toBe(false);
+    expect(isSnsHost("sns.us-east-1.amazonaws.com.evil.example")).toBe(false);
+    expect(isSnsHost("notsns.us-east-1.amazonaws.com")).toBe(false);
   });
 
   it("rejects an unparseable body with 400", async () => {

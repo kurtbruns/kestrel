@@ -6,7 +6,20 @@
  * bindings; we declare them here as an optional `Secrets` interface so the code
  * type-checks whether or not a local `.dev.vars` was present when types were
  * generated. `AppEnv` is what handlers receive.
+ *
+ * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
+ * (an unknown provider, a missing origin, a real provider without its credentials or still
+ * on the template's example.com placeholders) throws a `ConfigError` naming the variable.
  */
+
+import {
+  isProviderName,
+  PROVIDER_NAMES,
+  type ProviderName,
+  REQUIRED_VARS,
+} from "./providers/requirements";
+
+export type { ProviderName };
 
 export interface Secrets {
   /**
@@ -46,6 +59,14 @@ export interface Secrets {
  */
 export interface OptionalVars {
   /**
+   * The origin the public archive's links use, when it is surfaced on a website apex
+   * (SPEC §11). Unset means `APP_ORIGIN`.
+   */
+  ARCHIVE_ORIGIN?: string;
+  /** Base URL images are served from, when a media custom domain is set. Unset means
+   *  `${APP_ORIGIN}/media`. */
+  MEDIA_PUBLIC_BASE?: string;
+  /**
    * Subrequests (D1 statements plus outbound requests) one invocation of the send path
    * may make. Unset means the Workers Free plan's 50; raise it on Workers Paid.
    */
@@ -73,8 +94,6 @@ export interface OptionalBindings {
 }
 
 export type AppEnv = Env & Secrets & OptionalVars & OptionalBindings;
-
-export type ProviderName = "fake" | "ses" | "resend";
 
 /**
  * How notifications reach the publisher (SPEC §8): Cloudflare's own email when the `NOTIFY`
@@ -109,18 +128,20 @@ export interface Config {
   accessAllowedEmails?: string[];
   /**
    * True only in a dev-shaped env with the dev credential live (fake transport, no
-   * Access, dev secret present) — the single case where `/dashboard` is reachable
-   * without an Access wall, because the editor auto-mints a dev token on load. Gates
-   * the dev-only "Open dashboard" link the public reader surface injects for a local
-   * developer (SPEC §5, §11); structurally false in any deployed env, so the reader
-   * surface never links toward the Access gate there. Presentation only — the route
-   * gate in `app.ts` is identical in every environment.
+   * Access, a loopback `APP_ORIGIN`, dev secret present): the single case where
+   * `/dashboard` is reachable without an Access wall, because the editor auto-mints a
+   * dev token on load. It decides whether the `/api/dev/*` routes exist at all (`app.ts`
+   * registers them only here), and gates the dev-only "Open dashboard" link the public
+   * reader surface injects for a local developer (SPEC §5, §11). Structurally false in
+   * any deployed env, so there the dev routes are absent and the reader surface never
+   * links toward the Access gate. The admin/public gate in `app.ts` is identical in every
+   * environment.
    */
   devMode: boolean;
   /**
-   * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (fake transport,
-   * no Access configured). Undefined in any deployed env, which disables the dev
-   * credential path entirely — Access is then the only door.
+   * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (see `devMode`).
+   * Undefined in any deployed env, which disables the dev credential path entirely:
+   * Access is then the only door.
    */
   devAuthSecret?: string;
   /**
@@ -162,38 +183,69 @@ function normalizeBasePath(v: string | undefined): string {
   return withLead.length > 1 && withLead.endsWith("/") ? withLead.slice(0, -1) : withLead;
 }
 
-/** Resolve the typed `Config` from raw bindings. Pure; no I/O.
+/**
+ * Deploy config the app cannot run on as given. Names the variable, so the 500 it becomes
+ * and the line it logs both say what to fix. Never carries a secret's value: secrets are
+ * only ever checked for presence.
+ */
+export class ConfigError extends Error {
+  constructor(
+    readonly variable: string,
+    detail: string,
+  ) {
+    super(`${variable} ${detail}`);
+    this.name = "ConfigError";
+  }
+}
+
+/** Resolve the typed `Config` from raw bindings. Pure; no I/O. Throws `ConfigError` on
+ *  deploy config that would run wrong rather than fail (see the module header).
  *  Self-contained by default (SPEC §11): the archive origin and media base fall
  *  back to the app's own origin, so a deployment that sets only `APP_ORIGIN`
  *  serves archives and images on its own hostname with no further assumptions. */
 export function getConfig(env: AppEnv): Config {
-  const appOrigin = env.APP_ORIGIN;
-  const provider = (env.PROVIDER as ProviderName) ?? "fake";
+  const provider = readProvider(env.PROVIDER);
+  const appOrigin = readOrigin("APP_ORIGIN", env.APP_ORIGIN);
+  if (!appOrigin) {
+    throw new ConfigError("APP_ORIGIN", "is not set; it is the origin the app is served from");
+  }
+  const archiveOrigin = readOrigin("ARCHIVE_ORIGIN", env.ARCHIVE_ORIGIN) ?? appOrigin;
+  const mediaPublicBase =
+    readBaseUrl("MEDIA_PUBLIC_BASE", env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`;
+  if (provider !== "fake") {
+    requireRealProviderConfig(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
+  }
   const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
   // Belt-and-suspenders: only honor the dev credential when the env is unambiguously
-  // dev-shaped — fake transport AND no Access configured. Combined with the secret
-  // never being committed (it lives in the gitignored `.dev.vars`, not in
-  // `wrangler.jsonc` vars), a deployed Worker has no secret and this stays undefined
-  // — the dev auth path is off, Access is the only door. This one predicate is also
-  // what `devMode` keys on, so "this is local dev" has a single source.
-  const devShaped = provider === "fake" && !accessTeamDomain;
+  // dev-shaped: fake transport, no Access configured, AND an origin on this machine.
+  // Combined with the secret never being committed (it lives in the gitignored
+  // `.dev.vars`, not in `wrangler.jsonc` vars), a deployed Worker has no secret and this
+  // stays undefined, so the dev auth path is off and Access is the only door. The loopback
+  // origin also catches a fake, Access-less deploy given its real hostname with `.dev.vars`
+  // uploaded as secrets. Config alone cannot tell the development config deployed wholly
+  // unchanged (its origin still names localhost) from local dev; that deploy is
+  // misconfigured anyway, since every link it emits points at localhost. A real provider
+  // or Access, either of which every real deployment has, turns this path off regardless.
+  // This one predicate is also what `devMode` (and so the dev routes) keys on, so "this is
+  // local dev" has a single source.
+  const devShaped = provider === "fake" && !accessTeamDomain && isLoopbackOrigin(appOrigin);
   const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
   const notifyChannel: NotifyChannel = devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     provider,
     appOrigin,
-    archiveOrigin: orUndefined(env.ARCHIVE_ORIGIN) ?? appOrigin,
+    archiveOrigin,
     archiveBasePath: normalizeBasePath(env.ARCHIVE_BASE_PATH),
-    mediaPublicBase: orUndefined(env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`,
+    mediaPublicBase,
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,
     accessTeamDomain,
     accessAud: orUndefined(env.ACCESS_AUD),
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
-    // Show the dev-only dashboard link exactly when clicking it would work: the
-    // dev credential path is live (dev-shaped AND the secret resolved). Never true
-    // in a deployed env, so the reader surface stays clean of any admin link there.
+    // Show the dev-only dashboard link, and register the dev routes, exactly when the
+    // dev credential path is live (dev-shaped AND the secret resolved). Never true in a
+    // deployed env, so the reader surface stays clean of any admin link there.
     devMode: devAuthSecret !== undefined,
     devAuthSecret,
     // Only ever active in a dev-shaped env; a deployed env runs a real provider, so the
@@ -201,23 +253,153 @@ export function getConfig(env: AppEnv): Config {
     simulateSends: devShaped && isTruthy(env.SIMULATE_SENDS),
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
-      parsePositiveInt(env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
+      readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
     ),
     notifyChannel,
     notifyFrom:
       notifyChannel === "cloudflare"
-        ? (orUndefined(env.NOTIFY_FROM) ?? `Kestrel <kestrel@${hostOf(appOrigin)}>`)
+        ? (orUndefined(env.NOTIFY_FROM) ?? `Kestrel <kestrel@${new URL(appOrigin).hostname}>`)
         : env.FROM_ADDRESS,
   };
 }
 
-/** The hostname of an origin, or the origin itself when it does not parse. */
-function hostOf(origin: string): string {
-  try {
-    return new URL(origin).hostname;
-  } catch {
-    return origin;
+/** `PROVIDER` as one of the known names, exactly as spelled. Unset means the fake (the
+ *  development config); anything else unknown is an error, never a quiet fake that would
+ *  record every recipient accepted and mail no one. */
+function readProvider(v: string | undefined): ProviderName {
+  const raw = orUndefined(v);
+  if (raw === undefined) {
+    return "fake";
   }
+  if (!isProviderName(raw)) {
+    throw new ConfigError("PROVIDER", `must be one of ${PROVIDER_NAMES.join(", ")}, not "${raw}"`);
+  }
+  return raw;
+}
+
+/**
+ * What a real transport needs before it may run: its credentials, a `From:`, and no
+ * example.com placeholder left from the template, whose links and images would otherwise
+ * go out in every email and, as archive URLs are permanent (I3), stay wrong forever.
+ */
+function requireRealProviderConfig(
+  provider: Exclude<ProviderName, "fake">,
+  env: AppEnv,
+  origins: { appOrigin: string; archiveOrigin: string; mediaPublicBase: string },
+): void {
+  for (const name of [...REQUIRED_VARS[provider], "FROM_ADDRESS"] as const) {
+    const value = env[name];
+    if (typeof value !== "string" || value.trim() === "") {
+      throw new ConfigError(name, `is not set; PROVIDER "${provider}" needs it`);
+    }
+  }
+  const hosts: [string, string][] = [
+    ["APP_ORIGIN", new URL(origins.appOrigin).hostname],
+    ["ARCHIVE_ORIGIN", new URL(origins.archiveOrigin).hostname],
+    ["MEDIA_PUBLIC_BASE", new URL(origins.mediaPublicBase).hostname],
+    ["FROM_ADDRESS", emailDomain("FROM_ADDRESS", env.FROM_ADDRESS)],
+  ];
+  if (orUndefined(env.SENDING_DOMAIN)) {
+    hosts.push(["SENDING_DOMAIN", env.SENDING_DOMAIN.trim()]);
+  }
+  for (const [name, host] of hosts) {
+    if (isPlaceholderHost(host)) {
+      throw new ConfigError(
+        name,
+        `is still on the template's example.com placeholder; PROVIDER "${provider}" sends real email`,
+      );
+    }
+  }
+}
+
+/** The domain of a `From:` value, `Name <local@domain>` or a bare address. */
+function emailDomain(name: string, from: string): string {
+  // The address is the last `<…>`, so a display name that itself contains angle brackets
+  // is not mistaken for it.
+  const address = /<([^<>]*)>\s*$/.exec(from)?.[1] ?? from;
+  const at = address.lastIndexOf("@");
+  if (at < 1 || at === address.length - 1) {
+    throw new ConfigError(name, `must be an email address, optionally with a name, not "${from}"`);
+  }
+  return address.slice(at + 1).trim();
+}
+
+function isPlaceholderHost(host: string): boolean {
+  const h = host.toLowerCase().replace(/\.$/, "");
+  return h === "example.com" || h.endsWith(".example.com");
+}
+
+function isLoopbackOrigin(origin: string): boolean {
+  const host = new URL(origin).hostname;
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+/** A URL value as it may appear in an error, which is a public 500 and a log line: any
+ *  `user:password@` it carries is hidden, so a credential never leaves in a message. */
+function redactUserinfo(raw: string): string {
+  return raw.replace(/\/\/[^/?#]*@/, "//…@");
+}
+
+/** An http(s) URL with no credentials, query, or fragment. */
+function parseHttpUrl(name: string, raw: string): URL {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new ConfigError(name, `must be an http(s) URL, not "${redactUserinfo(raw)}"`);
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash
+  ) {
+    throw new ConfigError(name, `must be a plain http(s) URL, not "${redactUserinfo(raw)}"`);
+  }
+  return url;
+}
+
+/** An origin var (scheme, host, port; a trailing slash is dropped), or undefined when
+ *  unset. A path is refused rather than ignored, since it would never be honored. */
+function readOrigin(name: string, v: string | undefined): string | undefined {
+  const raw = orUndefined(v?.trim());
+  if (raw === undefined) {
+    return undefined;
+  }
+  const url = parseHttpUrl(name, raw);
+  if (!/^\/*$/.test(url.pathname)) {
+    throw new ConfigError(
+      name,
+      `must be an origin (scheme and host, no path), not "${redactUserinfo(raw)}"`,
+    );
+  }
+  return url.origin;
+}
+
+/** A base URL var (an origin, optionally with a path) with trailing slashes dropped, so
+ *  the URLs built on it never double a slash; undefined when unset. */
+function readBaseUrl(name: string, v: string | undefined): string | undefined {
+  const raw = orUndefined(v?.trim());
+  if (raw === undefined) {
+    return undefined;
+  }
+  const url = parseHttpUrl(name, raw);
+  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`;
+}
+
+/** A whole number above zero, or undefined when unset or blank. Anything else is refused
+ *  rather than quietly defaulted, so a typo can't pass for the default. */
+function readPositiveInt(name: string, v: string | undefined): number | undefined {
+  const raw = orUndefined(v?.trim());
+  if (raw === undefined) {
+    return undefined;
+  }
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new ConfigError(name, `must be a whole number above zero, not "${raw}"`);
+  }
+  return n;
 }
 
 /** Treat the usual "on" spellings as truthy for a dev opt-in flag. */
@@ -227,12 +409,6 @@ function isTruthy(v: string | undefined): boolean {
   }
   const s = v.trim().toLowerCase();
   return s === "1" || s === "true" || s === "yes" || s === "on";
-}
-
-/** A whole number above zero, or undefined for anything else (unset, blank, junk). */
-function parsePositiveInt(v: string | undefined): number | undefined {
-  const n = Number(v?.trim());
-  return v && Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {
