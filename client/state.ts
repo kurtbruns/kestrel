@@ -2,13 +2,13 @@
 // (`appState`) so each cross-module write is visible here. What a view owns lives in the
 // view, for as long as its mount (client/lifecycle.ts).
 
+import type { SettingsResponse } from "../shared/settings";
+
 /** The boot probe's answer (GET /api/whoami): who we are and which auth mode gates this surface. */
 export interface Session {
   principal: { kind: "human" | "service"; email?: string };
   auth: { mode: "access" | "dev" };
 }
-
-import type { SettingsResponse } from "../shared/settings";
 
 export interface AppState {
   /** The dev token (local dev only; deployed envs authenticate at the edge). */
