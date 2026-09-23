@@ -16,18 +16,33 @@ export const fmt = (ms: number | null | undefined): string =>
 
 /**
  * Split a free-text recipient list (newlines or commas) into unique, normalized
- * addresses, dropping any the server would refuse. Server-side validation is still
- * authoritative; this just tidies the Send-test input.
+ * addresses, and the entries that aren't addresses, as typed, so the caller can name
+ * them instead of quietly sending to fewer people than were listed. Server-side
+ * validation is still authoritative; this tidies the Send-test input.
  */
-export function parseAddresses(text: string | null | undefined): string[] {
-  const out = new Set<string>();
+export function parseAddresses(text: string | null | undefined): {
+  valid: string[];
+  invalid: string[];
+} {
+  const valid = new Set<string>();
+  const invalid: string[] = [];
   for (const part of String(text || "").split(/[\n,]+/)) {
     const a = normalizeEmail(part);
     if (isValidEmail(a)) {
-      out.add(a);
+      valid.add(a);
+    } else if (a) {
+      invalid.push(part.trim());
     }
   }
-  return [...out];
+  return { valid: [...valid], invalid };
+}
+
+/** The toast for Send-test entries that aren't addresses, or null when there are none. */
+export function invalidAddressesMessage(invalid: string[]): string | null {
+  if (!invalid.length) {
+    return null;
+  }
+  return `Not ${invalid.length === 1 ? "an email address" : "email addresses"}: ${invalid.join(", ")}`;
 }
 
 /** A Date as the value of a `datetime-local` input, in local time. */
