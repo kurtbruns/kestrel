@@ -65,9 +65,9 @@ export interface SubscribeResponse {
 }
 
 /**
- * POST /subscribe, the public form, as JSON. One answer whatever the address's state, so
- * the reply never says who is on the list (SPEC §7). Only a confirmation the provider
- * would not take is answered differently, as an error.
+ * POST /subscribe, the public form, as JSON. One answer whatever the address's state, given
+ * before any confirmation is sent, so neither the reply nor its timing says who is on the
+ * list (SPEC §7).
  */
 export interface PublicSubscribeResponse {
   status: "check_inbox";

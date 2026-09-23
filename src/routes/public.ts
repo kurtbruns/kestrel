@@ -119,29 +119,16 @@ export async function subscribe(c: RequestContext): Promise<Response> {
       subscribeFormHtml();
     return subscribePage(c, identity, main, 400);
   }
-  const outcome = await requestSubscription(c, email);
-  if (outcome.kind === "failed") {
-    // The one answer that differs: the confirmation did not go, which is about the
-    // provider, never about whether the address is on the list.
-    if (!wantsHtml(c)) {
-      return json(
-        {
-          error: "confirmation_not_sent",
-          message: "the confirmation email could not be sent; try again later",
-        },
-        503,
-      );
-    }
-    const identity = await readerIdentity(c, c.config);
-    const main =
-      `<p class="r-ey">Newsletter</p>` +
-      `<h1 class="r-h1">We couldn’t send your confirmation</h1>` +
-      `<p class="r-lead">Something went wrong sending the email. If it hasn’t arrived, please try again later.</p>` +
-      subscribeFormHtml();
-    return subscribePage(c, identity, main, 503);
-  }
-  // Every other outcome, sent or not, gets this same answer, so a request can't learn
-  // whether the address is subscribed, pending, suppressed, or new (SPEC §7).
+  // Subscribing, and any confirmation, happen after the answer has gone: the answer, and
+  // how long it takes, must not depend on the address's state (SPEC §7). A refusal is
+  // logged and changes nothing, so the reader can simply submit again.
+  c.ctx.waitUntil(
+    requestSubscription(c, email).catch((err: unknown) => {
+      console.error("subscribe failed", err instanceof Error ? err.message : String(err));
+    }),
+  );
+  // One answer for every address, so a request can't learn whether it is subscribed,
+  // pending, suppressed, or new.
   if (!wantsHtml(c)) {
     const body: PublicSubscribeResponse = { status: "check_inbox" };
     return json(body);

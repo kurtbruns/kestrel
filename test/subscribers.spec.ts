@@ -1,8 +1,10 @@
-import { SELF } from "cloudflare:test";
+import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRouter } from "../src/app";
 import * as settings from "../src/db/settings";
 import * as subs from "../src/db/subscribers";
+import { type AppEnv, getConfig } from "../src/env";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
@@ -16,21 +18,35 @@ const readJson = async (r: Response): Promise<any> => r.json();
 let seq = 0;
 const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;
 
+/** Dispatch through the real router and wait for its background work, since the public
+ *  form answers before it subscribes anyone or sends a confirmation. */
+async function route(req: Request): Promise<Response> {
+  const ctx = createExecutionContext();
+  const e = env as AppEnv;
+  const res = await createRouter(getConfig(e).archiveBasePath).handle(req, e, ctx);
+  await waitOnExecutionContext(ctx);
+  return res;
+}
+
 async function publicSubscribe(email: string): Promise<Response> {
-  return SELF.fetch(`${base}/subscribe`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email }),
-  });
+  return route(
+    new Request(`${base}/subscribe`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email }),
+    }),
+  );
 }
 
 /** The public form's own submission: urlencoded, answered with a page. */
 async function formSubscribe(email: string): Promise<Response> {
-  return SELF.fetch(`${base}/subscribe`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ email }).toString(),
-  });
+  return route(
+    new Request(`${base}/subscribe`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email }).toString(),
+    }),
+  );
 }
 
 async function adminAdd(email: string): Promise<Response> {
@@ -379,7 +395,7 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
   });
 });
 
-describe("a confirmation the provider does not take is not reported as sent", () => {
+describe("a confirmation the provider does not take is not treated as sent", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -419,16 +435,15 @@ describe("a confirmation the provider does not take is not reported as sent", ()
     });
 
   for (const retryable of [true, false]) {
-    it(`a ${retryable ? "retryable" : "permanent"} refusal of a new address: an error, and no row`, async () => {
+    it(`a ${retryable ? "retryable" : "permanent"} refusal of a new address: no row, and the admin is told`, async () => {
       const stub = stubProvider(refused(retryable));
       const email = uniqueEmail();
 
+      // The public answer never changes (it comes before the send); the state says what happened.
       const res = await publicSubscribe(email);
-      expect(res.status).toBe(503);
-      expect(await readJson(res)).toMatchObject({ error: "confirmation_not_sent" });
-      const page = await formSubscribe(email);
-      expect(page.status).toBe(503);
-      expect(await page.text()).not.toMatch(/Check your inbox/);
+      expect(res.status).toBe(200);
+      expect(await readJson(res)).toEqual({ status: "check_inbox" });
+      expect((await formSubscribe(email)).status).toBe(200);
       expect(await subs.getByEmail(env.DB, email)).toBeNull();
 
       const admin = await adminAdd(email);
@@ -449,9 +464,9 @@ describe("a confirmation the provider does not take is not reported as sent", ()
     const aged = (await subs.getByEmail(env.DB, email))!;
     const stub = stubProvider(refused(true));
 
-    expect((await publicSubscribe(email)).status).toBe(503);
+    await publicSubscribe(email);
     expect(await subs.getByEmail(env.DB, email)).toEqual(aged);
-    expect((await publicSubscribe(email)).status).toBe(503);
+    await publicSubscribe(email);
     expect(stub.calls).toHaveLength(2);
 
     vi.restoreAllMocks();
@@ -464,9 +479,9 @@ describe("a confirmation the provider does not take is not reported as sent", ()
       halt: { reason: "unavailable", cause: "outage", error: "502 bad gateway", mayHaveSent: true },
     }));
     const email = uniqueEmail();
-    expect((await publicSubscribe(email)).status).toBe(503);
+    await publicSubscribe(email);
     expect((await subs.getByEmail(env.DB, email))?.confirm_token).not.toBeNull();
-    expect((await publicSubscribe(email)).status).toBe(200);
+    await publicSubscribe(email);
     expect(stub.calls).toHaveLength(1);
   });
 
@@ -478,7 +493,9 @@ describe("a confirmation the provider does not take is not reported as sent", ()
     const stub = stubProvider(refused(false));
     vi.spyOn(settings, "getSettings").mockRejectedValue(new Error("settings are corrupt"));
 
-    expect((await publicSubscribe(email)).status).toBe(500);
+    expect((await publicSubscribe(email)).status).toBe(200);
+    expect(await subs.getByEmail(env.DB, email)).toEqual(before);
+    expect((await adminAdd(email)).status).toBe(500);
     expect(await subs.getByEmail(env.DB, email)).toEqual(before);
     expect(stub.calls).toHaveLength(0);
   });
@@ -498,6 +515,35 @@ describe("a confirmation the provider does not take is not reported as sent", ()
     expect(after.confirm_token).toBe(pending.confirm_token);
   });
 
+  it("the public form answers before the provider is asked, so its timing says nothing", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const stub = stubProvider(async (to) => {
+      await gate;
+      return { kind: "answered", results: [{ email: to, accepted: true, providerId: "p1" }] };
+    });
+    const email = uniqueEmail();
+    const ctx = createExecutionContext();
+    const e = env as AppEnv;
+    const res = await createRouter(getConfig(e).archiveBasePath).handle(
+      new Request(`${base}/subscribe`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email }),
+      }),
+      e,
+      ctx,
+    );
+    // Answered while the provider still holds the confirmation.
+    expect(await readJson(res)).toEqual({ status: "check_inbox" });
+    release();
+    await waitOnExecutionContext(ctx);
+    expect(stub.calls).toEqual([email]);
+    expect((await subs.getByEmail(env.DB, email))?.confirm_token).not.toBeNull();
+  });
+
   it("a halted batch is a refusal too", async () => {
     stubProvider(() => ({
       kind: "halted",
@@ -509,14 +555,14 @@ describe("a confirmation the provider does not take is not reported as sent", ()
       },
     }));
     const email = uniqueEmail();
-    expect((await publicSubscribe(email)).status).toBe(503);
+    await publicSubscribe(email);
     expect(await subs.getByEmail(env.DB, email)).toBeNull();
   });
 
-  it("no answer at all: the reader is told to retry, and the link works if it arrived", async () => {
+  it("no answer at all: the link is kept in case it arrived, and the cooldown holds", async () => {
     const stub = stubProvider(() => null);
     const email = uniqueEmail();
-    expect((await publicSubscribe(email)).status).toBe(503);
+    await publicSubscribe(email);
     const row = (await subs.getByEmail(env.DB, email))!;
     expect(row).toMatchObject({ status: "pending" });
     expect(row.confirm_sent_at).not.toBeNull();

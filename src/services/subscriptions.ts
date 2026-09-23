@@ -17,9 +17,9 @@ import type { RequestContext } from "../router";
  * What a subscribe request came to. `sent`: the provider took the confirmation. `skipped`:
  * none was due (already confirmed, suppressed, or one went out inside the cooldown).
  * `failed`: one was due and did not go, either refused, or with no answer at all
- * (`delivered: "unknown"`, when it may have arrived). Only `failed` may be told to the
- * public requester differently from the rest; which of the others happened is list
- * membership, and stays with the admin API (SPEC §7).
+ * (`delivered: "unknown"`, when it may have arrived). Which of these happened is list
+ * membership, so only the admin API reports it; the public form runs this after it has
+ * answered (SPEC §7).
  */
 export type SubscriptionOutcome =
   | { kind: "sent"; subscriber: subscribers.SubscriberRow; action: subscribers.SubscribeAction }

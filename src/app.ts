@@ -763,7 +763,7 @@ export function createRouter(archiveBasePath: string): Router {
       resource: "subscriptions",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), so the reply never reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A 503 `confirmation_not_sent` means the email provider did not take the confirmation; try again later.",
+        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /subscribers` reports the refusal.",
       example: {
         request: { email: "you@example.com" },
         response: { status: "check_inbox" },
