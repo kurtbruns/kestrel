@@ -142,7 +142,7 @@ export class SesProvider implements EmailProvider {
     };
   }
 
-  async parseWebhook(req: Request, _env: AppEnv): Promise<WebhookResult> {
+  async parseWebhook(req: Request, env: AppEnv): Promise<WebhookResult> {
     let msg: SnsEnvelope;
     try {
       msg = JSON.parse(await req.text()) as SnsEnvelope;
@@ -150,7 +150,13 @@ export class SesProvider implements EmailProvider {
       return { events: [], response: textResponse("invalid json", 400) };
     }
 
-    // Signature first: the route is public, so nothing acts on an unverified msg.
+    // Bind the signed message to this deployment before verifying or acting on it.
+    const topicArn = env.SNS_TOPIC_ARN?.trim();
+    if (!topicArn || msg.TopicArn !== topicArn) {
+      return { events: [], response: textResponse("untrusted topic", 403) };
+    }
+
+    // Signature verification protects the public route from forged envelopes.
     if (!(await verifySnsSignature(msg))) {
       return { events: [], response: textResponse("invalid signature", 403) };
     }

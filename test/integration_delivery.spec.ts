@@ -42,6 +42,7 @@ const sesEnv = () =>
     AWS_ACCESS_KEY_ID: "AKIAINTEGTEST",
     AWS_SECRET_ACCESS_KEY: "integ-secret-key",
     SES_CONFIGURATION_SET: "kestrel-events",
+    SNS_TOPIC_ARN: "arn:aws:sns:us-east-1:123456789012:kestrel-ses",
   }) as unknown as AppEnv;
 
 const WHSEC = `whsec_${btoa("integration-svix-signing-key-0123456789")}`;

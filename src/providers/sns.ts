@@ -34,8 +34,7 @@ export interface SnsEnvelope {
 
 /** Pin a URL to the SNS host family: `https://sns.<region>.amazonaws.com/...`. */
 export function isSnsHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  return h.startsWith("sns.") && h.endsWith(".amazonaws.com");
+  return /^sns\.[a-z0-9-]+\.amazonaws\.com(?:\.cn)?$/i.test(hostname);
 }
 
 // The fields that make up the string-to-sign, in the exact order SNS uses.

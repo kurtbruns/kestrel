@@ -35,7 +35,7 @@ A new SES account is in the **sandbox**: it can only send to verified addresses 
 
    > The route is `/webhooks/ses` (see `src/routes/webhooks.ts`) — not `/webhooks/email`.
 
-5. **The subscription-confirmation handshake is automatic.** When you add the HTTPS subscription, SNS immediately POSTs a `SubscriptionConfirmation` to the endpoint. The app verifies the SNS signature and completes the handshake for you by fetching the `SubscribeURL` (host-pinned to `sns.*.amazonaws.com`); there is nothing to click. The subscription flips to *Confirmed* on its own. Every subsequent event is signature-verified before it touches the database.
+5. **The subscription-confirmation handshake is automatic.** When you add the HTTPS subscription, SNS immediately POSTs a `SubscriptionConfirmation` to the endpoint. The app accepts messages only from the configured `SNS_TOPIC_ARN`, verifies the SNS signature, and completes the handshake by fetching the `SubscribeURL` from an SNS host; there is nothing to click. The subscription flips to *Confirmed* on its own. Every subsequent event is topic-checked and signature-verified before it touches the database.
 
 ### 4. Credentials and vars
 
