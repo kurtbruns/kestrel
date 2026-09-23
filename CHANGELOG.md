@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - A `SUBREQUEST_BUDGET` below 30 is now raised to 30 (it was 25), so each sweep tick keeps room to send a notification.
+- The Settings page's publication identity section drops its "No posts scheduled" / "In use" chip, and its note is shorter: it says the identity appears in every email and, only while posts are scheduled, how many emails a save would update.
 - The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter above the routes (press `/` to focus it). An opened route shows its examples with syntax colors and a curl command for your instance, each with a copy button.
 - A send the provider has halted (an outage, a rate limit, or a refused account) is retried with growing gaps instead of every minute: an outage after 1, 2, 5, 15, and 30 minutes, a refused account after 5, 15, and 30, then hourly, until the provider answers, at which point the send is back to full speed. Nobody is marked unsent while it waits, and the send's watch says when the next retry is due; once you fix a refused account, the send resumes at that retry, at most an hour later. `GET /api/reference` documents the new `halt_retries`, `halt_retry_at`, and `provider.halt.retry_at` fields. This touches the database baseline, so rebuild the database as described in the first Fixed entry below (SPEC §12).
 
