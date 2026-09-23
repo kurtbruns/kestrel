@@ -89,13 +89,19 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   "needs-attention": "Some deliveries are stuck and need a decision.",
   settling: "Dispatch complete — waiting on delivery receipts.",
 };
+/** When a halted send's next retry is due, relative to now (SPEC §12). */
+function nextRetry(retryAt: number): string {
+  const wait = retryAt - Date.now();
+  return wait > 0 ? `next retry in ${fmtDuration(wait)}` : "next retry due now";
+}
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendProgress): string {
-  if (prog.attention.refused) {
-    return "The provider is refusing this account — nothing more goes out until it is fixed.";
+  const halt = prog.provider.halt;
+  if (prog.attention.refused && halt) {
+    return `The provider is refusing this account — nothing more goes out until it is fixed; ${nextRetry(halt.retry_at)}.`;
   }
-  if (prog.phase === "backing-off" && prog.provider.halt?.reason === "unavailable") {
-    return "The provider is unavailable — it retries on the next sweep.";
+  if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
+    return `The provider is unavailable — ${nextRetry(halt.retry_at)}.`;
   }
   return PHASE_BLURB[prog.phase] || "";
 }
@@ -182,7 +188,7 @@ function watchBodyHtml(prog: SendProgress): Html {
   return html`
     ${
       halt
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent, and the send resumes on the next sweep once this is fixed.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent, and once this is fixed the send resumes at its next retry, ${fmt(halt.retry_at)}.</div></div></div>`
         : null
     }
     <div class="wbars">

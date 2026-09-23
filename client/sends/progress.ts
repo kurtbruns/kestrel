@@ -60,8 +60,8 @@ export function isWedged(s: SendSummary): boolean {
 
 /**
  * A send the provider refuses at the account level (a bad or revoked key, an unverified
- * domain, a paused account; SPEC §12): still `sending`, nobody consumed, retried every
- * tick, and unable to go on until the operator fixes the account. Read off the row, the
+ * domain, a paused account; SPEC §12): still `sending`, nobody consumed, retried with
+ * growing gaps up to an hour apart, and unable to go on until the operator fixes the account. Read off the row, the
  * same field the server derives `attention.refused` from.
  */
 export function isRefused(s: SendSummary): boolean {

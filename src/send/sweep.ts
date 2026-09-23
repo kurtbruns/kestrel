@@ -10,15 +10,16 @@
  *
  * One tick is one invocation, so it shares one subrequest budget (`budget.ts`) across
  * its own queries and every send it runs; a send the budget can't reach this tick is
- * picked up on the next. Notifying gets what the sends leave plus a reserve held back up
- * front, so a long send spending every tick's budget can't starve the notification that
- * says it is stuck.
+ * picked up on the next. A send the provider halted is left alone until its backoff
+ * says its next retry is due (`HALT_BACKOFF_MS`), so waiting costs only the query.
+ * Notifying gets what the sends leave plus a reserve held back up front, so a long send
+ * spending every tick's budget can't starve the notification that says it is stuck.
  */
 
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import { Budget, metered } from "./budget";
@@ -48,9 +49,12 @@ export async function sweep(env: AppEnv): Promise<void> {
     await safeRun(env, s.id, budget);
   }
 
-  // 2) Resume interrupted sends whose lease has expired, if the budget still has room
+  // 2) Resume interrupted sends whose lease has expired (and halted ones whose next retry
+  // is due), if the budget still has room
   // for one run after the query that finds them.
-  const resumable = budget.affords(1 + MIN_RUN_COST) ? await sends.resumableSends(db, now) : [];
+  const resumable = budget.affords(1 + MIN_RUN_COST)
+    ? await sends.resumableSends(db, now, now + HALT_RETRY_SLACK_MS)
+    : [];
   for (const s of resumable) {
     if (handled.has(s.id)) {
       continue;

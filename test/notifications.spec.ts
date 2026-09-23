@@ -15,6 +15,7 @@ import * as providers from "../src/providers";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
+import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -59,8 +60,10 @@ async function rows(sendId?: string) {
   return results;
 }
 
+/** Sweep ticks, each on the next minute or the next halt retry, whichever is later. */
 async function ticks(n: number): Promise<void> {
   for (let i = 0; i < n; i++) {
+    await toNextTick(env.DB);
     await sweep(env as AppEnv);
   }
 }
@@ -81,6 +84,8 @@ beforeEach(async () => {
   ]);
   await updateSettings(env.DB, { notifications: { to: PUBLISHER } });
   clearFakeNotifications();
+  // Only Date is faked, so `ticks` can move the clock past a halt's backoff.
+  vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
   errors = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -88,6 +93,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 

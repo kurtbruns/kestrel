@@ -32,6 +32,18 @@ describe("API reference is generated from the route registration", () => {
     }
   });
 
+  it("states a halted send's retry schedule as the sweep keeps it (SPEC §12)", () => {
+    const list = defs.find((d) => d.method === "GET" && d.path === "/sends")!;
+    expect(list.description).toContain(
+      "retried after 1, 2, 5, 15, and 30 minutes and then every 60 minutes",
+    );
+    expect(list.description).toContain(
+      "retried after 5, 15, and 30 minutes and then every 60 minutes",
+    );
+    const progress = defs.find((d) => d.path === "/sends/:id/progress")!;
+    expect(progress.description).toContain("retry_at");
+  });
+
   it("every route under the re-make rule states it in its own description (the reference is what Claude reads)", () => {
     // SPEC §9: a template or identity change re-makes the scheduled sends after an
     // explicit acknowledgement. The generated reference is where a client learns that
