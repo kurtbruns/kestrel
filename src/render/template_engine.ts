@@ -35,7 +35,8 @@ import { escapeHtmlAttr } from "../lib/html";
 // needs to know "which token resolves when, and how it's escaped."
 
 /** How a value is escaped into the HTML surface. `raw` inserts it verbatim — for the
- *  already-sanitized body HTML, and for the app-generated unsubscribe URL (kept raw to
+ *  already-sanitized body HTML, the logo markup (built with its own escaping), and for
+ *  the app-generated unsubscribe URL (kept raw to
  *  preserve the pre-unification wire bytes; see that token). `attr` HTML-escapes it so a
  *  stray `<`, `"`, or `&` can't break markup. The plain-text surface never escapes. */
 type Escaping = "raw" | "attr";
@@ -73,6 +74,9 @@ const TOKENS = {
   "publication.name": { phase: "render", escaping: "attr" },
   "publication.tagline": { phase: "render", escaping: "attr" },
   "publication.logoUrl": { phase: "render", escaping: "attr" },
+  // The whole logo `<img>`, or nothing when no logo is set (shared/email_logo.ts builds
+  // it, escaping its attributes), so a template never ships `<img src="">`.
+  "publication.logo": { phase: "render", escaping: "raw" },
   "publication.address": { phase: "render", escaping: "attr" },
   "email.viewInBrowserUrl": { phase: "render", escaping: "attr" },
   // Delivery-phase (per recipient). Unsubscribe stays `raw` so the delivered bytes are
@@ -169,11 +173,13 @@ export function templateTokens(html: string): Set<string> {
 
 export type { IdentityField };
 
-const IDENTITY_TOKENS: ReadonlyArray<[token: string, field: IdentityField]> = [
-  ["publication.name", "name"],
-  ["publication.tagline", "tagline"],
-  ["publication.logoUrl", "logoUrl"],
-  ["publication.address", "address"],
+const IDENTITY_TOKENS: ReadonlyArray<[token: string, fields: IdentityField[]]> = [
+  ["publication.name", ["name"]],
+  ["publication.tagline", ["tagline"]],
+  ["publication.logoUrl", ["logoUrl"]],
+  // The logo image carries the name as its alt text.
+  ["publication.logo", ["logoUrl", "name"]],
+  ["publication.address", ["address"]],
 ];
 
 /**
@@ -184,7 +190,8 @@ const IDENTITY_TOKENS: ReadonlyArray<[token: string, field: IdentityField]> = [
  */
 export function identityFieldsInUse(template: string): IdentityField[] {
   const tokens = templateTokens(template);
-  return IDENTITY_TOKENS.filter(([token]) => tokens.has(token)).map(([, field]) => field);
+  const fields = IDENTITY_TOKENS.filter(([token]) => tokens.has(token)).flatMap(([, f]) => f);
+  return [...new Set(fields)];
 }
 
 /**
@@ -205,6 +212,9 @@ export interface TemplateValidation {
   errors: string[];
   warnings: string[];
 }
+
+/** An `<img>` whose `src` is the bare logo URL: empty, so broken, while no logo is set. */
+const LOGO_URL_AS_IMG_SRC = /<img\b[^>]*\bsrc\s*=\s*["']?\s*\{\{\s*publication\.logoUrl\s*\}\}/i;
 
 /** Check a template for the variables an email can't do without (errors) and for
  *  likely mistakes (warnings). Errors block the send; warnings are surfaced but
@@ -230,6 +240,11 @@ export function validateEmailTemplate(html: string): TemplateValidation {
     if (!KNOWN_VARS.has(t)) {
       warnings.push(`{{ ${t} }} is not a known variable and will render empty.`);
     }
+  }
+  if (LOGO_URL_AS_IMG_SRC.test(html)) {
+    warnings.push(
+      "An <img> whose src is {{ publication.logoUrl }} shows as a broken image while no logo is set. Use {{ publication.logo }}, which renders the image only when there is one.",
+    );
   }
   if (/<script[\s/>]/i.test(html)) {
     warnings.push("A <script> tag won't run in email and may get the message filtered.");
@@ -308,7 +323,8 @@ export function defaultBranding(): EmailBranding {
 
 /** The built-in template — a signed sign-off (logo, name, tagline) over a "Powered by
  *  Kestrel · Unsubscribe · View in browser" footer, with the mailing address under it
- *  (an empty line while none is set). Authored with a `<style>` block;
+ *  (an empty line while none is set). With no logo set, the logo cell is empty and
+ *  collapses, so the sign-off is the name and tagline alone. Authored with a `<style>` block;
  *  the render path inlines it. Sent out of the box when the operator sets no template. */
 export const DEFAULT_EMAIL_TEMPLATE = `<style>
   .email {
@@ -332,12 +348,10 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
   .signoff td {
     vertical-align: middle;
   }
-  .signoff .logo-cell {
-    padding-right: 14px;
-  }
   .signoff .logo {
     display: block;
     border-radius: 9px;
+    margin-right: 14px;
   }
   .signoff .name {
     font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
@@ -392,9 +406,7 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
 
   <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td class="logo-cell">
-        <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
-      </td>
+      <td class="logo-cell">{{ publication.logo }}</td>
       <td>
         <div class="name">{{ publication.name }}</div>
         <div class="tagline">{{ publication.tagline }}</div>

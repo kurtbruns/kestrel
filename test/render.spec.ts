@@ -243,6 +243,26 @@ describe("render (the single render path)", async () => {
     expect(result.warnings).toEqual([]);
   });
 
+  it("renders the built-in sign-off without an image when no logo is set, and with it when one is", async () => {
+    const input = { post: post(), revision: revision("# Hi\n\nbody"), images: [] };
+    const bare = await render(input, config, { ...defaultBranding(), name: "Windbreak" });
+    // No <img src=""> in the email, and so none on the permanent archive page (I3).
+    expect(bare.html).not.toMatch(/<img[^>]*class="logo"/);
+    expect(bare.html).not.toMatch(/src=""/);
+    expect(bare.html).toContain("Windbreak");
+
+    const logoUrl = "https://media.example/branding/logo?v=1";
+    const signed = await render(input, config, {
+      ...defaultBranding(),
+      name: "Windbreak",
+      logoUrl,
+    });
+    expect(signed.html).toMatch(
+      /<img[^>]*class="logo"[^>]*src="https:\/\/media\.example\/branding\/logo\?v=1"/,
+    );
+    expect(signed.html).toMatch(/<img[^>]*alt="Windbreak"/);
+  });
+
   it("ships light+dark support: advertises the color-scheme and keeps a dark @media block", async () => {
     const result = await render(
       { post: post(), revision: revision("# Hi\n\nbody"), images: [] },

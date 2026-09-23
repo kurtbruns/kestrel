@@ -1,6 +1,7 @@
 // The email template page: the sample preview, the example menu, and the template
 // editor.
 
+import { emailLogoHtml } from "../../shared/email_logo";
 import type {
   SettingsPatchBody,
   SettingsResponse,
@@ -61,7 +62,11 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     vars: [
       { token: "{{ publication.name }}", desc: "Publication name (from Identity, above)." },
       { token: "{{ publication.tagline }}", desc: "Your tagline." },
-      { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, if set." },
+      {
+        token: "{{ publication.logo }}",
+        desc: "Your logo as an image, or nothing when no logo is set.",
+      },
+      { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, or empty." },
       {
         token: "{{ publication.address }}",
         desc: "Your mailing address, if you’ve added one in Settings; empty otherwise. Keep it in the footer if you send promotional email.",
@@ -118,12 +123,10 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   .signoff td {
     vertical-align: middle;
   }
-  .signoff .logo-cell {
-    padding-right: 14px;
-  }
   .signoff .logo {
     display: block;
     border-radius: 9px;
+    margin-right: 14px;
   }
   .signoff .name {
     font: 600 17px/1.2 Georgia, 'Times New Roman', serif;
@@ -178,9 +181,7 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
 
   <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td class="logo-cell">
-        <img class="logo" src="{{ publication.logoUrl }}" alt="{{ publication.name }}" width="44" height="44" />
-      </td>
+      <td class="logo-cell">{{ publication.logo }}</td>
       <td>
         <div class="name">{{ publication.name }}</div>
         <div class="tagline">{{ publication.tagline }}</div>
@@ -276,24 +277,17 @@ const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
   "</div>";
 
-// Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} is
-// raw HTML (the rendered Markdown); every other value is escaped, so a stray < or "
+// Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} (the
+// rendered Markdown) and {{ publication.logo }} (built with its own escaping) are raw
+// HTML; every other value is escaped, so a stray < or "
 // in a name can't break the surrounding markup. An unknown token renders empty. A string
 // builder by nature: the template is the publisher's own HTML, filled in and vouched for
 // at the preview's boundary (mountSampleEmailPreview).
+const RAW_TOKENS = new Set(["post.body", "publication.logo"]);
 function fillEmailTemplate(template: string, ctx: Record<string, string>): string {
   return String(template).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
-    key === "post.body" ? ctx["post.body"] || "" : escapeHtml(ctx[key] ?? ""),
+    RAW_TOKENS.has(key) ? ctx[key] || "" : escapeHtml(ctx[key] ?? ""),
   );
-}
-
-// A neutral placeholder logo (a monogram tile) for the preview when no real logo is
-// set, so a signed sign-off still renders. Fully URL-encoded so it carries no raw
-// <,>," and survives the template's attribute escaping.
-function sampleLogoDataUri(name: string): string {
-  const ch = (String(name || "").trim()[0] || "K").toUpperCase();
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="44"><rect width="44" height="44" rx="9" fill="#e4e4e7"/><text x="22" y="29" font-family="Georgia, serif" font-size="20" font-weight="700" fill="#52525b" text-anchor="middle">${ch}</text></svg>`;
-  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
 /** The identity a sample preview binds: the live or loaded publication fields. */
@@ -305,14 +299,17 @@ export interface TemplateIdentity {
 }
 
 // Sample values the template preview binds — mirrors the render path's context, with
-// email.* standing in for per-recipient values.
+// email.* standing in for per-recipient values. The logo is the real one or none, never
+// a stand-in: the preview shows the sign-off the email will carry.
 function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
+  const name = id.name || "Your publication";
   return {
     "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
     "post.subject": "The starlings are back",
-    "publication.name": id.name || "Your publication",
+    "publication.name": name,
     "publication.tagline": id.tagline || "Your tagline",
-    "publication.logoUrl": id.logoUrl || sampleLogoDataUri(id.name),
+    "publication.logoUrl": id.logoUrl,
+    "publication.logo": emailLogoHtml(id.logoUrl, name),
     "publication.address": id.address,
     "email.sentTo": "you@example.com",
     "email.unsubscribeUrl": "#unsubscribe",
