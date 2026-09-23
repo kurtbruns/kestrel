@@ -2,7 +2,12 @@
 // setup checklist, and quick actions.
 
 import type { PostListItem, PostListResponse } from "../../shared/posts";
-import type { SendListResponse, SendSummary } from "../../shared/sends";
+import {
+  type SendListItem,
+  type SendListResponse,
+  type SendSummary,
+  STUCK_THRESHOLD_MS,
+} from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
@@ -51,7 +56,7 @@ interface HealthAlert {
 
 // Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case,
 // loud only when something needs attention. Derived from GET /sends.
-function computeHealth(sends: SendSummary[]): HealthAlert[] {
+function computeHealth(sends: SendListItem[]): HealthAlert[] {
   const now = Date.now();
   const alerts: HealthAlert[] = [];
   const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
@@ -90,13 +95,12 @@ function computeHealth(sends: SendSummary[]): HealthAlert[] {
   }
   // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
   // its home (a bar + a Watch link, kept live by the poll). The health line is loud-only,
-  // so it keeps just the *stuck* case: a send that's been running unusually long.
-  const active = sending.filter((s) => !needsOperator(s));
-  const stuck = active.filter((s) => s.started_at && now - s.started_at > 10 * 60 * 1000);
+  // so it keeps just the *stuck* case: a send the server flags as in flight too long.
+  const stuck = sending.filter((s) => s.stuck && !needsOperator(s));
   if (stuck.length) {
     alerts.push({
       level: "amber",
-      text: "A send has been in progress over 10 minutes — it may be retrying.",
+      text: `A send has been in progress over ${STUCK_THRESHOLD_MS / 60000} minutes — it may be retrying.`,
     });
   }
   // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
@@ -145,7 +149,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   setHtml(view, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
   const root = $("#dash", view);
   let posts: PostListItem[];
-  let sends: SendSummary[];
+  let sends: SendListItem[];
   let counts: SubscriberCounts;
   try {
     // The health line scans every send and the archive-link slug map needs every post,

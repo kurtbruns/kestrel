@@ -1,6 +1,8 @@
 // Pure formatting and parsing, with no DOM: dates, countdowns, the datetime-local value,
 // and the recipient list.
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
+
 /** A short local date-time, or an em dash for none. */
 export const fmt = (ms: number | null | undefined): string =>
   ms
@@ -13,25 +15,34 @@ export const fmt = (ms: number | null | undefined): string =>
     : "—";
 
 /**
- * Split a free-text recipient list (newlines or commas) into unique addresses.
- * Server-side validation is authoritative; this just tidies the Send-test input.
+ * Split a free-text recipient list (newlines or commas) into unique, normalized
+ * addresses, and the entries that aren't addresses, as typed, so the caller can name
+ * them instead of quietly sending to fewer people than were listed. Server-side
+ * validation is still authoritative; this tidies the Send-test input.
  */
-export function parseAddresses(text: string | null | undefined): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
+export function parseAddresses(text: string | null | undefined): {
+  valid: string[];
+  invalid: string[];
+} {
+  const valid = new Set<string>();
+  const invalid: string[] = [];
   for (const part of String(text || "").split(/[\n,]+/)) {
-    const a = part.trim();
-    if (!a.includes("@")) {
-      continue;
+    const a = normalizeEmail(part);
+    if (isValidEmail(a)) {
+      valid.add(a);
+    } else if (a) {
+      invalid.push(part.trim());
     }
-    const key = a.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    seen.add(key);
-    out.push(a);
   }
-  return out;
+  return { valid: [...valid], invalid };
+}
+
+/** The toast for Send-test entries that aren't addresses, or null when there are none. */
+export function invalidAddressesMessage(invalid: string[]): string | null {
+  if (!invalid.length) {
+    return null;
+  }
+  return `Not ${invalid.length === 1 ? "an email address" : "email addresses"}: ${invalid.join(", ")}`;
 }
 
 /** A Date as the value of a `datetime-local` input, in local time. */

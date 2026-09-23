@@ -13,6 +13,11 @@ export function sanitizeEmailHtml(html: string): string {
   out = out.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
   // Drop any dangling script/style tags.
   out = out.replace(/<\/?(?:script|style)\b[^>]*>/gi, "");
+  // Drop the tags that act on the page rather than show content, which no email body
+  // needs: <meta> (a refresh redirects every reader of the archive page), <base> (it
+  // re-aims every relative link), and <form> (a submit from the app's own origin). A
+  // form's fields stay, inert.
+  out = out.replace(/<\/?(?:meta|base|form)\b[^>]*>/gi, "");
   // Strip inline event-handler attributes (onclick, onerror, ...).
   out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   // Neutralize script URL schemes wherever they appear in attributes.

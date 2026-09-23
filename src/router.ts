@@ -108,6 +108,22 @@ function gateFor(access: Access): Middleware[] {
   return access === "admin" ? [requireAuth] : [];
 }
 
+/**
+ * What the tier asks of every response, set here where the gate is attached so no admin
+ * route can forget it: an admin response (authed JSON, the preview, a CSV export, and
+ * the 401 itself) is never stored by a browser or a shared cache, since it is one
+ * person's view behind the gate. Other tiers pass through unchanged.
+ */
+function guard(access: Access, res: Response): Response {
+  if (access !== "admin") {
+    return res;
+  }
+  // A fetched or cached Response can have immutable headers; a copy never does.
+  const out = new Response(res.body, res);
+  out.headers.set("cache-control", "no-store");
+  return out;
+}
+
 interface CompiledRoute {
   def: RouteDef;
   pattern: URLPattern;
@@ -153,7 +169,7 @@ export class Router {
         for (const mw of route.middleware) {
           const short = await mw(c);
           if (short) {
-            return short;
+            return guard(route.def.access, short);
           }
         }
         // Refused only after the gate, so an admin route answers an unauthenticated
@@ -161,9 +177,9 @@ export class Router {
         if (badParam) {
           throw badParam;
         }
-        return await route.def.handler(c);
+        return guard(route.def.access, await route.def.handler(c));
       } catch (err) {
-        return toErrorResponse(err);
+        return guard(route.def.access, toErrorResponse(err));
       }
     }
 

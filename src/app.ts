@@ -478,7 +478,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       resource: "sends",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `stuck` is the same flag as its progress `attention.stuck`: sending for longer than the stuck threshold.",
       description:
         "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. The send retries on its own, spaced out the longer the halt lasts: `halt_retries` counts the halted attempts in a row and `halt_retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
         retrySchedule(HALT_BACKOFF_MS.unavailable) +

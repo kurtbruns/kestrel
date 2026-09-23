@@ -15,7 +15,7 @@ import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate"
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { buildSendProgress } from "../send/progress";
+import { buildSendProgress, isStuck } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { parseFutureFireAt } from "./schedule";
@@ -41,7 +41,13 @@ export async function list(c: RequestContext): Promise<Response> {
   // every Sent-page load and every ~3s active-send poll — is exactly what the counters
   // (`sends.c_*`) make redundant, so it is gone (#166). `deliveries` stays the source
   // of truth; the counters are its rebuildable cache (SPEC §8).
-  const body: SendListResponse = { sends: rows, page: listPage(total, page) };
+  // `stuck` is derived here, by the rule the progress poll uses, so the dashboard reads
+  // the server's flag instead of keeping a threshold of its own.
+  const now = Date.now();
+  const body: SendListResponse = {
+    sends: rows.map((s) => ({ ...s, stuck: isStuck(s, now) })),
+    page: listPage(total, page),
+  };
   return json(body);
 }
 
@@ -134,9 +140,17 @@ export async function deliveries(c: RequestContext): Promise<Response> {
   return json(body);
 }
 
-/** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */
+/**
+ * One CSV field. A text cell a spreadsheet would read as a formula (one starting with
+ * `=`, `+`, `-`, `@`, a tab, or a carriage return) is prefixed with `'` so it opens as
+ * text: an address like `=HYPERLINK(…)@example.com` is valid, and the export is opened
+ * by the publisher. Then quoted when it contains a comma, quote, or newline (RFC 4180).
+ */
 function csvCell(value: string | number | null): string {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 

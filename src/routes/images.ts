@@ -14,6 +14,16 @@ import { probeImageDimensions } from "../lib/image_dims";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
+/** The raster formats a post image may be: what mail clients show, and none that runs. */
+const POST_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif"]);
+/** Generous for a photo, still small enough to send: every recipient downloads it. */
+const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
+
+/** A declared content type as its bare media type: `Image/PNG; x=y` is `image/png`. */
+function mediaType(declared: string): string {
+  return (declared.split(";")[0] ?? "").trim().toLowerCase() || "application/octet-stream";
+}
+
 function storageKey(postId: string, filename: string): string {
   return `posts/${postId}/${filename}`;
 }
@@ -63,7 +73,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     filename = baseName(
       typeof override === "string" && override ? override : file.name || "upload",
     );
-    contentType = file.type || "application/octet-stream";
+    contentType = mediaType(file.type);
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
@@ -71,12 +81,25 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     if (!filename) {
       throw badRequest("filename query param required for a raw upload");
     }
-    contentType = ct || "application/octet-stream";
+    contentType = mediaType(ct);
     bytes = await c.req.arrayBuffer();
   }
 
   if (!filename) {
     throw badRequest("a filename is required");
+  }
+  // Raster images only, and not too large. The bytes are served back publicly, and a
+  // public media bucket domain serves them without the /media route's sandbox headers,
+  // so an SVG or HTML upload would run as a live page there. An email image has no need
+  // to be either.
+  if (!POST_IMAGE_TYPES.has(contentType)) {
+    throw badRequest("an image must be a PNG, JPEG, WebP, or GIF");
+  }
+  if (bytes.byteLength === 0) {
+    throw badRequest("the image file is empty");
+  }
+  if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
+    throw badRequest(`an image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller`);
   }
 
   const key = storageKey(post.id, filename);

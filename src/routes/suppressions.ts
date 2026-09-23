@@ -1,8 +1,8 @@
 /** Authed suppression admin: list, add (manual), clear. Webhooks add automatic
  *  suppressions in M9/M10; clearing is a deliberate, rare human action. */
 
+import { normalizeEmail } from "../../shared/email";
 import * as subscribers from "../db/subscribers";
-import { normalizeEmail } from "../db/subscribers";
 import { fieldError, optString, readJsonObject } from "../lib/body";
 import { json } from "../lib/errors";
 import type { RequestContext } from "../router";

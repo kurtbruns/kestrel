@@ -1,12 +1,12 @@
 /** Authed subscriber admin routes. */
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type {
   SubscribeResponse,
   SubscriberListResponse,
   SubscriberResponse,
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
-import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { fieldError, optString, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";

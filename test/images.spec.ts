@@ -56,6 +56,50 @@ describe("images", () => {
     expect(bytes.length).toBe(PNG_1x1.length);
   });
 
+  it("refuses an upload that is not a raster image, or is too large", async () => {
+    const id = await newDraft("Refusals");
+    const send = (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return SELF.fetch(`${base}/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+    };
+    // An SVG or HTML file would run as a page on a public media domain.
+    for (const [name, type] of [
+      ["x.svg", "image/svg+xml"],
+      ["x.html", "text/html"],
+      ["x.bin", "application/octet-stream"],
+    ] as const) {
+      const res = await send(new File(["<svg onload=alert(1)>"], name, { type }));
+      expect(res.status, type).toBe(400);
+      expect((await readJson(res)).message).toMatch(/PNG, JPEG, WebP, or GIF/);
+    }
+    const big = new Uint8Array(5 * 1024 * 1024 + 1);
+    big.set(PNG_1x1);
+    const tooBig = await send(new File([big], "huge.png", { type: "image/png" }));
+    expect(tooBig.status).toBe(400);
+    expect((await readJson(tooBig)).message).toMatch(/5 MB or smaller/);
+    // A raw-body upload is held to the same rule.
+    const raw = await SELF.fetch(`${base}/posts/${id}/images?filename=x.svg`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "image/svg+xml" },
+      body: "<svg/>",
+    });
+    expect(raw.status).toBe(400);
+    const list = await readJson(await SELF.fetch(`${base}/posts/${id}/images`, { headers: AUTH }));
+    expect(list.images).toEqual([]);
+  });
+
+  it("reads a declared type by its media type, ignoring case and parameters", async () => {
+    const id = await newDraft("Declared Types");
+    const res = await SELF.fetch(`${base}/posts/${id}/images?filename=raw.png`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "Image/PNG; charset=binary" },
+      body: PNG_1x1,
+    });
+    expect(res.status).toBe(201);
+    expect((await readJson(res)).image.content_type).toBe("image/png");
+  });
+
   it("lists images and deletes one", async () => {
     const id = await newDraft("Gallery");
     await upload(id, "a.png", AUTH);

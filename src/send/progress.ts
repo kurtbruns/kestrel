@@ -15,6 +15,16 @@ import type { SendHalt, SendPhase, SendProgress } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
+/** In flight too long (SPEC §12): still `sending` past the stuck threshold. The one
+ *  rule behind `attention.stuck` and the send list's `stuck`. */
+export function isStuck(send: Pick<SendRow, "status" | "started_at">, now: number): boolean {
+  return (
+    send.status === "sending" &&
+    send.started_at != null &&
+    now - send.started_at > STUCK_THRESHOLD_MS
+  );
+}
+
 /**
  * The live reporting phase — derived from the counters and send row, never stored:
  *   - `scheduled`       waiting in the review window (not yet fired).
@@ -121,10 +131,7 @@ export function buildSendProgress(
   const leaseHeld = send.locked_until != null && send.locked_until > now;
   const wedged =
     send.status === "sending" && counts.pending === 0 && counts.in_flight > 0 && !leaseHeld;
-  const stuck =
-    send.status === "sending" &&
-    send.started_at != null &&
-    now - send.started_at > STUCK_THRESHOLD_MS;
+  const stuck = isStuck(send, now);
   const missed = send.status === "scheduled" && send.fire_at < now - MISSED_THRESHOLD_MS;
   // The provider's standing refusal, while the send is still open to be retried.
   const halt: SendHalt | null =

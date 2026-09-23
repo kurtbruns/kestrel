@@ -1,6 +1,7 @@
 // The Settings page: publication identity, sending, notifications, confirmation wording,
 // test recipients, and the deployment reflection.
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type {
   ConfirmationEmailCopy,
   LogoResponse,
@@ -654,11 +655,11 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     refreshDirty();
   });
   const addRecip = () => {
-    const v = recipInput.value.trim().toLowerCase();
+    const v = normalizeEmail(recipInput.value);
     if (!v) {
       return;
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) {
+    if (!isValidEmail(v)) {
       toast("That doesn’t look like an email address.");
       return;
     }

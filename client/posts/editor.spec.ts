@@ -391,6 +391,22 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("names a test recipient that isn't an address and sends nothing, instead of testing fewer people", async () => {
+    await open([
+      { path: "/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "me@example.com, typo@gmail");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.filter((c) => c.url.pathname === "/posts/p1/test")).toEqual([]);
+    expect($("#toasts").textContent).toMatch(/Not an email address: typo@gmail/);
+    expect(document.querySelector(".modal")).not.toBeNull(); // left open to fix the typo
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
     const server = draftServer(draft({ subject: "" }));
     await open([

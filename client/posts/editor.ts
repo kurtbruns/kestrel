@@ -18,7 +18,7 @@ import { every, mount, onAbort, type ViewHandle } from "../lifecycle";
 import { openRescheduleModal } from "../sends/dialogs";
 import { appliedNoticeHtml } from "../settings/remake";
 import { $, $$ } from "../ui/dom";
-import { fmt, parseAddresses, toLocalInput } from "../ui/format";
+import { fmt, invalidAddressesMessage, parseAddresses, toLocalInput } from "../ui/format";
 import { highlightMarkdown } from "../ui/highlight";
 import { html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
@@ -173,7 +173,7 @@ export async function renderEditor(
             ? html`<div class="composer-foot composer-foot-lock" id="lockFoot" role="status">${icon("readonly")}<span>Cancel the schedule to edit</span></div>`
             : html`<div class="composer-foot" id="dropFoot">${icon("paperclip")}<span>Paste, drop, or click to add images</span></div>`
         }
-        <input type="file" id="imgInput" accept="image/*" multiple hidden>
+        <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
       </div>
       <div id="warnings"></div>
 
@@ -909,7 +909,12 @@ export async function renderEditor(
     $("#tCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, "Sending…", async () => {
-        const addrs = parseAddresses(to.value);
+        const { valid: addrs, invalid } = parseAddresses(to.value);
+        const notAddresses = invalidAddressesMessage(invalid);
+        if (notAddresses) {
+          toast(notAddresses);
+          return;
+        }
         if (!addrs.length) {
           toast("Enter at least one email address");
           return;
