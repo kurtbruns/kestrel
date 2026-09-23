@@ -214,7 +214,7 @@ describe("a retryable answer to a handed-off batch", () => {
 
     // The operator moves the deployment to a provider that can't dedupe a re-send.
     const plain = new (class extends ResendLikeProvider {
-      override readonly idempotentRetry = false;
+      override readonly idempotentRetry: boolean = false;
     })();
     vi.mocked(providers.getProvider).mockReturnValue(plain);
     await sweep(env);
