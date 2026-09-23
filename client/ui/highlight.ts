@@ -1,7 +1,8 @@
-// Syntax highlighting for the template editor (HTML/CSS with template tokens) and the
-// post composer (Markdown). String assembly by nature: the source is escaped first, then
-// the escaped text is decorated with spans, so the result is vouched for as markup at
-// the boundary rather than built with the html tag.
+// Syntax highlighting for the template editor (HTML/CSS with template tokens), the post
+// composer (Markdown), and the API reference's examples (JSON and a curl command). String
+// assembly by nature: the source is escaped first, then the escaped text is decorated with
+// spans, so the result is vouched for as markup at the boundary rather than built with the
+// html tag.
 
 import { escapeHtml as esc, type Html, unsafeHtml } from "./html";
 
@@ -143,5 +144,43 @@ export function highlightMarkdown(src: string): Html {
         return `<span class="cx-md-ln${band ? " cx-md-band" : ""}">${html}</span>`;
       })
       .join(""),
+  );
+}
+
+// --- API reference examples ---
+// One pass over the raw JSON text: each token is escaped and wrapped, and the whitespace
+// between tokens is escaped as it stands, so nothing is decorated twice.
+const JSON_TOKEN =
+  /("(?:\\.|[^"\\])*")(\s*:)?|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|\b(true|false|null)\b|([{}[\],])/g;
+/** A value as pretty-printed JSON (two-space indent), highlighted on the shared syntax palette. */
+export function highlightJson(value: unknown): Html {
+  const src = JSON.stringify(value, null, 2) ?? "";
+  let out = "";
+  let last = 0;
+  for (const m of src.matchAll(JSON_TOKEN)) {
+    out += esc(src.slice(last, m.index));
+    const [whole, str, colon, num, lit] = m;
+    if (str !== undefined) {
+      out += colon
+        ? `<span class="cx-prop">${esc(str)}</span><span class="cx-punct">${esc(colon)}</span>`
+        : `<span class="cx-str">${esc(str)}</span>`;
+    } else if (num !== undefined) {
+      out += `<span class="cx-num">${num}</span>`;
+    } else if (lit !== undefined) {
+      out += `<span class="cx-tag">${lit}</span>`;
+    } else {
+      out += `<span class="cx-punct">${esc(whole)}</span>`;
+    }
+    last = m.index + whole.length;
+  }
+  return unsafeHtml(out + esc(src.slice(last)));
+}
+/** A curl command with the command, its flags, and the shell variables to fill in marked. */
+export function highlightCurl(src: string): Html {
+  return unsafeHtml(
+    esc(src)
+      .replace(/^curl\b/, '<span class="cx-tag">curl</span>')
+      .replace(/(^|\s)(-[A-Za-z])\b/g, '$1<span class="cx-num">$2</span>')
+      .replace(/\$[A-Z_]+/g, '<span class="cx-var">$&</span>'),
   );
 }

@@ -8,6 +8,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Added
+
+- `GET /api/reference` now tags each route with the resource it acts on (posts, sends, subscribers, and so on) and lists each tier's resources, so a client can group the routes the way the reference does.
+
+### Changed
+
+- The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter above the routes (press `/` to focus it). An opened route shows its examples with syntax colors and a curl command for your instance, each with a copy button.
+
 ### Fixed
 
 - A send through Resend to 100 or more subscribers now goes out; before, it never left `sending`. Until 1.0.0 the database baseline is edited in place, and this change touches it, so any database that ran the old baseline is rebuilt, not migrated: locally, stop `wrangler dev`, delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`; a deployed database is recreated and `npm run migrate:remote` run against it.
