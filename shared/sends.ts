@@ -7,6 +7,28 @@ import type { PageMeta } from "./list";
 
 export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
 
+/**
+ * Why a provider refused a whole batch (SPEC §12): it is `unavailable` (an outage or a
+ * rate limit, which clears on its own), or it refuses the `account` (a bad key, an
+ * unverified domain, a paused account), which needs the operator.
+ */
+export type HaltReason = "unavailable" | "account";
+
+/**
+ * What a refusal is about, so the advice can name the fix: the API key or credentials,
+ * the sender (an unverified domain or from-address), a spent sending quota, the account
+ * paused or suspended by the provider, a rate limit, or the provider itself failing.
+ */
+export type HaltCause = "credentials" | "sender" | "quota" | "suspended" | "rate_limit" | "outage";
+
+/** The provider's standing refusal of a send, as the watch reports it. */
+export interface SendHalt {
+  reason: HaltReason;
+  cause: HaltCause | null;
+  error: string;
+  since: number;
+}
+
 /** The eight denormalized progress counters on a send. */
 export interface SendCounts {
   pending: number;
@@ -35,6 +57,14 @@ export interface Send {
   completed_at: number | null;
   /** When a template or identity change last re-made the frozen render while the send was scheduled; null if never. */
   remade_at: number | null;
+  /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
+  halt_reason: HaltReason | null;
+  /** What that refusal is about, for the advice shown with it. */
+  halt_cause: HaltCause | null;
+  /** The provider's own words for that refusal. */
+  halt_error: string | null;
+  /** When refusals for this reason began. */
+  halted_at: number | null;
   c_pending: number;
   c_in_flight: number;
   c_accepted: number;
@@ -92,9 +122,16 @@ export interface SendProgress {
     confirmed: number;
     percent_of_accepted: number;
   };
-  provider: { name: string };
-  /** The loud conditions (SPEC §12) the watch surfaces; Resolve appears when `wedged`. */
-  attention: { wedged: boolean; wedged_count: number; stuck: boolean; missed: boolean };
+  /** The provider, and its standing refusal of this send while one lasts. */
+  provider: { name: string; halt: SendHalt | null };
+  /** The loud conditions (SPEC §12) the watch surfaces; Resolve appears when `wedged`, and `refused` is the provider refusing the account, carrying its words in `provider.halt`. */
+  attention: {
+    wedged: boolean;
+    wedged_count: number;
+    stuck: boolean;
+    missed: boolean;
+    refused: boolean;
+  };
 }
 
 /** The sent record's per-recipient delivery breakdown (SPEC §8). */

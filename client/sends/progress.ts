@@ -1,7 +1,7 @@
 // What a send's counters say, shared by the list, the record, and the dashboard: the
 // wedge test, the list row's cells, the countdowns, and the small number formats.
 
-import type { SendSummary } from "../../shared/sends";
+import type { HaltCause, SendSummary } from "../../shared/sends";
 import { every } from "../lifecycle";
 import { $$ } from "../ui/dom";
 import { untilStr } from "../ui/format";
@@ -56,6 +56,42 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
 export function isWedged(s: SendSummary): boolean {
   const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
   return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
+}
+
+/**
+ * A send the provider refuses at the account level (a bad or revoked key, an unverified
+ * domain, a paused account; SPEC §12): still `sending`, nobody consumed, retried every
+ * tick, and unable to go on until the operator fixes the account. Read off the row, the
+ * same field the server derives `attention.refused` from.
+ */
+export function isRefused(s: SendSummary): boolean {
+  return s.status === "sending" && s.halt_reason === "account";
+}
+
+/**
+ * What to do about the provider refusing the account, by what the refusal is about
+ * (SPEC §12). The fix is always outside the app: nothing here can change a credential or
+ * the provider's view of the account (SPEC §9).
+ */
+export function refusalAdvice(cause: HaltCause | null): string {
+  switch (cause) {
+    case "credentials":
+      return "Replace the provider's API key or credentials in the deployment's secrets.";
+    case "sender":
+      return "Verify the sending domain or from-address with the provider.";
+    case "quota":
+      return "Wait for the provider's sending quota to reset, or raise it on your plan.";
+    case "suspended":
+      return "Settle the account's standing with the provider (for SES, in the SES console).";
+    default:
+      return "Fix the account with the provider.";
+  }
+}
+
+/** A send that needs the operator rather than patience, so its home is the attention
+ *  block, not the in-progress rows. */
+export function needsOperator(s: SendSummary): boolean {
+  return isWedged(s) || isRefused(s);
 }
 
 // Dispatch/delivery numbers from a `/sends` list row's denormalized counters, so the

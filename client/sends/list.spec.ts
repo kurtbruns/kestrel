@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendSummary } from "../../shared/sends";
 import { $, $$, type FakeApi, fakeApi, mount, resetShell } from "../test/support";
 import { renderSent } from "./list";
-import { deliveredCell, isWedged } from "./progress";
+import { deliveredCell, isRefused, isWedged } from "./progress";
 
 const page = { total: 1, limit: 50, offset: 0, sort: "fire", dir: "desc" };
 const send = (over: Partial<SendSummary> = {}): SendSummary => ({
@@ -17,6 +17,10 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   started_at: 1_000_000,
   completed_at: 1_001_000,
   remade_at: null,
+  halt_reason: null,
+  halt_cause: null,
+  halt_error: null,
+  halted_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,
@@ -44,6 +48,15 @@ describe("deliveredCell / isWedged", () => {
     expect(isWedged({ ...wedged, locked_until: Date.now() + 60_000 })).toBe(false); // the loop is working it
     expect(isWedged({ ...wedged, c_pending: 5 })).toBe(false);
     expect(isWedged({ ...wedged, status: "sent" })).toBe(false);
+  });
+});
+
+describe("isRefused", () => {
+  it("is refused only while sending with an account-level halt", () => {
+    const refused = send({ status: "sending", c_pending: 5, halt_reason: "account" });
+    expect(isRefused(refused)).toBe(true);
+    expect(isRefused({ ...refused, halt_reason: "unavailable" })).toBe(false);
+    expect(isRefused({ ...refused, status: "sent" })).toBe(false);
   });
 });
 
@@ -99,6 +112,40 @@ describe("sent view", () => {
     expect($("tr[data-id='x1'] .subject").textContent).toBe("Owls & co");
     expect($("tr[data-id='x1'] .delivered").textContent).toMatch(/147.*1 complained, 2 bounced/);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows a refused send as one attention card with the provider's words, not as in progress", async () => {
+    const refused = send({
+      id: "ref",
+      status: "sending",
+      c_pending: 90,
+      subject: "Paused one",
+      halt_reason: "account",
+      halt_cause: "suspended",
+      halt_error: "ses 400 SendingPausedException: Account is paused",
+      halted_at: Date.now() - 60_000,
+      completed_at: null,
+    });
+    fake = fakeApi([
+      {
+        path: "/sends",
+        reply: (req) => {
+          const status = req.url.searchParams.get("status");
+          const sends = status === "sending" ? [refused] : [];
+          return { sends, page: { ...page, total: sends.length } };
+        },
+      },
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    const cards = $$("#stuck .stuck-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]!.textContent).toContain("Paused one");
+    expect(cards[0]!.textContent).toContain("ses 400 SendingPausedException: Account is paused");
+    expect(cards[0]!.textContent).toContain("in the SES console");
+    expect(cards[0]!.querySelector("a")!.getAttribute("href")).toBe("#/sent/ref");
+    expect(cards[0]!.querySelector("button")).toBeNull(); // nothing in the app to press
+    expect(document.querySelector(".active-card")).toBeNull();
   });
 
   it("opens the record on a row click and the editor on a scheduled card click", async () => {

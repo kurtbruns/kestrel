@@ -213,6 +213,10 @@ describe("buildSendProgress — derived phase", () => {
       started_at: Date.now() - 60_000,
       completed_at: null,
       remade_at: null,
+      halt_reason: null,
+      halt_cause: null,
+      halt_error: null,
+      halted_at: null,
       c_pending: 0,
       c_in_flight: 0,
       c_accepted: 0,
@@ -250,6 +254,42 @@ describe("buildSendProgress — derived phase", () => {
   it("settling once sent while receipts are outstanding, complete when confirmed", () => {
     expect(phase({ status: "sent", c_accepted: 4 })).toBe("settling");
     expect(phase({ status: "sent", c_accepted: 0, c_delivered: 4 })).toBe("complete");
+  });
+  it("needs-attention, flagged refused with the provider's words, when the account is refused", () => {
+    const since = Date.now() - 120_000;
+    const prog = buildSendProgress(
+      mkSend({
+        status: "sending",
+        c_pending: 5,
+        halt_reason: "account",
+        halt_cause: "credentials",
+        halt_error: "resend batch 403: API key is not active",
+        halted_at: since,
+      }),
+      "resend",
+      false,
+      Date.now(),
+    );
+    expect(prog.phase).toBe("needs-attention");
+    expect(prog.attention.refused).toBe(true);
+    expect(prog.attention.wedged).toBe(false);
+    expect(prog.provider.halt).toEqual({
+      reason: "account",
+      cause: "credentials",
+      error: "resend batch 403: API key is not active",
+      since,
+    });
+  });
+  it("backing-off, not refused, while the provider is only unavailable", () => {
+    const prog = buildSendProgress(
+      mkSend({ status: "sending", c_pending: 5, halt_reason: "unavailable", halt_error: "503" }),
+      "resend",
+      false,
+      Date.now(),
+    );
+    expect(prog.phase).toBe("backing-off");
+    expect(prog.attention.refused).toBe(false);
+    expect(prog.provider.halt?.reason).toBe("unavailable");
   });
   it("flags a wedged send in attention with its count, but never while the lease is held", () => {
     const wedged = buildSendProgress(

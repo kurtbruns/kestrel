@@ -15,10 +15,10 @@ import type { AppEnv } from "../env";
 import { substituteRecipient } from "../render/render";
 import type {
   EmailProvider,
-  PerRecipientResult,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
+  SendBatchResult,
   WebhookResult,
 } from "./types";
 
@@ -59,17 +59,17 @@ export class FakeProvider implements EmailProvider {
     rendered: RenderedEmail,
     recipients: Recipient[],
     opts: SendBatchOptions,
-  ): Promise<PerRecipientResult[]> {
+  ): Promise<SendBatchResult> {
     if (failCount > 0) {
       failCount -= 1;
       throw new Error("fake transient failure");
     }
-    return recipients.map((r) => {
+    const results = recipients.map((r) => {
       const key = `${opts.idempotencyKey ?? opts.idempotencyKeyPrefix}:${r.email}`;
       const existing = sentKeys.get(key);
       if (existing) {
         // Deduped: a real idempotent provider would not re-deliver.
-        return { email: r.email, accepted: true, providerId: existing };
+        return { email: r.email, accepted: true as const, providerId: existing };
       }
       // Named by the caller and address, not the key, so a test can predict it.
       const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
@@ -86,8 +86,9 @@ export class FakeProvider implements EmailProvider {
         providerId,
         sentAt: Date.now(),
       });
-      return { email: r.email, accepted: true, providerId };
+      return { email: r.email, accepted: true as const, providerId };
     });
+    return { kind: "answered", results };
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {

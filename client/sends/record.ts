@@ -20,7 +20,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
-import { clampPct, fmtDuration } from "./progress";
+import { clampPct, fmtDuration, refusalAdvice } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -89,6 +89,16 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   "needs-attention": "Some deliveries are stuck and need a decision.",
   settling: "Dispatch complete — waiting on delivery receipts.",
 };
+/** The phase's one-line gloss, said for the cause when the phase has more than one. */
+function phaseBlurb(prog: SendProgress): string {
+  if (prog.attention.refused) {
+    return "The provider is refusing this account — nothing more goes out until it is fixed.";
+  }
+  if (prog.phase === "backing-off" && prog.provider.halt?.reason === "unavailable") {
+    return "The provider is unavailable — it retries on the next sweep.";
+  }
+  return PHASE_BLURB[prog.phase] || "";
+}
 function phasePill(phase: SendPhase): Html {
   const m = PHASE_META[phase] ?? { label: phase, tone: "muted" };
   return html`<span class="phase-pill tone-${m.tone}">${m.label}</span>`;
@@ -158,7 +168,7 @@ function watchBodyHtml(prog: SendProgress): Html {
   const rate = prog.dispatch.rate_per_min;
   const dispatchSub =
     prog.state === "sending"
-      ? `${PHASE_BLURB[prog.phase] || ""}${
+      ? `${phaseBlurb(prog)}${
           rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
         }`
       : "Dispatch complete.";
@@ -166,7 +176,15 @@ function watchBodyHtml(prog: SendProgress): Html {
   const providerText = noEmailProvider()
     ? "No email provider configured — nothing is delivered"
     : `Provider: ${prog.provider?.name || "—"}`;
+  // The provider refusing the account is the one loud condition here without a control:
+  // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
+  const halt = prog.attention.refused ? prog.provider.halt : null;
   return html`
+    ${
+      halt
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent, and the send resumes on the next sweep once this is fixed.</div></div></div>`
+        : null
+    }
     <div class="wbars">
       ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.total, dispatchSub)}
       ${deliveryBar(

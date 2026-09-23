@@ -315,7 +315,15 @@ describe("lease ownership", () => {
     expect(await sends.dispatchFresh(env.DB, send.id, successor, "k1", ids, now)).toHaveLength(2);
 
     expect(await sends.redispatch(env.DB, send.id, stale, "k1", now)).toEqual([]);
-    await sends.returnUnanswered(env.DB, send.id, stale, "k1", "stale", now);
+    await sends.holdBatch(
+      env.DB,
+      send.id,
+      stale,
+      "k1",
+      true,
+      { reason: "unavailable", cause: "outage", error: "stale" },
+      now,
+    );
     await sends.settleDeliveries(
       env.DB,
       send.id,
@@ -329,6 +337,9 @@ describe("lease ownership", () => {
     expect(row.c_in_flight).toBe(2);
     expect(row.c_pending).toBe(0);
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 2 });
-    expect(await sends.unansweredDispatchKeys(env.DB, send.id)).toEqual(["k1"]);
+    expect(await sends.unansweredDispatchKeys(env.DB, send.id)).toEqual([
+      { key: "k1", keyedAt: now },
+    ]);
+    expect(row.halt_reason).toBeNull(); // nor record a halt on the successor's send
   });
 });

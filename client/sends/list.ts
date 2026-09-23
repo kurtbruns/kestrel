@@ -19,7 +19,15 @@ import {
 } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openRescheduleModal, openResolveModal } from "./dialogs";
-import { activeRowHtml, countdowns, deliveredCell, isWedged } from "./progress";
+import {
+  activeRowHtml,
+  countdowns,
+  deliveredCell,
+  isRefused,
+  isWedged,
+  needsOperator,
+  refusalAdvice,
+} from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -71,7 +79,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // records without a manual reload. Polled every 3s (matching the watch + dashboard).
   let sentActiveSig = "";
   function renderActive(sends: SendSummary[]) {
-    const active = sends.filter((s) => !isWedged(s));
+    const active = sends.filter((s) => !needsOperator(s));
     setHtml(
       activeEl,
       active.length ? html`<h2>In progress</h2>${active.map(activeRowHtml)}` : html``,
@@ -86,9 +94,15 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   }
   function renderStuck(sends: SendSummary[]) {
     const wedged = sends.filter(isWedged);
+    // A refused send carries no control: the fix is in the provider's account or the
+    // deployment's secrets, and the send resumes on its own once it lands.
+    const refused = sends.filter(isRefused);
     setHtml(
       stuckEl,
-      html`${wedged.map((s) => {
+      html`${refused.map(
+        (s) =>
+          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${s.halt_error ?? "no detail given"}. ${refusalAdvice(s.halt_cause)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
+      )}${wedged.map((s) => {
         const n = s.c_in_flight || 0;
         const noun = n === 1 ? "delivery" : "deliveries";
         return html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${s.subject}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
