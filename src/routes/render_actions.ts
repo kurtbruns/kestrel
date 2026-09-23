@@ -271,11 +271,14 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
   // key of its own, as a post test does: an idempotent provider won't fold two
   // intentional tests into one.
+  // The prefix names the send too (the dev simulation keys its rolls on it), so it is as
+  // fresh as the key.
+  const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const results = perRecipient(
     await provider.sendBatch(result, batch, {
-      idempotencyKeyPrefix: "template-test",
-      idempotencyKey: `template-test-${crypto.randomUUID()}`,
+      idempotencyKeyPrefix: testId,
+      idempotencyKey: testId,
     }),
     batch,
   );
