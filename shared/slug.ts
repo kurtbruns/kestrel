@@ -9,3 +9,10 @@ export function slugify(input: string): string {
     .slice(0, 80)
     .replace(/-+$/g, "");
 }
+
+/**
+ * The slug a post gets when its subject slugifies to nothing (a new post, whose subject
+ * starts empty): the server numbers it `post`, `post-2`, …, and the editor reads that
+ * as still tracking the subject, so typing the first subject replaces it.
+ */
+export const EMPTY_SUBJECT_SLUG = "post";

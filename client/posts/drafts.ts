@@ -31,10 +31,9 @@ const DRAFTS_SCOPE = "draft,scheduled";
 export function createNewPost(btn: HTMLButtonElement): Promise<void> {
   return busy(btn, "Creating…", async () => {
     try {
-      const { post } = await api<PostSavedResponse>("/posts", {
-        method: "POST",
-        json: { subject: "Untitled" },
-      });
+      // An empty subject: the editor shows "Untitled" as the field's placeholder, so the
+      // first thing typed is the whole subject, not an addition to a stand-in.
+      const { post } = await api<PostSavedResponse>("/posts", { method: "POST", json: {} });
       location.hash = `#/edit/${post.id}`;
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err));
