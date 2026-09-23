@@ -23,6 +23,7 @@ import paperclip from "./icons/paperclip.svg";
 import preview from "./icons/preview.svg";
 import quote from "./icons/quote.svg";
 import readonly from "./icons/readonly.svg";
+import search from "./icons/search.svg";
 import send from "./icons/send.svg";
 import ul from "./icons/ul.svg";
 import upload from "./icons/upload.svg";
@@ -50,6 +51,7 @@ const ICONS = {
   preview: unsafeHtml(preview),
   quote: unsafeHtml(quote),
   readonly: unsafeHtml(readonly),
+  search: unsafeHtml(search),
   send: unsafeHtml(send),
   ul: unsafeHtml(ul),
   upload: unsafeHtml(upload),

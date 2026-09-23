@@ -76,34 +76,11 @@ const groups: ReferenceGroup[] = [
   },
 ];
 
-/** Stands in for the browser's observer: records what is observed and lets a test fire an entry. */
-class FakeObserver {
-  static last: FakeObserver | null = null;
-  observed: Element[] = [];
-  disconnected = false;
-  constructor(readonly callback: IntersectionObserverCallback) {
-    FakeObserver.last = this;
-  }
-  observe(el: Element) {
-    this.observed.push(el);
-  }
-  disconnect() {
-    this.disconnected = true;
-  }
-  enter(target: Element) {
-    this.callback(
-      [{ isIntersecting: true, target } as IntersectionObserverEntry],
-      this as unknown as IntersectionObserver,
-    );
-  }
-}
-
 describe("reference room", () => {
   let fake: FakeApi;
   beforeEach(() => {
     resetShell();
     location.hash = "#/reference";
-    vi.stubGlobal("IntersectionObserver", FakeObserver);
   });
   afterEach(() => {
     fake?.restore();
@@ -132,7 +109,6 @@ describe("reference room", () => {
       "public",
     ]);
     expect(nav.map((a) => $(".api-nav-count", a).textContent)).toEqual(["4", "3", "1", "1"]);
-    expect(nav.map((a) => a.classList.contains("active"))).toEqual([true, false, false, false]);
     expect($(".api-head p").textContent).toContain(`Base URL ${location.origin}.`);
     // Every row starts collapsed: badge, path, and summary line in the summary.
     const rows = $$<HTMLDetailsElement>("#api-admin-posts details.api-route");
@@ -150,13 +126,74 @@ describe("reference room", () => {
     expect($(".api-query td code", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
     expect(document.querySelector(".api-summary a, .api-route-line a")).toBeNull();
-    expect($$(".api-ex-label", rows[1]).map((l) => l.textContent)).toEqual(["Request", "Response"]);
-    expect($(".api-ex pre code", rows[1]).textContent).toBe(`{\n  "subject": "Owls"\n}`);
+    expect($$(".api-ex-label", rows[1]).map((l) => l.textContent)).toEqual([
+      "Request",
+      "Response",
+      "curl",
+    ]);
     expect($$(".api-ex", rows[0]).map((e) => $(".api-ex-label", e).textContent)).toEqual([
       "Query",
       "Response",
+      "curl",
     ]); // no request example, no request block
+    // An example is pretty-printed JSON, highlighted: the key and the string are marked.
+    const request = $(".api-ex pre code", rows[1]);
+    expect(request.textContent).toBe(`{\n  "subject": "Owls"\n}`);
+    expect($(".cx-prop", request).textContent).toBe(`"subject"`);
+    expect($(".cx-str", request).textContent).toBe(`"Owls"`);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("gives each route a curl command on this instance, and none to a webhook", async () => {
+    const withWebhook: ReferenceGroup[] = [
+      ...groups,
+      {
+        access: "webhook",
+        title: "Webhooks",
+        blurb: "Provider callbacks.",
+        resources: [{ key: "delivery", title: "Delivery events" }],
+        routes: [
+          {
+            method: "POST",
+            path: "/webhooks/ses",
+            access: "webhook",
+            resource: "delivery",
+            summary: "SES events.",
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withWebhook }) }]);
+    await mount(renderReference);
+    await settle();
+    const curlOf = (row: Element) =>
+      $$(".api-ex", row).find((e) => $(".api-ex-label", e).textContent === "curl");
+    const create = $$("#api-admin-posts details.api-route")[1]!;
+    // No session in this harness, so the dev token stands in for Access.
+    expect(curlOf(create)?.querySelector("code")?.textContent).toBe(
+      [
+        `curl -X POST "${location.origin}/posts"`,
+        '  -H "Authorization: Bearer $TOKEN"',
+        '  -H "Content-Type: application/json"',
+        `  -d '{"subject":"Owls"}'`,
+      ].join(" \\\n"),
+    );
+    expect(curlOf($("#api-webhook-delivery details.api-route"))).toBeUndefined();
+  });
+
+  it("copies a code block's plain text, not its highlighted markup", async () => {
+    const writeText = vi.fn(async () => {});
+    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
+    await mount(renderReference);
+    await settle();
+    const create = $$("#api-admin-posts details.api-route")[1]!;
+    const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
+    expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+    copy.click();
+    await settle();
+    expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
+    expect($("#toasts").textContent).toMatch(/Copied/);
   });
 
   it("jumps to a tier or a resource from the rail without navigating", async () => {
@@ -171,21 +208,42 @@ describe("reference room", () => {
     scroll.mockRestore();
   });
 
-  it("highlights the resource in view, or its tier when the rail lists the tier alone, and drops the last room's observer on re-render", async () => {
+  it("lights the rail for the last tier or resource heading scrolled under the bar, and stops following once the room is left", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
     await mount(renderReference);
     await settle();
-    const first = FakeObserver.last;
-    expect(first?.observed).toEqual($$(".api-res"));
-    const active = () => $$("#apiNav a.active").map((a) => a.dataset.sec);
-    first?.enter($("#api-admin-sends"));
+    // No layout here, so place the headings by hand: `scrolled` names those above the line.
+    let scrolled: string[] = [];
+    for (const el of $$(".api-section, .api-res")) {
+      vi.spyOn(el, "getBoundingClientRect").mockImplementation(
+        () => ({ top: scrolled.includes(el.id) ? 0 : 1000 }) as DOMRect,
+      );
+    }
+    const nav = $("#apiNav");
+    const active = () => $$("a.active", nav).map((a) => a.dataset.sec);
+    const scrollTo = (ids: string[]) => {
+      scrolled = ids;
+      window.dispatchEvent(new Event("scroll"));
+    };
+    scrollTo([]);
+    expect(active()).toEqual(["admin"]); // at the top, the first tier
+    scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
     expect(active()).toEqual(["admin-sends"]);
-    first?.enter($("#api-public-subscriptions"));
+    // A jump straight to a tier lights the tier, before any of its resources pass the line;
+    // a resource the rail doesn't list (a one-resource tier) keeps its tier lit.
+    scrollTo(["api-admin", "api-admin-posts", "api-admin-sends", "api-public"]);
     expect(active()).toEqual(["public"]);
-    await mount(renderReference);
-    await settle();
-    expect(first?.disconnected).toBe(true);
-    expect(FakeObserver.last).not.toBe(first);
+    scrollTo([
+      "api-admin",
+      "api-admin-posts",
+      "api-admin-sends",
+      "api-public",
+      "api-public-subscriptions",
+    ]);
+    expect(active()).toEqual(["public"]);
+    unmount();
+    scrollTo(["api-admin"]);
+    expect(active()).toEqual(["public"]); // the detached rail no longer moves
   });
 
   it("filters rows by method, path, or summary, keeping every count to what is shown", async () => {
@@ -202,7 +260,10 @@ describe("reference room", () => {
         .filter((li) => !li.hidden)
         .map((li) => `${$(".api-method", li).textContent} ${$(".api-path", li).textContent}`);
 
+    expect(filter.placeholder).toBe("Filter 5 routes by method, path, or summary");
+    expect($("#apiFilterClear").hidden).toBe(true);
     type("post create");
+    expect($("#apiFilterClear").hidden).toBe(false);
     expect(shown()).toEqual(["POST /posts"]);
     expect($("#api-admin-posts [data-count]").textContent).toBe("1");
     expect($("#api-admin-sends").hidden).toBe(true);
@@ -216,7 +277,15 @@ describe("reference room", () => {
     expect(shown()).toEqual([]);
     expect($("#apiEmpty").hidden).toBe(false);
 
-    // Escape in the filter clears it and brings everything back.
+    // The clear control empties it and hands focus back to the field.
+    $("#apiFilterClear").click();
+    expect(filter.value).toBe("");
+    expect(shown()).toHaveLength(5);
+    expect($("#apiFilterClear").hidden).toBe(true);
+    expect(document.activeElement).toBe(filter);
+
+    // Escape in the filter clears it too.
+    type("cancel");
     filter.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     expect(filter.value).toBe("");
     expect(shown()).toHaveLength(5);

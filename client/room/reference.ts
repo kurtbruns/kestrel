@@ -9,9 +9,13 @@ import type {
 } from "../../shared/reference";
 import { api } from "../api";
 import { mount } from "../lifecycle";
+import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
+import { highlightCurl, highlightJson } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
-import { renderError } from "../ui/widgets";
+import { icon } from "../ui/icons";
+import { copyText, renderError } from "../ui/widgets";
+import { curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest
@@ -19,10 +23,19 @@ import { roomShell } from "./shell";
 // it natively: a rail of tiers and their resources beside the route list, where each
 // route is one scannable row, a native <details>, that opens in place to its full
 // documentation.
+/** One labelled code block with a Copy of its plain text: an example, or the curl command. */
+function apiCode(label: string, code: Html, raw: string): Html {
+  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="icon api-copy" data-copy="${raw}" aria-label="Copy ${label}" title="Copy ${label}">${icon("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
+}
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
     ? null
-    : html`<div class="api-ex"><span class="api-ex-label">${label}</span><pre><code>${JSON.stringify(value, null, 2)}</code></pre></div>`;
+    : apiCode(label, highlightJson(value), JSON.stringify(value, null, 2));
+}
+/** The route as a curl command on this instance, with the credential its tier needs. */
+function apiCurl(r: ReferenceEntry): Html | null {
+  const cmd = curlCommand(r, location.origin, appState.session?.auth.mode ?? "dev");
+  return cmd === null ? null : apiCode("curl", highlightCurl(cmd), cmd);
 }
 // Query params for a list route, rendered as a name→description table so the
 // generated reference documents filter/sort/pagination from the registration.
@@ -33,7 +46,7 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
   const rows = query.map(
     (q) => html`<tr><td><code>${q.name}</code></td><td class="muted">${q.description}</td></tr>`,
   );
-  return html`<div class="api-ex"><span class="api-ex-label">Query</span><table class="api-query"><tbody>${rows}</tbody></table></div>`;
+  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
 /** The path with its parameters (`:id`, `:key(.*)`) marked, so the variable parts read at a glance. */
 function apiPathHtml(path: string): Html {
@@ -57,6 +70,7 @@ function apiRouteHtml(r: ReferenceEntry): Html {
         ${apiQueryHtml(r.query)}
         ${apiExample("Request", r.example?.request)}
         ${apiExample("Response", r.example?.response)}
+        ${apiCurl(r)}
       </div>
     </details></li>`;
 }
@@ -131,9 +145,37 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
   $<HTMLElement>("#apiEmpty", contentEl).hidden = shown > 0;
 }
 
-// Highlights whichever resource is in view. One observer for the room: it lives as long
-// as the view and is disconnected when the next render replaces it.
-let sectionObserver: IntersectionObserver | null = null;
+/**
+ * Highlight the rail link for what the reader is in: the last tier or resource heading
+ * scrolled above a line just under the sticky room bar (so an instant jump lands right,
+ * not only a scroll that passes each heading), or the last one once the page is at its
+ * bottom. A resource the rail doesn't list lights its tier; a filtered-out one is skipped.
+ */
+function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
+  // Measured, not assumed, as the docs' spy does: large-text zoom can push the bar taller.
+  const line = ($(".room-bar").getBoundingClientRect().height || 54) + 26;
+  const marks = $$(".api-section, .api-res", contentEl).filter((el) => !el.closest("[hidden]"));
+  // At the bottom, the last heading wins; a page that hasn't scrolled is at its top.
+  const atBottom =
+    window.scrollY > 0 &&
+    Math.ceil(window.innerHeight + window.scrollY) >= document.documentElement.scrollHeight;
+  let current = marks[0];
+  for (const el of marks) {
+    if (atBottom || el.getBoundingClientRect().top <= line) {
+      current = el;
+    } else {
+      break;
+    }
+  }
+  const sec = current?.dataset.sec ?? current?.dataset.tier;
+  const tier = current?.closest<HTMLElement>(".api-section")?.dataset.tier;
+  const links = $$("a[data-sec]", navEl);
+  const target =
+    links.find((a) => a.dataset.sec === sec) ?? links.find((a) => a.dataset.tier === tier);
+  for (const a of links) {
+    a.classList.toggle("active", a === target);
+  }
+}
 
 export async function renderReference(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
@@ -167,14 +209,33 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     return;
   }
 
+  const total = groups.reduce((n, g) => n + g.routes.length, 0);
   setHtml(navEl, apiNavHtml(groups));
-  navEl.querySelector("a")?.classList.add("active");
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><label class="api-filter"><input type="search" id="apiFilter" placeholder="Filter routes" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter ${total} routes by method, path, or summary" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
-  filterEl.addEventListener("input", () => applyFilter(filterEl.value, navEl, contentEl));
+  const clearEl = $("#apiFilterClear");
+  const spy = () => spyRail(navEl, contentEl);
+  const filterTo = (query: string) => {
+    filterEl.value = query;
+    clearEl.hidden = query === "";
+    applyFilter(query, navEl, contentEl);
+    spy();
+  };
+  filterEl.addEventListener("input", () => filterTo(filterEl.value));
+  clearEl.addEventListener("click", () => {
+    filterTo("");
+    filterEl.focus();
+  });
+  // A code block's Copy puts its plain text (the example, or the curl command) on the clipboard.
+  contentEl.addEventListener("click", (ev) => {
+    const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-copy]") : null;
+    if (b) {
+      copyText(b.dataset.copy ?? "");
+    }
+  });
   // "/" jumps to the filter from anywhere in the room (unless typing elsewhere); Escape
   // in the filter clears it. Bound to the view, so it ends when the room does.
   document.addEventListener(
@@ -187,38 +248,15 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
         ev.preventDefault();
         filterEl.focus();
       } else if (ev.key === "Escape" && ev.target === filterEl && filterEl.value) {
-        filterEl.value = "";
-        applyFilter("", navEl, contentEl);
+        filterTo("");
       }
     },
     { signal },
   );
 
-  // Highlight the resource in view, or its tier when the rail lists the tier alone.
-  // Query the live nav each time so it never holds a stale link reference.
-  sectionObserver?.disconnect();
-  const obs = new IntersectionObserver(
-    (entries) => {
-      for (const e of entries) {
-        if (!e.isIntersecting || !(e.target instanceof HTMLElement)) {
-          continue;
-        }
-        const sec = e.target.dataset.sec;
-        const tier = e.target.closest<HTMLElement>(".api-section")?.dataset.tier;
-        const links = $$("a[data-sec]", navEl);
-        const target =
-          links.find((a) => a.dataset.sec === sec) ?? links.find((a) => a.dataset.tier === tier);
-        for (const a of links) {
-          a.classList.toggle("active", a === target);
-        }
-      }
-    },
-    { rootMargin: "-15% 0px -75% 0px", threshold: 0 },
-  );
-  sectionObserver = obs;
-  for (const el of $$(".api-res", contentEl)) {
-    obs.observe(el);
-  }
+  // The rail follows the reading position, and the filter, which moves every heading.
+  window.addEventListener("scroll", spy, { passive: true, signal });
   // Its own page — start at the top, not wherever the last doc was scrolled to.
   window.scrollTo(0, 0);
+  spy();
 }

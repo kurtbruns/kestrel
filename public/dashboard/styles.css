@@ -1632,7 +1632,7 @@ th.num .th-sort {
 
 /* API reference: query-param table inside a route card */
 .api-query {
-  margin: 6px 0 0;
+  margin: 0;
 }
 .api-query td {
   padding: 5px 10px;
@@ -3138,29 +3138,62 @@ button.notice-dismiss svg {
    closes the intro, above the first tier, and narrows the whole list. */
 .api-filter {
   position: relative;
-  display: block;
-  max-width: 320px;
-  margin: 14px 0 0;
+  max-width: 480px;
+  margin: 16px 0 0;
+}
+.api-filter > svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--muted);
+  pointer-events: none;
 }
 .api-filter input {
-  font-size: 13px;
-  padding: 5px 28px 5px 10px;
+  height: 38px;
+  padding: 0 38px 0 34px;
+  border-radius: 8px;
+}
+/* The field's own clear control replaces the browser's, which sat inside the padding the
+   shortcut hint needs and drew in a different style per browser. */
+.api-filter input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
 }
 .api-filter kbd {
   position: absolute;
-  right: 7px;
+  right: 10px;
   top: 50%;
   transform: translateY(-50%);
   font: 11px var(--mono);
   color: var(--muted);
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 5px;
   pointer-events: none;
 }
 .api-filter input:focus + kbd,
 .api-filter input:not(:placeholder-shown) + kbd {
   display: none;
+}
+/* The Icon role, pinned inside the field's right edge (by top, not a transform, so the
+   role's pressed nudge doesn't fight the centering). */
+button.api-filter-clear {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+button.api-filter-clear svg {
+  width: 13px;
+  height: 13px;
 }
 .api-nav {
   display: flex;
@@ -3220,6 +3253,11 @@ button.notice-dismiss svg {
   scroll-margin-top: calc(var(--bar-h) + 2px);
   margin: 0 0 36px;
 }
+/* The last tier is at least a screen tall, so it can scroll up under the bar like every
+   other tier: its rail link lands it at the top and the scroll-spy can reach it. */
+.api-section:last-of-type {
+  min-height: calc(100vh - var(--bar-h));
+}
 .api-section h2 {
   font-size: 18px;
   margin: 24px 0 4px;
@@ -3241,9 +3279,12 @@ button.notice-dismiss svg {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 7px 6px;
+  background: var(--bg);
+  border-radius: 6px;
+}
+.api-res-head .api-nav-count {
   background: var(--card);
-  border-bottom: 1px solid var(--line);
 }
 .api-res-head h3 {
   margin: 0;
@@ -3343,12 +3384,30 @@ button.notice-dismiss svg {
 .api-ex {
   margin-top: 10px;
 }
+.api-ex-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px;
+}
 .api-ex-label {
   display: block;
   font-size: 12px;
   font-weight: 600;
   color: var(--muted);
-  margin: 8px 0 4px;
+}
+/* A code block's Copy: the Icon role, sized to the label line it shares. */
+button.api-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+}
+button.api-copy svg {
+  width: 14px;
+  height: 14px;
 }
 .api-ex pre {
   margin: 0;
