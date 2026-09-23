@@ -10,7 +10,7 @@ paths:
 
 ## What belongs in CLAUDE.md
 
-Facts Claude needs in every session: the commands, the conventions, the layout, the rules that are not obvious from the code. Add a line when Claude makes the same mistake twice, when a review catches something it should have known, or when you type the same correction into chat that you typed last session. Leave out what Claude can read from the code itself, such as directory listings and dependency lists, and keep what it cannot: pitfalls, rationale, and conventions that differ from the tool defaults.
+Facts Claude needs in every session: the commands, the conventions, the module boundaries, the rules that are not obvious from the code. Add a line when Claude makes the same mistake twice, when a review catches something it should have known, or when you type the same correction into chat that you typed last session. Leave out what Claude can read from the code itself, such as directory listings and dependency lists, and keep what it cannot: pitfalls, rationale, and conventions that differ from the tool defaults.
 
 Something that matters for one part of the codebase goes in a path-scoped rule. A multi-step procedure goes in a skill. A check that must run every time goes in a hook.
 
