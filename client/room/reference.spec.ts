@@ -98,8 +98,7 @@ describe("reference room", () => {
       "api-admin-sends",
       "api-public-subscriptions",
     ]);
-    expect($("#api-admin-posts .api-res-head h3").textContent).toBe("Posts");
-    expect($("#api-admin-posts .api-res-head [data-count]").textContent).toBe("3");
+    expect($("#api-admin-posts .api-res-head").textContent).toBe("Posts");
     // The rail lists a tier's resources only when it has more than one.
     const nav = $$("#apiNav a");
     expect(nav.map((a) => a.dataset.sec)).toEqual([
@@ -108,7 +107,7 @@ describe("reference room", () => {
       "admin-sends",
       "public",
     ]);
-    expect(nav.map((a) => $(".api-nav-count", a).textContent)).toEqual(["4", "3", "1", "1"]);
+    expect(nav.map((a) => a.textContent)).toEqual(["Admin", "Posts", "Sends", "Public"]);
     expect($(".api-head p").textContent).toContain(`Base URL ${location.origin}.`);
     // Every row starts collapsed: badge, path, and summary line in the summary.
     const rows = $$<HTMLDetailsElement>("#api-admin-posts details.api-route");
@@ -181,20 +180,64 @@ describe("reference room", () => {
     expect(curlOf($("#api-webhook-delivery details.api-route"))).toBeUndefined();
   });
 
-  it("copies a code block's plain text, not its highlighted markup", async () => {
+  it("copies a code block's plain text, not its highlighted markup, and shows a check for a moment", async () => {
     const writeText = vi.fn(async () => {});
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
     await mount(renderReference);
     await settle();
-    const create = $$("#api-admin-posts details.api-route")[1]!;
-    const copy = $<HTMLButtonElement>(".api-ex button.code-copy", create);
-    expect(copy.getAttribute("aria-label")).toBe("Copy Request");
-    expect($("[data-copy-label]", copy).textContent).toBe("Copy");
-    copy.click();
+    vi.useFakeTimers();
+    try {
+      const create = $$("#api-admin-posts details.api-route")[1]!;
+      const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
+      const glyph = () => copy.querySelector("svg")?.outerHTML;
+      const resting = glyph();
+      expect(copy.textContent?.trim()).toBe("Copy");
+      expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+      copy.click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
+      expect(copy.getAttribute("aria-label")).toBe("Copied");
+      expect(copy.classList.contains("copied")).toBe(true);
+      expect(glyph()).not.toBe(resting);
+      expect(copy.textContent?.trim()).toBe("Copy"); // the word stays; only the glyph changes
+      // A second copy mid-moment restarts it rather than being cut short by the first.
+      await vi.advanceTimersByTimeAsync(1000);
+      copy.click();
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(copy.getAttribute("aria-label")).toBe("Copied");
+      await vi.advanceTimersByTimeAsync(600);
+      expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+      expect(copy.classList.contains("copied")).toBe(false);
+      expect(glyph()).toBe(resting);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks a query parameter the route can't do without", async () => {
+    const withToken: ReferenceGroup[] = [
+      {
+        ...groups[1]!,
+        routes: [
+          {
+            method: "GET",
+            path: "/confirm",
+            access: "public",
+            resource: "subscriptions",
+            summary: "Confirm.",
+            query: [{ name: "token", description: "The link's token.", required: true }],
+          },
+        ],
+      },
+    ];
+    fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups: withToken }) }]);
+    await mount(renderReference);
     await settle();
-    expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
-    expect($("[data-copy-label]", copy).textContent).toBe("Copied");
+    expect($(".api-query td").textContent).toBe("token required");
+    expect($$("code", $$(".api-ex").at(-1)!).at(-1)?.textContent).toBe(
+      `curl "${location.origin}/confirm?token=:token"`,
+    );
   });
 
   it("jumps to a tier or a resource from the rail without navigating", async () => {
@@ -242,12 +285,42 @@ describe("reference room", () => {
       "api-public-subscriptions",
     ]);
     expect(active()).toEqual(["public"]);
-    unmount();
+    // At the bottom of a scrolled page the last heading wins, even one short of the line.
+    const scrollY = vi.spyOn(window, "scrollY", "get").mockReturnValue(500);
+    const height = vi
+      .spyOn(document.documentElement, "scrollHeight", "get")
+      .mockReturnValue(window.innerHeight + 500);
     scrollTo(["api-admin"]);
-    expect(active()).toEqual(["public"]); // the detached rail no longer moves
+    expect(active()).toEqual(["public"]);
+    scrollY.mockRestore();
+    height.mockRestore();
+    // A filtered-out heading is skipped, and with nothing left the rail lights nothing.
+    $("#api-admin-sends").hidden = true;
+    scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
+    expect(active()).toEqual(["admin-posts"]);
+    for (const sec of $$(".api-section")) {
+      sec.hidden = true;
+    }
+    scrollTo([]);
+    expect(active()).toEqual([]);
+    for (const el of $$(".api-section, .api-res")) {
+      el.hidden = false;
+    }
+    // On a phone the rail hides its resource links, so the tier chip takes the highlight.
+    const phone = document.createElement("style");
+    phone.textContent = ".api-nav-res { display: none; }";
+    document.head.append(phone);
+    scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
+    expect(active()).toEqual(["admin"]);
+    phone.remove();
+    scrollTo(["api-admin", "api-admin-posts"]);
+    expect(active()).toEqual(["admin-posts"]);
+    unmount();
+    scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
+    expect(active()).toEqual(["admin-posts"]); // the detached rail no longer moves
   });
 
-  it("filters rows by method, path, or summary, keeping every count to what is shown", async () => {
+  it("filters rows by method, path, or summary, with the headings and rail links that still hold one", async () => {
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
     await mount(renderReference);
     await settle();
@@ -261,18 +334,22 @@ describe("reference room", () => {
         .filter((li) => !li.hidden)
         .map((li) => `${$(".api-method", li).textContent} ${$(".api-path", li).textContent}`);
 
-    expect(filter.placeholder).toBe("Filter 5 routes by method, path, or summary");
+    expect(filter.placeholder).toBe("Filter routes by method, path, or summary");
     expect($("#apiFilterClear").hidden).toBe(true);
     type("post create");
     expect($("#apiFilterClear").hidden).toBe(false);
     expect(shown()).toEqual(["POST /posts"]);
-    expect($("#api-admin-posts [data-count]").textContent).toBe("1");
     expect($("#api-admin-sends").hidden).toBe(true);
     expect($("#api-public").hidden).toBe(true);
-    expect(
-      $$("#apiNav a").map((a) => (a.hidden ? "-" : $(".api-nav-count", a).textContent)),
-    ).toEqual(["1", "1", "-", "-"]);
+    expect($$("#apiNav a").map((a) => (a.hidden ? "hidden" : a.dataset.sec))).toEqual([
+      "admin",
+      "admin-posts",
+      "hidden",
+      "hidden",
+    ]);
     expect($("#apiEmpty").hidden).toBe(true);
+    // The last tier still shown keeps the last tier's room to scroll up under the bar.
+    expect($$(".api-section.api-last").map((sec) => sec.id)).toEqual(["api-admin"]);
 
     type("nothing-matches");
     expect(shown()).toEqual([]);

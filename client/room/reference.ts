@@ -15,7 +15,7 @@ import { highlightCurl, highlightJson } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { renderError, toast } from "../ui/widgets";
-import { curlCommand } from "./curl";
+import { concretePath, curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
 // Every route the app and Claude can call, generated from the route manifest
@@ -23,9 +23,13 @@ import { roomShell } from "./shell";
 // it natively: a rail of tiers and their resources beside the route list, where each
 // route is one scannable row, a native <details>, that opens in place to its full
 // documentation.
+/** The copy control's face: its word, then its glyph, which is a check once a copy has landed. */
+function copyFace(glyph: "copyout" | "check"): Html {
+  return html`<span>Copy</span>${icon(glyph)}`;
+}
 /** One labelled code block with a Copy of its plain text: an example, or the curl command. */
 function apiCode(label: string, code: Html, raw: string): Html {
-  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="code-copy" data-copy="${raw}" aria-label="Copy ${label}"><span data-copy-label>Copy</span>${icon("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
+  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="api-copy" data-copy="${raw}" aria-label="Copy ${label}">${copyFace("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
 }
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
@@ -44,19 +48,23 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
     return null;
   }
   const rows = query.map(
-    (q) => html`<tr><td><code>${q.name}</code></td><td class="muted">${q.description}</td></tr>`,
+    (q) =>
+      html`<tr><td><code>${q.name}</code>${q.required ? html` <span class="api-req">required</span>` : null}</td><td class="muted">${q.description}</td></tr>`,
   );
   return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
-/** The path with its parameters (`:id`, `:key(.*)`) marked, so the variable parts read at a glance. */
+/**
+ * The path as a URL path to type (the curl command's own, without the router's pattern
+ * syntax), with its parameters marked so the variable parts read at a glance.
+ */
 function apiPathHtml(path: string): Html {
-  return html`${path
-    .split(/(:[A-Za-z_]+(?:\([^)]*\))?)/)
+  return html`${concretePath(path)
+    .split(/(:[A-Za-z_]+)/)
     .map((part, i) => (i % 2 ? html`<span class="api-param">${part}</span>` : part))}`;
 }
 function apiRouteHtml(r: ReferenceEntry): Html {
   // What the filter matches: the method, the path, and the one-line summary.
-  const hay = `${r.method} ${r.path} ${r.summary}`.toLowerCase();
+  const hay = `${r.method} ${concretePath(r.path)} ${r.summary}`.toLowerCase();
   return html`<li data-hay="${hay}"><details class="api-route">
       <summary class="api-route-sum">
         <span class="api-method m-${r.method}">${r.method}</span>
@@ -81,7 +89,7 @@ function apiResourceHtml(g: ReferenceGroup, res: ReferenceResource): Html {
   const sec = `${g.access}-${res.key}`;
   const routes = routesIn(g, res);
   return html`<div class="api-res" id="api-${sec}" data-sec="${sec}">
-      <div class="api-res-head"><h3>${res.title}</h3><span class="api-nav-count" data-count>${routes.length}</span></div>
+      <div class="api-res-head"><h3>${res.title}</h3></div>
       <ul class="api-rows">${routes.map(apiRouteHtml)}</ul>
     </div>`;
 }
@@ -93,15 +101,15 @@ function apiSectionHtml(g: ReferenceGroup): Html {
     </section>`;
 }
 // The rail: each tier, then its resources beneath it. A tier with one resource lists only
-// the tier, since the resource would repeat it.
+// the tier, since the resource would repeat it. No counts: the rail is for moving.
 function apiNavHtml(groups: ReferenceGroup[]): Html {
   return html`${groups.map(
     (g) =>
-      html`<a href="#/reference" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}<span class="api-nav-count" data-count>${g.routes.length}</span></a>${
+      html`<a href="#/reference" class="api-nav-tier" data-sec="${g.access}" data-tier="${g.access}">${g.title}</a>${
         g.resources.length > 1
           ? g.resources.map(
               (res) =>
-                html`<a href="#/reference" class="api-nav-res" data-sec="${g.access}-${res.key}">${res.title}<span class="api-nav-count" data-count>${routesIn(g, res).length}</span></a>`,
+                html`<a href="#/reference" class="api-nav-res" data-sec="${g.access}-${res.key}">${res.title}</a>`,
             )
           : null
       }`,
@@ -110,8 +118,9 @@ function apiNavHtml(groups: ReferenceGroup[]): Html {
 
 /**
  * Show only the routes whose method, path, or summary contains every word of the query,
- * and keep each count (resource, tier, rail) to what is still shown. An empty query
- * shows everything.
+ * with the resources, tiers, and rail links that still hold one. An empty query shows
+ * everything. The last tier still shown is marked, so it keeps the room to scroll
+ * up under the bar that the last tier has.
  */
 function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement): void {
   const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -126,11 +135,9 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
         inRes += hit ? 1 : 0;
       }
       res.hidden = inRes === 0;
-      $("[data-count]", res).textContent = String(inRes);
       const link = navEl.querySelector<HTMLElement>(`a[data-sec="${res.dataset.sec}"]`);
       if (link) {
         link.hidden = inRes === 0;
-        $("[data-count]", link).textContent = String(inRes);
       }
       inTier += inRes;
     }
@@ -138,9 +145,13 @@ function applyFilter(query: string, navEl: HTMLElement, contentEl: HTMLElement):
     const tierLink = navEl.querySelector<HTMLElement>(`a[data-tier="${sec.dataset.tier}"]`);
     if (tierLink) {
       tierLink.hidden = inTier === 0;
-      $("[data-count]", tierLink).textContent = String(inTier);
     }
     shown += inTier;
+  }
+  const sections = $$<HTMLElement>(".api-section", contentEl);
+  const lastShown = sections.filter((sec) => !sec.hidden).at(-1);
+  for (const sec of sections) {
+    sec.classList.toggle("api-last", sec === lastShown);
   }
   $<HTMLElement>("#apiEmpty", contentEl).hidden = shown > 0;
 }
@@ -169,10 +180,13 @@ function spyRail(navEl: HTMLElement, contentEl: HTMLElement): void {
   }
   const sec = current?.dataset.sec ?? current?.dataset.tier;
   const tier = current?.closest<HTMLElement>(".api-section")?.dataset.tier;
-  const links = $$("a[data-sec]", navEl);
+  // A resource link the rail isn't showing (a phone's rail is the tier chips alone) hands
+  // the highlight to its tier.
+  const links = $$("a[data-sec]", navEl).filter((a) => getComputedStyle(a).display !== "none");
   const target =
-    links.find((a) => a.dataset.sec === sec) ?? links.find((a) => a.dataset.tier === tier);
-  for (const a of links) {
+    links.find((a) => a.dataset.sec === sec) ??
+    (tier === undefined ? undefined : links.find((a) => a.dataset.tier === tier));
+  for (const a of $$("a[data-sec]", navEl)) {
     a.classList.toggle("active", a === target);
   }
 }
@@ -209,11 +223,10 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     return;
   }
 
-  const total = groups.reduce((n, g) => n + g.routes.length, 0);
   setHtml(navEl, apiNavHtml(groups));
   setHtml(
     contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter ${total} routes by method, path, or summary" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><div class="api-filter">${icon("search")}<input type="search" id="apiFilter" placeholder="Filter routes by method, path, or summary" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd><button type="button" class="icon api-filter-clear" id="apiFilterClear" aria-label="Clear filter" hidden>${icon("x")}</button></div></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
   );
   const filterEl = $<HTMLInputElement>("#apiFilter");
   const clearEl = $("#apiFilterClear");
@@ -230,22 +243,34 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     filterEl.focus();
   });
   // A code block's Copy puts its plain text (the example, or the curl command) on the
-  // clipboard and says "Copied" for a moment, as a doc's code block does.
+  // clipboard, and its glyph turns to a check for a moment to say it worked; the word
+  // stays. The accessible name says "Copied" meanwhile, for a screen reader; a second
+  // copy restarts the moment.
+  const copied = new WeakMap<HTMLElement, { label: string; timer: number }>();
   contentEl.addEventListener("click", async (ev) => {
     const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-copy]") : null;
     if (!b) {
       return;
     }
-    const label = $("[data-copy-label]", b);
     try {
       await navigator.clipboard.writeText(b.dataset.copy ?? "");
-      label.textContent = "Copied";
-      setTimeout(() => {
-        label.textContent = "Copy";
-      }, 1500);
     } catch {
       toast("Couldn't copy to clipboard");
+      return;
     }
+    const prior = copied.get(b);
+    const label = prior?.label ?? b.getAttribute("aria-label") ?? "Copy";
+    window.clearTimeout(prior?.timer);
+    setHtml(b, copyFace("check"));
+    b.setAttribute("aria-label", "Copied");
+    b.classList.add("copied");
+    const timer = window.setTimeout(() => {
+      setHtml(b, copyFace("copyout"));
+      b.setAttribute("aria-label", label);
+      b.classList.remove("copied");
+      copied.delete(b);
+    }, 1500);
+    copied.set(b, { label, timer });
   });
   // "/" jumps to the filter from anywhere in the room (unless typing elsewhere); Escape
   // in the filter clears it. Bound to the view, so it ends when the room does.
@@ -265,6 +290,8 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     { signal },
   );
 
+  // Mark the last tier (the filter keeps it current from here).
+  applyFilter("", navEl, contentEl);
   // The rail follows the reading position, and the filter, which moves every heading.
   window.addEventListener("scroll", spy, { passive: true, signal });
   // Its own page — start at the top, not wherever the last doc was scrolled to.

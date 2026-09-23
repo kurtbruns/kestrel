@@ -22,9 +22,9 @@ function authLines(mode: AuthMode): string[] {
 /**
  * The route's path as a URL path to type: the pattern syntax a URL never carries (a
  * parameter's regex, an optional segment) is dropped, and `:id`-style parameters stay as
- * the placeholders to replace.
+ * the placeholders to replace. The reference shows its rows this way too.
  */
-function concretePath(path: string): string {
+export function concretePath(path: string): string {
   return path.replace(/\([^)]*\)/g, "").replace(/\{[^}]*\}\??/g, "") || "/";
 }
 
@@ -36,7 +36,10 @@ export function curlCommand(r: ReferenceEntry, origin: string, mode: AuthMode): 
   if (r.access === "webhook") {
     return null;
   }
-  const url = `"${origin}${concretePath(r.path)}"`;
+  // A query parameter the route can't do without rides the URL, as a placeholder like a path's.
+  const required = (r.query ?? []).filter((q) => q.required);
+  const search = required.length ? `?${required.map((q) => `${q.name}=:${q.name}`).join("&")}` : "";
+  const url = `"${origin}${concretePath(r.path)}${search}"`;
   const lines = [r.method === "GET" ? `curl ${url}` : `curl -X ${r.method} ${url}`];
   if (r.access === "admin") {
     lines.push(...authLines(mode));

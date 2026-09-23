@@ -38,6 +38,8 @@ export interface RouteExample {
 export interface QueryParam {
   name: string;
   description: string;
+  /** The route can't be called without it (a token-scoped link), unlike a list's optional filters. */
+  required?: boolean;
 }
 
 /** One route as the reference shows it: the manifest metadata, without handler or middleware. */

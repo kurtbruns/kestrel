@@ -56,6 +56,22 @@ describe("curlCommand", () => {
     expect(path("{/}?")).toBe('curl "https://news.example.com/"');
   });
 
+  it("puts a required query parameter on the URL as a placeholder, and leaves optional ones off", () => {
+    const cmd = curlCommand(
+      route({
+        path: "/confirm",
+        access: "public",
+        query: [
+          { name: "token", description: "", required: true },
+          { name: "lang", description: "" },
+        ],
+      }),
+      origin,
+      "dev",
+    );
+    expect(cmd).toBe('curl "https://news.example.com/confirm?token=:token"');
+  });
+
   it("a public route carries no credential, and a webhook gets no command at all", () => {
     expect(curlCommand(route({ path: "/subscribe", access: "public" }), origin, "access")).toBe(
       'curl "https://news.example.com/subscribe"',

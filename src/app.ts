@@ -606,6 +606,7 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       resource: "subscribers",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
+      example: { request: { email: "reader@example.com" } },
       handler: subscriberRoutes.create,
     },
     {
@@ -670,6 +671,10 @@ export function createRouter(archiveBasePath: string): Router {
       access: "admin",
       resource: "suppressions",
       summary: "Suppress an address manually.",
+      example: {
+        request: { email: "reader@example.com", reason: "manual" },
+        response: { suppressed: "reader@example.com", reason: "manual" },
+      },
       handler: suppressionRoutes.add,
     },
     {
@@ -730,6 +735,13 @@ export function createRouter(archiveBasePath: string): Router {
       access: "public",
       resource: "subscriptions",
       summary: "Confirm a subscription from the emailed link (`?token=`).",
+      query: [
+        {
+          name: "token",
+          description: "The one-shot confirmation token from the emailed link.",
+          required: true,
+        },
+      ],
       handler: publicRoutes.confirm,
     },
     {
@@ -738,6 +750,13 @@ export function createRouter(archiveBasePath: string): Router {
       access: "public",
       resource: "subscriptions",
       summary: "Unsubscribe landing page (`?token=`).",
+      query: [
+        {
+          name: "token",
+          description: "The subscriber's unsubscribe token, from any delivered email's link.",
+          required: true,
+        },
+      ],
       handler: publicRoutes.unsubscribeLanding,
     },
     {
@@ -746,6 +765,13 @@ export function createRouter(archiveBasePath: string): Router {
       access: "public",
       resource: "subscriptions",
       summary: "Process a one-click / form unsubscribe (`?token=`).",
+      query: [
+        {
+          name: "token",
+          description: "The subscriber's unsubscribe token, from any delivered email's link.",
+          required: true,
+        },
+      ],
       handler: publicRoutes.unsubscribe,
     },
 
