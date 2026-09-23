@@ -217,6 +217,8 @@ describe("buildSendProgress — derived phase", () => {
       halt_cause: null,
       halt_error: null,
       halted_at: null,
+      halt_retries: 0,
+      halt_retry_at: null,
       c_pending: 0,
       c_in_flight: 0,
       c_accepted: 0,
@@ -265,6 +267,8 @@ describe("buildSendProgress — derived phase", () => {
         halt_cause: "credentials",
         halt_error: "resend batch 403: API key is not active",
         halted_at: since,
+        halt_retries: 2,
+        halt_retry_at: since + 20 * 60_000,
       }),
       "resend",
       false,
@@ -278,6 +282,7 @@ describe("buildSendProgress — derived phase", () => {
       cause: "credentials",
       error: "resend batch 403: API key is not active",
       since,
+      retry_at: since + 20 * 60_000,
     });
   });
   it("backing-off, not refused, while the provider is only unavailable", () => {

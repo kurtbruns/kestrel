@@ -10,6 +10,7 @@ import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers
 import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
+import { toNextTick } from "./support/clock";
 
 const config = () => getConfig(env);
 
@@ -135,7 +136,16 @@ describe("send loop + sweep", () => {
     expect(fakeOutbox().length).toBe(0);
     expect(await sends.countDeliveries(env.DB, send.id, "pending")).toBe(2);
 
-    await sweep(env); // resume
+    // The failed request halted the run, so the send waits out its first backoff step.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await sweep(env);
+      expect(fakeOutbox().length).toBe(0);
+      await toNextTick(env.DB);
+      await sweep(env); // resume
+    } finally {
+      vi.useRealTimers();
+    }
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 2 });
     expect(countTo("x@example.com")).toBe(1);

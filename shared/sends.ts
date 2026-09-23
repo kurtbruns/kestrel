@@ -27,6 +27,8 @@ export interface SendHalt {
   cause: HaltCause | null;
   error: string;
   since: number;
+  /** When the next retry is due. The sweep leaves the send alone until then. */
+  retry_at: number;
 }
 
 /** The eight denormalized progress counters on a send. */
@@ -65,6 +67,10 @@ export interface Send {
   halt_error: string | null;
   /** When refusals for this reason began. */
   halted_at: number | null;
+  /** How many runs in a row this refusal has halted; 0 while the send is not halted. */
+  halt_retries: number;
+  /** When the sweep next retries the halted send (SPEC §12); null while it is not halted. */
+  halt_retry_at: number | null;
   c_pending: number;
   c_in_flight: number;
   c_accepted: number;

@@ -21,7 +21,8 @@ import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
  *   - `progressing`     actively handing recipients to the provider.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
- *                       ticks (a rate-limit pause or retry backoff waiting for the next tick).
+ *                       ticks, or, while the provider is unavailable, until the halt's
+ *                       next retry (`provider.halt.retry_at`).
  *   - `needs-attention` wedged: nothing left to hand off, but recipients stuck in flight
  *                       whose fate a transport error left unknown (§12) — awaiting Resolve;
  *                       or refused: the provider refuses the account, which the operator
@@ -58,7 +59,7 @@ function derivePhase(
         return hasRetries ? "retrying" : "progressing";
       }
       if (counts.pending > 0) {
-        return "backing-off"; // released the lease, waiting for the next sweep tick
+        return "backing-off"; // released the lease, waiting for the next sweep tick or retry
       }
       return "progressing";
     }
@@ -133,6 +134,7 @@ export function buildSendProgress(
           cause: send.halt_cause,
           error: send.halt_error ?? "",
           since: send.halted_at ?? now,
+          retry_at: send.halt_retry_at ?? now,
         }
       : null;
   const refused = halt?.reason === "account";

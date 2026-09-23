@@ -9,7 +9,8 @@
  *
  * One tick is one invocation, so it shares one subrequest budget (`budget.ts`) across
  * its own queries and every send it runs; a send the budget can't reach this tick is
- * picked up on the next.
+ * picked up on the next. A send the provider halted is left alone until its backoff
+ * says its next retry is due (`HALT_BACKOFF_MS`), so waiting costs only the query.
  */
 
 import * as sends from "../db/sends";
@@ -44,7 +45,8 @@ export async function sweep(env: AppEnv): Promise<void> {
     await safeRun(env, s.id, budget);
   }
 
-  // 2) Resume interrupted sends whose lease has expired, if the budget still has room
+  // 2) Resume interrupted sends whose lease has expired (and halted ones whose next retry
+  // is due), if the budget still has room
   // for one run after the query that finds them.
   const resumable = budget.affords(1 + MIN_RUN_COST) ? await sends.resumableSends(db, now) : [];
   for (const s of resumable) {

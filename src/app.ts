@@ -17,6 +17,7 @@
 import type { ReferenceResponse } from "../shared/reference";
 import { buildInfo } from "./build";
 import { json } from "./lib/errors";
+import { HALT_BACKOFF_MS } from "./lib/time";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
@@ -32,6 +33,18 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
+
+/** A halt's retry schedule in words for the reference, read off `HALT_BACKOFF_MS` so the
+ *  two can't drift: "after 1, 2, and 5 minutes and then every 15 minutes". */
+function retrySchedule(steps: readonly number[]): string {
+  const minutes = steps.map((ms) => ms / 60_000);
+  const last = minutes.pop();
+  const head =
+    minutes.length > 1
+      ? `${minutes.slice(0, -1).join(", ")}, and ${minutes.at(-1)}`
+      : `${minutes[0]}`;
+  return `after ${head} minutes and then every ${last} minutes`;
+}
 
 /**
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
@@ -455,7 +468,11 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled.",
       description:
-        "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. `unavailable` is an outage or a rate limit: the send retries every sweep on its own, and is worth raising only once its progress reads `attention.stuck`. `account` is the provider refusing the account itself; `halt_cause` names what (`credentials`, `sender`, `quota`, or `suspended`) and `halt_error` is the provider's own message. Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself on the next sweep, so it is never rescheduled or sent again.",
+        "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. The send retries on its own, spaced out the longer the halt lasts: `halt_retries` counts the halted attempts in a row and `halt_retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
+        retrySchedule(HALT_BACKOFF_MS.unavailable) +
+        ", and worth raising only once its progress reads `attention.stuck`. `account` is the provider refusing the account itself, retried " +
+        retrySchedule(HALT_BACKOFF_MS.account) +
+        "; `halt_cause` names what (`credentials`, `sender`, `quota`, or `suspended`) and `halt_error` is the provider's own message. Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner.",
       query: [
         {
           name: "status",
@@ -494,7 +511,7 @@ export function createRouter(archiveBasePath: string): Router {
       summary:
         "Live in-flight progress: a single-row read off the counters — dispatch/delivery bars, derived phase, and attention flags. The poll target for the watch view.",
       description:
-        "`phase` `needs-attention` has two causes, told apart by `attention`. `wedged` is recipients whose delivery is unknown, which the publisher settles with `POST /sends/:id/resolve`. `refused` is the provider refusing the account, with `provider.halt` carrying its `reason`, `cause` (`credentials`, `sender`, `quota`, or `suspended`), `error` (the provider's message), and `since`; there is no API action for it, so tell the publisher the cause and the fix, and that the send resumes on its own once the account is fixed and has consumed no one. `provider.halt` with reason `unavailable` is an outage or a rate limit that retries every sweep; `attention.stuck` is when it has lasted long enough to raise.",
+        "`phase` `needs-attention` has two causes, told apart by `attention`. `wedged` is recipients whose delivery is unknown, which the publisher settles with `POST /sends/:id/resolve`. `refused` is the provider refusing the account, with `provider.halt` carrying its `reason`, `cause` (`credentials`, `sender`, `quota`, or `suspended`), `error` (the provider's message), `since`, and `retry_at`; there is no API action for it, so tell the publisher the cause and the fix, that the send has consumed no one, and that it resumes on its own at the next retry after the account is fixed. `provider.halt` with reason `unavailable` is an outage or a rate limit, and the phase reads `backing-off`. Either way `provider.halt.retry_at` is when the next retry is due: the send is retried with growing gaps, capped at an hour, and returns to every-sweep pace once a batch is answered. `attention.stuck` is when a halt has lasted long enough to raise.",
       example: {
         response: {
           state: "sending",

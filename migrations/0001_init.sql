@@ -144,6 +144,10 @@ CREATE TABLE sends (
                                                -- sender, a quota, ...), for the advice shown
   halt_error      TEXT,                        -- the provider's words for that refusal
   halted_at       INTEGER,                     -- when refusals of this reason began
+  halt_retries    INTEGER NOT NULL DEFAULT 0,  -- halted runs in a row for that reason,
+                                               -- which picks the next retry's delay
+  halt_retry_at   INTEGER,                     -- the sweep leaves a halted send alone
+                                               -- until then; null once a batch is answered
   c_pending       INTEGER NOT NULL DEFAULT 0,
   c_in_flight     INTEGER NOT NULL DEFAULT 0,
   c_accepted      INTEGER NOT NULL DEFAULT 0,
