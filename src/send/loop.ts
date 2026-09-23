@@ -8,7 +8,8 @@
  * was never recorded is re-sent as the identical batch under its saved key, never
  * merged into a new one, so an idempotent provider dedupes it however the rest of
  * the send has changed since. Each invocation attempts each recipient at most once;
- * retryables go back to `pending` and wait for the next sweep tick (the backoff).
+ * retryables go back to `pending` (on an idempotent provider, still under their key)
+ * and wait for the next sweep tick (the backoff).
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
  * starting batches while it can still close cleanly; the next tick continues.
@@ -111,6 +112,12 @@ export async function runSend(
     renewAt = Date.now() + LEASE_TTL_MS / 2;
     return sends.renewLease(db, sendId, lease, Date.now() + LEASE_TTL_MS);
   };
+  /** After a hand-off moved nothing: renew now, which says whether this run still owns
+   *  the send or a successor took it (the moved-nothing case), and stop if it lost. */
+  const stillLeased = async (): Promise<boolean> => {
+    renewAt = Date.now() + LEASE_TTL_MS / 2;
+    return sends.renewLease(db, sendId, lease, Date.now() + LEASE_TTL_MS);
+  };
   const canStartBatch = () => budget.affords(CHUNK_COST + CLOSE_COST);
 
   // Resolve the audience once (idempotent), then work the snapshot of pending rows.
@@ -170,7 +177,12 @@ export async function runSend(
         outcomes.push({ id, status: "accepted", providerId: r.providerId });
         result.accepted += 1;
       } else if (r.retryable) {
-        outcomes.push({ id, status: "pending", error: r.error });
+        outcomes.push({
+          id,
+          status: "pending",
+          error: r.error,
+          keepKey: provider.idempotentRetry,
+        });
         result.requeued += 1;
       } else {
         outcomes.push({ id, status: "unsent", error: r.error });
@@ -187,43 +199,52 @@ export async function runSend(
   };
 
   // First, any batch a previous run handed off without recording the answer: re-send it
-  // whole, under its own key, before anything new. Only an idempotent provider dedupes
-  // that; on any other the rows stay `dispatched` for Resolve (§12). Its recipients were
-  // handed off already, so consent is not re-checked for them (I2 covers recipients not
-  // yet handed off), and re-sending a batch with someone removed would not be the same
-  // batch to the provider.
-  if (provider.idempotentRetry) {
-    for (const key of await sends.unansweredDispatchKeys(db, sendId)) {
-      if (!canStartBatch()) {
-        break;
-      }
-      if (!(await keepLease())) {
+  // whole, under its own key, before anything new. Its recipients were handed off
+  // already, so consent is not re-checked for them (I2 covers recipients not yet handed
+  // off), and re-sending a batch with someone removed would not be the same batch to the
+  // provider. Only an idempotent provider dedupes a re-send; on any other (say the
+  // provider was switched mid-send) the batch goes back in flight, the ambiguous case
+  // that waits for Resolve (§12), rather than sitting in the queue where nothing sends
+  // or resolves it.
+  for (const key of await sends.unansweredDispatchKeys(db, sendId)) {
+    if (!canStartBatch()) {
+      break;
+    }
+    if (!(await keepLease())) {
+      return result;
+    }
+    const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now()));
+    if (moved.size === 0) {
+      if (!(await stillLeased())) {
         return result;
       }
-      const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now()));
-      const members = (await sends.fetchDispatchGroup(db, sendId, key))
-        .filter((m) => moved.has(m.id))
-        .sort(byEmail);
-      if (members.length === 0) {
-        continue;
-      }
-      // The batch retries as a unit, so the cap does too: once any member has used its
-      // attempts, the whole batch stops retrying.
-      if (members.some((m) => m.attempts >= MAX_DELIVERY_ATTEMPTS)) {
-        await sends.settleDeliveries(
-          db,
-          sendId,
-          lease,
-          "dispatched",
-          members.map((m) => ({ id: m.id, status: "unsent", error: "max attempts exceeded" })),
-          Date.now(),
-        );
-        result.unsent += members.length;
-        continue;
-      }
-      if (!(await deliver(key, members))) {
-        return release();
-      }
+      continue;
+    }
+    if (!provider.idempotentRetry) {
+      continue;
+    }
+    const members = (await sends.fetchDispatchGroup(db, sendId, key))
+      .filter((m) => moved.has(m.id))
+      .sort(byEmail);
+    if (members.length === 0) {
+      continue;
+    }
+    // The batch retries as a unit, so the cap does too: once any member has used its
+    // attempts, the whole batch stops retrying.
+    if (members.some((m) => m.attempts >= MAX_DELIVERY_ATTEMPTS)) {
+      await sends.settleDeliveries(
+        db,
+        sendId,
+        lease,
+        "dispatched",
+        members.map((m) => ({ id: m.id, status: "unsent", error: "max attempts exceeded" })),
+        Date.now(),
+      );
+      result.unsent += members.length;
+      continue;
+    }
+    if (!(await deliver(key, members))) {
+      return release();
     }
   }
 
@@ -274,10 +295,13 @@ export async function runSend(
         Date.now(),
       ),
     );
-    const members = live.filter((l) => moved.has(l.id)).sort(byEmail);
-    if (members.length === 0) {
+    if (moved.size === 0) {
+      if (!(await stillLeased())) {
+        return result;
+      }
       continue;
     }
+    const members = live.filter((l) => moved.has(l.id)).sort(byEmail);
     if (!(await deliver(key, members))) {
       return release();
     }

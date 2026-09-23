@@ -938,13 +938,18 @@ export async function returnUnanswered(
   ]);
 }
 
-/** One recipient's recorded outcome. `pending` is a retryable rejection: back in the
- *  queue for the next tick, one attempt spent. */
+/**
+ * One recipient's recorded outcome. `pending` is a retryable rejection: back in the queue
+ * for the next tick, one attempt spent. `keepKey` keeps its dispatch key, so the batch is
+ * re-sent under that key rather than folded into a new one: on an idempotent provider a
+ * retryable answer (a 429, a 5xx) does not prove the batch was not accepted, and only the
+ * same key lets the provider dedupe it.
+ */
 export type DeliveryOutcome =
   | { id: string; status: "accepted"; providerId: string }
   | { id: string; status: "unsent"; error: string }
   | { id: string; status: "skipped" }
-  | { id: string; status: "pending"; error: string };
+  | { id: string; status: "pending"; error: string; keepKey: boolean };
 
 const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
   accepted: "c_accepted",
@@ -957,8 +962,8 @@ const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
  * Record a chunk's outcomes in one statement and its counter move, not a D1 call per
  * recipient. `from` is the status the rows leave: `pending` for a recipient closed before
  * hand-off (unsubscribed, suppressed, or out of attempts), `dispatched` for the
- * provider's answer. Every outcome clears the dispatch key, since the hand-off is
- * answered. Lease-guarded: a run that lost its lease records nothing, and the successor
+ * provider's answer. Every outcome but a `keepKey` retry clears the dispatch key, since
+ * the hand-off is answered. Lease-guarded: a run that lost its lease records nothing, and the successor
  * re-sends the batch under the same key and records the provider's answer itself.
  */
 export async function settleDeliveries(
@@ -977,6 +982,7 @@ export async function settleDeliveries(
     s: o.status,
     p: o.status === "accepted" ? o.providerId : null,
     e: o.status === "unsent" || o.status === "pending" ? o.error : null,
+    k: o.status === "pending" && o.keepKey ? 1 : 0,
   }));
   const deltas = new Map<CounterCol, number>();
   const bump = (col: CounterCol, n: number) => deltas.set(col, (deltas.get(col) ?? 0) + n);
@@ -994,7 +1000,7 @@ export async function settleDeliveries(
            provider_id = COALESCE(json_extract(j.value, '$.p'), provider_id),
            error = json_extract(j.value, '$.e'),
            attempts = attempts + (json_extract(j.value, '$.s') = 'pending'),
-           dispatch_key = NULL,
+           dispatch_key = CASE WHEN json_extract(j.value, '$.k') = 1 THEN dispatch_key END,
            updated_at = ?
          FROM json_each(?) AS j
          WHERE deliveries.id = json_extract(j.value, '$.id')

@@ -114,6 +114,10 @@ export interface Config {
 
 /** The Workers Free plan's per-invocation subrequest limit, the default budget. */
 export const DEFAULT_SUBREQUEST_BUDGET = 50;
+/** The least a sweep tick needs to find a send and deliver one batch of it. A lower
+ *  `SUBREQUEST_BUDGET` would start nothing and stall every send silently, so it is
+ *  raised to this. */
+export const MIN_SUBREQUEST_BUDGET = 25;
 
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
@@ -162,7 +166,10 @@ export function getConfig(env: AppEnv): Config {
     // Only ever active in a dev-shaped env; a deployed env runs a real provider, so the
     // simulation can never engage there whatever the var says.
     simulateSends: devShaped && isTruthy(env.SIMULATE_SENDS),
-    subrequestBudget: parsePositiveInt(env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
+    subrequestBudget: Math.max(
+      MIN_SUBREQUEST_BUDGET,
+      parsePositiveInt(env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
+    ),
   };
 }
 

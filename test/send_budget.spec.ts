@@ -3,11 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
-import { getConfig } from "../src/env";
+import { DEFAULT_SUBREQUEST_BUDGET, getConfig, MIN_SUBREQUEST_BUDGET } from "../src/env";
 import { LEASE_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { Budget } from "../src/send/budget";
-import { runSend } from "../src/send/loop";
+import { MIN_RUN_COST, runSend } from "../src/send/loop";
+import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { guardD1 } from "./support/d1_guard";
@@ -110,6 +111,21 @@ describe("the per-invocation budget", () => {
   });
 });
 
+describe("SUBREQUEST_BUDGET", () => {
+  const budgetFor = (v: string | undefined) =>
+    getConfig({ ...env, SUBREQUEST_BUDGET: v } as AppEnv).subrequestBudget;
+
+  it("defaults to the Workers Free limit, takes a raise, and is never set too low to send", () => {
+    expect(budgetFor(undefined)).toBe(DEFAULT_SUBREQUEST_BUDGET);
+    expect(budgetFor("not a number")).toBe(DEFAULT_SUBREQUEST_BUDGET);
+    expect(budgetFor("1000")).toBe(1000);
+    expect(budgetFor("10")).toBe(MIN_SUBREQUEST_BUDGET);
+    // The floor has to cover a tick's own queries (the anomaly checks, due and resumable
+    // sends) plus one run's opening, one batch, and its close.
+    expect(MIN_SUBREQUEST_BUDGET).toBeGreaterThanOrEqual(MIN_RUN_COST + 4);
+  });
+});
+
 describe("a Resend batch interrupted after acceptance", () => {
   // The batch was accepted but its answer never recorded: either the response was lost
   // (the request throws), or the run was cut off while recording it (the write throws,
@@ -173,6 +189,43 @@ describe("a Resend batch interrupted after acceptance", () => {
   }
 });
 
+describe("a retryable answer to a handed-off batch", () => {
+  it("keeps the batch's key, so a 429 on the re-send doesn't re-mail it under a new one", async () => {
+    const emails = addresses(3);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+
+    resend.loseAnswers = 1; // accepted, answer lost
+    await sweep(env);
+    resend.rateLimit = 1; // the re-send is rate-limited
+    await sweep(env);
+    await sweep(env); // re-sent again under the same key: Resend returns its first answer
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
+  });
+
+  it("on a provider switched to one without idempotency, goes to Resolve instead of stalling", async () => {
+    await seedConfirmed(addresses(3));
+    const send = await dueSend();
+    resend.loseAnswers = 1;
+    await sweep(env);
+
+    // The operator moves the deployment to a provider that can't dedupe a re-send.
+    const plain = new (class extends ResendLikeProvider {
+      override readonly idempotentRetry = false;
+    })();
+    vi.mocked(providers.getProvider).mockReturnValue(plain);
+    await sweep(env);
+
+    expect(plain.requests).toBe(0); // never re-sent blind
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 3 });
+    const resolved = await resolveStuckSend(env, send.id, "accepted", "op@example.com");
+    expect(resolved.completed).toBe(true);
+  });
+});
+
 describe("lease ownership", () => {
   it("a run whose lease passed to a successor can't release, renew, complete, or hand off", async () => {
     await seedConfirmed(addresses(2));
@@ -213,5 +266,36 @@ describe("lease ownership", () => {
     const result = await runSend(env, send.id);
     expect(result.leased).toBe(false); // its lease is live, so a third run stays out
     expect(await sends.renewLease(env.DB, send.id, successor!, now + LEASE_TTL_MS)).toBe(true);
+  });
+
+  it("a stale run can't re-send, return, or record the successor's in-flight batch", async () => {
+    await seedConfirmed(addresses(2));
+    const send = await dueSend();
+    const now = Date.now();
+    const stale = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
+    await sends.materializeAudience(env.DB, send.id, now);
+    await env.DB.prepare("UPDATE sends SET locked_until = ? WHERE id = ?")
+      .bind(now - 1, send.id)
+      .run();
+    const successor = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
+    const ids = await sends.pendingDeliveryIds(env.DB, send.id, 10);
+    expect(await sends.dispatchFresh(env.DB, send.id, successor, "k1", ids, now)).toHaveLength(2);
+
+    expect(await sends.redispatch(env.DB, send.id, stale, "k1", now)).toEqual([]);
+    await sends.returnUnanswered(env.DB, send.id, stale, "k1", "stale", now);
+    await sends.settleDeliveries(
+      env.DB,
+      send.id,
+      stale,
+      "dispatched",
+      ids.map((id) => ({ id, status: "unsent", error: "stale" })),
+      now,
+    );
+
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect(row.c_in_flight).toBe(2);
+    expect(row.c_pending).toBe(0);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 2 });
+    expect(await sends.unansweredDispatchKeys(env.DB, send.id)).toEqual(["k1"]);
   });
 });

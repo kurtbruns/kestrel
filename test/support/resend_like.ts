@@ -26,6 +26,8 @@ export class ResendLikeProvider implements EmailProvider {
   requests = 0;
   /** Accept (and mail) the next n batches, then throw as if the answer was lost. */
   loseAnswers = 0;
+  /** Answer the next n batches with a 429 for every recipient, mailing no one. */
+  rateLimit = 0;
 
   private readonly seen = new Map<string, { payload: string; results: PerRecipientResult[] }>();
 
@@ -37,6 +39,15 @@ export class ResendLikeProvider implements EmailProvider {
     this.requests += 1;
     if (recipients.length > this.maxBatch) {
       throw new Error(`resend-like: ${recipients.length} recipients in one batch`);
+    }
+    if (this.rateLimit > 0) {
+      this.rateLimit -= 1;
+      return recipients.map((r) => ({
+        email: r.email,
+        accepted: false,
+        retryable: true,
+        error: "resend batch 429: rate_limit_exceeded",
+      }));
     }
     const key = opts.idempotencyKey ?? `${opts.idempotencyKeyPrefix}:${recipients.length}`;
     const payload = JSON.stringify([rendered, recipients]);
