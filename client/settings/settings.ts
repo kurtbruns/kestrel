@@ -5,7 +5,7 @@ import type {
   ConfirmationEmailCopy,
   IdentityField,
   LogoResponse,
-  NotificationKind,
+  NotificationStatusKind,
   NotificationTestResponse,
   SettingsPatchBody,
   SettingsResponse,
@@ -458,6 +458,11 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     !sameList(state.recipients, baseline.recipients) ||
     !sameCopy(state.confirmation, baseline.confirmation) ||
     state.notifyTo !== baseline.notifyTo;
+  // Looked up before refreshDirty, which reaches them through refreshNotifyTest.
+  const notifyToEl = $<HTMLInputElement>("#notifyTo");
+  const notifyTest = $<HTMLButtonElement>("#notifyTest");
+  const notifyTestHint = $("#notifyTestHint");
+  const notifyStatus = $("#notifyStatus");
   const refreshDirty = () => {
     bar.setDirty(isDirty());
     refreshNotifyTest();
@@ -685,10 +690,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   });
 
   // --- notifications: the address rides the save bar; the test goes to the SAVED address
-  // only (the server never takes one from the request), so it waits for a save.
-  const notifyToEl = $<HTMLInputElement>("#notifyTo");
-  const notifyTest = $<HTMLButtonElement>("#notifyTest");
-  const notifyTestHint = $("#notifyTestHint");
+  // only (the server never takes one from the request), so it waits for a save. Its
+  // outcome is the channel's latest word, so the status line takes it in place.
   notifyToEl.addEventListener("input", () => {
     state.notifyTo = notifyToEl.value.trim().toLowerCase();
     refreshDirty();
@@ -713,8 +716,22 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
             ? `Test notification recorded for ${r.to} (no email provider configured — nothing is delivered)`
             : `Test notification sent to ${r.to}`,
         );
+        setHtml(
+          notifyStatus,
+          notificationStatusHtml({
+            lastSent: { kind: "test", subject: "", at: Date.now() },
+            lastFailure: null,
+          }),
+        );
       } catch (err) {
         toast(message(err));
+        setHtml(
+          notifyStatus,
+          notificationStatusHtml({
+            lastSent: null,
+            lastFailure: { kind: "test", subject: "", at: Date.now(), error: message(err) },
+          }),
+        );
       }
     });
 
@@ -923,22 +940,28 @@ function notifyChannelLabel(
   }
 }
 
-const NOTIFICATION_KINDS: Record<NotificationKind, string> = {
-  finished: "finished",
+const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
+  finished: "went out",
   refused: "provider refusing",
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",
+  test: "test",
 };
+
+/** What a status line is about: the send and what happened, or just "test notification". */
+function aboutNotification(n: { kind: NotificationStatusKind; subject: string }): string {
+  return n.kind === "test" ? "test notification" : `${n.subject} (${NOTIFICATION_KINDS[n.kind]})`;
+}
 
 /** The last delivered notification, and a newer failure when the channel has stopped working. */
 function notificationStatusHtml(status: SettingsResponse["notificationStatus"]): Html {
   const { lastSent, lastFailure } = status;
   if (lastFailure) {
-    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${lastFailure.subject} (${NOTIFICATION_KINDS[lastFailure.kind]}): ${lastFailure.error}</span>`;
+    return html`<span class="set-pill danger">Not delivered</span> <span class="muted">${fmt(lastFailure.at)}, ${aboutNotification(lastFailure)}: ${lastFailure.error}</span>`;
   }
   if (lastSent) {
-    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${fmt(lastSent.at)}, ${lastSent.subject} (${NOTIFICATION_KINDS[lastSent.kind]})</span>`;
+    return html`<span class="set-pill ok">${icon("check")}Delivered</span> <span class="muted">${fmt(lastSent.at)}, ${aboutNotification(lastSent)}</span>`;
   }
   return html`<span class="muted">None yet</span>`;
 }

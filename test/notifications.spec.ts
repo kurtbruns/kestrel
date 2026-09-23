@@ -12,7 +12,7 @@ import * as channel from "../src/notify/channel";
 import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
-import { freeze } from "../src/send/schedule";
+import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { guardD1 } from "./support/d1_guard";
@@ -338,6 +338,92 @@ describe("isolation", () => {
     }
     // At least one notification a tick, however much the sends spent.
     expect(fakeNotifications().length).toBeGreaterThanOrEqual(6);
+  });
+});
+
+describe("after the review", () => {
+  it("a send that resumes after a long refusal is not then reported as stuck", async () => {
+    await seedConfirmed(addresses(1));
+    const send = await dueSend("Resumed one");
+    const long = Date.now() - STUCK_THRESHOLD_MS - 60 * 60_000;
+    await env.DB.prepare(
+      "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 1, halt_reason = 'account', halted_at = ? WHERE id = ?",
+    )
+      .bind(long, long, send.id)
+      .run();
+    await notifications.recordNotifications(env.DB, Date.now());
+    // The account is fixed: the refusal lifts and the send is back to work, past the threshold.
+    await env.DB.prepare(
+      "UPDATE sends SET halt_reason = NULL, halted_at = NULL, halt_error = NULL WHERE id = ?",
+    )
+      .bind(send.id)
+      .run();
+    await notifications.recordNotifications(env.DB, Date.now());
+
+    expect((await rows(send.id)).map((r) => r.kind)).toEqual(["refused"]);
+  });
+
+  it("a problem that clears before its notification gets through is dropped, not sent late", async () => {
+    await seedConfirmed(addresses(2));
+    const send = await dueSend();
+    resend.refuse = "resend batch 401: API key is invalid";
+    failFakeNotify(1);
+    await ticks(1);
+    expect(await rows(send.id)).toMatchObject([
+      { kind: "refused", status: "pending", error: "fake notification failure" },
+    ]);
+
+    resend.refuse = null;
+    await ticks(3);
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(fakeNotifications().map((n) => n.subject)).toEqual(["Sent: Owls in winter"]);
+    const byKind = Object.fromEntries((await rows(send.id)).map((r) => [r.kind, r.status]));
+    expect(byKind).toEqual({ refused: "cleared", finished: "sent" });
+    // A cleared notification is not a channel failure.
+    expect((await notifications.notificationStatus(env.DB)).lastFailure).toBeNull();
+  });
+
+  it("a test that gets through clears Not delivered, and a failed one takes its place", async () => {
+    await seedConfirmed(addresses(1));
+    await dueSend();
+    failFakeNotify(100);
+    await ticks(MAX_NOTIFY_ATTEMPTS + 2);
+    expect((await notifications.notificationStatus(env.DB)).lastFailure).not.toBeNull();
+
+    clearFakeNotifications();
+    const test = async () =>
+      SELF.fetch(`${BASE}/api/settings/notifications/test`, {
+        method: "POST",
+        headers: await adminAuth(),
+      });
+    expect((await test()).status).toBe(200);
+    let status = await notifications.notificationStatus(env.DB);
+    expect(status.lastFailure).toBeNull();
+    expect(status.lastSent).toMatchObject({ kind: "test", subject: "" });
+
+    failFakeNotify(1);
+    expect((await test()).status).toBe(502);
+    status = await notifications.notificationStatus(env.DB);
+    expect(status.lastFailure).toMatchObject({ kind: "test", error: "fake notification failure" });
+    const { n } = (await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM notifications WHERE kind = 'test'",
+    ).first<{ n: number }>())!;
+    expect(n).toBe(1); // only the latest test is kept
+  });
+
+  it("deleting a draft whose canceled send has a notification deletes it too", async () => {
+    await seedConfirmed(addresses(1));
+    const send = await dueSend("Canceled one", Date.now() + 24 * 60 * 60 * 1000);
+    await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+      .bind(Date.now() - MISSED_THRESHOLD_MS - 60_000, send.id)
+      .run();
+    await notifications.recordNotifications(env.DB, Date.now());
+    expect((await rows(send.id)).map((r) => r.kind)).toEqual(["missed"]);
+
+    await cancel(env as AppEnv, send.id);
+    await posts.deletePost(env.DB, send.post_id);
+    expect(await rows(send.id)).toEqual([]);
+    expect(await sends.getSend(env.DB, send.id)).toBeNull();
   });
 });
 

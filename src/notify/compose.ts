@@ -68,7 +68,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       return message(
         `Problem with ${title}: still sending after ${minutes(STUCK_THRESHOLD_MS)} minutes`,
         [
-          `${title} started sending${n.started_at ? ` at ${when(n.started_at)}` : ""} and is still going: ${n.c_pending + n.c_in_flight} recipients have not been handed to the provider yet.`,
+          `${title} started sending${n.started_at ? ` at ${when(n.started_at)}` : ""} and is still going: ${n.c_pending + n.c_in_flight} recipients have not been sent yet.`,
           "It keeps retrying on its own. If it stays like this, check the provider's status and the send's page.",
         ],
         link,

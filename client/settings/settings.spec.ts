@@ -247,7 +247,27 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.method === "POST")).toBe(true);
     expect($("#toasts").textContent).toMatch(/Test notification sent to me@b.c/);
+    // The test is the channel's latest word, so the status line takes it in place.
+    expect($("#notifyStatus .set-pill.ok").textContent?.trim()).toBe("Delivered");
+    expect($("#notifyStatus").textContent).toMatch(/test notification/);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("puts the notifications address back on discard", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: settings({ notifications: { to: "me@b.c" } }) }),
+      },
+    ]);
+    typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
+    expect($("#notifyTestHint").textContent).toBe(
+      "Save first: the test goes to the saved address.",
+    );
+    $("#savebarDiscard").click();
+    expect($<HTMLInputElement>("#notifyTo").value).toBe("me@b.c");
+    expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
+    expect(bar().classList.contains("show")).toBe(false);
   });
 
   it("asks before a save that re-makes scheduled emails, then retries with the acknowledgement", async () => {

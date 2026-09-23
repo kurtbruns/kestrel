@@ -35,7 +35,7 @@ import type {
   SettingsView,
 } from "../../shared/settings";
 import { buildInfo } from "../build";
-import { notificationStatus } from "../db/notifications";
+import { notificationStatus, recordNotificationTest } from "../db/notifications";
 import { listScheduledSends } from "../db/sends";
 import {
   type AppSettings,
@@ -149,9 +149,10 @@ export async function get(c: RequestContext): Promise<Response> {
 /**
  * Send a sample notification to the saved address through the live channel, so the
  * publisher proves the channel (a verified Cloudflare destination, say) before a send
- * needs it. It goes to the one saved address only, never one named in the request, so
- * this cannot become a way to mail an arbitrary inbox. The channel's refusal is a 502
- * carrying its words.
+ * runs into a problem. It goes to the one saved address only, never one named in the
+ * request, so this cannot become a way to mail an arbitrary inbox. Its outcome is
+ * recorded as the latest test, so a test that gets through after a failure clears "Not
+ * delivered" on the status line. The channel's refusal is a 502 carrying its words.
  */
 export async function notificationTest(c: RequestContext): Promise<Response> {
   const { to } = (await getSettings(c.env.DB)).notifications;
@@ -162,8 +163,11 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
   try {
     await notifier.send(to, sampleNotification(c.config), `test-${Date.now()}`);
   } catch (err) {
-    throw new HttpError(502, "notify_failed", String((err as Error)?.message ?? err));
+    const error = String((err as Error)?.message ?? err);
+    await recordNotificationTest(c.env.DB, error, Date.now());
+    throw new HttpError(502, "notify_failed", error);
   }
+  await recordNotificationTest(c.env.DB, null, Date.now());
   const body: NotificationTestResponse = { to, channel: notifier.channel };
   return json(body);
 }

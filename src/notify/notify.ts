@@ -9,14 +9,16 @@
  * It runs after the sends, reads the send record, and writes only its own table, so a
  * notification that fails, or this whole step throwing, never changes a send (I1 to I6).
  * A failure is logged as NOTIFY_FAILED and kept on the row, where the settings surface
- * shows it.
+ * shows it. A problem that has cleared by the time its notification is tried (after a
+ * channel failure delayed it) is closed as cleared rather than sent, since the email is
+ * written from the send as it stands and would describe something no longer true.
  */
 
 import * as notifications from "../db/notifications";
 import { getSettings } from "../db/settings";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { MAX_NOTIFY_ATTEMPTS } from "../lib/time";
+import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { type Budget, metered } from "../send/budget";
 import { getNotifier } from "./channel";
 import { composeNotification } from "./compose";
@@ -29,6 +31,37 @@ const EACH_COST = 2;
 export const NOTIFY_RESERVE = OPEN_COST + EACH_COST;
 /** The most a tick delivers, however much budget is left, so a backlog drains steadily. */
 const MAX_PER_TICK = 10;
+
+/**
+ * Whether the event a notification tells of is still true of the send now. A finished
+ * send stays finished, and a send that went out late stays late; the other problems can
+ * clear (the refusal lifts, the send completes, Resolve settles the wedge, a reschedule
+ * moves the fire time), and the tests here mirror the conditions `recordNotifications`
+ * recorded them under.
+ */
+export function stillHolds(n: notifications.DueNotification, now: number): boolean {
+  switch (n.kind) {
+    case "finished":
+      return true;
+    case "refused":
+      return (
+        n.send_status === "sending" && n.halt_reason === "account" && n.halted_at === n.episode
+      );
+    case "stuck":
+      return n.send_status === "sending";
+    case "wedged":
+      return (
+        n.send_status === "sending" &&
+        n.c_pending === 0 &&
+        n.c_in_flight > 0 &&
+        (n.locked_until === null || n.locked_until <= now)
+      );
+    case "missed":
+      return n.send_status === "scheduled"
+        ? n.fire_at < now - MISSED_THRESHOLD_MS
+        : n.started_at !== null && n.started_at - n.fire_at > MISSED_THRESHOLD_MS;
+  }
+}
 
 export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void> {
   const config = getConfig(env);
@@ -53,11 +86,15 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
 
   const notifier = getNotifier(config, env);
   for (const n of due) {
+    if (!stillHolds(n, Date.now())) {
+      await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
+      continue;
+    }
     const key = `${n.send_id}-${n.kind}-${n.episode}`;
     budget.spend(); // the channel's request, which counts whether or not it succeeds
     try {
       await notifier.send(to, composeNotification(n, config), key);
-      await notifications.recordNotificationOutcome(db, n, { sent: true }, Date.now());
+      await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());
     } catch (err) {
       const error = String((err as Error)?.message ?? err);
       const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
@@ -71,7 +108,7 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       await notifications.recordNotificationOutcome(
         db,
         n,
-        { sent: false, error, giveUp },
+        { status: "unsent", error, giveUp },
         Date.now(),
       );
     }

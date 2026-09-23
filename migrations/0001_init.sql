@@ -214,31 +214,36 @@ CREATE INDEX idx_deliveries_dispatch_key ON deliveries (dispatch_key) WHERE disp
 
 -- ---------------------------------------------------------------- publisher notifications
 
--- One row per event the publisher is told about by email (SPEC §8): a send finished, or
--- a send needs them (the provider refusing the account, in flight too long, wedged
--- awaiting Resolve, a missed fire time). The primary key is the dedupe: one row per send,
--- kind, and episode, where the episode is 0 for a condition a send meets at most once and
--- the start of the refusal for a refusal, so a refusal that lifts and returns is a new
--- event. The sweep records events with INSERT OR IGNORE, so a condition that persists
--- across ticks is recorded once, and delivers the pending ones afterward.
+-- One row per event the publisher is told about by email (SPEC §8): a send went out, or
+-- a send ran into a problem (the provider refusing the account, in flight too long, wedged
+-- awaiting Resolve, a missed fire time). UNIQUE (send_id, kind, episode) is the dedupe,
+-- where the episode is 0 for a condition a send meets at most once and the start of the
+-- refusal for a refusal, so a refusal that lifts and returns is a new event. The sweep
+-- records events with INSERT OR IGNORE, so a condition that persists across ticks is
+-- recorded once, and delivers the pending ones afterward. The one row with no send is
+-- the latest test from the settings surface (kind 'test'), kept so its outcome counts as
+-- the channel's latest word.
 --
 -- A notification never feeds back into the send path: the send loop reads nothing here
 -- and no send-path write touches this table, so one that fails cannot affect a send.
 -- `status` is pending -> sent | failed | unaddressed (no destination was set when it
--- came due); `attempts` is counted BEFORE each try, so one whose try was cut off by the
--- invocation ending is tried again rather than lost, and gives up at the cap. `error` is
--- the channel's words for the last failure, shown on the settings surface.
+-- came due) | cleared (its problem had cleared before a try got through, so it would
+-- describe something no longer true); `attempts` is counted BEFORE each try, so one whose
+-- try was cut off by the invocation ending is tried again rather than lost, and gives up
+-- at the cap. `error` is the channel's words for the last failure, shown on the settings
+-- surface.
 CREATE TABLE notifications (
-  send_id    TEXT NOT NULL REFERENCES sends (id),
+  send_id    TEXT REFERENCES sends (id),       -- null only for a test
   kind       TEXT NOT NULL
-               CHECK (kind IN ('finished', 'refused', 'stuck', 'wedged', 'missed')),
+               CHECK (kind IN ('finished', 'refused', 'stuck', 'wedged', 'missed', 'test')),
   episode    INTEGER NOT NULL DEFAULT 0,
   status     TEXT NOT NULL DEFAULT 'pending'
-               CHECK (status IN ('pending', 'sent', 'failed', 'unaddressed')),
+               CHECK (status IN ('pending', 'sent', 'failed', 'unaddressed', 'cleared')),
   attempts   INTEGER NOT NULL DEFAULT 0,
   error      TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
-  PRIMARY KEY (send_id, kind, episode)
+  UNIQUE (send_id, kind, episode),
+  CHECK ((send_id IS NULL) = (kind = 'test'))
 );
 CREATE INDEX idx_notifications_status ON notifications (status, created_at);

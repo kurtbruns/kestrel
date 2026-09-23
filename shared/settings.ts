@@ -69,12 +69,20 @@ export interface DeploymentView {
 /** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */
 export type NotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
 
+/** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). */
+export type NotificationStatusKind = NotificationKind | "test";
+
 /** How notifications have gone lately, so a channel that stopped working is visible where the destination is set. */
 export interface NotificationStatusView {
-  /** The last notification delivered, or null if none has been. */
-  lastSent: { kind: NotificationKind; subject: string; at: number } | null;
+  /** The last notification delivered (a test counts), or null if none has been. */
+  lastSent: { kind: NotificationStatusKind; subject: string; at: number } | null;
   /** The last failed try, when newer than the last delivered one; null otherwise. */
-  lastFailure: { kind: NotificationKind; subject: string; at: number; error: string } | null;
+  lastFailure: {
+    kind: NotificationStatusKind;
+    subject: string;
+    at: number;
+    error: string;
+  } | null;
 }
 
 /** A scheduled send a template or identity change would re-make (SPEC §6, §9). */

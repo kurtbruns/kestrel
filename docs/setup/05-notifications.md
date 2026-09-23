@@ -2,7 +2,7 @@
 
 Kestrel emails you when a send goes out, and right away if a send runs into a problem, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12). The first carries the numbers from the send's record and a link to it; the second says what went wrong, with the provider's own words when the provider is the problem, and links to the send.
 
-Each problem is one email. One that lasts is not repeated; the dashboard keeps showing it until it clears. A problem that clears and later returns is a new one, and gets a new email.
+Each problem is one email per send. One that lasts is not repeated; the dashboard keeps showing it until it clears. The exception is the provider refusing your account: a refusal that clears and later returns is a new one, and gets a new email. A problem that clears before its email could be delivered (while the channel was failing, say) is dropped rather than sent late.
 
 Two things decide where the email goes and how it gets there, and they sit on opposite sides of the line between preferences and deploy config (`docs/SPEC.md` §9):
 
@@ -60,7 +60,7 @@ npm run deploy -- --env staging
 
 ## Set the address and send a test
 
-Open **Settings → Notifications**, enter your address, and **Save**. Then **Send a test notification**: it goes to the saved address through the live channel. Settings shows which channel is in use and its sender, and **Last notification** shows whether the latest one was delivered or, if not, the channel's own words (an unverified destination, say).
+Open **Settings → Notifications**, enter your address, and **Save**. Then **Send a test notification**: it goes to the saved address through the live channel. Settings shows which channel is in use and its sender, and **Last notification** shows whether the latest one, a test included, was delivered or, if not, the channel's own words (an unverified destination, say). A test that gets through after a failure clears it.
 
 Leave the address blank for no notifications. Events that happen while it is blank are not saved up, so setting an address later never delivers a backlog.
 

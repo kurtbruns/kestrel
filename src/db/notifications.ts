@@ -7,8 +7,12 @@
  * of it, so a notification that fails cannot change what a send does (I1 to I6).
  */
 
-import type { HaltCause } from "../../shared/sends";
-import type { NotificationKind, NotificationStatusView } from "../../shared/settings";
+import type { HaltCause, HaltReason } from "../../shared/sends";
+import type {
+  NotificationKind,
+  NotificationStatusKind,
+  NotificationStatusView,
+} from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
 export type { NotificationKind };
@@ -24,6 +28,9 @@ export interface DueNotification {
   fire_at: number;
   started_at: number | null;
   completed_at: number | null;
+  locked_until: number | null;
+  halt_reason: HaltReason | null;
+  halted_at: number | null;
   halt_cause: HaltCause | null;
   halt_error: string | null;
   c_pending: number;
@@ -50,8 +57,10 @@ const WEDGED = `status = 'sending' AND c_pending = 0 AND c_in_flight > 0
  * INSERT OR IGNORE on the (send, kind, episode) key is what makes a condition that
  * persists across ticks one notification rather than one a tick. A finished or late send
  * counts only within the horizon, so turning notifications on does not mail the history.
- * A send in flight too long is not also reported as stuck while the provider refuses the
- * account or it is wedged: those notifications already say why it is taking so long.
+ * A send in flight too long is not also reported as stuck while it is wedged, or once the
+ * provider has refused its account at any point: those notifications already say why it
+ * is taking so long, and a send that resumes after a long refusal is past the stuck
+ * threshold the moment it does.
  */
 export async function recordNotifications(db: D1Database, now: number): Promise<void> {
   await db
@@ -71,7 +80,9 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
          UNION ALL
          SELECT id, 'stuck', 0, ?1, ?1 FROM sends
           WHERE status = 'sending' AND started_at < ?1 - ?4
-            AND halt_reason IS NOT 'account' AND NOT (${WEDGED})`,
+            AND halt_reason IS NOT 'account' AND NOT (${WEDGED})
+            AND NOT EXISTS (SELECT 1 FROM notifications r
+                             WHERE r.send_id = sends.id AND r.kind = 'refused')`,
     )
     .bind(now, now - NOTIFY_HORIZON_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS)
     .run();
@@ -83,7 +94,7 @@ export async function dueNotifications(db: D1Database, limit: number): Promise<D
     .prepare(
       `SELECT n.send_id, n.kind, n.episode, n.attempts,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
-              s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
+              s.locked_until, s.halt_reason, s.halted_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
               s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent
          FROM notifications n JOIN sends s ON s.id = n.send_id
         WHERE n.status = 'pending'
@@ -120,24 +131,54 @@ export async function claimNotifications(
     .run();
 }
 
+/** How one try went: delivered, not delivered (with the channel's words), or not tried
+ *  because the problem it tells of had already cleared. */
+export type NotificationOutcome =
+  | { status: "sent" }
+  | { status: "cleared" }
+  | { status: "unsent"; error: string; giveUp: boolean };
+
 /**
- * Record how one try went: `sent`, or the channel's words for why not, which leaves it
- * pending for the next tick until `giveUp`, when it is recorded failed.
+ * Record how one try went. Not delivered leaves it pending for the next tick until
+ * `giveUp`, when it is recorded failed; either way the channel's words are kept.
  */
 export async function recordNotificationOutcome(
   db: D1Database,
   key: NotificationKey,
-  outcome: { sent: true } | { sent: false; error: string; giveUp: boolean },
+  outcome: NotificationOutcome,
   now: number,
 ): Promise<void> {
-  const status = outcome.sent ? "sent" : outcome.giveUp ? "failed" : "pending";
+  const status =
+    outcome.status === "unsent" ? (outcome.giveUp ? "failed" : "pending") : outcome.status;
+  const error = outcome.status === "unsent" ? outcome.error : null;
   await db
     .prepare(
       `UPDATE notifications SET status = ?, error = ?, updated_at = ?
         WHERE send_id = ? AND kind = ? AND episode = ?`,
     )
-    .bind(status, outcome.sent ? null : outcome.error, now, key.send_id, key.kind, key.episode)
+    .bind(status, error, now, key.send_id, key.kind, key.episode)
     .run();
+}
+
+/**
+ * Record the outcome of a test from the settings surface as the latest test, replacing
+ * the one before, so a test that gets through after a failure is the channel's latest
+ * word on the status line, and a failed one says so there too.
+ */
+export async function recordNotificationTest(
+  db: D1Database,
+  error: string | null,
+  now: number,
+): Promise<void> {
+  await db.batch([
+    db.prepare("DELETE FROM notifications WHERE kind = 'test'"),
+    db
+      .prepare(
+        `INSERT INTO notifications (send_id, kind, episode, status, attempts, error, created_at, updated_at)
+         VALUES (NULL, 'test', 0, ?, 1, ?, ?, ?)`,
+      )
+      .bind(error === null ? "sent" : "failed", error, now, now),
+  ]);
 }
 
 /**
@@ -157,25 +198,27 @@ export async function closeUnaddressed(db: D1Database, now: number): Promise<voi
 /**
  * How notifications have gone lately, for the settings surface: the last one delivered,
  * and the last failed try when it is newer than that, so a channel that has stopped
- * working shows until one gets through again.
+ * working shows until one gets through again, a test included.
  */
 export async function notificationStatus(db: D1Database): Promise<NotificationStatusView> {
   const { results } = await db
     .prepare(
       `SELECT * FROM (
-         SELECT 'sent' AS which, n.kind, s.subject, n.updated_at AS at, NULL AS error
-           FROM notifications n JOIN sends s ON s.id = n.send_id
+         SELECT 'sent' AS which, n.kind, COALESCE(s.subject, '') AS subject,
+                n.updated_at AS at, NULL AS error
+           FROM notifications n LEFT JOIN sends s ON s.id = n.send_id
           WHERE n.status = 'sent' ORDER BY n.updated_at DESC LIMIT 1)
        UNION ALL
        SELECT * FROM (
-         SELECT 'failed' AS which, n.kind, s.subject, n.updated_at AS at, n.error
-           FROM notifications n JOIN sends s ON s.id = n.send_id
+         SELECT 'failed' AS which, n.kind, COALESCE(s.subject, '') AS subject,
+                n.updated_at AS at, n.error
+           FROM notifications n LEFT JOIN sends s ON s.id = n.send_id
           WHERE n.error IS NOT NULL AND n.status IN ('pending', 'failed')
           ORDER BY n.updated_at DESC LIMIT 1)`,
     )
     .all<{
       which: "sent" | "failed";
-      kind: NotificationKind;
+      kind: NotificationStatusKind;
       subject: string;
       at: number;
       error: string | null;
