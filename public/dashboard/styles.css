@@ -3015,11 +3015,13 @@ button.notice-dismiss svg {
   border: 0;
   padding: 0;
 }
-/* Copy button on code blocks — revealed on hover (always shown on touch). */
+/* Copy on a code block, shared by the docs and the API reference: a small labelled
+   control that says "Copied" once it has. A doc's sits in the block's corner, revealed
+   on hover (always shown on touch); the reference's sits in the block's header. */
 .code-copy {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font: 11px var(--mono);
   padding: 3px 8px;
   border: 1px solid var(--line);
@@ -3027,19 +3029,28 @@ button.notice-dismiss svg {
   background: var(--card);
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.12s;
 }
-.doc pre:hover .code-copy,
-.code-copy:focus-visible {
-  opacity: 1;
+.code-copy svg {
+  width: 12px;
+  height: 12px;
 }
 .code-copy:hover {
   color: var(--fg);
   border-color: var(--muted);
 }
+.doc pre > .code-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.doc pre:hover > .code-copy,
+.doc pre > .code-copy:focus-visible {
+  opacity: 1;
+}
 @media (hover: none) {
-  .code-copy {
+  .doc pre > .code-copy {
     opacity: 1;
   }
 }
@@ -3396,19 +3407,7 @@ button.api-filter-clear svg {
   font-weight: 600;
   color: var(--muted);
 }
-/* A code block's Copy: the Icon role, sized to the label line it shares. */
-button.api-copy {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-}
-button.api-copy svg {
-  width: 14px;
-  height: 14px;
-}
+
 .api-ex pre {
   margin: 0;
   overflow-x: auto;

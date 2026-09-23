@@ -188,12 +188,13 @@ describe("reference room", () => {
     await mount(renderReference);
     await settle();
     const create = $$("#api-admin-posts details.api-route")[1]!;
-    const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
+    const copy = $<HTMLButtonElement>(".api-ex button.code-copy", create);
     expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+    expect($("[data-copy-label]", copy).textContent).toBe("Copy");
     copy.click();
     await settle();
     expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
-    expect($("#toasts").textContent).toMatch(/Copied/);
+    expect($("[data-copy-label]", copy).textContent).toBe("Copied");
   });
 
   it("jumps to a tier or a resource from the rail without navigating", async () => {

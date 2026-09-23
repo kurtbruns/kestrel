@@ -14,7 +14,7 @@ import { $, $$ } from "../ui/dom";
 import { highlightCurl, highlightJson } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { copyText, renderError } from "../ui/widgets";
+import { renderError, toast } from "../ui/widgets";
 import { curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
@@ -25,7 +25,7 @@ import { roomShell } from "./shell";
 // documentation.
 /** One labelled code block with a Copy of its plain text: an example, or the curl command. */
 function apiCode(label: string, code: Html, raw: string): Html {
-  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="icon api-copy" data-copy="${raw}" aria-label="Copy ${label}" title="Copy ${label}">${icon("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
+  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="code-copy" data-copy="${raw}" aria-label="Copy ${label}"><span data-copy-label>Copy</span>${icon("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
 }
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
@@ -229,11 +229,22 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     filterTo("");
     filterEl.focus();
   });
-  // A code block's Copy puts its plain text (the example, or the curl command) on the clipboard.
-  contentEl.addEventListener("click", (ev) => {
+  // A code block's Copy puts its plain text (the example, or the curl command) on the
+  // clipboard and says "Copied" for a moment, as a doc's code block does.
+  contentEl.addEventListener("click", async (ev) => {
     const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-copy]") : null;
-    if (b) {
-      copyText(b.dataset.copy ?? "");
+    if (!b) {
+      return;
+    }
+    const label = $("[data-copy-label]", b);
+    try {
+      await navigator.clipboard.writeText(b.dataset.copy ?? "");
+      label.textContent = "Copied";
+      setTimeout(() => {
+        label.textContent = "Copy";
+      }, 1500);
+    } catch {
+      toast("Couldn't copy to clipboard");
     }
   });
   // "/" jumps to the filter from anywhere in the room (unless typing elsewhere); Escape
