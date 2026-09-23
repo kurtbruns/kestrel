@@ -19,6 +19,11 @@ const POST_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp", "imag
 /** Generous for a photo, still small enough to send: every recipient downloads it. */
 const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
 
+/** A declared content type as its bare media type: `Image/PNG; x=y` is `image/png`. */
+function mediaType(declared: string): string {
+  return (declared.split(";")[0] ?? "").trim().toLowerCase() || "application/octet-stream";
+}
+
 function storageKey(postId: string, filename: string): string {
   return `posts/${postId}/${filename}`;
 }
@@ -68,7 +73,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     filename = baseName(
       typeof override === "string" && override ? override : file.name || "upload",
     );
-    contentType = file.type || "application/octet-stream";
+    contentType = mediaType(file.type);
     bytes = await file.arrayBuffer();
   } else {
     // Raw body upload: filename via query, content-type via header.
@@ -76,7 +81,7 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
     if (!filename) {
       throw badRequest("filename query param required for a raw upload");
     }
-    contentType = ct || "application/octet-stream";
+    contentType = mediaType(ct);
     bytes = await c.req.arrayBuffer();
   }
 

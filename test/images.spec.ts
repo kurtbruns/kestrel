@@ -89,6 +89,17 @@ describe("images", () => {
     expect(list.images).toEqual([]);
   });
 
+  it("reads a declared type by its media type, ignoring case and parameters", async () => {
+    const id = await newDraft("Declared Types");
+    const res = await SELF.fetch(`${base}/posts/${id}/images?filename=raw.png`, {
+      method: "POST",
+      headers: { ...AUTH, "content-type": "Image/PNG; charset=binary" },
+      body: PNG_1x1,
+    });
+    expect(res.status).toBe(201);
+    expect((await readJson(res)).image.content_type).toBe("image/png");
+  });
+
   it("lists images and deletes one", async () => {
     const id = await newDraft("Gallery");
     await upload(id, "a.png", AUTH);

@@ -50,6 +50,9 @@ describe("reader and preview pages", () => {
     expect(csp).toContain("https://fonts.googleapis.com");
     expect(csp).toContain("font-src https://fonts.gstatic.com");
     expect(csp).toContain("img-src * data:");
+    // A form in the post's body can't submit: it would carry the publisher's session to
+    // the admin API on this same origin.
+    expect(csp).toContain("form-action 'none'");
   });
 
   it("serve the landing page, the archive index, a not-found post, and the subscribe pages the same way", async () => {
@@ -57,6 +60,8 @@ describe("reader and preview pages", () => {
       const res = await SELF.fetch(`${base}${path}`, { headers: { accept: "text/html" } });
       expect(res.headers.get("content-type"), path).toContain("text/html");
       expectHardenedPage(res);
+      // The app's own forms (subscribe, unsubscribe) post back to it.
+      expect(res.headers.get("content-security-policy"), path).toContain("form-action 'self'");
     }
   });
 
@@ -65,6 +70,7 @@ describe("reader and preview pages", () => {
     const res = await SELF.fetch(`${base}/posts/${post.id}/preview`, { headers: AUTH });
     expect(res.status).toBe(200);
     expectHardenedPage(res);
+    expect(res.headers.get("content-security-policy")).toContain("form-action 'none'");
     expect(res.headers.get("cache-control")).toBe("no-store");
   });
 });

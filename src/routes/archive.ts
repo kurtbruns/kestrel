@@ -20,7 +20,7 @@ import {
   landingPage,
   type ReaderIdentity,
 } from "../lib/page";
-import { PAGE_SECURITY_HEADERS } from "../lib/page_headers";
+import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import {
   ARCHIVE_HEAD_ANCHOR,
   ARCHIVE_MASTHEAD_ANCHOR,
@@ -155,7 +155,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     .join(ARCHIVE_POST_HEAD);
   return new Response(html, {
     headers: {
-      ...PAGE_SECURITY_HEADERS,
+      ...POST_PAGE_SECURITY_HEADERS,
       "content-type": "text/html; charset=utf-8",
       "cache-control": "public, max-age=3600",
     },

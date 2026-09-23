@@ -7,6 +7,14 @@ describe("sanitizeEmailHtml (hygiene pass)", () => {
     expect(out).toBe("<p>hi</p>");
   });
 
+  it("drops <meta>, <base>, and <form> tags, which act on the page, keeping the content", () => {
+    const out = sanitizeEmailHtml(
+      '<meta http-equiv="refresh" content="0;url=https://evil.example"><base href="https://evil.example/">' +
+        '<form method="post" action="/posts/p1/schedule"><p>Keep reading</p><button>Go</button></FORM>',
+    );
+    expect(out).toBe("<p>Keep reading</p><button>Go</button>");
+  });
+
   it("strips inline event handlers", () => {
     const out = sanitizeEmailHtml('<img src="x.png" onerror="steal()" alt="a">');
     expect(out).not.toMatch(/onerror/i);
