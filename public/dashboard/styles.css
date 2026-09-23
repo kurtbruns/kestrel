@@ -36,16 +36,9 @@
   --warn-fg: #b45309;
   --warn-bg: #fef3c7;
   --warn-line: #fde68a;
-  --warn-on: #ffffff;
   --ok-fg: #15803d;
   --ok-bg: #dcfce7;
   --ok-line: #bbf7d0;
-  --ok-on: #ffffff;
-  /* Info — a fourth feedback hue, blue, for a neutral fact that isn't good/bad/warning
-     (the API reference's POST badge). No bg/line pair yet: nothing else needs one, but
-     it does need an on-color (like danger/warn/ok above) since the badge is a solid fill. */
-  --info-fg: #1d4ed8;
-  --info-on: #ffffff;
   --ring: #2563eb;
   --banner-bg: #eff6ff;
   --banner-line: #bfdbfe;
@@ -95,6 +88,14 @@
   /* Code surface — inline `code` chip and the fenced-block band. A hair off the editor well
      (--syntax-bg), lighter than the neutral --chip, so code reads as code without a heavy box. */
   --syntax-code-bg: #f2f2f4;
+  /* HTTP method badges in the API reference (DESIGN §3). A self-contained palette like
+     --syntax-*: verb colors are a naming convention, not feedback or lifecycle, so they
+     borrow no semantic scale. --method-on is the text on every solid method fill. */
+  --method-get: #15803d;
+  --method-post: #1d4ed8;
+  --method-put: #b45309;
+  --method-delete: #b91c1c;
+  --method-on: #ffffff;
   /* A recessed surface for read-only facts (set-at-deploy cards), plus a slightly
      stronger line + a neutral chip fill, layered on the zinc neutrals above. */
   --sunken: #f6f6f7;
@@ -118,13 +119,9 @@
     --warn-fg: #fbbf24;
     --warn-bg: #45350f;
     --warn-line: #b45309;
-    --warn-on: #18181b;
     --ok-fg: #4ade80;
     --ok-bg: #14532d;
     --ok-line: #15803d;
-    --ok-on: #18181b;
-    --info-fg: #60a5fa;
-    --info-on: #18181b;
     --ring: #60a5fa;
     --banner-bg: #1e293b;
     --banner-line: #334155;
@@ -167,6 +164,11 @@
     --syntax-emphasis: #f472b6;
     --syntax-quote: #f0a86a;
     --syntax-code-bg: #26262b;
+    --method-get: #4ade80;
+    --method-post: #60a5fa;
+    --method-put: #fbbf24;
+    --method-delete: #f87171;
+    --method-on: #18181b;
     --sunken: #1b1b1f;
     --line-soft: #3a3a41;
     --chip: #2a2a30;
@@ -3209,24 +3211,19 @@ button.notice-dismiss svg {
   letter-spacing: 0.03em;
   padding: 2px 8px;
   border-radius: 5px;
+  color: var(--method-on);
 }
-/* Solid fill: each pairs its -fg with its -on (DESIGN §3), the same pattern
-   button.danger uses, so the text stays readable once -fg turns light in dark mode. */
 .api-method.m-GET {
-  background: var(--ok-fg);
-  color: var(--ok-on);
+  background: var(--method-get);
 }
 .api-method.m-POST {
-  background: var(--info-fg);
-  color: var(--info-on);
+  background: var(--method-post);
 }
 .api-method.m-PUT {
-  background: var(--warn-fg);
-  color: var(--warn-on);
+  background: var(--method-put);
 }
 .api-method.m-DELETE {
-  background: var(--danger-fg);
-  color: var(--danger-on);
+  background: var(--method-delete);
 }
 .api-path {
   font: 14px var(--mono);

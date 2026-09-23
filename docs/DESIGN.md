@@ -77,14 +77,14 @@ A token means one thing, and a color has one job; a second token for a color tha
 
 | Token(s) | Role | Notes |
 | --- | --- | --- |
-| `--danger` · `--warn` · `--ok` | Semantic feedback, red · amber · green: a `{fg, bg, line, on}` set each | One scale per meaning. `--danger` serves both a solid-button fill and the soft alert: one red, not two. `-on` is the text color on a solid `-fg` fill, and flips light/dark opposite it so that text stays readable in both themes. |
-| `--info-fg` (+ `--info-on`) | A fourth feedback hue, blue, for the API reference's `POST` method badge | `fg` and `on` only, with no `bg` or `line`: nothing uses it as a soft alert, only as a solid-fill badge. |
+| `--danger` · `--warn` · `--ok` | Semantic feedback, red · amber · green: a `{fg, bg, line}` triple each | One scale per meaning. `--danger` serves both a solid-button fill (its text in `--danger-on`) and the soft alert: one red, not two. |
 | `--accent` (+ `--accent-on`, `--accent-soft`) | The one **action** hue — a fixed slate-blue | Primary + Secondary buttons only, never a status. Independent of the reader-surface theme (SPEC §9) — the app's own chrome, not the newsletter's. |
 | `--ink` | Strong near-black/near-white **text**: headings, strong labels | Never an admin button fill. There is one accent, and it is blue. The one fill is the reader-facing `.sub-btn` mockup (§1), which is not an admin control. |
 | `--status-draft` · `--status-scheduled` · `--status-sending` · `--status-sent` | Lifecycle badge hues — gray · violet · blue · green | Facts, not warnings; distinct from the feedback scales. `--status-sending`'s blue is its own shade, **not** the action `--accent`. Full state→hue map below. |
 | `--fg` `--muted` `--line` `--line-soft` `--chip` `--bg` `--card` | Neutral surface set | Text, borders, page/card grounds, and the recessed layer. |
 | `--ring` | Focus | The one focus treatment. |
 | `--syntax-*` | Editor syntax highlight — the **template** editor (HTML/CSS, `.cx-*`) and the **post/Markdown** editor (`.cx-md-*`) | One palette both editors' token classes map onto. The post editor's scheme is deliberately minimal — the *mark* is colored (`#` crimson `--syntax-heading`, `*`/`**` pink `--syntax-emphasis`, `>`/bullets orange `--syntax-quote`), the *content* keeps `--syntax-fg` and carries only weight/slant. This palette is self-contained: new syntax hues live here with a light + dark value each, and are otherwise out of scope for this contract's one-color-per-role rule. |
+| `--method-get` · `--method-post` · `--method-put` · `--method-delete` (+ `--method-on`) | HTTP method badges in the API reference: green · blue · amber · red | A self-contained palette like `--syntax-*`, and out of scope for the one-color-per-role rule the same way. A verb's color is a naming convention, not a verdict, so GET is not a success and DELETE is not an error: the badges borrow neither the feedback nor the lifecycle scales. `--method-on` is the text on every solid method fill and flips light/dark opposite them. |
 
 Every token has a light and a dark value; a color defined in only one theme is a bug.
 
