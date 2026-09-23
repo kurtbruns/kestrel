@@ -22,14 +22,6 @@ export interface SuppressionRow {
   created_at: number;
 }
 
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
-
-export function isValidEmail(email: string): boolean {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
-
 export function getByEmail(db: D1Database, email: string): Promise<SubscriberRow | null> {
   return db.prepare("SELECT * FROM subscribers WHERE email = ?").bind(email).first<SubscriberRow>();
 }
