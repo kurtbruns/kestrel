@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- The Settings page's publication identity section drops its "No posts scheduled" / "In use" chip, and its note is shorter: it says the identity appears in every email and, only while posts are scheduled, how many emails a save would update.
 - The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter above the routes (press `/` to focus it). An opened route shows its examples with syntax colors and a curl command for your instance, each with a copy button.
 
 ### Fixed

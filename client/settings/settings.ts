@@ -15,6 +15,7 @@ import { parseFromName, renderSidebarBrand } from "../brand";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
+import { fmt } from "../ui/format";
 import { escapeHtml, type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
@@ -152,8 +153,9 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   const secHead = (title: string, chipHtml: Html, extra: Html | null = null): Html =>
     html`<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 
-  // Which identity fields the template renders (SPEC §9): the note under the card says
-  // which reach the email, and the chip says whether scheduled posts are using them.
+  // The note under the card: where the identity shows up and, only while posts are
+  // scheduled, that a save reaches them too (SPEC §9). The confirmation dialog carries the
+  // rest, at the moment it matters, so the standing note stays one or two short lines.
   const inUse = data.inUse;
   const identityNote = (() => {
     const names: Record<IdentityField, string> = {
@@ -165,26 +167,37 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     const all: IdentityField[] = ["name", "tagline", "address", "logoUrl"];
     const used = all.filter((f) => (inUse.identityFields || []).includes(f));
     const unused = all.filter((f) => !used.includes(f));
-    // "name", or "name, tagline, and logo" (the serial comma even for two).
+    // "logo", "tagline and logo", or "name, tagline, and logo".
     const list = (fs: IdentityField[]) => {
       const words = fs.map((f) => names[f]);
       const last = words.pop() ?? "";
-      return words.length ? `${words.join(", ")}, and ${last}` : last;
+      if (!words.length) {
+        return last;
+      }
+      return words.length === 1 ? `${words[0]} and ${last}` : `${words.join(", ")}, and ${last}`;
     };
     if (!used.length) {
-      return "The email template doesn’t use your name, tagline, address, or logo, so a change here reaches no scheduled email.";
+      return "Your email template doesn’t show any of these.";
     }
-    const first = unused.length
-      ? `Your ${list(used)} ride inside every email; the template doesn’t use your ${list(unused)}.`
-      : "Your name, tagline, address, and logo ride inside every email.";
-    return `${first} Saving a change to those while posts are scheduled applies it to their emails too, after you confirm: the same result as canceling each, saving, and scheduling it again, without the steps. Sent emails never change.`;
+    const shown = unused.length
+      ? `Shown in every email; your template leaves out your ${list(unused)}.`
+      : "Shown in every email.";
+    const n = inUse.sends.length;
+    if (!n) {
+      return shown;
+    }
+    const reach = `Saving a change updates ${n} scheduled email${n === 1 ? "" : "s"} too; you’ll confirm first.`;
+    const wait = inUse.retry_after
+      ? ` One sends at ${fmt(inUse.retry_after)}, so saving waits until it has sent.`
+      : "";
+    return `${shown} ${reach}${wait}`;
   })();
 
   // The logo tile's background image is set from the DOM (applyLogoUi), not written into
   // the markup: a URL has no place inside a style attribute the tag would escape as text.
   const identitySection = html`
     <section class="set-sec">
-      ${secHead("Publication identity", chip("editable", "Editable"), inUseChip(inUse, true))}
+      ${secHead("Publication identity", chip("editable", "Editable"))}
       <div class="set-card">
         <div class="set-id-grid">
           <div class="set-logo-slot">

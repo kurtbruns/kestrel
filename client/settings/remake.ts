@@ -148,14 +148,10 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
 
 /**
  * The standing in-use chip (DESIGN §3): the state a template or identity change would
- * reach, read from GET /api/settings `inUse`. `forIdentity` narrows it for the identity
- * surface: a field the template does not render is not in use at all.
+ * reach, read from GET /api/settings `inUse`.
  */
-export function inUseChip(inUse: InUseView | null | undefined, forIdentity = false): Html {
+export function inUseChip(inUse: InUseView | null | undefined): Html {
   const sends = inUse?.sends || [];
-  if (forIdentity && !(inUse?.identityFields || []).length) {
-    return html`<span class="set-chip" title="The email template doesn't use your name, tagline, address, or logo.">${icon("info")}Not used by the email template</span>`;
-  }
   if (!sends.length) {
     return html`<span class="set-chip">${icon("info")}No posts scheduled</span>`;
   }
