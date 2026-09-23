@@ -4,6 +4,7 @@ import {
   type DeliveryContext,
   fillDeliveryTokens,
   fillEmailTemplate,
+  identityFieldsInUse,
   inlineEmailCss,
   onceUntilRejected,
   type RenderContext,
@@ -20,6 +21,7 @@ const ctx: RenderContext = {
   "publication.name": 'Ben & "Co"',
   "publication.tagline": "tag",
   "publication.logoUrl": "https://media.example/logo?v=1",
+  "publication.logo": '<img class="logo" src="https://media.example/logo?v=1" alt="" />',
   "publication.address": "1 Main St",
   "email.viewInBrowserUrl": "https://arc.example/archive/x",
 };
@@ -112,6 +114,30 @@ describe("validateEmailTemplate", () => {
     expect(w).toMatch(/view.?in.?browser/i);
     expect(w).toMatch(/mystery/);
     expect(w).toMatch(/script/i);
+  });
+
+  it("warns on an <img> whose src is the bare logo URL, which is broken while no logo is set", () => {
+    const base =
+      '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">u</a><a href="{{ email.viewInBrowserUrl }}">v</a>';
+    const warned = validateEmailTemplate(`${base}<img alt="" src="{{ publication.logoUrl }}">`);
+    expect(warned.warnings.join(" ")).toMatch(/publication\.logo \}\}/);
+    // The logo URL used elsewhere, and the logo token itself, are fine.
+    expect(
+      validateEmailTemplate(`${base}<a href="{{ publication.logoUrl }}">logo</a>`).warnings,
+    ).toEqual([]);
+    expect(validateEmailTemplate(`${base}{{ publication.logo }}`).warnings).toEqual([]);
+  });
+});
+
+describe("identityFieldsInUse", () => {
+  it("reads the logo token as rendering the logo and, as its alt text, the name", () => {
+    expect(identityFieldsInUse("{{ publication.logo }}")).toEqual(["logoUrl", "name"]);
+    expect(identityFieldsInUse(DEFAULT_EMAIL_TEMPLATE).sort()).toEqual([
+      "address",
+      "logoUrl",
+      "name",
+      "tagline",
+    ]);
   });
 });
 

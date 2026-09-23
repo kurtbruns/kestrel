@@ -8,6 +8,7 @@
  */
 
 import { archivePostUrl } from "../../shared/archive_url";
+import { emailLogoHtml } from "../../shared/email_logo";
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import type { Config } from "../env";
@@ -120,6 +121,7 @@ export async function render(
     "publication.name": branding.name,
     "publication.tagline": branding.tagline,
     "publication.logoUrl": branding.logoUrl,
+    "publication.logo": emailLogoHtml(branding.logoUrl, branding.name),
     "publication.address": branding.address,
     "email.viewInBrowserUrl": viewInBrowserUrl,
   };

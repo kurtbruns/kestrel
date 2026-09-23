@@ -12,7 +12,12 @@ import {
   resetShell,
   typeInto,
 } from "../test/support";
-import { EMAIL_TEMPLATE_EXAMPLES, renderTemplate, sampleEmailHtml } from "./template";
+import {
+  EMAIL_TEMPLATE_EXAMPLES,
+  mountSampleEmailPreview,
+  renderTemplate,
+  sampleEmailHtml,
+} from "./template";
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
 
@@ -283,5 +288,41 @@ describe("template view", () => {
     $(".wtog-btn[data-w='375']").click();
     expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("375px");
     expect($$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+  });
+});
+
+describe("sample email preview", () => {
+  const SIGNOFF =
+    '<div class="email">{{ post.body }}<table><tr><td class="logo-cell">{{ publication.logo }}</td><td>{{ publication.name }}</td></tr></table></div>';
+  const identity = { name: "Birds Weekly", tagline: "", address: "" };
+
+  function preview(logoUrl: string): HTMLElement {
+    resetShell();
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    mountSampleEmailPreview(
+      frame,
+      () => SIGNOFF,
+      () => ({ ...identity, logoUrl }),
+    );
+    frame.dispatchEvent(new Event("load"));
+    const slot = frame.contentDocument?.querySelector<HTMLElement>(".kestrel-email");
+    if (!slot) {
+      throw new Error("the preview painted nothing");
+    }
+    return slot;
+  }
+
+  it("shows no logo, and no stand-in, when none is set: the sign-off the email will carry", () => {
+    const slot = preview("");
+    expect(slot.querySelector("img")).toBeNull();
+    expect(slot.querySelector(".logo-cell")?.innerHTML).toBe("");
+    expect(slot.textContent).toContain("Birds Weekly");
+  });
+
+  it("shows the real logo when one is set", () => {
+    const img = preview("https://app.birds.example/media/branding/logo?v=1").querySelector("img");
+    expect(img?.getAttribute("src")).toBe("https://app.birds.example/media/branding/logo?v=1");
+    expect(img?.getAttribute("alt")).toBe("Birds Weekly");
   });
 });
