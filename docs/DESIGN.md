@@ -26,6 +26,8 @@ The roles differ by **treatment — fill, border, weight, font-size — never by
 
 If a new button doesn't fit one of the five, that's a signal to reconsider the button, not to add a sixth role.
 
+A role class can carry a small structural modifier for one control's own layout without leaving the role. `.set-menu-btn` (the Template page's "Start from example" trigger) adds only the layout its caret needs on top of `button.ghost`, and `.sched-toggle` (the Sent queue's "Show all N scheduled" expander) adds only its own spacing. Neither touches Ghost's fill, border, or text color, so both are still Ghost.
+
 ### Toggle is a Control, not a button
 
 A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a mode or a view — is a **Control**, documented apart from the five button roles. It carries `aria-pressed` on its segments, and the active segment uses the Secondary palette (`--accent-soft` fill, `--accent` text). It is not a Primary, and it is never the thing a Primary would be: a toggle changes what you're looking at, it doesn't commit an action.
@@ -33,6 +35,10 @@ A segmented toggle (`.wtog`) — the pressed-state pill group used to switch a m
 ### Link is a link, not a sixth button
 
 `button.linkbtn` renders an action as a text link — accent-colored, underlined, no fill or border — and is not one of the five button roles; it's the presentation of a hyperlink applied to a `<button>` (so it stays keyboard- and screen-reader-reachable) for an in-page action that navigates nowhere. Reserve it for a *deliberately subordinate* path that must read as clearly demoted, below even Ghost: the canonical case is **Send now** inside the Schedule modal, where scheduling behind the review window is the default the Primary commits to and sending immediately is the step-down choice. A Ghost button there would sit level with Cancel and undo the demotion; the link says "lesser path" at a glance. If you reach for it anywhere a real button role would do, prefer the role — the link is for demotion, not decoration.
+
+### Two controls outside the five roles, on purpose
+
+`.sub-btn` and `.doc-pager-btn` look like buttons but belong to none of the five roles, because neither is an admin action. `.sub-btn` is in the embeddable subscribe form's preview, under Settings → Ways to subscribe. It shows the reader-facing Subscribe button as it will look on the publisher's own site: inert and unfocusable, a mockup of the reader's chrome rather than a control the publisher clicks. So it is filled with the neutral `--ink` instead of any role's palette, the one place `--ink` fills a button (§3). `.doc-pager-btn` is the bordered Previous/Next card at the foot of a doc in the reference room. It is an `<a>`, not a `<button>`, and belongs to the room's own navigation (§6) rather than to the admin actions the five roles cover. Neither should gain a role class.
 
 ---
 
@@ -71,13 +77,14 @@ A token means one thing, and a color has one job; a second token for a color tha
 
 | Token(s) | Role | Notes |
 | --- | --- | --- |
-| `--danger` · `--warn` · `--ok` | Semantic feedback — a `{fg, bg, line}` triple each: red · amber · green | One scale per meaning. `--danger` serves both a solid-button fill and the soft alert: one red, not two. |
+| `--danger` · `--warn` · `--ok` | Semantic feedback, red · amber · green: a `{fg, bg, line}` triple each | One scale per meaning. `--danger` serves both a solid-button fill (its text in `--danger-on`) and the soft alert: one red, not two. |
 | `--accent` (+ `--accent-on`, `--accent-soft`) | The one **action** hue — a fixed slate-blue | Primary + Secondary buttons only, never a status. Independent of the reader-surface theme (SPEC §9) — the app's own chrome, not the newsletter's. |
-| `--ink` | Strong near-black/near-white **text** — headings, strong labels | Never a button fill. There is one accent, and it is blue. |
+| `--ink` | Strong near-black/near-white **text**: headings, strong labels | Never an admin button fill. There is one accent, and it is blue. The one fill is the reader-facing `.sub-btn` mockup (§1), which is not an admin control. |
 | `--status-draft` · `--status-scheduled` · `--status-sending` · `--status-sent` | Lifecycle badge hues — gray · violet · blue · green | Facts, not warnings; distinct from the feedback scales. `--status-sending`'s blue is its own shade, **not** the action `--accent`. Full state→hue map below. |
 | `--fg` `--muted` `--line` `--line-soft` `--chip` `--bg` `--card` | Neutral surface set | Text, borders, page/card grounds, and the recessed layer. |
 | `--ring` | Focus | The one focus treatment. |
 | `--syntax-*` | Editor syntax highlight — the **template** editor (HTML/CSS, `.cx-*`) and the **post/Markdown** editor (`.cx-md-*`) | One palette both editors' token classes map onto. The post editor's scheme is deliberately minimal — the *mark* is colored (`#` crimson `--syntax-heading`, `*`/`**` pink `--syntax-emphasis`, `>`/bullets orange `--syntax-quote`), the *content* keeps `--syntax-fg` and carries only weight/slant. This palette is self-contained: new syntax hues live here with a light + dark value each, and are otherwise out of scope for this contract's one-color-per-role rule. |
+| `--method-get` · `--method-post` · `--method-put` · `--method-delete` (+ `--method-on`) | HTTP method badges in the API reference: green · blue · amber · red | A self-contained palette like `--syntax-*`, and out of scope for the one-color-per-role rule the same way. A verb's color is a naming convention, not a verdict, so GET is not a success and DELETE is not an error: the badges borrow neither the feedback nor the lifecycle scales. `--method-on` is the text on every solid method fill and flips light/dark opposite them. |
 
 Every token has a light and a dark value; a color defined in only one theme is a bug.
 
@@ -98,7 +105,7 @@ The **in-use chip** on the Settings and Template surfaces ("In use by 2 schedule
 
 The badge belongs in the lists and the **sent record view**, not the editor head: the editor only ever opens a draft or a scheduled (frozen) post (a sent post routes to its record view instead, SPEC §8), and both editor states are already signaled (the editable layout, the scheduled banner in §2), so the editor carries no status pill. The sent record view is where the delivery-outcome counts appear in **full**, and they read in the **semantic feedback** scales (delivered `ok`, bounced `warn`, complained `danger`), a genuine good/bad reading of how the send landed, while the `sent` badge beside them stays a lifecycle fact. The two scales sitting together there is exactly why they must not be conflated. The send lists (the Sent-post table, the dashboard's recent sends) compress the same outcomes to a glance: a **Delivered** cell (the confirmed-delivered count, SPEC §8), with any complaints, bounces, or unsent recipients as a muted note **beneath** it, worst first, in words rather than swatches. The record's tiles carry the colors; a clean send prints nothing there. The **per-recipient rows** listed beneath those tiles carry the same reading down to the row: each row's outcome cell reuses the tiles' swatch palette (`sw-ok` / `sw-warn` / `sw-danger`, plus `sw-sending` for an accepted-not-yet-confirmed row and `sw-neutral` for an unsent or skipped one), so a row reads the same bucket as its tile and the record adds **no new token**. A bounce row shows *soft* versus *hard* by the kind recorded on it (SPEC §8), not by a color.
 
-**The in-flight watch adds no palette — it reuses these scales.** A **phase pill** borrows the matching lifecycle or feedback tone; **two progress bars share one scale** (the frozen audience is the denominator for both) — a **dispatch** bar in the `sending` hue, and a **delivery** bar beneath it pairing a neutral-grey `accepted` frontier with the `ok` green `confirmed` filling in behind, so delivery always reads as *lagging* dispatch; and **active-send cards** (dashboard widget, Sent "In progress" row) in the `sending` hue, as scheduled cards are violet. So `--status-sending` is the single "in flight" cue across badge, pill, bars, and cards — including the in-flight post's **Drafts-list** label, which routes to the watch, not the editor (SPEC §8).
+**The in-flight watch adds no palette; it reuses these scales.** A **phase pill** borrows the matching lifecycle or feedback tone. **Two progress bars share one axis**, both drawn to the width of the frozen audience so the delivery bar lines up under the dispatch bar: a **dispatch** bar in the `sending` hue, and beneath it a **delivery** bar whose neutral-grey `accepted` frontier matches dispatch, with the `ok` green `confirmed` filling in behind and never passing it, so delivery always reads as *lagging* dispatch. The delivery bar's count reads confirmed of accepted, the rate SPEC §8 defines; only its fill sits on the shared audience axis. **Active-send cards** (dashboard widget, Sent "In progress" row) take the `sending` hue, as scheduled cards are violet. So `--status-sending` is the single "in flight" cue across badge, pill, bars, and cards, including the in-flight post's **Drafts-list** label, which routes to the watch, not the editor (SPEC §8).
 
 ---
 
@@ -108,12 +115,12 @@ Stacking is a single named ladder, and every fixed or floating surface reference
 
 | Rung | Token | What sits here |
 | --- | --- | --- |
-| 1 | `--z-content` | Normal page content. |
-| 10 | `--z-header` | Sticky headers and the side rail. |
-| 20 | `--z-menu` | Popovers and menus. |
-| 30 | `--z-bar` | Fixed bars — the save bar. |
-| 40 | `--z-toast` | Toasts. |
-| 50 | `--z-modal` | Modals and their backdrop overlay. |
+| 1st | `--z-content` | Normal page content. |
+| 2nd | `--z-header` | Sticky headers and the side rail. |
+| 3rd | `--z-menu` | Popovers and menus. |
+| 4th | `--z-bar` | Fixed bars — the save bar. |
+| 5th | `--z-toast` | Toasts. |
+| 6th | `--z-modal` | Modals and their backdrop overlay. |
 
 The order encodes the intent: a menu opens over the content and headers; a fixed bar sits above the content it's saving; a toast confirms above that bar; a modal takes the whole screen and sits above everything. Because features reference the rung and not a number, the ladder is the one place stacking is reasoned about — a new floating surface picks the rung whose meaning fits and inherits a consistent order, instead of guessing a literal that happens to be higher than its neighbor today.
 
@@ -141,7 +148,7 @@ The record view's **in-flight watch** state (the same page while a send is still
 
 ## 6. Narrow viewports — one layout per list
 
-The admin UI gets opened on mobile, often just to check that a post went out, so every surface holds at any width, and a list never makes you scroll sideways to read its lead column. Below 720px a list table takes `.stacks`: each row collapses to its lead cell (title, subject, email) on its own line, then the rest as one muted meta line, with the row's ⋯ menu at top-right; the column headers and their sort controls drop, while search and the toolbar filters stay. It is the desktop table's own markup restyled — not a second render — so the two can't drift, and a new list opts in with the class rather than a layout of its own. (The record's per-recipient table is the one holdout: it scrolls sideways instead of stacking.)
+The admin UI gets opened on mobile, often just to check that a post went out, so every surface holds at any width, and a list never makes you scroll sideways to read its lead column. At narrow, phone-width viewports, a list table takes `.stacks`: each row collapses to its lead cell (title, subject, email) on its own line, then the rest as one muted meta line, with the row's ⋯ menu at top-right; the column headers and their sort controls drop, while search and the toolbar filters stay. It is the desktop table's own markup restyled — not a second render — so the two can't drift, and a new list opts in with the class rather than a layout of its own. (The record's per-recipient table is the one holdout: it scrolls sideways instead of stacking.)
 
 The reference room (Docs, API) follows the same rule with its own shape. Its top bar stays one row at every width, so the in-page anchors and the pinned contents rail always clear it: on mobile the back link is a square arrow, the close ✕ drops, and the rail stops being a column. Each rail then takes the shape its role wants: a doc's "On this page" folds to one tappable row that closes again once a section is picked, and the API tiers and the docs index's out-links each become a chip row. The build stamp, pinned to the rail's bottom-left corner on desktop, moves to the foot of the page, so it is the last thing on mobile rather than the first.
 

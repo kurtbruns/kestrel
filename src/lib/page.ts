@@ -4,7 +4,10 @@
  *  via prefers-color-scheme. */
 import { escapeHtml, escapeHtmlAttr } from "./html";
 
-/** Color tokens + resets shared by every reader page. */
+/** Color tokens + resets shared by every reader page. This is its own palette,
+ *  independent of, and never loaded alongside, the admin `:root` in
+ *  public/dashboard/styles.css. The two reuse names like --muted and --bg with
+ *  different values on purpose; don't assume they share meaning. */
 const TOKENS = `
 :root {
   color-scheme: light dark;
