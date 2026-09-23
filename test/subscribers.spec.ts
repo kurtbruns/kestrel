@@ -23,7 +23,7 @@ const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;
 async function route(req: Request): Promise<Response> {
   const ctx = createExecutionContext();
   const e = env as AppEnv;
-  const res = await createRouter(getConfig(e).archiveBasePath).handle(req, e, ctx);
+  const res = await createRouter(getConfig(e)).handle(req, e, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -527,7 +527,7 @@ describe("a confirmation the provider does not take is not treated as sent", () 
     const email = uniqueEmail();
     const ctx = createExecutionContext();
     const e = env as AppEnv;
-    const res = await createRouter(getConfig(e).archiveBasePath).handle(
+    const res = await createRouter(getConfig(e)).handle(
       new Request(`${base}/subscribe`, {
         method: "POST",
         headers: { "content-type": "application/json" },
