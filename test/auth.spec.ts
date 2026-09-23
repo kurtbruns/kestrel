@@ -115,9 +115,9 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     expect(getConfig(loopback).devAuthSecret).toBe(DEV_SECRET);
   });
 
-  // The development config deployed as-is, with `.dev.vars` uploaded as secrets: fake and
-  // no Access, so only the origin says it is not this machine. Without that check the
-  // public token route would hand out admin tokens.
+  // A fake, Access-less deploy given its real hostname, with `.dev.vars` uploaded as
+  // secrets: only the origin says it is not this machine. Without that check the public
+  // token route would hand out admin tokens.
   it("does not resolve devAuthSecret for the fake transport served from a public origin", () => {
     const pushedDev = {
       ...deployed,

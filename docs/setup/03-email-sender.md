@@ -1,6 +1,6 @@
 # Connect an email sender
 
-Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §10). Two adapters ship: **SES** (the default) and **Resend**. Pick one per environment with the `PROVIDER` var and set that provider's credentials as Worker secrets. Each provider's section below names the settings it requires: with `PROVIDER` set to that provider and one of them missing, the app refuses every request with an error naming it (see **Provision**) rather than failing at the first send.
+Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §10). Two adapters ship: **SES** (the default) and **Resend**. Pick one per environment with the `PROVIDER` var (switching it from the `fake` that **Provision** deployed with) and set that provider's credentials as Worker secrets. Set the secrets first and switch `PROVIDER` last, so the app never runs with a real provider missing its credentials. Each provider's section below names the settings it requires: with `PROVIDER` set to that provider and one of them missing, the app refuses every request with an error naming it (see **Provision**) rather than failing at the first send.
 
 The webhook is what closes the loop: a hard bounce or a complaint arrives from the provider and suppresses the address on its own. Set it up — a sender without a working bounce/complaint webhook degrades its own deliverability.
 
@@ -37,7 +37,7 @@ A new SES account is in the **sandbox**: it can only send to verified addresses 
 
 5. **The subscription-confirmation handshake is automatic.** When you add the HTTPS subscription, SNS immediately POSTs a `SubscriptionConfirmation` to the endpoint. The app verifies the SNS signature, checks that the message came from your topic, and completes the handshake for you by fetching the `SubscribeURL` (host-pinned to `sns.<region>.amazonaws.com`); there is nothing to click. The subscription flips to *Confirmed* on its own. Every subsequent event is checked the same way before it touches the database.
 
-   > **Set `SNS_TOPIC_ARN` (step 4) and deploy before you add the subscription.** SNS signs messages for every topic in every AWS account, so a valid signature alone does not prove a message is yours: the app accepts only messages whose topic is exactly `SNS_TOPIC_ARN`, and refuses everything while it is unset. If the subscription was added first, it stays *Pending confirmation*; once the secret is deployed, select it in the SNS console and choose **Request confirmation**.
+   > **Do step 4 first: set the secrets, including `SNS_TOPIC_ARN`, switch `PROVIDER` to `ses`, and deploy, then add the subscription.** Only the SES adapter confirms a subscription; the `fake` transport answers the handshake without confirming it. And SNS signs messages for every topic in every AWS account, so a valid signature alone does not prove a message is yours: the app accepts only messages whose topic is exactly `SNS_TOPIC_ARN`. If the subscription was added first, it stays *Pending confirmation*; once step 4 is deployed, select it in the SNS console and choose **Request confirmation**.
 
 ### 4. Credentials and vars
 

@@ -217,13 +217,17 @@ export function getConfig(env: AppEnv): Config {
   }
   const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
   // Belt-and-suspenders: only honor the dev credential when the env is unambiguously
-  // dev-shaped: fake transport, no Access configured, AND served from this machine.
+  // dev-shaped: fake transport, no Access configured, AND an origin on this machine.
   // Combined with the secret never being committed (it lives in the gitignored
   // `.dev.vars`, not in `wrangler.jsonc` vars), a deployed Worker has no secret and this
   // stays undefined, so the dev auth path is off and Access is the only door. The loopback
-  // origin covers the one deploy the first two miss: the development config pushed as-is
-  // with `.dev.vars` uploaded as secrets. This one predicate is also what `devMode` (and
-  // so the dev routes) keys on, so "this is local dev" has a single source.
+  // origin also catches a fake, Access-less deploy given its real hostname with `.dev.vars`
+  // uploaded as secrets. Config alone cannot tell the development config deployed wholly
+  // unchanged (its origin still names localhost) from local dev; that deploy is
+  // misconfigured anyway, since every link it emits points at localhost. A real provider
+  // or Access, either of which every real deployment has, turns this path off regardless.
+  // This one predicate is also what `devMode` (and so the dev routes) keys on, so "this is
+  // local dev" has a single source.
   const devShaped = provider === "fake" && !accessTeamDomain && isLoopbackOrigin(appOrigin);
   const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
   const notifyChannel: NotifyChannel = devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
