@@ -225,6 +225,18 @@ export function createRouter(archiveBasePath: string): Router {
       },
       handler: renderRoutes.templateTest,
     },
+    {
+      method: "POST",
+      path: "/api/settings/notifications/test",
+      access: "admin",
+      resource: "settings",
+      summary:
+        "Send a sample notification to the saved notifications address, through the live channel (SPEC §8).",
+      description:
+        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 `notify_failed` carrying its words.",
+      example: { response: { to: "you@example.com", channel: "cloudflare" } },
+      handler: settingsRoutes.notificationTest,
+    },
 
     // --- posts + revisions (authed) ---
     {

@@ -27,6 +27,7 @@ const settings = (over: Partial<SettingsView> = {}): SettingsView => ({
   emailTemplate: '<div>{{ post.body }}<a href="{{ email.unsubscribeUrl }}">out</a></div>',
   confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
   confirmationEmailDefault: DEFAULT_COPY,
+  notifications: { to: "" },
   ...over,
 });
 
@@ -43,6 +44,8 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     awsRegion: "us-east-1",
     accessConfigured: false,
     authMode: "dev",
+    notifyChannel: "provider",
+    notifyFrom: "Birds <hello@send.birds.example>",
     build: {
       version: "",
       sha: "dev",
@@ -53,6 +56,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
       tagUrl: "",
     },
   },
+  notificationStatus: { lastSent: null, lastFailure: null },
   inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
   ...over,
 });
@@ -156,6 +160,7 @@ describe("settings view", () => {
       publication: { name: "Birds Monthly", tagline: "Owls & more", address: "" },
       testRecipients: ["me@b.c", "new@b.c"],
       confirmationEmail: { subject: "Please confirm", body: "", buttonLabel: "", reassurance: "" },
+      notifications: { to: "" },
     });
     expect($<HTMLInputElement>("#setTagline").value).toBe(""); // the server's result is the baseline now
     expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["me@b.c", "new@b.c"]);
@@ -163,6 +168,104 @@ describe("settings view", () => {
     expect($("#brandName").textContent).toBe("Birds Monthly");
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Monthly");
     expect($("#toasts").textContent).toMatch(/Settings saved/);
+    expect(bar().classList.contains("show")).toBe(false);
+  });
+
+  it("shows where notifications go, how they are sent, and how the last one went", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: settings({ notifications: { to: "me@b.c" } }),
+            notificationStatus: {
+              lastSent: { kind: "finished", subject: "Gulls", at: 1_800_000_000_000 },
+              lastFailure: {
+                kind: "refused",
+                subject: "Terns",
+                at: 1_800_000_100_000,
+                error: "destination address not verified",
+              },
+            },
+          }),
+      },
+    ]);
+    expect($<HTMLInputElement>("#notifyTo").value).toBe("me@b.c");
+    const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
+    expect(facts).toContain("Your email provider (Amazon SES)");
+    expect(facts).toContain("Birds <hello@send.birds.example>");
+    // A newer failure outranks the last delivery: the channel has stopped working.
+    expect($("#notifyStatus .set-pill.danger").textContent).toBe("Not delivered");
+    expect($("#notifyStatus").textContent).toMatch(
+      /Terns \(provider refusing\): destination address not verified/,
+    );
+    // On the provider channel, the note says what it cannot carry.
+    expect($("#settingsBody").textContent).toMatch(
+      /one about the provider refusing your account cannot reach you/,
+    );
+    expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("saves the notifications address on the save bar, and holds the test until it is saved", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: (req) => {
+          const body = req.json() as { notifications: { to: string } };
+          return {
+            settings: settings({ notifications: { to: body.notifications.to } }),
+            warnings: [],
+            remade: [],
+          };
+        },
+      },
+      {
+        method: "POST",
+        path: "/api/settings/notifications/test",
+        reply: () => ({ to: "me@b.c", channel: "provider" }),
+      },
+    ]);
+    const test = $<HTMLButtonElement>("#notifyTest");
+    expect(test.disabled).toBe(true);
+    expect($("#notifyTestHint").textContent).toBe("Save an address to send a test.");
+
+    typeInto($<HTMLInputElement>("#notifyTo"), " Me@B.C ");
+    expect(bar().classList.contains("show")).toBe(true);
+    expect(test.disabled).toBe(true);
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const put = fake.calls.find((c) => c.method === "PUT");
+    expect((put!.json() as { notifications: unknown }).notifications).toEqual({ to: "me@b.c" });
+    expect(bar().classList.contains("show")).toBe(false);
+    expect(test.disabled).toBe(false);
+
+    test.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.method === "POST")).toBe(true);
+    expect($("#toasts").textContent).toMatch(/Test notification sent to me@b.c/);
+    // The test is the channel's latest word, so the status line takes it in place.
+    expect($("#notifyStatus .set-pill.ok").textContent?.trim()).toBe("Delivered");
+    expect($("#notifyStatus").textContent).toMatch(/test notification/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("puts the notifications address back on discard", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: settings({ notifications: { to: "me@b.c" } }) }),
+      },
+    ]);
+    typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
+    expect($("#notifyTestHint").textContent).toBe(
+      "Save first: the test goes to the saved address.",
+    );
+    $("#savebarDiscard").click();
+    expect($<HTMLInputElement>("#notifyTo").value).toBe("me@b.c");
+    expect($<HTMLButtonElement>("#notifyTest").disabled).toBe(false);
     expect(bar().classList.contains("show")).toBe(false);
   });
 

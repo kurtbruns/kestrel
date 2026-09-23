@@ -204,6 +204,7 @@ async function route(req: Request, e: AppEnv): Promise<Response> {
 beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM deliveries"),
+    env.DB.prepare("DELETE FROM notifications"),
     env.DB.prepare("DELETE FROM sends"),
     env.DB.prepare("DELETE FROM post_revisions"),
     env.DB.prepare("DELETE FROM posts"),

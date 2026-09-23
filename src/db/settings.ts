@@ -11,7 +11,11 @@
  * change, not a migration. Reads always merge the stored blob onto DEFAULTS, so a
  * field added here is safely absent-then-defaulted on existing rows.
  */
-import type { ConfirmationEmailCopy, SettingsPatchBody } from "../../shared/settings";
+import type {
+  ConfirmationEmailCopy,
+  NotificationPrefs,
+  SettingsPatchBody,
+} from "../../shared/settings";
 import { HttpError } from "../lib/errors";
 import { isValidEmail, normalizeEmail } from "./subscribers";
 
@@ -64,6 +68,12 @@ export interface AppSettings {
   emailTemplate: string;
   /** Editable wording of the double opt-in confirmation email (SPEC §7). */
   confirmationEmail: ConfirmationEmailCopy;
+  /**
+   * Where notifications about the publisher's sends go (SPEC §8): an address, which is a
+   * preference because it holds no secret. The channel that carries them, and its
+   * sender, are deploy config (SPEC §9).
+   */
+  notifications: NotificationPrefs;
 }
 
 /** The reserved R2 key the publication logo is stored under (served by /media). */
@@ -85,6 +95,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   publication: { name: "", tagline: "", address: "", logo: null },
   emailTemplate: "",
   confirmationEmail: DEFAULT_CONFIRMATION_EMAIL,
+  notifications: { to: "" },
 };
 
 /** Caps so a mistake (or a compromised session) can't grow a field unboundedly. */
@@ -151,7 +162,14 @@ function coerce(raw: unknown): AppSettings {
       "confirmationEmail" in o
         ? coerceConfirmation(o.confirmationEmail)
         : { ...DEFAULT_CONFIRMATION_EMAIL },
+    notifications: coerceNotifications(o.notifications),
   };
+}
+
+/** Coerce a stored notifications blob; anything but a string address reads as none. */
+function coerceNotifications(raw: unknown): NotificationPrefs {
+  const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return { to: typeof o.to === "string" ? o.to : "" };
 }
 
 /**
@@ -294,6 +312,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     ...current,
     publication: { ...current.publication },
     confirmationEmail: { ...current.confirmationEmail },
+    notifications: { ...current.notifications },
   };
 
   if (patch.testRecipients !== undefined) {
@@ -348,7 +367,22 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
       );
     }
   }
+  if (patch.notifications?.to !== undefined) {
+    next.notifications.to = normalizeNotifyTo(patch.notifications.to);
+  }
   return next;
+}
+
+/** One address, trimmed and lowercased, or "" to turn notifications off. */
+function normalizeNotifyTo(raw: unknown): string {
+  if (typeof raw !== "string") {
+    throw new Error("notifications address must be a string");
+  }
+  const email = normalizeEmail(raw);
+  if (email && !isValidEmail(email)) {
+    throw new Error(`not a valid email address: ${raw}`);
+  }
+  return email;
 }
 
 /** The settings with the logo metadata set (or cleared, with `null`); pure. */

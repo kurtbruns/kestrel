@@ -20,6 +20,7 @@ import { getSettings } from "../db/settings";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
+import { fakeNotifications } from "../notify/fake";
 import { getProvider, perRecipient } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
@@ -282,5 +283,5 @@ export async function devOutbox(c: RequestContext): Promise<Response> {
   if (c.config.provider !== "fake") {
     throw notFound("not available for this transport");
   }
-  return json({ messages: fakeOutbox() });
+  return json({ messages: fakeOutbox(), notifications: fakeNotifications() });
 }
