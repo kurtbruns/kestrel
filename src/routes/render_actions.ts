@@ -20,6 +20,7 @@ import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
+import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { fakeNotifications } from "../notify/fake";
 import { getProvider, perRecipient } from "../providers";
 import { fakeOutbox } from "../providers/fake";
@@ -109,7 +110,11 @@ export async function previewPage(c: RequestContext): Promise<Response> {
     "email.sentTo": "",
   }).html;
   return new Response(html, {
-    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
+    headers: {
+      ...POST_PAGE_SECURITY_HEADERS,
+      "content-type": "text/html; charset=utf-8",
+      "x-robots-tag": "noindex",
+    },
   });
 }
 

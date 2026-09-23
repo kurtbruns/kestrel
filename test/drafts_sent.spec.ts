@@ -272,6 +272,23 @@ describe("sent record view — GET /sends/:id", () => {
     expect(text).toContain("c@example.com,unsent,,");
   });
 
+  it("exports an address a spreadsheet would read as a formula as plain text", async () => {
+    const { sendId } = await seedSentSend("CSV Formulas", `csv-f-${uniq()}`, [
+      { email: "=HYPERLINK(1)@example.com", status: "accepted", event: "delivered" },
+      { email: "+1@example.com", status: "unsent" },
+      { email: "-1@example.com", status: "unsent" },
+      { email: "@x@example.com", status: "unsent" },
+    ]);
+    const text = await (
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries.csv`, { headers: AUTH })
+    ).text();
+    expect(text).toContain("'=HYPERLINK(1)@example.com,accepted,delivered,");
+    expect(text).toContain("'+1@example.com,unsent,,");
+    expect(text).toContain("'-1@example.com,unsent,,");
+    expect(text).toContain("'@x@example.com,unsent,,");
+    expect(text).not.toMatch(/(^|\r\n)[=+\-@]/);
+  });
+
   it("requires auth", async () => {
     expect((await SELF.fetch(`${base}/sends/whatever/deliveries.csv`)).status).toBe(401);
   });

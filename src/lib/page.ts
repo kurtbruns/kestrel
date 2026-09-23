@@ -3,6 +3,7 @@
  *  the landing page, the archive index, and the subscribe flow. Automatic light/dark
  *  via prefers-color-scheme. */
 import { escapeHtml, escapeHtmlAttr } from "./html";
+import { PAGE_SECURITY_HEADERS } from "./page_headers";
 
 /** Color tokens + resets shared by every reader page. This is its own palette,
  *  independent of, and never loaded alongside, the admin `:root` in
@@ -54,7 +55,11 @@ export function htmlPage(title: string, bodyHtml: string, status = 200): Respons
 </html>`;
   return new Response(doc, {
     status,
-    headers: { "content-type": "text/html; charset=utf-8", "x-robots-tag": "noindex" },
+    headers: {
+      ...PAGE_SECURITY_HEADERS,
+      "content-type": "text/html; charset=utf-8",
+      "x-robots-tag": "noindex",
+    },
   });
 }
 
@@ -279,7 +284,11 @@ ${devDashboardBadge(opts.devDashboardUrl)}
 </html>`;
   return new Response(doc, {
     status: opts.status ?? 200,
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "public, max-age=300" },
+    headers: {
+      ...PAGE_SECURITY_HEADERS,
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "public, max-age=300",
+    },
   });
 }
 

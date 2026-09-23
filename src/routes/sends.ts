@@ -140,9 +140,17 @@ export async function deliveries(c: RequestContext): Promise<Response> {
   return json(body);
 }
 
-/** Quote a CSV field when it contains a comma, quote, or newline (RFC 4180). */
+/**
+ * One CSV field. A text cell a spreadsheet would read as a formula (one starting with
+ * `=`, `+`, `-`, `@`, a tab, or a carriage return) is prefixed with `'` so it opens as
+ * text: an address like `=HYPERLINK(…)@example.com` is valid, and the export is opened
+ * by the publisher. Then quoted when it contains a comma, quote, or newline (RFC 4180).
+ */
 function csvCell(value: string | number | null): string {
-  const s = value == null ? "" : String(value);
+  let s = value == null ? "" : String(value);
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(s)) {
+    s = `'${s}`;
+  }
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
