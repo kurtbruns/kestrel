@@ -51,4 +51,6 @@
 ## Known gaps
 
 - **Subscriber import does not exist.** There is no import in the dashboard or the API. Attempt step 3 anyway, and report what a publisher would be left doing instead. Steps 7 and 8 then run against whatever audience the publisher can build by hand, and the report says so.
+- **Locally, the sweep never runs on its own.** `wrangler dev` doesn't fire cron triggers, so a scheduled send never starts and a sent one never settles its delivery receipts. When a step waits on the sweep, fire it by hand (`curl <origin>/cdn-cgi/local/scheduled`) and report how long the page sat stalled first.
+- **With the send simulation on, the fake outbox stays empty.** The simulator replaces the fake transport for all mail, so step 6's test email and every confirmation email are invisible locally. Report it and move on.
 - **Import needs a SPEC decision before it needs code.** I1 requires consent confirmed through Kestrel's own double opt-in, so an address confirmed by another tool doesn't qualify as written. Either an import carries the prior consent over as a recorded consent, with its source and date, or every imported address goes through double opt-in again. The second keeps I1 as it stands but costs a large list a real share of its readers. The expectations above hold either way, and the summary must say which rule applied.
