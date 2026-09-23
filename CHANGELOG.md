@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Scheduling a post, or sending it now, no longer goes ahead when the save it runs first was refused because the draft had changed elsewhere; it would have frozen the other writer's version. The dialog closes on the out-of-date banner instead, and your unsaved edits are left as they were.
 - Uploading or removing the publication logo now updates the confirmation email's preview at once, instead of leaving the old logo there until another field is edited.
 - The API reference's method badges (GET/POST/PUT/DELETE) now follow dark mode instead of staying their light-mode colors.
+- A malformed API request is now a 400 that names the problem instead of a silent no-op or a server error: a body that is not a JSON object, a field of the wrong type (named in the message and as `field` on the error), and a path with a broken percent-escape. Saving a post with a wrongly typed field, or a `base_revision` that is not a string, is refused instead of saved without that field or without the out-of-date check, and a post save must send a JSON body. A database failure while saving settings is now reported as a server error, not as a bad request.
 
 ## [0.2.0] - 2026-09-21
 

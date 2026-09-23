@@ -42,6 +42,7 @@ import {
   withPublicationLogo,
 } from "../db/settings";
 import type { Config } from "../env";
+import { type JsonObject, optObject, optString, optStringList, readJsonObject } from "../lib/body";
 import { badRequest, json } from "../lib/errors";
 import {
   DEFAULT_EMAIL_TEMPLATE,
@@ -132,14 +133,8 @@ export async function get(c: RequestContext): Promise<Response> {
 }
 
 /** The acknowledged send ids from a JSON body's `remake` (a list of strings), or null. */
-function readAck(o: Record<string, unknown>): string[] | null {
-  if (!("remake" in o)) {
-    return null;
-  }
-  if (!Array.isArray(o.remake) || !o.remake.every((id) => typeof id === "string")) {
-    throw badRequest("remake must be a list of send ids");
-  }
-  return o.remake as string[];
+function readAck(o: JsonObject): string[] | null {
+  return optStringList(o, "remake") ?? null;
 }
 
 /** The acknowledged send ids from the `remake` query parameter (comma-separated), for
@@ -156,14 +151,9 @@ function readAckQuery(c: RequestContext): string[] | null {
 }
 
 export async function update(c: RequestContext): Promise<Response> {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    throw badRequest("a JSON body is required");
-  }
+  const body = await readJsonObject(c);
   const patch = readPatch(body);
-  const ack = readAck((body && typeof body === "object" ? body : {}) as Record<string, unknown>);
+  const ack = readAck(body);
   // Structural template validation: a missing unsubscribe (or body) is an error and
   // rejects the write — no email may ship without a way to leave (I2). Other issues
   // are warnings, returned so the client can surface them without blocking. An empty
@@ -180,9 +170,11 @@ export async function update(c: RequestContext): Promise<Response> {
     warnings = v.warnings;
   }
   // Validate the patch against the current settings up front, so a bad field is a 400
-  // before any refusal about scheduled sends (applyPatch throws plain Errors).
+  // before any refusal about scheduled sends (applyPatch throws plain Errors). The read
+  // stays outside the catch: a database failure is a 500, never reported as a bad request.
+  const current = await getSettings(c.env.DB);
   try {
-    applyPatch(await getSettings(c.env.DB), patch);
+    applyPatch(current, patch);
   } catch (e) {
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
@@ -256,50 +248,39 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
   return json(body);
 }
 
-/** Pick only the known editable keys off the request body. */
-function readPatch(body: unknown): SettingsPatch {
-  const o = (body && typeof body === "object" ? body : {}) as Record<string, unknown>;
+/**
+ * Pick the known editable keys off the request body. A present key with the wrong type
+ * is a 400 naming it (`publication.name`); the value rules (lengths, valid addresses)
+ * are applyPatch's.
+ */
+function readPatch(o: JsonObject): SettingsPatch {
   const patch: SettingsPatch = {};
-  if ("testRecipients" in o) {
-    if (!Array.isArray(o.testRecipients)) {
-      throw badRequest("testRecipients must be a list");
-    }
-    patch.testRecipients = o.testRecipients as string[];
+  const testRecipients = optStringList(o, "testRecipients");
+  if (testRecipients !== undefined) {
+    patch.testRecipients = testRecipients;
   }
-  if ("publication" in o) {
-    const p = (o.publication && typeof o.publication === "object" ? o.publication : {}) as Record<
-      string,
-      unknown
-    >;
+  const p = optObject(o, "publication");
+  if (p !== undefined) {
     const pub: NonNullable<SettingsPatch["publication"]> = {};
-    if ("name" in p) {
-      pub.name = p.name as string;
-    }
-    if ("tagline" in p) {
-      pub.tagline = p.tagline as string;
-    }
-    if ("address" in p) {
-      pub.address = p.address as string;
+    for (const k of ["name", "tagline", "address"] as const) {
+      const v = optString(p, k, "publication");
+      if (v !== undefined) {
+        pub[k] = v;
+      }
     }
     patch.publication = pub;
   }
-  if ("emailTemplate" in o) {
-    if (typeof o.emailTemplate !== "string") {
-      throw badRequest("emailTemplate must be a string");
-    }
-    patch.emailTemplate = o.emailTemplate;
+  const emailTemplate = optString(o, "emailTemplate");
+  if (emailTemplate !== undefined) {
+    patch.emailTemplate = emailTemplate;
   }
-  if ("confirmationEmail" in o) {
-    const c = (
-      o.confirmationEmail && typeof o.confirmationEmail === "object" ? o.confirmationEmail : {}
-    ) as Record<string, unknown>;
+  const ceBody = optObject(o, "confirmationEmail");
+  if (ceBody !== undefined) {
     const ce: NonNullable<SettingsPatch["confirmationEmail"]> = {};
     for (const k of ["subject", "body", "buttonLabel", "reassurance"] as const) {
-      if (k in c) {
-        if (typeof c[k] !== "string") {
-          throw badRequest(`confirmationEmail.${k} must be a string`);
-        }
-        ce[k] = c[k] as string;
+      const v = optString(ceBody, k, "confirmationEmail");
+      if (v !== undefined) {
+        ce[k] = v;
       }
     }
     patch.confirmationEmail = ce;

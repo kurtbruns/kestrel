@@ -50,6 +50,14 @@ export function param(c: RequestContext, name: string): string {
   return v;
 }
 
+function decodePathParam(name: string, raw: string): string {
+  try {
+    return decodeURIComponent(raw);
+  } catch {
+    throw badRequest(`path parameter ${name} is not validly percent-encoded`);
+  }
+}
+
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
 // The access tier (`admin` is gated by `requireAuth`; `public` and `webhook` carry no auth
@@ -123,14 +131,15 @@ export class Router {
       }
 
       const params: Record<string, string> = {};
-      for (const [k, v] of Object.entries(match.pathname.groups)) {
-        if (v !== undefined) {
-          params[k] = decodeURIComponent(v);
-        }
-      }
-
       const c: RequestContext = { req, env, ctx, url, params, config };
       try {
+        // Decoded inside the try: a malformed escape (`/archive/%E0`) is the client's
+        // mistake, so it is a 400 like any other bad input, not an uncaught URIError.
+        for (const [k, v] of Object.entries(match.pathname.groups)) {
+          if (v !== undefined) {
+            params[k] = decodePathParam(k, v);
+          }
+        }
         for (const mw of route.middleware) {
           const short = await mw(c);
           if (short) {

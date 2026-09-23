@@ -8,7 +8,8 @@ import type {
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
-import { badRequest, json, notFound } from "../lib/errors";
+import { oneOf, readJsonObject } from "../lib/body";
+import { json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate";
 import { archiveUrl } from "../render/render";
@@ -189,12 +190,7 @@ export async function cancel(c: RequestContext): Promise<Response> {
  * `scheduled`-status only (the state machine's CAS enforces the latter, I6).
  */
 export async function reschedule(c: RequestContext): Promise<Response> {
-  let body: { fire_at?: unknown };
-  try {
-    body = (await c.req.json()) as { fire_at?: unknown };
-  } catch {
-    throw badRequest("JSON body with 'fire_at' is required");
-  }
+  const body = await readJsonObject(c);
   const fireAt = parseFutureFireAt(body.fire_at);
   const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
   const response: SendActionResponse = { send };
@@ -206,16 +202,7 @@ export async function reschedule(c: RequestContext): Promise<Response> {
  * step for the stuck state the sweep flags but can't clear on its own (SPEC §12).
  */
 export async function resolve(c: RequestContext): Promise<Response> {
-  let body: { resolution?: unknown };
-  try {
-    body = (await c.req.json()) as { resolution?: unknown };
-  } catch {
-    throw badRequest("JSON body with 'resolution' ('unsent' | 'accepted') is required");
-  }
-  const outcome = body.resolution;
-  if (outcome !== "unsent" && outcome !== "accepted") {
-    throw badRequest("resolution must be 'unsent' or 'accepted'");
-  }
+  const outcome = oneOf(await readJsonObject(c), "resolution", ["unsent", "accepted"]);
   const actor = c.principal?.email ?? "service";
   const result = await resolveStuckSend(c.env, param(c, "id"), outcome, actor);
   return json(result);

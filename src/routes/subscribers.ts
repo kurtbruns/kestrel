@@ -7,22 +7,18 @@ import type {
 } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { isValidEmail, normalizeEmail } from "../db/subscribers";
-import { badRequest, json, notFound } from "../lib/errors";
+import { fieldError, optString, readJsonObject } from "../lib/body";
+import { json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { requestSubscription } from "../services/subscriptions";
 
 export async function create(c: RequestContext): Promise<Response> {
-  let body: { email?: unknown };
-  try {
-    body = (await c.req.json()) as { email?: unknown };
-  } catch {
-    throw badRequest("JSON body with an 'email' is required");
-  }
-  const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
+  const raw = optString(await readJsonObject(c), "email");
+  const email = raw === undefined ? "" : normalizeEmail(raw);
   if (!email || !isValidEmail(email)) {
-    throw badRequest("a valid email is required");
+    throw fieldError("email", "a valid email is required");
   }
   const { subscriber, action } = await requestSubscription(c, email);
   const response: SubscribeResponse = { subscriber, action };
