@@ -156,11 +156,13 @@ describe("settings view", () => {
     $("#addrAddBtn").click();
     typeInto($<HTMLInputElement>("#setAddress"), "PO Box 1142");
     expect($("#addrWarn").hidden).toBe(false);
+    expect($("#setAddress").getAttribute("aria-describedby")).toBe("addrWarn");
     expect($("#addrWarn").textContent).toBe(
       "Your email template currently doesn’t include this field. If you send promotional email, add it to the template.",
     );
     typeInto($<HTMLInputElement>("#setAddress"), "");
     expect($("#addrWarn").hidden).toBe(true);
+    expect($("#setAddress").hasAttribute("aria-describedby")).toBe(false);
   });
 
   it("raises the save bar on an edit and drops it on discard, restoring the field", async () => {

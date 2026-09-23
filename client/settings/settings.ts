@@ -215,8 +215,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
               <p class="field-hint">A short line under the name on your public pages.</p>
             </div>
             <div class="set-field set-addr-add" id="addrAdd"${addressOpen ? HIDDEN : null}>
-              <button type="button" class="ghost" id="addrAddBtn">${icon("plus")}Add a mailing address</button>
-              <p class="field-hint">For promotional email, US law (CAN-SPAM) requires a postal address in the footer. A P.O. box works.</p>
+              <button type="button" class="ghost" id="addrAddBtn" aria-describedby="addrAddHint">${icon("plus")}Add a mailing address</button>
+              <p class="field-hint" id="addrAddHint">For promotional email, US law (CAN-SPAM) requires a postal address in the footer. A P.O. box works.</p>
             </div>
             <div class="set-field" id="addrField"${addressOpen ? null : HIDDEN}>
               <div class="set-field-head">
@@ -646,6 +646,13 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     addrAdd.hidden = addressOpen;
     addrField.hidden = !addressOpen;
     addrWarn.hidden = !(addressOpen && state.address && !templatePrintsAddress);
+    // Described by the warning only while it shows: a hidden element named by
+    // aria-describedby is still read out.
+    if (addrWarn.hidden) {
+      addressEl.removeAttribute("aria-describedby");
+    } else {
+      addressEl.setAttribute("aria-describedby", "addrWarn");
+    }
   };
   addressEl.addEventListener("input", applyAddressUi);
   $("#addrAddBtn").onclick = () => {

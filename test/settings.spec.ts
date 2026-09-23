@@ -221,6 +221,8 @@ describe("email template (wired to the render path)", () => {
     expect((await getSettings()).body.settings.publication.address).toBe(
       "123 Marsh Lane, Duluth, MN 55802",
     );
+    // Settings persist between tests in this file; don't leave an address set for them.
+    await env.DB.prepare("DELETE FROM settings").run();
   });
 
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
