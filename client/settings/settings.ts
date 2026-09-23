@@ -179,6 +179,12 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     return `${shown} ${reach}${wait}`;
   })();
 
+  // The mailing address is optional (SPEC §9): with none saved it is an "Add" row, not an
+  // empty field that reads as a missing required value. Opened (by the row, or because an
+  // address is saved) it is a field with Remove; it warns while the template leaves it out.
+  let addressOpen = Boolean(state.address);
+  const templatePrintsAddress = (inUse.identityFields || []).includes("address");
+
   // The logo tile's background image is set from the DOM (applyLogoUi), not written into
   // the markup: a URL has no place inside a style attribute the tag would escape as text.
   const identitySection = html`
@@ -209,10 +215,17 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
               <input id="setTagline" value="${state.tagline}" placeholder="A one-line description" maxlength="200" autocomplete="off">
               <p class="field-hint">A short line under the name on your public pages.</p>
             </div>
-            <div class="set-field">
-              <label for="setAddress">Mailing address</label>
-              <input id="setAddress" value="${state.address}" placeholder="123 Main St, City, ST 00000" maxlength="300" autocomplete="off">
-              <p class="field-hint">A physical postal address for the email footer. Bulk or commercial mail usually requires one.</p>
+            <div class="set-field set-addr-add" id="addrAdd"${addressOpen ? HIDDEN : null}>
+              <button type="button" class="ghost" id="addrAddBtn" aria-describedby="addrAddHint">${icon("plus")}Add a mailing address</button>
+              <p class="field-hint" id="addrAddHint">For promotional email, US law (CAN-SPAM) requires a postal address in the footer. A P.O. box works.</p>
+            </div>
+            <div class="set-field" id="addrField"${addressOpen ? null : HIDDEN}>
+              <div class="set-field-head">
+                <label for="setAddress">Mailing address</label>
+                <button type="button" class="danger-subtle set-field-remove" id="addrRemove">Remove</button>
+              </div>
+              <input id="setAddress" value="${state.address}" placeholder="PO Box 123, City, ST 00000" maxlength="300" autocomplete="off">
+              <p class="set-field-warn" id="addrWarn" hidden>Your email template currently doesn’t include this field. If you send promotional email, add it to the template.</p>
             </div>
           </div>
         </div>
@@ -626,6 +639,36 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   taglineEl.addEventListener("input", onIdentityInput);
   addressEl.addEventListener("input", onIdentityInput);
 
+  // --- the optional address: the Add row or the open field, and the field's warning.
+  const addrAdd = $("#addrAdd");
+  const addrField = $("#addrField");
+  const addrWarn = $("#addrWarn");
+  const applyAddressUi = () => {
+    addrAdd.hidden = addressOpen;
+    addrField.hidden = !addressOpen;
+    addrWarn.hidden = !(addressOpen && state.address && !templatePrintsAddress);
+    // Described by the warning only while it shows: a hidden element named by
+    // aria-describedby is still read out.
+    if (addrWarn.hidden) {
+      addressEl.removeAttribute("aria-describedby");
+    } else {
+      addressEl.setAttribute("aria-describedby", "addrWarn");
+    }
+  };
+  addressEl.addEventListener("input", applyAddressUi);
+  $("#addrAddBtn").onclick = () => {
+    addressOpen = true;
+    applyAddressUi();
+    addressEl.focus();
+  };
+  $("#addrRemove").onclick = () => {
+    addressEl.value = "";
+    addressOpen = false;
+    onIdentityInput();
+    applyAddressUi();
+    $("#addrAddBtn").focus();
+  };
+
   // --- test recipients: removable chips + an add row.
   const recipChips = $("#recipChips");
   const recipInput = $<HTMLInputElement>("#recipInput");
@@ -865,6 +908,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       nameEl.value = state.name;
       taglineEl.value = state.tagline;
       addressEl.value = state.address;
+      addressOpen = Boolean(state.address);
+      applyAddressUi();
       applyConfirmationFields();
       baseline = {
         name: state.name,
@@ -901,6 +946,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     nameEl.value = state.name;
     taglineEl.value = state.tagline;
     addressEl.value = state.address;
+    addressOpen = Boolean(state.address);
+    applyAddressUi();
     applyConfirmationFields();
     renderRecipChips();
     rebuildEmbed();
@@ -910,6 +957,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
 
   // --- initial paint.
   applyLogoUi();
+  applyAddressUi();
   renderRecipChips();
   setEmbed("plain");
   templatePreview.repaint();

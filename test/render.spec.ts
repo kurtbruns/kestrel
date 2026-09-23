@@ -3,6 +3,7 @@ import type { ImageRow } from "../src/db/images";
 import type { PostRow, RevisionRow } from "../src/db/posts";
 import type { Config } from "../src/env";
 import { render, SENTTO_SENTINEL, substituteRecipient, UNSUB_SENTINEL } from "../src/render/render";
+import { defaultBranding } from "../src/render/template_engine";
 
 const config: Config = {
   provider: "fake",
@@ -104,6 +105,19 @@ describe("render (the single render path)", async () => {
       config,
     );
     expect(result.warnings.join(" ")).toMatch(/not found/i);
+  });
+
+  it("prints the mailing address in the built-in template's footer only when one is set (SPEC §9)", async () => {
+    const input = { post: post(), revision: revision("body"), images: [] };
+    const addressLine = (html: string) =>
+      /<div class="address"[^>]*>([^<]*)<\/div>/.exec(html)?.[1];
+    const blank = await render(input, config);
+    expect(addressLine(blank.html)).toBe("");
+    const set = await render(input, config, {
+      ...defaultBranding(),
+      address: "PO Box 1142, Portland, OR 97207",
+    });
+    expect(addressLine(set.html)).toBe("PO Box 1142, Portland, OR 97207");
   });
 
   it("is deterministic (same input → same bytes)", async () => {

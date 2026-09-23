@@ -392,9 +392,14 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(inUse.retry_after).toBe(now.fire_at);
   });
 
-  it("the built-in template renders the logo, name, and tagline, not the address", async () => {
+  it("the built-in template renders the logo, name, tagline, and address", async () => {
     await env.DB.prepare("DELETE FROM settings").run();
-    expect((await getSettings()).inUse.identityFields).toEqual(["name", "tagline", "logoUrl"]);
+    expect((await getSettings()).inUse.identityFields).toEqual([
+      "name",
+      "tagline",
+      "logoUrl",
+      "address",
+    ]);
   });
 
   it("refuses a malformed acknowledgement (400) before anything else", async () => {

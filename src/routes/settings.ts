@@ -2,7 +2,7 @@
  * App settings surface (authed admin). Three parts:
  *
  *   GET    /api/settings      → { settings, deployment, inUse }
- *   PUT    /api/settings      → update editable settings (merge), returns { settings, remade }
+ *   PUT    /api/settings      → update editable settings (merge), returns { settings, warnings, remade }
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
  *   POST   /api/settings/notifications/test → a sample notification to the saved address
@@ -54,6 +54,7 @@ import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
 import {
   DEFAULT_EMAIL_TEMPLATE,
+  type IdentityField,
   identityFieldsInUse,
   resolveBranding,
   validateEmailTemplate,
@@ -123,6 +124,18 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
   };
 }
 
+/** The identity fields the template in effect renders: `inUse.identityFields`, and what
+ *  the mailing-address warning reads. */
+function renderedIdentityFields(settings: AppSettings, cfg: Config): IdentityField[] {
+  return identityFieldsInUse(resolveBranding(settings, cfg).template);
+}
+
+/** Said when a save leaves a mailing address set that the template doesn't print (SPEC
+ *  §9). Advice, never a refusal: whether a publication needs an address is the
+ *  publisher's call, and a template may carry one written in by hand. */
+const ADDRESS_NOT_PRINTED =
+  "You've added a mailing address in Settings, but this template doesn't include the {{ publication.address }} field. If you send promotional email, add it to the footer. If you've written your address into the template yourself, or don't need to provide one, you can ignore this or remove the address in Settings.";
+
 /** The scheduled sends a template or identity change would re-make (SPEC §9), the
  *  moment after which a save stops being refused for the lead, and the identity fields
  *  the current template renders: what a client reads before it saves. */
@@ -131,7 +144,7 @@ async function inUseView(db: D1Database, settings: AppSettings, cfg: Config): Pr
   return {
     sends,
     retry_after: insideLead(sends, Date.now()).retryAfter,
-    identityFields: identityFieldsInUse(resolveBranding(settings, cfg).template),
+    identityFields: renderedIdentityFields(settings, cfg),
   };
 }
 
@@ -224,6 +237,15 @@ export async function update(c: RequestContext): Promise<Response> {
     (current) => applyPatch(current, patch),
     ack,
   );
+  // A template or identity save that leaves an address the template doesn't print says
+  // so, whichever half of that pair the save changed.
+  if (
+    (patch.emailTemplate !== undefined || patch.publication !== undefined) &&
+    settings.publication.address.trim() &&
+    !renderedIdentityFields(settings, c.config).includes("address")
+  ) {
+    warnings = [...warnings, ADDRESS_NOT_PRINTED];
+  }
   const saved: SettingsSavedResponse = {
     settings: settingsView(settings, c.config),
     warnings,

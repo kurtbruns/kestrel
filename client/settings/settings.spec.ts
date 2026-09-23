@@ -113,6 +113,58 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("offers the mailing address as an Add row until one is added, with Remove to take it back", async () => {
+    await open();
+    expect($("#addrAdd").hidden).toBe(false);
+    expect($("#addrField").hidden).toBe(true);
+    expect($("#addrAdd .field-hint").textContent).toMatch(/CAN-SPAM.*A P\.O\. box works\./);
+    $("#addrAddBtn").click();
+    expect($("#addrAdd").hidden).toBe(true);
+    expect($("#addrField").hidden).toBe(false);
+    expect(document.activeElement).toBe($("#setAddress"));
+    expect($("#addrWarn").hidden).toBe(true); // opened but empty: nothing to warn about
+    typeInto($<HTMLInputElement>("#setAddress"), "PO Box 1142");
+    expect(bar().classList.contains("show")).toBe(true);
+    $("#addrRemove").click();
+    expect($<HTMLInputElement>("#setAddress").value).toBe("");
+    expect($("#addrAdd").hidden).toBe(false);
+    expect($("#addrField").hidden).toBe(true);
+    expect(bar().classList.contains("show")).toBe(false); // back to the saved baseline
+  });
+
+  it("shows a saved address as the open field, quiet while the template prints it", async () => {
+    const pub = { name: "Birds Weekly", tagline: "", address: "PO Box 1142", logoUrl: "" };
+    await open([
+      {
+        path: "/api/settings",
+        reply: () =>
+          response({
+            settings: settings({ publication: pub }),
+            inUse: { sends: [], retry_after: null, identityFields: ["name", "address"] },
+          }),
+      },
+    ]);
+    expect($("#addrAdd").hidden).toBe(true);
+    expect($("#addrField").hidden).toBe(false);
+    expect($<HTMLInputElement>("#setAddress").value).toBe("PO Box 1142");
+    expect($("#addrWarn").hidden).toBe(true);
+  });
+
+  it("warns on the address field while the template leaves the address out", async () => {
+    // The fixture's template renders the name and logo, not the address.
+    await open();
+    $("#addrAddBtn").click();
+    typeInto($<HTMLInputElement>("#setAddress"), "PO Box 1142");
+    expect($("#addrWarn").hidden).toBe(false);
+    expect($("#setAddress").getAttribute("aria-describedby")).toBe("addrWarn");
+    expect($("#addrWarn").textContent).toBe(
+      "Your email template currently doesn’t include this field. If you send promotional email, add it to the template.",
+    );
+    typeInto($<HTMLInputElement>("#setAddress"), "");
+    expect($("#addrWarn").hidden).toBe(true);
+    expect($("#setAddress").hasAttribute("aria-describedby")).toBe(false);
+  });
+
   it("raises the save bar on an edit and drops it on discard, restoring the field", async () => {
     await open();
     typeInto($<HTMLInputElement>("#setName"), "Birds Monthly");

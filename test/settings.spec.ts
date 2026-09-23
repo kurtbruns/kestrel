@@ -216,11 +216,53 @@ describe("email template (wired to the render path)", () => {
     expect(stored).not.toContain("Powered by Kestrel");
   });
 
-  it("persists the publication mailing address for the compliance footer", async () => {
+  it("persists the publication mailing address", async () => {
     await putSettings({ publication: { address: "123 Marsh Lane, Duluth, MN 55802" } });
     expect((await getSettings()).body.settings.publication.address).toBe(
       "123 Marsh Lane, Duluth, MN 55802",
     );
+    // Settings persist between tests in this file; don't leave an address set for them.
+    await env.DB.prepare("DELETE FROM settings").run();
+  });
+
+  describe("a mailing address the template doesn't print (SPEC §9)", () => {
+    const ADDRESS = "PO Box 1142, Portland, OR 97207";
+    const notPrinted =
+      /mailing address in Settings, but this template doesn't include the \{\{ publication\.address \}\} field/;
+    const warningsOf = async (res: Response) =>
+      ((await res.json()) as { warnings: string[] }).warnings;
+    const printsAddress = withUnsub(
+      '<a href="{{ email.viewInBrowserUrl }}">View</a><div>{{ publication.address }}</div>',
+    );
+    const dropsAddress = withUnsub('<a href="{{ email.viewInBrowserUrl }}">View</a>');
+
+    it("warns, and saves, a template that leaves out an address that is set", async () => {
+      await putSettings({ publication: { address: ADDRESS } });
+      const res = await putSettings({ emailTemplate: dropsAddress });
+      expect(res.status).toBe(200);
+      expect(await warningsOf(res)).toEqual([expect.stringMatching(notPrinted)]);
+      expect((await getSettings()).body.settings.emailTemplate).toBe(dropsAddress);
+    });
+
+    it("warns, and saves, an address the template in effect doesn't print", async () => {
+      await putSettings({ emailTemplate: dropsAddress });
+      const res = await putSettings({ publication: { address: ADDRESS } });
+      expect(res.status).toBe(200);
+      expect(await warningsOf(res)).toEqual([expect.stringMatching(notPrinted)]);
+      expect((await getSettings()).body.settings.publication.address).toBe(ADDRESS);
+    });
+
+    it("says nothing when the address is blank or the template prints it", async () => {
+      await env.DB.prepare("DELETE FROM settings").run();
+      expect(await warningsOf(await putSettings({ emailTemplate: dropsAddress }))).toEqual([]);
+      expect(await warningsOf(await putSettings({ publication: { name: "Marsh" } }))).toEqual([]);
+      // The built-in default prints it.
+      await env.DB.prepare("DELETE FROM settings").run();
+      expect(await warningsOf(await putSettings({ publication: { address: ADDRESS } }))).toEqual(
+        [],
+      );
+      expect(await warningsOf(await putSettings({ emailTemplate: printsAddress }))).toEqual([]);
+    });
   });
 });
 
