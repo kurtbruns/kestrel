@@ -32,8 +32,9 @@ There are three environments, each with its own database, storage, and — the l
 2. **Access** — the admin gate: one Access application over `/dashboard/*` (the editor SPA) **and** the authoring API, an Allow policy for you and a Service Auth policy for Claude.
 3. **Connect an email sender** — SES or Resend, and their bounce/complaint webhook.
 4. **Sending-domain DNS** — SPF/DKIM/DMARC on `send.example.com`.
-5. **Wire the archive to a website** — optional; the self-contained default needs nothing.
-6. **Verify it works** — a real test send, one-click unsubscribe, the bounce round-trip, DKIM alignment.
+5. **Notifications**: the email that tells you when a send goes out, and right away if a send runs into a problem, through Cloudflare's own email so it still arrives when your provider refuses the account.
+6. **Wire the archive to a website** — optional; the self-contained default needs nothing.
+7. **Verify it works** — a real test send, one-click unsubscribe, the bounce round-trip, DKIM alignment, a test notification.
 
 Work through them in that order: staging first, prove it end to end, then repeat the provider and DNS steps for production.
 

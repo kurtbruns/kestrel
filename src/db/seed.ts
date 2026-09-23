@@ -109,6 +109,7 @@ function chunk<T>(items: T[], size: number): T[][] {
 export async function resetAll(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM deliveries"),
+    db.prepare("DELETE FROM notifications"),
     db.prepare("DELETE FROM sends"),
     db.prepare("DELETE FROM images"),
     db.prepare("DELETE FROM post_revisions"),

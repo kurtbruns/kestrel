@@ -5,6 +5,7 @@
  *   PUT    /api/settings      → update editable settings (merge), returns { settings, remade }
  *   POST   /api/settings/logo → upload the publication logo (multipart `file`)
  *   DELETE /api/settings/logo → remove the publication logo
+ *   POST   /api/settings/notifications/test → a sample notification to the saved address
  *
  * `settings` are the mutable, in-app preferences (src/db/settings.ts) — including
  * the publication identity: name, tagline, address, and logo.
@@ -18,18 +19,23 @@
  * before saving. Every write goes through the re-make (send/remake.ts): a change
  * that reaches the email is refused until the client acknowledges those sends by id
  * (`remake`), and the response says what was re-made.
+ * `notificationStatus` is how the notifications to the publisher have gone lately (SPEC
+ * §8): the last delivered and any newer failure, so a channel that stopped working shows
+ * where its destination is set.
  */
 
 import type {
   DeploymentView,
   InUseView,
   LogoResponse,
+  NotificationTestResponse,
   PublicationView,
   SettingsResponse,
   SettingsSavedResponse,
   SettingsView,
 } from "../../shared/settings";
 import { buildInfo } from "../build";
+import { notificationStatus, recordNotificationTest } from "../db/notifications";
 import { listScheduledSends } from "../db/sends";
 import {
   type AppSettings,
@@ -43,7 +49,9 @@ import {
 } from "../db/settings";
 import type { Config } from "../env";
 import { type JsonObject, optObject, optString, optStringList, readJsonObject } from "../lib/body";
-import { badRequest, json } from "../lib/errors";
+import { badRequest, HttpError, json } from "../lib/errors";
+import { getNotifier } from "../notify/channel";
+import { sampleNotification } from "../notify/compose";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   identityFieldsInUse,
@@ -80,6 +88,10 @@ function deploymentView(cfg: Config): DeploymentView {
     // The running build (SPEC §9), so the editor can show/link it. Build metadata,
     // resolved at build (src/build.ts) — not deploy config, and never a secret.
     build: buildInfo(),
+    // How notifications reach the publisher, and their sender: deploy config, shown so
+    // the publisher knows which setup a failure points at. No credential rides either.
+    notifyChannel: cfg.notifyChannel,
+    notifyFrom: cfg.notifyFrom,
   };
 }
 
@@ -107,6 +119,7 @@ function settingsView(settings: AppSettings, cfg: Config): SettingsView {
     // plus the built-in default so "Reset to default" needs no hardcoded copy client-side.
     confirmationEmail: resolveConfirmationEmail(settings),
     confirmationEmailDefault: DEFAULT_CONFIRMATION_EMAIL,
+    notifications: settings.notifications,
   };
 }
 
@@ -128,7 +141,34 @@ export async function get(c: RequestContext): Promise<Response> {
     settings: settingsView(settings, c.config),
     deployment: deploymentView(c.config),
     inUse: await inUseView(c.env.DB, settings, c.config),
+    notificationStatus: await notificationStatus(c.env.DB),
   };
+  return json(body);
+}
+
+/**
+ * Send a sample notification to the saved address through the live channel, so the
+ * publisher proves the channel (a verified Cloudflare destination, say) before a send
+ * runs into a problem. It goes to the one saved address only, never one named in the
+ * request, so this cannot become a way to mail an arbitrary inbox. Its outcome is
+ * recorded as the latest test, so a test that gets through after a failure clears "Not
+ * delivered" on the status line. The channel's refusal is a 502 carrying its words.
+ */
+export async function notificationTest(c: RequestContext): Promise<Response> {
+  const { to } = (await getSettings(c.env.DB)).notifications;
+  if (!to) {
+    throw badRequest("set a notifications address first", { field: "notifications.to" });
+  }
+  const notifier = getNotifier(c.config, c.env);
+  try {
+    await notifier.send(to, sampleNotification(c.config), `test-${Date.now()}`);
+  } catch (err) {
+    const error = String((err as Error)?.message ?? err);
+    await recordNotificationTest(c.env.DB, error, Date.now());
+    throw new HttpError(502, "notify_failed", error);
+  }
+  await recordNotificationTest(c.env.DB, null, Date.now());
+  const body: NotificationTestResponse = { to, channel: notifier.channel };
   return json(body);
 }
 
@@ -284,6 +324,11 @@ function readPatch(o: JsonObject): SettingsPatch {
       }
     }
     patch.confirmationEmail = ce;
+  }
+  const nBody = optObject(o, "notifications");
+  if (nBody !== undefined) {
+    const to = optString(nBody, "to", "notifications");
+    patch.notifications = to === undefined ? {} : { to };
   }
   return patch;
 }

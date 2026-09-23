@@ -269,6 +269,14 @@ A send in flight has a **live watch**. It shows the two stages: **dispatch** (pr
 
 A send in flight too long, a send wedged on an ambiguous delivery (§12), a provider refusing the account (§12), a scheduled send that missed its fire time, a bounce spike. This is the only thing that ever needs the publisher's attention, so it's the only thing that surfaces loudly. The **bounce spike** is a real signal, not an approximation: it reads a recent send's confirmed bounce count over its audience at fire and fires when that rate reaches the provider's danger zone (about 5%, the rate at which a sender is put under review), so it stays quiet through the ordinary trickle of bad addresses and speaks up only when deliverability is genuinely at risk. It is read-only reporting: it warns, it never throttles or halts a reviewed send (an automatic circuit-breaker is deliberately deferred; see the appendix). One of these conditions carries an action rather than just an alarm: a send wedged on an ambiguous in-flight delivery (§12) shows its count *and* the control to resolve it, because a wedged send whose only remedy is raw SQL isn't really inspectable.
 
+### Does the publisher have to look?
+
+No. The publisher is told by email, at an address they set (§9), when a send goes out and when a send runs into a problem, so the status surface is where they go to act rather than somewhere they must keep watching. A finished send's notification carries the record's headline numbers (accepted by the provider, unsent, and skipped) and a link to the record. The problems told are the ones above that the app cannot settle on its own, or that mean the sweep has faltered: the provider refusing the account, told at once with the provider's words and what they point to; a send in flight too long; a send wedged awaiting Resolve; and a missed fire time. The bounce spike is shown and not yet told (appendix).
+
+Each event is told once. A condition that lasts across many ticks of the sweep is one notification, not one a tick, and it is not repeated while it lasts: the status surface keeps it loud, and the fix, which lies outside the app, does not come sooner for a reminder. A refusal that lifts and later returns is a new event and is told again. Only what happens while an address is set is told: with none, nothing is sent and nothing is saved up, so setting one never delivers a backlog, and an instance never reports its history, only what finished or fired late within about a day.
+
+A notification is downstream of the send, never part of it. It reads the record and changes nothing: it never mails a subscriber, never alters a send's audience or record, and one that cannot be delivered never delays or changes a send (I1 to I6). It is tried again on the next few ticks and then recorded as failed, and the failure is shown where the address is set and logged, so a channel that has stopped working is itself visible, until a later notification or a test gets through. A problem that clears before its notification gets through is not told at all, since a notification describes the send as it stands. Telling once has one gap the app cannot close: if the instance stops between the channel accepting a notification and the app recording that it did, the notification is sent again rather than lost, since a duplicate costs the publisher less than a silence.
+
 ### Who's on the list?
 
 The subscriber list tells the story of the list as a whole rather than of a particular send: each address, its consent state, and whether it's suppressed, filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From it the publisher can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2).
@@ -277,7 +285,7 @@ The subscriber list tells the story of the list as a whole rather than of a part
 
 ## 9. Configuration
 
-A settings surface holds the app's own runtime preferences, the ones with no home in a post or a subscriber: the default recipients the test-send flow pre-fills, the **publication identity** (name, tagline, logo, and the mailing address the email's footer carries) that themes the public reader surface and the editor, the **email template**, and the **wording of the double opt-in confirmation email** (§7). All of it is read and written through the same authenticated API as everything else, so Claude and the editor configure the app the same way.
+A settings surface holds the app's own runtime preferences, the ones with no home in a post or a subscriber: the default recipients the test-send flow pre-fills, the **publication identity** (name, tagline, logo, and the mailing address the email's footer carries) that themes the public reader surface and the editor, the **email template**, the **wording of the double opt-in confirmation email** (§7), and the **address notifications go to** (§8), which holds no secret. All of it is read and written through the same authenticated API as everything else, so Claude and the editor configure the app the same way.
 
 ### Two identities
 
@@ -291,7 +299,7 @@ There is **one template**, used by every post. Saving it while posts are schedul
 
 ### Preferences, never secrets
 
-Configuration splits along one hard line: this surface holds **preferences and never secrets**. The provider choice, its credentials, the access configuration, and the origins are deploy-time infrastructure that lives in the environment and its secrets (documented in the setup guide, §11), never in the database and never readable or writable through the admin API, so a compromised admin session can change a preference but can never reach a credential. For orientation the surface *shows* the deploy-time configuration read-only, next to a link to the guide that explains how to change it.
+Configuration splits along one hard line: this surface holds **preferences and never secrets**. The provider choice, its credentials, the channel notifications travel and their sender (§12), the access configuration, and the origins are deploy-time infrastructure that lives in the environment and its secrets (documented in the setup guide, §11), never in the database and never readable or writable through the admin API, so a compromised admin session can change a preference but can never reach a credential. For orientation the surface *shows* the deploy-time configuration read-only, next to a link to the guide that explains how to change it.
 
 Every instance can also report its own **build**: the admin surface shows the version and commit it is running, and its API adds the build time, so a bug report or support question can name the exact build a live instance is on. It is build metadata, fixed when the instance was built: neither a secret, nor deploy configuration, nor a preference, and independent of the database's schema version. Like the rest of this surface it is shown, never set.
 
@@ -353,6 +361,8 @@ Three environments, each with its own database, its own storage, and, the load-b
 | Staging (deployed) | Separate | Provider sandbox or test domain: only addresses the developer owns | Behind access control |
 | Production (deployed) | Real | Real provider, real sending domain | Behind access control |
 
+Notifications to the publisher (§8) follow the same rule: in development they reach the same dead end, whatever else is configured.
+
 Staging exists because email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only appear once deployed, and a real test send to the developer's own address is the only way to prove them before a real send to subscribers.
 
 The platform these roles run on, and the concrete deploy-and-operate steps (provisioning, the access application, connecting a provider and its webhook, sending-domain DNS, wiring the archive to a website, the verify checklist), are the setup guide under `docs/setup/`, which the admin surface also serves. This spec holds the *why*; that guide holds the *how*.
@@ -379,7 +389,7 @@ A second condition the app cannot absorb is **the provider refusing the account 
 
 The one failure that is not about delivery at all and is raised loudly rather than absorbed is a scheduled send that misses its fire time: still not gone out past a short tolerance, minutes long, so an ordinary slow tick is never a miss. Since the sweep that would have fired it is the same one that detects the miss, a miss can only mean the sweep is not running or failed on that send, which is exactly why it must be loud. A send that should have happened and didn't is as bad as one that shouldn't have and did, precisely because nothing happened and no one was watching, so the sweep that fires due sends also catches missed ones. The schedule is durable, so a restart or redeploy can't lose it; the sweep simply re-reads and continues.
 
-"Loud" has one meaning: the condition is the first thing the status surface shows (§8 lists them: a send in flight too long, a wedged send, a provider refusing the account, a missed fire time, a bounce spike). Nothing is pushed to the publisher; loud is where they will look, not a channel that finds them.
+"Loud" has two parts. The condition is the first thing the status surface shows (§8 lists them: a send in flight too long, a wedged send, a provider refusing the account, a missed fire time, a bounce spike), and the publisher is told of it by email (§8), so a condition is found without anyone watching; the bounce spike is, for now, only shown. Telling goes through a channel independent of the newsletter's email provider when the deployment provides one, the hosting platform's own email, because the condition that most needs telling, the provider refusing the account, is exactly the one a message through that provider cannot carry. Without it, notifications go through the provider, and that one condition is shown but cannot be told; the setup guide says so, so the choice is the developer's with its cost in view. The channel is chosen at deploy time, and a notification is never retried through the other, so where one went is never a guess and no notice arrives twice by two routes. A missed fire time is told once the sweep runs again: the sweep that failed to fire a send is the one that notices, so a sweep that has stopped altogether cannot report itself, and watching that the platform's scheduler runs stays with the developer.
 
 ### Always be inspectable
 
@@ -411,6 +421,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Double opt-in**, accepted as a deliberate cost, over single opt-in (§7).
 - **Two subscriber tokens, one per job**, over one token doing both (§7).
 - **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§3, §10).
+- **The publisher is told of each event once**, over loud meaning only the status surface, and over a reminder repeated while a condition lasts (§8, §12).
 - **Preferences in the app, never secrets**, over one settings surface for both (§9).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11).
@@ -418,6 +429,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **An edge access layer with a service principal for Claude**, over auth code in the app (§11).
 - **A generated API reference**, over an endpoint table in this document (§11).
 - **A provider outage retries without a ceiling**, over giving up on the send after a count of attempts (§12).
+- **Notifications through the hosting platform's own email, with the newsletter's provider as the fallback when it is not set up**, over the provider alone, which cannot tell of its own refusal, and over falling back from one channel to the other at runtime (§12).
 - **The reported phase is derived, never stored**, over a second copy of the send's state (§12).
 
 ## Deferred
@@ -428,6 +440,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Publisher pause/resume and an automatic deliverability circuit-breaker.** Both are new automation over a reviewed send, which §12 rules out by default; the bounce-spike report (§8) is the seam a circuit-breaker would hook into.
 - **Claude authenticating as the publisher.** An agent-native login through the platform's managed OAuth, in place of the distinct service principal; it slots into the one identity contract (§11).
 - **Multiple templates.** A per-post template selection, so a redesign can leave scheduled emails on the look they were reviewed with while future posts take the new one. The single template is its degenerate case, and the re-make rule stays as it is, scoped per template (§9).
+- **Telling the publisher of a bounce spike.** It is shown on the status surface (§8) but not mailed: unlike the other conditions it is a reading over receipts that keep arriving for days, so when it begins, and whether it has ended, needs its own rule.
 - **Template history and restore.** Undo for template edits. Separable from the re-make question, which is about scheduled sends, not past templates (§9).
 
 ## Open

@@ -16,6 +16,8 @@ const config: Config = {
   devMode: false,
   simulateSends: false,
   subrequestBudget: 50,
+  notifyChannel: "fake",
+  notifyFrom: "News <news@send.example>",
 };
 
 function post(over: Partial<PostRow> = {}): PostRow {

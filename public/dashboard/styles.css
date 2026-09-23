@@ -4207,6 +4207,12 @@ button.api-copy.copied svg {
   color: var(--ok-fg);
   border-color: var(--ok-line);
 }
+/* A notification channel that has stopped delivering: the one red in the settings reflection. */
+.set-pill.danger {
+  background: var(--danger-bg);
+  color: var(--danger-fg);
+  border-color: var(--danger-line);
+}
 .set-pill svg {
   width: 12px;
   height: 12px;
