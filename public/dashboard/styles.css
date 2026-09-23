@@ -3134,11 +3134,13 @@ button.notice-dismiss svg {
 
 /* API reference: a rail of tiers and their resources beside the route list, rendered in
    the reference room (the rail lives in the room rail, the routes in the room main). The
-   rail is dense on purpose: it is an index to scan, so its rows sit close. */
+   rail is dense on purpose: it is an index to scan, so its rows sit close. The filter
+   closes the intro, above the first tier, and narrows the whole list. */
 .api-filter {
   position: relative;
   display: block;
-  margin: 0 0 12px;
+  max-width: 320px;
+  margin: 14px 0 0;
 }
 .api-filter input {
   font-size: 13px;
@@ -3259,10 +3261,10 @@ button.notice-dismiss svg {
    place to the full documentation. */
 .api-route-sum {
   display: grid;
-  grid-template-columns: 58px minmax(0, max-content) minmax(0, 1fr) 10px;
-  gap: 12px;
+  grid-template-columns: 62px minmax(0, max-content) minmax(0, 1fr) 20px;
+  gap: 14px;
   align-items: center;
-  padding: 7px 6px;
+  padding: 9px 6px;
   border-radius: 6px;
   list-style: none;
   cursor: pointer;
@@ -3288,6 +3290,7 @@ button.notice-dismiss svg {
   height: 6px;
   border-right: 1.6px solid var(--muted);
   border-bottom: 1.6px solid var(--muted);
+  justify-self: center;
   transform: rotate(-45deg);
   transition: transform 0.15s;
 }
@@ -3297,7 +3300,7 @@ button.notice-dismiss svg {
 /* The verb as a tinted label: its own --method-* color as text over a wash of itself. */
 .api-method {
   text-align: center;
-  font: 700 11px / 1.8 var(--mono);
+  font: 700 11.5px / 1.7 var(--mono);
   letter-spacing: 0.03em;
   border-radius: 5px;
   color: var(--m);
@@ -3327,7 +3330,7 @@ button.notice-dismiss svg {
   padding: 0 2px;
 }
 .api-route-detail {
-  padding: 0 6px 16px 76px;
+  padding: 2px 6px 18px 82px;
 }
 .api-summary {
   margin: 2px 0 0;
@@ -3472,9 +3475,11 @@ button.notice-dismiss svg {
     padding: 0 10px 0 12px;
     font-size: 13px;
   }
-  /* The API rail is the tier chips alone on a phone: the resources and the filter need the
-     column the rail no longer has. A route row stacks its summary under its path. */
-  .api-filter,
+  /* The API rail is the tier chips alone on a phone: its resources need the column the
+     rail no longer has. A route row stacks its summary under its path. */
+  .api-filter {
+    max-width: none;
+  }
   .api-nav a.api-nav-res {
     display: none;
   }
@@ -3485,7 +3490,7 @@ button.notice-dismiss svg {
     margin-top: 0;
   }
   .api-route-sum {
-    grid-template-columns: 58px minmax(0, 1fr) 10px;
+    grid-template-columns: 62px minmax(0, 1fr) 20px;
     gap: 4px 10px;
   }
   .api-route-line {

@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter to the rail (press `/` to focus it).
+- The API reference groups each tier's routes by resource, shows each route as one line that opens to its details, and adds a filter above the routes (press `/` to focus it).
 
 ### Fixed
 

@@ -140,13 +140,12 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     root,
     roomShell(
       "reference",
-      html`<label class="api-filter"><input type="search" id="apiFilter" placeholder="Filter routes" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label><div class="toc-label">API</div><nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
+      html`<div class="toc-label">API</div><nav class="api-nav" id="apiNav" aria-label="API sections"></nav>`,
       html`<div class="api-content" id="apiContent"><p class="muted">Loading…</p></div>`,
     ),
   );
   const navEl = $("#apiNav");
   const contentEl = $("#apiContent");
-  const filterEl = $<HTMLInputElement>("#apiFilter");
   // Delegate clicks synchronously with one listener on the stable nav, so it survives
   // the async fill below: a rail click jumps to that tier or resource.
   navEl.addEventListener("click", (ev) => {
@@ -158,6 +157,23 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     ev.preventDefault();
     document.getElementById(`api-${sec}`)?.scrollIntoView({ block: "start" });
   });
+  let groups: ReferenceGroup[];
+  try {
+    ({ groups } = await api<ReferenceResponse>("/api/reference", { signal }));
+  } catch (e) {
+    renderError(contentEl, e instanceof Error ? e.message : String(e), () =>
+      mount(renderReference),
+    );
+    return;
+  }
+
+  setHtml(navEl, apiNavHtml(groups));
+  navEl.querySelector("a")?.classList.add("active");
+  setHtml(
+    contentEl,
+    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p><label class="api-filter"><input type="search" id="apiFilter" placeholder="Filter routes" autocomplete="off" aria-label="Filter routes" aria-keyshortcuts="/"><kbd aria-hidden="true">/</kbd></label></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
+  );
+  const filterEl = $<HTMLInputElement>("#apiFilter");
   filterEl.addEventListener("input", () => applyFilter(filterEl.value, navEl, contentEl));
   // "/" jumps to the filter from anywhere in the room (unless typing elsewhere); Escape
   // in the filter clears it. Bound to the view, so it ends when the room does.
@@ -177,26 +193,6 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     },
     { signal },
   );
-  let groups: ReferenceGroup[];
-  try {
-    ({ groups } = await api<ReferenceResponse>("/api/reference", { signal }));
-  } catch (e) {
-    renderError(contentEl, e instanceof Error ? e.message : String(e), () =>
-      mount(renderReference),
-    );
-    return;
-  }
-
-  setHtml(navEl, apiNavHtml(groups));
-  navEl.querySelector("a")?.classList.add("active");
-  setHtml(
-    contentEl,
-    html`<header class="api-head"><h1>API reference</h1><p class="muted">Generated from the route registration, so every endpoint the app and Claude can call is listed here. Base URL <code>${location.origin}</code>.</p></header>${groups.map(apiSectionHtml)}<p class="api-empty muted" id="apiEmpty" hidden>No routes match. Try a path segment like <code>sends</code> or a method like <code>DELETE</code>.</p>`,
-  );
-  // A filter typed before the list arrived applies to it.
-  if (filterEl.value) {
-    applyFilter(filterEl.value, navEl, contentEl);
-  }
 
   // Highlight the resource in view, or its tier when the rail lists the tier alone.
   // Query the live nav each time so it never holds a stale link reference.
