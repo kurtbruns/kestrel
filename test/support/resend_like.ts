@@ -17,7 +17,7 @@ import type {
 
 export class ResendLikeProvider implements EmailProvider {
   readonly name = "resend" as const;
-  readonly maxBatch = 100;
+  readonly maxBatch: number = 100;
   readonly idempotentRetry: boolean = true;
 
   /** Every message actually mailed. */

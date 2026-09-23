@@ -224,6 +224,39 @@ describe("a retryable answer to a handed-off batch", () => {
     const resolved = await resolveStuckSend(env, send.id, "accepted", "op@example.com");
     expect(resolved.completed).toBe(true);
   });
+
+  it("on a provider without idempotency, leaves in-flight batches untouched and keeps delivering", async () => {
+    // SES-shaped: one recipient per request, no idempotency, so a request with no answer
+    // leaves its recipient in flight for Resolve. That must neither stall the rest of
+    // the send nor refresh the row, which would hide it from the stale-delivery flag.
+    const emails = addresses(4);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const ses = new (class extends ResendLikeProvider {
+      override readonly maxBatch: number = 1;
+      override readonly idempotentRetry: boolean = false;
+    })();
+    vi.mocked(providers.getProvider).mockReturnValue(ses);
+
+    ses.loseAnswers = 1;
+    await sweep(env);
+    const wedged = await env.DB.prepare(
+      "SELECT id, updated_at FROM deliveries WHERE send_id = ? AND status = 'dispatched'",
+    )
+      .bind(send.id)
+      .first<{ id: string; updated_at: number }>();
+    expect(wedged).not.toBeNull();
+
+    await sweep(env);
+    await sweep(env);
+
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3, dispatched: 1 });
+    expect(emails.every((e) => ses.timesMailed(e) === 1)).toBe(true);
+    const after = await env.DB.prepare("SELECT updated_at FROM deliveries WHERE id = ?")
+      .bind(wedged!.id)
+      .first<{ updated_at: number }>();
+    expect(after!.updated_at).toBe(wedged!.updated_at);
+  });
 });
 
 describe("lease ownership", () => {

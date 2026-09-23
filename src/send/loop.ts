@@ -203,10 +203,12 @@ export async function runSend(
   // already, so consent is not re-checked for them (I2 covers recipients not yet handed
   // off), and re-sending a batch with someone removed would not be the same batch to the
   // provider. Only an idempotent provider dedupes a re-send; on any other (say the
-  // provider was switched mid-send) the batch goes back in flight, the ambiguous case
-  // that waits for Resolve (§12), rather than sitting in the queue where nothing sends
-  // or resolves it.
-  for (const key of await sends.unansweredDispatchKeys(db, sendId)) {
+  // provider was switched mid-send) a batch waiting in the queue under its key goes
+  // back in flight, the ambiguous case that waits for Resolve (§12), rather than
+  // sitting where nothing sends or resolves it. Batches already in flight there are left
+  // exactly as they are, so they neither eat this run's budget nor look freshly touched
+  // to the sweep's stale-delivery flag.
+  for (const key of await sends.unansweredDispatchKeys(db, sendId, !provider.idempotentRetry)) {
     if (!canStartBatch()) {
       break;
     }

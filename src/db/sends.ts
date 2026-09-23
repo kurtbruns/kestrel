@@ -804,14 +804,21 @@ export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<
 
 /**
  * The keys of a send's unanswered hand-offs, oldest first: batches handed off under a
- * key whose outcome was never recorded, because the request got no answer (the rows are
- * back in `pending`, key kept) or the run ended before recording it (still `dispatched`).
+ * key whose outcome was never recorded, because the request got no answer or a
+ * retryable one (the rows are back in `pending`, key kept) or the run ended before
+ * recording it (still `dispatched`). `queuedOnly` limits it to the first kind, which is
+ * all a provider without idempotency may act on: its `dispatched` rows are Resolve's.
  */
-export async function unansweredDispatchKeys(db: D1Database, sendId: string): Promise<string[]> {
+export async function unansweredDispatchKeys(
+  db: D1Database,
+  sendId: string,
+  queuedOnly = false,
+): Promise<string[]> {
   const { results } = await db
     .prepare(
       `SELECT dispatch_key AS k FROM deliveries
-        WHERE send_id = ? AND status IN ('pending', 'dispatched') AND dispatch_key IS NOT NULL
+        WHERE send_id = ? AND status IN (${queuedOnly ? "'pending'" : "'pending', 'dispatched'"})
+          AND dispatch_key IS NOT NULL
         GROUP BY dispatch_key ORDER BY MIN(rowid)`,
     )
     .bind(sendId)
