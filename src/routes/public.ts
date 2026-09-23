@@ -1,8 +1,8 @@
 /** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. */
 
+import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
-import { isValidEmail, normalizeEmail } from "../db/subscribers";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { htmlPage, readerPage } from "../lib/page";
