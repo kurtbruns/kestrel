@@ -40,7 +40,19 @@ export interface Secrets {
   SIMULATE_SENDS?: string;
 }
 
-export type AppEnv = Env & Secrets;
+/**
+ * Optional public vars: not secrets, but left out of `wrangler.jsonc` by default, so
+ * they are declared here rather than generated into `Env`.
+ */
+export interface OptionalVars {
+  /**
+   * Subrequests (D1 statements plus outbound requests) one invocation of the send path
+   * may make. Unset means the Workers Free plan's 50; raise it on Workers Paid.
+   */
+  SUBREQUEST_BUDGET?: string;
+}
+
+export type AppEnv = Env & Secrets & OptionalVars;
 
 export type ProviderName = "fake" | "ses" | "resend";
 
@@ -91,7 +103,21 @@ export interface Config {
    * never pace or fabricate events against a real inbox. Opt-in; the default is off.
    */
   simulateSends: boolean;
+  /**
+   * How many subrequests (D1 statements plus outbound requests) one invocation of the
+   * send path may make: the send loop stops starting batches before it would pass this,
+   * and the next sweep tick continues. Defaults to the Workers Free plan's 50, so a new
+   * deployment is correct on any plan; Workers Paid allows 1,000 D1 queries.
+   */
+  subrequestBudget: number;
 }
+
+/** The Workers Free plan's per-invocation subrequest limit, the default budget. */
+export const DEFAULT_SUBREQUEST_BUDGET = 50;
+/** The least a sweep tick needs to find a send and deliver one batch of it. A lower
+ *  `SUBREQUEST_BUDGET` would start nothing and stall every send silently, so it is
+ *  raised to this. */
+export const MIN_SUBREQUEST_BUDGET = 25;
 
 const orUndefined = (v: string | undefined): string | undefined =>
   v && v.length > 0 ? v : undefined;
@@ -140,6 +166,10 @@ export function getConfig(env: AppEnv): Config {
     // Only ever active in a dev-shaped env; a deployed env runs a real provider, so the
     // simulation can never engage there whatever the var says.
     simulateSends: devShaped && isTruthy(env.SIMULATE_SENDS),
+    subrequestBudget: Math.max(
+      MIN_SUBREQUEST_BUDGET,
+      parsePositiveInt(env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
+    ),
   };
 }
 
@@ -150,6 +180,12 @@ function isTruthy(v: string | undefined): boolean {
   }
   const s = v.trim().toLowerCase();
   return s === "1" || s === "true" || s === "yes" || s === "on";
+}
+
+/** A whole number above zero, or undefined for anything else (unset, blank, junk). */
+function parsePositiveInt(v: string | undefined): number | undefined {
+  const n = Number(v?.trim());
+  return v && Number.isInteger(n) && n > 0 ? n : undefined;
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {

@@ -560,13 +560,12 @@ export function remakeGuard(
   ackIds: string[],
 ): { sql: string; binds: unknown[] } {
   const version = settingsVersionIs(settingsVersion);
-  const unacked =
-    ackIds.length === 0
-      ? "NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled')"
-      : `NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND id NOT IN (${ackIds.map(() => "?").join(", ")}))`;
+  // The acknowledged ids travel as one JSON-array parameter, so the statement's bind
+  // count stays fixed however many sends are scheduled (D1 caps a statement at 100).
   return {
-    sql: `${version.sql} AND NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND fire_at < ?) AND ${unacked}`,
-    binds: [...version.binds, minFireAt, ...ackIds],
+    sql: `${version.sql} AND NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND fire_at < ?)
+      AND NOT EXISTS (SELECT 1 FROM sends WHERE status = 'scheduled' AND id NOT IN (SELECT value FROM json_each(?)))`,
+    binds: [...version.binds, minFireAt, JSON.stringify(ackIds)],
   };
 }
 
@@ -625,10 +624,12 @@ export async function stuckSends(db: D1Database, olderThan: number): Promise<Sen
 }
 
 /**
- * Acquire/renew the send lease and move scheduled → sending. CAS: succeeds only
- * if the send is unleased (or the lease expired) AND it is either already `sending`
- * (a resume) or a `scheduled` send whose fire time has arrived. Returns true iff this
- * caller now owns the send.
+ * Acquire the send lease and move scheduled → sending. CAS: succeeds only if the send
+ * is unleased (or the lease expired) AND it is either already `sending` (a resume) or a
+ * `scheduled` send whose fire time has arrived. Returns the lease token naming this run,
+ * or null when the caller does not own the send. Every later lease write and hand-off by
+ * the run passes the token back, so a run whose lease expired under it (a stall past the
+ * TTL) can no longer touch the send once a successor has taken it.
  *
  * The `fire_at <= now` guard on the scheduled branch is what closes the
  * reschedule-vs-sweep race: the sweep snapshots due sends (`dueSends`) and then leases
@@ -643,48 +644,83 @@ export async function acquireLease(
   sendId: string,
   now: number,
   leaseTtlMs: number,
-): Promise<boolean> {
+): Promise<string | null> {
+  const token = crypto.randomUUID();
   const res = await db
     .prepare(
       `UPDATE sends
          SET status = CASE WHEN status = 'scheduled' THEN 'sending' ELSE status END,
              started_at = COALESCE(started_at, ?),
-             locked_until = ?
+             locked_until = ?,
+             lease_token = ?
        WHERE id = ?
          AND (status = 'sending' OR (status = 'scheduled' AND fire_at <= ?))
          AND (locked_until IS NULL OR locked_until < ?)`,
     )
-    .bind(now, now + leaseTtlMs, sendId, now, now)
+    .bind(now, now + leaseTtlMs, token, sendId, now, now)
+    .run();
+  return (res.meta.changes ?? 0) > 0 ? token : null;
+}
+
+/** The predicate confining a write to the run that holds the send's lease. */
+function holdsLease(sendId: string, lease: string): { sql: string; binds: unknown[] } {
+  return {
+    sql: "EXISTS (SELECT 1 FROM sends WHERE id = ? AND lease_token = ?)",
+    binds: [sendId, lease],
+  };
+}
+
+/** Extend this run's lease. False once another run holds it, which then owns the send. */
+export async function renewLease(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  until: number,
+): Promise<boolean> {
+  const res = await db
+    .prepare("UPDATE sends SET locked_until = ? WHERE id = ? AND lease_token = ?")
+    .bind(until, sendId, lease)
     .run();
   return (res.meta.changes ?? 0) > 0;
 }
 
-export async function renewLease(db: D1Database, sendId: string, until: number): Promise<void> {
-  await db.prepare("UPDATE sends SET locked_until = ? WHERE id = ?").bind(until, sendId).run();
+/** Release this run's lease so the next tick may resume the send; a no-op once another
+ *  run holds it. */
+export async function releaseLease(db: D1Database, sendId: string, lease: string): Promise<void> {
+  await db
+    .prepare(
+      "UPDATE sends SET locked_until = NULL, lease_token = NULL WHERE id = ? AND lease_token = ?",
+    )
+    .bind(sendId, lease)
+    .run();
 }
 
-export async function releaseLease(db: D1Database, sendId: string): Promise<void> {
-  await db.prepare("UPDATE sends SET locked_until = NULL WHERE id = ?").bind(sendId).run();
-}
-
-/** Mark a send complete and its post sent (atomic). */
+/**
+ * Mark a send complete and its post sent (atomic). `lease` is the send loop's token, so
+ * a run that lost its lease cannot complete the send under its successor; the operator's
+ * Resolve holds no lease and passes null.
+ */
 export async function completeSend(
   db: D1Database,
   sendId: string,
   postId: string,
   now: number,
+  lease: string | null,
 ): Promise<void> {
   await db.batch([
     db
       .prepare(
-        "UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL WHERE id = ? AND status = 'sending'",
+        `UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL, lease_token = NULL
+          WHERE id = ? AND status = 'sending' AND (? IS NULL OR lease_token = ?)`,
       )
-      .bind(now, sendId),
+      .bind(now, sendId, lease, lease),
     db
       .prepare(
-        "UPDATE posts SET status = 'sent', updated_at = ? WHERE id = ? AND status = 'scheduled'",
+        `UPDATE posts SET status = 'sent', updated_at = ?
+          WHERE id = ? AND status = 'scheduled'
+            AND EXISTS (SELECT 1 FROM sends WHERE id = ? AND status = 'sent')`,
       )
-      .bind(now, postId),
+      .bind(now, postId, sendId),
     // Exactness pass: rebuild the counters from the aggregate as the record becomes
     // permanent, so its numbers equal `deliveries` regardless of any live-delta drift.
     // Delivery events keep arriving after this and update the counters on their own.
@@ -731,144 +767,272 @@ export interface DeliveryWork {
   suppressed: number; // 0/1
 }
 
-export async function pendingDeliveryIds(db: D1Database, sendId: string): Promise<string[]> {
+/** A delivery row joined to its subscriber's consent state: what the loop reads at hand-off. */
+const DELIVERY_WORK = `SELECT d.id AS id, d.email AS email, d.attempts AS attempts, s.unsub_token AS unsub_token,
+         s.status AS sub_status, (sup.email IS NOT NULL) AS suppressed
+    FROM deliveries d
+    LEFT JOIN subscribers s ON s.email = d.email
+    LEFT JOIN suppressions sup ON sup.email = d.email`;
+
+/** Up to `limit` of a send's fresh `pending` rows (never handed off), oldest first. */
+export async function pendingDeliveryIds(
+  db: D1Database,
+  sendId: string,
+  limit: number,
+): Promise<string[]> {
   const { results } = await db
     .prepare(
-      "SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' ORDER BY rowid ASC",
+      "SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' AND dispatch_key IS NULL ORDER BY rowid ASC LIMIT ?",
     )
-    .bind(sendId)
+    .bind(sendId, limit)
     .all<{ id: string }>();
   return results.map((r) => r.id);
 }
 
+/** The hand-off state of the given rows. The ids travel as one JSON-array parameter,
+ *  so a chunk of any size stays under D1's 100-parameter cap. */
 export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<DeliveryWork[]> {
   if (ids.length === 0) {
     return [];
   }
-  const placeholders = ids.map(() => "?").join(",");
   const { results } = await db
-    .prepare(
-      `SELECT d.id AS id, d.email AS email, d.attempts AS attempts, s.unsub_token AS unsub_token,
-              s.status AS sub_status, (sup.email IS NOT NULL) AS suppressed
-         FROM deliveries d
-         LEFT JOIN subscribers s ON s.email = d.email
-         LEFT JOIN suppressions sup ON sup.email = d.email
-        WHERE d.id IN (${placeholders})`,
-    )
-    .bind(...ids)
+    .prepare(`${DELIVERY_WORK} WHERE d.id IN (SELECT value FROM json_each(?))`)
+    .bind(JSON.stringify(ids))
     .all<DeliveryWork>();
   return results;
 }
 
-/** Move a chunk of `pending` rows to `dispatched` (the intent-before-network step). */
-export async function setDeliveriesDispatched(
+/**
+ * The keys of a send's unanswered hand-offs, oldest first: batches handed off under a
+ * key whose outcome was never recorded, because the request got no answer or a
+ * retryable one (the rows are back in `pending`, key kept) or the run ended before
+ * recording it (still `dispatched`). `queuedOnly` limits it to the first kind, which is
+ * all a provider without idempotency may act on: its `dispatched` rows are Resolve's.
+ */
+export async function unansweredDispatchKeys(
   db: D1Database,
   sendId: string,
-  ids: string[],
-  now: number,
-): Promise<void> {
-  if (ids.length === 0) {
-    return;
-  }
-  const placeholders = ids.map(() => "?").join(",");
-  await db.batch([
-    db
-      .prepare(
-        `UPDATE deliveries SET status = 'dispatched', updated_at = ? WHERE id IN (${placeholders})`,
-      )
-      .bind(now, ...ids),
-    counterMove(db, sendId, "c_pending", "c_in_flight", ids.length),
-  ]);
+  queuedOnly = false,
+): Promise<string[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT dispatch_key AS k FROM deliveries
+        WHERE send_id = ? AND status IN (${queuedOnly ? "'pending'" : "'pending', 'dispatched'"})
+          AND dispatch_key IS NOT NULL
+        GROUP BY dispatch_key ORDER BY MIN(rowid)`,
+    )
+    .bind(sendId)
+    .all<{ k: string }>();
+  return results.map((r) => r.k);
 }
 
-export async function setDeliveryAccepted(
+/** The members of one unanswered hand-off, with their hand-off state. */
+export async function fetchDispatchGroup(
   db: D1Database,
   sendId: string,
-  id: string,
-  providerId: string,
+  key: string,
+): Promise<DeliveryWork[]> {
+  const { results } = await db
+    .prepare(
+      `${DELIVERY_WORK} WHERE d.send_id = ? AND d.dispatch_key = ? AND d.status IN ('pending', 'dispatched')`,
+    )
+    .bind(sendId, key)
+    .all<DeliveryWork>();
+  return results;
+}
+
+/** A statement moving every row of one hand-off that is in `status` between two counter
+ *  buckets, lease-guarded like the row write it rides with. */
+function keyedCounterMove(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  key: string,
+  status: "pending" | "dispatched",
+  from: CounterCol,
+  to: CounterCol,
+): D1PreparedStatement {
+  const n =
+    "(SELECT COUNT(*) FROM deliveries WHERE send_id = ? AND dispatch_key = ? AND status = ?)";
+  return db
+    .prepare(
+      `UPDATE sends SET ${from} = ${from} - ${n}, ${to} = ${to} + ${n} WHERE id = ? AND lease_token = ?`,
+    )
+    .bind(sendId, key, status, sendId, key, status, sendId, lease);
+}
+
+/**
+ * Hand off fresh `pending` rows under a new dispatch key: the intent recorded before the
+ * request leaves. Only rows still `pending` and never handed off move, and only while
+ * `lease` holds the send; returns the ids that moved, which are the only ones to send.
+ */
+export async function dispatchFresh(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  key: string,
+  ids: string[],
   now: number,
-): Promise<void> {
-  await db.batch([
+): Promise<string[]> {
+  if (ids.length === 0) {
+    return [];
+  }
+  const guard = holdsLease(sendId, lease);
+  const [moved] = await db.batch<{ id: string }>([
     db
       .prepare(
-        "UPDATE deliveries SET status = 'accepted', provider_id = ?, error = NULL, updated_at = ? WHERE id = ?",
+        `UPDATE deliveries SET status = 'dispatched', dispatch_key = ?, updated_at = ?
+          WHERE id IN (SELECT value FROM json_each(?)) AND send_id = ?
+            AND status = 'pending' AND dispatch_key IS NULL AND ${guard.sql}
+          RETURNING id`,
       )
-      .bind(providerId, now, id),
-    counterMove(db, sendId, "c_in_flight", "c_accepted", 1),
+      .bind(key, now, JSON.stringify(ids), sendId, ...guard.binds),
+    // After the move, so it counts exactly the rows that took the (new) key.
+    keyedCounterMove(db, sendId, lease, key, "dispatched", "c_pending", "c_in_flight"),
+  ]);
+  return (moved?.results ?? []).map((r) => r.id);
+}
+
+/**
+ * Hand off an unanswered batch again, under its own key: rows an unanswered request sent
+ * back to `pending` move to `dispatched` (rows a crash left `dispatched` already are).
+ * Lease-guarded; returns the ids now in flight under the key.
+ */
+export async function redispatch(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  key: string,
+  now: number,
+): Promise<string[]> {
+  const guard = holdsLease(sendId, lease);
+  const [, moved] = await db.batch<{ id: string }>([
+    // Before the move, so it counts the rows about to leave `pending`.
+    keyedCounterMove(db, sendId, lease, key, "pending", "c_pending", "c_in_flight"),
+    db
+      .prepare(
+        `UPDATE deliveries SET status = 'dispatched', updated_at = ?
+          WHERE send_id = ? AND dispatch_key = ? AND status IN ('pending', 'dispatched') AND ${guard.sql}
+          RETURNING id`,
+      )
+      .bind(now, sendId, key, ...guard.binds),
+  ]);
+  return (moved?.results ?? []).map((r) => r.id);
+}
+
+/**
+ * A request that got no answer: its rows go back to `pending` still carrying their key,
+ * one attempt spent, so the next run re-sends that exact batch under that key instead of
+ * folding the rows into a new one the provider could not recognize (I4).
+ */
+export async function returnUnanswered(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  key: string,
+  error: string,
+  now: number,
+): Promise<void> {
+  const guard = holdsLease(sendId, lease);
+  await db.batch([
+    keyedCounterMove(db, sendId, lease, key, "dispatched", "c_in_flight", "c_pending"),
+    db
+      .prepare(
+        `UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ?
+          WHERE send_id = ? AND dispatch_key = ? AND status = 'dispatched' AND ${guard.sql}`,
+      )
+      .bind(error, now, sendId, key, ...guard.binds),
   ]);
 }
 
 /**
- * Mark a recipient unsent. `from` names the bucket it is leaving — `pending` for a
- * recipient unsent before dispatch (max-attempts / suppressed at claim), `dispatched`
- * for a non-retryable rejection after the network call — so the counter move is exact.
+ * One recipient's recorded outcome. `pending` is a retryable rejection: back in the queue
+ * for the next tick, one attempt spent. `keepKey` keeps its dispatch key, so the batch is
+ * re-sent under that key rather than folded into a new one: on an idempotent provider a
+ * retryable answer (a 429, a 5xx) does not prove the batch was not accepted, and only the
+ * same key lets the provider dedupe it.
  */
-export async function setDeliveryUnsent(
+export type DeliveryOutcome =
+  | { id: string; status: "accepted"; providerId: string }
+  | { id: string; status: "unsent"; error: string }
+  | { id: string; status: "skipped" }
+  | { id: string; status: "pending"; error: string; keepKey: boolean };
+
+const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
+  accepted: "c_accepted",
+  unsent: "c_unsent",
+  skipped: "c_skipped",
+  pending: "c_pending",
+};
+
+/**
+ * Record a chunk's outcomes in one statement and its counter move, not a D1 call per
+ * recipient. `from` is the status the rows leave: `pending` for a recipient closed before
+ * hand-off (unsubscribed, suppressed, or out of attempts), `dispatched` for the
+ * provider's answer. Every outcome but a `keepKey` retry clears the dispatch key, since
+ * the hand-off is answered. Lease-guarded: a run that lost its lease records nothing, and the successor
+ * re-sends the batch under the same key and records the provider's answer itself.
+ */
+export async function settleDeliveries(
   db: D1Database,
   sendId: string,
-  id: string,
-  error: string,
-  now: number,
+  lease: string,
   from: "pending" | "dispatched",
-): Promise<void> {
-  await db.batch([
-    db
-      .prepare("UPDATE deliveries SET status = 'unsent', error = ?, updated_at = ? WHERE id = ?")
-      .bind(error, now, id),
-    counterMove(db, sendId, from === "pending" ? "c_pending" : "c_in_flight", "c_unsent", 1),
-  ]);
-}
-
-/** Skip a `pending` recipient excluded at claim time (unsubscribed / suppressed, I2). */
-export async function setDeliverySkipped(
-  db: D1Database,
-  sendId: string,
-  id: string,
+  outcomes: DeliveryOutcome[],
   now: number,
 ): Promise<void> {
-  await db.batch([
-    db
-      .prepare("UPDATE deliveries SET status = 'skipped', updated_at = ? WHERE id = ?")
-      .bind(now, id),
-    counterMove(db, sendId, "c_pending", "c_skipped", 1),
-  ]);
-}
-
-/** Requeue a `dispatched` recipient to `pending` for the next tick (retryable outcome). */
-export async function requeueDelivery(
-  db: D1Database,
-  sendId: string,
-  id: string,
-  error: string,
-  now: number,
-): Promise<void> {
+  if (outcomes.length === 0) {
+    return;
+  }
+  const rows = outcomes.map((o) => ({
+    id: o.id,
+    s: o.status,
+    p: o.status === "accepted" ? o.providerId : null,
+    e: o.status === "unsent" || o.status === "pending" ? o.error : null,
+    k: o.status === "pending" && o.keepKey ? 1 : 0,
+  }));
+  const deltas = new Map<CounterCol, number>();
+  const bump = (col: CounterCol, n: number) => deltas.set(col, (deltas.get(col) ?? 0) + n);
+  bump(from === "pending" ? "c_pending" : "c_in_flight", -outcomes.length);
+  for (const o of outcomes) {
+    bump(OUTCOME_BUCKET[o.status], 1);
+  }
+  const cols = [...deltas.keys()];
+  const guard = holdsLease(sendId, lease);
   await db.batch([
     db
       .prepare(
-        "UPDATE deliveries SET status = 'pending', attempts = attempts + 1, error = ?, updated_at = ? WHERE id = ?",
+        `UPDATE deliveries SET
+           status = json_extract(j.value, '$.s'),
+           provider_id = COALESCE(json_extract(j.value, '$.p'), provider_id),
+           error = json_extract(j.value, '$.e'),
+           attempts = attempts + (json_extract(j.value, '$.s') = 'pending'),
+           dispatch_key = CASE WHEN json_extract(j.value, '$.k') = 1 THEN dispatch_key END,
+           updated_at = ?
+         FROM json_each(?) AS j
+         WHERE deliveries.id = json_extract(j.value, '$.id')
+           AND deliveries.send_id = ? AND deliveries.status = ? AND ${guard.sql}`,
       )
-      .bind(error, now, id),
-    counterMove(db, sendId, "c_in_flight", "c_pending", 1),
+      .bind(now, JSON.stringify(rows), sendId, from, ...guard.binds),
+    // The column names come from the fixed `CounterCol` union, never user input.
+    db
+      .prepare(
+        `UPDATE sends SET ${cols.map((c) => `${c} = ${c} + ?`).join(", ")} WHERE id = ? AND lease_token = ?`,
+      )
+      .bind(...cols.map((c) => deltas.get(c) ?? 0), sendId, lease),
   ]);
 }
 
-/** Reset a prior invocation's in-flight rows back to pending (idempotent providers only). */
-export async function resetDispatchedToPending(
-  db: D1Database,
-  sendId: string,
-  now: number,
-): Promise<number> {
-  const res = await db
+/** How many of a send's recipients are still open (`pending` or `dispatched`): the
+ *  completion gate, zero when every recipient is accepted or terminal. */
+export async function openDeliveryCount(db: D1Database, sendId: string): Promise<number> {
+  const row = await db
     .prepare(
-      "UPDATE deliveries SET status = 'pending', updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
+      "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND status IN ('pending', 'dispatched')",
     )
-    .bind(now, sendId)
-    .run();
-  const n = res.meta.changes ?? 0;
-  if (n > 0) {
-    await counterMove(db, sendId, "c_in_flight", "c_pending", n).run();
-  }
-  return n;
+    .bind(sendId)
+    .first<{ n: number }>();
+  return row?.n ?? 0;
 }
 
 /**
@@ -888,7 +1052,7 @@ export async function resolveDispatched(
 ): Promise<number> {
   const res = await db
     .prepare(
-      "UPDATE deliveries SET status = ?, error = ?, updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
+      "UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
     )
     .bind(outcome, note, now, sendId)
     .run();

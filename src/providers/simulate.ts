@@ -260,8 +260,9 @@ export class SimProvider implements EmailProvider {
 
     // Wall-clock budget, scoped to one invocation: a gap since the last batch means a new
     // sweep tick, so start a fresh window; otherwise, once this run has spent
-    // PACE_BUDGET_MS handing off, throw so the loop requeues this chunk and releases the
-    // lease — the send resumes on the next tick (phase `backing-off`), exercising resume.
+    // PACE_BUDGET_MS handing off, throw so the loop returns this chunk unanswered and
+    // releases the lease — the send re-sends it on the next tick (phase `backing-off`),
+    // exercising resume.
     const now = Date.now();
     const st = paceState.get(sendId);
     if (st == null || now - st.lastCallAt > NEW_RUN_GAP_MS) {

@@ -4,9 +4,10 @@
  *
  *   sendBatch    — POST /emails/batch, one object per recipient with the
  *                  unsubscribe sentinel substituted and RFC 8058 one-click
- *                  List-Unsubscribe headers. An Idempotency-Key derived from the
- *                  send id + the chunk's recipients lets a re-sent stuck chunk be
- *                  deduped by Resend instead of double-mailing (idempotentRetry).
+ *                  List-Unsubscribe headers. The Idempotency-Key is the send
+ *                  loop's dispatch key, saved with the batch and re-sent with it
+ *                  unchanged, so Resend dedupes a re-sent batch instead of
+ *                  double-mailing (idempotentRetry).
  *   parseWebhook — verify the Svix signature over the raw body, then normalize
  *                  Resend events (delivered / bounced / complained) into the
  *                  provider-agnostic DeliveryEvent[] the record applies.
@@ -85,9 +86,12 @@ export class ResendProvider implements EmailProvider {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
-        // Stable across retries of the same chunk, distinct across chunks, so a
-        // replayed stuck chunk is deduped while a genuinely new chunk is not.
-        "Idempotency-Key": await chunkIdempotencyKey(opts.idempotencyKeyPrefix, recipients),
+        // The send loop's dispatch key: the same on every re-send of this batch and
+        // never reused for another, so a replayed batch is deduped however the rest of
+        // the send has changed since. A one-off caller without one gets a key derived
+        // from the batch itself.
+        "Idempotency-Key":
+          opts.idempotencyKey ?? (await chunkIdempotencyKey(opts.idempotencyKeyPrefix, recipients)),
       },
       // The batch endpoint takes the JSON array of email objects as the body.
       body: JSON.stringify(elements),
@@ -156,7 +160,9 @@ async function safeText(res: Response): Promise<string> {
   }
 }
 
-/** `<sendId>-<sha256(sorted recipient emails)>` — deterministic per chunk. */
+/** `<prefix>-<sha256(sorted recipient emails)>`, for a one-off batch that brings no key
+ *  of its own. Never the send loop's: a hash of the batch's composition changes when the
+ *  batch is re-made differently, which is exactly the retry it would have to dedupe. */
 async function chunkIdempotencyKey(prefix: string, recipients: Recipient[]): Promise<string> {
   const emails = recipients
     .map((r) => r.email)

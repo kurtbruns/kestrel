@@ -6,6 +6,10 @@
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
  * timeliness problem, not a correctness one — but it is never silent (§12).
+ *
+ * One tick is one invocation, so it shares one subrequest budget (`budget.ts`) across
+ * its own queries and every send it runs; a send the budget can't reach this tick is
+ * picked up on the next.
  */
 
 import * as sends from "../db/sends";
@@ -13,7 +17,12 @@ import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { drainSimulatedWebhooks } from "../providers/simulate";
-import { runSend } from "./loop";
+import { Budget, metered } from "./budget";
+import { MIN_RUN_COST, runSend } from "./loop";
+
+/** The two anomaly queries at the end of a tick, held back from the budget up front so
+ *  they run whatever the sends spent. */
+const ANOMALY_CHECKS = 2;
 
 export async function sweep(env: AppEnv): Promise<void> {
   const now = Date.now();
@@ -22,27 +31,31 @@ export async function sweep(env: AppEnv): Promise<void> {
   // lease, so without this a just-failed send would be retried again in the same
   // sweep; instead it waits for the next tick (the backoff).
   const handled = new Set<string>();
+  const budget = new Budget(config.subrequestBudget - ANOMALY_CHECKS);
+  const db = metered(env.DB, budget);
 
   // 1) Due scheduled sends.
-  for (const s of await sends.dueSends(env.DB, now)) {
+  for (const s of await sends.dueSends(db, now)) {
     const lag = now - s.fire_at;
     if (lag > MISSED_THRESHOLD_MS) {
       console.error("MISSED_FIRE", { sendId: s.id, postId: s.post_id, lagMs: lag });
     }
     handled.add(s.id);
-    await safeRun(env, s.id);
+    await safeRun(env, s.id, budget);
   }
 
-  // 2) Resume interrupted sends whose lease has expired.
-  for (const s of await sends.resumableSends(env.DB, now)) {
+  // 2) Resume interrupted sends whose lease has expired, if the budget still has room
+  // for one run after the query that finds them.
+  const resumable = budget.affords(1 + MIN_RUN_COST) ? await sends.resumableSends(db, now) : [];
+  for (const s of resumable) {
     if (handled.has(s.id)) {
       continue;
     }
     handled.add(s.id);
-    await safeRun(env, s.id);
+    await safeRun(env, s.id, budget);
   }
 
-  // 3) Loud anomaly flags.
+  // 3) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
   for (const s of await sends.stuckSends(env.DB, now - STUCK_THRESHOLD_MS)) {
     console.error("STUCK_SEND", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
   }
@@ -57,9 +70,9 @@ export async function sweep(env: AppEnv): Promise<void> {
   await drainSimulatedWebhooks(env, config);
 }
 
-async function safeRun(env: AppEnv, sendId: string): Promise<void> {
+async function safeRun(env: AppEnv, sendId: string, budget: Budget): Promise<void> {
   try {
-    await runSend(env, sendId);
+    await runSend(env, sendId, budget);
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
     console.error("SEND_ERROR", { sendId, error: String((err as Error)?.message ?? err) });

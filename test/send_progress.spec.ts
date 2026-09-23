@@ -105,11 +105,11 @@ describe("send counters (sends.c_*)", () => {
     await seedConfirmed("y@example.com");
     const send = await scheduledSend(Date.now() - 1000);
 
-    failFakeSendBatch(1); // first send call throws → whole batch requeued
+    failFakeSendBatch(1); // first send call throws → the unanswered batch is returned
     await runSend(env, send.id);
     let row = await expectCountersMatchAggregate(send.id);
     expect(row.status).toBe("sending");
-    expect(row.c_pending).toBe(2); // requeued back to pending
+    expect(row.c_pending).toBe(2); // back in pending, under its key, for the re-send
     expect(row.c_in_flight).toBe(0);
 
     await runSend(env, send.id); // resume

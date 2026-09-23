@@ -15,6 +15,7 @@ const config: Config = {
   awsRegion: "us-east-1",
   devMode: false,
   simulateSends: false,
+  subrequestBudget: 50,
 };
 
 function post(over: Partial<PostRow> = {}): PostRow {
