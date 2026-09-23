@@ -316,6 +316,19 @@ describe("editor view", () => {
     expect(auto.checked).toBe(true);
   });
 
+  it("opens a new post with an empty subject under an Untitled placeholder, tracking the subject from the first keystroke", async () => {
+    // What the server makes of a new post: no subject, and its stand-in slug.
+    await open([{ path: "/posts/p1", reply: () => draft({ subject: "", slug: "post-3" }) }]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    const slug = $<HTMLInputElement>("#f-slug");
+    expect(subject.value).toBe("");
+    expect(subject.placeholder).toBe("Untitled");
+    expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(true);
+    typeInto(subject, "Welcome to The Compiler");
+    expect(subject.value).toBe("Welcome to The Compiler");
+    expect(slug.value).toBe("welcome-to-the-compiler");
+  });
+
   it("formats the selection from the toolbar and by shortcut, and marks the draft dirty", async () => {
     await open([{ path: "/posts/p1", reply: () => draft() }]);
     const ta = body();

@@ -22,6 +22,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- A new post now starts with an empty subject, with "Untitled" shown as a placeholder, instead of the text "Untitled", which the first typed subject was added onto (and which then seeded the slug).
 - A send through Resend to 100 or more subscribers now goes out; before, it never left `sending`. Until 1.0.0 the database baseline is edited in place, and this change touches it, so any database that ran the old baseline is rebuilt, not migrated: locally, stop `wrangler dev`, delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`; a deployed database is recreated and `npm run migrate:remote` run against it.
 - A large send now spans several sweep ticks, each staying inside Cloudflare's per-invocation limits, instead of being cut off partway through a batch; a Resend batch interrupted after it was accepted is re-sent under the same idempotency key, so no one is mailed twice. The default fits the Workers Free plan; on Workers Paid, set `SUBREQUEST_BUDGET` to 1000 for faster sends (see the setup guide's Provision step).
 - A provider outage (Resend or SES down, erroring, or rate-limiting) no longer uses up recipients' retries: the send stays open and retries until the provider is back, and mails everyone exactly once, instead of recording the whole audience unsent after about five minutes and closing as sent (SPEC §12).

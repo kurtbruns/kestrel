@@ -1,7 +1,7 @@
 /** Post + revision queries. Every save writes a full-text revision (spec §4). */
 
 import type { Post, PostListItem, PostStatus } from "../../shared/posts";
-import { slugify } from "../../shared/slug";
+import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
@@ -151,7 +151,7 @@ async function slugTaken(db: D1Database, slug: string, exceptId?: string): Promi
 
 /** Return `base`, or `base-2`, `base-3`, … until one is free. */
 export async function uniqueSlug(db: D1Database, base: string, exceptId?: string): Promise<string> {
-  const root = base || "post";
+  const root = base || EMPTY_SUBJECT_SLUG;
   let candidate = root;
   let n = 1;
   while (await slugTaken(db, candidate, exceptId)) {

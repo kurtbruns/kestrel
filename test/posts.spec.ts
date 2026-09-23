@@ -35,6 +35,14 @@ describe("posts + revisions", () => {
     expect(revs.revisions).toHaveLength(1);
   });
 
+  it("creates a new post with an empty subject under the stand-in slug", async () => {
+    const res = await createPost({});
+    expect(res.status).toBe(201);
+    const { post } = await readJson(res);
+    expect(post.subject).toBe("");
+    expect(post.slug).toMatch(/^post(-\d+)?$/);
+  });
+
   it("writes a new revision per save and advances current_revision", async () => {
     const created = await readJson(await createPost({ subject: "Versioned", markdown: "v1" }));
     const id = created.post.id;

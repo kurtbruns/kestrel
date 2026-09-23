@@ -282,7 +282,7 @@ describe("dashboard", () => {
     expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
     $(".setup [data-act='new-post']").click();
     await vi.advanceTimersByTimeAsync(10);
-    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe(`{"subject":"Untitled"}`);
+    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe("{}");
     expect(location.hash).toBe("#/edit/p9");
   });
 

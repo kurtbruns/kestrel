@@ -111,7 +111,7 @@ describe("drafts view", () => {
     await settle();
     $("#newPost").click();
     await settle();
-    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe(`{"subject":"Untitled"}`);
+    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe("{}"); // no stand-in subject
     expect(location.hash).toBe("#/edit/p9");
   });
 });

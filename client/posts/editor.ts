@@ -10,7 +10,7 @@ import type {
 } from "../../shared/posts";
 import type { ScheduleResponse } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
-import { slugify } from "../../shared/slug";
+import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { withNoProviderNote } from "../deployment";
@@ -143,7 +143,7 @@ export async function renderEditor(
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${post.subject}" aria-describedby="f-subject-error"${ro}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${post.subject}" placeholder="Untitled" aria-describedby="f-subject-error"${ro}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
@@ -257,12 +257,12 @@ export async function renderEditor(
     const derive = () => slugify(subjectEl.value);
 
     // Infer the starting mode: auto when the slug is empty, equals the derived
-    // slug, or is a deduped variant of it (base-2, base-3, …). A hand-written
-    // slug that has diverged starts as a custom (unchecked) slug.
-    const base = derive();
+    // slug, or is a deduped variant of it (base-2, base-3, …). An empty subject
+    // derives nothing, so the server's stand-in slug is the base then. A
+    // hand-written slug that has diverged starts as a custom (unchecked) slug.
+    const base = derive() || EMPTY_SUBJECT_SLUG;
     const v = slugEl.value.trim();
-    autoEl.checked =
-      v === "" || v === base || (base !== "" && new RegExp(`^${base}-\\d+$`).test(v));
+    autoEl.checked = v === "" || v === base || new RegExp(`^${base}-\\d+$`).test(v);
 
     // Muted while it tracks the subject; normal color once it's a hand-set slug.
     const reflect = () => slugEl.classList.toggle("slug-auto", autoEl.checked);
