@@ -1,7 +1,8 @@
 // A page on another site can't make the publisher's browser act on the admin API (SPEC §11):
-// an admin write marked cross-site by the browser is refused, and so is a body whose type
-// the route doesn't declare, which is all a plain HTML form can send. Reads, public routes,
-// and webhooks are untouched, and a client that isn't a browser (no Sec-Fetch-Site) is too.
+// an admin write marked cross-site by the browser is refused (by Sec-Fetch-Site, or by
+// Origin from a browser too old to send it), and so is a body whose type the route doesn't
+// declare, which is all a plain HTML form can send. Reads, public routes, and webhooks are
+// untouched, and so is a client that isn't a browser (neither header).
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
@@ -86,6 +87,35 @@ describe("Sec-Fetch-Site on an admin write", () => {
       const up = await post(`/posts/${id}/images`, { headers, body: fd });
       expect(up.status, String(site)).toBe(201);
     }
+  });
+
+  it("falls back to Origin when a browser sends no Sec-Fetch-Site", async () => {
+    const before = await subscriberCount();
+    // An older browser's no-cors POST from a sibling subdomain: no body, no type, but an Origin.
+    for (const origin of ["https://blog.kestrel.test", "https://evil.example", "null"]) {
+      const send = await post("/posts/p_missing/send", { headers: { origin } });
+      expect(send.status, origin).toBe(403);
+      expect((await readJson(send)).error).toBe("cross_site_request");
+      const added = await addSubscriber("origin@example.com", { origin });
+      expect(added.status, origin).toBe(403);
+    }
+    expect(await subscriberCount()).toBe(before);
+    // The request's own origin, and no Origin at all, pass.
+    expect((await addSubscriber("own-origin@example.com", { origin: base })).status).toBe(201);
+    expect((await addSubscriber("no-origin@example.com")).status).toBe(201);
+  });
+
+  it("lets Sec-Fetch-Site decide when a browser sends both", async () => {
+    const res = await addSubscriber("both@example.com", {
+      "sec-fetch-site": "same-origin",
+      origin: base,
+    });
+    expect(res.status).toBe(201);
+    const foreign = await addSubscriber("both-foreign@example.com", {
+      "sec-fetch-site": "same-site",
+      origin: base,
+    });
+    expect(foreign.status).toBe(403);
   });
 
   it("leaves reads alone: a cross-site GET is answered", async () => {
@@ -192,6 +222,7 @@ describe("public and webhook routes are outside these checks", () => {
       headers: {
         "content-type": "application/x-www-form-urlencoded",
         "sec-fetch-site": "cross-site",
+        origin: "https://example.com",
       },
       body: new URLSearchParams({ email: "embed@example.com" }).toString(),
     });
