@@ -21,6 +21,8 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   halt_cause: null,
   halt_error: null,
   halted_at: null,
+  halt_retries: 0,
+  halt_retry_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,

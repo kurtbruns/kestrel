@@ -60,7 +60,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
         [
           `The email provider is refusing this account, so ${title} is paused where it is. The provider said: ${n.halt_error || "no detail given"}`,
           refusalAdvice(n.halt_cause),
-          "No one has been marked unsent. The send tries again every minute and resumes on its own once the account is fixed, mailing no one twice.",
+          "No one has been marked unsent. The send keeps trying, at most an hour apart, and resumes on its own at the next try after the account is fixed, mailing no one twice.",
         ],
         link,
       );

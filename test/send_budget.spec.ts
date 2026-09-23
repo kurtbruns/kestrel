@@ -4,7 +4,7 @@ import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { DEFAULT_SUBREQUEST_BUDGET, getConfig, MIN_SUBREQUEST_BUDGET } from "../src/env";
-import { LEASE_TTL_MS } from "../src/lib/time";
+import { HALT_BACKOFF_MS, LEASE_TTL_MS } from "../src/lib/time";
 import { NOTIFY_RESERVE } from "../src/notify/notify";
 import * as providers from "../src/providers";
 import { Budget } from "../src/send/budget";
@@ -12,6 +12,7 @@ import { MIN_RUN_COST, runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
+import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -39,6 +40,12 @@ function guarded() {
   return { guard, env: { ...env, DB: guard.db } as AppEnv };
 }
 
+/** One sweep tick, on the next minute or the next halt retry, whichever is later. */
+async function tick(): Promise<void> {
+  await toNextTick(env.DB);
+  await sweep(env);
+}
+
 let resend: ResendLikeProvider;
 
 beforeEach(async () => {
@@ -52,11 +59,14 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM suppressions"),
     env.DB.prepare("DELETE FROM subscribers"),
   ]);
+  // Only Date is faked, so `tick` can move the clock past a halt's backoff.
+  vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -156,7 +166,7 @@ describe("a Resend batch interrupted after acceptance", () => {
       const send = await dueSend();
 
       interrupt();
-      await sweep(env);
+      await tick();
       expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
       expect(resend.mailed.length).toBe(100); // the first batch went out
 
@@ -180,7 +190,7 @@ describe("a Resend batch interrupted after acceptance", () => {
         .bind(Date.now() - 1, send.id)
         .run();
 
-      await sweep(env);
+      await tick();
 
       expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
       expect(emails.every((e) => resend.timesMailed(e) <= 1)).toBe(true);
@@ -198,10 +208,10 @@ describe("a retryable answer to a handed-off batch", () => {
     const send = await dueSend();
 
     resend.loseAnswers = 1; // accepted, answer lost
-    await sweep(env);
+    await tick();
     resend.rateLimit = 1; // the re-send is rate-limited
-    await sweep(env);
-    await sweep(env); // re-sent again under the same key: Resend returns its first answer
+    await tick();
+    await tick(); // re-sent again under the same key: Resend returns its first answer
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
@@ -212,14 +222,14 @@ describe("a retryable answer to a handed-off batch", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.loseAnswers = 1;
-    await sweep(env);
+    await tick();
 
     // The operator moves the deployment to a provider that can't dedupe a re-send.
     const plain = new (class extends ResendLikeProvider {
       override readonly idempotentRetry: boolean = false;
     })();
     vi.mocked(providers.getProvider).mockReturnValue(plain);
-    await sweep(env);
+    await tick();
 
     expect(plain.requests).toBe(0); // never re-sent blind
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 3 });
@@ -241,7 +251,7 @@ describe("a retryable answer to a handed-off batch", () => {
     vi.mocked(providers.getProvider).mockReturnValue(ses);
 
     ses.loseAnswers = 1;
-    await sweep(env);
+    await tick();
     const wedged = await env.DB.prepare(
       "SELECT id, updated_at FROM deliveries WHERE send_id = ? AND status = 'dispatched'",
     )
@@ -249,8 +259,8 @@ describe("a retryable answer to a handed-off batch", () => {
       .first<{ id: string; updated_at: number }>();
     expect(wedged).not.toBeNull();
 
-    await sweep(env);
-    await sweep(env);
+    await tick();
+    await tick();
 
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3, dispatched: 1 });
     expect(emails.every((e) => ses.timesMailed(e) === 1)).toBe(true);
@@ -324,6 +334,7 @@ describe("lease ownership", () => {
       "k1",
       true,
       { reason: "unavailable", cause: "outage", error: "stale" },
+      HALT_BACKOFF_MS.unavailable,
       now,
     );
     await sends.settleDeliveries(

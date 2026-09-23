@@ -14,7 +14,8 @@
  * A failure that is the provider's or the account's rather than a recipient's (the
  * adapter's halt, or a request with no answer) halts the run, not the recipients: the
  * batch goes back to `pending` with no attempt spent, the send records the halt and stays
- * open, and the next tick tries the same batch again, however long that takes (SPEC §12).
+ * open, and the sweep tries the same batch again once the halt's backoff (`HALT_BACKOFF_MS`)
+ * has passed, however long the halt lasts; an answered batch ends it (SPEC §12).
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
@@ -25,7 +26,7 @@ import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
-import { LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
+import { HALT_BACKOFF_MS, LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import type {
@@ -157,7 +158,16 @@ export async function runSend(
     firstAttempt: boolean,
   ): Promise<void> => {
     const keepKey = provider.idempotentRetry && (halt.mayHaveSent || !firstAttempt);
-    await sends.holdBatch(db, sendId, lease, key, keepKey, halt, Date.now());
+    await sends.holdBatch(
+      db,
+      sendId,
+      lease,
+      key,
+      keepKey,
+      halt,
+      HALT_BACKOFF_MS[halt.reason],
+      Date.now(),
+    );
     result.requeued += members;
     result.halt = halt.reason;
     if (halt.reason === "account") {

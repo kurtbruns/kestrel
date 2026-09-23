@@ -87,9 +87,8 @@ describe("settings view", () => {
     await open();
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
-    expect($(".set-note span").textContent).toMatch(
-      /Your name, and logo ride inside every email; the template doesn’t use your tagline, and mailing address\./,
-    );
+    // Nothing scheduled: the note says where the identity shows up, and no more.
+    expect($(".set-note span").textContent).toBe("Shown in every email.");
     expect($$(".set-inbox-from")[0]?.textContent).toBe("Birds");
     expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
@@ -291,7 +290,11 @@ describe("settings view", () => {
         },
       },
     ]);
-    expect($(".set-chip.inuse").textContent).toBe("In use by 1 scheduled post");
+    // The template section carries the in-use chip; the identity section says it in its note.
+    expect($$(".set-chip.inuse").map((c) => c.textContent)).toEqual(["In use by 1 scheduled post"]);
+    expect($(".set-note span").textContent).toMatch(
+      /Saving a change updates 1 scheduled email too; you’ll confirm first\.$/,
+    );
     typeInto($<HTMLInputElement>("#setName"), "Renamed");
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);

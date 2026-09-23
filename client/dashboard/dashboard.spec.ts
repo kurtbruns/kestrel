@@ -41,6 +41,8 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   halt_cause: null,
   halt_error: null,
   halted_at: null,
+  halt_retries: 0,
+  halt_retry_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,
@@ -280,7 +282,7 @@ describe("dashboard", () => {
     expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
     $(".setup [data-act='new-post']").click();
     await vi.advanceTimersByTimeAsync(10);
-    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe(`{"subject":"Untitled"}`);
+    expect(fake.calls.find((c) => c.method === "POST")?.body).toBe("{}");
     expect(location.hash).toBe("#/edit/p9");
   });
 

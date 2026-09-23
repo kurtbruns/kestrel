@@ -262,7 +262,8 @@ export class SimProvider implements EmailProvider {
     // Wall-clock budget, scoped to one invocation: a gap since the last batch means a new
     // sweep tick, so start a fresh window; otherwise, once this run has spent
     // PACE_BUDGET_MS handing off, answer as a rate-limited provider would, which halts the
-    // run and releases the lease: the send re-sends this chunk on the next tick (phase
+    // run and releases the lease: the send re-sends this chunk at the halt's first retry,
+    // the next tick, since the run's answered batches cleared any earlier halt (phase
     // `backing-off`), exercising resume.
     const now = Date.now();
     const st = paceState.get(sendId);

@@ -60,7 +60,8 @@ export async function resolveStuckSend(
   const resolved = await sends.resolveDispatched(env.DB, sendId, outcome, note, now);
 
   // Run the loop's completion gate: finish only when nothing is left in flight, so a
-  // send that still has pending rows just continues on the next sweep tick.
+  // send that still has pending rows just continues when the sweep next resumes it: the
+  // next tick, or a halted send's next retry.
   const pending = await sends.countDeliveries(env.DB, sendId, "pending");
   const stillDispatched = await sends.countDeliveries(env.DB, sendId, "dispatched");
   let completed = false;

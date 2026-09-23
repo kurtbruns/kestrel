@@ -5,6 +5,7 @@ import {
   fillDeliveryTokens,
   fillEmailTemplate,
   inlineEmailCss,
+  onceUntilRejected,
   type RenderContext,
   SENTTO_SENTINEL,
   UNSUB_SENTINEL,
@@ -124,5 +125,31 @@ describe("inlineEmailCss", () => {
     expect(out).toContain("@media");
     expect(out).toContain("<!--kestrel:masthead-->");
     expect(out).toContain("%%UNSUBSCRIBE_URL%%");
+  });
+});
+
+describe("onceUntilRejected (the inliner's WASM init)", () => {
+  it("runs a successful init once and shares it", async () => {
+    let runs = 0;
+    const ready = onceUntilRejected(async () => {
+      runs += 1;
+    });
+    await Promise.all([ready(), ready()]);
+    await ready();
+    expect(runs).toBe(1);
+  });
+
+  it("retries after a rejected init instead of caching the failure", async () => {
+    let runs = 0;
+    const ready = onceUntilRejected(async () => {
+      runs += 1;
+      if (runs === 1) {
+        throw new Error("transient load failure");
+      }
+    });
+    await expect(ready()).rejects.toThrow("transient load failure");
+    await expect(ready()).resolves.toBeUndefined();
+    await ready();
+    expect(runs).toBe(2);
   });
 });

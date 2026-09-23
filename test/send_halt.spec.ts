@@ -4,7 +4,7 @@ import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
-import { MAX_DELIVERY_ATTEMPTS } from "../src/lib/time";
+import { HALT_BACKOFF_MS, MAX_DELIVERY_ATTEMPTS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { ResendProvider } from "../src/providers/resend";
 import { SesProvider } from "../src/providers/ses";
@@ -14,6 +14,7 @@ import { runSend } from "../src/send/loop";
 import { buildSendProgress } from "../src/send/progress";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
+import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -47,16 +48,29 @@ function capped(): AppEnv {
   return { ...env, DB: guardD1(env.DB).db } as AppEnv;
 }
 
+/** One sweep tick, on the next minute or the next halt retry, whichever is later: so each
+ *  tick here is one retry of a halted send. */
+async function tick(e: AppEnv = capped()): Promise<void> {
+  await toNextTick(env.DB);
+  await sweep(e);
+}
+
+/** One sweep tick at the cron's own pace: the clock a minute on, never further. */
+async function minute(e: AppEnv = capped()): Promise<void> {
+  vi.setSystemTime(Date.now() + 60_000);
+  await sweep(e);
+}
+
 async function ticks(n: number, e: AppEnv = capped()): Promise<void> {
   for (let i = 0; i < n; i++) {
-    await sweep(e);
+    await tick(e);
   }
 }
 
 async function untilSent(sendId: string, max = 30): Promise<void> {
   const e = capped();
   for (let i = 0; i < max && (await sends.getSend(env.DB, sendId))!.status !== "sent"; i++) {
-    await sweep(e);
+    await tick(e);
   }
 }
 
@@ -94,12 +108,16 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM suppressions"),
     env.DB.prepare("DELETE FROM subscribers"),
   ]);
+  // Only Date is faked: the backoff is read off the clock, and D1 and the provider stubs
+  // still resolve on their own.
+  vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -146,7 +164,7 @@ describe("a provider outage", () => {
     const send = await dueSend();
 
     resend.loseAnswers = 1; // the first batch is accepted, its answer lost
-    await sweep(capped());
+    await tick();
     resend.outage = 2;
     resend.rateLimit = TICKS;
     await ticks(TICKS + 2);
@@ -204,11 +222,11 @@ describe("the provider refusing the account", () => {
     await seedConfirmed(addresses(450)); // more than one free-plan tick delivers
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await sweep(capped());
+    await tick();
     expect((await sends.getSend(env.DB, send.id))!.halt_reason).toBe("account");
 
     resend.refuse = null;
-    await sweep(capped());
+    await tick();
     const going = (await sends.getSend(env.DB, send.id))!;
     expect(going.status).toBe("sending");
     expect(going.c_accepted).toBeGreaterThan(0);
@@ -220,20 +238,171 @@ describe("the provider refusing the account", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.refuse = "resend batch 403: API key is not active";
-    await sweep(capped());
+    await tick();
     const first = (await sends.getSend(env.DB, send.id))!.halted_at!;
     await env.DB.prepare("UPDATE sends SET halted_at = halted_at - 60000 WHERE id = ?")
       .bind(send.id)
       .run();
-    await sweep(capped());
+    await tick();
     expect((await sends.getSend(env.DB, send.id))!.halted_at).toBe(first - 60_000);
 
     resend.refuse = null;
     resend.rateLimit = 1;
-    await sweep(capped());
+    await tick();
     const now = (await sends.getSend(env.DB, send.id))!;
     expect(now.halt_reason).toBe("unavailable");
     expect(now.halted_at).toBeGreaterThanOrEqual(first);
+  });
+});
+
+describe("the halt's backoff", () => {
+  const MIN = 60_000;
+
+  /** Record the clock at every provider request, as minutes since the first. Each request
+   *  takes a second to answer, as a real one does, so the halt is stamped a moment after the
+   *  tick began and not exactly on it. */
+  function requestMinutes(provider: ResendLikeProvider): () => number[] {
+    const at: number[] = [];
+    const send = provider.sendBatch.bind(provider);
+    vi.spyOn(provider, "sendBatch").mockImplementation((...args) => {
+      at.push(Date.now());
+      vi.setSystemTime(Date.now() + 1000);
+      return send(...args);
+    });
+    return () => at.map((t) => Math.round((t - at[0]!) / MIN));
+  }
+
+  it.each([
+    ["unavailable", [0, 1, 3, 8, 23, 53, 113, 173]],
+    ["account", [0, 5, 20, 50, 110, 170]],
+  ] as const)("spaces %s retries out across ticks, consuming no one", async (reason, expected) => {
+    const emails = addresses(250);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const minutes = requestMinutes(resend);
+    if (reason === "account") {
+      resend.refuse = "resend batch 401: API key is invalid";
+    } else {
+      resend.rateLimit = 1_000;
+    }
+
+    // Ticks on the cron's own minutes, however long each request took.
+    const start = Date.now();
+    let retries = 0;
+    for (let i = 1; i <= 180; i++) {
+      vi.setSystemTime(start + i * MIN);
+      await sweep(capped());
+      const now = (await sends.getSend(env.DB, send.id))!;
+      if (now.halt_retries > retries) {
+        // Each halt schedules the next retry by the schedule's next step, capped at its last.
+        retries = now.halt_retries;
+        const steps = HALT_BACKOFF_MS[reason];
+        expect(now.halt_retry_at! - Date.now()).toBe(steps[Math.min(retries, steps.length) - 1]);
+      }
+    }
+
+    expect(minutes()).toEqual(expected);
+    const held = await expectHeld(send.id, 250);
+    expect(held.halt_retries).toBe(expected.length);
+    const prog = buildSendProgress(held, "resend", false, Date.now());
+    expect(prog.provider.halt?.retry_at).toBe(held.halt_retry_at);
+    expect(prog.provider.halt!.retry_at).toBeGreaterThan(Date.now());
+    expect(prog.phase).toBe(reason === "account" ? "needs-attention" : "backing-off");
+    expect(prog.attention.stuck).toBe(true); // a long halt is still raised
+  });
+
+  it("returns to every-tick pace the moment a batch is answered", async () => {
+    await seedConfirmed(addresses(900)); // several free-plan ticks' worth
+    const send = await dueSend();
+    resend.rateLimit = 4;
+    await ticks(4); // four halts: the next retry would be fifteen minutes out
+    expect((await sends.getSend(env.DB, send.id))!.halt_retries).toBe(4);
+
+    await tick(); // answered
+    const going = (await sends.getSend(env.DB, send.id))!;
+    expect(going.status).toBe("sending");
+    expect(going.c_accepted).toBeGreaterThan(0);
+    expect(going).toMatchObject({ halt_reason: null, halt_retries: 0, halt_retry_at: null });
+
+    const before = resend.requests;
+    await minute(); // the very next tick carries on
+    expect(resend.requests).toBeGreaterThan(before);
+
+    resend.rateLimit = 1; // a fresh halt starts the schedule from the top
+    await minute();
+    const again = (await sends.getSend(env.DB, send.id))!;
+    expect(again.halt_retries).toBe(1);
+    expect(again.halt_retry_at! - Date.now()).toBe(HALT_BACKOFF_MS.unavailable[0]);
+  });
+
+  it("costs a waiting send no provider request and nothing past the sweep's query", async () => {
+    const limit = getConfig(env).subrequestBudget;
+    // An idle tick's cost, with nothing to send.
+    const idle = guardD1(env.DB);
+    await sweep({ ...env, DB: idle.db } as AppEnv);
+
+    await seedConfirmed(addresses(3));
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      ids.push((await dueSend()).id);
+    }
+    resend.refuse = "resend batch 401: API key is invalid";
+
+    let waitingTicks = 0;
+    for (let i = 0; i < 120; i++) {
+      const guard = guardD1(env.DB);
+      const requests = resend.requests;
+      vi.setSystemTime(Date.now() + MIN);
+      const due = await env.DB.prepare(
+        `SELECT COUNT(*) AS n FROM sends WHERE status IN ('scheduled', 'sending')
+            AND (halt_retry_at IS NULL OR halt_retry_at <= ?)`,
+      )
+        .bind(Date.now())
+        .first<number>("n");
+      await sweep({ ...env, DB: guard.db } as AppEnv);
+      expect(guard.statements + resend.requests - requests).toBeLessThanOrEqual(limit);
+      if (due === 0) {
+        // Five sends waiting out their backoff cost what a tick with nothing to send does.
+        waitingTicks += 1;
+        expect(resend.requests).toBe(requests);
+        expect(guard.statements).toBe(idle.statements);
+      }
+    }
+    expect(waitingTicks).toBeGreaterThan(100);
+    // Every send retried on the account schedule, never once a tick.
+    expect(resend.requests).toBe(5 * 5);
+    for (const id of ids) {
+      await expectHeld(id, 3);
+    }
+  });
+
+  it("mails everyone exactly once after the fault clears, at the next scheduled retry", async () => {
+    const emails = addresses(250);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    resend.rateLimit = 1_000;
+    for (let i = 0; i < 40; i++) {
+      await minute();
+    }
+    await expectHeld(send.id, 250);
+
+    resend.rateLimit = 0; // the outage ends between retries
+    const due = (await sends.getSend(env.DB, send.id))!.halt_retry_at!;
+    const before = resend.requests;
+    while (Date.now() + MIN < due) {
+      await minute();
+      expect(resend.requests).toBe(before); // still waiting out the step it was on
+    }
+    for (let i = 0; i < 10 && (await sends.getSend(env.DB, send.id))!.status !== "sent"; i++) {
+      await minute();
+    }
+
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 250 });
+    expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
+    expect(await rows(send.id)).toSatisfy((all: { attempts: number }[]) =>
+      all.every((r) => r.attempts === 0),
+    );
   });
 });
 
@@ -251,11 +420,11 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await sweep(capped());
+    await tick();
     expect(await keysOf(send.id)).toEqual([]);
     resend.rateLimit = 1; // a definite 429 on a first attempt, likewise
     resend.refuse = null;
-    await sweep(capped());
+    await tick();
     expect(await keysOf(send.id)).toEqual([]);
   });
 
@@ -282,7 +451,7 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.failAfterSending = 1; // a 5xx after the batch went out
-    await sweep(capped());
+    await tick();
     expect(await keysOf(send.id)).toHaveLength(1);
     resend.refuse = "resend batch 401: API key is invalid";
     await ticks(2);
@@ -299,7 +468,7 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.loseAnswers = 1; // accepted, the answer lost
-    await sweep(capped());
+    await tick();
     resend.refuse = "resend batch 401: API key is invalid";
     await ticks(2);
     // A day later the key is fixed, but Resend no longer remembers the batch's key.
@@ -391,7 +560,7 @@ describe("the real adapters, end to end through the loop", () => {
     vi.mocked(providers.getProvider).mockReturnValue(resendAdapter());
     resendAnswers(422, { name: "missing_required_field", message: "The `to` field is missing." });
 
-    await sweep(capped());
+    await tick();
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ unsent: 3 });

@@ -214,7 +214,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -603,13 +603,20 @@ export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> 
   return results;
 }
 
-/** Sends left mid-flight whose lease has expired — resume them. */
-export async function resumableSends(db: D1Database, now: number): Promise<SendRow[]> {
+/** Sends left mid-flight whose lease has expired, and whose halt, if they carry one, is
+ *  due its next retry by `retryDueBy` (SPEC §12): resume them. A send still waiting out its
+ *  backoff costs the sweep nothing past this query. */
+export async function resumableSends(
+  db: D1Database,
+  now: number,
+  retryDueBy: number,
+): Promise<SendRow[]> {
   const { results } = await db
     .prepare(
-      "SELECT * FROM sends WHERE status = 'sending' AND (locked_until IS NULL OR locked_until < ?) ORDER BY started_at ASC",
+      `SELECT * FROM sends WHERE status = 'sending' AND (locked_until IS NULL OR locked_until < ?)
+          AND (halt_retry_at IS NULL OR halt_retry_at <= ?) ORDER BY started_at ASC`,
     )
-    .bind(now)
+    .bind(now, retryDueBy)
     .all<SendRow>();
   return results;
 }
@@ -713,7 +720,8 @@ export async function completeSend(
     db
       .prepare(
         `UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL, lease_token = NULL,
-                halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL
+                halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL,
+                halt_retries = 0, halt_retry_at = NULL
           WHERE id = ? AND status = 'sending' AND (? IS NULL OR lease_token = ?)`,
       )
       .bind(now, sendId, lease, lease),
@@ -944,7 +952,10 @@ export async function redispatch(
  * keeps the batch's key, so the next run re-sends that exact batch under it instead of
  * folding the rows into a new one the provider could not recognize (I4); without it the
  * rows are fresh again, and go back through the consent check at hand-off (I2).
- * `halted_at` keeps the start of an unbroken run of refusals for the same reason.
+ * `halted_at` keeps the start of an unbroken run of refusals for the same reason, and
+ * `halt_retries` counts the run's halts, which picks the next retry's delay from `backoff`
+ * (the reason's schedule, in ms, its last step repeating): the sweep leaves the send
+ * alone until `halt_retry_at`. A new reason starts its schedule from the top.
  * Lease-guarded, and three statements in all.
  */
 export async function holdBatch(
@@ -954,9 +965,12 @@ export async function holdBatch(
   key: string,
   keepKey: boolean,
   halt: { reason: HaltReason; cause: HaltCause; error: string },
+  backoff: readonly number[],
   now: number,
 ): Promise<void> {
   const guard = holdsLease(sendId, lease);
+  // The halts before this one in an unbroken run for this reason, capped at the last step.
+  const step = `MIN(CASE WHEN halt_reason IS ? THEN halt_retries ELSE 0 END, ${backoff.length - 1})`;
   await db.batch([
     // Before the move, so it counts the rows still under the key.
     keyedCounterMove(db, sendId, lease, key, "dispatched", "c_in_flight", "c_pending"),
@@ -971,10 +985,24 @@ export async function holdBatch(
     db
       .prepare(
         `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
-                halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END
+                halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END,
+                halt_retries = CASE WHEN halt_reason IS ? THEN halt_retries + 1 ELSE 1 END,
+                halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']')
           WHERE id = ? AND lease_token = ?`,
       )
-      .bind(halt.reason, halt.cause, halt.error, halt.reason, now, sendId, lease),
+      .bind(
+        halt.reason,
+        halt.cause,
+        halt.error,
+        halt.reason,
+        now,
+        halt.reason,
+        now,
+        JSON.stringify(backoff),
+        halt.reason,
+        sendId,
+        lease,
+      ),
   ]);
 }
 
@@ -1036,7 +1064,14 @@ export async function settleDeliveries(
   const cols = [...deltas.keys()];
   const sets = cols.map((c) => `${c} = ${c} + ?`);
   if (answered) {
-    sets.push("halt_reason = NULL", "halt_cause = NULL", "halt_error = NULL", "halted_at = NULL");
+    sets.push(
+      "halt_reason = NULL",
+      "halt_cause = NULL",
+      "halt_error = NULL",
+      "halted_at = NULL",
+      "halt_retries = 0",
+      "halt_retry_at = NULL",
+    );
   }
   const guard = holdsLease(sendId, lease);
   await db.batch([

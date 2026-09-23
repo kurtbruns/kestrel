@@ -22,6 +22,8 @@ const send = (over: Partial<Send> = {}): Send => ({
   halt_cause: null,
   halt_error: null,
   halted_at: null,
+  halt_retries: 0,
+  halt_retry_at: null,
   c_pending: 0,
   c_in_flight: 0,
   c_accepted: 0,
@@ -230,6 +232,7 @@ describe("sent record", () => {
           cause: "credentials",
           error: "resend batch 403: API key is not active",
           since: 1_000,
+          retry_at: Date.now() + 12 * 60_000,
         },
       },
       attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: true },
@@ -257,6 +260,7 @@ describe("sent record", () => {
     expect(alert.textContent).toContain("Replace the provider's API key or credentials");
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
+    expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
   });
 
   it("stops polling when the reader navigates away, even with a tick's read in flight", async () => {
