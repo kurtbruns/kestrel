@@ -12,7 +12,11 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 // delivery row and suppresses.
 
 /** Seed one accepted delivery (with its parent post + send, for the FK). */
-async function seedDelivery(email: string, providerId: string): Promise<void> {
+async function seedDelivery(
+  email: string,
+  providerId: string | null,
+  id = `d-${providerId}`,
+): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
     "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-we','p-we','sent',?,?)",
@@ -27,7 +31,7 @@ async function seedDelivery(email: string, providerId: string): Promise<void> {
   await env.DB.prepare(
     "INSERT INTO deliveries (id, send_id, email, status, provider_id, updated_at) VALUES (?, 's-we', ?, 'accepted', ?, ?)",
   )
-    .bind(`d-${providerId}`, email, providerId, now)
+    .bind(id, email, providerId, now)
     .run();
 }
 
@@ -54,7 +58,7 @@ beforeEach(async () => {
   ]);
 });
 
-describe("applyDeliveryEvents — suppression address recovery", () => {
+describe("applyDeliveryEvents: suppression address recovery", () => {
   it("suppresses via the matched delivery row when a hard bounce carries only a provider id", async () => {
     await seedDelivery("idonly-hard@example.com", "msg-idonly-hard");
     const events: DeliveryEvent[] = [
@@ -122,7 +126,7 @@ async function sendCounters(): Promise<Record<string, number>> {
   return row!;
 }
 
-describe("applyDeliveryEvents — matching the right delivery", () => {
+describe("applyDeliveryEvents: matching the right delivery", () => {
   it("leaves every real record untouched for a test send's events", async () => {
     // The publisher is on their own list, and a test send to them has no delivery row.
     await seedDelivery("publisher@example.com", "msg-real");
@@ -138,6 +142,26 @@ describe("applyDeliveryEvents — matching the right delivery", () => {
     expect(await sendCounters()).toEqual(before);
   });
 
+  it("lands a receipt on a recipient resolved as sent, which has no provider id", async () => {
+    await seedDelivery("resolved@example.com", null, "d-resolved");
+    const outcome = () =>
+      env.DB.prepare("SELECT event FROM deliveries WHERE id = 'd-resolved'").first<{
+        event: string | null;
+      }>();
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-real-id", email: "resolved@example.com" },
+    ]);
+    expect((await outcome())?.event).toBe("delivered");
+
+    // A complaint days later still lands, and ranks over the delivery.
+    await applyDeliveryEvents(env.DB, [
+      { type: "complained", providerId: "msg-real-id", email: "resolved@example.com" },
+    ]);
+    expect((await outcome())?.event).toBe("complained");
+    expect(await sendCounters()).toMatchObject({ c_delivered: 0, c_complained: 1 });
+  });
+
   it("falls back to the address only when the event carries no provider id", async () => {
     await seedDelivery("noid@example.com", "msg-noid");
 
@@ -147,7 +171,7 @@ describe("applyDeliveryEvents — matching the right delivery", () => {
   });
 });
 
-describe("applyDeliveryEvents — a worse outcome is never replaced by a better one", () => {
+describe("applyDeliveryEvents: a worse outcome is never replaced by a better one", () => {
   it("keeps complained when delivered arrives after it", async () => {
     await seedDelivery("order@example.com", "msg-order");
 
@@ -193,7 +217,7 @@ describe("applyDeliveryEvents — a worse outcome is never replaced by a better 
   });
 });
 
-describe("applyDeliveryEvents — suppression casing", () => {
+describe("applyDeliveryEvents: suppression casing", () => {
   it("suppresses subscriber bob@x.com on a Bob@X.com bounce", async () => {
     const applied = await applyDeliveryEvents(env.DB, [
       { type: "bounced", providerId: "msg-case", email: "Bob@X.com", hard: true },
@@ -207,7 +231,7 @@ describe("applyDeliveryEvents — suppression casing", () => {
     await seedDelivery("carol@x.com", "msg-carol");
 
     await applyDeliveryEvents(env.DB, [
-      { type: "complained", providerId: "msg-carol", email: "Carol@X.com" },
+      { type: "complained", providerId: "msg-carol", email: "carol+alias@x.com" },
     ]);
 
     const rows = await env.DB.prepare("SELECT email FROM suppressions").all<{ email: string }>();

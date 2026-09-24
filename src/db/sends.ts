@@ -1208,11 +1208,13 @@ function eventRank(event: string | null, bounceKind: string | null): number {
 /**
  * Record an out-of-band provider event (delivered/bounced/complained) on the matching
  * delivery row, unless the row already holds a worse outcome. An event with a provider
- * id matches only by it (unique per delivery), and one that matches nothing is dropped:
- * test sends and confirmation emails have no delivery row, and their events must never
- * land on a real send's record (SPEC §8). Only an event carrying no provider id at all
- * falls back to the recipient's most recent delivery. Never touches the send-loop
- * `status`, which is a separate, earlier signal.
+ * id matches by it (unique per delivery). One whose id matches nothing may land only on
+ * the address's most recent accepted row that never learned its id, which is a recipient
+ * the publisher resolved as sent (SPEC §12), whose receipt still has to land; otherwise
+ * it is dropped, since test sends and confirmation emails have no delivery row and their
+ * events must never land on a real send's record (SPEC §8). An event carrying no provider
+ * id at all falls back to the address's most recent delivery. Never touches the
+ * send-loop `status`, which is a separate, earlier signal.
  */
 export async function markDeliveryEvent(
   db: D1Database,
@@ -1236,6 +1238,17 @@ export async function markDeliveryEvent(
       .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
       .bind(u.providerId)
       .first<Target>();
+    if (!row && u.email) {
+      // An id-less accepted row: resolved as sent, or an SES answer whose body was unreadable.
+      row = await db
+        .prepare(
+          `SELECT ${cols} FROM deliveries
+            WHERE email = ? AND status = 'accepted' AND (provider_id IS NULL OR provider_id = '')
+            ORDER BY updated_at DESC LIMIT 1`,
+        )
+        .bind(normalizeEmail(u.email))
+        .first<Target>();
+    }
   } else if (u.email) {
     row = await db
       .prepare(`SELECT ${cols} FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1`)
