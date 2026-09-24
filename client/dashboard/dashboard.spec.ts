@@ -1,11 +1,22 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostListItem } from "../../shared/posts";
-import type { SendListItem } from "../../shared/sends";
+import type { LiveSend, SendListItem } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
 import { confirmUnsubscribe } from "../subscribers/dialogs";
-import { $, $$, type FakeApi, fakeApi, mount, resetShell, unmount } from "../test/support";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  liveReads,
+  liveRoute,
+  liveSend,
+  mount,
+  resetShell,
+  unmount,
+} from "../test/support";
 import { renderDashboard } from "./dashboard";
 
 const NOW = 1_700_000_000_000;
@@ -83,10 +94,17 @@ const config = (): SettingsResponse =>
     },
   }) as unknown as SettingsResponse;
 
-// A stateful fake: the sends list filters on `status` like the Worker does, so the poll and
-// the queue refresh read the same world as the first render.
-function world(posts: PostListItem[], sends: () => SendListItem[], subs = counts) {
+// A stateful fake: the sends list filters on `status` like the Worker does, and `live` is what
+// the send-state layer reads (GET /sends/live), so every read sees the same world.
+function world(
+  posts: PostListItem[],
+  sends: () => SendListItem[],
+  live: () => LiveSend[] = () => [],
+  subs = counts,
+  next: () => number | null = () => null,
+) {
   return fakeApi([
+    liveRoute(live, next),
     { path: "/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
     {
       path: "/sends",
@@ -200,12 +218,10 @@ describe("dashboard", () => {
     );
   });
 
-  it("raises the health line, red for a missed send and a wedged one, and keeps the wedged send out of the active widget", async () => {
+  it("raises the health line from the server's flags, red for a missed send and a wedged one, and keeps the wedged send out of the active widget", async () => {
     const sends = [
-      send({ id: "m1", status: "scheduled", fire_at: NOW - 1_000, started_at: null }),
-      send({ id: "w1", status: "sending", c_pending: 0, c_in_flight: 2, locked_until: null }),
-      // The server's stuck flag decides, not a clock of the dashboard's own: eleven
-      // minutes in is not in flight too long (SPEC §12), and a send the server flags is.
+      send({ id: "m1", status: "scheduled", fire_at: NOW - 6 * 60_000, started_at: null }),
+      send({ id: "w1", subject: "Kinglets", status: "sending", c_pending: 0, c_in_flight: 2 }),
       send({ id: "ok1", status: "sending", c_pending: 5, started_at: NOW - 11 * 60_000 }),
       send({
         id: "st1",
@@ -216,7 +232,20 @@ describe("dashboard", () => {
         stuck: true,
       }),
     ];
-    fake = world([post()], () => sends);
+    const [m1, w1, ok1, st1] = sends as [SendListItem, SendListItem, SendListItem, SendListItem];
+    // The server decides every flag (SPEC §12): eleven minutes in is not in flight too long,
+    // thirty-one is, and a send due six minutes ago is past the missed tolerance.
+    const live = [
+      liveSend(m1, "due", { attention: { missed: true } }),
+      liveSend(w1, "needs-attention", { attention: { wedged: true, wedged_count: 2 } }),
+      liveSend(ok1, "progressing"),
+      liveSend(st1, "progressing", { attention: { stuck: true } }),
+    ];
+    fake = world(
+      [post()],
+      () => sends,
+      () => live,
+    );
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
@@ -224,10 +253,27 @@ describe("dashboard", () => {
     const lines = $$(":scope > div > div", health).map((d) => d.textContent);
     expect(lines).toEqual([
       "1 scheduled send passed the fire time without going out.",
-      "2 ambiguous deliveries need a decision — resolve on the Sent page.",
+      "Kinglets has 2 ambiguous deliveries awaiting a decision; resolve them on its page.",
       "A send has been in progress over 30 minutes — it may be retrying.",
     ]);
+    // The wedged line leads to where Resolve is: the send's own page.
+    expect($("a", health).getAttribute("href")).toBe("#/sent/w1");
     expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["ok1", "st1"]);
+    expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(/over 30 minutes/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("calls a due send missed only past the server's tolerance, never at the fire time", async () => {
+    const due = send({ id: "d1", status: "scheduled", fire_at: NOW - 30_000, started_at: null });
+    fake = world(
+      [post()],
+      () => [due],
+      () => [liveSend(due, "due")],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.querySelector(".health")).toBeNull();
+    expect($("#dashScheduled .sched-card").dataset.post).toBe("p3");
   });
 
   it("raises one red line with the provider's words for a refused account, and keeps the send out of the active widget", async () => {
@@ -252,7 +298,26 @@ describe("dashboard", () => {
         halt_reason: "unavailable",
       }),
     ];
-    fake = world([post()], () => sends);
+    const halt = {
+      reason: "account" as const,
+      cause: "credentials" as const,
+      error: "Resend 401 invalid_api_key: API key is invalid",
+      since: NOW - 60_000,
+      retry_at: NOW + 240_000,
+    };
+    const [r1, r2, u1] = sends as [SendListItem, SendListItem, SendListItem];
+    const live = [
+      liveSend(r1, "needs-attention", { attention: { refused: true }, halt }),
+      liveSend(r2, "needs-attention", { attention: { refused: true }, halt }),
+      liveSend(u1, "backing-off", {
+        halt: { ...halt, reason: "unavailable", cause: "outage", error: "503" },
+      }),
+    ];
+    fake = world(
+      [post()],
+      () => sends,
+      () => live,
+    );
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
@@ -277,6 +342,7 @@ describe("dashboard", () => {
 
   it("shows the first-run checklist when nothing is written and no one is on the list, and its New post creates one", async () => {
     fake = fakeApi([
+      liveRoute(() => []),
       { path: "/posts", reply: () => ({ posts: [], page }) },
       { path: "/sends", reply: () => ({ sends: [], page }) },
       { path: "/subscribers", reply: () => ({ counts: none, subscribers: [], page }) },
@@ -301,7 +367,11 @@ describe("dashboard", () => {
       send({ id: "x2", post_id: "p2", status: "scheduled", fire_at: NOW + 60_000 }),
       send({ id: "x3", post_id: "p4", status: "sending", c_pending: 50, c_accepted: 50 }),
     ];
-    fake = world([post()], () => sends);
+    fake = world(
+      [post()],
+      () => sends,
+      () => [liveSend(sends[2] as SendListItem, "progressing")],
+    );
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     $("tr[data-id='p1'] td:last-child").click();
@@ -314,53 +384,252 @@ describe("dashboard", () => {
     expect(location.hash).toBe("#/sent/x3");
   });
 
-  it("keeps the active-send widget live: polls every 3 s, repaints in place, and refreshes the queue when the send finishes", async () => {
-    let phase: "sending" | "sent" = "sending";
-    const sends = () => [
-      send({ id: "x2", post_id: "p2", status: "scheduled", fire_at: NOW + 60_000 }),
-      send({
-        id: "x3",
-        post_id: "p4",
-        status: phase,
-        c_pending: phase === "sending" ? 50 : 0,
-        c_accepted: 50,
-        c_delivered: phase === "sending" ? 0 : 50,
-      }),
-    ];
-    fake = world([post()], sends);
+  it("moves a send that starts and finishes between two reads straight from the queue to the Sent table, within one read", async () => {
+    let stage: "due" | "sent" = "due";
+    const later = send({ id: "x2", post_id: "p2", status: "scheduled", fire_at: NOW + 60_000 });
+    const fast = () =>
+      stage === "due"
+        ? send({
+            id: "x3",
+            post_id: "p4",
+            subject: "Swifts",
+            status: "scheduled",
+            fire_at: NOW - 5_000,
+            started_at: null,
+            completed_at: null,
+            c_delivered: 0,
+            c_bounced: 0,
+          })
+        : send({
+            id: "x3",
+            post_id: "p4",
+            subject: "Swifts",
+            status: "sent",
+            fire_at: NOW - 5_000,
+            c_accepted: 50,
+            c_delivered: 0,
+            c_bounced: 0,
+            completed_at: Date.now(),
+          });
+    fake = world(
+      [post()],
+      () => [later, fast()],
+      () => [liveSend(fast(), stage === "due" ? "due" : "settling")],
+    );
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
-    expect($("#dashActive .active-card").dataset.watch).toBe("x3");
-    const polls = () =>
-      fake.calls.filter((c) => c.url.searchParams.get("status") === "sending").length;
-    const refreshes = () =>
-      fake.calls.filter((c) => c.url.searchParams.get("status") === "scheduled").length;
-    expect(polls()).toBe(0);
+    expect($$("#dashScheduled .sched-card").map((c) => c.dataset.post)).toEqual(["p4", "p2"]);
+    expect($("#dashSent").textContent).toMatch(/No sends yet/);
+    const listReads = () => fake.calls.filter((c) => c.url.pathname === "/sends").length;
+    const before = listReads();
+    await vi.advanceTimersByTimeAsync(3000); // due: the layer reads every 3 s
+    expect(liveReads(fake)).toHaveLength(2);
+    expect(listReads()).toBe(before); // nothing moved, nothing re-read
+    // The tick starts it and it finishes dispatch before the next read: one change, due to sent.
+    stage = "sent";
     await vi.advanceTimersByTimeAsync(3000);
-    expect(polls()).toBe(1);
-    expect($("#dashActive .active-card").dataset.watch).toBe("x3"); // still in flight
-    const before = refreshes();
-    phase = "sent";
-    await vi.advanceTimersByTimeAsync(3000);
-    expect(polls()).toBe(2);
-    expect(document.querySelector("#dashActive .active-card")).toBeNull(); // cleared in place
-    expect(refreshes()).toBe(before + 1); // the transition refreshed the queue
-    expect($("#dashScheduled .sched-card").dataset.post).toBe("p2");
-    expect($$(".dash-head")).toHaveLength(1); // no full re-render
+    expect($$("#dashScheduled .sched-card").map((c) => c.dataset.post)).toEqual(["p2"]);
+    const row = $("#dashSent tr[data-send='x3']");
+    expect($(".badge", row).textContent).toBe("sent");
+    expect($("a", row).getAttribute("href")).toBe("#/sent/x3");
+    expect($$(".dash-head")).toHaveLength(1); // repainted in place, no full re-render
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("stops polling when the reader navigates away", async () => {
-    fake = world([post()], () => [send({ id: "x3", status: "sending", c_pending: 50 })]);
+  it("makes no request while nothing is due, sending, or settling, and wakes once when the next send comes due", async () => {
+    const fire = NOW + 2 * 3_600_000;
+    const scheduled = send({
+      id: "x2",
+      post_id: "p2",
+      status: "scheduled",
+      fire_at: fire,
+      started_at: null,
+    });
+    fake = world(
+      [post()],
+      () => [scheduled],
+      () => [],
+      counts,
+      () => fire,
+    );
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
-    const polls = () =>
-      fake.calls.filter((c) => c.url.searchParams.get("status") === "sending").length;
+    const calls = fake.calls.length;
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(fake.calls.length).toBe(calls); // the countdown ticks with no network
+    await vi.advanceTimersByTimeAsync(60 * 60_000 + 1_000);
+    expect(liveReads(fake)).toHaveLength(2); // the fire time: one read, to see it due
+  });
+
+  it("keeps a refused send's red line live, and clears it when the refusal lifts", async () => {
+    let refused = false;
+    const row = send({
+      id: "x3",
+      post_id: "p4",
+      subject: "Swifts",
+      status: "sending",
+      c_pending: 50,
+      c_accepted: 10,
+      completed_at: null,
+    });
+    const halt = {
+      reason: "account" as const,
+      cause: "quota" as const,
+      error: "ses 429 TooManyRequestsException: Daily message quota exceeded.",
+      since: NOW,
+      retry_at: NOW + 300_000,
+    };
+    fake = world(
+      [post()],
+      () => [row],
+      () => [
+        refused
+          ? liveSend(row, "needs-attention", { attention: { refused: true }, halt })
+          : liveSend(row, "progressing"),
+      ],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.querySelector(".health")).toBeNull();
+    expect($("#dashActive .active-card").dataset.watch).toBe("x3");
+    refused = true;
     await vi.advanceTimersByTimeAsync(3000);
-    expect(polls()).toBe(1);
-    unmount(); // what navigating away does: the armed tick is cleared with the mount
+    expect($(".health.red").textContent).toMatch(/refusing this account, pausing Swifts: ses 429/);
+    expect($(".health a").getAttribute("href")).toBe("#/sent/x3");
+    expect(document.querySelector("#dashActive .active-card")).toBeNull(); // reported once
     await vi.advanceTimersByTimeAsync(9000);
-    expect(polls()).toBe(1);
+    expect($(".health.red").textContent).toMatch(/Daily message quota/); // it stays
+    refused = false; // the retry got through
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.querySelector(".health")).toBeNull();
+    expect($("#dashActive .active-card").dataset.watch).toBe("x3");
+  });
+
+  it("keeps a wedged send's red line until Resolve lets it finish, then shows it sent", async () => {
+    let resolved = false;
+    const row = () =>
+      resolved
+        ? send({
+            id: "w1",
+            post_id: "p4",
+            subject: "Kinglets",
+            status: "sent",
+            c_accepted: 99,
+            c_in_flight: 0,
+            c_unsent: 1,
+            c_delivered: 0,
+            c_bounced: 0,
+          })
+        : send({
+            id: "w1",
+            post_id: "p4",
+            subject: "Kinglets",
+            status: "sending",
+            c_accepted: 99,
+            c_in_flight: 1,
+            c_delivered: 0,
+            c_bounced: 0,
+            completed_at: null,
+          });
+    fake = world(
+      [post()],
+      () => [row()],
+      () => [
+        resolved
+          ? liveSend(row(), "settling")
+          : liveSend(row(), "needs-attention", { attention: { wedged: true, wedged_count: 1 } }),
+      ],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".health.red").textContent).toBe(
+      "⚠️Kinglets has 1 ambiguous delivery awaiting a decision; resolve it on its page.",
+    );
+    await vi.advanceTimersByTimeAsync(6000);
+    expect($(".health.red a").getAttribute("href")).toBe("#/sent/w1");
+    resolved = true; // Resolve, on the send's page
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.querySelector(".health")).toBeNull();
+    expect($("#dashSent tr[data-send='w1'] .badge").textContent).toBe("sent");
+  });
+
+  it("follows a settling send's receipts in its Delivered cell, to the last one", async () => {
+    let delivered = 10;
+    let complete = false;
+    const row = () =>
+      send({
+        id: "x1",
+        status: "sent",
+        completed_at: NOW - 10_000,
+        c_accepted: 100 - delivered - (complete ? 2 : 0),
+        c_delivered: delivered,
+        c_bounced: complete ? 2 : 0,
+      });
+    fake = world(
+      [post()],
+      () => [row()],
+      () => [liveSend(row(), complete ? "complete" : "settling")],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    const cell = () => $("#dashSent tr[data-send='x1'] td.delivered").textContent;
+    expect(cell()).toBe("10");
+    const listReads = () => fake.calls.filter((c) => c.url.pathname === "/sends").length;
+    const before = listReads();
+    delivered = 60;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(cell()).toBe("60");
+    expect(listReads()).toBe(before); // the counts came with the layer's read
+    delivered = 98;
+    complete = true; // the last receipt: it leaves the live set, named as complete
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(cell()).toBe("982 bounced");
+    const reads = liveReads(fake).length;
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(liveReads(fake)).toHaveLength(reads); // nothing left to follow
+  });
+
+  it("keeps a sending send's Delivered in the Sent table in step with its active-send card", async () => {
+    let confirmed = 0;
+    const row = () =>
+      send({
+        id: "x3",
+        subject: "Swifts",
+        status: "sending",
+        c_pending: 60,
+        c_accepted: 40 - confirmed,
+        c_delivered: confirmed,
+        c_bounced: 0,
+        completed_at: null,
+      });
+    fake = world(
+      [post()],
+      () => [row()],
+      () => [liveSend(row(), "progressing")],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("0");
+    confirmed = 34;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("34");
+    expect($("#dashActive .active-stat").textContent).toMatch(/34 confirmed/);
+  });
+
+  it("stops reading when the reader navigates away", async () => {
+    const row = send({ id: "x3", status: "sending", c_pending: 50 });
+    fake = world(
+      [post()],
+      () => [row],
+      () => [liveSend(row, "progressing")],
+    );
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(liveReads(fake)).toHaveLength(2);
+    unmount(); // what navigating away does: the layer's follower leaves with the mount
+    await vi.advanceTimersByTimeAsync(9000);
+    expect(liveReads(fake)).toHaveLength(2);
   });
 
   it("paints one applied-change notice over the re-made scheduled sends, which a dismiss clears", async () => {

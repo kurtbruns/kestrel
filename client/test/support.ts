@@ -3,6 +3,13 @@
 // attached, 401 routed, errors shaped) and a view test exercises the same code the browser
 // does, with only the network replaced. Imported by specs only; never part of the bundle.
 
+import type {
+  LiveSend,
+  LiveSendsResponse,
+  SendHalt,
+  SendPhase,
+  SendSummary,
+} from "../../shared/sends";
 import { unmount } from "../lifecycle";
 
 /** One request the script saw. `url` is absolute against a placeholder origin. */
@@ -139,3 +146,86 @@ export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: stri
   el.value = value;
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
+
+/**
+ * A send as `GET /sends/live` reports it, built from a list row: its fields and counters in
+ * the live shape, with the phase, flags, and halt the server would derive, given here since
+ * a spec scripts the server.
+ */
+export function liveSend(
+  row: SendSummary,
+  phase: SendPhase,
+  over: {
+    attention?: Partial<LiveSend["attention"]>;
+    halt?: SendHalt | null;
+    eta_ms?: number | null;
+  } = {},
+): LiveSend {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    subject: row.subject,
+    fire_at: row.fire_at,
+    started_at: row.started_at,
+    completed_at: row.completed_at,
+    state: row.status,
+    phase,
+    total: row.recipient_count,
+    counts: {
+      pending: row.c_pending,
+      in_flight: row.c_in_flight,
+      accepted: row.c_accepted,
+      delivered: row.c_delivered,
+      bounced: row.c_bounced,
+      complained: row.c_complained,
+      skipped: row.c_skipped,
+      unsent: row.c_unsent,
+    },
+    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: over.eta_ms ?? null },
+    delivery: {
+      confirmed: row.c_delivered + row.c_bounced + row.c_complained,
+      percent_of_accepted: 0,
+    },
+    provider: { name: "fake", halt: over.halt ?? null },
+    attention: {
+      wedged: false,
+      wedged_count: 0,
+      stuck: false,
+      missed: false,
+      refused: false,
+      ...over.attention,
+    },
+  };
+}
+
+/**
+ * `GET /sends/live` over a scripted server: `known()` is every send it would report, and it
+ * answers the way the Worker does, the live ones (due, sending, settling) under `sends`, the
+ * ones named in `ids` that aren't under `named`, and `next()` as the next fire time.
+ */
+export function liveRoute(
+  known: () => LiveSend[],
+  next: () => number | null = () => null,
+): FakeRoute {
+  const isLive = (s: LiveSend) =>
+    (s.state === "scheduled" && s.phase === "due") ||
+    s.state === "sending" ||
+    (s.state === "sent" && s.phase === "settling");
+  return {
+    path: "/sends/live",
+    reply: (req): LiveSendsResponse => {
+      const ids = (req.url.searchParams.get("ids") ?? "").split(",").filter(Boolean);
+      const all = known();
+      return {
+        now: Date.now(),
+        sends: all.filter(isLive),
+        named: all.filter((s) => !isLive(s) && ids.includes(s.id)),
+        next_fire_at: next(),
+      };
+    },
+  };
+}
+
+/** The `GET /sends/live` reads a spec's fake has seen. */
+export const liveReads = (fake: FakeApi): FakeRequest[] =>
+  fake.calls.filter((c) => c.url.pathname === "/sends/live");

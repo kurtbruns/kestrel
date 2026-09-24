@@ -27,6 +27,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- The dashboard and the Sent page now show every change to a send within a few seconds, including a send that starts and finishes between two looks, which before stayed on "Sending now…" and never reached the Sent table until you reloaded. A settling send's Delivered count follows its receipts there too, and with nothing due, sending, or settling the pages make no requests at all.
+- The dashboard now keeps a refused, wedged, or long-running send in view, live, until it clears, instead of drawing its warning once at load and then dropping the send; the wedged line links to the send's page, where Resolve is. A scheduled send is flagged missed only past the server's five-minute tolerance, not the moment its fire time passes, and the Sent page's in-progress card says when a send has been in flight too long.
 - A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
 - On a send's live watch, the "provider is refusing this account" banner no longer sits flush against the start time and recipient count above it.
 

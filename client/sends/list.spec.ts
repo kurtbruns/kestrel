@@ -1,8 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendSummary } from "../../shared/sends";
-import { $, $$, type FakeApi, fakeApi, mount, resetShell } from "../test/support";
+import type { LiveSend, SendSummary } from "../../shared/sends";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  liveReads,
+  liveRoute,
+  liveSend,
+  mount,
+  resetShell,
+} from "../test/support";
 import { renderSent } from "./list";
-import { deliveredCell, isRefused, isWedged } from "./progress";
+import { activeRowHtml, deliveredCell, needsOperator, rowCounts } from "./progress";
 
 const page = { total: 1, limit: 50, offset: 0, sort: "fire", dir: "desc" };
 const send = (over: Partial<SendSummary> = {}): SendSummary => ({
@@ -36,33 +46,74 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   ...over,
 });
 
-describe("deliveredCell / isWedged", () => {
+describe("deliveredCell", () => {
   it("reports webhook-confirmed delivered and names the failures worst first", () => {
-    const m = deliveredCell(send()).markup;
+    const m = deliveredCell(rowCounts(send())).markup;
     expect(m).toContain(`<span class="n">147</span>`);
     expect(m).toMatch(/1 complained.*2 bounced/);
-    expect(deliveredCell(send({ c_bounced: 0, c_complained: 0 })).markup).not.toContain(
+    expect(deliveredCell(rowCounts(send({ c_bounced: 0, c_complained: 0 }))).markup).not.toContain(
       "delivered-note",
     );
   });
+});
 
-  it("is wedged only when sending, nothing pending, something in flight, and the lease released", () => {
-    const wedged = send({ status: "sending", c_in_flight: 3, c_pending: 0, locked_until: null });
-    expect(isWedged(wedged)).toBe(true);
-    expect(isWedged({ ...wedged, locked_until: Date.now() + 60_000 })).toBe(false); // the loop is working it
-    expect(isWedged({ ...wedged, c_pending: 5 })).toBe(false);
-    expect(isWedged({ ...wedged, status: "sent" })).toBe(false);
+describe("the in-progress card", () => {
+  const sending = send({
+    status: "sending",
+    c_pending: 90,
+    c_accepted: 50,
+    c_delivered: 10,
+    c_bounced: 0,
+    c_complained: 0,
+    completed_at: null,
+  });
+  const card = (s: LiveSend) => {
+    const el = document.createElement("div");
+    el.innerHTML = activeRowHtml(s).markup;
+    return el;
+  };
+
+  it("reads the watch's numbers: accepted over the audience, and the server's time to finish while handing off", () => {
+    const el = card(liveSend(sending, "progressing", { eta_ms: 90_000 }));
+    expect($(".active-stat", el).textContent).toBe(
+      "Sending — 60 of 150 accepted · 10 confirmed · ~2 min left",
+    );
+    expect($<HTMLElement>(".active-fill", el).style.width).toBe("40%");
+    expect(el.querySelector(".active-stuck")).toBeNull();
+  });
+
+  it("gives no time to finish while the send is paused, and says when it has been in flight too long", () => {
+    const el = card(
+      liveSend(sending, "backing-off", { eta_ms: 90_000, attention: { stuck: true } }),
+    );
+    expect($(".active-stat", el).textContent).not.toMatch(/left/);
+    expect($(".active-stuck", el).textContent).toBe(
+      "In progress over 30 minutes; it may be retrying.",
+    );
+  });
+
+  it("belongs to the attention block instead when the send needs the operator", () => {
+    expect(needsOperator(liveSend(sending, "progressing"))).toBe(false);
+    expect(
+      needsOperator(liveSend(sending, "needs-attention", { attention: { wedged: true } })),
+    ).toBe(true);
+    expect(
+      needsOperator(liveSend(sending, "needs-attention", { attention: { refused: true } })),
+    ).toBe(true);
   });
 });
 
-describe("isRefused", () => {
-  it("is refused only while sending with an account-level halt", () => {
-    const refused = send({ status: "sending", c_pending: 5, halt_reason: "account" });
-    expect(isRefused(refused)).toBe(true);
-    expect(isRefused({ ...refused, halt_reason: "unavailable" })).toBe(false);
-    expect(isRefused({ ...refused, status: "sent" })).toBe(false);
-  });
-});
+/** The Worker's /sends, filtering on `status` over a scripted world. */
+function sendsRoute(all: () => SendSummary[]) {
+  return {
+    path: "/sends",
+    reply: (req: { url: URL }) => {
+      const status = req.url.searchParams.get("status");
+      const sends = all().filter((s) => !status || s.status === status);
+      return { sends, page: { ...page, total: sends.length } };
+    },
+  };
+}
 
 describe("sent view", () => {
   let fake: FakeApi;
@@ -93,18 +144,12 @@ describe("sent view", () => {
       c_complained: 0,
       c_pending: 90,
       started_at: Date.now() - 60_000,
+      completed_at: null,
       subject: "Live one",
     });
     fake = fakeApi([
-      {
-        path: "/sends",
-        reply: (req) => {
-          const status = req.url.searchParams.get("status");
-          const sends =
-            status === "scheduled" ? [scheduled] : status === "sending" ? [sending] : [send()];
-          return { sends, page: { ...page, total: sends.length } };
-        },
-      },
+      liveRoute(() => [liveSend(sending, "progressing")]),
+      sendsRoute(() => [scheduled, sending, send()]),
     ]);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
@@ -131,14 +176,19 @@ describe("sent view", () => {
       completed_at: null,
     });
     fake = fakeApi([
-      {
-        path: "/sends",
-        reply: (req) => {
-          const status = req.url.searchParams.get("status");
-          const sends = status === "sending" ? [refused] : [];
-          return { sends, page: { ...page, total: sends.length } };
-        },
-      },
+      liveRoute(() => [
+        liveSend(refused, "needs-attention", {
+          attention: { refused: true },
+          halt: {
+            reason: "account",
+            cause: "suspended",
+            error: "ses 400 SendingPausedException: Account is paused",
+            since: Date.now() - 60_000,
+            retry_at: Date.now() + 240_000,
+          },
+        }),
+      ]),
+      sendsRoute(() => [refused]),
     ]);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
@@ -154,16 +204,7 @@ describe("sent view", () => {
 
   it("opens the record on a row click and the editor on a scheduled card click", async () => {
     const scheduled = send({ id: "sch", status: "scheduled", post_id: "p7", completed_at: null });
-    fake = fakeApi([
-      {
-        path: "/sends",
-        reply: (req) => {
-          const status = req.url.searchParams.get("status");
-          const sends = status === "scheduled" ? [scheduled] : status === "sending" ? [] : [send()];
-          return { sends, page: { ...page, total: sends.length } };
-        },
-      },
-    ]);
+    fake = fakeApi([liveRoute(() => []), sendsRoute(() => [scheduled, send()])]);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     $("tr[data-id='x1'] .delivered").click();
@@ -172,10 +213,11 @@ describe("sent view", () => {
     expect(location.hash).toBe("#/edit/p7");
   });
 
-  it("cancels a scheduled send and refreshes every section", async () => {
+  it("cancels a scheduled send, refreshes its sections, and has the layer read at once", async () => {
     const scheduled = send({ id: "sch", status: "scheduled", completed_at: null });
     let canceled = false;
     fake = fakeApi([
+      liveRoute(() => []),
       {
         method: "POST",
         path: "/sends/sch/cancel",
@@ -184,28 +226,156 @@ describe("sent view", () => {
           return { send: { ...scheduled, status: "canceled" } };
         },
       },
-      {
-        path: "/sends",
-        reply: (req) => {
-          const status = req.url.searchParams.get("status");
-          const sends =
-            status === "scheduled"
-              ? canceled
-                ? []
-                : [scheduled]
-              : status === "sending"
-                ? []
-                : [send()];
-          return { sends, page: { ...page, total: sends.length } };
-        },
-      },
+      sendsRoute(() => (canceled ? [send()] : [scheduled, send()])),
     ]);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
+    expect(liveReads(fake)).toHaveLength(1);
     $("[data-cancel='sch']").click();
     await vi.advanceTimersByTimeAsync(10);
     expect(canceled).toBe(true);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
     expect($("#toasts").textContent).toMatch(/Canceled/);
+    expect(liveReads(fake)).toHaveLength(2);
+  });
+
+  it("moves a send that starts and finishes between two reads from the queue to the records, within one read", async () => {
+    let sent = false;
+    const row = () =>
+      sent
+        ? send({
+            id: "fast",
+            subject: "Swifts",
+            status: "sent",
+            fire_at: Date.now() - 5_000,
+            completed_at: Date.now(),
+            c_accepted: 150,
+            c_delivered: 0,
+            c_bounced: 0,
+            c_complained: 0,
+          })
+        : send({
+            id: "fast",
+            subject: "Swifts",
+            status: "scheduled",
+            fire_at: Date.now() - 5_000,
+            started_at: null,
+            completed_at: null,
+            c_delivered: 0,
+            c_bounced: 0,
+            c_complained: 0,
+          });
+    fake = fakeApi([
+      liveRoute(() => [liveSend(row(), sent ? "settling" : "due")]),
+      sendsRoute(() => [row(), send()]),
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".sched-card .sched-subj").textContent).toBe("Swifts");
+    expect($$("tr[data-id]").map((tr) => tr.dataset.id)).toEqual(["x1"]);
+    sent = true;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
+    expect($$("tr[data-id]").map((tr) => tr.dataset.id)).toEqual(["fast", "x1"]);
+    expect(document.querySelector(".active-card")).toBeNull(); // it never showed as in progress
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("keeps a wedged send's attention card, with Resolve, until Resolve clears it", async () => {
+    let resolved = false;
+    const row = () =>
+      resolved
+        ? send({
+            id: "wedge",
+            subject: "Kinglets",
+            status: "sent",
+            c_accepted: 149,
+            c_unsent: 1,
+            c_delivered: 0,
+            c_bounced: 0,
+            c_complained: 0,
+          })
+        : send({
+            id: "wedge",
+            subject: "Kinglets",
+            status: "sending",
+            c_accepted: 149,
+            c_in_flight: 1,
+            c_delivered: 0,
+            c_bounced: 0,
+            c_complained: 0,
+            completed_at: null,
+          });
+    fake = fakeApi([
+      liveRoute(() => [
+        resolved
+          ? liveSend(row(), "settling")
+          : liveSend(row(), "needs-attention", { attention: { wedged: true, wedged_count: 1 } }),
+      ]),
+      {
+        method: "POST",
+        path: "/sends/wedge/resolve",
+        reply: () => {
+          resolved = true;
+          return { send: row(), resolved: 1, completed: true };
+        },
+      },
+      sendsRoute(() => [row()]),
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(6000);
+    const card = $("#stuck .stuck-card");
+    expect(card.textContent).toMatch(/1 ambiguous delivery/);
+    expect($("a", card).getAttribute("href")).toBe("#/sent/wedge");
+    $<HTMLButtonElement>("[data-resolve='wedge']", card).click();
+    $("#rUnsent").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.querySelector("#stuck .stuck-card")).toBeNull(); // at once, not at the next read
+    expect($$("tr[data-id]").map((tr) => tr.dataset.id)).toEqual(["wedge"]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("makes no request while nothing is due, sending, or settling", async () => {
+    const later = send({
+      id: "sch",
+      status: "scheduled",
+      fire_at: Date.now() + 3_600_000,
+      completed_at: null,
+    });
+    fake = fakeApi([
+      liveRoute(
+        () => [],
+        () => later.fire_at,
+      ),
+      sendsRoute(() => [later, send()]),
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    const calls = fake.calls.length;
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(fake.calls.length).toBe(calls);
+  });
+
+  it("says so in place when the first live read fails, and follows again on Retry", async () => {
+    let down = true;
+    fake = fakeApi([
+      {
+        path: "/sends/live",
+        reply: () =>
+          down
+            ? new Response(JSON.stringify({ error: "internal_error" }), { status: 500 })
+            : { now: Date.now(), sends: [], named: [], next_fire_at: null },
+      },
+      sendsRoute(() => [send()]),
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#active").textContent).toMatch(/internal_error|Internal/i);
+    expect($$("tr[data-id]")).toHaveLength(1); // the records stand on their own read
+    down = false;
+    $<HTMLButtonElement>("#active button").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#active").textContent).toBe("");
   });
 });

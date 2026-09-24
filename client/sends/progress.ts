@@ -1,7 +1,13 @@
-// What a send's counters say, shared by the list, the record, and the dashboard: the
-// wedge test, the list row's cells, the countdowns, and the small number formats.
+// What a send's counters say, shared by the list, the record, and the dashboard: who needs
+// the operator, the Delivered cell, the in-progress card, the countdowns, and the small
+// number formats.
 
-import type { SendSummary } from "../../shared/sends";
+import {
+  type LiveSend,
+  type SendCounts,
+  type SendSummary,
+  STUCK_THRESHOLD_MS,
+} from "../../shared/sends";
 import { every } from "../lifecycle";
 import { $$ } from "../ui/dom";
 import { untilStr } from "../ui/format";
@@ -42,90 +48,52 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   return tick;
 }
 
-/**
- * A send wedged on ambiguous in-flight rows: still `sending`, nothing left pending, but
- * one or more in-flight recipients whose fate a transport error left unknown (SPEC §12).
- * This is the state the sweep flags and the operator must adjudicate; it can't clear on
- * its own without risking a double-mail (I4). Read straight off the row's denormalized
- * counters, the same signals the server derives `wedged` from, so the list and the
- * watch agree. The lease check is essential: while the loop is actively working a send
- * it holds the lease (`locked_until` in the future), so a normal send's final dispatched
- * batch (pending 0, in flight > 0) is not a wedge, just work in progress. A genuine wedge
- * has released the lease.
- */
-export function isWedged(s: SendSummary): boolean {
-  const leaseHeld = s.locked_until != null && s.locked_until > Date.now();
-  return s.status === "sending" && !(s.c_pending || 0) && (s.c_in_flight || 0) > 0 && !leaseHeld;
-}
-
-/**
- * A send the provider refuses at the account level (a bad or revoked key, an unverified
- * domain, a paused account; SPEC §12): still `sending`, nobody consumed, retried with
- * growing gaps up to an hour apart, and unable to go on until the operator fixes the account. Read off the row, the
- * same field the server derives `attention.refused` from.
- */
-export function isRefused(s: SendSummary): boolean {
-  return s.status === "sending" && s.halt_reason === "account";
-}
-
 // The refusal advice lives in shared/, so the notification that emails it words it the same way.
 export { refusalAdvice } from "../../shared/sends";
 
-/** A send that needs the operator rather than patience, so its home is the attention
- *  block, not the in-progress rows. */
-export function needsOperator(s: SendSummary): boolean {
-  return isWedged(s) || isRefused(s);
+/**
+ * A send that needs the operator rather than patience (SPEC §12): wedged on ambiguous
+ * deliveries, which only Resolve can settle without risking a double-mail (I4), or refused
+ * by the provider, which only a fix to the account lifts. Its home is the attention block,
+ * not the in-progress cards. The server decides both flags, so every page agrees.
+ */
+export function needsOperator(s: LiveSend): boolean {
+  return s.attention.wedged || s.attention.refused;
 }
 
-// Dispatch/delivery numbers from a `/sends` list row's denormalized counters, so the
-// active-send row and the dashboard widget need no per-send /progress read. `done` is
-// the dispatch fraction (accepted vs the audience at fire), matching the watch's dispatch bar.
-function listRowCounts(s: SendSummary) {
-  const total =
-    (s.c_pending || 0) +
-    (s.c_in_flight || 0) +
-    (s.c_accepted || 0) +
-    (s.c_delivered || 0) +
-    (s.c_bounced || 0) +
-    (s.c_complained || 0) +
-    (s.c_skipped || 0) +
-    (s.c_unsent || 0);
-  const t = total > 0 ? total : s.recipient_count || 0;
-  const done =
-    (s.c_accepted || 0) + (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
-  const confirmed = (s.c_delivered || 0) + (s.c_bounced || 0) + (s.c_complained || 0);
-  const pct = t > 0 ? Math.round((100 * done) / t) : 0;
-  // Rough ETA from the average rate since the send started — the same cumulative
-  // estimate /progress reports, computed here off the list row so no extra read is needed.
-  let etaMs: number | null = null;
-  if (s.started_at && done > 0 && t > done) {
-    const elapsed = Date.now() - s.started_at;
-    if (elapsed > 0) {
-      etaMs = ((t - done) * elapsed) / done;
-    }
-  }
-  return { total: t, accepted: done, confirmed, pct, etaMs };
+/** The counts a Delivered cell reads. */
+export type DeliveredCounts = Pick<SendCounts, "delivered" | "bounced" | "complained" | "unsent">;
+
+/** A `/sends` list row's counters, as a Delivered cell reads them. */
+export function rowCounts(s: SendSummary): DeliveredCounts {
+  return {
+    delivered: s.c_delivered,
+    bounced: s.c_bounced,
+    complained: s.c_complained,
+    unsent: s.c_unsent,
+  };
 }
 
 /**
- * A `/sends` list row's "Delivered" cell, from its denormalized counters. It reports TRUE
- * delivered (webhook-confirmed `c_delivered`, not provider-`accepted`), so the Sent list
- * and dashboard recent-sends agree with the record view's "Delivered" for the same send,
- * and a bounced/complained recipient is never miscounted as delivered. Any bounce /
- * complaint / unsent shows as a muted delivery-failure note beneath the count, worst
- * first, so a bad send reads as one at a glance. A clean send prints nothing.
+ * A send's "Delivered" cell in the send lists, from its counters: a list row's (through
+ * `rowCounts`), or a live send's as its receipts settle. It reports TRUE delivered
+ * (webhook-confirmed, not provider-accepted), so the Sent list and the dashboard's Sent
+ * table agree with the record view's "Delivered" for the same send, and a bounced or
+ * complained recipient is never miscounted as delivered. Any bounce, complaint, or unsent
+ * shows as a muted delivery-failure note beneath the count, worst first, so a bad send
+ * reads as one at a glance. A clean send prints nothing.
  */
-export function deliveredCell(s: SendSummary): Html {
-  const delivered = s.c_delivered || 0;
+export function deliveredCell(c: DeliveredCounts): Html {
+  const delivered = c.delivered || 0;
   const kinds: string[] = [];
-  if (s.c_complained) {
-    kinds.push(`${s.c_complained.toLocaleString()} complained`);
+  if (c.complained) {
+    kinds.push(`${c.complained.toLocaleString()} complained`);
   }
-  if (s.c_bounced) {
-    kinds.push(`${s.c_bounced.toLocaleString()} bounced`);
+  if (c.bounced) {
+    kinds.push(`${c.bounced.toLocaleString()} bounced`);
   }
-  if (s.c_unsent) {
-    kinds.push(`${s.c_unsent.toLocaleString()} unsent`);
+  if (c.unsent) {
+    kinds.push(`${c.unsent.toLocaleString()} unsent`);
   }
   // Each kind is one unbreakable unit, so a wrap lands between kinds, never inside one.
   const note = kinds.length
@@ -135,19 +103,31 @@ export function deliveredCell(s: SendSummary): Html {
 }
 
 /**
- * One in-progress send as a card with a live mini dispatch bar, an ETA, and a Watch link.
+ * One in-progress send as a card with a live mini dispatch bar, its counts, and a Watch
+ * link, from the layer's read. The bar is accepted over the audience, as the watch's
+ * dispatch bar is, and the time to finish is the server's, shown only while the send is
+ * handing off, never while it is paused. A send in flight too long says so on its card.
  * The whole card opens the watch; the "Watch" link is the keyboard/middle-click target.
  */
-export function activeRowHtml(s: SendSummary): Html {
-  const c = listRowCounts(s);
-  const eta = c.etaMs != null ? ` · ~${fmtDuration(c.etaMs)} left` : "";
+export function activeRowHtml(s: LiveSend): Html {
+  const c = s.counts;
+  const accepted = c.accepted + c.delivered + c.bounced + c.complained;
+  const confirmed = c.delivered + c.bounced + c.complained;
+  const pct = s.total > 0 ? (100 * accepted) / s.total : 0;
+  const handingOff = s.phase === "progressing" || s.phase === "retrying";
+  const eta = handingOff && s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
   return html`<div class="card spread clickable active-card" data-watch="${s.id}">
       <div class="active-main">
         <a class="card-link active-subj" href="#/sent/${s.id}">${s.subject || html`<em>untitled</em>`}</a>
-        <div class="active-bar"><div class="active-fill" style="width:${clampPct(c.pct)}%"></div></div>
-        <div class="muted active-stat">Sending — ${c.accepted.toLocaleString()} of ${c.total.toLocaleString()} accepted${
-          c.confirmed ? ` · ${c.confirmed.toLocaleString()} confirmed` : ""
+        <div class="active-bar"><div class="active-fill" style="width:${clampPct(pct)}%"></div></div>
+        <div class="muted active-stat">Sending — ${accepted.toLocaleString()} of ${s.total.toLocaleString()} accepted${
+          confirmed ? ` · ${confirmed.toLocaleString()} confirmed` : ""
         }${eta}</div>
+        ${
+          s.attention.stuck
+            ? html`<div class="active-stuck">In progress over ${STUCK_THRESHOLD_MS / 60_000} minutes; it may be retrying.</div>`
+            : null
+        }
       </div>
       <a class="ghost-link" href="#/sent/${s.id}">Watch&nbsp;→</a>
     </div>`;

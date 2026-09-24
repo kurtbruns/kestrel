@@ -16,7 +16,10 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * not. Both outcomes are safe for I4 (neither re-mails this post), so the modal explains
  * the trade-off (record accuracy) rather than warning of a double-send.
  */
-export function openResolveModal(send: SendSummary, reload: () => void): void {
+export function openResolveModal(
+  send: Pick<SendSummary, "id" | "c_in_flight">,
+  reload: () => void,
+): void {
   const n = send.c_in_flight || 0;
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
