@@ -266,12 +266,12 @@ describe("every write to sends", () => {
   });
 });
 
-describe("migration 0003", () => {
-  it("keeps send_rev_floor for the Worker still serving between migrate and deploy, and adds the tombstones", async () => {
+describe("migration 0002", () => {
+  it("adds the tombstones and no rev floor", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('send_rev_floor', 'send_tombstones') ORDER BY name",
     ).all<{ name: string }>();
-    expect(results.map((r) => r.name)).toEqual(["send_rev_floor", "send_tombstones"]);
+    expect(results.map((r) => r.name)).toEqual(["send_tombstones"]);
   });
 });
 
