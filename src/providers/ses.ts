@@ -28,17 +28,18 @@ import type { AppEnv, Config } from "../env";
 import { substituteRecipient } from "../render/render";
 import { base64Utf8, buildRawMessage } from "./ses_mime";
 import { isSnsHost, mapSesNotification, type SnsEnvelope, verifySnsSignature } from "./sns";
-import type {
-  BatchHalt,
-  EmailProvider,
-  HaltCause,
-  PerRecipientResult,
-  ProviderTraits,
-  Recipient,
-  RenderedEmail,
-  SendBatchOptions,
-  SendBatchResult,
-  WebhookResult,
+import {
+  type BatchHalt,
+  type EmailProvider,
+  type HaltCause,
+  type PerRecipientResult,
+  PROVIDER_REQUEST_TIMEOUT_MS,
+  type ProviderTraits,
+  type Recipient,
+  type RenderedEmail,
+  type SendBatchOptions,
+  type SendBatchResult,
+  type WebhookResult,
 } from "./types";
 
 /**
@@ -212,10 +213,13 @@ export class SesProvider implements EmailProvider {
     // the send loop leaves the row `dispatched` for a human — its designed
     // at-most-once handling for non-idempotent providers. A real HTTP error
     // response below is unambiguous (SES did NOT accept) and is safely retryable.
+    // A request SES never answers is ended the same way: the timeout rejects the fetch,
+    // so it throws down that same path. aws4fetch carries `signal` onto the signed Request.
     const res = await this.client.fetch(this.endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
     });
 
     if (res.ok) {

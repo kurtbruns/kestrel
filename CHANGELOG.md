@@ -53,6 +53,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A provider request that never answers now ends after 30 seconds and is treated as unanswered, instead of holding the send until the Worker is stopped.
 - Two delivery receipts for the same message arriving together (an SES Delivery and a Complaint) no longer count the recipient twice, which could leave a send reading Complete while a receipt was outstanding, or Settling forever, with counts that disagreed with its record. A Resolve that lands beside a receipt no longer miscounts either, and a sent send's counts are checked against its record when its last receipt arrives (SPEC §8).
 - `GET /sends/:id` no longer links an archive page (`archive_url`) before the send is sent, when the link would 404.
 - The dashboard and the Sent page now keep up with every send without a reload: a send that starts and finishes between two looks moves straight to the Sent table, which before stayed on "Sending now…" until you reloaded, and a settling send's Delivered count follows its receipts. A cancel, move, re-make, or new schedule made by Claude or in another tab shows within about a minute, and with nothing moving the pages look about once a minute.

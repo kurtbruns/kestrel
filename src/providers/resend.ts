@@ -23,18 +23,19 @@
 import type { AppEnv, Config } from "../env";
 import { timingSafeEqual } from "../lib/constant_time";
 import { substituteRecipient } from "../render/render";
-import type {
-  BatchHalt,
-  DeliveryEvent,
-  EmailProvider,
-  HaltCause,
-  PerRecipientResult,
-  ProviderTraits,
-  Recipient,
-  RenderedEmail,
-  SendBatchOptions,
-  SendBatchResult,
-  WebhookResult,
+import {
+  type BatchHalt,
+  type DeliveryEvent,
+  type EmailProvider,
+  type HaltCause,
+  type PerRecipientResult,
+  PROVIDER_REQUEST_TIMEOUT_MS,
+  type ProviderTraits,
+  type Recipient,
+  type RenderedEmail,
+  type SendBatchOptions,
+  type SendBatchResult,
+  type WebhookResult,
 } from "./types";
 
 const BATCH_URL = "https://api.resend.com/emails/batch";
@@ -176,6 +177,9 @@ export class ResendProvider implements EmailProvider {
       },
       // The batch endpoint takes the JSON array of email objects as the body.
       body: JSON.stringify(elements),
+      // A request Resend never answers is ended and rejects like any other with no
+      // answer, so the send loop re-sends the batch under its key next tick.
+      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
