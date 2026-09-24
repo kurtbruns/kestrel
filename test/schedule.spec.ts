@@ -1,7 +1,9 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import type { AppEnv } from "../src/env";
 import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
+import { cancel } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
 
 const AUTH = await adminAuth();
@@ -166,6 +168,98 @@ describe("schedule / send / cancel + soft-lock", () => {
       headers: AUTH,
     });
     expect(twice.status).toBe(409);
+  });
+
+  it("cancel changes the send and the post together, or neither", async () => {
+    const schedule = async (id: string) =>
+      readJson(
+        await SELF.fetch(`${base}/posts/${id}/schedule`, {
+          method: "POST",
+          headers: JSON_AUTH,
+          body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+        }),
+      );
+    const sendStatus = async (sendId: string) =>
+      (await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }))).send.status;
+
+    // Both: the send is canceled and the post unlocked.
+    const both = await makeDraft();
+    const bothSend = (await schedule(both)).send.id;
+    await cancel(env as AppEnv, bothSend);
+    expect(await sendStatus(bothSend)).toBe("canceled");
+    expect(await postStatus(both)).toBe("draft");
+
+    // Neither: the post unlock fails, so the cancel rolls back with it.
+    const neither = await makeDraft();
+    const neitherSend = (await schedule(neither)).send.id;
+    await env.DB.prepare(
+      "CREATE TRIGGER fail_post_unlock BEFORE UPDATE OF status ON posts BEGIN SELECT RAISE(ABORT, 'unlock failed'); END",
+    ).run();
+    try {
+      await expect(cancel(env as AppEnv, neitherSend)).rejects.toThrow(/unlock failed/);
+    } finally {
+      await env.DB.prepare("DROP TRIGGER fail_post_unlock").run();
+    }
+    expect(await sendStatus(neitherSend)).toBe("scheduled");
+    expect(await postStatus(neither)).toBe("scheduled");
+
+    // Neither: a send already past the window is not canceled, and its post stays locked.
+    const sending = await makeDraft();
+    const sendingSend = (await schedule(sending)).send.id;
+    await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?")
+      .bind(sendingSend)
+      .run();
+    await expect(cancel(env as AppEnv, sendingSend)).rejects.toThrow(/not cancelable/);
+    expect(await sendStatus(sendingSend)).toBe("sending");
+    expect(await postStatus(sending)).toBe("scheduled");
+  });
+
+  it("refuses a fire_at without a timezone (400 naming the field); offsets and epoch millis are accepted", async () => {
+    const at = new Date(Date.now() + 60 * 60 * 1000);
+    const offsetless = at.toISOString().replace(/Z$/, "");
+    for (const fire_at of [offsetless, offsetless.slice(0, 16), at.toISOString().slice(0, 10)]) {
+      const id = await makeDraft();
+      const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at }),
+      });
+      expect(res.status).toBe(400);
+      const body = await readJson(res);
+      expect(body.field).toBe("fire_at");
+      expect(body.message).toMatch(/timezone/);
+      expect(await postStatus(id)).toBe("draft");
+    }
+
+    // The same instant written with an offset, as Z, as epoch millis (number or string).
+    const plus2 = new Date(at.getTime() + 2 * 60 * 60 * 1000).toISOString().replace(/Z$/, "+02:00");
+    for (const fire_at of [plus2, at.toISOString(), at.getTime(), String(at.getTime())]) {
+      const id = await makeDraft();
+      const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at }),
+      });
+      expect(res.status).toBe(201);
+      expect((await readJson(res)).send.fire_at).toBe(at.getTime());
+    }
+
+    // Reschedule reads fire_at the same way.
+    const id = await makeDraft();
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+      }),
+    );
+    const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: offsetless }),
+    });
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).field).toBe("fire_at");
   });
 
   it("reschedules a scheduled send: moves fire_at, keeps the frozen render and the lock (I3, I6)", async () => {

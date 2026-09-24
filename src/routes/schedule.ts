@@ -10,22 +10,38 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { freeze } from "../send/schedule";
 
-/** Parse a `fire_at` field (ISO-8601 timestamp or epoch millis) to epoch millis, or throw a 400. */
+/** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
+const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
+
+/**
+ * Parse a `fire_at` field (epoch millis, or an ISO-8601 timestamp with an offset) to
+ * epoch millis, or throw a 400. A timestamp without an offset is refused rather than
+ * read as UTC: an API caller meaning the publisher's local 9am would fire hours off.
+ */
 function parseFireAt(input: unknown): number {
   if (typeof input === "number" && Number.isFinite(input)) {
     return input;
   }
   if (typeof input === "string") {
-    const iso = Date.parse(input);
-    if (!Number.isNaN(iso)) {
-      return iso;
-    }
     const n = Number(input);
-    if (Number.isFinite(n)) {
+    if (input.trim() !== "" && Number.isFinite(n)) {
       return n;
     }
+    const iso = Date.parse(input);
+    if (!Number.isNaN(iso)) {
+      if (!ISO_WITH_OFFSET.test(input.trim())) {
+        throw fieldError(
+          "fire_at",
+          "fire_at needs a timezone: end the timestamp with Z or an offset like +02:00, or send epoch milliseconds",
+        );
+      }
+      return iso;
+    }
   }
-  throw fieldError("fire_at", "fire_at must be an ISO-8601 timestamp or epoch milliseconds");
+  throw fieldError(
+    "fire_at",
+    "fire_at must be an ISO-8601 timestamp with a Z or ±hh:mm offset, or epoch milliseconds",
+  );
 }
 
 /**
