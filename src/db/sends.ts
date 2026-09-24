@@ -530,6 +530,38 @@ export function insertScheduledSendStmt(
     );
 }
 
+/** Move a scheduled send's fire time, nothing else. A CAS on `status = 'scheduled'`:
+ *  `meta.changes === 0` means the send has left the review window (or never existed). */
+export function rescheduleStmt(
+  db: D1Database,
+  sendId: string,
+  fireAt: number,
+): D1PreparedStatement {
+  return db
+    .prepare("UPDATE sends SET fire_at = ? WHERE id = ? AND status = 'scheduled'")
+    .bind(fireAt, sendId);
+}
+
+/** Cancel a scheduled send. The same CAS as `rescheduleStmt`: a send that has begun
+ *  sending, or is already sent or canceled, changes zero rows. */
+export function cancelStmt(db: D1Database, sendId: string, now: number): D1PreparedStatement {
+  return db
+    .prepare(
+      "UPDATE sends SET status = 'canceled', completed_at = ? WHERE id = ? AND status = 'scheduled'",
+    )
+    .bind(now, sendId);
+}
+
+/** The predicate a post unlock carries when it runs in a batch after `cancelStmt`: the
+ *  post has no active send left. When the cancel's CAS changed nothing because the send
+ *  is still active, the unlock changes nothing too; a failure in either rolls back both. */
+export function noActiveSendFor(postId: string): { sql: string; binds: unknown[] } {
+  return {
+    sql: "NOT EXISTS (SELECT 1 FROM sends WHERE post_id = ? AND status IN ('scheduled', 'sending'))",
+    binds: [postId],
+  };
+}
+
 // --- the re-make (SPEC §6, §9) ---------------------------------------------------
 
 /** A scheduled send as the settings surface lists it: what a template or identity
