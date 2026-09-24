@@ -210,6 +210,23 @@ describe("GET /sends/:id is tagged", () => {
   });
 });
 
+describe("the ETag follows the words the clock changes", () => {
+  it("changes as a missed send's minutes late do, with no write", async () => {
+    const send = await frozenSend(Date.now() - 20 * 60_000);
+    const first = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
+    const etag = first.headers.get("etag") ?? "";
+    // A minute later by the send's own clock: the fire time a minute further back, with no rev.
+    await env.DB.prepare("UPDATE sends SET fire_at = fire_at - 60000 WHERE id = ?")
+      .bind(send.id)
+      .run();
+    const later = await SELF.fetch(`${base}/sends/${send.id}`, {
+      headers: { ...AUTH, "if-none-match": etag },
+    });
+    expect(later.status).toBe(200);
+    expect(later.headers.get("etag")).not.toBe(etag);
+  });
+});
+
 describe("the frozen email at its own route", () => {
   it("serves the html and text a send froze, and refuses another format", async () => {
     const send = await frozenSend(Date.now() + 3_600_000, "Owls", "# Owls\n\nhoot");

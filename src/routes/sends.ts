@@ -71,15 +71,17 @@ export async function list(c: RequestContext): Promise<Response> {
 
 /**
  * The entity tag of a send's view: its `rev`, and what the clock derives from it (the
- * phase, the kinds of its conditions, its actions), so a 304 means nothing about the send
- * has changed since, written or derived: a fire time passing turns a `scheduled` view
- * `due` with no write, and must not be answered "unchanged". `If-Match` reads the `rev`.
+ * phase, each condition and its words, the actions, the next change), so a 304 means
+ * nothing about the send has changed since, written or derived: a fire time passing turns
+ * a `scheduled` view `due` with no write, and a missed or stuck send's words count its
+ * minutes. Only `as_of` is left out. `If-Match` reads the `rev`.
  */
 function sendEtag(view: SendView): string {
   const derived = [
     view.phase,
-    view.conditions.map((cond) => cond.kind).join(","),
+    view.conditions.map((cond) => `${cond.kind}:${cond.message}`).join(","),
     view.actions.map((act) => act.name).join(","),
+    String(view.next_change_at),
   ].join(";");
   let h = 0;
   for (let i = 0; i < derived.length; i++) {
@@ -104,7 +106,9 @@ export async function get(c: RequestContext): Promise<Response> {
   }
   const { send, cursor } = read;
   const etag = sendEtag(send);
-  const headers = { etag, "cache-control": "private, no-cache" };
+  // The router marks every admin answer `no-store`; the tag is for a client that sends
+  // `If-None-Match` itself.
+  const headers = { etag };
   const match = c.req.headers.get("if-none-match");
   if (match?.split(",").some((t) => t.trim() === etag || t.trim() === `W/${etag}`)) {
     return new Response(null, { status: 304, headers });
@@ -132,7 +136,10 @@ export async function email(c: RequestContext): Promise<Response> {
         headers: { ...POST_PAGE_SECURITY_HEADERS, "content-type": "text/html; charset=utf-8" },
       })
     : new Response(send.rendered_text, {
-        headers: { "content-type": "text/plain; charset=utf-8" },
+        headers: {
+          "content-type": "text/plain; charset=utf-8",
+          "x-content-type-options": "nosniff",
+        },
       });
 }
 

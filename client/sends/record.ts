@@ -12,7 +12,7 @@ import type {
 } from "../../shared/sends";
 import { api, apiFile } from "../api";
 import { noEmailProvider } from "../deployment";
-import { mount, poll } from "../lifecycle";
+import { every, mount, poll } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
@@ -265,6 +265,10 @@ function startWatch(
 ): void {
   setHtml(root, watchHtml(data.send));
   wireWatchHeader(root, data.send, remount);
+  // The latest report, repainted on the clock between reports: a halt's "next retry in …"
+  // counts down while nothing about the send is written.
+  let latest = data.send;
+  every(1000, () => paintWatch(root, latest), signal);
   // From the page's own read, the send-state layer reports each change to the send, at the
   // server's pace; the watch keeps no poll of its own. Once dispatch ends it re-enters as the
   // frozen record (which settles).
@@ -276,6 +280,7 @@ function startWatch(
           remount();
           return;
         }
+        latest = fresh;
         // If Resolve just became possible, or stopped being, the header changes: re-render.
         if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
           setHtml(root, watchHtml(fresh));

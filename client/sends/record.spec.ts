@@ -416,6 +416,49 @@ describe("sent record", () => {
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
   });
 
+  it("counts a halt's next retry down on the clock while no report arrives", async () => {
+    const retryAt = Date.now() + 12 * 60_000;
+    const refused = sendView(send({ status: "sending", completed_at: null }), {
+      phase: "needs-attention",
+      provider: {
+        name: "ses",
+        halt: {
+          reason: "account",
+          cause: "quota",
+          error: "quota exceeded",
+          retries: 1,
+          since: 1_000,
+          retry_at: retryAt,
+        },
+      },
+      conditions: [condition.refused("quota exceeded", retryAt)],
+    });
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({ send: refused, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+      },
+      {
+        // Nothing about the send changes: every read reports no send.
+        path: "/sends/feed",
+        reply: () => ({
+          now: Date.now(),
+          sends: [],
+          removed: [],
+          cursor: `1.${Date.now()}`,
+          more: false,
+          conditions: [],
+          read_again_at: Date.now() + 60_000,
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
+    await vi.advanceTimersByTimeAsync(3 * 60_000);
+    expect($(".wbar-sub").textContent).toContain("next retry in 9 min");
+  });
+
   it("offers Resolve while the server lists it, and names its count", async () => {
     const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
       phase: "needs-attention",
