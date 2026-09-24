@@ -14,9 +14,10 @@ In the editor (`/dashboard/`), open a draft and use **Send test email** to deliv
 
 Open the received test's raw source (Gmail: **Show original**) and read the `Authentication-Results` header.
 
-- [ ] `spf=pass`, `dkim=pass`, and `dmarc=pass`, all aligned to `send.example.com`.
+- [ ] `dkim=pass` and `dmarc=pass`, both for `send.example.com`.
+- [ ] `spf=pass`. Its domain is under `send.example.com` for Resend, or for SES with a custom MAIL FROM domain; for SES without one it is `amazonses.com`, which is expected and still passes DMARC through DKIM.
 
-If any fail, revisit **Sending-domain DNS** — alignment is the single best predictor of landing in the inbox.
+If any fail, revisit **Sending-domain DNS**: alignment is the single best predictor of landing in the inbox.
 
 ## 3. One-click unsubscribe in a real client
 

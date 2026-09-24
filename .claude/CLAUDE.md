@@ -25,12 +25,12 @@ npm run check                       # biome check --write . (format + organize i
 npm run client:build                # emit the served admin tree (public/ + client/ → dist/public) once; client:watch keeps it current
 npm run lint                        # biome lint .          (report only, no writes)
 npm run format                      # biome format --write .
-npm run deploy                      # stamps the build, then wrangler deploy (add --env staging | --env production for those)
-npm run migrate:remote              # apply D1 migrations to the remote database
+npm run deploy -- --env staging     # stamps the build, then wrangler deploy; refuses without --env (staging | production)
+npm run migrate:remote -- --env staging  # apply D1 migrations to that environment's remote database; refuses without --env
 ```
 
 - **Quality gate before finishing:** `npm test`, `npm run typecheck`, and `npm run check`. CI runs the same gate on every pull request and `main` requires it, but CI only tells you afterwards, so run it before pushing.
-- **Deploy through `npm run deploy`,** never a bare `wrangler deploy`, so the build stamp is fresh.
+- **Deploy through `npm run deploy -- --env <name>`,** never a bare `wrangler deploy`, so the build stamp is fresh. It and `migrate:remote` refuse to run without `--env` (`scripts/require-env.mjs`), because the top-level config is development.
 - **Run `typecheck` after touching `wrangler.jsonc`:** `wrangler types` regenerates the gitignored `worker-configuration.d.ts`.
 - **`wrangler.jsonc` top level is the development environment** (fake transport, so dev can never reach a real inbox). `staging` and `production` are named `env`s that must redeclare every binding and var, because wrangler does not inherit them.
 - **A failed import of `src/generated/version.ts`** means the build stamp was never generated (an `--ignore-scripts` install, or `npx vitest` skipping `pretest`). Run `npm run version:build` once.

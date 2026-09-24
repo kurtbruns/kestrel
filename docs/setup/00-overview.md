@@ -35,7 +35,10 @@ There are three environments, each with its own database, storage, and — the l
 5. **Notifications**: the email that tells you when a send goes out, and right away if a send runs into a problem, through Cloudflare's own email so it still arrives when your provider refuses the account.
 6. **Wire the archive to a website** — optional; the self-contained default needs nothing.
 7. **Verify it works** — a real test send, one-click unsubscribe, the bounce round-trip, DKIM alignment, a test notification.
+8. **Connect Claude**: a service token so Claude can drive the same API the editor does.
 
 Work through them in that order: staging first, prove it end to end, then repeat the provider and DNS steps for production.
+
+Once the instance is running, **Upgrade to a new release** says how to move it to the next version.
 
 > Throughout, `example.com` / `newsletter.example.com` / `send.example.com` and every `REPLACE_WITH_*` id are placeholders — substitute your own. Secrets are never committed: local ones live in `.dev.vars` (gitignored), deployed ones in `wrangler secret put`.

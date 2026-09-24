@@ -8,7 +8,7 @@ Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You
 
 ## Prerequisites
 
-- Node 20+ and npm
+- Node 22+ and npm
 - A Cloudflare account, to deploy (not needed for local dev)
 - An email provider like **Amazon SES** or **Resend** to send mail once deployed (local dev uses a fake transport that sends nothing)
 
@@ -62,7 +62,7 @@ Deployed, the gate is Cloudflare Access instead; that setup is in the [setup gui
 - **Deploy a real instance:** start with [`docs/setup/00-overview.md`](docs/setup/00-overview.md); the whole guide is also served read-only in the editor's Docs tab.
 - **Understand the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md), kept fresh as the code moves.
 - **What Kestrel guarantees, and how the admin UI is built:** [`docs/SPEC.md`](docs/SPEC.md) and [`docs/DESIGN.md`](docs/DESIGN.md).
-- **Release history:** [`CHANGELOG.md`](CHANGELOG.md). A deployed instance shows its own version in the editor and at `GET /api/version`.
+- **Release history:** [`CHANGELOG.md`](CHANGELOG.md). A deployed instance shows its own version in the editor and at `GET /api/version`; [`docs/setup/09-upgrade.md`](docs/setup/09-upgrade.md) says how to move it to a newer release.
 - **All scripts:** `package.json`.
 
 ## License
