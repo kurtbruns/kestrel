@@ -651,20 +651,22 @@ describe("the tick's clock", () => {
 
   it("keeps one pace and one deadline across every send in the tick", async () => {
     vi.useRealTimers();
-    await seedConfirmed(addresses(10));
+    await seedConfirmed(addresses(30));
     const a = await dueSend();
     const b = await dueSend();
-    // 100 a second in a 60 ms window: at most seven starts, whichever send makes them.
-    const window = new SendWindow(100, 60);
     const budget = new Budget(1000);
+    // 10 a second in a one-second window: at most eleven starts in all, fewer than A's
+    // thirty recipients, so A runs until the window closes and leaves B nothing to start.
+    const window = new SendWindow(10, 1000);
 
     await runSend(env, a.id, budget, window);
     const afterA = ses.requests;
     await runSend(env, b.id, budget, window);
 
     expect(afterA).toBeGreaterThan(0);
-    expect(afterA).toBeLessThanOrEqual(7);
+    expect(afterA).toBeLessThanOrEqual(11);
     expect(ses.requests).toBe(afterA);
+    expect(window.startsLeft()).toBe(0);
   });
 });
 
