@@ -1,15 +1,15 @@
 /** Post send actions: schedule for a future time, or send now (buffered). Authed. */
 
-import { formatLead, type ScheduleResponse } from "../../shared/sends";
+import type { ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
-import { json, notFound, refusal } from "../lib/errors";
+import { json, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewWithCursor } from "../send/describe";
-import { freeze } from "../send/schedule";
+import { acceptFireAt, freeze } from "../send/schedule";
 
 /** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
 const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/i;
@@ -46,27 +46,18 @@ export function parseFireAt(input: unknown): number {
 }
 
 /**
- * Parse `fire_at` and require it to be at least the deployment's minimum lead out — the
- * single rule every future-dated send obeys, so scheduling and rescheduling can't drift on
- * it (I6). `immediateHint` appends the send-now pointer, which fits the schedule path (a
- * reschedule has no immediate alternative to point at).
+ * Parse `fire_at` and pass it through `acceptFireAt`, the one gate every requested fire time
+ * obeys (at least the minimum lead out, stored on the minute), so scheduling and rescheduling
+ * can't drift on it (I6). `immediateHint` appends the send-now pointer, which fits the
+ * schedule path (a reschedule has no immediate alternative to point at).
  */
 export function parseFutureFireAt(
   input: unknown,
   minLeadMs: number,
   immediateHint = false,
 ): number {
-  const fireAt = parseFireAt(input);
-  if (fireAt < Date.now() + minLeadMs) {
-    const hint = immediateHint ? "; use POST /posts/:id/send for the soonest send" : "";
-    throw refusal(
-      400,
-      "fire_at_too_soon",
-      `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead${hint}`,
-      { field: "fire_at" },
-    );
-  }
-  return fireAt;
+  const hint = immediateHint ? "; use POST /posts/:id/send for the soonest send" : "";
+  return acceptFireAt(parseFireAt(input), minLeadMs, { hint });
 }
 
 /**
@@ -117,7 +108,11 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     return json(repeat);
   }
 
-  const send = await freeze(c.env, c.config, post, Date.now() + c.config.minLeadMs);
+  // The soonest time the lead allows, through the same gate as a schedule, so it lands on
+  // the minute at or after it like any other fire time.
+  const now = Date.now();
+  const fireAt = acceptFireAt(now + c.config.minLeadMs, c.config.minLeadMs, { now });
+  const send = await freeze(c.env, c.config, post, fireAt);
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
 }

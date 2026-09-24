@@ -568,7 +568,7 @@ export function createRouter({
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". Answers with the new send's view (as `GET /sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000" },
@@ -582,11 +582,11 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "posts",
       summary:
-        "Send now: freeze and schedule one minimum lead out, cancelable until then. Idempotent per post.",
+        "Send now: freeze and schedule one minimum lead out, on the minute, cancelable until then. Idempotent per post.",
       description:
-        "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead: " +
+        "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +
-        ". For that whole window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. A second call for a post already in its window answers with that send and `idempotent: true`; the other refusals are as for scheduling.",
+        ". For nearly all of that window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. A second call for a post already in its window answers with that send and `idempotent: true`; the other refusals are as for scheduling.",
       example: {
         response: { send: scheduledExample, cursor: "57.1768467610000" },
       },
@@ -828,7 +828,7 @@ export function createRouter({
       description:
         "Updates only `fire_at` on a send still in its review window: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same `fire_at` form as scheduling (epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset), and the same minimum lead, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". A move to the time the send already has answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). " +
+        ". As when scheduling, the new time is rounded up to the next whole minute, after the lead is checked on the time as requested. A move to the time the send already has (after that rounding) answers 200 with `changed: false` before the lead is checked, so a retried move is safe. Once the fire time has passed it is a 409 `window_closed`, and a canceled send is a 409 `send_canceled` (schedule the post again instead). " +
         actionText,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },

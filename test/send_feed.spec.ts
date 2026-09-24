@@ -16,7 +16,7 @@ import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { readAgainAt, SETTLE_FOLLOW_MS } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
-import { cancel, freeze } from "../src/send/schedule";
+import { cancel, freeze, onTheMinute } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
@@ -160,7 +160,7 @@ describe("GET /sends/feed after a cursor", () => {
       Fresh: ["scheduled", "scheduled"],
     });
     expect(body.sends.find((s) => s.id === untouched.id)).toBeUndefined();
-    expect(body.sends.find((s) => s.id === moved.id)?.fire_at).toBe(Date.parse(to));
+    expect(body.sends.find((s) => s.id === moved.id)?.fire_at).toBe(onTheMinute(Date.parse(to)));
     // Nothing moving on its own: about once a minute, so the other client's next change
     // shows within one read.
     expect(body.read_again_at).toBe(body.now + 60_000);

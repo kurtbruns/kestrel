@@ -62,10 +62,18 @@ async function schedule(postId: string, msFromNow = 10 * 60 * 1000): Promise<any
   return (await readJson(res)).send;
 }
 
+/**
+ * Send now, then age the send by a minute, so it stands inside the minimum lead. Its fire
+ * time is rounded up to the minute, so for its first seconds a send-now send can sit just
+ * outside the lead; a minute later it is inside for the rest of its window.
+ */
 async function sendNow(postId: string): Promise<any> {
   const res = await SELF.fetch(`${base}/posts/${postId}/send`, { method: "POST", headers: AUTH });
   expect(res.status).toBe(201);
-  return (await readJson(res)).send;
+  const { send } = await readJson(res);
+  const fire_at = send.fire_at - 60_000;
+  await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?").bind(fire_at, send.id).run();
+  return { ...send, fire_at };
 }
 
 /** The send's view, with its frozen email beside it (read at its own route). */

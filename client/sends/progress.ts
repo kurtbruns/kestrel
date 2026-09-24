@@ -9,7 +9,7 @@ import type {
   SendCounts,
   SendView,
 } from "../../shared/sends";
-import { every } from "../lifecycle";
+import { at, every } from "../lifecycle";
 import { $$ } from "../ui/dom";
 import { lateStr, untilStr } from "../ui/format";
 import { type Html, html } from "../ui/html";
@@ -50,19 +50,37 @@ export function countdownHtml(s: SendView): Html {
  * leaves the queue; and, past the server's missed tolerance, how late it is, in the danger
  * tone. A card's window controls (`data-closes`, Cancel and Reschedule) hide at the fire
  * time, when the review window closes (SPEC §6) and the server would refuse them, rather
- * than wait for the next read. Returns the tick, for a section that re-renders its cards:
- * a fresh cell is empty until the next tick paints it.
+ * than wait for the next read. A fire time inside the coming second gets a tick of its own
+ * at that moment, so the switch lands when the countdown runs out, not up to a second
+ * after. Controls hidden this way stay hidden: a card is re-rendered only from a read, whose
+ * `actions` decide what it offers. Returns the tick, for a section that re-renders its
+ * cards: a fresh cell is empty until the next tick paints it.
  */
 export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
+  let armed = 0; // the moment an extra tick is set for, so a repeated tick sets it once
   const tick = () => {
+    const now = Date.now();
+    let next = Number.POSITIVE_INFINITY;
+    const watch = (moment: number) => {
+      if (moment > now && moment < next) {
+        next = moment;
+      }
+    };
     for (const el of $$<HTMLElement>("[data-closes]", root)) {
-      el.hidden = Date.now() >= Number(el.dataset.closes);
+      const closes = Number(el.dataset.closes);
+      el.hidden = now >= closes;
+      watch(closes);
     }
     for (const el of $$<HTMLElement>("[data-fire]", root)) {
       const fire = Number(el.dataset.fire);
       const missed = el.dataset.missed !== undefined;
       el.textContent = missed ? lateStr(fire) : untilStr(fire, el.dataset.due !== undefined);
       el.classList.toggle("countdown-missed", missed);
+      watch(fire);
+    }
+    if (next - now <= 1000 && next !== armed) {
+      armed = next;
+      at(next, tick, signal);
     }
   };
   every(1000, tick, signal);

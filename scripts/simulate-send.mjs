@@ -6,19 +6,21 @@
  * when the database is empty, and moves the demo's scheduled post to the requested time
  * through the reschedule route (or, when the demo's post has already gone out, creates a
  * post and schedules it through the schedule route). Then it prints the watch URL. Nothing
- * about the send is special: it fires at the first sweep tick after its fire time, as a
- * deployed send does (`npm run dev` runs the sweep once a minute, on the minute), and the
- * simulation profile the server runs (`SIMULATE_SENDS`) paces and answers it.
+ * about the send is special: the server rounds its fire time up to the whole minute, and it
+ * fires at the sweep tick on that minute, as a deployed send does (`npm run dev` runs the
+ * sweep once a minute, on the minute), and the simulation profile the server runs
+ * (`SIMULATE_SENDS`) paces and answers it.
  *
  *   --in <duration>   when it fires: 90s, 2m, 1m30s, 1h (default: the server's minimum
- *                     lead, the soonest any send may fire). Inside the lead is refused.
+ *                     lead, the soonest any send may fire), then rounded up to the minute
+ *                     by the server, as every fire time is. Inside the lead is refused.
  *   --profile <name>  resend, ses, or generic: checks the server runs that profile. The
  *                     profile is fixed when the server starts (`SIMULATE_SENDS=ses npm run
  *                     dev`), so this explains how to switch rather than switching.
  *   --size <n>        the list size to seed an empty database with (100 / 1k / 10k / 100k).
- *   --punctual        stay until the send comes due and run one extra sweep tick then, so it
- *                     fires on time instead of at the next minute. A dev tool's extra tick:
- *                     the app behaves as it always does.
+ *   --punctual        stay until the send comes due, run one extra sweep tick then, and say
+ *                     whether it started, rather than leave it to the server's own tick that
+ *                     minute. A dev tool's extra tick: the app behaves as it always does.
  *
  * The target is this worktree's dev server, as for the seed; override it with `PORT` or a
  * URL or port argument.
@@ -187,7 +189,6 @@ async function main() {
   }
 
   const confirmed = (await api("/subscribers?limit=1")).body?.counts?.confirmed ?? 0;
-  const nextTick = Math.ceil(send.fire_at / 60_000) * 60_000;
   const watch = `${base}/dashboard/#/sent/${send.id}`;
   console.log(
     `[${TAG}] "${send.subject}" is scheduled for ${clock(send.fire_at)}, to ${confirmed} confirmed subscriber${confirmed === 1 ? "" : "s"}.`,
@@ -195,11 +196,13 @@ async function main() {
   console.log(
     `  simulating ${PROFILES[simulation.profile]}${simulation.faults === "none" ? " with no injected failures" : ", with a real provider's failures"}`,
   );
+  // The server stores a fire time on the minute (docs/SPEC.md §6), and the sweep ticks on
+  // the minute, so the time it answered is when the send starts.
   if (flags.punctual) {
     console.log(`  it fires at ${clock(send.fire_at)}: this script runs one extra sweep tick then`);
   } else {
     console.log(
-      `  it fires at the first sweep tick after that, ${clock(nextTick)}, as a deployed send would`,
+      `  it fires at ${clock(send.fire_at)}, on that minute's sweep tick, as a deployed send would (a fire time is rounded up to the whole minute)`,
     );
   }
   if (simulation.profile === "ses") {

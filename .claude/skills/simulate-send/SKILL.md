@@ -24,7 +24,7 @@ A local send is a real send through the real API, send loop, and receipt ingest;
    ```
 
    `--in` is how far out the send fires (`90s`, `2m`, `1m30s`); left out, it is the server's minimum lead. It refuses a time inside the lead (one minute in the shipped dev setup, never less anywhere) and says why. It seeds the demo if the database is empty (`--size 1k` to seed a larger list), moves the demo's scheduled post to that time, or schedules a new post once the demo's has gone out, and prints the watch URL `…/dashboard/#/sent/<id>`.
-4. **Open the watch URL** in the Browser pane. Tell the person when it will fire: at the first minute tick after its fire time, so one to two minutes after a `--in 60s` request, as deployed. Pass `--punctual` only when they want it on the second (the script waits and runs one extra sweep tick).
+4. **Open the watch URL** in the Browser pane. Tell the person when it will fire: at the fire time the script prints, which the server has rounded up to the whole minute, so one to two minutes after a `--in 60s` request, as deployed. Pass `--punctual` only when they want the script to wait and run one extra sweep tick at that moment itself.
 
 ## What to expect on the record view
 

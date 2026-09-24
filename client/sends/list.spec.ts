@@ -364,6 +364,24 @@ describe("sent view", () => {
     expect(document.querySelector("#scheduled [data-reschedule]")).toBeNull();
   });
 
+  it("switches a scheduled card at the fire time itself, on the page's clock, with no read", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW + 5_500 })]);
+    fake = world(srv);
+    await mount(renderSent);
+    // The once-a-second ticks fall on whole seconds from the mount, so the fire time sits
+    // half a second between two of them: only a switch at the moment itself passes.
+    await vi.advanceTimersByTimeAsync(0);
+    const calls = fake.calls.length;
+    const controls = () => $<HTMLElement>("#scheduled [data-closes]");
+    await vi.advanceTimersByTimeAsync(5_499);
+    expect(controls().hidden).toBe(false);
+    expect($(".sched-card .countdown").textContent).toBe("Sends in 0s");
+    await vi.advanceTimersByTimeAsync(1);
+    expect(controls().hidden).toBe(true);
+    expect($(".sched-card .countdown").textContent).toBe("Preparing to send…");
+    expect(fake.calls).toHaveLength(calls);
+  });
+
   it("shows the other client's cancel, move, and new schedule within one idle read", async () => {
     const srv = sendServer([scheduled(), send()]);
     fake = world(srv);

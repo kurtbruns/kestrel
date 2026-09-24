@@ -9,16 +9,16 @@ import type {
   PostSavedResponse,
   TestSendResponse,
 } from "../../shared/posts";
-import type { ScheduleResponse, SendResponse, SendView } from "../../shared/sends";
+import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
-import { every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
+import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
-import { has } from "../sends/progress";
+import { can, has } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { $, $$ } from "../ui/dom";
 import {
@@ -792,18 +792,45 @@ export async function renderEditor(
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
     // Before the fire time it counts down on the clock. From then the server refuses Cancel
-    // and Reschedule (SPEC §6), so the banner stops offering them and says the send is being
-    // prepared, and that this page moves to the live send when it starts. Past the server's
-    // missed tolerance it says how late the send is, from the server's condition.
+    // and Reschedule (SPEC §6), so the same line reads "Preparing to send…" in place of the
+    // countdown and the buttons stay where they are, disabled: the page hands off to the
+    // live send within seconds, so nothing needs to move. Past the server's missed
+    // tolerance it says how late the send is, from the server's condition.
+    // The switch happens on this page's clock, at the fire time itself (a tick of its own
+    // when the fire time is inside the coming second), with no read needed. Before it the
+    // buttons are the server's to offer (`actions`); from it the clock only disables what
+    // was offered, so a read that answered before the fire time cannot bring them back.
     let painted = "";
+    let armed = 0; // the fire time an exact tick is set for, so it is set once
+    let seenOpen = false; // whether this page showed the window open, and so its buttons
+    const reschedBtn = $<HTMLButtonElement>("#rescheduleSchedule");
+    const cancelBtn = $<HTMLButtonElement>("#cancelSchedule");
+    const offers = (name: SendAction["name"]) =>
+      current.actions === undefined || can({ actions: current.actions }, name);
     const paintBanner = () => {
-      const due = current.phase === "due" || Date.now() >= current.fire_at;
-      controls.hidden = due;
+      const now = Date.now();
+      const due = current.phase === "due" || now >= current.fire_at;
+      if (!due) {
+        seenOpen = true;
+        reschedBtn.hidden = !offers("reschedule");
+        cancelBtn.hidden = !offers("cancel");
+      } else if (!seenOpen) {
+        // Opened after the window closed: there is nothing to show disabled.
+        reschedBtn.hidden = true;
+        cancelBtn.hidden = true;
+      }
+      reschedBtn.disabled = due;
+      cancelBtn.disabled = due;
+      controls.hidden = reschedBtn.hidden && cancelBtn.hidden;
       const markup = scheduledBannerHtml(current, due);
       const key = String(markup);
       if (key !== painted) {
         painted = key;
         setHtml(whenEl, markup);
+      }
+      if (!due && current.fire_at - now <= 1000 && current.fire_at !== armed) {
+        armed = current.fire_at;
+        at(current.fire_at, paintBanner, signal);
       }
     };
     paintBanner();
@@ -879,13 +906,11 @@ export async function renderEditor(
     }
 
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
-    const rescheduleBtn = $<HTMLButtonElement>("#rescheduleSchedule");
-    rescheduleBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount);
+    reschedBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount);
 
     // --- cancel schedule (from the scheduled banner) ---
-    const cancelScheduleBtn = $<HTMLButtonElement>("#cancelSchedule");
-    cancelScheduleBtn.onclick = () =>
-      busy(cancelScheduleBtn, "Canceling…", async () => {
+    cancelBtn.onclick = () =>
+      busy(cancelBtn, "Canceling…", async () => {
         try {
           await api(`/sends/${scheduled.id}/cancel`, { method: "POST" });
           toast("Schedule canceled");
@@ -893,7 +918,9 @@ export async function renderEditor(
         } catch (e) {
           toast(message(e));
         }
-      });
+        // `busy` hands the button back when it ends; a cancel still answering at the fire
+        // time must not re-enable it, so the clock's verdict is painted again at once.
+      }).finally(paintBanner);
   }
 
   // --- image upload: drag/drop, paste, click ---
@@ -1130,9 +1157,11 @@ export async function renderEditor(
               refused();
               return;
             }
-            await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
+            // The toast names the time the server answered, not the lead: the fire time is
+            // rounded up to the minute (SPEC §6), so it can be up to a minute past the lead.
+            const { send } = await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withNoProviderNote(`Sends in ${minLeadText()}, cancelable until then.`));
+            toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
             remount();
           } catch (e) {
             toast(message(e));
@@ -1150,7 +1179,7 @@ export async function renderEditor(
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of ${minLeadText()}. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of at least ${minLeadText()}, on the minute. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1177,8 +1206,10 @@ export async function renderEditor(
   return handle;
 }
 
-/** What the scheduled banner reads of its send. */
-type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at">;
+/** What the scheduled banner reads of its send. `actions` is absent only until the send's
+ *  own read answers (the post's read does not carry them). */
+type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at"> &
+  Partial<Pick<SendView, "actions">>;
 
 /**
  * Whether the send has moved on from scheduled, found on the editor's own read of it: once
@@ -1199,16 +1230,16 @@ function movedOn(send: SendView, remount: () => void): boolean {
 
 /**
  * The scheduled banner's words for where its send stands (DESIGN §9), in the cards' own
- * formats: the fire time and a countdown while the window is open; from the fire time,
- * "Preparing to send…" and that this page switches to the live send when it starts; past
- * the server's missed tolerance, how late it is, in the danger tone.
+ * formats: the fire time and a countdown while the window is open; from the fire time, the
+ * same line with "Preparing to send…" in place of the countdown; past the server's missed
+ * tolerance, how late it is, in the danger tone.
  */
 function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
   if (has(send, "missed")) {
     return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>`;
   }
   if (due) {
-    return html`<strong>${untilStr(send.fire_at, true)}</strong> This page switches to the live send when it starts.`;
+    return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at, true)}</span>`;
   }
   return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span> · cancelable until then.`;
 }

@@ -159,6 +159,9 @@ export interface SendExtras {
   /** Conditions beyond the ones a plain row implies (missed by the clock, refused by an
    *  account halt): a wedge, a stuck send, a bounce spike, as `condition` builds them. */
   conditions?: SendCondition[];
+  /** The actions, when not the ones the clock implies: a read whose clock disagrees with
+   *  the page's, or a server that withholds one. */
+  actions?: SendAction[];
   eta_ms?: number | null;
   /** The published post's page, which the server links once the send is sent. */
   archive?: string | null;
@@ -355,14 +358,15 @@ export function sendServer(rows: SendSummary[] = []) {
     // What the server would take now: the window's controls until the fire time, Resolve
     // while wedged.
     const actions: SendAction[] =
-      row.status === "scheduled" && now < row.fire_at
+      extras.actions ??
+      (row.status === "scheduled" && now < row.fire_at
         ? [
             { name: "cancel", method: "POST", path: `/sends/${row.id}/cancel` },
             { name: "reschedule", method: "POST", path: `/sends/${row.id}/reschedule` },
           ]
         : conditions.some((c) => c.kind === "wedged")
           ? [{ name: "resolve", method: "POST", path: `/sends/${row.id}/resolve` }]
-          : [];
+          : []);
     return { phase, conditions, actions };
   };
   const view = (s: { row: SendSummary; extras: SendExtras }, now: number): SendView => {

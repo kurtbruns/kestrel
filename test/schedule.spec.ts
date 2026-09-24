@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
-import { cancel } from "../src/send/schedule";
+import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
 
 const AUTH = await adminAuth();
@@ -262,7 +262,7 @@ describe("schedule / send / cancel + soft-lock", () => {
         body: JSON.stringify({ fire_at }),
       });
       expect(res.status).toBe(201);
-      expect((await readJson(res)).send.fire_at).toBe(at.getTime());
+      expect((await readJson(res)).send.fire_at).toBe(onTheMinute(at.getTime()));
     }
 
     // Reschedule reads fire_at the same way.
@@ -305,7 +305,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     const { send } = await readJson(res);
     // only the fire time moved: still scheduled, at the new time
     expect(send.status).toBe("scheduled");
-    expect(send.fire_at).toBe(Date.parse(newFire));
+    expect(send.fire_at).toBe(onTheMinute(Date.parse(newFire)));
     // the frozen render and audience are untouched — no re-freeze (I3)
     expect(await emailOf(sendId)).toBe(frozenHtml);
     expect(frozenHtml).toContain("frozen body");
@@ -317,7 +317,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(await postStatus(id)).toBe("scheduled");
     // still the post's one active send, now at the new time
     const still = await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }));
-    expect(still.send.fire_at).toBe(Date.parse(newFire));
+    expect(still.send.fire_at).toBe(onTheMinute(Date.parse(newFire)));
   });
 
   it("rejects a reschedule fire_at that isn't at least the buffer out (400), leaving the time unchanged", async () => {
@@ -408,9 +408,11 @@ describe("schedule / send / cancel + soft-lock", () => {
       await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
     );
     expect(first.send.status).toBe("scheduled");
-    expect(
-      Math.abs(first.send.fire_at - first.send.scheduled_at - DEFAULT_MIN_LEAD_MS),
-    ).toBeLessThan(2000);
+    // One lead out, on the minute at or after it: never less than the lead, under a minute more.
+    expect(first.send.fire_at % 60_000).toBe(0);
+    const lead = first.send.fire_at - first.send.scheduled_at;
+    expect(lead).toBeGreaterThan(DEFAULT_MIN_LEAD_MS - 2000);
+    expect(lead).toBeLessThan(DEFAULT_MIN_LEAD_MS + 60_000);
 
     const second = await readJson(
       await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
@@ -582,7 +584,9 @@ describe("the minimum lead is the deployment's own", () => {
     });
     expect(res.status).toBe(201);
     const { send } = await readJson(res);
-    expect(Math.abs(send.fire_at - send.scheduled_at - 60_000)).toBeLessThan(2000);
+    expect(send.fire_at % 60_000).toBe(0);
+    expect(send.fire_at - send.scheduled_at).toBeGreaterThan(60_000 - 2000);
+    expect(send.fire_at - send.scheduled_at).toBeLessThan(120_000);
   });
 
   it("reschedules as close as the configured lead allows, and no closer", async () => {
@@ -615,6 +619,91 @@ describe("the minimum lead is the deployment's own", () => {
       const route = routes.find((r: any) => r.path === path && r.method === "POST");
       expect(route?.description, path).toMatch(/1 minute on this deployment/);
       expect(route?.description, path).toMatch(/MIN_LEAD_SECONDS/);
+    }
+  });
+});
+
+describe("fire times fall on the minute", () => {
+  const post = async (path: string, body?: unknown) =>
+    SELF.fetch(`${base}${path}`, {
+      method: "POST",
+      headers: body === undefined ? AUTH : JSON_AUTH,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+
+  it("rounds a time with seconds up to the next minute, and leaves one on the minute as it is", () => {
+    const minute = Date.UTC(2026, 8, 24, 12, 50);
+    expect(onTheMinute(minute)).toBe(minute);
+    expect(onTheMinute(minute + 1)).toBe(minute + 60_000);
+    expect(onTheMinute(minute - 9_000)).toBe(minute);
+    expect(onTheMinute(minute + 1_000)).toBe(minute + 60_000);
+  });
+
+  it("checks the lead on the time as requested, so rounding never lets a time inside it through", () => {
+    const now = Date.UTC(2026, 8, 24, 12, 49, 10);
+    // 59 s out would round to 12:51:00, 110 s out, but it was asked inside a one-minute lead.
+    expect(() => acceptFireAt(now + 59_000, 60_000, { now })).toThrow(/at least 1 minute/);
+    // Exactly the lead out is accepted, and stored on the minute after it: a longer window.
+    expect(acceptFireAt(now + 60_000, 60_000, { now })).toBe(Date.UTC(2026, 8, 24, 12, 51));
+  });
+
+  it("stores schedule, Send now, and reschedule on the minute, and answers and reads back that time", async () => {
+    const withSeconds = onTheMinute(Date.now() + 20 * 60_000) + 17_000;
+    const scheduled = await post(`/posts/${await makeDraft()}/schedule`, {
+      fire_at: new Date(withSeconds).toISOString(),
+    });
+    expect(scheduled.status).toBe(201);
+    const { send } = await readJson(scheduled);
+    expect(send.fire_at).toBe(withSeconds + 43_000);
+
+    const moveTo = withSeconds + 30 * 60_000;
+    const moved = await readJson(await post(`/sends/${send.id}/reschedule`, { fire_at: moveTo }));
+    expect(moved).toMatchObject({ changed: true, send: { fire_at: moveTo + 43_000 } });
+    const read = await readJson(await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }));
+    expect(read.send.fire_at).toBe(moveTo + 43_000);
+
+    const now = await readJson(await post(`/posts/${await makeDraft()}/send`));
+    expect(now.send.fire_at % 60_000).toBe(0);
+    expect(now.send.fire_at).toBeGreaterThanOrEqual(
+      now.send.scheduled_at + DEFAULT_MIN_LEAD_MS - 2000,
+    );
+  });
+
+  it("keeps a time already on the minute exactly, on schedule and on reschedule", async () => {
+    const onMinute = onTheMinute(Date.now() + 20 * 60_000);
+    const { send } = await readJson(
+      await post(`/posts/${await makeDraft()}/schedule`, { fire_at: onMinute }),
+    );
+    expect(send.fire_at).toBe(onMinute);
+    const moved = await readJson(
+      await post(`/sends/${send.id}/reschedule`, { fire_at: onMinute + 60 * 60_000 }),
+    );
+    expect(moved.send.fire_at).toBe(onMinute + 60 * 60_000);
+  });
+
+  it("refuses a schedule and a reschedule inside the lead, whatever minute they would round to", async () => {
+    const id = await makeDraft();
+    const refused = await post(`/posts/${id}/schedule`, {
+      fire_at: Date.now() + DEFAULT_MIN_LEAD_MS - 1_000,
+    });
+    expect(refused.status).toBe(400);
+    expect((await readJson(refused)).error).toBe("fire_at_too_soon");
+    const { send } = await readJson(
+      await post(`/posts/${id}/schedule`, { fire_at: Date.now() + 20 * 60_000 }),
+    );
+    const move = await post(`/sends/${send.id}/reschedule`, {
+      fire_at: Date.now() + DEFAULT_MIN_LEAD_MS - 1_000,
+    });
+    expect(move.status).toBe(400);
+    expect((await readJson(move)).error).toBe("fire_at_too_soon");
+  });
+
+  it("says in the API reference that the fire time is rounded up to the minute", async () => {
+    const ref = await readJson(await SELF.fetch(`${base}/api/reference`, { headers: AUTH }));
+    const routes = ref.groups.flatMap((g: any) => g.routes);
+    for (const path of ["/posts/:id/schedule", "/posts/:id/send", "/sends/:id/reschedule"]) {
+      const route = routes.find((r: any) => r.path === path && r.method === "POST");
+      expect(route?.description, path).toMatch(/rounded up to the next whole minute/);
     }
   });
 });

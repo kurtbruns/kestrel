@@ -94,6 +94,27 @@ export function every(ms: number, fn: () => void, signal: AbortSignal): void {
   signal.addEventListener("abort", () => clearInterval(id), { once: true });
 }
 
+/**
+ * Run `fn` once at the wall-clock moment `time`, unless the signal aborts first. For a
+ * change that belongs to an exact moment (a review window closing at the fire time), which a
+ * once-a-second tick would reach up to a second late. Only for moments close at hand: a
+ * timer's delay tops out near 25 days, past which it would fire at once.
+ */
+export function at(time: number, fn: () => void, signal: AbortSignal): void {
+  if (signal.aborted) {
+    return;
+  }
+  const cancel = () => clearTimeout(id);
+  const id = setTimeout(
+    () => {
+      signal.removeEventListener("abort", cancel);
+      fn();
+    },
+    Math.max(0, time - Date.now()),
+  );
+  signal.addEventListener("abort", cancel, { once: true });
+}
+
 // A tick's answer: `false` ends the poll; anything else (nothing, for a tick that always
 // continues) keeps it going.
 // biome-ignore lint/suspicious/noConfusingVoidType: see above
