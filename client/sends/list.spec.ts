@@ -197,6 +197,8 @@ describe("sent view", () => {
     expect(cards[0]!.textContent).toContain("Paused one");
     expect(cards[0]!.textContent).toContain("ses 400 SendingPausedException: Account is paused");
     expect(cards[0]!.textContent).toContain("in the SES console");
+    // Words without a closing stop get one; the next sentence follows a single period.
+    expect(cards[0]!.textContent).toContain("Account is paused. Settle the account's standing");
     expect(cards[0]!.querySelector("a")!.getAttribute("href")).toBe("#/sent/ref");
     expect(cards[0]!.querySelector("button")).toBeNull(); // nothing in the app to press
     expect(document.querySelector(".active-card")).toBeNull();

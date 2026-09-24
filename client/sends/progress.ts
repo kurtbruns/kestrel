@@ -51,6 +51,13 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
 // The refusal advice lives in shared/, so the notification that emails it words it the same way.
 export { refusalAdvice } from "../../shared/sends";
 
+/** The provider's words for a refusal, as a sentence the copy around them can follow: their
+ *  own closing stop kept ("…quota exceeded."), one added only when they have none. */
+export function providerWords(error: string | null | undefined): string {
+  const text = error?.trim() || "no detail given";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 /**
  * A send that needs the operator rather than patience (SPEC §12): wedged on ambiguous
  * deliveries, which only Resolve can settle without risking a double-mail (I4), or refused

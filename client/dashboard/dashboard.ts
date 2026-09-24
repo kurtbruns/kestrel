@@ -22,6 +22,7 @@ import {
   countdowns,
   deliveredCell,
   needsOperator,
+  providerWords,
   refusalAdvice,
   rowCounts,
 } from "../sends/progress";
@@ -99,7 +100,7 @@ function computeHealth(live: LiveSend[], sends: SendListItem[]): HealthAlert[] {
     const halt = firstRefused.provider.halt;
     alerts.push({
       level: "red",
-      text: html`The email provider is refusing this account, pausing ${which}: ${halt?.error || "no detail given"}. ${refusalAdvice(halt?.cause ?? null)} Sending resumes on its own.`,
+      text: html`The email provider is refusing this account, pausing ${which}: ${providerWords(halt?.error)} ${refusalAdvice(halt?.cause ?? null)} Sending resumes on its own.`,
     });
   }
   // A healthy in-progress send is NOT surfaced here: the active-send widget below is its

@@ -495,6 +495,8 @@ describe("dashboard", () => {
     refused = true;
     await vi.advanceTimersByTimeAsync(3000);
     expect($(".health.red").textContent).toMatch(/refusing this account, pausing Swifts: ses 429/);
+    // The provider's words end in a period already: the line adds none of its own.
+    expect($(".health.red").textContent).toMatch(/quota exceeded\. Wait for the provider's/);
     expect($(".health a").getAttribute("href")).toBe("#/sent/x3");
     expect(document.querySelector("#dashActive .active-card")).toBeNull(); // reported once
     await vi.advanceTimersByTimeAsync(9000);

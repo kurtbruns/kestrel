@@ -31,6 +31,7 @@ import {
   countdowns,
   deliveredCell,
   needsOperator,
+  providerWords,
   refusalAdvice,
   rowCounts,
 } from "./progress";
@@ -105,7 +106,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       stuckEl,
       html`${refused.map(
         (s) =>
-          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${s.provider.halt?.error || "no detail given"}. ${refusalAdvice(s.provider.halt?.cause ?? null)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
+          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${providerWords(s.provider.halt?.error)} ${refusalAdvice(s.provider.halt?.cause ?? null)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
       )}${wedged.map((s) => {
         const n = s.attention.wedged_count;
         const noun = n === 1 ? "delivery" : "deliveries";
