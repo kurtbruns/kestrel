@@ -49,6 +49,8 @@ beforeEach(async () => {
   await env.DB.batch([
     env.DB.prepare("DELETE FROM deliveries"),
     env.DB.prepare("DELETE FROM suppressions"),
+    // A fresh send each test, so its counters start at zero.
+    env.DB.prepare("DELETE FROM sends WHERE id = 's-we'"),
   ]);
 });
 
@@ -110,5 +112,105 @@ describe("applyDeliveryEvents — suppression address recovery", () => {
 
     expect(applied.suppressed).toBe(1);
     expect(await isSuppressed(env.DB, "direct@example.com")).toBe(true);
+  });
+});
+
+async function sendCounters(): Promise<Record<string, number>> {
+  const row = await env.DB.prepare(
+    "SELECT c_accepted, c_delivered, c_bounced, c_complained FROM sends WHERE id = 's-we'",
+  ).first<Record<string, number>>();
+  return row!;
+}
+
+describe("applyDeliveryEvents — matching the right delivery", () => {
+  it("leaves every real record untouched for a test send's events", async () => {
+    // The publisher is on their own list, and a test send to them has no delivery row.
+    await seedDelivery("publisher@example.com", "msg-real");
+    const before = await sendCounters();
+
+    const applied = await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-test", email: "publisher@example.com" },
+      { type: "bounced", providerId: "msg-test", email: "publisher@example.com", hard: false },
+    ]);
+
+    expect(applied.suppressed).toBe(0);
+    expect(await deliveryEvent("msg-real")).toBeNull();
+    expect(await sendCounters()).toEqual(before);
+  });
+
+  it("falls back to the address only when the event carries no provider id", async () => {
+    await seedDelivery("noid@example.com", "msg-noid");
+
+    await applyDeliveryEvents(env.DB, [{ type: "delivered", email: "NoId@Example.com" }]);
+
+    expect(await deliveryEvent("msg-noid")).toBe("delivered");
+  });
+});
+
+describe("applyDeliveryEvents — a worse outcome is never replaced by a better one", () => {
+  it("keeps complained when delivered arrives after it", async () => {
+    await seedDelivery("order@example.com", "msg-order");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "complained", providerId: "msg-order" },
+      { type: "delivered", providerId: "msg-order" },
+    ]);
+
+    expect(await deliveryEvent("msg-order")).toBe("complained");
+    expect(await sendCounters()).toMatchObject({ c_delivered: 0, c_complained: 1 });
+  });
+
+  it("keeps complained over a later bounce, and a bounce over a later delivered", async () => {
+    await seedDelivery("cmp@example.com", "msg-cmp");
+    await seedDelivery("bnc@example.com", "msg-bnc");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "complained", providerId: "msg-cmp" },
+      { type: "bounced", providerId: "msg-cmp", hard: true },
+      { type: "bounced", providerId: "msg-bnc", hard: false },
+      { type: "delivered", providerId: "msg-bnc" },
+    ]);
+
+    expect(await deliveryEvent("msg-cmp")).toBe("complained");
+    expect(await deliveryEvent("msg-bnc")).toBe("bounced");
+    expect(await sendCounters()).toMatchObject({ c_delivered: 0, c_bounced: 1, c_complained: 1 });
+  });
+
+  it("lets a worse outcome replace a better one", async () => {
+    await seedDelivery("up@example.com", "msg-up");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-up" },
+      { type: "bounced", providerId: "msg-up", hard: false },
+      { type: "bounced", providerId: "msg-up", hard: true },
+      { type: "bounced", providerId: "msg-up", hard: false },
+    ]);
+
+    expect(await deliveryEvent("msg-up")).toBe("bounced");
+    // A later soft bounce does not undo the hard one that suppressed the address.
+    expect(await deliveryBounceKind("msg-up")).toBe("hard");
+    expect(await sendCounters()).toMatchObject({ c_delivered: 0, c_bounced: 1 });
+  });
+});
+
+describe("applyDeliveryEvents — suppression casing", () => {
+  it("suppresses subscriber bob@x.com on a Bob@X.com bounce", async () => {
+    const applied = await applyDeliveryEvents(env.DB, [
+      { type: "bounced", providerId: "msg-case", email: "Bob@X.com", hard: true },
+    ]);
+
+    expect(applied.suppressed).toBe(1);
+    expect(await isSuppressed(env.DB, "bob@x.com")).toBe(true);
+  });
+
+  it("suppresses the matched delivery's address over the event's", async () => {
+    await seedDelivery("carol@x.com", "msg-carol");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "complained", providerId: "msg-carol", email: "Carol@X.com" },
+    ]);
+
+    const rows = await env.DB.prepare("SELECT email FROM suppressions").all<{ email: string }>();
+    expect(rows.results.map((r) => r.email)).toEqual(["carol@x.com"]);
   });
 });
