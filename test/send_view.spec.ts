@@ -163,7 +163,7 @@ describe("one SendView on every route", () => {
     expect([res.resolved, res.completed, res.send.status]).toEqual([1, true, "sent"]);
   });
 
-  it("gives no time to finish while the send is paused", async () => {
+  it("gives no time to finish while the send backs off, and one between ticks", async () => {
     const send = await frozenSend(Date.now() - 60_000);
     const now = Date.now();
     await env.DB.prepare(
@@ -171,11 +171,23 @@ describe("one SendView on every route", () => {
     )
       .bind(now - 60_000, send.id)
       .run();
-    const paused = (
-      (await readJson(
-        await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }),
-      )) as SendResponse
-    ).send;
+    const read = async () =>
+      (
+        (await readJson(
+          await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }),
+        )) as SendResponse
+      ).send;
+    // Paused only by the tick's budget: still handing off, at the pace since the start.
+    const between = await read();
+    expect(between.phase).toBe("progressing");
+    expect(between.dispatch.eta_ms).not.toBeNull();
+
+    await env.DB.prepare(
+      "UPDATE sends SET halt_reason = 'unavailable', halt_error = '503', halted_at = ? WHERE id = ?",
+    )
+      .bind(now, send.id)
+      .run();
+    const paused = await read();
     expect(paused.phase).toBe("backing-off");
     expect(paused.dispatch.rate_per_min).not.toBeNull();
     expect(paused.dispatch.eta_ms).toBeNull();

@@ -770,6 +770,26 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("reads a send waiting for its next tick as sending, paused between ticks, not backing off", async () => {
+    let between = true;
+    const current = () =>
+      sendView(send({ ...inFlight(), c_in_flight: between ? 0 : 3 }), {
+        phase: "progressing",
+        dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: 120_000 },
+      });
+    fake = watching(current);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".phase-pill").textContent).toBe("Sending");
+    expect($(".wbar-sub").textContent).toMatch(
+      /^Paused between ticks — it resumes on the next sweep\. · ~30\/min · ETA 2 min$/,
+    );
+    between = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($(".wbar-sub").textContent).toMatch(/^Handing recipients to the provider\./);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("offers Resolve while the server lists it, and names its count", async () => {
     const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
       phase: "needs-attention",

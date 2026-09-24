@@ -55,6 +55,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send too large for one sweep tick no longer reads as Backing off while it waits for the next tick: it reads as progressing (Sending), with a line under the dispatch bar that it resumes on the next sweep. Backing off now means only a pause after an error: recipients waiting on a retry after a transient error, or the provider unavailable (SPEC §12).
 - A provider request that never answers now ends after 30 seconds and is treated as unanswered, instead of holding the send until the Worker is stopped.
 - Two delivery receipts for the same message arriving together (an SES Delivery and a Complaint) no longer count the recipient twice, which could leave a send reading Complete while a receipt was outstanding, or Settling forever, with counts that disagreed with its record. A Resolve that lands beside a receipt no longer miscounts either, and a sent send's counts are checked against its record when its last receipt arrives (SPEC §8).
 - `GET /sends/:id` no longer links an archive page (`archive_url`) before the send is sent, when the link would 404.
