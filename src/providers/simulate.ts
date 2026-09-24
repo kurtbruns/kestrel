@@ -99,8 +99,14 @@ const SES_QUOTA = {
   msg: "Daily message quota exceeded.",
 };
 
-const PROFILES: Record<SimulationProfile, SimProfile> = {
-  generic: {
+/**
+ * Each profile is built when a simulation asks for it, never at module load: the send loop
+ * and sweep import this module in every environment, so a profile that can't be built (an
+ * adapter answer `adapterHalt` can't read) fails a dev send, never a deployed Worker's
+ * startup.
+ */
+const PROFILES: Record<SimulationProfile, () => SimProfile> = {
+  generic: () => ({
     traits: () => ({ maxBatch: 8, idempotentRetry: true }),
     requestMs: 900,
     transientRate: 0.04,
@@ -109,8 +115,8 @@ const PROFILES: Record<SimulationProfile, SimProfile> = {
     rejectError: "simulated permanent transport failure (550)",
     quota: null,
     guaranteed: { lost: false, quota: false },
-  },
-  resend: {
+  }),
+  resend: () => ({
     traits: () => RESEND_TRAITS,
     requestMs: 500,
     transientRate: 0,
@@ -119,8 +125,8 @@ const PROFILES: Record<SimulationProfile, SimProfile> = {
     rejectError: "The `to` field is invalid. (simulated)",
     quota: null,
     guaranteed: { lost: false, quota: false },
-  },
-  ses: {
+  }),
+  ses: () => ({
     // The send loop keeps requests to the account's send rate (`maxRequestRate`); this is
     // how long each one takes to be answered.
     traits: sesTraits,
@@ -138,7 +144,7 @@ const PROFILES: Record<SimulationProfile, SimProfile> = {
       sesErrorText(SES_QUOTA.status, SES_QUOTA.type, SES_QUOTA.msg),
     ),
     guaranteed: { lost: true, quota: true },
-  },
+  }),
 };
 
 // --- receipts: outcome mix and lag ----------------------------------------------------
@@ -305,10 +311,12 @@ function guaranteedAt(sendId: string, state: "lost" | "quota"): number {
  * first retry (its first step, less the slack a due retry is given). That covers every
  * request of the run it halted, those the loop sent alongside the refused one included, and
  * the retry always finds it lifted, since the halt is stamped after the refusal. Kept on
- * `Date`, the clock the retry time is kept on. A real quota lifts over a day.
+ * `Date`, the clock the retry time is kept on. A real quota lifts over a day. Computed on
+ * use, like the profiles, so nothing here can fail at module load.
  */
-const QUOTA_HOLD_MS =
-  unwrap(HALT_BACKOFF_MS.account[0], "the first account backoff step") - HALT_RETRY_SLACK_MS;
+function quotaHoldMs(): number {
+  return unwrap(HALT_BACKOFF_MS.account[0], "the first account backoff step") - HALT_RETRY_SLACK_MS;
+}
 
 /**
  * The local send simulation as a provider. List sends run through the profile; everything
@@ -328,7 +336,7 @@ export class SimProvider implements EmailProvider {
   private readonly fake = new FakeProvider();
 
   constructor(simulation: SimulationView, config: Config) {
-    this.profile = PROFILES[simulation.profile];
+    this.profile = PROFILES[simulation.profile]();
     this.faults = simulation.faults;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
@@ -370,7 +378,7 @@ export class SimProvider implements EmailProvider {
           sendId,
         });
       }
-      if (state.quotaSpentAt !== null && now < state.quotaSpentAt + QUOTA_HOLD_MS) {
+      if (state.quotaSpentAt !== null && now < state.quotaSpentAt + quotaHoldMs()) {
         return { kind: "halted", halt: p.quota };
       }
     }

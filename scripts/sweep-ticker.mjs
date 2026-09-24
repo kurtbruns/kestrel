@@ -19,6 +19,8 @@
 /** The path `wrangler dev` answers by running the Worker's scheduled handler once. */
 const SCHEDULED_PATH = "/cdn-cgi/local/scheduled";
 const MINUTE = 60_000;
+/** Closer to the next minute than this, a tick is taken to have fired early for it. */
+const EARLY_MS = 1000;
 
 /**
  * Run the scheduled handler once on the dev server at `base`, as the cron would at `time`.
@@ -50,17 +52,25 @@ export function startSweepTicker(base, log = console) {
   let warned = false;
   const schedule = () => {
     const now = Date.now();
-    timer = setTimeout(tick, MINUTE - (now % MINUTE));
+    let minute = now - (now % MINUTE) + MINUTE;
+    // A timer can fire a hair before the minute it was set for (it runs on a monotonic clock,
+    // the minute is wall-clock). That tick's next minute is then only a moment away: skip to
+    // the one after, or two sweeps would run back to back.
+    if (minute - now < EARLY_MS) {
+      minute += MINUTE;
+    }
+    timer = setTimeout(() => tick(minute), minute - now);
   };
-  const tick = async () => {
+  // `minute` is the one the tick was set for, early or late, as a deployed cron's
+  // `scheduledTime` is.
+  const tick = async (minute) => {
     if (stopped) {
       return;
     }
     // The next tick is scheduled first, so a slow sweep can't push the one after it off the
     // minute: deployed, ticks don't wait for each other either (the lease keeps them apart).
     schedule();
-    const scheduledTime = Date.now() - (Date.now() % MINUTE);
-    const ok = await triggerSweep(base, scheduledTime);
+    const ok = await triggerSweep(base, minute);
     if (ok && !announced) {
       announced = true;
       log.log("[dev] send sweep: running once a minute, on the minute, as the deployed cron does");

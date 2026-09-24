@@ -171,28 +171,35 @@ const originArgs = isRemote
 // forwarded, it would override `.dev.vars` with the app's default (`MIN_LEAD_SECONDS=`
 // would quietly bring back the five-minute lead).
 const OVERRIDABLE = ["SIMULATE_SENDS", "MIN_LEAD_SECONDS", "SUBREQUEST_BUDGET"];
+const fromShell = OVERRIDABLE.filter((name) => process.env[name]?.trim());
 const overrideArgs = isRemote
   ? []
-  : OVERRIDABLE.filter((name) => process.env[name]?.trim()).flatMap((name) => [
-      "--var",
-      `${name}:${process.env[name]}`,
-    ]);
+  : fromShell.flatMap((name) => ["--var", `${name}:${process.env[name]}`]);
 
 // A `.dev.vars` copied before a setting was added to `.dev.vars.example` runs without it (the
 // app's default, not the dev setup's), so name what's missing rather than let the dev server
-// quietly differ from the one the README describes.
+// quietly differ from the one the README describes. Only a setting the example gives a value
+// counts: an empty placeholder (the deployed provider's credentials, Access) reads the same as
+// an absent one, and local dev runs without it. Nor does one the shell supplies for this run.
 if (!isRemote) {
-  const keys = (file) =>
-    new Set(
-      [...readFileSync(file, "utf8").matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=/gm)].map((m) => m[1]),
+  // Each `NAME=value` in a .dev.vars-shaped file, unquoted, with a trailing comment dropped.
+  const settings = (file) =>
+    new Map(
+      [
+        ...readFileSync(file, "utf8").matchAll(
+          /^[ \t]*([A-Z][A-Z0-9_]*)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)'|([^#\n]*))/gm,
+        ),
+      ].map(([, name, double, single, bare]) => [name, (double ?? single ?? bare ?? "").trim()]),
     );
   const example = join(ROOT, ".dev.vars.example");
   const local = join(ROOT, ".dev.vars");
   if (!existsSync(local)) {
     console.warn("[dev] no .dev.vars: run `cp .dev.vars.example .dev.vars` for the dev setup");
   } else if (existsSync(example)) {
-    const have = keys(local);
-    const missing = [...keys(example)].filter((k) => !have.has(k));
+    const have = new Set([...settings(local).keys(), ...fromShell]);
+    const missing = [...settings(example)]
+      .filter(([name, value]) => value !== "" && !have.has(name))
+      .map(([name]) => name);
     if (missing.length > 0) {
       console.warn(
         `[dev] .dev.vars has no ${missing.join(", ")}; copy ${missing.length === 1 ? "it" : "them"} from .dev.vars.example`,

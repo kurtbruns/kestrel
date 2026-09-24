@@ -8,6 +8,7 @@ import worker from "../src/index";
 import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { ResendProvider } from "../src/providers/resend";
+import * as sesAdapter from "../src/providers/ses";
 import { SesProvider } from "../src/providers/ses";
 import {
   drainSimulatedWebhooks,
@@ -222,6 +223,24 @@ describe("a profile per provider, with the real adapter's traits", () => {
       expect(sim.name).toBe("fake"); // a fake-family transport: nothing reaches an inbox
     }
     expect(ses.maxRequestRate).toBe(3);
+  });
+
+  it("builds a profile when a simulation asks for it, never at module load", () => {
+    // The send loop and sweep import the simulation in every environment, production
+    // included. An adapter answer the SES profile can't read fails building that profile
+    // (a dev send), where built at load it would fail a deployed Worker's startup.
+    const classify = vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
+    try {
+      const config = getConfig(env);
+      expect(
+        () => new SimProvider({ profile: "resend", faults: "realistic" }, config),
+      ).not.toThrow();
+      expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
+        "expected a halting error response to exist",
+      );
+    } finally {
+      classify.mockRestore();
+    }
   });
 });
 
