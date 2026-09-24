@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostListItem } from "../../shared/posts";
-import type { LiveSend, SendListItem } from "../../shared/sends";
+import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
@@ -9,12 +9,13 @@ import {
   $,
   $$,
   type FakeApi,
+  type FakeRoute,
   fakeApi,
-  liveReads,
-  liveRoute,
-  liveSend,
+  feedReads,
+  listReads,
   mount,
   resetShell,
+  sendServer,
   unmount,
 } from "../test/support";
 import { renderDashboard } from "./dashboard";
@@ -36,7 +37,7 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   author: "human",
   ...over,
 });
-const send = (over: Partial<SendListItem> = {}): SendListItem => ({
+const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   id: "x1",
   post_id: "p3",
   status: "sent",
@@ -64,9 +65,6 @@ const send = (over: Partial<SendListItem> = {}): SendListItem => ({
   c_skipped: 0,
   c_unsent: 0,
   rev: 1,
-  phase: "complete",
-  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
-  stuck: false,
   ...over,
 });
 const counts: SubscriberCounts = { pending: 3, confirmed: 40, unsubscribed: 2, suppressed: 1 };
@@ -94,29 +92,56 @@ const config = (): SettingsResponse =>
     },
   }) as unknown as SettingsResponse;
 
-// A stateful fake: the sends list filters on `status` like the Worker does, and `live` is what
-// the send-state layer reads (GET /sends/live), so every read sees the same world.
+// The dashboard's world: the posts and subscribers it reads once, and a stateful send server
+// that answers the sends list and the layer's feed over one change sequence, so every read
+// sees the same world and a spec's write is what any client's would be.
 function world(
   posts: PostListItem[],
-  sends: () => SendListItem[],
-  live: () => LiveSend[] = () => [],
+  srv: ReturnType<typeof sendServer>,
   subs = counts,
-  next: () => number | null = () => null,
+  extra: FakeRoute[] = [],
 ) {
   return fakeApi([
-    liveRoute(live, next),
+    ...extra,
+    ...srv.routes,
     { path: "/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
-    {
-      path: "/sends",
-      reply: (req) => {
-        const status = req.url.searchParams.get("status");
-        const rows = sends().filter((s) => !status || s.status === status);
-        return { sends: rows, page: { ...page, total: rows.length } };
-      },
-    },
     { path: "/subscribers", reply: () => ({ counts: subs, subscribers: [], page }) },
   ]);
 }
+
+const scheduled = (over: Partial<SendSummary> = {}) =>
+  send({
+    id: "x2",
+    post_id: "p2",
+    subject: "Gulls",
+    status: "scheduled",
+    fire_at: NOW + 60_000,
+    started_at: null,
+    completed_at: null,
+    audience_resolved_at: null,
+    c_delivered: 0,
+    c_bounced: 0,
+    recipient_count: 40,
+    ...over,
+  });
+const sending = (over: Partial<SendSummary> = {}) =>
+  send({
+    id: "x3",
+    post_id: "p4",
+    subject: "Swifts",
+    status: "sending",
+    fire_at: NOW - 60_000,
+    started_at: NOW - 60_000,
+    completed_at: null,
+    c_pending: 50,
+    c_accepted: 10,
+    c_delivered: 0,
+    c_bounced: 0,
+    ...over,
+  });
+
+const cards = () => $$("#dashScheduled .sched-card").map((c) => c.dataset.post);
+const countdown = (post: string) => $(`#dashScheduled .sched-card[data-post='${post}'] .countdown`);
 
 describe("dashboard", () => {
   let fake: FakeApi;
@@ -145,20 +170,7 @@ describe("dashboard", () => {
       }),
       post({ id: "p3", slug: "waxwings", subject: "Waxwings", status: "sent" }),
     ];
-    const sends = [
-      send(),
-      send({
-        id: "x2",
-        post_id: "p2",
-        status: "scheduled",
-        subject: "Gulls",
-        fire_at: NOW + 60_000,
-        started_at: null,
-        completed_at: null,
-        recipient_count: 40,
-      }),
-    ];
-    fake = world(posts, () => sends);
+    fake = world(posts, sendServer([send(), scheduled()]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".dash-head h1").textContent).toBe("Birds Weekly");
@@ -202,7 +214,7 @@ describe("dashboard", () => {
   });
 
   it("reports Claude as connected once the service principal has authored a revision", async () => {
-    fake = world([post({ author: "service" })], () => []);
+    fake = world([post({ author: "service" })], sendServer());
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".conn-status").textContent).toBe("Claude is connected.");
@@ -218,34 +230,31 @@ describe("dashboard", () => {
     );
   });
 
+  it("follows from its own list read: the layer's first read asks from that read's cursor", async () => {
+    fake = world([post()], sendServer([send()]));
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    const [list] = listReads(fake);
+    const [feed] = feedReads(fake);
+    expect(listReads(fake)).toHaveLength(1);
+    expect(feed?.url.searchParams.get("since")).toBeTruthy();
+    // The feed's first read comes after the page's own, never beside it.
+    expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(list!));
+  });
+
   it("raises the health line from the server's flags, red for a missed send and a wedged one, and keeps the wedged send out of the active widget", async () => {
-    const sends = [
-      send({ id: "m1", status: "scheduled", fire_at: NOW - 6 * 60_000, started_at: null }),
-      send({ id: "w1", subject: "Kinglets", status: "sending", c_pending: 0, c_in_flight: 2 }),
-      send({ id: "ok1", status: "sending", c_pending: 5, started_at: NOW - 11 * 60_000 }),
-      send({
-        id: "st1",
-        status: "sending",
-        c_pending: 5,
-        c_in_flight: 1,
-        started_at: NOW - 31 * 60_000,
-        stuck: true,
-      }),
-    ];
-    const [m1, w1, ok1, st1] = sends as [SendListItem, SendListItem, SendListItem, SendListItem];
     // The server decides every flag (SPEC §12): eleven minutes in is not in flight too long,
     // thirty-one is, and a send due six minutes ago is past the missed tolerance.
-    const live = [
-      liveSend(m1, "due", { attention: { missed: true } }),
-      liveSend(w1, "needs-attention", { attention: { wedged: true, wedged_count: 2 } }),
-      liveSend(ok1, "progressing"),
-      liveSend(st1, "progressing", { attention: { stuck: true } }),
-    ];
-    fake = world(
-      [post()],
-      () => sends,
-      () => live,
-    );
+    const srv = sendServer([scheduled({ id: "m1", post_id: "p9", fire_at: NOW - 6 * 60_000 })]);
+    srv.put(sending({ id: "w1", subject: "Kinglets", c_pending: 0, c_in_flight: 2 }), {
+      phase: "needs-attention",
+      attention: { wedged: true, wedged_count: 2 },
+    });
+    srv.put(sending({ id: "ok1", c_pending: 5, started_at: NOW - 11 * 60_000 }));
+    srv.put(sending({ id: "st1", c_pending: 5, c_in_flight: 1, started_at: NOW - 31 * 60_000 }), {
+      attention: { stuck: true },
+    });
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
@@ -258,66 +267,94 @@ describe("dashboard", () => {
     ]);
     // The wedged line leads to where Resolve is: the send's own page.
     expect($("a", health).getAttribute("href")).toBe("#/sent/w1");
-    expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["ok1", "st1"]);
+    expect(
+      $$("#dashActive .active-card")
+        .map((c) => c.dataset.watch)
+        .sort(),
+    ).toEqual(["ok1", "st1"]);
     expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(/over 30 minutes/);
+    // The missed send's own card says how late it is, in the danger tone.
+    expect(countdown("p9").textContent).toBe("Missed its fire time · 6 min late");
+    expect(countdown("p9").classList.contains("countdown-missed")).toBe(true);
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("calls a due send missed only past the server's tolerance, never at the fire time", async () => {
-    const due = send({ id: "d1", status: "scheduled", fire_at: NOW - 30_000, started_at: null });
-    fake = world(
-      [post()],
-      () => [due],
-      () => [liveSend(due, "due")],
-    );
+  it("says Preparing to send from the fire time, calls a due send missed only past the server's tolerance, and then says how late it is", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW + 20_000 })]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
-    expect(document.querySelector(".health")).toBeNull();
-    expect($("#dashScheduled .sched-card").dataset.post).toBe("p3");
+    expect(countdown("p2").textContent).toBe("Sends in 20s");
+    // The clock switches the card at the fire time, before any read says so.
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(countdown("p2").textContent).toBe("Preparing to send…");
+    // Just past it the layer reads, sees the send due, and re-reads the queue: still preparing.
+    const before = listReads(fake).length;
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(listReads(fake).length).toBe(before + 1);
+    expect(countdown("p2").textContent).toBe("Preparing to send…");
+    expect(document.querySelector(".health")).toBeNull(); // an ordinary slow tick is no miss
+    // Nothing starts it: at the tolerance the feed reports the miss, with no write.
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect($(".health.red").textContent).toMatch(/1 scheduled send passed the fire time/);
+    expect(countdown("p2").textContent).toBe("Missed its fire time · 5 min late");
+    expect(countdown("p2").classList.contains("countdown-missed")).toBe(true);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(countdown("p2").textContent).toBe("Missed its fire time · 7 min late");
+  });
+
+  it("says Preparing to send when the server reads the send due, even with the page's clock behind", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW + 20_000 })]);
+    fake = world([post()], srv);
+    vi.setSystemTime(NOW + 25_000); // the server's clock, past the fire time
+    const route = srv.routes.find((r) => r.path === "/sends")!;
+    const reply = route.reply;
+    route.reply = (req) => {
+      const out = reply(req);
+      vi.setSystemTime(NOW); // the page's, behind it
+      return out;
+    };
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(countdown("p2").textContent).toBe("Preparing to send…");
+  });
+
+  it("hands a due send from the queue to the active-send card on the read that sees it start, never saying Sending now", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW - 10_000 })]);
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(countdown("p2").textContent).toBe("Preparing to send…");
+    srv.edit("x2", { status: "sending", started_at: Date.now(), c_pending: 30, c_accepted: 10 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(cards()).toEqual([]);
+    expect($("#dashActive .active-stat").textContent).toMatch(/^Sending — 10 of 40 accepted/);
+    expect(document.body.textContent).not.toMatch(/Sending now/);
   });
 
   it("raises one red line with the provider's words for a refused account, and keeps the send out of the active widget", async () => {
     const refused = (id: string) =>
-      send({
+      sending({
         id,
-        status: "sending",
         c_pending: 40,
         halt_reason: "account",
         halt_cause: "credentials",
         halt_error: "Resend 401 invalid_api_key: API key is invalid",
         halted_at: NOW - 60_000,
       });
-    const sends = [
-      refused("r1"),
-      refused("r2"),
-      send({
+    const srv = sendServer([refused("r1"), refused("r2")]);
+    // Only unavailable, which retries on its own: still an ordinary in-progress send.
+    srv.put(
+      sending({
         id: "u1",
-        status: "sending",
         c_pending: 5,
-        started_at: NOW - 60_000,
         halt_reason: "unavailable",
+        halt_cause: "outage",
+        halt_error: "503",
       }),
-    ];
-    const halt = {
-      reason: "account" as const,
-      cause: "credentials" as const,
-      error: "Resend 401 invalid_api_key: API key is invalid",
-      since: NOW - 60_000,
-      retry_at: NOW + 240_000,
-    };
-    const [r1, r2, u1] = sends as [SendListItem, SendListItem, SendListItem];
-    const live = [
-      liveSend(r1, "needs-attention", { attention: { refused: true }, halt }),
-      liveSend(r2, "needs-attention", { attention: { refused: true }, halt }),
-      liveSend(u1, "backing-off", {
-        halt: { ...halt, reason: "unavailable", cause: "outage", error: "503" },
-      }),
-    ];
-    fake = world(
-      [post()],
-      () => sends,
-      () => live,
+      { phase: "backing-off" },
     );
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
@@ -327,12 +364,11 @@ describe("dashboard", () => {
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
-    // Only unavailable, which retries on its own: still an ordinary in-progress send.
     expect($$("#dashActive .active-card").map((c) => c.dataset.watch)).toEqual(["u1"]);
   });
 
   it("flags an elevated bounce rate on a recent send, amber", async () => {
-    fake = world([post()], () => [send({ c_delivered: 90, c_bounced: 10 })]);
+    fake = world([post()], sendServer([send({ c_delivered: 90, c_bounced: 10 })]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
@@ -341,11 +377,7 @@ describe("dashboard", () => {
   });
 
   it("shows the first-run checklist when nothing is written and no one is on the list, and its New post creates one", async () => {
-    fake = fakeApi([
-      liveRoute(() => []),
-      { path: "/posts", reply: () => ({ posts: [], page }) },
-      { path: "/sends", reply: () => ({ sends: [], page }) },
-      { path: "/subscribers", reply: () => ({ counts: none, subscribers: [], page }) },
+    fake = world([], sendServer(), none, [
       { method: "POST", path: "/posts", reply: () => ({ post: { id: "p9" }, revision_id: "r" }) },
     ]);
     await mount(renderDashboard);
@@ -362,16 +394,7 @@ describe("dashboard", () => {
   });
 
   it("opens the post from a draft row or a scheduled card, the record from a sent row, and the watch from the active card", async () => {
-    const sends = [
-      send(),
-      send({ id: "x2", post_id: "p2", status: "scheduled", fire_at: NOW + 60_000 }),
-      send({ id: "x3", post_id: "p4", status: "sending", c_pending: 50, c_accepted: 50 }),
-    ];
-    fake = world(
-      [post()],
-      () => sends,
-      () => [liveSend(sends[2] as SendListItem, "progressing")],
-    );
+    fake = world([post()], sendServer([send(), scheduled(), sending({ c_accepted: 50 })]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     $("tr[data-id='p1'] td:last-child").click();
@@ -385,50 +408,23 @@ describe("dashboard", () => {
   });
 
   it("moves a send that starts and finishes between two reads straight from the queue to the Sent table, within one read", async () => {
-    let stage: "due" | "sent" = "due";
-    const later = send({ id: "x2", post_id: "p2", status: "scheduled", fire_at: NOW + 60_000 });
-    const fast = () =>
-      stage === "due"
-        ? send({
-            id: "x3",
-            post_id: "p4",
-            subject: "Swifts",
-            status: "scheduled",
-            fire_at: NOW - 5_000,
-            started_at: null,
-            completed_at: null,
-            c_delivered: 0,
-            c_bounced: 0,
-          })
-        : send({
-            id: "x3",
-            post_id: "p4",
-            subject: "Swifts",
-            status: "sent",
-            fire_at: NOW - 5_000,
-            c_accepted: 50,
-            c_delivered: 0,
-            c_bounced: 0,
-            completed_at: Date.now(),
-          });
-    fake = world(
-      [post()],
-      () => [later, fast()],
-      () => [liveSend(fast(), stage === "due" ? "due" : "settling")],
-    );
+    const srv = sendServer([
+      scheduled(),
+      scheduled({ id: "x3", post_id: "p4", subject: "Swifts", fire_at: NOW - 5_000 }),
+    ]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
-    expect($$("#dashScheduled .sched-card").map((c) => c.dataset.post)).toEqual(["p4", "p2"]);
+    expect(cards()).toEqual(["p4", "p2"]);
     expect($("#dashSent").textContent).toMatch(/No sends yet/);
-    const listReads = () => fake.calls.filter((c) => c.url.pathname === "/sends").length;
-    const before = listReads();
-    await vi.advanceTimersByTimeAsync(3000); // due: the layer reads every 3 s
-    expect(liveReads(fake)).toHaveLength(2);
-    expect(listReads()).toBe(before); // nothing moved, nothing re-read
+    const before = listReads(fake).length;
+    await vi.advanceTimersByTimeAsync(3000); // due: the server asks for a read every 3 s
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(listReads(fake).length).toBe(before); // nothing moved, nothing re-read
     // The tick starts it and it finishes dispatch before the next read: one change, due to sent.
-    stage = "sent";
+    srv.edit("x3", { status: "sent", c_accepted: 50, completed_at: Date.now() });
     await vi.advanceTimersByTimeAsync(3000);
-    expect($$("#dashScheduled .sched-card").map((c) => c.dataset.post)).toEqual(["p2"]);
+    expect(cards()).toEqual(["p2"]);
     const row = $("#dashSent tr[data-send='x3']");
     expect($(".badge", row).textContent).toBe("sent");
     expect($("a", row).getAttribute("href")).toBe("#/sent/x3");
@@ -436,63 +432,66 @@ describe("dashboard", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("makes no request while nothing is due, sending, or settling, and wakes once when the next send comes due", async () => {
+  it("reads about once a minute while nothing moves, and once just past the next fire time", async () => {
     const fire = NOW + 2 * 3_600_000;
-    const scheduled = send({
-      id: "x2",
-      post_id: "p2",
-      status: "scheduled",
-      fire_at: fire,
-      started_at: null,
-    });
-    fake = world(
-      [post()],
-      () => [scheduled],
-      () => [],
-      counts,
-      () => fire,
-    );
+    fake = world([post()], sendServer([scheduled({ fire_at: fire })]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
-    const calls = fake.calls.length;
+    const lists = listReads(fake).length;
     await vi.advanceTimersByTimeAsync(60 * 60_000);
-    expect(fake.calls.length).toBe(calls); // the countdown ticks with no network
+    expect(feedReads(fake)).toHaveLength(61); // the first, then one a minute
+    expect(listReads(fake).length).toBe(lists); // nothing changed, nothing re-read
     await vi.advanceTimersByTimeAsync(60 * 60_000 + 1_000);
-    expect(liveReads(fake)).toHaveLength(2); // the fire time: one read, to see it due
+    // The fire time: the read just past it sees the send due and re-reads the queue.
+    expect(listReads(fake).length).toBe(lists + 1);
+    expect(countdown("p2").textContent).toBe("Preparing to send…");
+  });
+
+  it("shows the other client's cancel, move, new schedule, and re-make of far-off sends within one idle read", async () => {
+    const far = NOW + 2 * 86_400_000;
+    const srv = sendServer([
+      scheduled({ fire_at: far }),
+      scheduled({ id: "x5", post_id: "p5", subject: "Terns", fire_at: far + 3_600_000 }),
+    ]);
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(cards()).toEqual(["p2", "p5"]);
+    // Claude moves one a day later, which changes no stage.
+    srv.edit("x5", { fire_at: NOW + 3 * 86_400_000 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(countdown("p5").textContent).toBe("Sends in 3 days");
+    // Then cancels the other.
+    srv.edit("x2", { status: "canceled" });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(cards()).toEqual(["p5"]);
+    // Then schedules another, and a template change re-makes every scheduled send.
+    srv.put(scheduled({ id: "x6", post_id: "p6", subject: "Rails", fire_at: far }));
+    srv.edit("x5", { remade_at: Date.now() });
+    srv.edit("x6", { remade_at: Date.now() });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(cards()).toEqual(["p6", "p5"]);
+    expect($("#dashNotices .notice").textContent).toMatch(/was applied to 2 scheduled posts/);
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("keeps a refused send's red line live, and clears it when the refusal lifts", async () => {
-    let refused = false;
-    const row = send({
-      id: "x3",
-      post_id: "p4",
-      subject: "Swifts",
-      status: "sending",
-      c_pending: 50,
-      c_accepted: 10,
-      completed_at: null,
-    });
-    const halt = {
-      reason: "account" as const,
-      cause: "quota" as const,
-      error: "ses 429 TooManyRequestsException: Daily message quota exceeded.",
-      since: NOW,
-      retry_at: NOW + 300_000,
-    };
-    fake = world(
-      [post()],
-      () => [row],
-      () => [
-        refused
-          ? liveSend(row, "needs-attention", { attention: { refused: true }, halt })
-          : liveSend(row, "progressing"),
-      ],
-    );
+    const srv = sendServer([sending({ c_pending: 50 })]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect(document.querySelector(".health")).toBeNull();
     expect($("#dashActive .active-card").dataset.watch).toBe("x3");
-    refused = true;
+    srv.edit(
+      "x3",
+      {
+        halt_reason: "account",
+        halt_cause: "quota",
+        halt_error: "ses 429 TooManyRequestsException: Daily message quota exceeded.",
+        halted_at: Date.now(),
+      },
+      { phase: "needs-attention" },
+    );
     await vi.advanceTimersByTimeAsync(3000);
     expect($(".health.red").textContent).toMatch(/refusing this account, pausing Swifts: ses 429/);
     // The provider's words end in a period already: the line adds none of its own.
@@ -501,47 +500,20 @@ describe("dashboard", () => {
     expect(document.querySelector("#dashActive .active-card")).toBeNull(); // reported once
     await vi.advanceTimersByTimeAsync(9000);
     expect($(".health.red").textContent).toMatch(/Daily message quota/); // it stays
-    refused = false; // the retry got through
+    // The retry got through.
+    srv.edit("x3", { halt_reason: null, halt_cause: null, halt_error: null, halted_at: null });
     await vi.advanceTimersByTimeAsync(3000);
     expect(document.querySelector(".health")).toBeNull();
     expect($("#dashActive .active-card").dataset.watch).toBe("x3");
   });
 
   it("keeps a wedged send's red line until Resolve lets it finish, then shows it sent", async () => {
-    let resolved = false;
-    const row = () =>
-      resolved
-        ? send({
-            id: "w1",
-            post_id: "p4",
-            subject: "Kinglets",
-            status: "sent",
-            c_accepted: 99,
-            c_in_flight: 0,
-            c_unsent: 1,
-            c_delivered: 0,
-            c_bounced: 0,
-          })
-        : send({
-            id: "w1",
-            post_id: "p4",
-            subject: "Kinglets",
-            status: "sending",
-            c_accepted: 99,
-            c_in_flight: 1,
-            c_delivered: 0,
-            c_bounced: 0,
-            completed_at: null,
-          });
-    fake = world(
-      [post()],
-      () => [row()],
-      () => [
-        resolved
-          ? liveSend(row(), "settling")
-          : liveSend(row(), "needs-attention", { attention: { wedged: true, wedged_count: 1 } }),
-      ],
-    );
+    const srv = sendServer();
+    srv.put(sending({ id: "w1", subject: "Kinglets", c_accepted: 99, c_in_flight: 1 }), {
+      phase: "needs-attention",
+      attention: { wedged: true, wedged_count: 1 },
+    });
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".health.red").textContent).toBe(
@@ -549,110 +521,70 @@ describe("dashboard", () => {
     );
     await vi.advanceTimersByTimeAsync(6000);
     expect($(".health.red a").getAttribute("href")).toBe("#/sent/w1");
-    resolved = true; // Resolve, on the send's page
+    // Resolve, on the send's page.
+    srv.edit("w1", { status: "sent", c_in_flight: 0, c_unsent: 1, completed_at: Date.now() });
     await vi.advanceTimersByTimeAsync(3000);
     expect(document.querySelector(".health")).toBeNull();
     expect($("#dashSent tr[data-send='w1'] .badge").textContent).toBe("sent");
   });
 
   it("follows a settling send's receipts in its Delivered cell, to the last one", async () => {
-    let delivered = 10;
-    let complete = false;
-    const row = () =>
-      send({
-        id: "x1",
-        status: "sent",
-        completed_at: NOW - 10_000,
-        c_accepted: 100 - delivered - (complete ? 2 : 0),
-        c_delivered: delivered,
-        c_bounced: complete ? 2 : 0,
-      });
-    fake = world(
-      [post()],
-      () => [row()],
-      () => [liveSend(row(), complete ? "complete" : "settling")],
-    );
+    const srv = sendServer([
+      send({ completed_at: NOW - 10_000, c_accepted: 90, c_delivered: 10, c_bounced: 0 }),
+    ]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const cell = () => $("#dashSent tr[data-send='x1'] td.delivered").textContent;
     expect(cell()).toBe("10");
-    const listReads = () => fake.calls.filter((c) => c.url.pathname === "/sends").length;
-    const before = listReads();
-    delivered = 60;
+    const before = listReads(fake).length;
+    srv.edit("x1", { c_accepted: 40, c_delivered: 60 });
     await vi.advanceTimersByTimeAsync(3000);
     expect(cell()).toBe("60");
-    expect(listReads()).toBe(before); // the counts came with the layer's read
-    delivered = 98;
-    complete = true; // the last receipt: it leaves the live set, named as complete
+    expect(listReads(fake).length).toBe(before); // the counts came with the layer's read
+    srv.edit("x1", { c_accepted: 0, c_delivered: 98, c_bounced: 2 }); // the last receipt
     await vi.advanceTimersByTimeAsync(3000);
     expect(cell()).toBe("982 bounced");
-    const reads = liveReads(fake).length;
+    // Complete: back to the idle pace, one read a minute.
+    const reads = feedReads(fake).length;
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(liveReads(fake)).toHaveLength(reads); // nothing left to follow
+    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(11);
+    // A receipt long after dispatch still shows, within the minute.
+    srv.edit("x1", { c_delivered: 97, c_bounced: 3 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(cell()).toBe("973 bounced");
   });
 
   it("keeps a sending send's Delivered in the Sent table in step with its active-send card", async () => {
-    let confirmed = 0;
-    const row = () =>
-      send({
-        id: "x3",
-        subject: "Swifts",
-        status: "sending",
-        c_pending: 60,
-        c_accepted: 40 - confirmed,
-        c_delivered: confirmed,
-        c_bounced: 0,
-        completed_at: null,
-      });
-    fake = world(
-      [post()],
-      () => [row()],
-      () => [liveSend(row(), "progressing")],
-    );
+    const srv = sendServer([sending({ c_pending: 60, c_accepted: 40 })]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("0");
-    confirmed = 34;
+    srv.edit("x3", { c_accepted: 6, c_delivered: 34 });
     await vi.advanceTimersByTimeAsync(3000);
     expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("34");
     expect($("#dashActive .active-stat").textContent).toMatch(/34 confirmed/);
   });
 
   it("stops reading when the reader navigates away", async () => {
-    const row = send({ id: "x3", status: "sending", c_pending: 50 });
-    fake = world(
-      [post()],
-      () => [row],
-      () => [liveSend(row, "progressing")],
-    );
+    fake = world([post()], sendServer([sending()]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     await vi.advanceTimersByTimeAsync(3000);
-    expect(liveReads(fake)).toHaveLength(2);
+    expect(feedReads(fake)).toHaveLength(2);
     unmount(); // what navigating away does: the layer's follower leaves with the mount
     await vi.advanceTimersByTimeAsync(9000);
-    expect(liveReads(fake)).toHaveLength(2);
+    expect(feedReads(fake)).toHaveLength(2);
   });
 
   it("paints one applied-change notice over the re-made scheduled sends, which a dismiss clears", async () => {
-    const sends = [
-      send({
-        id: "x2",
-        post_id: "p2",
-        status: "scheduled",
-        fire_at: NOW + 60_000,
-        remade_at: NOW - 500,
-      }),
-      send({
-        id: "x4",
-        post_id: "p5",
-        status: "scheduled",
-        fire_at: NOW + 120_000,
-        remade_at: NOW - 500,
-      }),
-      send({ id: "x5", post_id: "p6", status: "scheduled", fire_at: NOW + 180_000 }),
-    ];
-    fake = world([post()], () => sends);
+    const srv = sendServer([
+      scheduled({ remade_at: NOW - 500 }),
+      scheduled({ id: "x4", post_id: "p5", fire_at: NOW + 120_000, remade_at: NOW - 500 }),
+      scheduled({ id: "x5", post_id: "p6", fire_at: NOW + 180_000 }),
+    ]);
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const n = $("#dashNotices .notice");
@@ -668,7 +600,7 @@ describe("dashboard", () => {
   it("quick actions: add a subscriber, edit the publication, copy an origin", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
-    fake = world([post()], () => []);
+    fake = world([post()], sendServer());
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     $(".quick-actions [data-act='add-sub']").click();

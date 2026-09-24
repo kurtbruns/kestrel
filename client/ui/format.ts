@@ -57,10 +57,12 @@ export function toLocalInput(d: Date): string {
  * counts down by the minute, by the hour within a day, and by whole days beyond, so
  * a send scheduled days away reads "Sends in 2 days", not a ticking "47h 47m".
  */
-export function untilStr(fireAt: number): string {
+export function untilStr(fireAt: number, due = false): string {
   const d = fireAt - Date.now();
-  if (d <= 0) {
-    return "Sending now…";
+  if (due || d <= 0) {
+    // Past the fire time the send waits for the next sweep tick, up to a minute; nothing is
+    // sending yet, and the card leaves the queue once something is (docs/DESIGN.md §9).
+    return "Preparing to send…";
   }
   const s = Math.floor(d / 1000);
   const min = Math.floor(s / 60);
@@ -77,4 +79,10 @@ export function untilStr(fireAt: number): string {
   }
   const days = Math.round(hr / 24);
   return `Sends in ${days} day${days === 1 ? "" : "s"}`;
+}
+
+/** A scheduled send past the server's missed tolerance, by how late it now is. */
+export function lateStr(fireAt: number): string {
+  const min = Math.max(0, Math.floor((Date.now() - fireAt) / 60_000));
+  return `Missed its fire time · ${min} min late`;
 }
