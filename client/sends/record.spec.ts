@@ -752,7 +752,7 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
-  it("gives no time to finish while the send is paused, and one while it hands off", async () => {
+  it("gives no rate or time to finish while the send is paused, and both while it hands off", async () => {
     let paused = true;
     const current = () =>
       sendView(inFlight(), {
@@ -763,11 +763,10 @@ describe("sent record", () => {
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
-    expect($(".wbar-sub").textContent).toContain("~30/min");
-    expect($(".wbar-sub").textContent).not.toMatch(/ETA/);
+    expect($(".wbar-sub").textContent).not.toMatch(/\/min|ETA/);
     paused = false;
     await vi.advanceTimersByTimeAsync(3000);
-    expect($(".wbar-sub").textContent).toMatch(/ETA 2 min/);
+    expect($(".wbar-sub").textContent).toMatch(/~30\/min · ETA 2 min/);
     expect(fake.unhandled).toHaveLength(0);
   });
 

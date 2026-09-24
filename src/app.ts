@@ -375,7 +375,7 @@ export function createRouter({
       access: "admin",
       resource: "posts",
       summary:
-        "List posts. Filter, sort, and paginate via query params; returns a `page` envelope.",
+        "List posts. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries its active send's id, status, and fire time; the response's `cursor` marks where the read stood among the changes to sends (`<seq>.<at>`, as on `GET /sends`), so a client can follow the listed posts' sends from it with `GET /sends/feed`.",
       query: [
         {
           name: "status",

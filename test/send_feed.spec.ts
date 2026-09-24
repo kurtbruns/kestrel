@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
+import type { PostListResponse } from "../shared/posts";
 import {
   type SendFeedResponse,
   type SendListResponse,
@@ -97,6 +98,36 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM settings"),
   ]);
   clearFakeOutbox();
+});
+
+describe("GET /posts's cursor", () => {
+  it("follows the listed posts' sends: a schedule and a cancel after the list read are reported", async () => {
+    const far = Date.now() + 24 * 3_600_000;
+    const listed = await scheduledSend("Listed", far);
+    const { post: draft } = await posts.createPost(
+      env.DB,
+      { subject: "Draft", markdown: "# Hi\n\nbody" },
+      "test",
+    );
+    const res = await SELF.fetch(`${base}/posts?status=draft,scheduled`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const { cursor } = (await res.json()) as PostListResponse;
+    expect(decodeSendCursor(cursor)).not.toBeNull();
+    expect((await feed(cursor)).sends).toEqual([]); // nothing since the list read
+
+    expect((await post(`/sends/${listed.id}/cancel`)).status).toBe(200);
+    expect(
+      (await post(`/posts/${draft.id}/schedule`, { fire_at: new Date(far).toISOString() })).status,
+    ).toBe(201);
+    const got = (await feed(cursor)).sends.map((s) => [s.post_id, s.status]);
+    expect(got).toEqual(
+      expect.arrayContaining([
+        [listed.post_id, "canceled"],
+        [draft.id, "scheduled"],
+      ]),
+    );
+    expect(got).toHaveLength(2);
+  });
 });
 
 describe("GET /sends/feed after a cursor", () => {

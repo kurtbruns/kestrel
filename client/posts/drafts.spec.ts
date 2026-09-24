@@ -12,6 +12,7 @@ import {
   settle,
   typeInto,
 } from "../test/support";
+import { fmt } from "../ui/format";
 import { renderDrafts } from "./drafts";
 
 const page = { total: 2, limit: 50, offset: 0, sort: "", dir: "desc" };
@@ -41,7 +42,10 @@ describe("drafts view", () => {
   const postReads = () => fake.calls.filter((c) => c.url.pathname === "/posts");
 
   it("lists drafts and scheduled posts within the drafts scope, with subjects shown as text", async () => {
-    fake = fakeApi([...sendServer().routes, { path: "/posts", reply: () => ({ posts, page }) }]);
+    fake = fakeApi([
+      ...sendServer().routes,
+      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+    ]);
     await mount(renderDrafts);
     await settle();
     expect($("h1").textContent).toBe("Drafts");
@@ -53,7 +57,10 @@ describe("drafts view", () => {
   });
 
   it("opens the editor on a row click, and the live watch for a post being sent", async () => {
-    fake = fakeApi([...sendServer().routes, { path: "/posts", reply: () => ({ posts, page }) }]);
+    fake = fakeApi([
+      ...sendServer().routes,
+      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+    ]);
     await mount(renderDrafts);
     await settle();
     $("tr[data-id='p1'] td:last-child").click();
@@ -64,7 +71,10 @@ describe("drafts view", () => {
 
   it("searches from page one after the debounce", async () => {
     vi.useFakeTimers();
-    fake = fakeApi([...sendServer().routes, { path: "/posts", reply: () => ({ posts, page }) }]);
+    fake = fakeApi([
+      ...sendServer().routes,
+      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+    ]);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
     typeInto($<HTMLInputElement>(".lt-search"), "wax");
@@ -78,7 +88,7 @@ describe("drafts view", () => {
     vi.useFakeTimers();
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 } }) },
+      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }) },
     ]);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
@@ -94,7 +104,8 @@ describe("drafts view", () => {
       ...sendServer().routes,
       {
         path: "/posts",
-        reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { posts, page }),
+        reply: () =>
+          failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { posts, page, cursor: "0.0" },
       },
     ]);
     await mount(renderDrafts);
@@ -108,7 +119,7 @@ describe("drafts view", () => {
   it("creates a new post and opens it", async () => {
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 } }) },
+      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }) },
       {
         method: "POST",
         path: "/posts",
@@ -125,13 +136,16 @@ describe("drafts view", () => {
 
   // A post whose send the spec starts: the posts list and the send routes agree.
   function scheduledPost() {
-    const sends = sendServer([scheduledRow()]);
+    const row = scheduledRow();
+    const sends = sendServer([row]);
     let sending = false;
     let failing = false;
+    let fireAt = row.fire_at;
     const listed = () => [
       posts[0],
       {
         ...posts[1],
+        fire_at: fireAt,
         active_send_status: sending ? "sending" : "scheduled",
         active_send_id: "s2",
       },
@@ -141,15 +155,30 @@ describe("drafts view", () => {
         ...sends.routes,
         {
           path: "/posts",
-          reply: () => (failing ? jsonResponse({ error: "down" }, 500) : { posts: listed(), page }),
+          reply: () =>
+            failing
+              ? jsonResponse({ error: "down" }, 500)
+              : { posts: listed(), page, cursor: sends.cursor() },
         },
       ],
       start() {
         sending = true;
         sends.edit("s2", { status: "sending", started_at: Date.now() });
       },
+      /** A batch lands while it sends: its counters move, nothing Drafts shows. */
+      progress(accepted: number) {
+        sends.edit("s2", { status: "sending", started_at: Date.now(), c_accepted: accepted });
+      },
+      /** Claude moves it. */
+      move(at: number) {
+        fireAt = at;
+        sends.edit("s2", { fire_at: at });
+      },
       fail() {
         failing = true;
+      },
+      recover() {
+        failing = false;
       },
     };
   }
@@ -167,6 +196,53 @@ describe("drafts view", () => {
     expect($("tr[data-id='p2']").textContent).toMatch(/sending/i);
     expect($("tr[data-id='p2']").dataset.target).toBe("#/sent/s2");
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("takes its cursor from its own read of the list, and re-reads only when a listed send's stage or time changes", async () => {
+    vi.useFakeTimers();
+    const post = scheduledPost();
+    fake = fakeApi(post.routes);
+    await mount(renderDrafts);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(fake.calls.some((c) => c.url.pathname === "/sends")).toBe(false); // no second read
+    post.start();
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(postReads()).toHaveLength(2); // started: re-read once
+    for (let n = 10; n <= 50; n += 10) {
+      post.progress(n); // batches land every few seconds while it sends
+      await vi.advanceTimersByTimeAsync(3_000);
+    }
+    expect(postReads()).toHaveLength(2); // progress alone changes nothing Drafts shows
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows a move made elsewhere within an idle read", async () => {
+    vi.useFakeTimers();
+    const post = scheduledPost();
+    fake = fakeApi(post.routes);
+    await mount(renderDrafts);
+    await vi.advanceTimersByTimeAsync(10);
+    const moved = Date.now() + 2 * 3_600_000;
+    post.move(moved);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(postReads()).toHaveLength(2);
+    expect($("tr[data-id='p2'] .when").textContent).toBe(fmt(moved));
+  });
+
+  it("follows once a first read that failed is retried", async () => {
+    vi.useFakeTimers();
+    const post = scheduledPost();
+    post.fail();
+    fake = fakeApi(post.routes);
+    await mount(renderDrafts);
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#list .error").textContent).toMatch(/down/);
+    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(false);
+    post.recover();
+    $("[data-retry]").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect($$("tr[data-id]")).toHaveLength(2);
+    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(true);
   });
 
   it("keeps the list when a re-read after a send changed fails", async () => {

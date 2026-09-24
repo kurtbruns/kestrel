@@ -1,7 +1,6 @@
 // The drafts list (draft + scheduled), kept current with its posts' sends.
 
 import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
-import type { SendListResponse } from "../../shared/sends";
 import { api } from "../api";
 import { mount } from "../lifecycle";
 import { followSends } from "../send_state";
@@ -67,16 +66,25 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   const listEl = $("#list", root);
   const pagerEl = $("#postsPager", root);
 
-  // The posts on screen, so a report of a send knows whether it touches this page.
-  let listed = new Set<string>();
-  // A background reload (a send changed) that fails leaves the list the reader is reading;
-  // only a load the reader started shows the error.
+  // The posts on screen and their sends' fire times, so a report of a send knows whether it
+  // changes this page; and the active sends shown, for a report of one removed.
+  let shownFire = new Map<string, number | null>();
+  let shownSends = new Set<string>();
+  // Loads can overlap (a send's change reloading while the reader sorts or pages), so only
+  // the latest paints. A background reload that fails leaves the list the reader is
+  // reading; only a load the reader started shows the error.
+  let latest = 0;
   const reload = () => load(false);
-  async function load(background: boolean) {
+  async function load(background: boolean): Promise<PostListResponse | null> {
+    const mine = ++latest;
     try {
       const data = await api<PostListResponse>(`/posts?${listQuery(state)}`, { signal });
+      if (mine !== latest) {
+        return null;
+      }
       const posts = data.posts;
-      listed = new Set(posts.map((p) => p.id));
+      shownFire = new Map(posts.map((p) => [p.id, p.fire_at]));
+      shownSends = new Set(posts.flatMap((p) => (p.active_send_id ? [p.active_send_id] : [])));
       if (!posts.length) {
         // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
         // single-status pick) — so a fresh, empty list still reads as an invitation.
@@ -86,7 +94,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
           html`<p class="muted">${filtered ? "No drafts match." : "No drafts yet — create your first draft."}</p>`,
         );
         setHtml(pagerEl, html``);
-        return;
+        return data;
       }
       // Cells are named (when / updated) and an empty Scheduled cell is marked, so the
       // ≤720px layout can stack a row and label its dates from CSS alone.
@@ -141,37 +149,67 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
         };
       }
       renderPager(pagerEl, state, data.page, reload);
+      return data;
     } catch (e) {
-      if (!background) {
-        renderError(listEl, e instanceof Error ? e.message : String(e), reload);
+      if (!background && mine === latest) {
+        // Until the list has first answered, Retry is that first read, which starts following.
+        renderError(listEl, e instanceof Error ? e.message : String(e), () =>
+          following ? reload() : void firstLoad(),
+        );
       }
+      return null;
     }
   }
-  wireToolbar(root, state, reload);
-  // Where sends stood before the list was read, so the layer reports every change to a
-  // listed post's send from then on: one that starts goes out of Drafts, a cancel makes its
-  // post a draft again, and a move changes its fire time, whichever client made it
-  // (DESIGN §9). Only the cursor is wanted from this read.
-  let since: SendListResponse;
-  try {
-    since = await api<SendListResponse>("/sends?status=scheduled&limit=1", { signal });
-  } catch (e) {
-    renderError(listEl, e instanceof Error ? e.message : String(e), () => mount(renderDrafts));
-    return;
-  }
-  await load(false);
-  followSends(
-    { cursor: since.cursor, sends: [] },
-    {
-      update({ sends, removed }) {
-        if (sends.some((s) => listed.has(s.post_id)) || removed.length) {
-          void load(true);
-        }
+  // Follow the listed posts' sends from the first read of the list that answers (DESIGN §9):
+  // a send that starts or is canceled, or moves, re-reads the list, whichever client made the
+  // change, so a post that has gone out stops reading scheduled. A send's progress alone
+  // (counts moving while it sends) changes nothing Drafts shows, so it reads nothing.
+  let following = false;
+  const follow = (first: PostListResponse) => {
+    following = true;
+    followSends(
+      {
+        cursor: first.cursor,
+        sends: first.posts.flatMap((p) =>
+          p.active_send_id && p.active_send_status
+            ? [
+                {
+                  id: p.active_send_id,
+                  status: p.active_send_status,
+                  phase: p.active_send_status === "sending" ? "progressing" : "scheduled",
+                },
+              ]
+            : [],
+        ),
       },
-      stale: () => mount(renderDrafts),
-    },
-    signal,
-  );
+      {
+        update({ sends, changes, removed }) {
+          const touched =
+            changes.some((c) => shownFire.has(c.send.post_id)) ||
+            sends.some(
+              (s) =>
+                s.status === "scheduled" &&
+                shownFire.has(s.post_id) &&
+                shownFire.get(s.post_id) !== s.fire_at,
+            ) ||
+            removed.some((id) => shownSends.has(id));
+          if (touched) {
+            void load(true);
+          }
+        },
+        stale: () => mount(renderDrafts),
+      },
+      signal,
+    );
+  };
+  const firstLoad = async () => {
+    const data = await load(false);
+    if (data && !following) {
+      follow(data);
+    }
+  };
+  wireToolbar(root, state, reload);
+  await firstLoad();
 }
 
 function confirmDelete(pid: string, reload: () => unknown): void {

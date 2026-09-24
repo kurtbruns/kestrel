@@ -179,13 +179,13 @@ function watchBodyHtml(prog: SendView): Html {
   const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
   const rate = prog.dispatch.rate_per_min;
   // The server gives a time to finish only while the send is handing off, never while it
-  // is paused (backing off, refused, or wedged), where a rate from before the pause would
-  // promise an end nothing is working toward.
+  // is paused (backing off, refused, or wedged). The rate goes with it: it is an average
+  // since the send started, so beside a pause it would promise progress nothing is making.
   const eta = prog.dispatch.eta_ms;
   const dispatchSub =
     prog.status === "sending"
-      ? `${phaseBlurb(prog)}${rate ? ` · ~${rate.toLocaleString()}/min` : ""}${
-          eta ? ` · ETA ${fmtDuration(eta)}` : ""
+      ? `${phaseBlurb(prog)}${
+          eta ? `${rate ? ` · ~${rate.toLocaleString()}/min` : ""} · ETA ${fmtDuration(eta)}` : ""
         }`
       : "Dispatch complete.";
   const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);

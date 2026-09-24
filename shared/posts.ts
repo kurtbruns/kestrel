@@ -35,6 +35,11 @@ export interface PostListItem extends Post {
 export interface PostListResponse {
   posts: PostListItem[];
   page: PageMeta;
+  /**
+   * Where this read stood among the changes to sends (`<seq>.<at>`, as on `GET /sends`), to
+   * follow the listed posts' sends from with `GET /sends/feed`.
+   */
+  cursor: string;
 }
 
 /** GET /posts/:id: the post, its current text, and where its send stands. */
