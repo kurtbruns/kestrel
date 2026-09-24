@@ -1,4 +1,5 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
+import { normalizeEmail } from "../../shared/email";
 import type {
   SubscribeAction,
   Subscriber,
@@ -337,6 +338,17 @@ export async function audienceEmails(db: D1Database): Promise<string[]> {
   return results.map((r) => r.email);
 }
 
+/** How many addresses a send would reach now: confirmed minus suppressed, the same
+ *  set `audienceEmails` lists, counted without loading it. */
+export async function audienceCount(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions)",
+    )
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 export async function isSuppressed(db: D1Database, email: string): Promise<boolean> {
   const row = await db.prepare("SELECT 1 FROM suppressions WHERE email = ?").bind(email).first();
   return row !== null;
@@ -361,6 +373,8 @@ export async function blocksConfirmation(db: D1Database, email: string): Promise
   return row !== null;
 }
 
+/** Suppress an address, stored in its normalized form (trimmed, lowercased) whatever
+ *  the caller passes, since the audience filter compares exactly (I1). */
 export async function addSuppression(
   db: D1Database,
   email: string,
@@ -373,7 +387,7 @@ export async function addSuppression(
     .prepare(
       "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET reason = excluded.reason, detail = excluded.detail, created_at = excluded.created_at WHERE suppressions.reason = ?",
     )
-    .bind(email, reason, detail ?? null, Date.now(), ERASED)
+    .bind(normalizeEmail(email), reason, detail ?? null, Date.now(), ERASED)
     .run();
 }
 

@@ -11,15 +11,18 @@ import { listImages } from "../db/images";
 import type { PostRow } from "../db/posts";
 import { getCurrentRevision, setPostStatusStmt } from "../db/posts";
 import {
+  cancelStmt,
   type FrozenRender,
   getActiveSendForPost,
   getSend,
   insertScheduledSendStmt,
+  noActiveSendFor,
+  rescheduleStmt,
   type SendRow,
   settingsVersionIs,
 } from "../db/sends";
 import { readSettings } from "../db/settings";
-import { audienceEmails } from "../db/subscribers";
+import { audienceCount } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
@@ -77,7 +80,7 @@ export async function freeze(
     // the insert changes zero rows and the freeze renders again with the new settings.
     const { settings, version } = await readSettings(env.DB);
     const rendered = await renderPost(env, config, post, resolveBranding(settings, config));
-    const audience = await audienceEmails(env.DB);
+    const audience = await audienceCount(env.DB);
 
     const now = Date.now();
     const id = newId();
@@ -87,7 +90,7 @@ export async function freeze(
       results = await env.DB.batch([
         insertScheduledSendStmt(
           env.DB,
-          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience.length },
+          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience },
           now,
           settingsVersion,
         ),
@@ -140,36 +143,35 @@ export async function reschedule(env: AppEnv, sendId: string, fireAt: number): P
   if (!send) {
     throw notFound("send");
   }
-  const res = await env.DB.prepare(
-    "UPDATE sends SET fire_at = ? WHERE id = ? AND status = 'scheduled'",
-  )
-    .bind(fireAt, sendId)
-    .run();
+  const res = await rescheduleStmt(env.DB, sendId, fireAt).run();
   if ((res.meta.changes ?? 0) === 0) {
     throw conflict("send is not reschedulable (already sending, sent, or canceled)");
   }
   return unwrap(await getSend(env.DB, sendId), "send");
 }
 
-/** Cancel a pending Send and unlock its post. Only works while `scheduled`. */
+/** Cancel a pending Send and unlock its post, in one batch so the two land together:
+ *  a post left `scheduled` with no active send would be locked out of the editor.
+ *  Only works while `scheduled`. */
 export async function cancel(env: AppEnv, sendId: string): Promise<SendRow> {
   const send = await getSend(env.DB, sendId);
   if (!send) {
     throw notFound("send");
   }
   const now = Date.now();
-  const res = await env.DB.prepare(
-    "UPDATE sends SET status = 'canceled', completed_at = ? WHERE id = ? AND status = 'scheduled'",
-  )
-    .bind(now, sendId)
-    .run();
-  if ((res.meta.changes ?? 0) === 0) {
+  const [res] = await env.DB.batch([
+    cancelStmt(env.DB, sendId, now),
+    setPostStatusStmt(
+      env.DB,
+      send.post_id,
+      "scheduled",
+      "draft",
+      now,
+      noActiveSendFor(send.post_id),
+    ),
+  ]);
+  if ((res?.meta.changes ?? 0) === 0) {
     throw conflict("send is not cancelable (already sending, sent, or canceled)");
   }
-  await env.DB.prepare(
-    "UPDATE posts SET status = 'draft', updated_at = ? WHERE id = ? AND status = 'scheduled'",
-  )
-    .bind(now, send.post_id)
-    .run();
   return unwrap(await getSend(env.DB, sendId), "send");
 }

@@ -217,8 +217,8 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
   await db
     .prepare(
       `INSERT INTO sends
-         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)`,
+         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
     )
     .bind(
       row.id,
@@ -232,6 +232,9 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
       row.scheduled_at,
       row.started_at,
       row.completed_at,
+      // A seeded send that has started carries its deliveries already: its audience is
+      // fixed, so a run never resolves it again.
+      row.started_at,
     )
     .run();
 }

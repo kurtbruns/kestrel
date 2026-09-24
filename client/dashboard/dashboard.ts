@@ -105,7 +105,7 @@ function computeHealth(sends: SendListItem[]): HealthAlert[] {
   }
   // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
   // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
-  // row's `c_bounced` counter over the frozen audience — not the old
+  // row's `c_bounced` counter over the audience at fire (`recipient_count`) — not the old
   // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
   // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
   // from tripping it. Read-only reporting — it never throttles or halts a send (§12 leaves

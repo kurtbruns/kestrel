@@ -17,6 +17,7 @@ const send = (over: Partial<Send> = {}): Send => ({
   scheduled_at: 900_000,
   started_at: 1_000_000,
   completed_at: 1_001_000,
+  audience_resolved_at: 1_000_000,
   remade_at: null,
   halt_reason: null,
   halt_cause: null,

@@ -157,7 +157,7 @@ function csvCell(value: string | number | null): string {
 /**
  * The sent record's per-recipient delivery data as CSV (SPEC §8, §12 "always
  * inspectable"). Read-only over the frozen record (I3) — one row per recipient of
- * the frozen audience, with the send-loop status and the later webhook event.
+ * the audience at fire, with the send-loop status and the later webhook event.
  */
 export async function deliveriesCsv(c: RequestContext): Promise<Response> {
   const send = await sends.getSend(c.env.DB, param(c, "id"));

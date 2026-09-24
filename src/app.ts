@@ -474,7 +474,7 @@ export function createRouter({
       resource: "posts",
       summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
       description:
-        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400.",
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant.",
       example: {
         request: { fire_at: "2026-01-15T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
@@ -502,7 +502,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `stuck` is the same flag as its progress `attention.stuck`: sending for longer than the stuck threshold.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `stuck` is the same flag as its progress `attention.stuck`: sending for longer than the stuck threshold. `recipient_count` is a snapshot of the audience while a send is scheduled; once it fires (`audience_resolved_at`), it is the audience fixed at fire, which never grows.",
       description:
         "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. The send retries on its own, spaced out the longer the halt lasts: `halt_retries` counts the halted attempts in a row and `halt_retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
@@ -640,7 +640,7 @@ export function createRouter({
       resource: "sends",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. Same minimum lead as scheduling.",
+        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. Same minimum lead as scheduling, and the same `fire_at` form: epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset.",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768554000000 } },

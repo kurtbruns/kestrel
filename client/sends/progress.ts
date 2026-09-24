@@ -79,7 +79,7 @@ export function needsOperator(s: SendSummary): boolean {
 
 // Dispatch/delivery numbers from a `/sends` list row's denormalized counters, so the
 // active-send row and the dashboard widget need no per-send /progress read. `done` is
-// the dispatch fraction (accepted vs the frozen total), matching the watch's dispatch bar.
+// the dispatch fraction (accepted vs the audience at fire), matching the watch's dispatch bar.
 function listRowCounts(s: SendSummary) {
   const total =
     (s.c_pending || 0) +
