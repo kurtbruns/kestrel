@@ -34,7 +34,7 @@ npm run migrate:remote -- --env staging  # apply D1 migrations to that environme
 - **Run `typecheck` after touching `wrangler.jsonc`:** `wrangler types` regenerates the gitignored `worker-configuration.d.ts`.
 - **`wrangler.jsonc` top level is the development environment** (fake transport, so dev can never reach a real inbox). `staging` and `production` are named `env`s that must redeclare every binding and var, because wrangler does not inherit them.
 - **A failed import of `src/generated/version.ts`** means the build stamp was never generated (an `--ignore-scripts` install, or `npx vitest` skipping `pretest`). Run `npm run version:build` once.
-- **The app 500s on a missing column after a pull** when the schema baseline changed. Until 1.0.0, `migrations/0001_init.sql` is edited in place (its header says why and when that stops), so a changed baseline means rebuilding, not migrating: stop `wrangler dev` (it holds the database file open), delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.
+- **The app 500s on a missing column after a pull** when a new migration landed: run `npm run migrate:local`. `migrations/0001_init.sql` is the 1.0.0 baseline and frozen (its header says why), so a schema change is always a new migration file, never an edit to an old one. A local database made before 1.0.0 ran an older baseline and has to be rebuilt once: stop `wrangler dev` (it holds the database file open), delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.
 
 ## Lint
 

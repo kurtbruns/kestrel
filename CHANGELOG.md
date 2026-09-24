@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+## [1.0.0] - 2026-09-23
+
+### Breaking
+
+- The database schema is frozen from this release: every later schema change is a new migration that `npm run migrate:remote` applies to the database you already have, keeping its data. A database that ran a 0.x baseline can't take the 1.0.0 one and has to be rebuilt once, which starts it empty; the setup guide's Upgrade step walks through it.
+
 ### Added
 
 - The setup guide has a new last step, Upgrade to a new release, also in the editor's Docs tab: how to move a running instance to a newer version, including when a 0.x release needs the database rebuilt rather than migrated.
@@ -99,6 +105,7 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.0.0
 [0.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v0.2.0
 [0.1.0]: https://github.com/kurtbruns/kestrel/releases/tag/v0.1.0
