@@ -135,9 +135,10 @@ async function main() {
     );
   }
 
-  // The demo's scheduled post, moved; or a new post, scheduled.
-  const fireAt = Date.now() + inMs + SLACK_MS;
-  const fire_at = new Date(fireAt).toISOString();
+  // The demo's scheduled post, moved; or a new post, scheduled. The fire time is read at the
+  // call that sets it: read before the scan below, the scan's round trips would eat the
+  // slack, and a send asked for exactly one lead out would be refused as inside it.
+  const fireAt = () => new Date(Date.now() + inMs + SLACK_MS).toISOString();
   const scheduled = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=100");
   let demo = null;
   for (const send of scheduled.body?.sends ?? []) {
@@ -149,7 +150,10 @@ async function main() {
   }
   let send;
   if (demo) {
-    const moved = await api(`/sends/${demo.id}/reschedule`, { method: "POST", json: { fire_at } });
+    const moved = await api(`/sends/${demo.id}/reschedule`, {
+      method: "POST",
+      json: { fire_at: fireAt() },
+    });
     if (!moved.ok) {
       fail(
         TAG,
@@ -171,7 +175,7 @@ async function main() {
     }
     const frozen = await api(`/posts/${created.body.post.id}/schedule`, {
       method: "POST",
-      json: { fire_at },
+      json: { fire_at: fireAt() },
     });
     if (!frozen.ok) {
       fail(

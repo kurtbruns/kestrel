@@ -1,5 +1,4 @@
 #!/usr/bin/env node
-import { existsSync } from "node:fs";
 /*
  * Load the local "Field Notes" demo dataset into the running dev server.
  *
@@ -19,9 +18,10 @@ import { existsSync } from "node:fs";
  * and pin the seeded PRNG with `--seed`: `npm run seed -- --size 10k`. Without
  * `--size`, the curated story-shaped list (~155 subscribers) loads unchanged.
  */
+import { existsSync, realpathSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { baseUrl, devToken, fail, parseArgs } from "./dev-api.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -123,7 +123,18 @@ async function main() {
   }
 }
 
+/** Whether this file is the script node was asked to run. Compared as real paths: node
+ *  resolves symlinks for the module's own URL but keeps argv as typed, so a script run
+ *  through a symlinked path (`/tmp` on macOS) would otherwise never match. */
+function invokedDirectly() {
+  try {
+    return realpathSync(process.argv[1] ?? "") === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false; // no script path (a REPL, `node -e`): imported, not run
+  }
+}
+
 // Run when invoked (`npm run seed`); `simulate-send` imports `seedDemo` instead.
-if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+if (invokedDirectly()) {
   main();
 }

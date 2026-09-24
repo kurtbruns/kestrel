@@ -50,17 +50,27 @@ export function startSweepTicker(base, log = console) {
   let warned = false;
   const schedule = () => {
     const now = Date.now();
-    timer = setTimeout(tick, MINUTE - (now % MINUTE));
+    const minute = now - (now % MINUTE) + MINUTE;
+    timer = setTimeout(() => tick(minute), minute - now);
   };
-  const tick = async () => {
+  // `minute` is the one the tick was set for, as a deployed cron's `scheduledTime` is.
+  const tick = async (minute) => {
     if (stopped) {
+      return;
+    }
+    // A timer can fire before the minute it was set for: it runs on a monotonic clock, the
+    // minute is wall-clock, and the two drift or step apart. A deployed cron never runs early,
+    // and an early sweep would miss a send due on the minute (the editor schedules on whole
+    // minutes), so wait out the rest of it. The next tick is then a full minute away.
+    const early = minute - Date.now();
+    if (early > 0) {
+      timer = setTimeout(() => tick(minute), early);
       return;
     }
     // The next tick is scheduled first, so a slow sweep can't push the one after it off the
     // minute: deployed, ticks don't wait for each other either (the lease keeps them apart).
     schedule();
-    const scheduledTime = Date.now() - (Date.now() % MINUTE);
-    const ok = await triggerSweep(base, scheduledTime);
+    const ok = await triggerSweep(base, minute);
     if (ok && !announced) {
       announced = true;
       log.log("[dev] send sweep: running once a minute, on the minute, as the deployed cron does");
