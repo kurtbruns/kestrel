@@ -73,13 +73,6 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   return tick;
 }
 
-/** The provider's words for a refusal, as a sentence the copy around them can follow: their
- *  own closing stop kept ("…quota exceeded."), one added only when they have none. */
-export function providerWords(error: string | null | undefined): string {
-  const text = error?.trim() || "no detail given";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-}
-
 /**
  * What the in-progress card, the attention lines, and a Delivered cell read of a send: the
  * layer's `LiveSend` as it stands, or a page's `GET /sends` row (`rowView`) until the layer
