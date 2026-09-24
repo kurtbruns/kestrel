@@ -440,7 +440,7 @@ describe("editor view", () => {
     const scheduled = fake.calls.find((c) => c.url.pathname === "/posts/p1/schedule");
     expect(scheduled?.json()).toEqual({ fire_at: new Date("2026-09-25T15:00").toISOString() });
     expect($("#toasts").textContent).toMatch(/Scheduled for/);
-    expect($(".banner-scheduled").textContent).toMatch(/cancelable until it sends/);
+    expect($(".banner-scheduled").textContent).toMatch(/cancelable until then/);
     expect(body().readOnly).toBe(true);
   });
 
@@ -584,6 +584,17 @@ describe("editor view", () => {
     typeInto(body(), "nope");
     await vi.advanceTimersByTimeAsync(30000);
     expect(puts()).toHaveLength(0);
+  });
+
+  it("stops offering Cancel and Reschedule at the fire time, when the review window closes", async () => {
+    const server = draftServer(draft({ status: "scheduled" }));
+    server.scheduled({ id: "s1", fire_at: Date.now() + 5_000, remade_at: null });
+    await open([{ path: "/posts/p1", reply: server.get }]);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    expect($("#cancelSchedule").textContent).toBe("Cancel");
+    await vi.advanceTimersByTimeAsync(6_000);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect($("#schedWhen").textContent).toBe("Preparing to send…");
   });
 
   it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {

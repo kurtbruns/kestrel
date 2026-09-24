@@ -3,6 +3,7 @@ import type { DeliveryOutcomes, Send, SendProgress } from "../../shared/sends";
 import {
   $,
   $$,
+  condition,
   type FakeApi,
   fakeApi,
   mount,
@@ -28,6 +29,7 @@ const send = (over: Partial<Send> = {}): Send => ({
   completed_at: 1_001_000,
   audience_resolved_at: 1_000_000,
   remade_at: null,
+  tested_at: null,
   halt_reason: null,
   halt_cause: null,
   halt_error: null,
@@ -73,7 +75,8 @@ const progress = (over: Partial<SendProgress> = {}): SendProgress => ({
   dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: 10_000 },
   delivery: { confirmed: 0, percent_of_accepted: 0 },
   provider: { name: "fake", halt: null },
-  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
+  conditions: [],
+  actions: [],
   next_change_at: null,
   ...over,
 });
@@ -394,7 +397,9 @@ describe("sent record", () => {
           retry_at: Date.now() + 12 * 60_000,
         },
       },
-      attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: true },
+      conditions: [
+        condition.refused("resend batch 403: API key is not active", Date.now() + 12 * 60_000),
+      ],
     });
     fake = fakeApi([
       {

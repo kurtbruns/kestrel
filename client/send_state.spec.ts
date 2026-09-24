@@ -44,7 +44,8 @@ function live(
     dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
     delivery: { confirmed: 0, percent_of_accepted: 0 },
     provider: { name: "fake", halt: null },
-    attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
+    conditions: [],
+    actions: [],
     next_change_at: null,
     ...over,
   };
@@ -115,6 +116,7 @@ function server() {
             : [],
           cursor: cursorNow(),
           more: false,
+          conditions: [],
           read_again_at: now + state.pace,
         };
         return body;

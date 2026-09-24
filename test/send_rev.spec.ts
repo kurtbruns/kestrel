@@ -14,7 +14,7 @@ import { adminAuth } from "./support/auth";
 // Every change a reader could see of a send moves its `rev` along one app-wide sequence,
 // and a list read hands back a cursor at that sequence (SPEC §8), so a client can later
 // ask what changed since and miss nothing, whichever client made the change. A lease
-// renewal is not such a change. List rows carry the same phase and attention as the
+// renewal is not such a change. List rows carry the same phase, conditions, and actions as the
 // send's `/progress`.
 
 const config = () => getConfig(env);
@@ -184,7 +184,9 @@ describe("a send's rev", () => {
     const canceled = await rev(send.id);
     const sequence = await seq();
     // A reschedule's CAS on a send that is no longer scheduled changes zero rows.
-    const res = await sends.rescheduleStmt(env.DB, send.id, Date.now() + 7_200_000).run();
+    const res = await sends
+      .rescheduleStmt(env.DB, send.id, Date.now() + 7_200_000, Date.now())
+      .run();
     expect(res.meta.changes).toBe(0);
     expect(await rev(send.id)).toBe(canceled);
     expect(await seq()).toBe(sequence);
@@ -294,7 +296,7 @@ describe("GET /sends", () => {
     expect(decodeSendCursor(body.cursor)?.seq).toBe(await seq());
   });
 
-  it("rows carry the phase and attention their /progress reports, keeping every field", async () => {
+  it("rows carry the phase, conditions, and actions their /progress reports, keeping every field", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     // scheduled, due, canceled, settling, and a send retrying a recipient
@@ -337,8 +339,8 @@ describe("GET /sends", () => {
       );
       expect(row.phase).toBe(phase);
       expect(row.phase).toBe(progress.phase);
-      expect(row.attention).toEqual(progress.attention);
-      expect(row.stuck).toBe(progress.attention.stuck);
+      expect(row.conditions).toEqual(progress.conditions);
+      expect(row.actions).toEqual(progress.actions);
       expect(row.rev).toBe(await rev(id));
       // The existing fields stay, the internal probe and the frozen bodies stay out.
       const stored = await sends.getSend(env.DB, id);

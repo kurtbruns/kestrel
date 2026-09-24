@@ -84,6 +84,8 @@ export interface Send {
   audience_resolved_at: number | null;
   /** When a template or identity change last re-made the frozen render while the send was scheduled; null if never. */
   remade_at: number | null;
+  /** When a test of the frozen copy was last sent while the send was scheduled; null if never. */
+  tested_at: number | null;
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */
   halt_reason: HaltReason | null;
   /** What that refusal is about, for the advice shown with it. */
@@ -163,10 +165,10 @@ export function formatLead(ms: number): string {
 export type SendListItem = SendSummary & {
   /** The live reporting phase, as `/progress` reports it. */
   phase: SendPhase;
-  /** The loud conditions, as `/progress` reports them. */
-  attention: SendAttention;
-  /** In flight too long: the same flag as `attention.stuck`. */
-  stuck: boolean;
+  /** The open conditions, as `/progress` reports them. */
+  conditions: SendCondition[];
+  /** What the server would accept on the send right now. */
+  actions: SendAction[];
 };
 
 /** GET /sends */
@@ -223,8 +225,10 @@ export interface SendProgress {
   };
   /** The provider, and its standing refusal of this send while one lasts. */
   provider: { name: string; halt: SendHalt | null };
-  /** The loud conditions (SPEC §12) the watch surfaces; Resolve appears when `wedged`, and `refused` is the provider refusing the account, carrying its words in `provider.halt`. */
-  attention: SendAttention;
+  /** What is wrong with the send, or worth knowing, now (SPEC §8, §12), each with its own words and the action that settles it, if any. */
+  conditions: SendCondition[];
+  /** What the server would accept on the send right now. */
+  actions: SendAction[];
   /**
    * The earliest moment the send can change with no one acting on it, by the server's
    * clock: at or before the read's time while it can move at any moment (due, or sending
@@ -235,14 +239,72 @@ export interface SendProgress {
   next_change_at: number | null;
 }
 
-/** The loud conditions on a send (SPEC §12), as `/progress` and the send list report them. */
-export interface SendAttention {
-  wedged: boolean;
-  wedged_count: number;
-  stuck: boolean;
-  missed: boolean;
-  refused: boolean;
+/** Something a person can do to a send through the API, exactly as the server would take it now. */
+export interface SendAction {
+  name: "cancel" | "reschedule" | "resolve";
+  method: "POST";
+  /** The route, with the send's id filled in. */
+  path: string;
 }
+
+/** What a condition asks of a person: `action` needs one (red), `warn` is worth a look (amber), `info` is worth knowing. */
+export type ConditionSeverity = "action" | "warn" | "info";
+
+/** What every condition carries. */
+interface ConditionBase {
+  severity: ConditionSeverity;
+  /** When the condition began, or null when the record does not say. */
+  since: number | null;
+  /** The server's words for it, whole sentences, the same wherever it is shown. */
+  message: string;
+  /** The action that settles it, if a person can take one through the API. */
+  action: SendAction | null;
+}
+
+/**
+ * One open condition on a send (SPEC §8, §12), derived by the server from the record, the
+ * same on every route:
+ *
+ * - `missed`: still scheduled past the missed tolerance; the sweep that fires it has not run.
+ * - `stuck`: still sending past the stuck threshold after it started.
+ * - `wedged`: recipients whose delivery is unknown; `count` of them, settled by Resolve.
+ * - `refused`: the provider refuses the account; its `cause`, `error`, the `advice` for the
+ *   fix (outside the app), and `retry_at`. No action: the send resumes on its own.
+ * - `provider_unavailable`: the provider is down or rate-limiting; retried at `retry_at`.
+ * - `bounce_spike`: a recently sent send's confirmed bounces reached the danger zone.
+ * - `remade`: a template or identity change re-made the scheduled email after its last test.
+ */
+export type SendCondition =
+  | (ConditionBase & { kind: "missed" })
+  | (ConditionBase & { kind: "stuck" })
+  | (ConditionBase & { kind: "wedged"; count: number })
+  | (ConditionBase & {
+      kind: "refused";
+      cause: HaltCause | null;
+      error: string;
+      advice: string;
+      retry_at: number | null;
+    })
+  | (ConditionBase & { kind: "provider_unavailable"; error: string; retry_at: number | null })
+  | (ConditionBase & { kind: "bounce_spike"; bounced: number; rate: number })
+  | (ConditionBase & { kind: "remade"; tested_at: number | null });
+
+/** The kinds of condition. */
+export type ConditionKind = SendCondition["kind"];
+
+/** A condition in the feed's roll-up: which send it is on, and the condition. */
+export type FeedCondition = SendCondition & { send_id: string; subject: string };
+
+/**
+ * The bounce spike (SPEC §8): a send's confirmed bounces over its audience at fire reaching
+ * the provider's danger zone. SES puts a sender under review at a 5% bounce rate; the small
+ * absolute floor keeps a tiny audience's noisy rate (one bad address among a handful) from
+ * tripping it; and only a send finished within the recent window is read, since an old
+ * send's bounces are history, not a risk to act on. Well above the dev simulation's ~2%.
+ */
+export const BOUNCE_SPIKE_RATE = 0.05;
+export const BOUNCE_SPIKE_MIN = 3;
+export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
 
 /** One send in `GET /sends/feed`: which send, and where it stands, in the `/progress` shape. */
 export interface LiveSend extends SendProgress {
@@ -270,6 +332,8 @@ export interface SendFeedResponse {
   cursor: string;
   /** Whether the read stopped at `limit` changes with more after `cursor`: read again at once from it. */
   more: boolean;
+  /** Every open condition across the sends that can have one (scheduled, sending, and recently sent), whether or not they changed: every open problem in one read, most severe first. */
+  conditions: FeedCondition[];
   /**
    * When to read again, by the server's clock: soon while a send can move, about once a
    * minute while none can, and never later than just past the next change the clock or the
@@ -361,6 +425,8 @@ export interface ResolveResponse {
 /** POST /sends/:id/cancel and /reschedule */
 export interface SendActionResponse {
   send: Send;
+  /** False when the send already stood as asked (canceled already, or already at that time): nothing was written. */
+  changed: boolean;
 }
 
 /**

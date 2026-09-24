@@ -163,12 +163,13 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(still.send.rendered_html).toBe(frozenHtml);
     expect(still.send.rendered_html).toContain("original body");
 
-    // cancel again → 409
+    // cancel again → nothing to do: 200, unchanged, so a retried cancel is safe
     const twice = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
-    expect(twice.status).toBe(409);
+    expect(twice.status).toBe(200);
+    expect(await readJson(twice)).toMatchObject({ changed: false, send: { status: "canceled" } });
   });
 
   it("cancel changes the send and the post together, or neither", async () => {
@@ -210,7 +211,10 @@ describe("schedule / send / cancel + soft-lock", () => {
     await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?")
       .bind(sendingSend)
       .run();
-    await expect(cancel(env as AppEnv, sendingSend)).rejects.toThrow(/not cancelable/);
+    await expect(cancel(env as AppEnv, sendingSend)).rejects.toMatchObject({
+      status: 409,
+      code: "window_closed",
+    });
     expect(await sendStatus(sendingSend)).toBe("sending");
     expect(await postStatus(sending)).toBe("scheduled");
   });

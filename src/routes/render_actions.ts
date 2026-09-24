@@ -16,7 +16,7 @@ import type { TemplateTestResponse } from "../../shared/settings";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
-import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import { getActiveSendForPost, latestSentSendForPost, markTested } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
@@ -132,6 +132,9 @@ export async function test(c: RequestContext): Promise<Response> {
     throw fieldError("to", "to must be an email address");
   }
 
+  // When the copy was read, so the test marks the send tested only if no re-make replaced
+  // that copy while the provider was answering.
+  const readAt = Date.now();
   const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
@@ -149,6 +152,12 @@ export async function test(c: RequestContext): Promise<Response> {
     }),
     recipients,
   );
+
+  // A test of a scheduled send's frozen copy is the sign-off the re-make rule asks for
+  // (SPEC §6, §8): record it, which settles the send's `remade` condition.
+  if (frozen && res?.accepted === true) {
+    await markTested(c.env.DB, frozen.id, readAt, Date.now());
+  }
 
   const result: TestSendResponse = {
     sent: res?.accepted === true,

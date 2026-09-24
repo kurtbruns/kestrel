@@ -11,6 +11,7 @@
  */
 
 import type { PageMeta, SortDir } from "../../shared/list";
+import { badRequest } from "./errors";
 import { unwrap } from "./unwrap";
 
 // The envelope's types live in shared/ so the editor reads the same definition; re-exported
@@ -20,8 +21,7 @@ export type { PageMeta, SortDir };
 /**
  * A list endpoint's sort contract: the public sort keys mapped to the SQL column
  * (or expression) they order by, plus the defaults. `columns` is the whitelist — a
- * `sort` outside it falls back to `defaultSort`, so untrusted input never reaches
- * the ORDER BY. Values are code-defined, which is what makes interpolating the
+ * `sort` outside it is a 400, so untrusted input never reaches the ORDER BY. Values are code-defined, which is what makes interpolating the
  * resolved column into SQL safe.
  */
 export interface ListSpec {
@@ -50,26 +50,36 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 export function parseListParams(url: URL, spec: ListSpec): ListParams {
-  const sortParam = url.searchParams.get("sort") ?? "";
+  const sortParam = url.searchParams.get("sort");
   // `Object.hasOwn`, not `in`: `in` walks the prototype chain, so `sort=constructor`
   // / `toString` / etc. would pass the whitelist and resolve to an inherited function,
-  // which then interpolates into the ORDER BY as malformed SQL (a 500). Own keys only.
-  const sortExplicit = sortParam !== "" && Object.hasOwn(spec.columns, sortParam);
-  const sort = sortExplicit ? sortParam : spec.defaultSort;
+  // which then interpolates into the ORDER BY as malformed SQL. Own keys only; any other
+  // value is refused naming the field, never quietly read as the default.
+  if (sortParam !== null && !Object.hasOwn(spec.columns, sortParam)) {
+    throw badRequest(`sort must be one of ${Object.keys(spec.columns).join(", ")}`, {
+      field: "sort",
+    });
+  }
+  const sortExplicit = sortParam !== null;
+  const sort = sortParam ?? spec.defaultSort;
   // `sort` is either a validated key or `defaultSort`; a spec whose defaultSort isn't a
   // real column is a programming error, so fail loud rather than emit `ORDER BY undefined`.
   const column = unwrap(spec.columns[sort], "list sort column");
 
   const dirParam = url.searchParams.get("dir");
-  const dir: SortDir = dirParam === "asc" || dirParam === "desc" ? dirParam : spec.defaultDir;
+  if (dirParam !== null && dirParam !== "asc" && dirParam !== "desc") {
+    throw badRequest("dir must be asc or desc", { field: "dir" });
+  }
+  const dir: SortDir = dirParam ?? spec.defaultDir;
 
   const limit = clampInt(
+    "limit",
     url.searchParams.get("limit"),
     spec.defaultLimit ?? DEFAULT_LIMIT,
     1,
     spec.maxLimit ?? MAX_LIMIT,
   );
-  const offset = clampInt(url.searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
+  const offset = clampInt("offset", url.searchParams.get("offset"), 0, 0, Number.MAX_SAFE_INTEGER);
 
   return { sort, column, dir, limit, offset, sortExplicit };
 }
@@ -94,13 +104,21 @@ export function listPage(total: number, params: ListParams): PageMeta {
   };
 }
 
-function clampInt(raw: string | null, fallback: number, min: number, max: number): number {
+/** A whole-number query value, held to its range (a documented clamp, such as the page
+ *  size's maximum); one that is not a whole number is a 400 naming the field. */
+function clampInt(
+  field: string,
+  raw: string | null,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
   if (raw === null) {
     return fallback;
   }
-  const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n)) {
-    return fallback;
+  if (!/^-?\d+$/.test(raw.trim())) {
+    throw badRequest(`${field} must be a whole number`, { field });
   }
+  const n = Number.parseInt(raw, 10);
   return Math.min(Math.max(n, min), max);
 }

@@ -1,38 +1,53 @@
 /** Send status surface: list, detail, the feed pages follow, cancel. Authed. */
 
 import { decodeSendCursor, encodeSendCursor, type SendCursor } from "../../shared/cursor";
-import type {
-  DeliveryListResponse,
-  SendActionResponse,
-  SendFeedResponse,
-  SendListResponse,
-  SendResponse,
+import {
+  BOUNCE_SPIKE_RECENT_MS,
+  type DeliveryListResponse,
+  type FeedCondition,
+  type SendActionResponse,
+  type SendFeedResponse,
+  type SendListResponse,
+  type SendResponse,
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
-import { oneOf, readJsonObject } from "../lib/body";
+import { oneOf, optCount, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { bySeverity, sendConditions } from "../send/conditions";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
-import { buildLiveSend, buildSendProgress } from "../send/progress";
+import { buildListItem, buildLiveSend, buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
-import { parseFutureFireAt } from "./schedule";
+import { parseFireAt } from "./schedule";
+
+/** The `GET /sends` filters: each a value from its set, or absent; anything else is a 400
+ *  naming the field. */
+function parseSendFilter(url: URL): sends.SendFilter {
+  const q = url.searchParams;
+  const status = q.get("status");
+  const statuses: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled"];
+  if (status !== null && !statuses.includes(status as sends.SendStatus)) {
+    throw badRequest(`status must be one of ${statuses.join(", ")}`, { field: "status" });
+  }
+  const failures = q.get("failures");
+  if (failures !== null && failures !== "only") {
+    throw badRequest("failures must be only", { field: "failures" });
+  }
+  return {
+    status: (status as sends.SendStatus | null) ?? undefined,
+    search: q.get("search") ?? undefined,
+    failures: failures === "only" ? "only" : undefined,
+  };
+}
 
 export async function list(c: RequestContext): Promise<Response> {
-  const statusParam = c.url.searchParams.get("status") ?? undefined;
-  const valid: sends.SendStatus[] = ["scheduled", "sending", "sent", "canceled"];
-  const status = valid.includes(statusParam as sends.SendStatus)
-    ? (statusParam as sends.SendStatus)
-    : undefined;
-  const search = c.url.searchParams.get("search") ?? undefined;
-  // "only" narrows to sends with a delivery failure (any bounce / complaint / unsent).
-  const failures = c.url.searchParams.get("failures") === "only" ? "only" : undefined;
-  const filter = { status, search, failures } satisfies sends.SendFilter;
+  const filter = parseSendFilter(c.url);
   const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
   // One moment for the whole page: the rows' derived fields and the cursor's read time.
   // Taken before the read, so anything the clock changes after it is still ahead of the
@@ -40,14 +55,11 @@ export async function list(c: RequestContext): Promise<Response> {
   const now = Date.now();
   const { rows, total, seq } = await sends.listSendsPage(c.env.DB, filter, page);
   // Every row carries the denormalized c_* counters and its retry probe, so each row's
-  // phase and attention come from `buildSendProgress` exactly as `/progress` builds them,
-  // with no aggregate over deliveries and no read per row (SPEC §8). The server derives;
-  // no client keeps a threshold or a phase rule of its own.
+  // phase, conditions, and actions come from the same rules as `/progress`, with no
+  // aggregate over deliveries and no read per row (SPEC §8). The server derives; no client
+  // keeps a threshold or a phase rule of its own.
   const body: SendListResponse = {
-    sends: rows.map(({ has_retries, ...s }) => {
-      const { phase, attention } = buildSendProgress(s, c.config.provider, has_retries === 1, now);
-      return { ...s, phase, attention, stuck: attention.stuck };
-    }),
+    sends: rows.map(({ has_retries, ...s }) => buildListItem(s, has_retries === 1, now)),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -166,6 +178,7 @@ export async function feed(c: RequestContext): Promise<Response> {
     now - SETTLE_FOLLOW_MS,
     { missedMs: MISSED_THRESHOLD_MS, stuckMs: STUCK_THRESHOLD_MS },
     limit,
+    now - BOUNCE_SPIKE_RECENT_MS,
   );
   if (since && (since.seq > read.current || since.at > now + CURSOR_CLOCK_SLACK_MS)) {
     throw new HttpError(
@@ -175,7 +188,17 @@ export async function feed(c: RequestContext): Promise<Response> {
       { field: "since", cursor: encodeSendCursor({ seq: read.current, at: now }) },
     );
   }
-  const pace = feedPace(read.unfinished, read.settlingSince, now);
+  const pace = feedPace(
+    read.open.filter((s) => s.status === "scheduled" || s.status === "sending"),
+    read.settlingSince,
+    now,
+  );
+  // Every open problem in one read, whichever sends it is on and whether they changed.
+  const conditions: FeedCondition[] = read.open
+    .flatMap((s) =>
+      sendConditions(s, now).map((cond) => ({ ...cond, send_id: s.id, subject: s.subject })),
+    )
+    .sort(bySeverity);
   const body: SendFeedResponse = {
     now,
     sends: read.rows.map(({ has_retries, ...row }) =>
@@ -184,6 +207,7 @@ export async function feed(c: RequestContext): Promise<Response> {
     removed: read.removed,
     cursor: encodeSendCursor({ seq: read.seq, at: now }),
     more: read.more,
+    conditions,
     // With more waiting, at once; otherwise the pace.
     read_again_at: read.more ? now : readAgainAt(pace, now),
   };
@@ -276,9 +300,26 @@ export async function deliveriesCsv(c: RequestContext): Promise<Response> {
   });
 }
 
+/**
+ * The `If-Match` header of an action: the `rev` the caller last read, as `"<rev>"` (the
+ * `ETag` form) or bare, or undefined when absent. Anything else is a 400 naming it.
+ */
+function parseIfMatch(c: RequestContext): number | undefined {
+  const raw = c.req.headers.get("if-match");
+  if (raw === null) {
+    return undefined;
+  }
+  const match = /^\s*(?:W\/)?"?(\d+)"?\s*$/.exec(raw);
+  const rev = match?.[1] === undefined ? Number.NaN : Number(match[1]);
+  if (!Number.isSafeInteger(rev)) {
+    throw badRequest('If-Match must be a send\'s rev, as "<rev>"', { field: "If-Match" });
+  }
+  return rev;
+}
+
 export async function cancel(c: RequestContext): Promise<Response> {
-  const send = await cancelSend(c.env, param(c, "id"));
-  const body: SendActionResponse = { send };
+  const result = await cancelSend(c.env, param(c, "id"), { ifMatch: parseIfMatch(c) });
+  const body: SendActionResponse = result;
   return json(body);
 }
 
@@ -286,14 +327,16 @@ export async function cancel(c: RequestContext): Promise<Response> {
  * Move a scheduled send's fire time without re-freezing the render (SPEC §6). The
  * frozen bytes are untouched (I3; the audience is resolved when the send fires, not
  * here) and the review window is preserved (I6) — only `fire_at` moves. Same
- * minimum-lead guard as scheduling, and
- * `scheduled`-status only (the state machine's CAS enforces the latter, I6).
+ * minimum-lead guard as scheduling, and only inside the review window (the state
+ * machine's CAS enforces the latter, I6).
  */
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
-  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
-  const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
-  const response: SendActionResponse = { send };
+  const fireAt = parseFireAt(body.fire_at);
+  const result = await rescheduleSend(c.env, param(c, "id"), fireAt, c.config.minLeadMs, {
+    ifMatch: parseIfMatch(c),
+  });
+  const response: SendActionResponse = result;
   return json(response);
 }
 
@@ -302,8 +345,13 @@ export async function reschedule(c: RequestContext): Promise<Response> {
  * step for the stuck state the sweep flags but can't clear on its own (SPEC §12).
  */
 export async function resolve(c: RequestContext): Promise<Response> {
-  const outcome = oneOf(await readJsonObject(c), "resolution", ["unsent", "accepted"]);
+  const body = await readJsonObject(c);
+  const outcome = oneOf(body, "resolution", ["unsent", "accepted"]);
+  const expectedCount = optCount(body, "expected_count");
   const actor = c.principal?.email ?? "service";
-  const result = await resolveStuckSend(c.env, param(c, "id"), outcome, actor);
+  const result = await resolveStuckSend(c.env, param(c, "id"), outcome, actor, {
+    ifMatch: parseIfMatch(c),
+    expectedCount,
+  });
   return json(result);
 }

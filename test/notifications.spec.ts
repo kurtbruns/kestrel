@@ -12,7 +12,7 @@ import * as channel from "../src/notify/channel";
 import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
-import { cancel, freeze } from "../src/send/schedule";
+import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
@@ -431,7 +431,12 @@ describe("after the review", () => {
     await notifications.recordNotifications(env.DB, Date.now());
     expect((await rows(send.id)).map((r) => r.kind)).toEqual(["missed"]);
 
-    await cancel(env as AppEnv, send.id);
+    // Past its window it can no longer be canceled through the API; the operator's own
+    // database fix stands in, so the draft can be deleted.
+    await env.DB.batch([
+      env.DB.prepare("UPDATE sends SET status = 'canceled' WHERE id = ?").bind(send.id),
+      env.DB.prepare("UPDATE posts SET status = 'draft' WHERE id = ?").bind(send.post_id),
+    ]);
     await posts.deletePost(env.DB, send.post_id);
     expect(await rows(send.id)).toEqual([]);
     expect(await sends.getSend(env.DB, send.id)).toBeNull();

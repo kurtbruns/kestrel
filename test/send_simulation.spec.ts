@@ -20,6 +20,7 @@ import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
+import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { logged } from "./support/log";
 
@@ -415,7 +416,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     expect(row.c_in_flight).toBeGreaterThanOrEqual(1);
     const stuck = await progress();
     expect(stuck.phase).toBe("needs-attention");
-    expect(stuck.attention.wedged).toBe(true);
+    expect(has(stuck, "wedged")).toBe(true);
     // It did leave: the lost request is in the outbox, as it would be in the reader's inbox.
     // Only a reader SES refused for good (rare, at its real rate) is missing.
     const refused = await addresses("unsent");

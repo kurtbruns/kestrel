@@ -18,6 +18,7 @@ import { runSend } from "../src/send/loop";
 import { cancel, freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
+import { has } from "./support/conditions";
 
 // GET /sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever
@@ -176,7 +177,7 @@ describe("GET /sends/feed after a cursor", () => {
     const now = Date.now();
     const late = await scheduledSend("Late", now - MISSED_THRESHOLD_MS - 10_000);
     const body = await feed(await cursorReadAt(now - 20_000));
-    expect(body.sends.map((s) => [s.id, s.attention.missed])).toEqual([[late.id, true]]);
+    expect(body.sends.map((s) => [s.id, has(s, "missed")])).toEqual([[late.id, true]]);
     expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
   });
 
@@ -190,7 +191,7 @@ describe("GET /sends/feed after a cursor", () => {
       c_pending: 5,
     });
     const body = await feed(await cursorReadAt(now - 20_000));
-    expect(body.sends.map((s) => [s.id, s.attention.stuck])).toEqual([[send.id, true]]);
+    expect(body.sends.map((s) => [s.id, has(s, "stuck")])).toEqual([[send.id, true]]);
     expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
   });
 
@@ -211,7 +212,7 @@ describe("GET /sends/feed after a cursor", () => {
     const lease = await sends.acquireLease(env.DB, send.id, Date.now(), 60_000);
     await sends.releaseLease(env.DB, send.id, lease!);
     const body = await feed(since);
-    expect(body.sends.map((s) => [s.id, s.phase, s.attention.wedged])).toEqual([
+    expect(body.sends.map((s) => [s.id, s.phase, has(s, "wedged")])).toEqual([
       [send.id, "needs-attention", true],
     ]);
   });
@@ -278,7 +279,7 @@ describe("GET /sends/feed without a cursor", () => {
     expect(decodeSendCursor(body.cursor)?.at).toBe(body.now);
 
     const [s, g, d] = body.sends;
-    expect([d?.state, d?.phase, d?.attention.missed]).toEqual(["scheduled", "due", false]);
+    expect([d?.state, d?.phase, has(d, "missed")]).toEqual(["scheduled", "due", false]);
     expect(d).toMatchObject({ id: due.id, post_id: due.post_id, fire_at: due.fire_at });
     expect([g?.state, g?.phase, g?.counts.pending, g?.counts.accepted]).toEqual([
       "sending",
@@ -309,11 +310,10 @@ describe("GET /sends/feed without a cursor", () => {
   it("eases to the idle pace once a due send is past the missed tolerance", async () => {
     const missed = await scheduledSend("Missed", Date.now() - MISSED_THRESHOLD_MS - 60_000);
     const body = await feed();
-    expect(body.sends.map((s) => [s.id, s.attention.missed])).toEqual([[missed.id, true]]);
+    expect(body.sends.map((s) => [s.id, has(s, "missed")])).toEqual([[missed.id, true]]);
     expect(body.read_again_at).toBe(body.now + 60_000); // the sweep isn't running: nothing moves
-    const due = await scheduledSend("Due", Date.now() - 30_000);
+    const _due = await scheduledSend("Due", Date.now() - 30_000);
     expect((await feed()).read_again_at - body.now).toBeLessThan(10_000);
-    await cancel(env, due.id);
   });
 
   it("answers an empty world with nothing to follow, read again in about a minute", async () => {
@@ -486,7 +486,7 @@ describe("GET /sends/feed paces from each send's next change", () => {
     });
     const body = await feed();
     const [s] = body.sends;
-    expect(s?.attention.refused).toBe(true);
+    expect(has(s, "refused")).toBe(true);
     // The sweep takes it at the first tick within half a tick of the retry.
     expect(s?.next_change_at).toBe(retryAt - 30_000);
     expect(body.read_again_at).toBe(body.now + 60_000); // the retry is further off than a minute
@@ -524,7 +524,7 @@ describe("GET /sends/feed paces from each send's next change", () => {
       locked_until: null,
     });
     const body = await feed();
-    expect(body.sends[0]?.attention.wedged).toBe(true);
+    expect(has(body.sends[0], "wedged")).toBe(true);
     expect(body.sends[0]?.next_change_at).toBe(now - 110_000 + STUCK_THRESHOLD_MS);
     expect(body.read_again_at).toBe(body.now + 60_000);
   });
