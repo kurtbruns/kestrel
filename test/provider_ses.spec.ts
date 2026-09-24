@@ -243,6 +243,21 @@ describe("SesProvider.sendBatch", () => {
     expect(r).toMatchObject({ kind: "halted", halt: { ...halt, mayHaveSent: false } });
   });
 
+  it("reads the quota wording only on a throttle, not on a rejected message", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ __type: "MessageRejected", message: "Daily message quota exceeded." }),
+        { status: 400 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+  });
+
   it("maps a permanent 400 (bad address) to a non-retryable failure", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(

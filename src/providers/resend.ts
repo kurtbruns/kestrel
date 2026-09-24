@@ -225,8 +225,11 @@ export class ResendProvider implements EmailProvider {
  * SDKs show it leaving the refused items out, but its docs don't say so, so both
  * layouts are read: one entry per created email, or one per request item, read by
  * position (the two agree when nothing is refused). When neither count fits, which id
- * is whose is a guess, so every recipient not refused is left retryable: the batch's
- * idempotency key makes the re-send safe (I4).
+ * is whose is a guess, so the whole batch is left retryable, refused items included:
+ * a retry re-sends only the rows still pending under the key, so settling the refused
+ * ones would re-send a smaller batch under a key Resend already answered for the whole
+ * one. Kept whole, the re-send is the same request and Resend's replay of it lines up
+ * again (I4).
  */
 function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientResult[] {
   const { data = [], errors = [] } =
@@ -240,8 +243,18 @@ function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientR
   }
   const positional = ids.length === recipients.length;
   const compacted = ids.length === recipients.length - refused.size;
+  if (!positional && !compacted) {
+    return recipients.map((r) => ({
+      email: r.email,
+      accepted: false as const,
+      retryable: true,
+      error: "resend batch: ids in response don't match the batch",
+    }));
+  }
   let next = 0;
   return recipients.map((r, i) => {
+    // A refusal wins over an id in its slot: Resend doesn't send one for a refused item,
+    // and if it did, which answer is true would be a guess either way.
     if (refused.has(i)) {
       const message = refused.get(i);
       return {
@@ -251,12 +264,12 @@ function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientR
         error: `Resend: ${message || "refused in batch validation"}`,
       };
     }
-    const id = positional ? ids[i] : compacted ? ids[next++] : undefined;
+    const id = positional ? ids[i] : ids[next++];
     if (id) {
       return { email: r.email, accepted: true as const, providerId: id };
     }
-    // A 2xx without an id we can match to this recipient is ambiguous: let the next tick
-    // retry under the same key.
+    // A 2xx without an id for this recipient is ambiguous: let the next tick retry under
+    // the same key.
     return {
       email: r.email,
       accepted: false as const,

@@ -79,13 +79,18 @@ export function classifySesError(
   message = "",
   senderUnverified = false,
 ): Omit<BatchHalt, "error"> | null {
+  const throttled = status === 429 || /throttl|toomany/i.test(type);
   const cause =
     ACCOUNT_ERROR_TYPES.get(type) ??
-    (senderUnverified ? "sender" : /daily message quota/i.test(message) ? "quota" : undefined);
+    (senderUnverified
+      ? "sender"
+      : throttled && /daily message quota/i.test(message)
+        ? "quota"
+        : undefined);
   if (cause || status === 401 || status === 403) {
     return { reason: "account", cause: cause ?? "credentials", mayHaveSent: false };
   }
-  if (status === 429 || /throttl|toomany/i.test(type)) {
+  if (throttled) {
     return { reason: "unavailable", cause: "rate_limit", mayHaveSent: false };
   }
   if (status >= 500) {

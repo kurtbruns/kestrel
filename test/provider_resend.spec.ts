@@ -155,9 +155,11 @@ describe("ResendProvider.sendBatch", () => {
     ]);
   });
 
-  it("leaves every recipient not refused retryable when the ids don't add up", async () => {
+  it("leaves the whole batch retryable, the refused one too, when the ids don't add up", async () => {
     // Two ids for three unrefused recipients: which id is whose is a guess, so no one is
-    // marked accepted on it; the re-send goes under the same idempotency key.
+    // marked accepted on it. The refused one isn't settled either: a retry re-sends only
+    // the rows still pending under the key, and a smaller batch under a key Resend already
+    // answered for this one would not replay the same answer.
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       cannedResponse({
         data: [{ id: "re_x" }, { id: "re_y" }],
@@ -172,7 +174,7 @@ describe("ResendProvider.sendBatch", () => {
       idempotencyKeyPrefix: "s",
     });
     expect(result.kind === "answered" && result.results).toEqual([
-      expect.objectContaining({ email: "a@example.com", accepted: false, retryable: false }),
+      expect.objectContaining({ email: "a@example.com", accepted: false, retryable: true }),
       expect.objectContaining({ email: "b@example.com", accepted: false, retryable: true }),
       expect.objectContaining({ email: "c@example.com", accepted: false, retryable: true }),
       expect.objectContaining({ email: "d@example.com", accepted: false, retryable: true }),
