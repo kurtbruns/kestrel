@@ -13,7 +13,7 @@ import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { withNoProviderNote } from "../deployment";
+import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
 import { every, mount, onAbort, type ViewHandle } from "../lifecycle";
 import { openRescheduleModal } from "../sends/dialogs";
 import { appliedNoticeHtml } from "../settings/remake";
@@ -961,9 +961,9 @@ export async function renderEditor(
       if (!validateSubject()) {
         return; // empty subject: the field-level error is now showing; don't open the modal
       }
-      const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
+      const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least 5 minutes out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1017,7 +1017,7 @@ export async function renderEditor(
             }
             await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withNoProviderNote("Sends in 5 minutes, cancelable until then."));
+            toast(withNoProviderNote(`Sends in ${minLeadText()}, cancelable until then.`));
             remount();
           } catch (e) {
             toast(message(e));
@@ -1035,7 +1035,7 @@ export async function renderEditor(
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a 5-minute cancelable window. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of ${minLeadText()}. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;

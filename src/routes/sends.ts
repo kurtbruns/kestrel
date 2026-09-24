@@ -205,7 +205,7 @@ export async function cancel(c: RequestContext): Promise<Response> {
  */
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
-  const fireAt = parseFutureFireAt(body.fire_at);
+  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
   const send = await rescheduleSend(c.env, param(c, "id"), fireAt);
   const response: SendActionResponse = { send };
   return json(response);

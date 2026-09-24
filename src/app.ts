@@ -18,6 +18,7 @@
  */
 
 import type { ReferenceResponse } from "../shared/reference";
+import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
@@ -58,14 +59,18 @@ function retrySchedule(steps: readonly number[]): string {
  * Build the router. `archiveBasePath` (from `ARCHIVE_BASE_PATH`, resolved in
  * `getConfig`) drives the archive route so it can't drift from the emitted
  * archive URL (see the archive route below and SPEC §11); `devMode` decides whether
- * the dev routes exist.
+ * the dev routes exist; `minLeadMs` is the minimum lead the reference states on the
+ * routes that enforce it, so Claude reads it there rather than from its first 400.
  */
 export function createRouter({
   archiveBasePath,
   devMode,
-}: Pick<Config, "archiveBasePath" | "devMode">): Router {
+  minLeadMs,
+}: Pick<Config, "archiveBasePath" | "devMode" | "minLeadMs">): Router {
   /** The given routes in a dev-shaped env, none anywhere else. */
   const devOnly = (...defs: RouteDef[]): RouteDef[] => (devMode ? defs : []);
+  /** The minimum lead as the reference states it: this deployment's value and the floor. */
+  const lead = `${formatLead(minLeadMs)} on this deployment (\`deployment.minLeadMs\` in \`GET /api/settings\`); a deployment sets it with \`MIN_LEAD_SECONDS\`, never below ${formatLead(MIN_LEAD_FLOOR_MS)}`;
   const r = new Router();
 
   const manifest: RouteDef[] = [
@@ -472,9 +477,11 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
-      summary: "Freeze the render and schedule the send for a future time (≥5 min out).",
+      summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
-        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant.",
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until it fires. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 otherwise: " +
+        lead +
+        ".",
       example: {
         request: { fire_at: "2026-01-15T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
@@ -488,9 +495,11 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "posts",
       summary:
-        "Send now: freeze and schedule after a short cancelable buffer. Idempotent per post.",
+        "Send now: freeze and schedule one minimum lead out, cancelable until then. Idempotent per post.",
       description:
-        "The same freeze as scheduling, with the template and identity as they stand. For its five minutes the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired.",
+        "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead: " +
+        lead +
+        ". For that whole window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired.",
       example: {
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
       },
@@ -640,7 +649,9 @@ export function createRouter({
       resource: "sends",
       summary: "Move a scheduled send's fire time without re-freezing the render (I3, I6).",
       description:
-        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. Same minimum lead as scheduling, and the same `fire_at` form: epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset.",
+        "Updates only `fire_at` on a still-`scheduled` send: the frozen render is untouched (the audience is resolved when the send fires) and the review window is preserved; a re-made send keeps its `remade_at`. Distinct from cancel → edit → schedule again, which is for content changes. The same `fire_at` form as scheduling (epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset), and the same minimum lead: " +
+        lead +
+        ".",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768554000000 } },

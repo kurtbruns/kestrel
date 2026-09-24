@@ -1,11 +1,10 @@
 /** Post send actions: schedule for a future time, or send now (buffered). Authed. */
 
-import type { ScheduleResponse } from "../../shared/sends";
+import { formatLead, type ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
 import { json, notFound } from "../lib/errors";
-import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { freeze } from "../send/schedule";
@@ -45,18 +44,22 @@ function parseFireAt(input: unknown): number {
 }
 
 /**
- * Parse `fire_at` and require it to be at least the review buffer out — the single
- * minimum-lead rule every future-dated send obeys, so scheduling and rescheduling can't
- * drift on it (I6). `immediateHint` appends the send-now pointer, which fits the schedule
- * path (a reschedule has no immediate alternative to point at).
+ * Parse `fire_at` and require it to be at least the deployment's minimum lead out — the
+ * single rule every future-dated send obeys, so scheduling and rescheduling can't drift on
+ * it (I6). `immediateHint` appends the send-now pointer, which fits the schedule path (a
+ * reschedule has no immediate alternative to point at).
  */
-export function parseFutureFireAt(input: unknown, immediateHint = false): number {
+export function parseFutureFireAt(
+  input: unknown,
+  minLeadMs: number,
+  immediateHint = false,
+): number {
   const fireAt = parseFireAt(input);
-  if (fireAt < Date.now() + SEND_NOW_BUFFER_MS) {
-    const hint = immediateHint ? "; use POST /posts/:id/send for immediate delivery" : "";
+  if (fireAt < Date.now() + minLeadMs) {
+    const hint = immediateHint ? "; use POST /posts/:id/send for the soonest send" : "";
     throw fieldError(
       "fire_at",
-      `fire_at must be at least ${SEND_NOW_BUFFER_MS / 60000} minutes in the future${hint}`,
+      `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead${hint}`,
     );
   }
   return fireAt;
@@ -85,7 +88,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
 
   const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
-  const fireAt = parseFutureFireAt(body.fire_at, true);
+  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs, true);
   const send = await freeze(c.env, c.config, post, fireAt);
   const frozen: ScheduleResponse = { send };
   return json(frozen, 201);
@@ -107,7 +110,7 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     return json(repeat);
   }
 
-  const send = await freeze(c.env, c.config, post, Date.now() + SEND_NOW_BUFFER_MS);
+  const send = await freeze(c.env, c.config, post, Date.now() + c.config.minLeadMs);
   const frozen: ScheduleResponse = { send };
   return json(frozen, 201);
 }

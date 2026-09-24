@@ -18,6 +18,7 @@ const config: Config = {
   devMode: false,
   simulateSends: false,
   subrequestBudget: 50,
+  minLeadMs: 5 * 60 * 1000,
   notifyChannel: "fake",
   notifyFrom: "News <news@send.example>",
 };

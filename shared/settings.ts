@@ -64,6 +64,8 @@ export interface DeploymentView {
   notifyChannel: "cloudflare" | "provider" | "fake";
   /** The `From:` a notification carries. */
   notifyFrom: string;
+  /** The minimum lead (SPEC §6): every schedule, send now, and reschedule fires at least this long after the request. Never under `MIN_LEAD_FLOOR_MS`. */
+  minLeadMs: number;
 }
 
 /** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */

@@ -25,6 +25,14 @@ SNS_TOPIC_ARN=""           # the topic the SES webhook accepts; every other topi
 RESEND_API_KEY=""
 RESEND_WEBHOOK_SECRET=""   # Svix signing secret for webhook verification
 
+# --- Minimum lead ---
+# How long every send stays visible and cancelable before it fires (docs/SPEC.md §6).
+# Deployed environments default to 300 (five minutes); local dev uses the one-minute floor
+# that every environment shares, so a send scheduled a minute out behaves exactly as it
+# would deployed. Not a secret: a deployed environment sets it in its `vars` in
+# wrangler.jsonc. Below 60 is refused.
+MIN_LEAD_SECONDS="60"
+
 # --- Dev send simulation (optional; local only) ---
 # Swap the instant `fake` transport for a seeded simulation that paces a send over real
 # time and produces a believable outcome mix (transient retries, a rate-limit pause on a

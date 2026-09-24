@@ -9,9 +9,11 @@
  *
  * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
  * (an unknown provider, a missing origin, a real provider without its credentials or still
- * on the template's example.com placeholders) throws a `ConfigError` naming the variable.
+ * on the template's example.com placeholders, a minimum lead under the sweep's one-minute
+ * tick) throws a `ConfigError` naming the variable.
  */
 
+import { DEFAULT_MIN_LEAD_MS, formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import {
   isProviderName,
   PROVIDER_NAMES,
@@ -73,6 +75,11 @@ export interface OptionalVars {
    * may make. Unset means the Workers Free plan's 50; raise it on Workers Paid.
    */
   SUBREQUEST_BUDGET?: string;
+  /**
+   * The minimum lead in seconds (SPEC §6): how long every send stays visible and cancelable
+   * before it fires, at the least. Unset means five minutes; below sixty is refused.
+   */
+  MIN_LEAD_SECONDS?: string;
   /**
    * The `From:` of the notifications that email the publisher through Cloudflare (SPEC §8): an
    * address on a domain onboarded to Cloudflare's email sending. Unset means
@@ -167,6 +174,13 @@ export interface Config {
    * deployment is correct on any plan; Workers Paid allows 10,000.
    */
   subrequestBudget: number;
+  /**
+   * The minimum lead (SPEC §6, I6): the least time between a request to send and the send
+   * firing, which every schedule, send now, reschedule, and re-make enforces. Deploy config,
+   * never a preference behind the API: the API is also Claude's door, and a review window
+   * Claude could shorten through it would be no guard against Claude.
+   */
+  minLeadMs: number;
   /** The channel notifications to the publisher go through (see `NotifyChannel`). */
   notifyChannel: NotifyChannel;
   /** The `From:` a notification carries: `NOTIFY_FROM` on the Cloudflare channel, else the
@@ -268,6 +282,7 @@ export function getConfig(env: AppEnv): Config {
       MIN_SUBREQUEST_BUDGET,
       readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
     ),
+    minLeadMs: readMinLead(env.MIN_LEAD_SECONDS),
     notifyChannel,
     notifyFrom:
       notifyChannel === "cloudflare"
@@ -413,6 +428,26 @@ function readPositiveInt(name: string, v: string | undefined): number | undefine
     throw new ConfigError(name, `must be a whole number above zero, not "${raw}"`);
   }
   return n;
+}
+
+/**
+ * `MIN_LEAD_SECONDS` in milliseconds, or the default when unset. One floor in every
+ * environment, local dev included: the sweep runs once a minute, so a shorter lead is a
+ * window the app cannot honestly promise. A value under it is refused rather than raised,
+ * so a deployment never runs on a lead other than the one it names.
+ */
+function readMinLead(v: string | undefined): number {
+  const seconds = readPositiveInt("MIN_LEAD_SECONDS", v);
+  if (seconds === undefined) {
+    return DEFAULT_MIN_LEAD_MS;
+  }
+  if (seconds * 1000 < MIN_LEAD_FLOOR_MS) {
+    throw new ConfigError(
+      "MIN_LEAD_SECONDS",
+      `must be at least ${MIN_LEAD_FLOOR_MS / 1000}, not "${v?.trim()}": the send sweep runs once a minute, so no send can be promised a window shorter than ${formatLead(MIN_LEAD_FLOOR_MS)}`,
+    );
+  }
+  return seconds * 1000;
 }
 
 /** Treat the usual "on" spellings as truthy for a dev opt-in flag. */
