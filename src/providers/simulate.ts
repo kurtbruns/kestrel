@@ -30,8 +30,10 @@
  *
  * Receipts are normalized delivery events applied through `applyDeliveryEvents`, the same
  * path a verified webhook takes; the provider's webhook HTTP and signatures are the
- * adapters' own tests' business. Every roll is seeded per (send, recipient) or per batch
- * key, so a run reproduces.
+ * adapters' own tests' business. A recipient's rolls are seeded per (send, recipient) and
+ * the guaranteed edge states' places per send, so they hold however the loop batches and
+ * retries; a request's rare loss is rolled on its batch key, which is new at every
+ * hand-off, so it falls differently from run to run.
  *
  * Where it is faster than production, it says so: receipts that take hours (a complaint)
  * arrive within minutes, and a spent quota lifts before the send's first retry instead of
@@ -42,6 +44,7 @@ import type { SimulationFaults, SimulationProfile, SimulationView } from "../../
 import { type AcceptedAwaitingEvent, acceptedAwaitingEvent } from "../db/sends";
 import type { AppEnv, Config } from "../env";
 import { hashString, makePrng } from "../lib/prng";
+import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
@@ -79,7 +82,8 @@ interface SimProfile {
   /** The account's sending quota running out, as the adapter reports it; null for a
    *  profile that doesn't model it. */
   quota: BatchHalt | null;
-  /** Which edge states `realistic` guarantees once per send, so a demo shows them. */
+  /** Which edge states `realistic` guarantees once per send, so a demo shows them. The lost
+   *  request is placed after the quota lifts, so it comes only with the quota. */
   guaranteed: { lost: boolean; quota: boolean };
 }
 
@@ -250,16 +254,28 @@ function drawFor(tag: string): number {
 }
 
 // --- per-send state -----------------------------------------------------------------
-// Module-level and ephemeral (per dev isolate), keyed by send or batch key. Losing it on a
-// reload re-paces from scratch and may inject a guaranteed edge state once more; it never
+// Module-level, keyed by send or batch key, so it lasts as long as the dev isolate, which
+// `wrangler dev` keeps from one sweep tick to the next until a reload. Losing it forgets
+// which guaranteed edge states a send has had, so one may happen once more; it never
 // double-mails, because the durable `deliveries` ledger is the guarantee (I4).
+
+/** One send as the simulated provider has seen it. */
+interface SendSim {
+  /** Requests made for the send, refused ones included. */
+  requests: number;
+  /** When the send's quota ran out, or null while it hasn't. */
+  quotaSpentAt: number | null;
+  /** Requests the provider took since the quota lifted. */
+  resumed: number;
+  /** Whether a request of the send has been lost in flight. */
+  lost: boolean;
+}
 
 /** `${sendId}:${email}` that already spent their one transient refusal. */
 const transientSeen = new Set<string>();
 /** Batch keys whose request was already lost once: a re-send under the key is answered. */
 const lostKeys = new Set<string>();
-/** Per send: requests made, and whether each guaranteed edge state has happened. */
-const sendState = new Map<string, { requests: number; lost: boolean; quota: boolean }>();
+const sendState = new Map<string, SendSim>();
 /** Per small send: the forced receipt outcomes of the guaranteed floor. */
 const floorOverrides = new Map<string, Map<string, SimOutcome>>();
 
@@ -272,16 +288,27 @@ export function resetSimulation(): void {
 }
 
 /**
- * Which request of the send (counting from 1) carries a guaranteed edge state, seeded by the
- * send so a run reproduces: the quota on the 2nd to 4th, early enough that a small demo
- * reaches it, and the lost request a few after it. The loop sends a group's requests
- * together, so both can come in the first group; either way the watch reads halt, resume,
- * then wedge, since a wedge shows only once nothing is left to send.
+ * Where a guaranteed edge state falls, counting from 1 and seeded by the send: the quota runs
+ * out on the send's 2nd to 4th request, early enough that a small demo reaches it, and the
+ * lost request is the 2nd to 5th after the quota lifts, so the send halts, resumes at its
+ * retry, and only then loses one. Not the 1st: the loop sends that one alone to try the
+ * account, and its answer is what clears the halt.
  */
 function guaranteedAt(sendId: string, state: "lost" | "quota"): number {
-  const quota = 2 + (hashString(`${sendId}:quota`) % 3);
-  return state === "quota" ? quota : quota + 2 + (hashString(`${sendId}:lost`) % 4);
+  return state === "quota"
+    ? 2 + (hashString(`${sendId}:quota`) % 3)
+    : 2 + (hashString(`${sendId}:lost`) % 4);
 }
+
+/**
+ * How long a spent quota refuses the send: until the earliest the sweep may run the halt's
+ * first retry (its first step, less the slack a due retry is given). That covers every
+ * request of the run it halted, those the loop sent alongside the refused one included, and
+ * the retry always finds it lifted, since the halt is stamped after the refusal. Kept on
+ * `Date`, the clock the retry time is kept on. A real quota lifts over a day.
+ */
+const QUOTA_HOLD_MS =
+  unwrap(HALT_BACKOFF_MS.account[0], "the first account backoff step") - HALT_RETRY_SLACK_MS;
 
 /**
  * The local send simulation as a provider. List sends run through the profile; everything
@@ -323,25 +350,38 @@ export class SimProvider implements EmailProvider {
     const key = opts.idempotencyKey ?? sendId;
     const realistic = this.faults === "realistic";
     const p = this.profile;
-    const state = sendState.get(sendId) ?? { requests: 0, lost: false, quota: false };
+    const state = sendState.get(sendId) ?? {
+      requests: 0,
+      quotaSpentAt: null,
+      resumed: 0,
+      lost: false,
+    };
     sendState.set(sendId, state);
     state.requests += 1;
 
-    // A spent quota answers before anything is sent, so the provider took no one.
-    if (realistic && p.quota && p.guaranteed.quota && !state.quota) {
-      if (state.requests >= guaranteedAt(sendId, "quota")) {
-        state.quota = true;
+    // A spent quota answers before anything is sent, so the provider took no one. It
+    // refuses every request until it lifts, not only the one that spent it: the loop sends
+    // a group's requests together, so the rest are already on their way.
+    if (realistic && p.quota && p.guaranteed.quota) {
+      const now = Date.now();
+      if (state.quotaSpentAt === null && state.requests >= guaranteedAt(sendId, "quota")) {
+        state.quotaSpentAt = now;
         console.log("[sim] sending quota spent; the send halts until its next retry", {
           sendId,
         });
+      }
+      if (state.quotaSpentAt !== null && now < state.quotaSpentAt + QUOTA_HOLD_MS) {
         return { kind: "halted", halt: p.quota };
       }
     }
+    // This request's place since the quota lifted, taken as it arrives: by the time it is
+    // answered, the requests the loop sent alongside it have counted too.
+    const resumed = state.quotaSpentAt === null ? 0 : ++state.resumed;
     await sleep(p.requestMs);
     const results = this.answer(sendId, rendered, recipients, opts);
     // A request lost in flight: the provider took it (it is in the outbox), but its answer
     // never came, so its fate is unknown to the send (§12).
-    if (realistic && this.lost(sendId, key, state)) {
+    if (realistic && this.lost(sendId, key, state, resumed)) {
       console.log("[sim] request lost in flight; its fate is unknown to the send", {
         sendId,
         key,
@@ -354,13 +394,14 @@ export class SimProvider implements EmailProvider {
   }
 
   /** Whether this request is lost in flight: once per send when the profile guarantees it,
-   *  otherwise at the profile's rate; never twice under one key, so a re-send is answered. */
-  private lost(sendId: string, key: string, state: { requests: number; lost: boolean }): boolean {
+   *  at its place after the quota lifts (`resumed`), otherwise at the profile's rate; never
+   *  twice under one key, so a re-send is answered. */
+  private lost(sendId: string, key: string, state: SendSim, resumed: number): boolean {
     if (lostKeys.has(key)) {
       return false;
     }
     const guaranteed =
-      this.profile.guaranteed.lost && !state.lost && state.requests >= guaranteedAt(sendId, "lost");
+      this.profile.guaranteed.lost && !state.lost && resumed >= guaranteedAt(sendId, "lost");
     if (guaranteed || drawFor(`${key}:lost`) < this.profile.lostRate) {
       state.lost = true;
       lostKeys.add(key);

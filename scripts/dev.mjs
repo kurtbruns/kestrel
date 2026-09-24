@@ -167,11 +167,13 @@ const originArgs = isRemote
     ];
 
 // The dev settings a shell may set for one run (see the header). `--var` wins over
-// `.dev.vars`, so the shell's value is the one the Worker sees.
+// `.dev.vars`, so the shell's value is the one the Worker sees. An empty one is left out:
+// forwarded, it would override `.dev.vars` with the app's default (`MIN_LEAD_SECONDS=`
+// would quietly bring back the five-minute lead).
 const OVERRIDABLE = ["SIMULATE_SENDS", "MIN_LEAD_SECONDS", "SUBREQUEST_BUDGET"];
 const overrideArgs = isRemote
   ? []
-  : OVERRIDABLE.filter((name) => process.env[name] !== undefined).flatMap((name) => [
+  : OVERRIDABLE.filter((name) => process.env[name]?.trim()).flatMap((name) => [
       "--var",
       `${name}:${process.env[name]}`,
     ]);

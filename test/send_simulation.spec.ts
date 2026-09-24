@@ -307,46 +307,91 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   });
 
   it("halts on the daily quota, resumes at its retry, wedges on a lost request, and Resolve completes it", async () => {
-    // Workers Paid's budget, so a tick reaches every recipient; the default models Free.
+    // Workers Paid's budget, so a tick reaches every recipient; the default models Free. More
+    // readers than one group, so the requests after each group's first go out together and
+    // the resumed send takes more than one tick.
+    // The send id and each batch key seed where the guaranteed states fall and SES's rare
+    // real-rate rolls (a reader refused for good, a second lost request), so fixed ids make
+    // this run the same every time instead of failing on an unlucky roll now and then. If a
+    // change to how ids are drawn lands a roll the assertions below don't allow for, change
+    // the prefix.
+    let ids = 0;
+    vi.spyOn(crypto, "randomUUID").mockImplementation(
+      () => `5e5e5e5e-0000-4000-8000-${(++ids).toString(16).padStart(12, "0")}` as const,
+    );
     const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
-    const emails = await seedConfirmed(12);
+    const emails = await seedConfirmed(30);
     const sendId = await dueSend(e, "Kestrels");
     const progress = async () =>
       readJson(await fetchWith(vars, `/sends/${sendId}/progress`, { headers: AUTH }));
+    const addresses = async (status: string) =>
+      (
+        await env.DB.prepare("SELECT email FROM deliveries WHERE send_id = ? AND status = ?")
+          .bind(sendId, status)
+          .all<{ email: string }>()
+      ).results.map((r) => r.email);
+    const sentTo = () => new Set(fakeOutbox().map((m) => m.to));
 
-    // The first tick runs into the quota, answered as the SES adapter answers it: the
-    // account refused, nobody unsent, the retry spaced out.
+    // The first tick runs into the quota on one of its first requests, answered as the SES
+    // adapter answers it: the account refused, nobody unsent, the retry spaced out. Every
+    // request after the refusal is refused too, the ones the loop sent alongside it
+    // included, so only what the provider took before it went out and nothing is in flight.
     await sweep(e);
     let row = (await sends.getSend(env.DB, sendId))!;
     expect(row.halt_reason).toBe("account");
     expect(row.halt_cause).toBe("quota");
     expect(row.halt_error).toMatch(/TooManyRequestsException: Daily message quota exceeded/);
     expect(row.c_unsent).toBe(0);
+    expect(row.c_in_flight).toBe(0);
+    expect(row.c_accepted).toBeGreaterThanOrEqual(1); // the group's first request, alone
+    expect(row.c_accepted).toBeLessThanOrEqual(3); // the quota runs out by the 4th
+    expect(row.c_pending).toBe(30 - row.c_accepted);
+    expect(sentTo()).toEqual(new Set(await addresses("accepted")));
+    expect(fakeOutbox()).toHaveLength(row.c_accepted);
     expect((await progress()).phase).toBe("needs-attention");
+    const haltedAt = Date.now();
+    const beforeQuota = row.c_accepted;
 
-    // A minute later the retry isn't due; at its first step (five minutes) it is.
+    // A minute later the retry isn't due, and nothing more goes out.
     vi.setSystemTime(Date.now() + 60_000);
     await sweep(e);
-    expect((await sends.getSend(env.DB, sendId))!.halt_reason).toBe("account");
-    for (let tick = 0; tick < 10; tick++) {
+    row = (await sends.getSend(env.DB, sendId))!;
+    expect(row.halt_reason).toBe("account");
+    expect(fakeOutbox()).toHaveLength(beforeQuota);
+
+    // At its first step (five minutes) it is, and the quota has lifted: the send resumes,
+    // and a few requests in, one is lost in flight, in this run rather than the halted one.
+    while (row.halt_reason !== null && Date.now() - haltedAt < 10 * 60_000) {
       vi.setSystemTime(Date.now() + 60_000);
       await sweep(e);
       row = (await sends.getSend(env.DB, sendId))!;
-      if (row.c_pending === 0) {
-        break;
-      }
     }
-    // Everyone went but one request lost in flight: SES has no key to re-send it under, so
+    expect(Date.now() - haltedAt).toBe(5 * 60_000);
+    expect(row.halt_reason).toBeNull();
+    expect(fakeOutbox().length).toBeGreaterThan(beforeQuota);
+    // At least one: SES's own rare loss can add another to the one the profile guarantees.
+    expect(row.c_in_flight).toBeGreaterThanOrEqual(1);
+    // The lost request ended the run, so the rest waits for the next tick.
+    expect(row.c_pending).toBeGreaterThan(0);
+
+    for (let tick = 0; tick < 10 && row.c_pending > 0; tick++) {
+      vi.setSystemTime(Date.now() + 60_000);
+      await sweep(e);
+      row = (await sends.getSend(env.DB, sendId))!;
+    }
+    // Everyone went but the request lost in flight: SES has no key to re-send it under, so
     // the send is wedged, waiting on the publisher.
     expect(row.halt_reason).toBeNull();
     expect(row.c_pending).toBe(0);
-    expect(row.c_in_flight).toBe(1);
+    expect(row.c_in_flight).toBeGreaterThanOrEqual(1);
     const stuck = await progress();
     expect(stuck.phase).toBe("needs-attention");
     expect(stuck.attention.wedged).toBe(true);
     // It did leave: the lost request is in the outbox, as it would be in the reader's inbox.
-    expect(new Set(fakeOutbox().map((m) => m.to))).toEqual(new Set(emails));
+    // Only a reader SES refused for good (rare, at its real rate) is missing.
+    const refused = await addresses("unsent");
+    expect(sentTo()).toEqual(new Set(emails.filter((m) => !refused.includes(m))));
 
     const resolved = await fetchWith(vars, `/sends/${sendId}/resolve`, {
       method: "POST",
@@ -356,7 +401,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     expect(resolved.status).toBe(200);
     row = (await sends.getSend(env.DB, sendId))!;
     expect(row.status).toBe("sent");
-    expect(row.c_unsent).toBe(0);
+    expect(row.c_unsent).toBe(refused.length);
   });
 
   it("runs clean with no faults: one tick, no halt, every receipt a delivery", async () => {
