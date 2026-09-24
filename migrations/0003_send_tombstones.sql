@@ -8,10 +8,15 @@
 -- tombstone holds, so it still never falls back when the send holding the largest number
 -- goes, and `send_rev_floor`, which only kept that from happening, is no longer needed.
 --
--- The floor is dropped without carrying it forward. A local database whose floor stood
--- above every remaining send's `rev` reads a lower sequence afterward, and a client still
--- holding a cursor from before is told its cursor is ahead of the database and re-reads,
--- the same answer it gets after a local reset or a restore.
+-- The floor is carried forward as one tombstone holding its number, so the sequence never
+-- falls back below a cursor a client already holds (a later write would otherwise take a
+-- number that cursor claims to be past, and the change would be skipped). Its id names no
+-- send, so a client told it was removed has nothing to drop.
+--
+-- `send_rev_floor` itself stays, unread by the code this migration ships with, because
+-- the upgrade runs migrations before it deploys: the Worker still serving in between reads
+-- the floor on every write to a send, and would fail every one without it. A later
+-- migration drops it once no deployed code reads it.
 
 CREATE TABLE send_tombstones (
   id  TEXT PRIMARY KEY,     -- the removed send's id
@@ -21,4 +26,5 @@ CREATE TABLE send_tombstones (
 -- What was removed after a cursor is a range read on it, as for sends.
 CREATE INDEX idx_send_tombstones_rev ON send_tombstones (rev);
 
-DROP TABLE send_rev_floor;
+INSERT INTO send_tombstones (id, rev)
+  SELECT 'send-rev-floor', value FROM send_rev_floor WHERE id = 1 AND value > 0;
