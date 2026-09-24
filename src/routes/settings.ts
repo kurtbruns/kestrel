@@ -50,6 +50,7 @@ import {
 import type { Config } from "../env";
 import { type JsonObject, optObject, optString, optStringList, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
+import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
 import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
 import {
@@ -64,13 +65,6 @@ import { insideLead, saveSettingsRemaking } from "../send/remake";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
 const MAX_LOGO_BYTES = 512 * 1024;
-const ALLOWED_LOGO_TYPES = new Set([
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/svg+xml",
-]);
 
 /** The non-secret, deploy-time facts the editor shows read-only. */
 function deploymentView(cfg: Config): DeploymentView {
@@ -271,9 +265,11 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (!(file instanceof File)) {
     throw badRequest("missing 'file' field");
   }
-  const type = file.type || "application/octet-stream";
-  if (!ALLOWED_LOGO_TYPES.has(type)) {
-    throw badRequest("logo must be a PNG, JPEG, WebP, GIF, or SVG image");
+  // The post images' allowlist: the logo rides in every email's sign-off, and most email
+  // apps don't show an SVG. A logo stored before this rule was set keeps serving.
+  const type = mediaType(file.type);
+  if (!RASTER_IMAGE_TYPES.includes(type)) {
+    throw badRequest("The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don't show SVG.");
   }
   const bytes = await file.arrayBuffer();
   if (bytes.byteLength === 0) {

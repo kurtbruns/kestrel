@@ -29,6 +29,7 @@ import {
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
+import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
@@ -461,7 +462,7 @@ export function createRouter({
       method: "POST",
       path: "/posts/:id/images",
       access: "admin",
-      accepts: [...FORM_UPLOAD, ...imageRoutes.POST_IMAGE_TYPES],
+      accepts: [...FORM_UPLOAD, ...RASTER_IMAGE_TYPES],
       resource: "posts",
       summary: "Upload an image to a post (multipart form field `file`).",
       handler: imageRoutes.uploadImage,

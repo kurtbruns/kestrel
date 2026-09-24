@@ -205,12 +205,12 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
             <div class="set-logo-tile${state.logoUrl ? " has-img" : ""}" id="logoTile" role="button" tabindex="0" aria-label="Upload logo">
               <span class="set-logo-ph" id="logoPh"${state.logoUrl ? HIDDEN : null}>${icon("upload")}Upload</span>
             </div>
-            <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" hidden>
+            <input type="file" id="logoInput" accept="image/png,image/jpeg,image/webp,image/gif" hidden>
             <div class="set-logo-actions">
               <button type="button" id="logoReplace">${state.logoUrl ? "Replace" : "Upload"}</button>
               <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? null : HIDDEN}>Remove</button>
             </div>
-            <p class="field-hint">PNG, JPEG, WebP, GIF, or SVG, up to 512&nbsp;KB. Saves immediately.</p>
+            <p class="field-hint">PNG, JPEG, WebP, or GIF, up to 512&nbsp;KB. Saves immediately.</p>
             <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
           </div>
           <div class="set-id-fields">
