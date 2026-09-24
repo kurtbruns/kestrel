@@ -4,7 +4,7 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_MIN_LEAD_MS, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import { DEFAULT_MIN_LEAD_MS, MIN_LEAD_CEILING_MS, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";
 import { type AppEnv, ConfigError, getConfig } from "../src/env";
@@ -234,6 +234,22 @@ describe("getConfig — deploy config is validated", () => {
     }
     expect(message).toMatch(/MIN_LEAD_SECONDS must be at least 60/);
     expect(message).toMatch(/once a minute/);
+  });
+
+  it("refuses a minimum lead over a day, the likeliest a value in milliseconds, instead of clamping it", () => {
+    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "86400" })).minLeadMs).toBe(MIN_LEAD_CEILING_MS);
+    for (const value of ["86401", "300000", "9999999999999", "1e306"]) {
+      refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+      refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+    }
+    let message = "";
+    try {
+      getConfig(envWith({ MIN_LEAD_SECONDS: "300000" }));
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/MIN_LEAD_SECONDS must be at most 86400/);
+    expect(message).toMatch(/in seconds/);
   });
 
   it("answers every request with a 500 that names the variable", async () => {

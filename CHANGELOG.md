@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- `MIN_LEAD_SECONDS` sets the minimum lead, how long every send stays cancelable before it fires, per deployment: five minutes when unset, and never under one minute in any environment (a lower value stops the app with an error naming it). Settings shows it read-only, the editor's Schedule, Send now, and Reschedule use it instead of a fixed five minutes, and the API reference states it on the routes that enforce it (SPEC §6). Local dev ships with it at one minute; add `MIN_LEAD_SECONDS="60"` from `.dev.vars.example` to an existing `.dev.vars`.
+- `MIN_LEAD_SECONDS` sets the minimum lead, how long every send stays cancelable before it fires, per deployment: five minutes when unset, never under one minute in any environment, and never over a day (a value outside that stops the app with an error naming it). Settings shows it read-only, the editor's Schedule, Send now, and Reschedule use it instead of a fixed five minutes, and the API reference states it on the routes that enforce it (SPEC §6). Local dev ships with it at one minute; add `MIN_LEAD_SECONDS="60"` from `.dev.vars.example` to an existing `.dev.vars`.
 
 ### Fixed
 

@@ -64,7 +64,7 @@ export interface DeploymentView {
   notifyChannel: "cloudflare" | "provider" | "fake";
   /** The `From:` a notification carries. */
   notifyFrom: string;
-  /** The minimum lead (SPEC §6): every schedule, send now, and reschedule fires at least this long after the request. Never under `MIN_LEAD_FLOOR_MS`. */
+  /** The minimum lead (SPEC §6): every schedule, send now, and reschedule fires at least this long after the request. Never under `MIN_LEAD_FLOOR_MS` or over `MIN_LEAD_CEILING_MS`. */
   minLeadMs: number;
 }
 

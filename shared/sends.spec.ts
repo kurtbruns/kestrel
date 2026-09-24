@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_MIN_LEAD_MS, formatLead, MIN_LEAD_FLOOR_MS } from "./sends";
+import { DEFAULT_MIN_LEAD_MS, formatLead, MIN_LEAD_CEILING_MS, MIN_LEAD_FLOOR_MS } from "./sends";
 
 describe("the minimum lead", () => {
-  it("defaults to five minutes and never goes below one sweep tick", () => {
+  it("defaults to five minutes, never goes below one sweep tick, and never above a day", () => {
     expect(DEFAULT_MIN_LEAD_MS).toBe(5 * 60 * 1000);
     expect(MIN_LEAD_FLOOR_MS).toBe(60 * 1000);
+    expect(MIN_LEAD_CEILING_MS).toBe(24 * 60 * 60 * 1000);
   });
 
   it("is worded in whole minutes when it is one, in seconds otherwise", () => {

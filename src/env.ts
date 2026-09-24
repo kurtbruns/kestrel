@@ -13,7 +13,12 @@
  * tick) throws a `ConfigError` naming the variable.
  */
 
-import { DEFAULT_MIN_LEAD_MS, formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import {
+  DEFAULT_MIN_LEAD_MS,
+  formatLead,
+  MIN_LEAD_CEILING_MS,
+  MIN_LEAD_FLOOR_MS,
+} from "../shared/sends";
 import {
   isProviderName,
   PROVIDER_NAMES,
@@ -433,8 +438,9 @@ function readPositiveInt(name: string, v: string | undefined): number | undefine
 /**
  * `MIN_LEAD_SECONDS` in milliseconds, or the default when unset. One floor in every
  * environment, local dev included: the sweep runs once a minute, so a shorter lead is a
- * window the app cannot honestly promise. A value under it is refused rather than raised,
- * so a deployment never runs on a lead other than the one it names.
+ * window the app cannot honestly promise. The ceiling, one day, catches a value in
+ * milliseconds. A value outside the two is refused rather than clamped, so a deployment
+ * never runs on a lead other than the one it names.
  */
 function readMinLead(v: string | undefined): number {
   const seconds = readPositiveInt("MIN_LEAD_SECONDS", v);
@@ -445,6 +451,12 @@ function readMinLead(v: string | undefined): number {
     throw new ConfigError(
       "MIN_LEAD_SECONDS",
       `must be at least ${MIN_LEAD_FLOOR_MS / 1000}, not "${v?.trim()}": the send sweep runs once a minute, so no send can be promised a window shorter than ${formatLead(MIN_LEAD_FLOOR_MS)}`,
+    );
+  }
+  if (seconds * 1000 > MIN_LEAD_CEILING_MS) {
+    throw new ConfigError(
+      "MIN_LEAD_SECONDS",
+      `must be at most ${MIN_LEAD_CEILING_MS / 1000} (one day), not "${v?.trim()}": it is in seconds, and it is the least wait before every send, not a limit on how far out one can be scheduled`,
     );
   }
   return seconds * 1000;

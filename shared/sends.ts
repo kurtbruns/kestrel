@@ -127,6 +127,13 @@ export const DEFAULT_MIN_LEAD_MS = 5 * 60 * 1000;
  */
 export const MIN_LEAD_FLOOR_MS = 60 * 1000;
 
+/**
+ * The most minimum lead any deployment may set: one day. The lead bounds only the least
+ * wait before a send, never how far out one may be scheduled, so a longer one holds back
+ * every Send now and is almost certainly milliseconds typed as seconds (SPEC §6).
+ */
+export const MIN_LEAD_CEILING_MS = 24 * 60 * 60 * 1000;
+
 /** A minimum lead in words, "5 minutes" or "90 seconds", so the server's refusal and the
  *  editor's copy name it the same way. */
 export function formatLead(ms: number): string {
