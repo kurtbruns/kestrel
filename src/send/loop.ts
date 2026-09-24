@@ -21,7 +21,8 @@
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
  * starting batches while it can still close cleanly; the next tick continues. A provider
  * that takes one recipient a request has its requests grouped (`GROUP_RECIPIENTS`) so
- * they share the D1 writes, and paced to the provider's rate (`maxRequestRate`).
+ * they share the D1 writes. Requests keep the provider's rate (`maxRequestRate`), and a
+ * run stops starting them near the end of the tick (`pace.ts`).
  */
 
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
@@ -33,6 +34,7 @@ import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { BatchHalt, HaltReason } from "../providers/types";
 import { Budget, metered } from "./budget";
+import { SendWindow } from "./pace";
 
 export interface SendLoopResult {
   sendId: string;
@@ -58,10 +60,6 @@ const MAX_CHUNK = 500;
  * under (SPEC §12). A provider that batches this many or more sends one batch a group.
  */
 const GROUP_RECIPIENTS = 10;
-/** How long a run keeps starting groups, so a send paced to its provider's rate hands the
- *  rest to the next tick rather than running into it. */
-const RUN_WINDOW_MS = 50 * 1000;
-
 // What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
@@ -102,31 +100,11 @@ function errorText(err: unknown): string {
   return String((err as Error)?.message ?? err);
 }
 
-/**
- * Spaces request starts to at most `rate` a second: each call resolves when the next
- * request may start. Starts are reserved in call order, so requests started together
- * still go out one gap apart. No rate means no wait.
- */
-function pacer(rate: number | undefined): () => Promise<void> {
-  if (!rate) {
-    return async () => {};
-  }
-  const gap = 1000 / rate;
-  let next = 0;
-  return async () => {
-    const now = Date.now();
-    const at = Math.max(now, next);
-    next = at + gap;
-    if (at > now) {
-      await new Promise((resolve) => setTimeout(resolve, at - now));
-    }
-  };
-}
-
 export async function runSend(
   env: AppEnv,
   sendId: string,
   budget: Budget = new Budget(getConfig(env).subrequestBudget),
+  window?: SendWindow,
 ): Promise<SendLoopResult> {
   const empty: SendLoopResult = {
     sendId,
@@ -192,7 +170,9 @@ export async function runSend(
     firstAttempt: boolean;
   }
 
-  const pace = pacer(provider.maxRequestRate);
+  // The tick's clock when the sweep runs this, so every send it runs keeps one pace and
+  // one deadline; a run of its own gets its own.
+  const clock = window ?? new SendWindow(provider.maxRequestRate);
 
   /**
    * Send a group of handed-off batches, each under its own key, and record every answer
@@ -242,7 +222,7 @@ export async function runSend(
 
     const sent = calls.filter((c) => c.recipients.length > 0);
     const send = async (call: (typeof sent)[number]) => {
-      await pace();
+      await clock.pace();
       budget.request(); // the request counts whether or not it answers
       try {
         const answer = await provider.sendBatch(rendered, call.recipients, {
@@ -373,7 +353,7 @@ export async function runSend(
     keyedBefore,
   );
   for (const { key, keyedAt } of unanswered) {
-    if (!budget.affords(REDO_COST + CLOSE_COST, 1)) {
+    if (!budget.affords(REDO_COST + CLOSE_COST, 1) || clock.startsLeft() < 1) {
       break;
     }
     if (!(await keepLease())) {
@@ -428,13 +408,14 @@ export async function runSend(
   const pendingIds =
     groups > 0 ? await sends.pendingDeliveryIds(db, sendId, groups * groupCalls * batchSize) : [];
   /** How many requests the next group may make: its full size, or fewer when the budget
-   *  is short, so a tight budget still sends; zero once the run should stop. */
+   *  or the tick's time is short, so a tight budget still sends; zero once the run should
+   *  stop. */
   const nextGroupCalls = (): number => {
-    if (Date.now() - now >= RUN_WINDOW_MS) {
-      return 0;
-    }
     const byQueries = budget.queriesLeft >= GROUP_COST + CLOSE_COST ? groupCalls : 0;
-    return Math.max(0, Math.min(byQueries, budget.left - GROUP_COST - CLOSE_COST));
+    return Math.max(
+      0,
+      Math.min(byQueries, budget.left - GROUP_COST - CLOSE_COST, clock.startsLeft()),
+    );
   };
 
   for (let at = 0; at < pendingIds.length; ) {

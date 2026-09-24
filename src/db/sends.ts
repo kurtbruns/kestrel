@@ -948,18 +948,23 @@ export async function dispatchFresh(
   if (rows.length === 0) {
     return [];
   }
+  const json = JSON.stringify(rows);
   const guard = holdsLease(sendId, lease);
   const [moved] = await db.batch<{ id: string; key: string }>([
+    // Rows are found by primary key (the unary `+` keeps SQLite off the (send_id, status)
+    // index, which would walk every pending row of the send for each group), and each
+    // takes its own batch's key.
     db
       .prepare(
-        `UPDATE deliveries SET status = 'dispatched', dispatch_key = json_extract(j.value, '$.k'),
+        `UPDATE deliveries SET status = 'dispatched',
+                dispatch_key = (SELECT json_extract(j.value, '$.k') FROM json_each(?) AS j
+                                 WHERE json_extract(j.value, '$.id') = deliveries.id),
                 keyed_at = ?, updated_at = ?
-           FROM json_each(?) AS j
-          WHERE deliveries.id = json_extract(j.value, '$.id') AND deliveries.send_id = ?
-            AND deliveries.status = 'pending' AND deliveries.dispatch_key IS NULL AND ${guard.sql}
-          RETURNING deliveries.id AS id, deliveries.dispatch_key AS key`,
+          WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?))
+            AND +send_id = ? AND +status = 'pending' AND dispatch_key IS NULL AND ${guard.sql}
+          RETURNING id, dispatch_key AS key`,
       )
-      .bind(now, now, JSON.stringify(rows), sendId, ...guard.binds),
+      .bind(json, now, now, json, sendId, ...guard.binds),
     // After the move, so it counts exactly the rows that took the (new) keys.
     keyedCounterMove(
       db,
@@ -1161,6 +1166,8 @@ export async function settleDeliveries(
     );
   }
   const guard = holdsLease(sendId, lease);
+  // Rows are found by primary key; see `dispatchFresh` for the unary `+`.
+  const json = JSON.stringify(rows);
   await db.batch([
     db
       .prepare(
@@ -1174,9 +1181,10 @@ export async function settleDeliveries(
            updated_at = ?
          FROM json_each(?) AS j
          WHERE deliveries.id = json_extract(j.value, '$.id')
-           AND deliveries.send_id = ? AND deliveries.status = ? AND ${guard.sql}`,
+           AND deliveries.id IN (SELECT json_extract(value, '$.id') FROM json_each(?))
+           AND +deliveries.send_id = ? AND +deliveries.status = ? AND ${guard.sql}`,
       )
-      .bind(now, JSON.stringify(rows), sendId, from, ...guard.binds),
+      .bind(now, json, json, sendId, from, ...guard.binds),
     // The column names come from the fixed `CounterCol` union, never user input.
     db
       .prepare(`UPDATE sends SET ${sets.join(", ")} WHERE id = ? AND lease_token = ?`)
@@ -1202,20 +1210,24 @@ export async function openDeliveryCount(db: D1Database, sendId: string): Promise
  * `unsent` (assume the batch never left) or `accepted` (assume it did) — stamping
  * the reason into `error` as an inspectable audit trail. It touches ONLY
  * `dispatched` rows, so an already-`accepted` recipient is never disturbed, and it
- * never re-mails anyone (nothing here calls the provider). Returns rows resolved.
+ * never re-mails anyone (nothing here calls the provider). Only while `lease` holds the
+ * send, so no run is waiting on those rows' answers. Returns rows resolved.
  */
 export async function resolveDispatched(
   db: D1Database,
   sendId: string,
+  lease: string,
   outcome: "unsent" | "accepted",
   note: string,
   now: number,
 ): Promise<number> {
+  const guard = holdsLease(sendId, lease);
   const res = await db
     .prepare(
-      "UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ? WHERE send_id = ? AND status = 'dispatched'",
+      `UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ?
+        WHERE send_id = ? AND status = 'dispatched' AND ${guard.sql}`,
     )
-    .bind(outcome, note, now, sendId)
+    .bind(outcome, note, now, sendId, ...guard.binds)
     .run();
   const n = res.meta.changes ?? 0;
   if (n > 0) {

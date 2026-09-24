@@ -20,12 +20,18 @@
  * After resolving, it runs the loop's own completion gate, so a resolved send
  * finishes exactly as a clean one would. Only `dispatched` rows are ever touched —
  * an already-`accepted` recipient is never re-mailed by any of this (I4).
+ *
+ * It holds the send's lease while it works, as a run does. A run in progress may have
+ * rows `dispatched` that are only waiting for the provider's answer, and settling those
+ * would put the publisher's guess in place of the provider's answer, so while a run holds
+ * the send, Resolve is refused and can be tried again a moment later.
  */
 
 import type { ResolveResponse, StuckResolution } from "../../shared/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { conflict, notFound } from "../lib/errors";
+import { LEASE_TTL_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 
 // The shapes live in shared/ so the editor reads the same definitions; the names here
@@ -53,11 +59,15 @@ export async function resolveStuckSend(
   }
 
   const now = Date.now();
+  const lease = await sends.acquireLease(env.DB, sendId, now, LEASE_TTL_MS);
+  if (!lease) {
+    throw conflict("this send is being worked on right now; try Resolve again in a moment");
+  }
   const note =
     outcome === "unsent"
       ? `operator adjudication: assumed NOT delivered (${actor})`
       : `operator adjudication: assumed delivered (${actor})`;
-  const resolved = await sends.resolveDispatched(env.DB, sendId, outcome, note, now);
+  const resolved = await sends.resolveDispatched(env.DB, sendId, lease, outcome, note, now);
 
   // Run the loop's completion gate: finish only when nothing is left in flight, so a
   // send that still has pending rows just continues when the sweep next resumes it: the
@@ -66,8 +76,10 @@ export async function resolveStuckSend(
   const stillDispatched = await sends.countDeliveries(env.DB, sendId, "dispatched");
   let completed = false;
   if (pending === 0 && stillDispatched === 0) {
-    await sends.completeSend(env.DB, sendId, send.post_id, now, null);
+    await sends.completeSend(env.DB, sendId, send.post_id, now, lease);
     completed = true;
+  } else {
+    await sends.releaseLease(env.DB, sendId, lease);
   }
 
   return { send: unwrap(await sends.getSend(env.DB, sendId), "send"), resolved, completed };

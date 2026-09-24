@@ -656,7 +656,7 @@ export function createRouter({
       summary:
         "Resolve a send wedged on ambiguous (dispatched) deliveries; body {resolution: 'unsent'|'accepted'}.",
       description:
-        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient.",
+        "On a non-idempotent provider a mid-batch transport error leaves recipients `dispatched` — the loop won't blind-retry them (I4), so the send can't reach its completion gate. This adjudicates those rows: 'unsent' (assume not sent; the address is picked up by the next post) or 'accepted' (assume sent, operator-confirmed), then completes the send. Never re-mails an already-accepted recipient. A 409 while a run is sending the send: its in-flight rows may still get the provider's answer, so try again a moment later.",
       example: {
         request: { resolution: "unsent" },
         response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },

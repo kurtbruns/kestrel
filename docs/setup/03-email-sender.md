@@ -4,7 +4,7 @@ Kestrel treats the email provider as **transport** behind a two-method seam (`se
 
 ## How fast each provider sends
 
-A send is delivered a slice at a time, one slice per minute, and each slice stays inside what Cloudflare allows one Worker invocation (`SUBREQUEST_BUDGET`, see **Provision**). Resend takes up to 100 recipients in one request, so it sends about 400 recipients a minute even on Workers Free, and tens of thousands on Workers Paid. SES takes one recipient per request, which costs far more of the budget per recipient:
+A send is delivered a slice at a time, one slice per minute, and each slice stays inside what Cloudflare allows one Worker invocation (`SUBREQUEST_BUDGET`, see **Provision**). Resend takes up to 100 recipients in one request, so it sends about 400 recipients a minute even on Workers Free, and up to about 19,000 a minute on Workers Paid. SES takes one recipient per request, which costs far more of the budget per recipient:
 
 - **Workers Free:** about 18 recipients a minute. A send to 1,000 subscribers takes about an hour.
 - **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** as fast as your SES account's sending rate allows, up to about 1,900 recipients a minute. At a new production account's 14 a second, that is about 700 a minute, so 10,000 subscribers take about fifteen minutes; ask AWS to raise the rate and set `SES_MAX_SEND_RATE` to match to go faster.

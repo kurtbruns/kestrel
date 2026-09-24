@@ -9,8 +9,9 @@
  * timeliness problem, not a correctness one — but it is never silent (§12).
  *
  * One tick is one invocation, so it shares one subrequest budget (`budget.ts`) across
- * its own queries and every send it runs; a send the budget can't reach this tick is
- * picked up on the next. A send the provider halted is left alone until its backoff
+ * its own queries and every send it runs, and one clock (`pace.ts`), so the sends it runs
+ * keep the provider's rate between them and stop before the next tick; a send the budget
+ * or the clock can't reach this tick is picked up on the next. A send the provider halted is left alone until its backoff
  * says its next retry is due (`HALT_BACKOFF_MS`), so waiting costs only the query.
  * Notifying gets what the sends leave plus a reserve held back up front, so a long send
  * spending every tick's budget can't starve the notification that says it is stuck.
@@ -21,9 +22,11 @@ import type { AppEnv } from "../env";
 import { getConfig } from "../env";
 import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
+import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import { Budget, metered } from "./budget";
 import { MIN_RUN_COST, runSend } from "./loop";
+import { SendWindow } from "./pace";
 
 /** The two anomaly queries at the end of a tick, held back from the budget up front so
  *  they run whatever the sends spent. */
@@ -40,6 +43,7 @@ export async function sweep(env: AppEnv): Promise<void> {
   const whole = new Budget(config.subrequestBudget);
   const budget = new Budget(whole.limit - held, whole.queryLimit - held);
   const db = metered(env.DB, budget);
+  const window = new SendWindow(getProvider(config, env).maxRequestRate);
 
   // 1) Due scheduled sends.
   for (const s of await sends.dueSends(db, now)) {
@@ -48,7 +52,7 @@ export async function sweep(env: AppEnv): Promise<void> {
       console.error("MISSED_FIRE", { sendId: s.id, postId: s.post_id, lagMs: lag });
     }
     handled.add(s.id);
-    await safeRun(env, s.id, budget);
+    await safeRun(env, s.id, budget, window);
   }
 
   // 2) Resume interrupted sends whose lease has expired (and halted ones whose next retry
@@ -62,7 +66,7 @@ export async function sweep(env: AppEnv): Promise<void> {
       continue;
     }
     handled.add(s.id);
-    await safeRun(env, s.id, budget);
+    await safeRun(env, s.id, budget, window);
   }
 
   // 3) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
@@ -94,9 +98,14 @@ export async function sweep(env: AppEnv): Promise<void> {
   await drainSimulatedWebhooks(env, config);
 }
 
-async function safeRun(env: AppEnv, sendId: string, budget: Budget): Promise<void> {
+async function safeRun(
+  env: AppEnv,
+  sendId: string,
+  budget: Budget,
+  window: SendWindow,
+): Promise<void> {
   try {
-    await runSend(env, sendId, budget);
+    await runSend(env, sendId, budget, window);
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
     console.error("SEND_ERROR", { sendId, error: String((err as Error)?.message ?? err) });
