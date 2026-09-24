@@ -1,5 +1,6 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
- *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
+ *  render (I3). State transitions use compare-and-swap (WHERE status = ...). Every write
+ *  to a send stamps its `rev` (see `NEXT_REV`). */
 
 import { normalizeEmail } from "../../shared/email";
 import type {
@@ -15,6 +16,7 @@ import type {
 } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
+import { unwrap } from "../lib/unwrap";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
@@ -35,6 +37,37 @@ export function countsOf(send: SendSummary): SendCounts {
     skipped: send.c_skipped,
     unsent: send.c_unsent,
   };
+}
+
+// --- the change sequence (`sends.rev`, SPEC §8) -----------------------------------
+//
+// Every write that changes what a reader can see of a send sets its `rev` to NEXT_REV,
+// inside the same statement, so a client holding the sequence value it last read can ask
+// for every send that changed after it, across sends, whichever client made the change.
+// The sequence is the largest `rev` any send holds, or the floor, whichever is higher. A
+// delete takes a number of its own by raising the floor past the sequence
+// (`raiseRevFloorStmt`), so a number is never handed out twice even when the send that
+// held the largest one goes, and a floor above a client's cursor tells it that something
+// it listed may be gone. Rows one statement stamps share its number, as rows one read
+// sees are one snapshot. The one write that does not stamp is a lease
+// renewal (`renewLease`): it changes nothing a reader sees. `test/send_rev.spec.ts`
+// fails if a write to `sends` anywhere under src/ leaves NEXT_REV out, or a delete skips
+// the floor.
+
+/** The sequence value now: every change so far is at or below it. Each side falls back
+ *  to 0, since SQLite's two-argument MAX is null if either is, and a null here would fail
+ *  every write to a send. */
+const CURRENT_REV =
+  "MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT value FROM send_rev_floor WHERE id = 1), 0))";
+
+/** The number a write to a send takes: above every change before it. */
+export const NEXT_REV = `(${CURRENT_REV} + 1)`;
+
+/** Run before deleting sends, in the same batch: the delete takes the next number as
+ *  the floor, so the sequence never falls back when the send that held its largest number
+ *  goes, and the removal itself is a change a cursor can be past or not. */
+export function raiseRevFloorStmt(db: D1Database): D1PreparedStatement {
+  return db.prepare(`UPDATE send_rev_floor SET value = ${NEXT_REV} WHERE id = 1`);
 }
 
 // --- denormalized counter maintenance (`sends.c_*`) --------------------------
@@ -94,7 +127,9 @@ function counterMove(
   n: number,
 ): D1PreparedStatement {
   return db
-    .prepare(`UPDATE sends SET ${from} = ${from} - ?, ${to} = ${to} + ? WHERE id = ?`)
+    .prepare(
+      `UPDATE sends SET ${from} = ${from} - ?, ${to} = ${to} + ?, rev = ${NEXT_REV} WHERE id = ?`,
+    )
     .bind(n, n, sendId);
 }
 
@@ -115,7 +150,8 @@ export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1Pre
          c_bounced    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'bounced'),
          c_complained = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event = 'complained'),
          c_skipped    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'skipped'),
-         c_unsent     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'unsent')
+         c_unsent     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'unsent'),
+         rev          = ${NEXT_REV}
        WHERE id = ?`,
     )
     .bind(sendId);
@@ -125,18 +161,22 @@ export async function recomputeSendCounters(db: D1Database, sendId: string): Pro
   await recomputeSendCountersStmt(db, sendId).run();
 }
 
-/** Whether the send still has a recipient that has been retried (attempts > 0) and is
- *  not yet terminal — the signal that separates the `retrying` phase from a clean
- *  `progressing` one. An indexed EXISTS probe (send_id, status), so it stays cheap
- *  even on a large audience and keeps `/progress` off a full aggregate. */
+/** A recipient of the send named by `sendIdExpr` that has been retried (attempts > 0)
+ *  and is not yet terminal: the signal that separates the `retrying` phase from a clean
+ *  `progressing` one. An EXISTS over the (send_id, status) index, so it stays cheap even
+ *  on a large audience. `sendIdExpr` is fixed SQL (a `?` or a column), never user input. */
+function activeRetriesSql(sendIdExpr: string): string {
+  return `EXISTS (SELECT 1 FROM deliveries d WHERE d.send_id = ${sendIdExpr} AND d.status IN ('pending', 'dispatched') AND d.attempts > 0)`;
+}
+
+/** Whether the send still has a retried recipient in flight (`activeRetriesSql`): one
+ *  probe, which keeps `/progress` off a full aggregate. */
 export async function hasActiveRetries(db: D1Database, sendId: string): Promise<boolean> {
   const row = await db
-    .prepare(
-      "SELECT 1 AS x FROM deliveries WHERE send_id = ? AND status IN ('pending', 'dispatched') AND attempts > 0 LIMIT 1",
-    )
+    .prepare(`SELECT ${activeRetriesSql("?")} AS x`)
     .bind(sendId)
     .first<{ x: number }>();
-  return row != null;
+  return row?.x === 1;
 }
 
 export type { SendSummary };
@@ -215,7 +255,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -257,14 +297,47 @@ export async function listSends(
   return results;
 }
 
-/** How many sends match `filter` — the `page.total` for the send list. */
-export async function countSends(db: D1Database, filter: SendFilter = {}): Promise<number> {
+/** A `GET /sends` row as read: the list projection plus the retry probe, folded in so a
+ *  page of rows is one statement rather than a probe per row. */
+export type SendListRow = SendSummary & { has_retries: 0 | 1 };
+
+/** One page of the send list, how many sends match, and the change sequence the page
+ *  was read at (SPEC §8). */
+export interface SendListPage {
+  rows: SendListRow[];
+  total: number;
+  seq: number;
+}
+
+/**
+ * One page of sends for `GET /sends`, read in one batch so the page, its total, and the
+ * change sequence are one snapshot: a change either shows in the rows or lands after
+ * `seq`, never neither. Only a `sending` send's retry probe can decide its phase, so the
+ * CASE skips the probe for every other row (an AND would still run it: SQLite evaluates
+ * both sides of one in a result column).
+ */
+export async function listSendsPage(
+  db: D1Database,
+  filter: SendFilter,
+  page: ListParams,
+): Promise<SendListPage> {
   const { clause, binds } = sendWhere(filter);
-  const row = await db
-    .prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`)
-    .bind(...binds)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+  const [seq, count, list] = await db.batch([
+    db.prepare(`SELECT ${CURRENT_REV} AS seq`),
+    db.prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`).bind(...binds),
+    db
+      .prepare(
+        `SELECT ${SEND_LIST_COLS},
+                CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
+           FROM sends ${clause} ${orderByClause(page, "id")} LIMIT ? OFFSET ?`,
+      )
+      .bind(...binds, page.limit, page.offset),
+  ]);
+  return {
+    rows: (list?.results ?? []) as SendListRow[],
+    total: (count?.results[0] as { n: number } | undefined)?.n ?? 0,
+    seq: unwrap((seq?.results[0] as { seq: number } | undefined)?.seq, "the send sequence"),
+  };
 }
 
 /** Per-recipient state rollup for a send. */
@@ -514,8 +587,8 @@ export function insertScheduledSendStmt(
   const guard = settingsVersionIs(settingsVersion);
   return db
     .prepare(
-      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at)
-       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?
+      `INSERT INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, scheduled_at, rev)
+       SELECT ?, ?, 'scheduled', ?, ?, ?, ?, ?, ?, ${NEXT_REV}
         WHERE ${guard.sql}`,
     )
     .bind(
@@ -539,7 +612,9 @@ export function rescheduleStmt(
   fireAt: number,
 ): D1PreparedStatement {
   return db
-    .prepare("UPDATE sends SET fire_at = ? WHERE id = ? AND status = 'scheduled'")
+    .prepare(
+      `UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
+    )
     .bind(fireAt, sendId);
 }
 
@@ -548,7 +623,7 @@ export function rescheduleStmt(
 export function cancelStmt(db: D1Database, sendId: string, now: number): D1PreparedStatement {
   return db
     .prepare(
-      "UPDATE sends SET status = 'canceled', completed_at = ? WHERE id = ? AND status = 'scheduled'",
+      `UPDATE sends SET status = 'canceled', completed_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
     )
     .bind(now, sendId);
 }
@@ -619,7 +694,7 @@ export function remakeSendStmt(
 ): D1PreparedStatement {
   return db
     .prepare(
-      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, remade_at = ?
+      `UPDATE sends SET rendered_html = ?, rendered_text = ?, subject = ?, remade_at = ?, rev = ${NEXT_REV}
         WHERE id = ? AND status = 'scheduled' AND ${guard.sql}`,
     )
     .bind(render.rendered_html, render.rendered_text, render.subject, now, sendId, ...guard.binds);
@@ -694,7 +769,8 @@ export async function acquireLease(
          SET status = CASE WHEN status = 'scheduled' THEN 'sending' ELSE status END,
              started_at = COALESCE(started_at, ?),
              locked_until = ?,
-             lease_token = ?
+             lease_token = ?,
+             rev = ${NEXT_REV}
        WHERE id = ?
          AND (status = 'sending' OR (status = 'scheduled' AND fire_at <= ?))
          AND (locked_until IS NULL OR locked_until < ?)`,
@@ -712,7 +788,8 @@ function holdsLease(sendId: string, lease: string): { sql: string; binds: unknow
   };
 }
 
-/** Extend this run's lease. False once another run holds it, which then owns the send. */
+/** Extend this run's lease. False once another run holds it, which then owns the send.
+ *  The one write to a send that takes no `rev`: a renewal changes nothing a reader sees. */
 export async function renewLease(
   db: D1Database,
   sendId: string,
@@ -727,11 +804,12 @@ export async function renewLease(
 }
 
 /** Release this run's lease so the next tick may resume the send; a no-op once another
- *  run holds it. */
+ *  run holds it. Unlike a renewal it stamps `rev`: whether a lease is held is what tells a
+ *  wedged send (given up, awaiting Resolve) from one finishing its last batch. */
 export async function releaseLease(db: D1Database, sendId: string, lease: string): Promise<void> {
   await db
     .prepare(
-      "UPDATE sends SET locked_until = NULL, lease_token = NULL WHERE id = ? AND lease_token = ?",
+      `UPDATE sends SET locked_until = NULL, lease_token = NULL, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
     )
     .bind(sendId, lease)
     .run();
@@ -754,7 +832,7 @@ export async function completeSend(
       .prepare(
         `UPDATE sends SET status = 'sent', completed_at = ?, locked_until = NULL, lease_token = NULL,
                 halt_reason = NULL, halt_cause = NULL, halt_error = NULL, halted_at = NULL,
-                halt_retries = 0, halt_retry_at = NULL
+                halt_retries = 0, halt_retry_at = NULL, rev = ${NEXT_REV}
           WHERE id = ? AND status = 'sending' AND (? IS NULL OR lease_token = ?)`,
       )
       .bind(now, sendId, lease, lease),
@@ -802,7 +880,8 @@ export async function resolveAudience(
         `UPDATE sends
             SET audience_resolved_at = ?,
                 recipient_count = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id),
-                c_pending = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id AND status = 'pending' AND event IS NULL)
+                c_pending = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id AND status = 'pending' AND event IS NULL),
+                rev = ${NEXT_REV}
           WHERE id = ? AND audience_resolved_at IS NULL`,
       )
       .bind(now, sendId),
@@ -919,7 +998,7 @@ function keyedCounterMove(
   const k = JSON.stringify(keys);
   return db
     .prepare(
-      `UPDATE sends SET ${from} = ${from} - ${n}, ${to} = ${to} + ${n} WHERE id = ? AND lease_token = ?`,
+      `UPDATE sends SET ${from} = ${from} - ${n}, ${to} = ${to} + ${n}, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
     )
     .bind(sendId, k, status, sendId, k, status, sendId, lease);
 }
@@ -1077,7 +1156,8 @@ export async function holdBatch(
           `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
                   halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END,
                   halt_retries = CASE WHEN halt_reason IS ? THEN halt_retries + 1 ELSE 1 END,
-                  halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']')
+                  halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']'),
+                  rev = ${NEXT_REV}
             WHERE id = ? AND lease_token = ?`,
         )
         .bind(
@@ -1189,7 +1269,9 @@ export async function settleDeliveries(
       .bind(now, json, json, sendId, from, ...guard.binds),
     // The column names come from the fixed `CounterCol` union, never user input.
     db
-      .prepare(`UPDATE sends SET ${sets.join(", ")} WHERE id = ? AND lease_token = ?`)
+      .prepare(
+        `UPDATE sends SET ${sets.join(", ")}, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
+      )
       .bind(...cols.map((c) => deltas.get(c) ?? 0), sendId, lease),
   ]);
 }

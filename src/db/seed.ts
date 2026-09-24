@@ -7,7 +7,7 @@
  * the normal `db/` write path. Only the fake-provider seed route calls them.
  */
 import type { PostStatus } from "./posts";
-import type { SendStatus } from "./sends";
+import { NEXT_REV, raiseRevFloorStmt, type SendStatus } from "./sends";
 import type { SubscriberStatus } from "./subscribers";
 
 export interface SeedSubscriber {
@@ -111,6 +111,7 @@ export async function resetAll(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM deliveries"),
     db.prepare("DELETE FROM notifications"),
+    raiseRevFloorStmt(db),
     db.prepare("DELETE FROM sends"),
     db.prepare("DELETE FROM images"),
     db.prepare("DELETE FROM post_revisions"),
@@ -216,8 +217,8 @@ export async function insertSend(db: D1Database, row: SeedSend): Promise<void> {
   await db
     .prepare(
       `INSERT INTO sends
-         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?)`,
+         (id, post_id, status, fire_at, rendered_html, rendered_text, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, rev)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ${NEXT_REV})`,
     )
     .bind(
       row.id,

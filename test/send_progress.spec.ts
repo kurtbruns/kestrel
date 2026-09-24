@@ -252,6 +252,7 @@ describe("buildSendProgress — derived phase", () => {
       c_complained: 0,
       c_skipped: 0,
       c_unsent: 0,
+      rev: 0,
       ...over,
     };
   }
