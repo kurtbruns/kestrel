@@ -8,7 +8,7 @@ Kestrel is a newsletter app for publishers that you self-host on Cloudflare. You
 
 ## Prerequisites
 
-- Node 20+ and npm
+- Node 22+ and npm
 - A Cloudflare account, to deploy (not needed for local dev)
 - An email provider like **Amazon SES** or **Resend** to send mail once deployed (local dev uses a fake transport that sends nothing)
 

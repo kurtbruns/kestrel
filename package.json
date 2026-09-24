@@ -6,7 +6,7 @@
   "description": "Newsletter app: write in Markdown, preview, schedule with a review window, and send to a double opt-in list. Cloudflare Worker + D1 + R2 + SES/Resend.",
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "repository": {
     "type": "git",

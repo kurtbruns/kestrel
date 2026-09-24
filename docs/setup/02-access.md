@@ -52,7 +52,7 @@ npx wrangler secret put ACCESS_AUD --env staging           # the AUD tag from st
 npx wrangler secret put ACCESS_ALLOWED_EMAILS --env staging # e.g. you@example.com,team@example.com
 ```
 
-- `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` **must both be set**. If either is missing, the app cannot verify any Access assertion, so it admits no one: every admin route answers `401`, even to a request the edge let through, and the editor loads but can do nothing. A `401` after logging in through Access usually means one of these is missing, misspelled, or set on a different environment than the one you deployed.
+- `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` **must both be set**. If either is missing, the app cannot verify any Access assertion, so it admits no one: every admin route answers `401`, even to a request the edge let through, and the editor loads but can do nothing. A `401` after logging in through Access usually means one of these is missing, misspelled, or set on a different environment than the one you deployed, or that `ACCESS_ALLOWED_EMAILS` (below) is set and does not list your address.
 - `ACCESS_ALLOWED_EMAILS` is optional. Empty/unset admits any valid Access login; set it to lock admin down to named humans. It gates humans only — service tokens carry no email.
 
 ## 4. There is no bearer backdoor to close

@@ -1,15 +1,15 @@
 # Sending-domain DNS
 
-Bulk mail lands in spam or is rejected outright without SPF, DKIM, and DMARC on the sending domain. Publish all three for **`send.example.com`** — the dedicated sending subdomain, kept off the apex so the newsletter's sending reputation can never affect your regular mail (`docs/SPEC.md` §11).
+Bulk mail lands in spam or is rejected outright without SPF, DKIM, and DMARC on the sending domain. Publish all three for **`send.example.com`**, the dedicated sending subdomain, kept off the apex so the newsletter's sending reputation can never affect your regular mail (`docs/SPEC.md` §11).
 
 ## Two hard rules
 
 - **Never send bulk mail from the apex** (`example.com`). This is the one item here that is not a preference. The apex carries your primary mail reputation; a newsletter must not put it at risk. Send from `send.example.com`.
-- **Keep the app name and the mail name unmistakably different.** `newsletter.example.com` is where the app and reader surface live; `send.example.com` is where mail comes from — two different jobs, two names that can't be confused for each other. Avoid `mail.` as the sending subdomain too: the world treats `mail.example.com` as an inbound MX host, not a sending identity, so it invites the opposite confusion. `send.` is the right role name for outbound.
+- **Keep the app name and the mail name unmistakably different.** `newsletter.example.com` is where the app and reader surface live; `send.example.com` is where mail comes from: two different jobs, two names that can't be confused for each other. Avoid `mail.` as the sending subdomain too: the world treats `mail.example.com` as an inbound MX host, not a sending identity, so it invites the opposite confusion. `send.` is the right role name for outbound.
 
 ## The three records
 
-These live on the `send.example.com` zone. The exact DKIM values come from your provider's verification wizard (SES "Easy DKIM" or the Resend domain page) — that console is the source of truth for the CNAME/TXT it wants; copy them verbatim. DMARC you author yourself.
+These live on the `send.example.com` zone. The exact DKIM values come from your provider's verification wizard (SES "Easy DKIM" or the Resend domain page). That console is the source of truth for the CNAME/TXT it wants; copy them verbatim. DMARC you author yourself.
 
 ### SPF: authorize the provider's return path
 
@@ -25,7 +25,7 @@ SPF is checked against the message's envelope sender (the MAIL FROM, or return p
 
 Keep a single SPF record with a single `v=spf1` on each name; if one already exists, merge the `include:` rather than adding a second TXT.
 
-### DKIM — let the provider sign
+### DKIM: let the provider sign
 
 Publish the CNAME (SES) or TXT (varies) records exactly as the provider's wizard lists them. SES Easy DKIM publishes **three** CNAMEs of the form:
 
@@ -37,7 +37,7 @@ Publish the CNAME (SES) or TXT (varies) records exactly as the provider's wizard
 
 Identity/domain verification only reports **verified** once these resolve, so give DNS time to propagate.
 
-### DMARC — publish a policy and collect reports
+### DMARC: publish a policy and collect reports
 
 A TXT record at `_dmarc.send.example.com`. Start in **monitor** mode so you can watch alignment before enforcing:
 

@@ -7,7 +7,7 @@ Rationale for the platform choice (Worker + D1 + R2 + Cron) is in `docs/SPEC.md`
 ## Prerequisites
 
 - A Cloudflare account.
-- Node 20+ and this repo cloned, with `npm install` run.
+- Node 22+ and this repo cloned, with `npm install` run.
 - `npx wrangler login` (authenticates the CLI against your account).
 - If you work from a fork, set `repository.url` in `package.json` to your fork and commit it. The editor and `GET /api/version` link the running build to its commit and release through that field, and a fork inherits the upstream URL, so the links would otherwise open the upstream project. Delete the field to drop the links instead.
 
@@ -71,7 +71,7 @@ While you are here, set each environment's public `vars` (these are **not** secr
 | `FROM_ADDRESS` | the `From:` header | `Newsletter <newsletter@send.example.com>` |
 | `AWS_REGION` | SES region (ignored by Resend) | `us-east-1` |
 
-`FROM_ADDRESS` is the **sender**: the email's authenticated identity, fixed here at deploy time. It is the only value mail is sent from. `SENDING_DOMAIN` is informational: Settings shows it beside the From address, and the app checks only that it is a plain host off `example.com`, not that it matches `FROM_ADDRESS`. Set it to the domain part of `FROM_ADDRESS` so the two never disagree. That is a separate thing from the **publication identity** (the name, tagline, and logo that theme the reader surface and ride inside the email), which is a runtime preference the publisher sets in the app, not a deploy-time var (`docs/SPEC.md` §9). The From display name only stands in for the publication name until that preference is set.
+`FROM_ADDRESS` is the **sender**: the email's authenticated identity, fixed here at deploy time. It is the only value mail is sent from. `SENDING_DOMAIN` is informational: Settings shows it beside the From address, and with a real provider the app checks only that it is not left on `example.com`, never that it matches `FROM_ADDRESS`. Set it to the domain part of `FROM_ADDRESS` so the two never disagree. That is a separate thing from the **publication identity** (the name, tagline, and logo that theme the reader surface and ride inside the email), which is a runtime preference the publisher sets in the app, not a deploy-time var (`docs/SPEC.md` §9). The From display name only stands in for the publication name until that preference is set.
 
 Set `PROVIDER` to `fake` in each environment for now, even though the template says `ses`. A real provider refuses to run until its secrets are set, and those come later, in **Connect an email sender**, which switches `PROVIDER` over; until then, `fake` lets you deploy and verify Access in between. The `fake` transport delivers nothing: it records a send as if every recipient accepted it, so do not schedule a real post before switching.
 
@@ -79,7 +79,7 @@ The app checks this configuration on every request and refuses to run on one tha
 
 `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` are **optional** — leave them unset to stay self-contained (archives and images serve on `APP_ORIGIN`). They are the opt-in enhancements covered in "Wire the archive to a website."
 
-`SUBREQUEST_BUDGET` is **optional** too. Cloudflare caps how many D1 queries and outbound requests one Worker invocation may make, and each minute's send sweep is one invocation, so a large send is delivered over several ticks, each stopping before the cap. Unset, the budget is 50, the Workers Free plan's limit, which is correct on any plan. On Workers Paid, which allows 1,000 D1 queries per invocation, set `"SUBREQUEST_BUDGET": "1000"` in that environment's `vars` so each tick delivers about twenty times as much. Never set it above your plan's limit: a tick that hits the cap is cut off mid-batch, and the send stalls until its lease expires. A value below 30 is raised to 30, the least a tick needs to deliver anything and still send a notification (see **Notifications**); a value that is not a whole number above zero is refused like the settings above.
+`SUBREQUEST_BUDGET` is **optional** too. Cloudflare caps how many D1 queries and outbound requests one Worker invocation may make, and each minute's send sweep is one invocation, so a large send is delivered over several ticks, each stopping before the cap. Unset, the budget is 50, the Workers Free plan's limit, which is correct on any plan. On Workers Paid, which allows 1,000 D1 queries per invocation, set `"SUBREQUEST_BUDGET": "1000"` in that environment's `vars` so each tick delivers far more (about thirty times as much for SES; see **Connect an email sender**). Never set it above your plan's limit: a tick that hits the cap is cut off mid-batch, and the send stalls until its lease expires. A value below 30 is raised to 30, the least a tick needs to deliver anything and still send a notification (see **Notifications**); a value that is not a whole number above zero is refused like the settings above.
 
 > **Pick `ARCHIVE_BASE_PATH` before your first send.** Archive URLs are permanent (I3): every post you send carries its `<base>/<slug>` link forever. Changing the prefix later orphans the links already mailed under the old one. The default is `/archive`; if you are migrating an install that already sent `/newsletter/…` links, set `ARCHIVE_BASE_PATH=/newsletter` to keep them alive.
 
