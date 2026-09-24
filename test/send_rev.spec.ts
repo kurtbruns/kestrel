@@ -50,10 +50,11 @@ async function rev(id: string): Promise<number> {
   return row.rev;
 }
 
+/** The sequence now, read the way the list reads it. */
 async function seq(): Promise<number> {
-  const row = await env.DB.prepare("SELECT value FROM send_rev_seq WHERE id = 1").first<{
-    value: number;
-  }>();
+  const row = await env.DB.prepare(
+    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), (SELECT value FROM send_rev_floor WHERE id = 1)) AS value",
+  ).first<{ value: number }>();
   return row!.value;
 }
 
@@ -165,19 +166,66 @@ describe("a send's rev", () => {
     expect(await rev(send.id)).toBeGreaterThan(taken);
   });
 
-  it("does not move on a write that changes nothing, or on a compare-and-swap that matches no row", async () => {
+  it("does not move on a compare-and-swap that matches no row", async () => {
     const send = await frozenSend(Date.now() + 3_600_000);
-    const before = await rev(send.id);
-    const sequence = await seq();
-    await env.DB.prepare("UPDATE sends SET subject = subject WHERE id = ?").bind(send.id).run();
-    expect(await rev(send.id)).toBe(before);
     await sends.cancelStmt(env.DB, send.id, Date.now()).run();
     const canceled = await rev(send.id);
-    expect(canceled).toBeGreaterThan(before);
+    const sequence = await seq();
     // A reschedule's CAS on a send that is no longer scheduled changes zero rows.
-    await sends.rescheduleStmt(env.DB, send.id, Date.now() + 7_200_000).run();
+    const res = await sends.rescheduleStmt(env.DB, send.id, Date.now() + 7_200_000).run();
+    expect(res.meta.changes).toBe(0);
     expect(await rev(send.id)).toBe(canceled);
-    expect(await seq()).toBe(sequence + 1); // only the cancel took a number
+    expect(await seq()).toBe(sequence);
+  });
+
+  it("never falls back when the send holding the largest number is deleted", async () => {
+    const kept = await frozenSend(Date.now() + 3_600_000, "kept");
+    const gone = await frozenSend(Date.now() + 3_600_000, "gone");
+    await sends.cancelStmt(env.DB, gone.id, Date.now()).run();
+    await env.DB.prepare("UPDATE posts SET status = 'draft' WHERE id = ?").bind(gone.post_id).run();
+    const top = await rev(gone.id);
+    expect(top).toBe(await seq());
+
+    await posts.deletePost(env.DB, gone.post_id);
+    expect(await sends.getSend(env.DB, gone.id)).toBeNull();
+    expect(await seq()).toBe(top);
+    // The next change is numbered past the deleted send's, which a cursor may already hold.
+    await sends.cancelStmt(env.DB, kept.id, Date.now()).run();
+    expect(await rev(kept.id)).toBeGreaterThan(top);
+  });
+});
+
+// Every file under src/, as text: the check below reads the SQL where it is written.
+const SOURCES = import.meta.glob("../src/**/*.ts", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+describe("every write to sends", () => {
+  it("stamps NEXT_REV, but for the lease renewal, and every delete raises the floor first", () => {
+    const writes = /(UPDATE|INSERT(?:\s+OR\s+\w+)?\s+INTO|DELETE\s+FROM)\s+sends\b/g;
+    let seen = 0;
+    for (const [file, text] of Object.entries(SOURCES)) {
+      for (const match of text.matchAll(writes)) {
+        seen += 1;
+        const at = match.index ?? 0;
+        // The statement runs to the end of the string literal it is written in, which the
+        // quote opening it names (a template literal may hold `"` in an interpolation).
+        const before = text.slice(0, at);
+        const quote = before.lastIndexOf("`") > before.lastIndexOf('"') ? "`" : '"';
+        const rest = text.slice(at);
+        const statement = rest.slice(0, rest.indexOf(quote));
+        const where = `${file}: ${statement.slice(0, 80)}`;
+        if (match[1]?.startsWith("DELETE")) {
+          expect(text.slice(Math.max(0, at - 200), at), where).toContain("raiseRevFloorStmt(db)");
+        } else if (!statement.startsWith("UPDATE sends SET locked_until = ? WHERE")) {
+          // biome-ignore lint/suspicious/noTemplateCurlyInString: matches the source text of the interpolation, not a value
+          expect(statement, where).toContain("${NEXT_REV}");
+        }
+      }
+    }
+    expect(seen).toBeGreaterThan(15); // the scan found the writes it is meant to check
   });
 });
 
