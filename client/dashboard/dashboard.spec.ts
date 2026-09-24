@@ -36,6 +36,7 @@ const send = (over: Partial<SendListItem> = {}): SendListItem => ({
   scheduled_at: NOW - 7_200_000,
   started_at: NOW - 3_600_000,
   completed_at: NOW - 3_500_000,
+  audience_resolved_at: NOW - 3_600_000,
   remade_at: null,
   halt_reason: null,
   halt_cause: null,

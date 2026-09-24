@@ -78,6 +78,8 @@ export interface Send {
   scheduled_at: number;
   started_at: number | null;
   completed_at: number | null;
+  /** When the send's first run fixed its audience (SPEC §6); null until it fires. From then on `recipient_count` is the audience at fire. */
+  audience_resolved_at: number | null;
   /** When a template or identity change last re-made the frozen render while the send was scheduled; null if never. */
   remade_at: number | null;
   /** Why the provider refused this send's last batch as a whole (SPEC §12), or null once a batch is answered: `unavailable` retries on its own, `account` needs the operator. */

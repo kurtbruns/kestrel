@@ -284,7 +284,7 @@ describe("lease ownership", () => {
     const send = await dueSend();
     const now = Date.now();
     const stale = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
-    await sends.materializeAudience(env.DB, send.id, now);
+    await sends.resolveAudience(env.DB, send.id, now);
     // The stale run stalls past its lease, and the next tick takes the send over.
     await env.DB.prepare("UPDATE sends SET locked_until = ? WHERE id = ?")
       .bind(now - 1, send.id)
@@ -325,7 +325,7 @@ describe("lease ownership", () => {
     const send = await dueSend();
     const now = Date.now();
     const stale = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
-    await sends.materializeAudience(env.DB, send.id, now);
+    await sends.resolveAudience(env.DB, send.id, now);
     await env.DB.prepare("UPDATE sends SET locked_until = ? WHERE id = ?")
       .bind(now - 1, send.id)
       .run();

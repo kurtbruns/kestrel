@@ -26,7 +26,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 /**
  * A sent post is a frozen record (I3), not an editable object, so it opens this instead
- * of a locked editor: how the send went over the frozen audience, with a link to the
+ * of a locked editor: how the send went over the audience at fire, with a link to the
  * archived post. A send still IN FLIGHT opens the live watch (two bars, dispatch and the
  * lagging delivery, a derived phase, a counts grid, throughput, and a provider-health
  * strip), polling /progress until dispatch completes, after which the record keeps
@@ -469,7 +469,7 @@ function renderFrozenRecord(
         <h1>${send.subject || html`<em>untitled</em>`}</h1>
         <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
       </div>
-      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience and the published post are fixed as sent.</p>
+      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">

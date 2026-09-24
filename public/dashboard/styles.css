@@ -1692,7 +1692,7 @@ th.num .th-sort {
   flex-wrap: wrap;
 }
 /* Names the living layer of the record: the outcome tiles below keep moving as receipts
-   arrive, while the audience and published post are frozen (SPEC §8). */
+   arrive, while the audience at fire and the published post are fixed (SPEC §8). */
 .rec-tiles-cap {
   margin: 16px 0 0;
   font-size: 12.5px;

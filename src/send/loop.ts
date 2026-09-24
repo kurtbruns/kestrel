@@ -136,8 +136,12 @@ export async function runSend(
   };
   const canStartBatch = () => budget.affords(CHUNK_COST + CLOSE_COST);
 
-  // Resolve the audience once (idempotent), then work the snapshot of pending rows.
-  await sends.materializeAudience(db, sendId, now);
+  // The first run fixes the audience (SPEC §6); every later run works the rows that
+  // exist, so a reader who confirms mid-send gets the next post, not this one. The guard
+  // in `resolveAudience` makes a racing first run a no-op.
+  if (send.audience_resolved_at === null) {
+    await sends.resolveAudience(db, sendId, now);
+  }
 
   const result: SendLoopResult = { ...empty, leased: true };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
