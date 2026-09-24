@@ -41,6 +41,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The setup guide says when it is safe to switch email providers, and the spec states what Kestrel trusts to the people who run it.
 - A sent post's page now follows delivery receipts for as long as it is open, closely while they arrive and about once a minute after. Before, it checked every 15 seconds and stopped after ten minutes, missing a late bounce or complaint.
 - The Sent page's scheduled card and the editor's scheduled banner stop offering Cancel and Reschedule at the send's fire time, and the banner reads "Preparing to send…" until the send starts. The dashboard's warnings and the Sent page's attention cards use the server's own words for each problem, and the bounce-spike line links to the send.
 - A send is wedged, awaiting Resolve, from the moment the run that left recipients with an unknown fate hands it back, by one rule the send's page, the lists, the feed, the notification, and the log's `send.wedged` all share; before, the log flagged it only after 30 minutes. The sweep no longer runs a wedged send every minute, so its page no longer reads "progressing" for a moment each minute or reports a change when nothing changed. On Resend, recipients a cut-off run left in flight no longer read as wedged while they wait for the next run to send them again under their key (SPEC §12).

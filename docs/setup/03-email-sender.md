@@ -101,6 +101,16 @@ npx wrangler secret put SNS_TOPIC_ARN --env production           # the topic ARN
 
 ---
 
+## Switching providers
+
+Switch `PROVIDER`, or move to another account on the same provider, only while no send is sending. The dashboard lists any send in progress.
+
+When a request to the provider gets no answer, Kestrel cannot know whether those recipients were mailed. On Resend it sends the request again under the same idempotency key, and Resend drops the copy it already delivered. A different provider or account has never seen that key, so it would deliver them again. That is at most the recipients of the one request the old provider never answered, but each of them would get the post twice, and Kestrel does not guard against it (`docs/SPEC.md`, appendix, *Trusted, not guarded*).
+
+If a send is halted and you want another provider to finish it, either accept that risk, or fix the old provider's account and let the send resume there.
+
+---
+
 ## After either provider
 
 Redeploy so the new `PROVIDER` and secrets take effect:

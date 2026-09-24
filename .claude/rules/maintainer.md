@@ -1,6 +1,7 @@
 ---
 paths:
   - "docs/SPEC.md"
+  - "docs/API.md"
   - "docs/DESIGN.md"
   - "README.md"
   - "CHANGELOG.md"
@@ -16,6 +17,7 @@ Kestrel's documents are part of how it is built, and this file is the contract f
 Kestrel is built in levels of abstraction, and is kept that way. Each level is precise at its own height and hides the decisions beneath it. The spec says what is guaranteed and nothing about how. The API route table describes the surface and behavior of the application and leaves the functions, comments, and lines of code beneath it out of view. The documents are the upper levels; the code is the rest. A fact belongs at the level where it is precise, and a change starts at the highest level it touches and is carried down. The documents, from the top:
 
 - **`docs/SPEC.md`, the idea.** What Kestrel guarantees: the features, the behavior, the invariants, and the publisher's experience. The system, not the code that implements it.
+- **`docs/API.md`, the shape of the API.** The rules every route follows: how a resource is read, followed, acted on, and refused, and the test a new wire concept must pass. It sits between the spec's guarantees and the generated API reference, which lists each route; it names concepts, never a route's every field.
 - **`docs/DESIGN.md`, the presentation.** How the admin UI presents that behavior: the button roles, tokens, notification homes, and save models. What each means and which to reach for, one level above the exact CSS.
 - **`README.md`, getting started.** What Kestrel is in a paragraph, the prerequisites, and the path to a running instance. It points onward to `.claude/CLAUDE.md` instead of repeating details the codebase keeps changing.
 - **`CHANGELOG.md`, the record.** What changed between releases, one line per change, for the person deciding whether to upgrade. It cuts across the levels instead of sitting at one. `.claude/rules/changelog.md` says what earns a line, how it is written, and when a release is cut.
@@ -26,7 +28,7 @@ This file holds the rules for keeping them at their height.
 ## The rules
 
 1. **Guarantees, not mechanism.** A spec section states what is guaranteed and how the system behaves, never the mechanism that implements it: no endpoints, poll intervals, counter or column names, or storage details. Those live in `.claude/CLAUDE.md` and the code.
-2. **Behavior in SPEC, presentation in DESIGN.** SPEC says what the system does; DESIGN says which control, which token, and what layout show it. A feature with both is split at that seam, and neither document restates the other.
+2. **Behavior in SPEC, presentation in DESIGN.** SPEC says what the system does; DESIGN says which control, which token, and what layout show it. A feature with both is split at that seam, and neither document restates the other. The same seam runs between SPEC and API: SPEC says what both clients can rely on, API says the shape they rely on it through.
 3. **Rationale that stands on its own.** State the why inline and keep it accurate. Do not rest a decision on something the reader cannot see or check, the way citing a draft that no longer exists does. The git history and the issues hold the record of how a decision was reached; the document holds the decision and its reason.
 4. **One vocabulary, one example set.** The documents share a single glossary (publisher versus developer) and a single set of example names (hostnames and the like). A rename updates the source; a straggler is drift. The newsletter entity is a **post**, and "issue" is reserved for the GitHub tracker: it never names a post, nor a delivery failure, which is a **bounce**, a **complaint**, or an **unsent** recipient.
 
