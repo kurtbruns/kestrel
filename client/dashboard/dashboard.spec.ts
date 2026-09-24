@@ -202,6 +202,12 @@ describe("dashboard", () => {
       "#/subscribers/suppressed",
     ]);
     expect(tiles.map((t) => $(".tile-n", t).textContent)).toEqual(["39", "3", "2", "1"]);
+    expect(tiles.map((t) => $(".tile-label", t).textContent)).toEqual([
+      "Audience",
+      "Pending",
+      "Unsubscribed",
+      "Suppressed",
+    ]);
     expect(tiles[0]?.classList.contains("tile-emph")).toBe(true);
     const card = $("#dashScheduled .sched-card");
     expect(card.dataset.post).toBe("p2");
