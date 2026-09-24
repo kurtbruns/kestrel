@@ -307,7 +307,7 @@ A notification is downstream of the send, never part of it. It reads the record 
 
 ### Who's on the list?
 
-The subscriber list tells the story of the list as a whole rather than of a particular send: each address, its consent state, and whether it's suppressed, filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. Suppression cuts across consent, so a suppressed address can still be confirmed; the counts also carry the **audience**, confirmed and not suppressed, which is who a send would reach now (I1) and the figure the dashboard leads with as Confirmed. From it the publisher can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2).
+The subscriber list tells the story of the list as a whole rather than of a particular send: each address, its consent state, and whether it's suppressed, filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From it the publisher can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2).
 
 ---
 

@@ -69,21 +69,8 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   rev: 1,
   ...over,
 });
-// One of the 40 confirmed is suppressed, so the next send reaches 39.
-const counts: SubscriberCounts = {
-  pending: 3,
-  confirmed: 40,
-  unsubscribed: 2,
-  suppressed: 1,
-  audience: 39,
-};
-const none: SubscriberCounts = {
-  pending: 0,
-  confirmed: 0,
-  unsubscribed: 0,
-  suppressed: 0,
-  audience: 0,
-};
+const counts: SubscriberCounts = { pending: 3, confirmed: 40, unsubscribed: 2, suppressed: 1 };
+const none: SubscriberCounts = { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 };
 
 // What the dashboard reads from the boot-time settings: the identity and the origins.
 const config = (): SettingsResponse =>
@@ -196,12 +183,12 @@ describe("dashboard", () => {
     expect(document.querySelector("#dashActive .active-card")).toBeNull();
     const tiles = $$<HTMLAnchorElement>(".tile");
     expect(tiles.map((t) => t.getAttribute("href"))).toEqual([
-      "#/subscribers/audience",
+      "#/subscribers/confirmed",
       "#/subscribers/pending",
       "#/subscribers/unsubscribed",
       "#/subscribers/suppressed",
     ]);
-    expect(tiles.map((t) => $(".tile-n", t).textContent)).toEqual(["39", "3", "2", "1"]);
+    expect(tiles.map((t) => $(".tile-n", t).textContent)).toEqual(["40", "3", "2", "1"]);
     expect(tiles[0]?.classList.contains("tile-emph")).toBe(true);
     const card = $("#dashScheduled .sched-card");
     expect(card.dataset.post).toBe("p2");
