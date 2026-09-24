@@ -199,11 +199,10 @@ describe("SIMULATE_SENDS", () => {
 });
 
 describe("a profile per provider, with the real adapter's traits", () => {
-  it("takes batch size, idempotency, and key memory from SesProvider and ResendProvider", () => {
-    const ses: EmailProvider = new SesProvider(
-      getConfig(withVars(SES_DEPLOY)),
-      withVars(SES_DEPLOY),
-    );
+  it("takes batch size, idempotency, key memory, and send rate from SesProvider and ResendProvider", () => {
+    // An account allowed three messages a second: the SES profile paces to the same rate.
+    const sesVars = { ...SES_DEPLOY, SES_MAX_SEND_RATE: "3" };
+    const ses: EmailProvider = new SesProvider(getConfig(withVars(sesVars)), withVars(sesVars));
     const resend: EmailProvider = new ResendProvider(
       getConfig(withVars(RESEND_DEPLOY)),
       withVars(RESEND_DEPLOY),
@@ -212,12 +211,17 @@ describe("a profile per provider, with the real adapter's traits", () => {
       ["ses", ses],
       ["resend", resend],
     ] as const) {
-      const sim = new SimProvider({ profile, faults: "realistic" });
+      const sim = new SimProvider(
+        { profile, faults: "realistic" },
+        getConfig(withVars({ SES_MAX_SEND_RATE: "3" })),
+      );
       expect(sim.maxBatch).toBe(real.maxBatch);
       expect(sim.idempotentRetry).toBe(real.idempotentRetry);
       expect(sim.idempotencyWindowMs).toBe(real.idempotencyWindowMs);
+      expect(sim.maxRequestRate).toBe(real.maxRequestRate);
       expect(sim.name).toBe("fake"); // a fake-family transport: nothing reaches an inbox
     }
+    expect(ses.maxRequestRate).toBe(3);
   });
 });
 
@@ -230,7 +234,7 @@ describe("list sends only", () => {
 
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
-    const sim = new SimProvider({ profile: "generic", faults: "realistic" });
+    const sim = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
     for (const purpose of ["test", "confirmation", "notification"] as const) {
       const batch = recipients(100, purpose);
       const started = Date.now();
@@ -275,7 +279,7 @@ describe("list sends only", () => {
   });
 
   it("records a simulated list batch in the outbox with each recipient's own link, once per key", async () => {
-    const sim = new SimProvider({ profile: "resend", faults: "none" });
+    const sim = new SimProvider({ profile: "resend", faults: "none" }, getConfig(env));
     const email = { ...rendered, html: `<p>hi</p><a href="${UNSUB_SENTINEL}">Unsubscribe</a>` };
     const batch = recipients(3);
     const opts = { purpose: "list" as const, idempotencyKeyPrefix: "s-1", idempotencyKey: "s-1-k" };
@@ -304,7 +308,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
 
   it("halts on the daily quota, resumes at its retry, wedges on a lost request, and Resolve completes it", async () => {
     // Workers Paid's budget, so a tick reaches every recipient; the default models Free.
-    const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "1000" };
+    const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
     const emails = await seedConfirmed(12);
     const sendId = await dueSend(e, "Kestrels");
@@ -356,7 +360,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   });
 
   it("runs clean with no faults: one tick, no halt, every receipt a delivery", async () => {
-    const vars = { SIMULATE_SENDS: "ses:none", SUBREQUEST_BUDGET: "1000" };
+    const vars = { SIMULATE_SENDS: "ses:none", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
     await seedConfirmed(12);
     const sendId = await dueSend(e, "Merlins");
@@ -492,7 +496,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
 
 describe("the generic profile", () => {
   it("paces a batch, accepting the bulk and refusing a few once, retryably", async () => {
-    const provider = new SimProvider({ profile: "generic", faults: "realistic" });
+    const provider = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
     expect(provider.maxBatch).toBe(8);
     expect(provider.idempotentRetry).toBe(true);
 

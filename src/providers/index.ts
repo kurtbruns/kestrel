@@ -12,7 +12,7 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
       // Local dev: the send simulation stands in for a real provider on list sends (SPEC
       // §10). `simulation` is only ever set in a dev-shaped env (getConfig), so a deployed
       // env never reaches it.
-      return config.simulation ? new SimProvider(config.simulation) : new FakeProvider();
+      return config.simulation ? new SimProvider(config.simulation, config) : new FakeProvider();
     case "ses":
       return new SesProvider(config, env);
     case "resend":

@@ -200,8 +200,9 @@ async function main() {
   }
   if (simulation.profile === "ses") {
     console.log(
-      "  SES takes one recipient per request: about 3 a minute on the default SUBREQUEST_BUDGET\n" +
-        "  (Workers Free). Run `SUBREQUEST_BUDGET=1000 npm run dev` to model Workers Paid.",
+      "  SES takes one recipient per request, so on the default SUBREQUEST_BUDGET (Workers Free)\n" +
+        "  it goes out a slice a minute, as deployed. Run `SUBREQUEST_BUDGET=10000 npm run dev`\n" +
+        "  (with SIMULATE_SENDS=ses) to model Workers Paid.",
     );
   }
   if (confirmed === 0) {

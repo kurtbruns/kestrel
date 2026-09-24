@@ -13,12 +13,12 @@
  *
  * One simulator, a profile per provider (`SIMULATE_SENDS`):
  *   - `resend` and `ses` take their traits from the real adapters (`RESEND_TRAITS`,
- *     `SES_TRAITS`: batch size, idempotency, and how long a key is remembered), and answer
- *     a failure the way the adapter answers it: the halt comes from the adapter's own
- *     classifier and wording. Pacing is per request: Resend takes a batch per request, SES
- *     one recipient per request.
- *   - `generic` is a small-batch idempotent provider paced to be watched: slow batches, a
- *     transient refusal for a few recipients, and a rate-limit pause on a long run.
+ *     `sesTraits`: batch size, idempotency, how long a key is remembered, and SES's send
+ *     rate, which the send loop paces to), and answer a failure the way the adapter answers
+ *     it: the halt comes from the adapter's own classifier and wording. Each request takes
+ *     a request's time: Resend's carries a batch, SES's one recipient.
+ *   - `generic` is a small-batch idempotent provider paced to be watched: slow batches and
+ *     a transient refusal for a few recipients.
  *
  * Two fault levels. `realistic` injects what a real provider does: a rare permanent refusal,
  * a rare request that leaves with no answer (its fate unknown, §12), receipts with bounces
@@ -46,7 +46,7 @@ import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
 import { RESEND_TRAITS } from "./resend";
-import { classifySesError, SES_TRAITS, sesErrorText } from "./ses";
+import { classifySesError, sesErrorText, sesTraits } from "./ses";
 import type {
   BatchHalt,
   DeliveryEvent,
@@ -64,11 +64,10 @@ import type {
 
 /** How one simulated provider behaves: its traits, its pace, and its failures. */
 interface SimProfile {
-  traits: ProviderTraits;
+  /** The provider's traits, as its adapter declares them for this deployment's config. */
+  traits: (config: Config) => ProviderTraits;
   /** How long one request to the provider takes. */
   requestMs: number;
-  /** One request per recipient (SES) rather than one per batch. */
-  requestPerRecipient: boolean;
   /** Recipients refused once with a retryable error, accepted on the retry. */
   transientRate: number;
   /** Requests that leave and get no answer: the provider may have sent them (§12). */
@@ -82,8 +81,6 @@ interface SimProfile {
   quota: BatchHalt | null;
   /** Which edge states `realistic` guarantees once per send, so a demo shows them. */
   guaranteed: { lost: boolean; quota: boolean };
-  /** A pause, answered as a rate limit, once a single run has dispatched this long. */
-  pace: { budgetMs: number; halt: BatchHalt } | null;
 }
 
 /** An adapter's classification of an error response, with its wording: the halt the real
@@ -100,42 +97,30 @@ const SES_QUOTA = {
 
 const PROFILES: Record<SimulationProfile, SimProfile> = {
   generic: {
-    traits: { maxBatch: 8, idempotentRetry: true },
+    traits: () => ({ maxBatch: 8, idempotentRetry: true }),
     requestMs: 900,
-    requestPerRecipient: false,
     transientRate: 0.04,
     lostRate: 0,
     rejectRate: 0.001,
     rejectError: "simulated permanent transport failure (550)",
     quota: null,
     guaranteed: { lost: false, quota: false },
-    pace: {
-      budgetMs: 90_000,
-      halt: {
-        reason: "unavailable",
-        cause: "rate_limit",
-        error: "simulated rate limit (429); pausing until the next tick",
-        mayHaveSent: false,
-      },
-    },
   },
   resend: {
-    traits: RESEND_TRAITS,
+    traits: () => RESEND_TRAITS,
     requestMs: 500,
-    requestPerRecipient: false,
     transientRate: 0,
     lostRate: 0.0005,
     rejectRate: 0.001,
     rejectError: "The `to` field is invalid. (simulated)",
     quota: null,
     guaranteed: { lost: false, quota: false },
-    pace: null,
   },
   ses: {
-    traits: SES_TRAITS,
-    // SES's default sending rate is 14 messages a second; one request is a little slower.
+    // The send loop keeps requests to the account's send rate (`maxRequestRate`); this is
+    // how long each one takes to be answered.
+    traits: sesTraits,
     requestMs: 80,
-    requestPerRecipient: true,
     transientRate: 0,
     lostRate: 0.0005,
     rejectRate: 0.001,
@@ -149,7 +134,6 @@ const PROFILES: Record<SimulationProfile, SimProfile> = {
       sesErrorText(SES_QUOTA.status, SES_QUOTA.type, SES_QUOTA.msg),
     ),
     guaranteed: { lost: true, quota: true },
-    pace: null,
   },
 };
 
@@ -276,20 +260,14 @@ const transientSeen = new Set<string>();
 const lostKeys = new Set<string>();
 /** Per send: requests made, and whether each guaranteed edge state has happened. */
 const sendState = new Map<string, { requests: number; lost: boolean; quota: boolean }>();
-/** Per send: the generic profile's pacing window. `lastCallAt` tells a new sweep tick (a gap
- *  between batches) from the same run, so each invocation starts a fresh window. */
-const paceState = new Map<string, { windowStart: number; lastCallAt: number }>();
 /** Per small send: the forced receipt outcomes of the guaranteed floor. */
 const floorOverrides = new Map<string, Map<string, SimOutcome>>();
-
-const NEW_RUN_GAP_MS = 5_000; // a gap between batches larger than this marks a new sweep tick
 
 /** Forget every simulated send's state, as a restarted dev server would. For tests. */
 export function resetSimulation(): void {
   transientSeen.clear();
   lostKeys.clear();
   sendState.clear();
-  paceState.clear();
   floorOverrides.clear();
 }
 
@@ -315,19 +293,23 @@ export class SimProvider implements EmailProvider {
   readonly maxBatch: number;
   readonly idempotentRetry: boolean;
   readonly idempotencyWindowMs?: number;
+  readonly maxRequestRate?: number;
 
   private readonly profile: SimProfile;
   private readonly faults: SimulationFaults;
   private readonly fake = new FakeProvider();
 
-  constructor(simulation: SimulationView) {
+  constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile];
     this.faults = simulation.faults;
-    this.maxBatch = this.profile.traits.maxBatch;
-    this.idempotentRetry = this.profile.traits.idempotentRetry;
-    this.idempotencyWindowMs = this.profile.traits.idempotencyWindowMs;
+    const traits = this.profile.traits(config);
+    this.maxBatch = traits.maxBatch;
+    this.idempotentRetry = traits.idempotentRetry;
+    this.idempotencyWindowMs = traits.idempotencyWindowMs;
+    this.maxRequestRate = traits.maxRequestRate;
   }
 
+  /** One list batch is one request to the provider (SES's batches are one recipient). */
   async sendBatch(
     rendered: RenderedEmail,
     recipients: Recipient[],
@@ -340,56 +322,32 @@ export class SimProvider implements EmailProvider {
     const key = opts.idempotencyKey ?? sendId;
     const realistic = this.faults === "realistic";
     const p = this.profile;
-
-    if (realistic && p.pace) {
-      const paused = this.paceWindow(sendId, p.pace.budgetMs);
-      if (paused) {
-        return { kind: "halted", halt: p.pace.halt };
-      }
-    }
-
     const state = sendState.get(sendId) ?? { requests: 0, lost: false, quota: false };
     sendState.set(sendId, state);
-    const requests = p.requestPerRecipient ? recipients.map((r) => [r]) : [recipients];
-    const results: PerRecipientResult[] = [];
-    for (const [i, group] of requests.entries()) {
-      state.requests += 1;
-      // A spent quota answers before anything is sent: the provider took no one. Like the
-      // adapter, a halt after some of the batch was accepted leaves the rest to retry.
-      if (realistic && p.quota && p.guaranteed.quota && !state.quota) {
-        if (state.requests >= guaranteedAt(sendId, "quota")) {
-          state.quota = true;
-          console.log("[sim] sending quota spent; the send halts until its next retry", {
-            sendId,
-          });
-          if (results.length === 0) {
-            return { kind: "halted", halt: p.quota };
-          }
-          for (const rest of requests.slice(i).flat()) {
-            results.push({
-              email: rest.email,
-              accepted: false,
-              retryable: true,
-              error: p.quota.error,
-            });
-          }
-          break;
-        }
-      }
-      await sleep(p.requestMs);
-      const answered = this.answer(sendId, rendered, group, opts);
-      // A request lost in flight: the provider took it (it is in the outbox), but its answer
-      // never came, so its fate is unknown to the send (§12).
-      if (realistic && this.lost(sendId, key, state)) {
-        console.log("[sim] request lost in flight; its fate is unknown to the send", {
+    state.requests += 1;
+
+    // A spent quota answers before anything is sent, so the provider took no one.
+    if (realistic && p.quota && p.guaranteed.quota && !state.quota) {
+      if (state.requests >= guaranteedAt(sendId, "quota")) {
+        state.quota = true;
+        console.log("[sim] sending quota spent; the send halts until its next retry", {
           sendId,
-          key,
         });
-        throw new Error(
-          "simulated network error: the connection closed before the provider answered",
-        );
+        return { kind: "halted", halt: p.quota };
       }
-      results.push(...answered);
+    }
+    await sleep(p.requestMs);
+    const results = this.answer(sendId, rendered, recipients, opts);
+    // A request lost in flight: the provider took it (it is in the outbox), but its answer
+    // never came, so its fate is unknown to the send (§12).
+    if (realistic && this.lost(sendId, key, state)) {
+      console.log("[sim] request lost in flight; its fate is unknown to the send", {
+        sendId,
+        key,
+      });
+      throw new Error(
+        "simulated network error: the connection closed before the provider answered",
+      );
     }
     return { kind: "answered", results };
   }
@@ -442,27 +400,6 @@ export class SimProvider implements EmailProvider {
       }
       return unwrap(deliverToOutbox(rendered, [r], opts)[0], "outbox delivery");
     });
-  }
-
-  /**
-   * The generic profile's pace: once one run has dispatched for `budgetMs`, answer as a
-   * rate-limited provider would, which halts the run and releases the lease; the send
-   * resumes at the halt's first retry, the next tick (phase `backing-off`).
-   */
-  private paceWindow(sendId: string, budgetMs: number): boolean {
-    const now = Date.now();
-    const st = paceState.get(sendId);
-    if (st == null || now - st.lastCallAt > NEW_RUN_GAP_MS) {
-      paceState.set(sendId, { windowStart: now, lastCallAt: now });
-      return false;
-    }
-    if (now - st.windowStart > budgetMs) {
-      paceState.delete(sendId);
-      console.log("[sim] injected rate-limit pause; requeueing until the next tick", { sendId });
-      return true;
-    }
-    st.lastCallAt = now;
-    return false;
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {
