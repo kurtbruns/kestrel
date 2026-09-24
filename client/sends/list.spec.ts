@@ -392,6 +392,39 @@ describe("sent view", () => {
     expect(document.body.textContent).not.toMatch(/Sending now/);
   });
 
+  it("paints only the latest queue read, so a slow one never puts a started send back", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW + 30_000 }), send()]);
+    const lists = srv.routes.find((r) => r.path === "/sends")!;
+    let hold: Promise<void> | null = null;
+    let release = () => {};
+    fake = world(srv, [
+      {
+        path: "/sends",
+        reply: async (req) => {
+          const out = lists.reply(req); // the world as it stands when the read arrives
+          if (hold && req.url.searchParams.get("status") === "scheduled") {
+            await hold;
+          }
+          return out;
+        },
+      },
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    hold = new Promise((r) => {
+      release = r;
+    });
+    await vi.advanceTimersByTimeAsync(31_000); // the due read re-reads the queue: held
+    hold = null;
+    srv.edit("sch", { status: "sending", started_at: Date.now(), c_pending: 140, c_accepted: 10 });
+    await vi.advanceTimersByTimeAsync(3_000); // the start: its queue read lands first
+    expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
+    release(); // the older read, from before the start, lands last
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
+    expect($(".active-card").dataset.watch).toBe("sch");
+  });
+
   it("moves a send that starts and finishes between two reads from the queue to the records, within one read", async () => {
     const srv = sendServer([
       scheduled({ id: "fast", subject: "Swifts", fire_at: NOW - 5_000 }),
@@ -499,6 +532,11 @@ describe("sent view", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect($("#active").textContent).toMatch(/internal_error|Internal/i);
     expect(records()).toHaveLength(1); // the records stand on their own read
+    // A report from the layer (a receipt on the record) leaves the error and its Retry.
+    srv.edit("x1", { c_delivered: 148 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
+    expect($("#active").textContent).toMatch(/internal_error|Internal/i);
     down = false;
     srv.put(sending());
     $<HTMLButtonElement>("#active button").click();

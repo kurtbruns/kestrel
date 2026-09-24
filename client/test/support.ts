@@ -280,7 +280,12 @@ export function sendServer(rows: SendSummary[] = []) {
           return phase === "due" || s.row.status === "sending" || phase === "settling";
         });
         const phases = all.map((s) => derive(s, now).phase);
-        const active = all.some((s, i) => phases[i] === "due" || s.row.status === "sending");
+        // A missed send moves nothing until the sweep runs, so only one short of the
+        // tolerance quickens the pace, as on the Worker.
+        const active = all.some(
+          (s, i) =>
+            (phases[i] === "due" && !derive(s, now).attention.missed) || s.row.status === "sending",
+        );
         const settling = phases.includes("settling");
         const next = all.find((s) => s.row.status === "scheduled" && s.row.fire_at > now);
         const wait = active || settling ? 3000 : 60_000;

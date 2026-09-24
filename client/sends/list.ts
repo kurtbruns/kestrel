@@ -77,6 +77,14 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // The sends in flight as the page last read them, and every send the layer has reported
   // since, as it now stands: together, what the attention and in-progress sections show.
   let sendingRows: SendListItem[] = [];
+  // Until a read of the sends in flight succeeds, the In progress slot keeps its error and
+  // Retry: the layer reports only sends that change, so one refused for an hour would
+  // otherwise never show.
+  let liveRead = false;
+  // Each section paints only its latest read, so a slow earlier one (a queue read for a
+  // send turning due, landing after the one for its start) never paints over a newer one.
+  let scheduledReads = 0;
+  let listReads = 0;
   const reported = new Map<string, LiveSend>();
 
   // Resolving a wedged send or canceling a scheduled one touches several sections at once:
@@ -144,7 +152,9 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   function paintLive() {
     const live = sendsNow(sendingRows, reported);
     renderStuck(live);
-    renderActive(live);
+    if (liveRead) {
+      renderActive(live);
+    }
     patchDelivered();
   }
   // Each report moves sends between this page's sections, whoever changed them. Any change
@@ -193,6 +203,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     try {
       const res = await api<SendListResponse>("/sends?status=sending&limit=200", { signal });
       sendingRows = res.sends;
+      liveRead = true;
       paintLive();
       return res;
     } catch (e) {
@@ -205,11 +216,15 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // for the cancel window on) sits at the top. Fetched on its own so it shows every
   // scheduled send regardless of the table's paging/filter below.
   async function loadScheduled(): Promise<SendListResponse | null> {
+    const mine = ++scheduledReads;
     try {
       const res = await api<SendListResponse>(
         "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
         { signal },
       );
+      if (mine !== scheduledReads) {
+        return res; // a later read paints
+      }
       const { sends } = res;
       const schedCard = (s: SendListItem) =>
         html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
@@ -272,7 +287,9 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       tickCountdowns();
       return res;
     } catch (e) {
-      renderError(schedEl, message(e), async () => follow([await loadScheduled()]));
+      if (mine === scheduledReads) {
+        renderError(schedEl, message(e), async () => follow([await loadScheduled()]));
+      }
       return null;
     }
   }
@@ -280,8 +297,12 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // The frozen Sent records: every completed post, each opening its read-only record
   // view. Sent-only, so no status column; the "When" is the send's completion.
   async function loadList(): Promise<SendListResponse | null> {
+    const mine = ++listReads;
     try {
       const data = await api<SendListResponse>(`/sends?${listQuery(state)}`, { signal });
+      if (mine !== listReads) {
+        return data; // a later read paints
+      }
       const sends = data.sends;
       if (!sends.length) {
         setHtml(
@@ -319,7 +340,9 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       patchDelivered();
       return data;
     } catch (e) {
-      renderError(listEl, message(e), async () => follow([await loadList()]));
+      if (mine === listReads) {
+        renderError(listEl, message(e), async () => follow([await loadList()]));
+      }
       return null;
     }
   }
