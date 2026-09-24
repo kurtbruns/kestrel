@@ -481,6 +481,28 @@ describe("receipts racing for one recipient", () => {
   });
 });
 
+describe("a cache that drifted before the receipt rule", () => {
+  it("is rebuilt when a receipt drives its accepted count below zero, so a send already reading complete settles again", async () => {
+    await seedConfirmed("n1@example.com");
+    await seedConfirmed("n2@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    await runSend(env, send.id);
+    // As the old race left it: one recipient moved out of accepted twice, so the send
+    // reads complete while both still await a receipt.
+    await env.DB.prepare("UPDATE sends SET c_accepted = 0, c_delivered = 2 WHERE id = ?")
+      .bind(send.id)
+      .run();
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: `fake-${send.id}:n1@example.com` },
+    ]);
+
+    const row = await expectCountersMatchAggregate(send.id);
+    expect(row.c_accepted).toBe(1);
+    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+  });
+});
+
 describe("resolve counts only the rows it moves", () => {
   it("leaves a row a receipt already reached in its event's bucket", async () => {
     await seedConfirmed("r1@example.com");

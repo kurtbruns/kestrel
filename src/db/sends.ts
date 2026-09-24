@@ -16,6 +16,7 @@ import type {
 } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
+import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names
@@ -76,10 +77,12 @@ export function raiseRevFloorStmt(db: D1Database): D1PreparedStatement {
 // eight mutually-exclusive buckets, the webhook `event` winning over the send-loop
 // `status`. Every transition below moves a recipient between buckets by adjusting
 // two columns by ±n, batched atomically with the `deliveries` write so the cache
-// can never partially diverge from the source of truth. A move counts only the rows
-// its write changes: it runs under the same predicate as the write, or counts the rows
-// in the same batch, never from a read taken earlier, which a concurrent write could
-// have made stale. `recomputeSendCounters` rebuilds them from the aggregate (backfill,
+// can never partially diverge from the source of truth. A receipt's move and Resolve's
+// count only the rows their write changes: they run under the same predicate as the
+// write, or count the rows in the same batch, never from a read taken earlier, which a
+// concurrent write could have made stale. (The send loop's own moves count its outcomes;
+// a receipt that reached one of its in-flight rows first is healed by the rebuild at
+// completion.) `recomputeSendCounters` rebuilds them from the aggregate (backfill,
 // the exactness pass at completion, and when a receipt turns a sent send complete).
 
 const COUNTER_COLS = [
@@ -1556,7 +1559,8 @@ export async function markDeliveryEvent(
       // The receipt that may have confirmed a sent send's last accepted recipient: check
       // the counters against the record as it turns complete, so `complete` is never read
       // off a cache that has drifted (SPEC §12).
-      stmts.push(recomputeSendCountersStmt(db, row.send_id, "status = 'sent' AND c_accepted = 0"));
+      // `<= 0`, not `= 0`: a cache that drifted before this rule reaches below zero here.
+      stmts.push(recomputeSendCountersStmt(db, row.send_id, "status = 'sent' AND c_accepted <= 0"));
     }
     const results = await db.batch(stmts);
     const write = results[fromCol !== toCol ? 1 : 0];
@@ -1566,7 +1570,12 @@ export async function markDeliveryEvent(
   }
   // Still losing to other writes after every retry: record nothing rather than guess. The
   // provider redelivers a webhook it gets no success for; this one was answered, so it is
-  // dropped, but only under a sustained storm of writes to the same row.
+  // dropped, but only under a sustained storm of writes to the same row, and said so.
+  log.warn("receipt.dropped", {
+    sendId: row?.send_id,
+    event: u.event,
+    attempts: RECEIPT_RETRIES,
+  });
   return { changes: 0, email: row?.email ?? null, sendId: row?.send_id ?? null };
 }
 
