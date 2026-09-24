@@ -7,10 +7,12 @@
  *                  List-Unsubscribe headers. The Idempotency-Key is the send
  *                  loop's dispatch key, saved with the batch and re-sent with it
  *                  unchanged, so Resend dedupes a re-sent batch instead of
- *                  double-mailing (idempotentRetry). Resend answers a batch as a
- *                  whole, so an error response is a halt when it is about Resend
- *                  or the account (`classifyResendError`), and otherwise a
- *                  permanent failure for every recipient in it.
+ *                  double-mailing (idempotentRetry). The batch is validated
+ *                  permissively, so an invalid item fails alone and the rest are
+ *                  sent (`mapBatchResponse`). An error response is about the
+ *                  batch as a whole: a halt when it is about Resend or the
+ *                  account (`classifyResendError`), and otherwise a permanent
+ *                  failure for every recipient in it.
  *   parseWebhook — verify the Svix signature over the raw body, then normalize
  *                  Resend events (delivered / bounced / complained) into the
  *                  provider-agnostic DeliveryEvent[] the record applies.
@@ -26,6 +28,7 @@ import type {
   DeliveryEvent,
   EmailProvider,
   HaltCause,
+  PerRecipientResult,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
@@ -147,6 +150,10 @@ export class ResendProvider implements EmailProvider {
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
         "Content-Type": "application/json",
+        // Strict (Resend's default) refuses the whole batch over one invalid item, which
+        // would record up to 99 good recipients unsent alongside it. Permissive sends the
+        // valid items and lists the invalid ones by index.
+        "x-batch-validation": "permissive",
         // The send loop's dispatch key: the same on every re-send of this batch and
         // never reused for another, so a replayed batch is deduped however the rest of
         // the send has changed since. A one-off caller without one gets a key derived
@@ -180,24 +187,8 @@ export class ResendProvider implements EmailProvider {
       };
     }
 
-    const body = (await res.json().catch(() => ({}))) as { data?: Array<{ id?: string }> };
-    const data = Array.isArray(body.data) ? body.data : [];
-    return {
-      kind: "answered",
-      results: recipients.map((r, i) => {
-        const id = data[i]?.id;
-        if (id) {
-          return { email: r.email, accepted: true as const, providerId: id };
-        }
-        // A 2xx without a matching id is ambiguous — let the next tick retry.
-        return {
-          email: r.email,
-          accepted: false as const,
-          retryable: true,
-          error: "resend batch: missing id in response",
-        };
-      }),
-    };
+    const body: unknown = await res.json().catch(() => ({}));
+    return { kind: "answered", results: mapBatchResponse(recipients, body) };
   }
 
   /** An error body is shown to the operator, so it never carries the key, even echoed. */
@@ -225,6 +216,67 @@ export class ResendProvider implements EmailProvider {
 
     return { events: parseResendEvents(body), response: new Response("ok", { status: 200 }) };
   }
+}
+
+/**
+ * Each recipient's own outcome from a permissive batch's 2xx body. `errors` names the
+ * refused items by their index in the request, and a refused item is permanent for that
+ * recipient alone. `data` holds the created emails' ids in request order. Resend's
+ * SDKs show it leaving the refused items out, but its docs don't say so, so both
+ * layouts are read: one entry per created email, or one per request item, read by
+ * position (the two agree when nothing is refused). When neither count fits, which id
+ * is whose is a guess, so the whole batch is left retryable, refused items included:
+ * a retry re-sends only the rows still pending under the key, so settling the refused
+ * ones would re-send a smaller batch under a key Resend already answered for the whole
+ * one. Kept whole, the re-send is the same request and Resend's replay of it lines up
+ * again (I4).
+ */
+function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientResult[] {
+  const { data = [], errors = [] } =
+    typeof body === "object" && body !== null ? (body as { data?: unknown; errors?: unknown }) : {};
+  const ids = Array.isArray(data) ? data.map((d) => (typeof d?.id === "string" ? d.id : "")) : [];
+  const refused = new Map<number, string>();
+  for (const e of Array.isArray(errors) ? errors : []) {
+    if (Number.isInteger(e?.index) && e.index >= 0 && e.index < recipients.length) {
+      refused.set(e.index, typeof e.message === "string" ? e.message : "");
+    }
+  }
+  const positional = ids.length === recipients.length;
+  const compacted = ids.length === recipients.length - refused.size;
+  if (!positional && !compacted) {
+    return recipients.map((r) => ({
+      email: r.email,
+      accepted: false as const,
+      retryable: true,
+      error: "resend batch: ids in response don't match the batch",
+    }));
+  }
+  let next = 0;
+  return recipients.map((r, i) => {
+    // A refusal wins over an id in its slot: Resend doesn't send one for a refused item,
+    // and if it did, which answer is true would be a guess either way.
+    if (refused.has(i)) {
+      const message = refused.get(i);
+      return {
+        email: r.email,
+        accepted: false as const,
+        retryable: false,
+        error: `Resend: ${message || "refused in batch validation"}`,
+      };
+    }
+    const id = positional ? ids[i] : ids[next++];
+    if (id) {
+      return { email: r.email, accepted: true as const, providerId: id };
+    }
+    // A 2xx without an id for this recipient is ambiguous: let the next tick retry under
+    // the same key.
+    return {
+      email: r.email,
+      accepted: false as const,
+      retryable: true,
+      error: "resend batch: missing id in response",
+    };
+  });
 }
 
 function reject(status: number, message: string): WebhookResult {

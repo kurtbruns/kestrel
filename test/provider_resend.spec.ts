@@ -86,6 +86,101 @@ describe("ResendProvider.sendBatch", () => {
     });
   });
 
+  it("asks for permissive validation, so one invalid item can't refuse the batch", async () => {
+    const spy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(cannedResponse({ data: [{ id: "re_1" }] }));
+    await makeProvider().sendBatch(
+      rendered,
+      [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }],
+      { idempotencyKeyPrefix: "s" },
+    );
+    const headers = (spy.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
+    expect(headers["x-batch-validation"]).toBe("permissive");
+  });
+
+  it("accepts the valid recipients and fails only the invalid one, matching ids by index", async () => {
+    // Permissive mode lists the refused item by its index and leaves it out of `data`,
+    // so `data[i]` no longer lines up with recipient i past the refused one.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({
+        data: [{ id: "re_a" }, { id: "re_c" }, { id: "re_d" }],
+        errors: [{ index: 1, message: "Invalid `to` field." }],
+      }),
+    );
+    const recipients: Recipient[] = ["a", "b", "c", "d"].map((x) => ({
+      email: `${x}@example.com`,
+      unsubscribeUrl: `https://app.test/u?t=${x}`,
+    }));
+    const result = await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "s",
+    });
+    expect(result).toEqual({
+      kind: "answered",
+      results: [
+        { email: "a@example.com", accepted: true, providerId: "re_a" },
+        {
+          email: "b@example.com",
+          accepted: false,
+          retryable: false,
+          error: "Resend: Invalid `to` field.",
+        },
+        { email: "c@example.com", accepted: true, providerId: "re_c" },
+        { email: "d@example.com", accepted: true, providerId: "re_d" },
+      ],
+    });
+  });
+
+  // Resend's docs don't say whether `data` leaves a refused item out or keeps its slot,
+  // and the two only differ when the refused item isn't last, so both are pinned here.
+  it.each([
+    ["leaves refused items out", [{ id: "re_b" }, { id: "re_c" }]],
+    ["keeps a slot per request item", [null, { id: "re_b" }, { id: "re_c" }]],
+    ["keeps an empty slot per request item", [{}, { id: "re_b" }, { id: "re_c" }]],
+  ])("matches ids to recipients when `data` %s", async (_label, data) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({ data, errors: [{ index: 0, message: "Invalid `to` field." }] }),
+    );
+    const recipients: Recipient[] = ["a", "b", "c"].map((x) => ({
+      email: `${x}@example.com`,
+      unsubscribeUrl: `https://app.test/u?t=${x}`,
+    }));
+    const result = await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "s",
+    });
+    expect(result.kind === "answered" && result.results).toEqual([
+      expect.objectContaining({ email: "a@example.com", accepted: false, retryable: false }),
+      { email: "b@example.com", accepted: true, providerId: "re_b" },
+      { email: "c@example.com", accepted: true, providerId: "re_c" },
+    ]);
+  });
+
+  it("leaves the whole batch retryable, the refused one too, when the ids don't add up", async () => {
+    // Two ids for three unrefused recipients: which id is whose is a guess, so no one is
+    // marked accepted on it. The refused one isn't settled either: a retry re-sends only
+    // the rows still pending under the key, and a smaller batch under a key Resend already
+    // answered for this one would not replay the same answer.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({
+        data: [{ id: "re_x" }, { id: "re_y" }],
+        errors: [{ index: 0, message: "Invalid `to` field." }],
+      }),
+    );
+    const recipients: Recipient[] = ["a", "b", "c", "d"].map((x) => ({
+      email: `${x}@example.com`,
+      unsubscribeUrl: `https://app.test/u?t=${x}`,
+    }));
+    const result = await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "s",
+    });
+    expect(result.kind === "answered" && result.results).toEqual([
+      expect.objectContaining({ email: "a@example.com", accepted: false, retryable: true }),
+      expect.objectContaining({ email: "b@example.com", accepted: false, retryable: true }),
+      expect.objectContaining({ email: "c@example.com", accepted: false, retryable: true }),
+      expect.objectContaining({ email: "d@example.com", accepted: false, retryable: true }),
+    ]);
+  });
+
   it("derives a stable Idempotency-Key per chunk (same recipients => same key)", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")

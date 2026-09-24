@@ -31,6 +31,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
+- Through Resend, one invalid recipient in a batch no longer stops the rest of it: the other recipients in the batch (up to 99) are sent, and only the invalid one is recorded unsent. Before, Resend refused the whole batch and every recipient in it was marked unsent for that send.
+- Through SES, a spent daily sending quota is now reported as a quota problem, the same as Resend's, instead of as a rate limit, so the dashboard and the notification email tell you to wait for the quota or raise it (SPEC §12).
 - A send's audience is now fixed when it fires, as SPEC §6 says: a reader who confirms while a send is still going out gets the next post, not this one, and a send's recipient count on the Sent page, its record, and the bounce-spike check is its audience at fire rather than the count when it was scheduled. `GET /sends` rows carry the new `audience_resolved_at`. This touches the database baseline, so rebuild the database as described in the Fixed entry about sends through Resend to 100 or more subscribers.
 - Canceling a scheduled send now unlocks its post in the same write, so a failure can no longer leave the post locked with nothing scheduled.
 - A new post now starts with an empty subject, with "Untitled" shown as a placeholder, instead of the text "Untitled", which the first typed subject was added onto (and which then seeded the slug).

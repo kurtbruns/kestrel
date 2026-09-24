@@ -44,7 +44,6 @@ function textResponse(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
 }
 
-/** Error types that are about the account or its credentials, never a recipient. */
 /** Error types that are about the account or its credentials, never a recipient, by
  *  what the operator has to fix. */
 const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
@@ -66,21 +65,32 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
  * recipient's message (a bad address, a rejected message), which is permanent for it
  * alone. The account-level types, any 401 or 403, and a rejection because the sender's
  * own identity is not verified (`senderUnverified`, which the caller works out from the
- * message) need the operator. Throttling (a 429, or a throttling type on a 400) and a 5xx
- * are SES being unavailable: the next recipient would get the same answer, so the batch
- * waits for the next tick instead. An SES error response always means SES did not accept
- * the message, so none of these leaves the fate unknown.
+ * message) need the operator, as does a spent daily quota, which SES reports as the same
+ * throttle as its per-second rate and tells apart only by the message: it won't lift for
+ * up to a day, so the operator hears "quota", as Resend's does. Any other throttling (a
+ * 429, or a throttling type on a 400) and a 5xx are SES being unavailable: the next
+ * recipient would get the same answer, so the batch waits for the next tick instead. An
+ * SES error response always means SES did not accept the message, so none of these
+ * leaves the fate unknown.
  */
 export function classifySesError(
   status: number,
   type: string,
+  message = "",
   senderUnverified = false,
 ): Omit<BatchHalt, "error"> | null {
-  const cause = ACCOUNT_ERROR_TYPES.get(type) ?? (senderUnverified ? "sender" : undefined);
+  const throttled = status === 429 || /throttl|toomany/i.test(type);
+  const cause =
+    ACCOUNT_ERROR_TYPES.get(type) ??
+    (senderUnverified
+      ? "sender"
+      : throttled && /daily message quota/i.test(message)
+        ? "quota"
+        : undefined);
   if (cause || status === 401 || status === 403) {
     return { reason: "account", cause: cause ?? "credentials", mayHaveSent: false };
   }
-  if (status === 429 || /throttl|toomany/i.test(type)) {
+  if (throttled) {
     return { reason: "unavailable", cause: "rate_limit", mayHaveSent: false };
   }
   if (status >= 500) {
@@ -206,7 +216,7 @@ export class SesProvider implements EmailProvider {
       type === "MessageRejected" &&
       /not verified/i.test(message) &&
       message.toLowerCase().includes(bareAddress(this.from));
-    const halt = classifySesError(res.status, type, senderUnverified);
+    const halt = classifySesError(res.status, type, message, senderUnverified);
     if (halt) {
       return { ...halt, error };
     }
