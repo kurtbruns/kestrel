@@ -301,6 +301,16 @@ describe("GET /sends/feed without a cursor", () => {
     expect(id).toBe(send.id);
   });
 
+  it("eases to the idle pace once a due send is past the missed tolerance", async () => {
+    const missed = await scheduledSend("Missed", Date.now() - MISSED_THRESHOLD_MS - 60_000);
+    const body = await feed();
+    expect(body.sends.map((s) => [s.id, s.attention.missed])).toEqual([[missed.id, true]]);
+    expect(body.read_again_at).toBe(body.now + 60_000); // the sweep isn't running: nothing moves
+    const due = await scheduledSend("Due", Date.now() - 30_000);
+    expect((await feed()).read_again_at - body.now).toBeLessThan(10_000);
+    await cancel(env, due.id);
+  });
+
   it("answers an empty world with nothing to follow, read again in about a minute", async () => {
     const body = await feed();
     expect(body.sends).toEqual([]);

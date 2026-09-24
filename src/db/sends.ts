@@ -422,11 +422,14 @@ export async function sendFeed(
     rows,
     db
       .prepare(
-        `SELECT EXISTS (SELECT 1 FROM sends WHERE status = 'sending' OR (status = 'scheduled' AND fire_at <= ?1)) AS active,
+        // A due send quickens the pace only within the missed tolerance: past it the sweep
+        // has not run, nothing about the send moves until it does, and the miss itself was
+        // reported by the read that crossed it.
+        `SELECT EXISTS (SELECT 1 FROM sends WHERE status = 'sending' OR (status = 'scheduled' AND fire_at <= ?1 AND fire_at + ?2 >= ?1)) AS active,
                 (SELECT MAX(completed_at) FROM sends WHERE status = 'sent' AND c_accepted > 0) AS settling_since,
                 (SELECT MIN(fire_at) FROM sends WHERE status = 'scheduled' AND fire_at > ?1) AS next_fire_at`,
       )
-      .bind(now),
+      .bind(now, thresholds.missedMs),
   ]);
   const p = pace?.results[0] as
     | { active: number; settling_since: number | null; next_fire_at: number | null }

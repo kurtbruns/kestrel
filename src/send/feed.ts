@@ -36,8 +36,9 @@ const IDLE_MS = 60_000;
 // A read for a fire time lands this long after it, so the server's clock has passed it.
 const WAKE_SLACK_MS = 1000;
 
-/** What sets the pace: whether any send is due or sending, when the youngest settling
- *  send finished dispatch, and the soonest fire time still ahead. */
+/** What sets the pace: whether any send is sending or due (short of the missed tolerance:
+ *  a missed send waits on a sweep that isn't running, so it moves nothing), when the
+ *  youngest settling send finished dispatch, and the soonest fire time still ahead. */
 export interface FeedPace {
   active: boolean;
   settlingSince: number | null;
