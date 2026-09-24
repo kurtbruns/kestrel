@@ -9,7 +9,6 @@ import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { ResendProvider } from "../src/providers/resend";
 import * as sesAdapter from "../src/providers/ses";
-import { SesProvider } from "../src/providers/ses";
 import {
   drainSimulatedWebhooks,
   resetSimulation,
@@ -203,7 +202,10 @@ describe("a profile per provider, with the real adapter's traits", () => {
   it("takes batch size, idempotency, key memory, and send rate from SesProvider and ResendProvider", () => {
     // An account allowed three messages a second: the SES profile paces to the same rate.
     const sesVars = { ...SES_DEPLOY, SES_MAX_SEND_RATE: "3" };
-    const ses: EmailProvider = new SesProvider(getConfig(withVars(sesVars)), withVars(sesVars));
+    const ses: EmailProvider = new sesAdapter.SesProvider(
+      getConfig(withVars(sesVars)),
+      withVars(sesVars),
+    );
     const resend: EmailProvider = new ResendProvider(
       getConfig(withVars(RESEND_DEPLOY)),
       withVars(RESEND_DEPLOY),
@@ -225,10 +227,11 @@ describe("a profile per provider, with the real adapter's traits", () => {
     expect(ses.maxRequestRate).toBe(3);
   });
 
-  it("builds a profile when a simulation asks for it, never at module load", () => {
+  it("builds a profile when a simulation is set up, not ahead of it", () => {
     // The send loop and sweep import the simulation in every environment, production
-    // included. An adapter answer the SES profile can't read fails building that profile
-    // (a dev send), where built at load it would fail a deployed Worker's startup.
+    // included. An adapter answer the SES profile can't read fails setting up that profile
+    // (a dev server simulating SES), where built at load it would fail a deployed Worker's
+    // startup.
     const classify = vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
     try {
       const config = getConfig(env);

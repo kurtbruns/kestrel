@@ -19,8 +19,6 @@
 /** The path `wrangler dev` answers by running the Worker's scheduled handler once. */
 const SCHEDULED_PATH = "/cdn-cgi/local/scheduled";
 const MINUTE = 60_000;
-/** Closer to the next minute than this, a tick is taken to have fired early for it. */
-const EARLY_MS = 1000;
 
 /**
  * Run the scheduled handler once on the dev server at `base`, as the cron would at `time`.
@@ -52,19 +50,21 @@ export function startSweepTicker(base, log = console) {
   let warned = false;
   const schedule = () => {
     const now = Date.now();
-    let minute = now - (now % MINUTE) + MINUTE;
-    // A timer can fire a hair before the minute it was set for (it runs on a monotonic clock,
-    // the minute is wall-clock). That tick's next minute is then only a moment away: skip to
-    // the one after, or two sweeps would run back to back.
-    if (minute - now < EARLY_MS) {
-      minute += MINUTE;
-    }
+    const minute = now - (now % MINUTE) + MINUTE;
     timer = setTimeout(() => tick(minute), minute - now);
   };
-  // `minute` is the one the tick was set for, early or late, as a deployed cron's
-  // `scheduledTime` is.
+  // `minute` is the one the tick was set for, as a deployed cron's `scheduledTime` is.
   const tick = async (minute) => {
     if (stopped) {
+      return;
+    }
+    // A timer can fire before the minute it was set for: it runs on a monotonic clock, the
+    // minute is wall-clock, and the two drift or step apart. A deployed cron never runs early,
+    // and an early sweep would miss a send due on the minute (the editor schedules on whole
+    // minutes), so wait out the rest of it. The next tick is then a full minute away.
+    const early = minute - Date.now();
+    if (early > 0) {
+      timer = setTimeout(() => tick(minute), early);
       return;
     }
     // The next tick is scheduled first, so a slow sweep can't push the one after it off the

@@ -102,8 +102,8 @@ const SES_QUOTA = {
 /**
  * Each profile is built when a simulation asks for it, never at module load: the send loop
  * and sweep import this module in every environment, so a profile that can't be built (an
- * adapter answer `adapterHalt` can't read) fails a dev send, never a deployed Worker's
- * startup.
+ * adapter answer `adapterHalt` can't read) fails the dev server simulating that provider,
+ * never a deployed Worker's startup.
  */
 const PROFILES: Record<SimulationProfile, () => SimProfile> = {
   generic: () => ({

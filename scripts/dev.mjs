@@ -39,6 +39,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import { clearDevPort, writeDevPort } from "./dev-port.mjs";
 import { startSweepTicker } from "./sweep-ticker.mjs";
 
@@ -182,23 +183,16 @@ const overrideArgs = isRemote
 // counts: an empty placeholder (the deployed provider's credentials, Access) reads the same as
 // an absent one, and local dev runs without it. Nor does one the shell supplies for this run.
 if (!isRemote) {
-  // Each `NAME=value` in a .dev.vars-shaped file, unquoted, with a trailing comment dropped.
-  const settings = (file) =>
-    new Map(
-      [
-        ...readFileSync(file, "utf8").matchAll(
-          /^[ \t]*([A-Z][A-Z0-9_]*)[ \t]*=[ \t]*(?:"([^"]*)"|'([^']*)'|([^#\n]*))/gm,
-        ),
-      ].map(([, name, double, single, bare]) => [name, (double ?? single ?? bare ?? "").trim()]),
-    );
+  // Read as dotenv reads it, which is how wrangler reads `.dev.vars`.
+  const settings = (file) => parseEnv(readFileSync(file, "utf8"));
   const example = join(ROOT, ".dev.vars.example");
   const local = join(ROOT, ".dev.vars");
   if (!existsSync(local)) {
     console.warn("[dev] no .dev.vars: run `cp .dev.vars.example .dev.vars` for the dev setup");
   } else if (existsSync(example)) {
-    const have = new Set([...settings(local).keys(), ...fromShell]);
-    const missing = [...settings(example)]
-      .filter(([name, value]) => value !== "" && !have.has(name))
+    const have = new Set([...Object.keys(settings(local)), ...fromShell]);
+    const missing = Object.entries(settings(example))
+      .filter(([name, value]) => value.trim() !== "" && !have.has(name))
       .map(([name]) => name);
     if (missing.length > 0) {
       console.warn(
