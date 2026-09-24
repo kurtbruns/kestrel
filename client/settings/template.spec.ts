@@ -44,6 +44,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     notifyChannel: "fake",
     notifyFrom: "Birds <hello@birds.example>",
     minLeadMs: 5 * 60 * 1000,
+    simulation: null,
     build: {
       version: "",
       sha: "dev",

@@ -49,6 +49,7 @@ describe("ResendProvider.sendBatch", () => {
     ];
 
     const results = await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "list",
       idempotencyKeyPrefix: "send-123",
     });
 
@@ -93,7 +94,7 @@ describe("ResendProvider.sendBatch", () => {
     await makeProvider().sendBatch(
       rendered,
       [{ email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" }],
-      { idempotencyKeyPrefix: "s" },
+      { purpose: "list", idempotencyKeyPrefix: "s" },
     );
     const headers = (spy.mock.calls[0]![1] as RequestInit).headers as Record<string, string>;
     expect(headers["x-batch-validation"]).toBe("permissive");
@@ -113,6 +114,7 @@ describe("ResendProvider.sendBatch", () => {
       unsubscribeUrl: `https://app.test/u?t=${x}`,
     }));
     const result = await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "list",
       idempotencyKeyPrefix: "s",
     });
     expect(result).toEqual({
@@ -146,6 +148,7 @@ describe("ResendProvider.sendBatch", () => {
       unsubscribeUrl: `https://app.test/u?t=${x}`,
     }));
     const result = await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "list",
       idempotencyKeyPrefix: "s",
     });
     expect(result.kind === "answered" && result.results).toEqual([
@@ -171,6 +174,7 @@ describe("ResendProvider.sendBatch", () => {
       unsubscribeUrl: `https://app.test/u?t=${x}`,
     }));
     const result = await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "list",
       idempotencyKeyPrefix: "s",
     });
     expect(result.kind === "answered" && result.results).toEqual([
@@ -188,7 +192,7 @@ describe("ResendProvider.sendBatch", () => {
     const recipients: Recipient[] = [
       { email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" },
     ];
-    const opts = { idempotencyKeyPrefix: "send-xyz" };
+    const opts = { purpose: "list" as const, idempotencyKeyPrefix: "send-xyz" };
 
     await makeProvider().sendBatch(rendered, recipients, opts);
     await makeProvider().sendBatch(rendered, recipients, opts);
@@ -206,10 +210,12 @@ describe("ResendProvider.sendBatch", () => {
       { email: "a@example.com", unsubscribeUrl: "https://app.test/u?t=a" },
     ];
     await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "test",
       idempotencyKeyPrefix: "test-p1",
       idempotencyKey: "test-p1-first",
     });
     await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "test",
       idempotencyKeyPrefix: "test-p1",
       idempotencyKey: "test-p1-second",
     });
@@ -233,7 +239,10 @@ describe("ResendProvider.sendBatch", () => {
     [409, { name: "concurrent_idempotent_requests", message: "In progress." }, "outage", true],
   ])("halts the batch as unavailable on a %i %o", async (status, body, cause, mayHaveSent) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
-    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    const result = await makeProvider().sendBatch(rendered, one, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
     expect(result).toMatchObject({
       kind: "halted",
       halt: { reason: "unavailable", cause, mayHaveSent },
@@ -275,7 +284,10 @@ describe("ResendProvider.sendBatch", () => {
     [422, { name: "invalid_from_address", message: "Invalid `from` field." }, "sender"],
   ])("halts the batch as an account refusal on a %i %o", async (status, body, cause) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(cannedResponse(body, status));
-    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    const result = await makeProvider().sendBatch(rendered, one, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
     expect(result).toMatchObject({
       kind: "halted",
       halt: { reason: "account", cause, mayHaveSent: false },
@@ -290,7 +302,10 @@ describe("ResendProvider.sendBatch", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       cannedResponse({ name: "invalid_api_key", message: "API key re_test_key is invalid" }, 403),
     );
-    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    const result = await makeProvider().sendBatch(rendered, one, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
     expect(result.kind).toBe("halted");
     expect(JSON.stringify(result)).not.toContain("re_test_key");
   });
@@ -299,7 +314,10 @@ describe("ResendProvider.sendBatch", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       cannedResponse({ name: "validation_error", message: "bad" }, 422),
     );
-    const result = await makeProvider().sendBatch(rendered, one, { idempotencyKeyPrefix: "s" });
+    const result = await makeProvider().sendBatch(rendered, one, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
     expect(result.kind).toBe("answered");
     expect(result.kind === "answered" && result.results[0]).toMatchObject({
       email: "a@example.com",

@@ -96,6 +96,9 @@ function deploymentView(cfg: Config): DeploymentView {
     // The minimum lead (SPEC §6): deploy config, so the editor floors its pickers and words
     // its copy by the value this deployment enforces instead of a number of its own.
     minLeadMs: cfg.minLeadMs,
+    // Which provider the local send simulation models, so a dev tool can check it before a
+    // demo; null in every deployed env.
+    simulation: cfg.simulation,
   };
 }
 

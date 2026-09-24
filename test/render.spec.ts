@@ -16,7 +16,7 @@ const config: Config = {
   awsRegion: "us-east-1",
   sesMaxSendRate: 14,
   devMode: false,
-  simulateSends: false,
+  simulation: null,
   subrequestBudget: 50,
   minLeadMs: 5 * 60 * 1000,
   notifyChannel: "fake",

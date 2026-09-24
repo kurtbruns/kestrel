@@ -29,6 +29,7 @@ import type {
   EmailProvider,
   HaltCause,
   PerRecipientResult,
+  ProviderTraits,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
@@ -44,6 +45,18 @@ const WEBHOOK_TOLERANCE_S = 5 * 60;
 /** How long Resend remembers an idempotency key (24 hours), less a margin for clock skew
  *  and a slow tick. */
 const IDEMPOTENCY_WINDOW_MS = 23 * 60 * 60 * 1000;
+/**
+ * How Resend behaves under the send loop: up to 100 recipients a request, and an
+ * idempotency key it remembers for a day, so a batch whose answer was lost is re-sent
+ * under its key and deduped. The dev simulation's Resend profile reads these, so it can't
+ * drift.
+ */
+export const RESEND_TRAITS: ProviderTraits = {
+  maxBatch: MAX_BATCH,
+  idempotentRetry: true,
+  idempotencyWindowMs: IDEMPOTENCY_WINDOW_MS,
+};
+
 /** Error names that are about the API key rather than the request, whatever the status. */
 const CREDENTIAL_ERROR_NAMES = new Set([
   "missing_api_key",
@@ -108,9 +121,9 @@ interface ResendBatchElement {
 
 export class ResendProvider implements EmailProvider {
   readonly name = "resend" as const;
-  readonly maxBatch = MAX_BATCH;
-  readonly idempotentRetry = true;
-  readonly idempotencyWindowMs = IDEMPOTENCY_WINDOW_MS;
+  readonly maxBatch = RESEND_TRAITS.maxBatch;
+  readonly idempotentRetry = RESEND_TRAITS.idempotentRetry;
+  readonly idempotencyWindowMs = RESEND_TRAITS.idempotencyWindowMs;
 
   private readonly apiKey: string;
   private readonly webhookSecret: string;

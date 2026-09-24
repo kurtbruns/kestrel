@@ -20,7 +20,9 @@ cp .dev.vars.example .dev.vars      # ships a working dev setup; no edits needed
 npm run dev                         # wrangler dev on http://localhost:8787
 ```
 
-`npm run dev` applies the D1 migrations automatically on a fresh local database, so there's no separate migrate step. Locally the email transport is a dead-end fake, so nothing you do can reach a real inbox. The shipped dev setup sets the minimum lead, the cancelable window before every send, to one minute (`MIN_LEAD_SECONDS`), the floor every environment shares; deployed, it defaults to five. Open the editor at **http://localhost:8787/dashboard/**. There's nothing to sign in with locally: the editor mints its own dev token and shows a **Local dev** chip, and the preview (which opens at `/`) carries an **Open dashboard** shortcut, so you're one click from the editor.
+`npm run dev` applies the D1 migrations automatically on a fresh local database, so there's no separate migrate step. Locally the email transport is a dead-end fake, so nothing you do can reach a real inbox. Open the editor at **http://localhost:8787/dashboard/**. There's nothing to sign in with locally: the editor mints its own dev token and shows a **Local dev** chip, and the preview (which opens at `/`) carries an **Open dashboard** shortcut, so you're one click from the editor.
+
+Local sends behave as deployed ones do. `npm run dev` runs the send sweep once a minute, on the minute, as the deployed cron does, so a scheduled send fires, a paused one resumes, and a sent one settles its delivery receipts without anything run by hand. The shipped dev setup sets the minimum lead, the cancelable window before every send, to one minute (`MIN_LEAD_SECONDS`), the floor every environment shares (deployed, it defaults to five), so a send scheduled a minute out fires one to two minutes later. And on a send to the list, a simulation stands in for a real provider (`SIMULATE_SENDS`, Resend by default; `ses` for Amazon SES, with its wedged sends and quota): batches go out at that provider's pace, now and then one fails the way that provider's do, and receipts (delivered, bounced, complained) arrive after the send. Test sends and confirmation emails skip the simulation and land in the dev outbox (`GET /api/dev/outbox`). `.dev.vars.example` explains each setting; set one in the shell for a single run, for example `SIMULATE_SENDS=ses npm run dev`.
 
 Everything the editor does is on the HTTP API; the editor is just a client of it. Because a draft can be open in two tabs or edited by Claude at once, a stale save is rejected rather than clobbering the newer one (see `docs/SPEC.md` §4).
 
@@ -37,6 +39,14 @@ This loads a sample publication called **Windbreak** with example data to show h
 ```bash
 npm run seed -- --size 10k
 ```
+
+To watch a send go out, schedule one a minute or more ahead and open its watch view:
+
+```bash
+npm run simulate-send -- --in 90s
+```
+
+It loads the demo first if the database is empty, moves the demo's scheduled post to that time (or schedules a new post), and prints the link to watch it. The send fires at the next sweep tick after that time, as deployed. `--profile ses` checks the server simulates SES, and `--punctual` fires it the moment it comes due instead of at the next minute.
 
 Return to the empty first-run state anytime:
 

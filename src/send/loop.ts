@@ -226,6 +226,7 @@ export async function runSend(
       budget.request(); // the request counts whether or not it answers
       try {
         const answer = await provider.sendBatch(rendered, call.recipients, {
+          purpose: "list",
           idempotencyKeyPrefix: sendId,
           idempotencyKey: call.batch.key,
         });

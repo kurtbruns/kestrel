@@ -90,6 +90,7 @@ export class ProviderNotifier implements Notifier {
     // the publisher about their own sends and never to the list.
     const recipients = [{ email: to, unsubscribeUrl: "" }];
     const answer = await provider.sendBatch(message, recipients, {
+      purpose: "notification",
       idempotencyKeyPrefix: `notify-${key}`,
     });
     const [result] = perRecipient(answer, recipients);

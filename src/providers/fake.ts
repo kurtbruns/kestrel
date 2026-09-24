@@ -2,7 +2,9 @@
  * In-memory transport for local dev and tests. It is the ONLY transport in the
  * dev environment, so dev can never reach a real inbox. It records each message
  * with the unsubscribe sentinel already substituted — exactly what a real
- * provider would send — so tests can assert the delivered bytes.
+ * provider would send — so tests can assert the delivered bytes. The dev send
+ * simulation records into the same outbox (`deliverToOutbox`), so `GET /api/dev/outbox`
+ * shows everything a local server sent, simulated or not.
  *
  * `idempotentRetry` is true, so it dedupes per recipient under the batch's key (the
  * send loop's dispatch key, else the caller's prefix): re-sending a batch after a crash
@@ -15,6 +17,7 @@ import type { AppEnv } from "../env";
 import { substituteRecipient } from "../render/render";
 import type {
   EmailProvider,
+  PerRecipientResult,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
@@ -50,6 +53,42 @@ export function failFakeSendBatch(n: number): void {
   failCount = n;
 }
 
+/**
+ * Deliver each recipient's message into the outbox, as a real provider would send it, and
+ * accept them all. Once per recipient under the batch's key (the dispatch key, else the
+ * caller's prefix): a batch re-sent under its key is deduped, as at an idempotent provider.
+ */
+export function deliverToOutbox(
+  rendered: RenderedEmail,
+  recipients: Recipient[],
+  opts: SendBatchOptions,
+): PerRecipientResult[] {
+  return recipients.map((r) => {
+    const key = `${opts.idempotencyKey ?? opts.idempotencyKeyPrefix}:${r.email}`;
+    const existing = sentKeys.get(key);
+    if (existing) {
+      // Deduped: a real idempotent provider would not re-deliver.
+      return { email: r.email, accepted: true as const, providerId: existing };
+    }
+    // Named by the caller and address, not the key, so a test can predict it.
+    const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
+    const final = substituteRecipient(rendered, {
+      "email.unsubscribeUrl": r.unsubscribeUrl,
+      "email.sentTo": r.email,
+    });
+    sentKeys.set(key, providerId);
+    outbox.push({
+      to: r.email,
+      subject: final.subject,
+      html: final.html,
+      text: final.text,
+      providerId,
+      sentAt: Date.now(),
+    });
+    return { email: r.email, accepted: true as const, providerId };
+  });
+}
+
 export class FakeProvider implements EmailProvider {
   readonly name = "fake" as const;
   readonly maxBatch = Number.MAX_SAFE_INTEGER;
@@ -64,31 +103,7 @@ export class FakeProvider implements EmailProvider {
       failCount -= 1;
       throw new Error("fake transient failure");
     }
-    const results = recipients.map((r) => {
-      const key = `${opts.idempotencyKey ?? opts.idempotencyKeyPrefix}:${r.email}`;
-      const existing = sentKeys.get(key);
-      if (existing) {
-        // Deduped: a real idempotent provider would not re-deliver.
-        return { email: r.email, accepted: true as const, providerId: existing };
-      }
-      // Named by the caller and address, not the key, so a test can predict it.
-      const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
-      const final = substituteRecipient(rendered, {
-        "email.unsubscribeUrl": r.unsubscribeUrl,
-        "email.sentTo": r.email,
-      });
-      sentKeys.set(key, providerId);
-      outbox.push({
-        to: r.email,
-        subject: final.subject,
-        html: final.html,
-        text: final.text,
-        providerId,
-        sentAt: Date.now(),
-      });
-      return { email: r.email, accepted: true as const, providerId };
-    });
-    return { kind: "answered", results };
+    return { kind: "answered", results: deliverToOutbox(rendered, recipients, opts) };
   }
 
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {

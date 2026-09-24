@@ -12,7 +12,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- `npm run simulate-send -- --in 90s` schedules a demo send on the local dev server through the API (loading the demo first if the database is empty) and prints the link to watch it; it refuses a time inside the minimum lead and says why.
+- Local development can model Amazon SES or Resend: `SIMULATE_SENDS` takes `resend`, `ses`, or `1` (the generic simulation), optionally with `:none` for a run with no failures, and Settings names the provider modeled. The SES profile reaches a wedged send and Resolve, and a spent daily quota with its spaced-out retries (SPEC §10). `GET /api/settings` reflects the simulation under `deployment.simulation`.
 - `MIN_LEAD_SECONDS` sets the minimum lead, how long every send stays cancelable before it fires, per deployment: five minutes when unset, never under one minute in any environment, and never over a day (a value outside that stops the app with an error naming it). Settings shows it read-only, the editor's Schedule, Send now, and Reschedule use it instead of a fixed five minutes, and the API reference states it on the routes that enforce it (SPEC §6). Local dev ships with it at one minute; add `MIN_LEAD_SECONDS="60"` from `.dev.vars.example` to an existing `.dev.vars`.
+
+### Changed
+
+- `npm run dev` now runs the send sweep once a minute, on the minute, as the deployed cron does, so a local send fires, resumes, and settles its receipts on its own instead of waiting for a hand-run trigger. The shipped `.dev.vars.example` turns the send simulation on (`SIMULATE_SENDS="resend"`); add it to an existing `.dev.vars`, and `npm run dev` names any setting yours is missing. With the simulation on, test sends and confirmation emails are no longer simulated: they appear in the dev outbox and are never refused.
 
 ### Fixed
 

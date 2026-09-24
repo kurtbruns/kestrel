@@ -58,7 +58,18 @@ export interface WebhookResult {
   response: Response;
 }
 
+/**
+ * What a batch is for: a `list` send's batch from the send loop, or one of the one-off
+ * messages (a post or template `test`, a subscriber's `confirmation`, a `notification` to
+ * the publisher). A real transport sends them all alike; the dev simulation models only
+ * list sends and hands the rest to the fake outbox, so it is said here, not inferred from
+ * the keys.
+ */
+export type SendPurpose = "list" | "test" | "confirmation" | "notification";
+
 export interface SendBatchOptions {
+  /** What the batch is for (see `SendPurpose`). */
+  purpose: SendPurpose;
   /** Names the caller (a send id, or a test or confirmation tag); an adapter derives a
    *  key from it when no `idempotencyKey` is given. */
   idempotencyKeyPrefix: string;
@@ -70,8 +81,14 @@ export interface SendBatchOptions {
   idempotencyKey?: string;
 }
 
-export interface EmailProvider {
-  readonly name: "fake" | "ses" | "resend";
+/**
+ * How a provider behaves under the send loop, as its adapter declares it: how many
+ * recipients one request takes, whether a re-sent batch is deduped and for how long, and
+ * how fast it takes requests. The
+ * dev simulation's provider profiles read these from the real adapters, so the two can't
+ * drift.
+ */
+export interface ProviderTraits {
   /** Max recipients per provider call (the send loop chunks to this). One call makes at
    *  most one outbound request, which is how the send loop budgets it. */
   readonly maxBatch: number;
@@ -84,6 +101,10 @@ export interface EmailProvider {
   /** The most requests a second the provider takes from this account, when it holds the
    *  sender to a rate the send loop should keep under (SES's maximum send rate). */
   readonly maxRequestRate?: number;
+}
+
+export interface EmailProvider extends ProviderTraits {
+  readonly name: "fake" | "ses" | "resend";
 
   /** Throws only when the request got no answer at all, whose fate is then unknown. */
   sendBatch(

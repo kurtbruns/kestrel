@@ -143,6 +143,7 @@ export async function test(c: RequestContext): Promise<Response> {
   // deduped into nothing, or refused outright once the post had changed.
   const [res] = perRecipient(
     await provider.sendBatch(email, recipients, {
+      purpose: "test",
       idempotencyKeyPrefix: `test-${input.post.id}`,
       idempotencyKey: `test-${input.post.id}-${crypto.randomUUID()}`,
     }),
@@ -277,6 +278,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const results = perRecipient(
     await provider.sendBatch(result, batch, {
+      purpose: "test",
       idempotencyKeyPrefix: testId,
       idempotencyKey: testId,
     }),

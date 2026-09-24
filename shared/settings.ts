@@ -47,6 +47,24 @@ export interface SettingsView {
   notifications: NotificationPrefs;
 }
 
+/**
+ * The providers the local send simulation can model (SPEC §10): `resend` and `ses` take
+ * their traits from the real adapters, and `generic` is a small-batch provider paced to be
+ * watched.
+ */
+export const SIMULATION_PROFILES = ["generic", "resend", "ses"] as const;
+export type SimulationProfile = (typeof SIMULATION_PROFILES)[number];
+
+/** Which of a provider's failures the simulation injects: a real provider's mix, or none for a clean demo. */
+export const SIMULATION_FAULTS = ["realistic", "none"] as const;
+export type SimulationFaults = (typeof SIMULATION_FAULTS)[number];
+
+/** The local send simulation a dev server runs, from `SIMULATE_SENDS`; only ever set in local dev. */
+export interface SimulationView {
+  profile: SimulationProfile;
+  faults: SimulationFaults;
+}
+
 /** The deploy-time configuration, reflected read-only: origins, provider, and whether Access gates the surface. Never a secret. */
 export interface DeploymentView {
   provider: string;
@@ -66,6 +84,8 @@ export interface DeploymentView {
   notifyFrom: string;
   /** The minimum lead (SPEC §6): every schedule, send now, and reschedule fires at least this long after the request. Never under `MIN_LEAD_FLOOR_MS` or over `MIN_LEAD_CEILING_MS`. */
   minLeadMs: number;
+  /** The local send simulation standing in for a provider, or null: always null once deployed. */
+  simulation: SimulationView | null;
 }
 
 /** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */

@@ -33,12 +33,29 @@ import type {
   EmailProvider,
   HaltCause,
   PerRecipientResult,
+  ProviderTraits,
   Recipient,
   RenderedEmail,
   SendBatchOptions,
   SendBatchResult,
   WebhookResult,
 } from "./types";
+
+/**
+ * How SES behaves under the send loop: one recipient per request (each message carries
+ * its own unsubscribe headers), no idempotency key, so a request that got no answer is
+ * never re-sent, and the account's maximum send rate as its request rate. The dev
+ * simulation's SES profile reads these, so it can't drift.
+ */
+export function sesTraits(config: Config): ProviderTraits & { maxRequestRate: number } {
+  return { maxBatch: 1, idempotentRetry: false, maxRequestRate: config.sesMaxSendRate };
+}
+
+/** An SES error response as the operator reads it: the status, then SES's type and message. */
+export function sesErrorText(status: number, type: string, message: string): string {
+  const detail = [type, message].filter(Boolean).join(": ");
+  return `ses ${status}${detail ? ` ${detail}` : ""}`;
+}
 
 function textResponse(body: string, status: number): Response {
   return new Response(body, { status, headers: { "content-type": "text/plain; charset=utf-8" } });
@@ -101,8 +118,8 @@ export function classifySesError(
 
 export class SesProvider implements EmailProvider {
   readonly name = "ses" as const;
-  readonly maxBatch = 1;
-  readonly idempotentRetry = false;
+  readonly maxBatch: number;
+  readonly idempotentRetry: boolean;
   /** One recipient a request, so the account's send rate is its request rate. */
   readonly maxRequestRate: number;
 
@@ -114,7 +131,10 @@ export class SesProvider implements EmailProvider {
   constructor(config: Config, env: AppEnv) {
     this.region = config.awsRegion;
     this.from = config.fromAddress;
-    this.maxRequestRate = config.sesMaxSendRate;
+    const traits = sesTraits(config);
+    this.maxBatch = traits.maxBatch;
+    this.idempotentRetry = traits.idempotentRetry;
+    this.maxRequestRate = traits.maxRequestRate;
     this.configurationSet =
       env.SES_CONFIGURATION_SET && env.SES_CONFIGURATION_SET.length > 0
         ? env.SES_CONFIGURATION_SET
@@ -211,8 +231,7 @@ export class SesProvider implements EmailProvider {
 
     const bodyText = await res.text().catch(() => "");
     const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
-    const detail = [type, message].filter(Boolean).join(": ");
-    const error = `ses ${res.status}${detail ? ` ${detail}` : ""}`;
+    const error = sesErrorText(res.status, type, message);
     // A sandbox account, or a sending identity that lapsed, is rejected as MessageRejected
     // naming the identities that failed; it is the operator's only when the sender is one.
     const senderUnverified =

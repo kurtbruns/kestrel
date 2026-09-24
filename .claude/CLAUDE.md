@@ -16,7 +16,9 @@ It runs on a Cloudflare Worker over D1 (database) and R2 (images), with a Cron T
 npm install
 cp .dev.vars.example .dev.vars      # ships a dev-insecure DEV_AUTH_SECRET; the editor mints its own admin token
 npm run migrate:local               # apply D1 migrations to the local database
-npm run dev                         # wrangler dev on http://localhost:8787 (editor at /dashboard/)
+npm run dev                         # wrangler dev on http://localhost:8787 (editor at /dashboard/), plus the send sweep once a minute
+npm run seed                        # load the demo publication (resets the local database); --size 10k to scale the list
+npm run simulate-send -- --in 90s   # schedule a demo send through the API and print its watch URL (seeds an empty database first)
 
 npm test                            # Vitest suite, run inside workerd (@cloudflare/vitest-pool-workers)
 npm run test:watch                  # watch mode
@@ -33,6 +35,7 @@ npm run migrate:remote -- --env staging  # apply D1 migrations to that environme
 - **Deploy through `npm run deploy -- --env <name>`,** never a bare `wrangler deploy`, so the build stamp is fresh. It and `migrate:remote` refuse to run without `--env` (`scripts/require-env.mjs`), because the top-level config is development.
 - **Run `typecheck` after touching `wrangler.jsonc`:** `wrangler types` regenerates the gitignored `worker-configuration.d.ts`.
 - **`wrangler.jsonc` top level is the development environment** (fake transport, so dev can never reach a real inbox). `staging` and `production` are named `env`s that must redeclare every binding and var, because wrangler does not inherit them.
+- **Local dev models production** (SPEC §10): `npm run dev` runs the sweep at every wall-clock minute (`scripts/sweep-ticker.mjs`; `wrangler dev` never fires the cron itself), the dev lead is the 60-second floor, and `SIMULATE_SENDS` (`resend` in `.dev.vars.example`; `ses`, `1`, `:none`, `off`) stands in for a provider on list sends only. Switch profile for one run with `SIMULATE_SENDS=ses npm run dev`, never by editing a send's row. When asked for a demo send, use the `simulate-send` skill.
 - **A failed import of `src/generated/version.ts`** means the build stamp was never generated (an `--ignore-scripts` install, or `npx vitest` skipping `pretest`). Run `npm run version:build` once.
 - **The app 500s on a missing column after a pull** when a new migration landed: run `npm run migrate:local`. `migrations/0001_init.sql` is the 1.0.0 baseline and frozen (its header says why), so a schema change is always a new migration file, never an edit to an old one. A local database made before 1.0.0 ran an older baseline and has to be rebuilt once: stop `wrangler dev` (it holds the database file open), delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.
 
@@ -47,7 +50,7 @@ The mechanism behind each boundary is in its module's header comment; these are 
 - **`src/app.ts` is the one place routes are registered** and where the public/admin line is drawn. The admin surface (editor and authoring API) is wrapped in `requireAuth`; reader routes are public. No public entry point may redirect or link into an Access-gated path, so `/` is the public archive index, never a bounce into `/dashboard`.
 - **`render/render.ts` is the single render path (I5).** Preview, test, schedule, and send all call it. Never add a second Markdown-to-email route: a test is only a real test because it runs the same code as the send. The in-app docs viewer (`src/docs/`) renders the `docs/setup/` Markdown to a web page, a deliberately separate path; the SPA fetches it through the authed `/api/docs` routes, never a top-level navigation.
 - **`send/` owns the send state machine,** and no retry or restart may re-mail an accepted recipient (I4).
-- **`providers/` is the transport seam** (`sendBatch` + `parseWebhook`). What a provider's error means is decided in its adapter and nowhere else. The app owns the list, consent, deliveries, and suppressions, so swapping providers is a swap, not a migration.
+- **`providers/` is the transport seam** (`sendBatch` + `parseWebhook`). What a provider's error means is decided in its adapter and nowhere else; the dev simulation (`simulate.ts`) reads each profile's traits and failure answers from the adapter it models, so a sim profile never restates them. The app owns the list, consent, deliveries, and suppressions, so swapping providers is a swap, not a migration.
 - **`notify/` tells the publisher (SPEC §8, §12).** It reads the send record, writes only its own table, and never runs inside the send loop, so a notification can't change a send.
 - **`auth/` gates the admin surface with one contract:** verify a signed token, get a `Principal`. Deployed, Cloudflare Access issues it (re-verified in-app); locally a dev-signed token stands in, honored only in a dev-shaped env (fake transport, no Access, a loopback `APP_ORIGIN`). The same predicate, through `config.devMode`, decides whether the `/api/dev/*` routes are registered at all; never gate dev tooling on the provider name. `DEV_AUTH_SECRET` lives in `.dev.vars` and is never committed.
 - **All SQL lives in `db/`,** and nowhere else. Bind a variable-length list as one JSON-array parameter, `IN (SELECT value FROM json_each(?))`, never a `?` per item: D1 rejects a statement with more than 100 bound parameters and local SQLite does not, so only the test guard (`test/support/d1_guard.ts`) would catch it.

@@ -12,6 +12,7 @@ import type {
   SettingsResponse,
   SettingsSavedResponse,
   SettingsView,
+  SimulationProfile,
 } from "../../shared/settings";
 import { api } from "../api";
 import { parseFromName, renderSidebarBrand } from "../brand";
@@ -40,6 +41,13 @@ const PROVIDER_LABELS: Record<string, string> = {
   fake: "Fake (dev, dead-end)",
   ses: "Amazon SES",
   resend: "Resend",
+};
+
+/** The provider a local send simulation models, as the Email provider row names it. */
+const SIMULATION_LABELS: Record<SimulationProfile, string> = {
+  generic: "a generic provider",
+  resend: "Resend",
+  ses: "Amazon SES",
 };
 
 /** The persisted fields the save bar tracks against their saved baseline. */
@@ -269,7 +277,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.fromAddress}</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sendingDomain}</span></div>
-          <div class="set-kv-k">Email provider</div><div class="set-kv-v">${PROVIDER_LABELS[d.provider] || d.provider}</div>
+          <div class="set-kv-k">Email provider</div><div class="set-kv-v">${PROVIDER_LABELS[d.provider] || d.provider}${d.simulation ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>` : null}</div>
         </div>
       </div>
     </section>`;

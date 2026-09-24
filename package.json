@@ -17,6 +17,7 @@
     "dev": "node scripts/dev.mjs",
     "seed": "node scripts/seed.mjs",
     "reset": "node scripts/reset.mjs",
+    "simulate-send": "node scripts/simulate-send.mjs",
     "predeploy": "node scripts/stamp-version.mjs",
     "deploy": "node scripts/require-env.mjs deploy",
     "types": "wrangler types",
