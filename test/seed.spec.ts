@@ -62,6 +62,7 @@ describe("dev seed (Windbreak dataset)", () => {
       pending: PENDING,
       unsubscribed: UNSUBSCRIBED,
       suppressed: SUPPRESSED,
+      audience: AUDIENCE_NOW,
     });
 
     const audience = await audienceEmails(env.DB);
@@ -146,6 +147,7 @@ describe("dev seed (Windbreak dataset)", () => {
       pending: 0,
       unsubscribed: 0,
       suppressed: 0,
+      audience: 0,
     });
     expect(await listSends(env.DB)).toHaveLength(0);
     // Settings are back to defaults, so the identity falls back to the From name.
@@ -185,6 +187,7 @@ describe("dev seed (Windbreak dataset)", () => {
       pending: PENDING,
       unsubscribed: UNSUBSCRIBED,
       suppressed: SUPPRESSED,
+      audience: AUDIENCE_NOW,
     });
   });
 

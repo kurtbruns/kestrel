@@ -604,6 +604,30 @@ describe("subscribers: admin + suppressions", () => {
     const body = await readJson(res);
     expect(body.counts).toHaveProperty("confirmed");
     expect(body.counts).toHaveProperty("suppressed");
+    expect(body.counts).toHaveProperty("audience");
+  });
+
+  it("counts.audience is who a send reaches: a suppressed confirmed address stays confirmed but leaves it", async () => {
+    const read = async () => {
+      const res = await SELF.fetch(`${base}/subscribers`, { headers: AUTH });
+      return (await readJson(res)).counts;
+    };
+    const before = await read();
+    const kept = uniqueEmail();
+    const bounced = uniqueEmail();
+    await addConfirmed(kept);
+    await addConfirmed(bounced);
+    await subs.addSuppression(env.DB, bounced, "bounce");
+    const after = await read();
+
+    expect(after.confirmed - before.confirmed).toBe(2);
+    expect(after.suppressed - before.suppressed).toBe(1);
+    expect(after.audience - before.audience).toBe(1);
+    // The same set the send lists, and the roster the dashboard's tile opens.
+    expect(after.audience).toBe(await subs.audienceCount(env.DB));
+    expect(after.audience).toBe(
+      await subs.countSubscribers(env.DB, { status: "confirmed", suppressed: "hide" }),
+    );
   });
 
   it("suppression excludes a confirmed subscriber, and clearing restores them", async () => {

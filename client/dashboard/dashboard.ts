@@ -197,13 +197,15 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   }
 
   // Each tile deep-links into the roster pre-filtered on its criterion
-  // (#/subscribers/<filter>), so a count is a way in, not just a number.
+  // (#/subscribers/<filter>), so a count is a way in, not just a number. Confirmed is
+  // the figure read first, so it is who the next send reaches: a suppressed address
+  // stays `confirmed` in consent but is never mailed, and already has its own tile.
   const tiles: Tile[] = [
     {
       label: "Confirmed",
       emph: true,
-      v: counts.confirmed,
-      filter: "confirmed",
+      v: counts.audience,
+      filter: "audience",
     },
     { label: "Pending", v: counts.pending, filter: "pending" },
     { label: "Unsubscribed", v: counts.unsubscribed, filter: "unsubscribed" },

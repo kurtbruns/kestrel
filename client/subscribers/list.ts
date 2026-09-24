@@ -21,7 +21,8 @@ import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
 // filterable, sortable, and searchable. Consent status and suppression are separate
 // axes: the status filter narrows the roster; the suppression facet is an overlay. The
 // dashboard tiles deep-link via #/subscribers/<filter> — `initialFilter` seeds the
-// status filter, or the suppression facet for "suppressed".
+// status filter, the suppression facet for "suppressed", or both for "audience"
+// (confirmed with suppressed hidden: who a send reaches, so the list matches the tile).
 const SUB_STATUSES = [
   { value: "confirmed", label: "Confirmed" },
   { value: "pending", label: "Pending" },
@@ -44,6 +45,9 @@ export async function renderSubscribers(
   };
   if (initialFilter === "suppressed") {
     state.suppressed = "only";
+  } else if (initialFilter === "audience") {
+    state.status = "confirmed";
+    state.suppressed = "hide";
   } else if (
     initialFilter === "confirmed" ||
     initialFilter === "pending" ||
