@@ -676,8 +676,9 @@ function renderFrozenRecord(
   );
 }
 
-/** A sent send's outcomes from its counters: the same eight buckets as the record's own
- *  read, one bucket per recipient, over the audience fixed at fire. */
+/** A sent send's outcomes from its counters: the same buckets as the record's own read,
+ *  one per recipient, over the audience fixed at fire. As there, a recipient not yet handed
+ *  off (pending) counts as in flight. */
 function outcomesOf(send: SendView): DeliveryOutcomes {
   const c = send.counts;
   return {
@@ -688,7 +689,7 @@ function outcomesOf(send: SendView): DeliveryOutcomes {
     unsent: c.unsent,
     skipped: c.skipped,
     accepted: c.accepted,
-    in_flight: c.in_flight,
+    in_flight: c.pending + c.in_flight,
   };
 }
 

@@ -117,6 +117,7 @@ describe("sent record", () => {
     return {
       routes: server.routes,
       receipt: (counts: Partial<Send>) => server.edit("x1", counts),
+      remove: () => server.remove("x1"),
     };
   };
   const SETTLING = { c_delivered: 5, c_bounced: 0, c_unsent: 0, c_accepted: 5 };
@@ -181,24 +182,31 @@ describe("sent record", () => {
   });
 
   it("names each leftover recipient for what it is: only an accepted one awaits a receipt", async () => {
-    fake = fakeApi([
-      ...sentSend({
-        c_delivered: 6,
-        c_bounced: 0,
-        c_unsent: 0,
-        c_accepted: 1,
-        c_skipped: 2,
-        c_in_flight: 1,
-      }).routes,
-      noRows,
-    ]);
+    const sent = sentSend({
+      c_delivered: 5,
+      c_bounced: 0,
+      c_unsent: 0,
+      c_accepted: 1,
+      c_skipped: 2,
+      c_pending: 1,
+      c_in_flight: 1,
+    });
+    fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
-    const recon = $(".rec-recon").textContent ?? "";
-    expect(recon).toContain("1 accepted, awaiting a delivery receipt");
-    expect(recon).toContain("2 skipped (unsubscribed or suppressed before hand-off, never mailed)");
-    expect(recon).toContain("1 in flight");
-    expect(recon).not.toMatch(/[2-9] accepted, awaiting/);
+    const recon = () => $(".rec-recon").textContent ?? "";
+    expect(recon()).toContain("1 accepted, awaiting a delivery receipt");
+    expect(recon()).toContain(
+      "2 skipped (unsubscribed or suppressed before hand-off, never mailed)",
+    );
+    expect(recon()).toContain("2 in flight"); // one not yet handed off counts as in flight
+    expect(recon()).not.toMatch(/[2-9] accepted, awaiting/);
+    // A report whose counters read the same buckets as the page's own read moves nothing.
+    const lists = fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries")).length;
+    sent.receipt({});
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(recon()).toContain("2 in flight");
+    expect(fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"))).toHaveLength(lists);
   });
 
   it("reads Canceled for a canceled send, with when, never Sent", async () => {
@@ -233,6 +241,59 @@ describe("sent record", () => {
     expect($(".rec-n.danger").textContent).toBe("1");
     expect(fake.calls.filter((c) => c.url.pathname === "/sends/x1")).toHaveLength(1);
     expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("goes back to the watch when a settling send resumes sending", async () => {
+    const sent = sentSend(SETTLING);
+    fake = fakeApi([...sent.routes, noRows]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".rec-card")).toBeTruthy();
+    // A Resolve that put ambiguous recipients back to be handed off, say.
+    sent.receipt({ status: "sending", completed_at: null, c_accepted: 4, c_pending: 1 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($(".watch-card")).toBeTruthy();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("re-reads the page when its send is removed, and stops following", async () => {
+    const sent = sentSend(SETTLING);
+    fake = fakeApi([...sent.routes, noRows]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    sent.remove(); // deleted with its post
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("#app .error")).toBeTruthy(); // the re-read finds no send
+    const feeds = fake.calls.filter((c) => c.url.pathname === "/sends/feed").length;
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(fake.calls.filter((c) => c.url.pathname === "/sends/feed")).toHaveLength(feeds);
+  });
+
+  it("re-reads the page and follows again when its cursor is ahead of the database", async () => {
+    const sent = sentSend(SETTLING);
+    let ahead = true;
+    const feed = sent.routes.find((r) => r.path === "/sends/feed");
+    fake = fakeApi([
+      {
+        path: "/sends/feed",
+        reply: (req) => {
+          if (ahead) {
+            ahead = false; // a local reset, once
+            return jsonResponse({ error: "cursor_ahead", message: "reset" }, 409);
+          }
+          return feed?.reply(req);
+        },
+      },
+      ...sent.routes,
+      noRows,
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    const reads = () => fake.calls.filter((c) => c.url.pathname === "/sends/x1").length;
+    expect(reads()).toBe(2); // its own read, then again after the refused cursor
+    sent.receipt({ c_delivered: 6, c_accepted: 4 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($(".rec-n.ok").textContent).toBe("6"); // following again
   });
 
   it("switches the recipients view and reloads from page one", async () => {
