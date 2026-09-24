@@ -88,7 +88,7 @@ const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
 const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   progressing: "Handing recipients to the provider.",
   retrying: "Some recipients hit a transient error and will be retried.",
-  "backing-off": "Paused between ticks — it resumes on the next sweep.",
+  "backing-off": "Some recipients hit a transient error — they are retried on the next sweep.",
   "needs-attention": "Some deliveries are stuck and need a decision.",
   settling: "Dispatch complete — waiting on delivery receipts.",
 };
@@ -108,6 +108,11 @@ function phaseBlurb(prog: SendView): string {
   }
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
     return `The provider is unavailable — ${nextRetry(halt.retry_at)}.`;
+  }
+  // A send too large for one tick waits for the next with nothing in flight. The server
+  // reads that as progressing, since nothing failed; the line says why the bar is still.
+  if (prog.phase === "progressing" && prog.counts.in_flight === 0 && prog.counts.pending > 0) {
+    return "Paused between ticks — it resumes on the next sweep.";
   }
   return PHASE_BLURB[prog.phase] || "";
 }

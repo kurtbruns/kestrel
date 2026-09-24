@@ -27,11 +27,13 @@ import { isWedged } from "./wedged";
  *   - `scheduled`       waiting in the review window (not yet fired).
  *   - `due`             still `scheduled`, but the fire time has passed: the next sweep
  *                       tick starts it (past the missed threshold, the `missed` condition too).
- *   - `progressing`     actively handing recipients to the provider.
+ *   - `progressing`     handing recipients to the provider at the pace the platform allows,
+ *                       including a send too large for one tick waiting for the next.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
- *   - `backing-off`     work remains but nothing is in flight — paused between sweep
- *                       ticks, or, while the provider is unavailable, until the halt's
- *                       next retry (`provider.halt.retry_at`).
+ *   - `backing-off`     work remains, nothing is in flight, and the pause follows an error:
+ *                       recipients waiting on their retry after a transient error, or the
+ *                       provider unavailable until the halt's next retry
+ *                       (`provider.halt.retry_at`).
  *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
  *                       send with recipients in flight whose fate is unknown (§12) —
  *                       awaiting Resolve;
@@ -50,6 +52,7 @@ function derivePhase(
   due: boolean,
   wedged: boolean,
   refused: boolean,
+  unavailable: boolean,
 ): SendPhase {
   switch (status) {
     case "scheduled":
@@ -69,8 +72,12 @@ function derivePhase(
       if (counts.in_flight > 0) {
         return hasRetries ? "retrying" : "progressing";
       }
-      if (counts.pending > 0) {
-        return "backing-off"; // released the lease, waiting for the next sweep tick or retry
+      // Work remains and nothing is in flight: the run released the lease. Only an error
+      // makes that a back-off. The retry probe already tells one apart: a pending recipient
+      // with attempts is one a transient error put back in the queue. Without either, the
+      // tick's budget ran out on a healthy send, which the next tick carries on (SPEC §12).
+      if (counts.pending > 0 && (hasRetries || unavailable)) {
+        return "backing-off";
       }
       return "progressing";
     }
@@ -149,10 +156,13 @@ export function buildSendView(
         }
       : null;
   const refused = halt?.reason === "account";
+  const unavailable = halt?.reason === "unavailable";
 
-  const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused);
-  // A time to finish only while the send is handing off: paused (between ticks, halted,
+  const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused, unavailable);
+  // A time to finish only while the send is handing off: paused (backing off, halted,
   // wedged), an average over the whole send would promise a finish that is not coming.
+  // Between ticks a healthy send is still handing off, and its average since the start
+  // already counts the waits, so its time to finish stays honest.
   const handingOff = phase === "progressing" || phase === "retrying";
 
   return {

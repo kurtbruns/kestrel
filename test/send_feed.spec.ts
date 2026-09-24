@@ -314,7 +314,7 @@ describe("GET /sends/feed without a cursor", () => {
     expect(d).toMatchObject({ id: due.id, post_id: due.post_id, fire_at: due.fire_at });
     expect([g?.status, g?.phase, g?.counts.pending, g?.counts.accepted]).toEqual([
       "sending",
-      "backing-off", // work remains, nothing in flight
+      "progressing", // between ticks: work remains, nothing in flight, nothing failed
       5,
       3,
     ]);

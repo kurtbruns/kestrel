@@ -284,8 +284,12 @@ describe("buildSendView — derived phase", () => {
   it("retrying while handing off with a retried recipient", () => {
     expect(phase({ status: "sending", c_pending: 5, c_in_flight: 3 }, true)).toBe("retrying");
   });
-  it("backing-off when work remains but nothing is in flight", () => {
-    expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 })).toBe("backing-off");
+  it("progressing when work remains between ticks and nothing failed", () => {
+    // A send too large for one tick's budget waits for the next: healthy, not a back-off.
+    expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 })).toBe("progressing");
+  });
+  it("backing-off when nothing is in flight and recipients wait on a retry", () => {
+    expect(phase({ status: "sending", c_pending: 5, c_in_flight: 0 }, true)).toBe("backing-off");
   });
   it("needs-attention (wedged) when nothing is pending but rows are stuck in flight", () => {
     expect(phase({ status: "sending", c_pending: 0, c_in_flight: 2 })).toBe("needs-attention");
