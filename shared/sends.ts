@@ -1,5 +1,5 @@
 // Sends as the API carries them (SPEC §6, §8, §12): the send row and its counters, the
-// list summary, the live progress shape the watch polls, the live set the pages follow,
+// list summary, the live progress shape the watch polls, the feed the pages follow,
 // and the per-recipient record.
 // The Worker's routes produce these shapes and the editor consumes them; one definition,
 // so neither can drift.
@@ -235,18 +235,7 @@ export interface SendAttention {
   refused: boolean;
 }
 
-/**
- * How long after dispatch completes a settling send is still followed live (SPEC §8).
- * Some accepted messages are never confirmed at all (SPEC §6), so a send can settle
- * indefinitely; past this, a receipt that lands is read when its record is next opened.
- */
-export const SETTLE_FOLLOW_MS = 60 * 60 * 1000;
-
-/** The most send ids `GET /sends/live` takes in `ids`: a follower names only the live
- *  sends it last saw and the one send a page is about, so this is never near. */
-export const LIVE_IDS_MAX = 100;
-
-/** One send in `GET /sends/live`: which send, and where it stands, in the `/progress` shape. */
+/** One send in `GET /sends/feed`: which send, and where it stands, in the `/progress` shape. */
 export interface LiveSend extends SendProgress {
   id: string;
   post_id: string;
@@ -256,16 +245,20 @@ export interface LiveSend extends SendProgress {
   completed_at: number | null;
 }
 
-/** GET /sends/live: what a page follows to keep up with sends without polling each one. */
-export interface LiveSendsResponse {
+/** GET /sends/feed: what a client follows to keep up with sends without polling each one. */
+export interface SendFeedResponse {
   /** The server's clock at the read, so a client times its next read by the server's clock, not its own. */
   now: number;
-  /** Every send that can still change on its own: due, sending, or settling (sent within `SETTLE_FOLLOW_MS`, receipts outstanding). */
+  /**
+   * With `since`, every send that changed after that cursor, whatever its state, those the
+   * clock changed with no write included (turned due, missed, in flight too long, or wedged
+   * as a lease ran out); without it, every send that can change on its own. Soonest fire first.
+   */
   sends: LiveSend[];
-  /** The sends named in `ids` that are not in `sends`, as they stand now, so a client that was following one sees where it went. */
-  named: LiveSend[];
-  /** The soonest fire time among scheduled sends not yet due, or null when there is none: when the next one comes due. */
-  next_fire_at: number | null;
+  /** Where this read stands, to hand back as `since` on the next. */
+  cursor: string;
+  /** When to read again, by the server's clock: soon while a send moves, about once a minute while none does. */
+  read_again_at: number;
 }
 
 /** The sent record's per-recipient delivery breakdown (SPEC §8). */
@@ -291,6 +284,8 @@ export interface SendResponse {
   slug: string | null;
   archive_url: string | null;
   published: boolean;
+  /** Where this read stands among the changes to sends, to follow the send from with `GET /sends/feed`. */
+  cursor: string;
 }
 
 /** The buckets GET /sends/:id/deliveries filters by, exactly as the outcomes count them, plus "all" and "failures" (bounced, complained, or unsent). */

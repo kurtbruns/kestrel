@@ -1,6 +1,6 @@
 /**
  * Derive the in-flight reporting shape for `GET /sends/:id/progress`, and for each send
- * in `GET /sends/live` (SPEC §8, §12).
+ * in `GET /sends/feed` (SPEC §8, §12).
  *
  * Everything here is computed from the send row's denormalized counters (`sends.c_*`)
  * plus one cheap retry probe — no aggregate over the audience — so a poll is a
@@ -163,7 +163,7 @@ export function buildSendProgress(
   };
 }
 
-/** One send as `GET /sends/live` reports it: which send, and the same progress shape
+/** One send as `GET /sends/feed` reports it: which send, and the same progress shape
  *  `/progress` reports for it, so a page following it and its watch can't disagree. */
 export function buildLiveSend(
   send: SendSummary,

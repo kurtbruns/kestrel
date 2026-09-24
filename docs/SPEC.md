@@ -251,7 +251,7 @@ Topics and segmentation, letting people subscribe to some kinds of post and not 
 
 A small status surface, readable in the editor and through the API, answers the questions the publisher will actually have. Each answer is made of the record itself, never a separate summary that could drift from it.
 
-A send reads the same wherever it appears. Its phase (§12) and anything wrong with it are worked out once, by the app, from the record, and every place that lists or shows the send reports that one answer, so the list of sends and a send's own watch never disagree about it. And every change made to a send, whether the editor, Claude, or the app itself made it, takes its place in one order across all sends, removing a send included. A client can therefore tell whether anything changed since it last looked, including a change the other client made to a send it was not watching, rather than trusting a snapshot that only the changes it expected would update. What the clock changes rather than a write, such as a fire time passing, is not in that order: it follows from the send's own times, which the client already has.
+A send reads the same wherever it appears. Its phase (§12) and anything wrong with it are worked out once, by the app, from the record, and every place that lists or shows the send reports that one answer, so the list of sends and a send's own watch never disagree about it. And every change made to a send, whether the editor, Claude, or the app itself made it, takes its place in one order across all sends, removing a send included. A client can therefore tell whether anything changed since it last looked, including a change the other client made to a send it was not watching, rather than trusting a snapshot that only the changes it expected would update. What the clock changes rather than a write, such as a fire time passing or a send staying in flight too long, is not in that order, but a client asking what changed since it last looked is told of it all the same.
 
 ### What's scheduled, and when does it fire?
 
@@ -281,7 +281,9 @@ A send in flight too long, a send wedged on an ambiguous delivery (§12), a prov
 
 ### Does what I see keep up?
 
-On its own. Every place that shows a send tells the same story about it, and follows the send while it can change without anyone acting: once its fire time has passed, while it sends, and while its receipts settle. A change the sweep makes shows everywhere the send shows within seconds, a send that starts and finishes between two looks included, and a problem stays in view until it clears. A send far from its fire time changes only when someone acts, so the surface does not keep asking about it, and it stops following a settling send after about an hour; a receipt later than that is read when the record is next opened. Following is only reading: nothing the surface reads changes a send, and a send never waits for anyone to look.
+On its own. Every place that shows a send tells the same story about it and keeps up with every change to it, whoever or whatever made it: the sweep, the clock, the editor, or Claude. While a send can change without anyone acting (once its fire time has passed, while it sends, and while its receipts arrive), a change shows everywhere the send shows within seconds, a send that starts and finishes between two looks included, and a problem stays in view until it clears. Otherwise an open page still looks about once a minute, so a change the other client made, such as canceling a send scheduled for next week, or a receipt that lands long after dispatch, shows within a minute without a reload. A look that comes late misses nothing: it is told everything that changed since the last one. Following is only reading: nothing the surface reads changes a send, and a send never waits for anyone to look.
+
+Keeping up asks the app what changed since the client last looked, not what is live now. A snapshot of the sends that are moving would miss a change to one that is not, such as that cancel; and a question about the sends a client already knows to name would miss one the other client has just scheduled. It is its own question rather than a filter on the list of sends: the list answers one page of sends in the order the reader chose, while keeping up needs every send that changed, whatever page it falls on. How often to look is the app's answer too, not each client's, so the editor and Claude keep up the same way without each keeping a rule of its own.
 
 ### Does the publisher have to look?
 
@@ -471,7 +473,8 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Two subscriber tokens, one per job**, over one token doing both (§7).
 - **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§3, §10).
 - **The publisher is told of each event once**, over loud meaning only the status surface, and over a reminder repeated while a condition lasts (§8, §12).
-- **The status surface follows only what can change on its own**, over every page asking on a timer of its own (§8).
+- **Keeping up asks what changed since the last look, as a question of its own**, over a snapshot of what is live, and over a filter on the list of sends naming the ones to ask about (§8).
+- **The app says how often to look**, over each client keeping a pace of its own (§8).
 - **Preferences in the app, never secrets**, over one settings surface for both (§9).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11).

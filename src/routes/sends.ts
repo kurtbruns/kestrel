@@ -1,25 +1,24 @@
-/** Send status surface: list, detail, the live set pages follow, cancel. Authed. */
+/** Send status surface: list, detail, the feed pages follow, cancel. Authed. */
 
-import {
-  type DeliveryListResponse,
-  LIVE_IDS_MAX,
-  type LiveSend,
-  type LiveSendsResponse,
-  SETTLE_FOLLOW_MS,
-  type SendActionResponse,
-  type SendListResponse,
-  type SendResponse,
+import { decodeSendCursor, encodeSendCursor, type SendCursor } from "../../shared/cursor";
+import type {
+  DeliveryListResponse,
+  SendActionResponse,
+  SendFeedResponse,
+  SendListResponse,
+  SendResponse,
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { encodeSendCursor } from "../send/cursor";
-import { buildLiveSend, buildSendProgress, isStuck } from "../send/progress";
+import { readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
+import { buildLiveSend, buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { parseFutureFireAt } from "./schedule";
@@ -56,6 +55,10 @@ export async function list(c: RequestContext): Promise<Response> {
 }
 
 export async function get(c: RequestContext): Promise<Response> {
+  // The sequence and its time come first, so whatever the send shows is at or after its
+  // cursor, and a client following it from here misses nothing.
+  const now = Date.now();
+  const seq = await sends.currentSendSeq(c.env.DB);
   const send = await sends.getSend(c.env.DB, param(c, "id"));
   if (!send) {
     throw notFound("send");
@@ -79,6 +82,7 @@ export async function get(c: RequestContext): Promise<Response> {
     slug: post?.slug ?? null, // the archive slug — names the CSV export the same way the CSV endpoint does
     archive_url: post ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
+    cursor: encodeSendCursor({ seq, at: now }),
   };
   return json(body);
 }
@@ -101,41 +105,43 @@ export async function progress(c: RequestContext): Promise<Response> {
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
 }
 
-/** The send ids named in `ids` (comma-separated), deduplicated; a 400 naming the field past
- *  `LIVE_IDS_MAX`, since a follower names only what it last saw. */
-function parseLiveIds(raw: string | null): string[] {
-  const ids = [
-    ...new Set(
-      (raw ?? "")
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean),
-    ),
-  ];
-  if (ids.length > LIVE_IDS_MAX) {
-    throw badRequest(`ids names at most ${LIVE_IDS_MAX} sends`, { field: "ids" });
+/** The `since` cursor, or null when none is given; a 400 naming the field for one this
+ *  server did not issue. */
+function parseSince(raw: string | null): SendCursor | null {
+  if (raw === null) {
+    return null;
   }
-  return ids;
+  const cursor = decodeSendCursor(raw);
+  if (!cursor) {
+    throw badRequest("since is not a cursor from this API", { field: "since" });
+  }
+  return cursor;
 }
 
 /**
- * What a page follows to keep up with sends (SPEC §8): every send that can still change
- * on its own (due, sending, or settling within `SETTLE_FOLLOW_MS` of dispatch), each in the
- * `/progress` shape, the sends named in `ids` as they stand, and the soonest fire time still
- * ahead, so a follower knows when to look again. One read of send rows, never of the
- * delivery record, and reading it changes nothing.
+ * What a client follows to keep up with sends (SPEC §8): with `since`, every send that
+ * changed after that cursor, whatever its state, those the clock changed with no write
+ * included; without it, every send that can change on its own. Each is in the `/progress`
+ * shape, beside a new cursor and when to read again (`readAgainAt`). One read of send rows,
+ * never of the delivery record, and reading it changes nothing.
  */
-export async function live(c: RequestContext): Promise<Response> {
-  const ids = parseLiveIds(c.url.searchParams.get("ids"));
+export async function feed(c: RequestContext): Promise<Response> {
+  const since = parseSince(c.url.searchParams.get("since"));
+  // Taken before the read, so a threshold the clock crosses after it is still ahead of the
+  // cursor this read hands back.
   const now = Date.now();
-  const { rows, nextFireAt } = await sends.liveSends(c.env.DB, now, now - SETTLE_FOLLOW_MS, ids);
-  const following: LiveSend[] = [];
-  const named: LiveSend[] = [];
-  for (const { live: isLive, has_retries, ...row } of rows) {
-    const send = buildLiveSend(row, c.config.provider, has_retries === 1, now);
-    (isLive ? following : named).push(send);
-  }
-  const body: LiveSendsResponse = { now, sends: following, named, next_fire_at: nextFireAt };
+  const { rows, seq, pace } = await sends.sendFeed(c.env.DB, now, since, now - SETTLE_FOLLOW_MS, {
+    missedMs: MISSED_THRESHOLD_MS,
+    stuckMs: STUCK_THRESHOLD_MS,
+  });
+  const body: SendFeedResponse = {
+    now,
+    sends: rows.map(({ has_retries, ...row }) =>
+      buildLiveSend(row, c.config.provider, has_retries === 1, now),
+    ),
+    cursor: encodeSendCursor({ seq, at: now }),
+    read_again_at: readAgainAt(pace, now),
+  };
   return json(body);
 }
 

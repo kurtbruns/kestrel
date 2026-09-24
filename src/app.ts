@@ -18,11 +18,11 @@
  */
 
 import type { ReferenceResponse } from "../shared/reference";
-import { formatLead, LIVE_IDS_MAX, MIN_LEAD_FLOOR_MS, SETTLE_FOLLOW_MS } from "../shared/sends";
+import { formatLead, MIN_LEAD_FLOOR_MS, STUCK_THRESHOLD_MS } from "../shared/sends";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
-import { HALT_BACKOFF_MS } from "./lib/time";
+import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
@@ -38,6 +38,7 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
+import { SETTLE_FOLLOW_MS } from "./send/feed";
 
 // The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
 const JSON_BODY = ["application/json"];
@@ -540,18 +541,19 @@ export function createRouter({
       handler: sendRoutes.list,
     },
     {
-      // Before /sends/:id, which would otherwise take "live" as an id.
+      // Before /sends/:id, which would otherwise take "feed" as an id.
       method: "GET",
-      path: "/sends/live",
+      path: "/sends/feed",
       access: "admin",
       resource: "sends",
       summary:
-        "The sends that can still change on their own, each with its phase, counters, and attention flags, and when the next scheduled one comes due: what a client follows to keep up with sends without polling each one.",
-      description: `\`sends\` is every send that is due (still \`scheduled\`, its fire time passed, so the next sweep tick starts it), \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), soonest fire first. Each is the send's id, post, subject, and times beside the same shape \`GET /sends/:id/progress\` reports, read off the send's counters, never its delivery rows, so a send reads the same here as on its watch. \`next_fire_at\` is the soonest fire time among scheduled sends not yet due, and \`now\` the server's clock at the read: while nothing is live there is nothing to read again until then, since a send far from its fire time changes only when someone acts on it. Name sends in \`ids\` to have them reported under \`named\` whatever their state, which is how a follower learns where a send it saw has gone (complete, canceled, or moved to a later fire time). Reading it changes nothing.`,
+        "What changed among sends since a cursor, each send with its phase, counters, and attention flags, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
+      description: `With \`since\` (the \`cursor\` from \`GET /sends\`, \`GET /sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (\`attention.missed\`), one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`attention.stuck\`), and one whose lease ran out with recipients in flight (\`attention.wedged\`). Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt). Either way each send is its id, post, subject, and times beside the same shape \`GET /sends/:id/progress\` reports, read off the send's counters, never its delivery rows, so a send reads the same here as on its watch; soonest fire first. A send removed since the cursor (only a canceled one can be, with its post) is not reported. \`cursor\` is where this read stood, opaque, to pass as \`since\` next time. \`read_again_at\` is when to read again, by the server's clock (\`now\`): about 3 seconds while a send is due or sending; while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next scheduled fire time. A client that reads again then is never more than a few seconds behind a due or sending send, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a late receipt) by about a minute. Reading late or skipping a read loses nothing: the next read from the last cursor reports every send that changed in between. Reading it changes nothing.`,
       query: [
         {
-          name: "ids",
-          description: `Comma-separated send ids to report under \`named\` when they are not in \`sends\`; at most ${LIVE_IDS_MAX}.`,
+          name: "since",
+          description:
+            "The `cursor` of an earlier read of sends. Omit it for the sends that can change on their own. A value this API did not issue is a 400 naming the field.",
         },
       ],
       example: {
@@ -590,11 +592,11 @@ export function createRouter({
               },
             },
           ],
-          named: [],
-          next_fire_at: 1768554000000,
+          cursor: "2s.mk9x3a1s",
+          read_again_at: 1768467613000,
         },
       },
-      handler: sendRoutes.live,
+      handler: sendRoutes.feed,
     },
     {
       method: "GET",
@@ -602,7 +604,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent).",
+        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent). The response's `cursor` marks where this read stood among the changes to sends, to follow the send from with `GET /sends/feed`.",
       handler: sendRoutes.get,
     },
     {

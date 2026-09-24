@@ -1,11 +1,11 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
-import { decodeSendCursor, encodeSendCursor } from "../src/send/cursor";
 import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";

@@ -6,8 +6,9 @@
  * state changed afterward has a higher `rev`. `at` is the server's time of the read, for
  * what changes with the clock rather than with a write (a fire time passing, a send
  * becoming stuck, a lease running out), which no `rev` can record. The string is opaque to
- * clients, so its format is free to change; a cursor that does not parse is refused, never
- * guessed at.
+ * API clients, so its format is free to change; a cursor that does not parse is refused,
+ * never guessed at. It lives in `shared/` only so the editor, which ships with the server,
+ * can merge two cursors it holds (`earlierCursor`) without learning the format itself.
  */
 
 /** A read's position among the changes to sends. */
@@ -32,4 +33,18 @@ export function decodeSendCursor(raw: string): SendCursor | null {
   const seq = Number.parseInt(match[1], 36);
   const at = Number.parseInt(match[2], 36);
   return Number.isSafeInteger(seq) && Number.isSafeInteger(at) ? { seq, at } : null;
+}
+
+/**
+ * A cursor at or before both: asking what changed since it answers for each of them, and a
+ * send reported twice reads the same both times. One that does not parse gives way to the
+ * other.
+ */
+export function earlierCursor(a: string, b: string): string {
+  const x = decodeSendCursor(a);
+  const y = decodeSendCursor(b);
+  if (!x || !y) {
+    return x ? a : b;
+  }
+  return encodeSendCursor({ seq: Math.min(x.seq, y.seq), at: Math.min(x.at, y.at) });
 }
