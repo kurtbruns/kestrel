@@ -10,11 +10,14 @@ import type {
   SendView,
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
+import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { freeze } from "../src/send/schedule";
+import { tickEstimate } from "../src/send/view";
 import { adminAuth } from "./support/auth";
+import { viewOf } from "./support/view";
 
 // One `SendView` on every route (SPEC §8): the list, the send, the feed, and every action's
 // answer carry the same shape, with `rev` to tell two apart and a cursor to follow from; the
@@ -191,6 +194,125 @@ describe("one SendView on every route", () => {
     expect(paused.phase).toBe("backing-off");
     expect(paused.dispatch.rate_per_min).not.toBeNull();
     expect(paused.dispatch.eta_ms).toBeNull();
+  });
+});
+
+// The time to finish counts sweep ticks (SPEC §6, §8): a large send hands off a burst each
+// minute, so its finish is the minute of the last tick it needs, never an average rate
+// over the seconds since the last burst. The case is the one observed: 1,045 recipients at
+// about 400 a tick.
+describe("the time to finish, in ticks", () => {
+  const MIN = 60_000;
+  // A minute boundary well clear of the test's own clock, and the start tick's run just after it.
+  const T = Math.floor(Date.now() / MIN) * MIN - 10 * MIN;
+  const started = T + 400;
+  const TOTAL = 1045;
+
+  function row(done: number, over: Partial<SendRow> = {}): SendRow {
+    return {
+      id: "s",
+      post_id: "p",
+      status: "sending",
+      fire_at: T,
+      rendered_html: "",
+      rendered_text: "",
+      subject: "s",
+      recipient_count: TOTAL,
+      locked_until: null,
+      scheduled_at: T - 10 * MIN,
+      started_at: started,
+      completed_at: null,
+      audience_resolved_at: started,
+      remade_at: null,
+      tested_at: null,
+      halt_reason: null,
+      halt_cause: null,
+      halt_error: null,
+      halted_at: null,
+      halt_retries: 0,
+      halt_retry_at: null,
+      c_pending: TOTAL - done,
+      c_in_flight: 0,
+      c_accepted: done,
+      c_delivered: 0,
+      c_bounced: 0,
+      c_complained: 0,
+      c_skipped: 0,
+      c_unsent: 0,
+      rev: 0,
+      ...over,
+    };
+  }
+  const dispatchAt = (r: SendRow, now: number, hasRetries = false) =>
+    viewOf(r, "fake", hasRetries, now).dispatch;
+  const running = (now: number) => ({ locked_until: now + 5 * MIN });
+
+  it("between ticks after the first tick's 400, finishes on the tick two minutes on", () => {
+    const now = T + 16_000;
+    const d = dispatchAt(row(400), now);
+    // Two more ticks: the next minute's and the one after, which is the last.
+    expect(d.eta_ms).toBe(T + 2 * MIN + 5_000 - now);
+    expect(d.rate_per_min).toBe(400);
+  });
+
+  it("between ticks after 800 over two ticks, finishes on the next minute's tick", () => {
+    const now = T + MIN + 19_000;
+    const d = dispatchAt(row(800), now);
+    expect(d.eta_ms).toBe(T + 2 * MIN + 5_000 - now);
+    expect(d.rate_per_min).toBe(400);
+  });
+
+  it("takes this minute's tick as still to come just after the boundary", () => {
+    // The cron has fired but the tick has not yet taken the lease: 400 over one tick, and
+    // the next tick is this one.
+    const now = T + MIN + 500;
+    const d = dispatchAt(row(400), now);
+    expect(d.rate_per_min).toBe(400);
+    expect(d.eta_ms).toBe(T + 2 * MIN + 5_000 - now);
+  });
+
+  it("gives no time to finish or rate before the first tick has finished", () => {
+    const now = T + 8_000;
+    const d = dispatchAt(
+      row(250, { c_pending: TOTAL - 350, c_in_flight: 100, ...running(now) }),
+      now,
+    );
+    expect([d.rate_per_min, d.eta_ms]).toEqual([null, null]);
+  });
+
+  it("finishes within the running tick when the rest fits in it", () => {
+    // The third tick is running with the last 125 to go: it ends this tick, in seconds.
+    const now = T + 2 * MIN + 3_000;
+    const d = dispatchAt(row(920, running(now)), now);
+    expect(d.eta_ms).toBe(2_000);
+    expect(d.eta_ms).toBeLessThan(MIN);
+  });
+
+  it("while a later tick runs with more than it can carry, finishes on a tick ahead", () => {
+    // The second tick, part way: the rest needs the next minute's tick too.
+    const now = T + MIN + 5_000;
+    const d = dispatchAt(row(600, running(now)), now);
+    expect(d.eta_ms).toBe(T + 2 * MIN + 5_000 - now);
+  });
+
+  it("gives no time to finish while backing off or halted", () => {
+    const now = T + 16_000;
+    expect(dispatchAt(row(400), now, true).eta_ms).toBeNull();
+    const halted = row(400, {
+      halt_reason: "unavailable",
+      halt_error: "503",
+      halted_at: now,
+      halt_retry_at: now + MIN,
+    });
+    expect(viewOf(halted, "fake", false, now).phase).toBe("backing-off");
+    expect(dispatchAt(halted, now).eta_ms).toBeNull();
+  });
+
+  it("counts a send that fits one tick as finishing at once", () => {
+    expect(tickEstimate(started, 400, 400, false, T + 30_000)).toEqual({
+      perTick: 400,
+      finishAt: T + 30_000,
+    });
   });
 });
 
