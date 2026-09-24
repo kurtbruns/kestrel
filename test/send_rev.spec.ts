@@ -53,7 +53,7 @@ async function rev(id: string): Promise<number> {
 /** The sequence now, read the way the list reads it. */
 async function seq(): Promise<number> {
   const row = await env.DB.prepare(
-    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT value FROM send_rev_floor WHERE id = 1), 0)) AS value",
+    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT MAX(rev) FROM send_tombstones), 0)) AS value",
   ).first<{ value: number }>();
   return row!.value;
 }
@@ -218,7 +218,7 @@ const SOURCES = import.meta.glob("../src/**/*.ts", {
 });
 
 describe("every write to sends", () => {
-  it("stamps NEXT_REV, but for the lease renewal, and every delete raises the floor first", () => {
+  it("stamps NEXT_REV, but for the lease renewal, and every delete leaves a tombstone first", () => {
     // Any verb that writes a table, in any case, with or without a schema or brackets.
     const writes =
       /\b(UPDATE(?:\s+OR\s+\w+)?|(?:INSERT(?:\s+OR\s+\w+)?|REPLACE)\s+INTO|DELETE\s+FROM)\s+(?:main\.)?\[?sends\b\]?/gi;
@@ -239,9 +239,9 @@ describe("every write to sends", () => {
         const where = `${file}: ${statement.slice(0, 80)}`;
         const verb = (match[1] ?? "").toUpperCase();
         if (verb.startsWith("DELETE")) {
-          // The floor raise is the statement just before, in the same batch.
+          // The tombstone is the statement just before, in the same batch.
           expect(before.slice(-120), where).toMatch(
-            /raiseRevFloorStmt\(db\),\s*db\.prepare\(\s*["`]$/,
+            /tombstoneSendsStmt\(db, [^)]*\),\s*db\.prepare\(\s*["`]$/,
           );
         } else if (verb.startsWith("UPDATE")) {
           if (/^UPDATE sends SET locked_until = \? WHERE/.test(statement)) {

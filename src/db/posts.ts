@@ -5,7 +5,7 @@ import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import { newId } from "../lib/ids";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
 import { unwrap } from "../lib/unwrap";
-import { raiseRevFloorStmt } from "./sends";
+import { tombstoneSendsStmt } from "./sends";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
@@ -292,7 +292,7 @@ export async function deletePost(db: D1Database, id: string): Promise<void> {
         "DELETE FROM notifications WHERE send_id IN (SELECT id FROM sends WHERE post_id = ?)",
       )
       .bind(id),
-    raiseRevFloorStmt(db),
+    tombstoneSendsStmt(db, "post_id = ?", id),
     db.prepare("DELETE FROM sends WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM images WHERE post_id = ?").bind(id),
     db.prepare("DELETE FROM post_revisions WHERE post_id = ?").bind(id),

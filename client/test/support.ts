@@ -173,6 +173,7 @@ const MISSED_MS = 5 * 60_000;
  */
 export function sendServer(rows: SendSummary[] = []) {
   const sends = new Map<string, { row: SendSummary; extras: SendExtras }>();
+  const removed = new Map<string, number>();
   let seq = 0;
   const put = (row: SendSummary, extras: SendExtras = {}) => {
     seq += 1;
@@ -247,12 +248,27 @@ export function sendServer(rows: SendSummary[] = []) {
               cause: row.halt_cause,
               error: row.halt_error ?? "",
               since: row.halted_at ?? 0,
-              retry_at: row.halt_retry_at ?? 0,
+              retry_at: row.halt_retry_at,
             }
           : null,
       },
       attention,
+      next_change_at: nextChange(s, now),
     };
+  };
+  // When a send can next change with no one acting, by the Worker's rule in outline: now
+  // while due short of the tolerance or sending with nothing to wait for; a halted send at
+  // its retry (less the sweep's half-tick of slack); a scheduled one at its fire time.
+  const nextChange = (s: { row: SendSummary; extras: SendExtras }, now: number) => {
+    const { row } = s;
+    const { attention } = derive(s, now);
+    if (row.status === "scheduled") {
+      return row.fire_at > now ? row.fire_at : attention.missed ? null : now;
+    }
+    if (row.status !== "sending" || attention.wedged) {
+      return null;
+    }
+    return row.halt_retry_at === null ? now : Math.max(now, row.halt_retry_at - 30_000);
   };
   const byFire = (dir: 1 | -1) => (a: { row: SendSummary }, b: { row: SendSummary }) =>
     dir * (a.row.fire_at - b.row.fire_at);
@@ -279,21 +295,20 @@ export function sendServer(rows: SendSummary[] = []) {
           const { phase } = derive(s, now);
           return phase === "due" || s.row.status === "sending" || phase === "settling";
         });
-        const phases = all.map((s) => derive(s, now).phase);
-        // A missed send moves nothing until the sweep runs, so only one short of the
-        // tolerance quickens the pace, as on the Worker.
-        const active = all.some(
-          (s, i) =>
-            (phases[i] === "due" && !derive(s, now).attention.missed) || s.row.status === "sending",
-        );
-        const settling = phases.includes("settling");
-        const next = all.find((s) => s.row.status === "scheduled" && s.row.fire_at > now);
-        const wait = active || settling ? 3000 : 60_000;
+        const changes = all.map((s) => nextChange(s, now));
+        const moving = changes.some((at) => at !== null && at <= now);
+        const settling = all.some((s) => derive(s, now).phase === "settling");
+        const ahead = changes.filter((at): at is number => at !== null && at > now);
+        const wait = moving || settling ? 3000 : 60_000;
         return {
           now,
           sends: reported.map((s) => live(s, now)),
+          removed: since
+            ? [...removed].filter(([, rev]) => rev > since.seq).map(([id, rev]) => ({ id, rev }))
+            : [],
           cursor: cursor(),
-          read_again_at: Math.min(now + wait, next ? next.row.fire_at + 1000 : Infinity),
+          more: false,
+          read_again_at: Math.min(now + wait, ahead.length ? Math.min(...ahead) + 1000 : Infinity),
         };
       },
     },
@@ -327,6 +342,12 @@ export function sendServer(rows: SendSummary[] = []) {
         throw new Error(`no send ${id}`);
       }
       put({ ...s.row, ...over }, extras);
+    },
+    /** Delete a send with its post: gone, and reported as removed after any earlier cursor. */
+    remove(id: string) {
+      seq += 1;
+      sends.delete(id);
+      removed.set(id, seq);
     },
   };
 }

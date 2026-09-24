@@ -49,6 +49,27 @@ export interface SendsUpdate {
   sends: LiveSend[];
   /** Those whose stage moved, a send the follower had not seen included. */
   changes: StageChange[];
+  /** The ids of sends removed since (deleted with their post). */
+  removed: string[];
+}
+
+/**
+ * What a page does with what the layer reads. `stale` is the server saying the page's
+ * cursor is ahead of its database (reset or restored since): nothing after it will ever be
+ * reported, so the layer stops following for every page, and each re-reads its own list or
+ * send and follows again from that read.
+ */
+export interface SendsFollower {
+  update(update: SendsUpdate): void;
+  stale(): void;
+}
+
+/** What a page following one send does with what the layer reads: `update` for each read
+ *  that changed it, `removed` once it is deleted, `stale` as for `SendsFollower`. */
+export interface SendFollower {
+  update(send: LiveSend, change: StageChange | null): void;
+  removed(): void;
+  stale(): void;
 }
 
 /** Where a page's own read of sends (`GET /sends`) stood: its cursor, and the rows it painted. */
@@ -72,6 +93,8 @@ const RETRY_MAX_MS = 60_000;
 interface Follower {
   /** Take a read it was part of. */
   take(res: SendFeedResponse): void;
+  /** Its cursor is ahead of the database: it has been dropped, and reads again. */
+  stale(): void;
 }
 
 const followers = new Set<Follower>();
@@ -152,6 +175,19 @@ function read(): void {
       }
       reading = null;
       readAgain = false;
+      if (err instanceof ApiError && err.code === "cursor_ahead") {
+        // The database is behind every cursor the layer holds (a reset or a restore): no
+        // read from them would ever report anything. Every page reads its own sends again
+        // and follows from that read.
+        const dropped = [...followers];
+        for (const f of dropped) {
+          leave(f);
+        }
+        for (const f of dropped) {
+          safely(() => f.stale());
+        }
+        return;
+      }
       if (err instanceof ApiError && err.status === 400) {
         // A cursor this server no longer reads (one from before a deploy changed its
         // format): start again from what can change on its own.
@@ -222,21 +258,18 @@ function leave(f: Follower): void {
 /**
  * Follow every send from the page's own list read, for the life of `signal`. The first
  * feed read asks from that read's cursor, so nothing that changed between the two is
- * missed. `onUpdate` gets each later read that found a change, with the stage changes
- * since the page's read (a send it did not list reads as first seen).
+ * missed. `follower.update` gets each later read that found a change, with the stage
+ * changes since the page's read (a send it did not list reads as first seen) and the sends
+ * removed.
  */
-export function followSends(
-  from: ListRead,
-  onUpdate: (update: SendsUpdate) => void,
-  signal: AbortSignal,
-): void {
+export function followSends(from: ListRead, follower: SendsFollower, signal: AbortSignal): void {
   const seen = new Map<string, SendStage>(
     from.sends.map((s) => [s.id, stageOf({ state: s.status, phase: s.phase })]),
   );
   join(
     {
       take(res) {
-        if (!res.sends.length) {
+        if (!res.sends.length && !res.removed.length) {
           return;
         }
         const changes: StageChange[] = [];
@@ -248,8 +281,13 @@ export function followSends(
           }
           seen.set(send.id, to);
         }
-        safely(() => onUpdate({ sends: res.sends, changes }));
+        const removed = res.removed.map((r) => r.id);
+        for (const id of removed) {
+          seen.delete(id);
+        }
+        safely(() => follower.update({ sends: res.sends, changes, removed }));
       },
+      stale: () => follower.stale(),
     },
     from.cursor,
     signal,
@@ -258,19 +296,19 @@ export function followSends(
 
 /**
  * Follow one send from the page's own read of it, for the life of `signal`, whatever its
- * state. `onUpdate` gets the send from each later read that found it changed, with its
- * stage change when it moved.
+ * state. `follower.update` gets the send from each later read that found it changed, with
+ * its stage change when it moved; `follower.removed` is told once it is deleted.
  */
-export function followSend(
-  from: SendRead,
-  onUpdate: (send: LiveSend, change: StageChange | null) => void,
-  signal: AbortSignal,
-): void {
+export function followSend(from: SendRead, follower: SendFollower, signal: AbortSignal): void {
   const id = from.send.id;
   let seen: SendStage = stageOf({ state: from.send.status, phase: from.progress.phase });
   join(
     {
       take(res) {
+        if (res.removed.some((r) => r.id === id)) {
+          safely(() => follower.removed());
+          return;
+        }
         const send = res.sends.find((s) => s.id === id);
         if (!send) {
           return;
@@ -278,8 +316,9 @@ export function followSend(
         const to = stageOf(send);
         const change = to !== seen ? { send, from: seen, to } : null;
         seen = to;
-        safely(() => onUpdate(send, change));
+        safely(() => follower.update(send, change));
       },
+      stale: () => follower.stale(),
     },
     from.cursor,
     signal,

@@ -519,11 +519,15 @@ describe("dashboard", () => {
     expect($(".health.red").textContent).toBe(
       "⚠️Kinglets has 1 ambiguous delivery awaiting a decision; resolve it on its page.",
     );
-    await vi.advanceTimersByTimeAsync(6000);
+    // A wedged send moves only when someone resolves it: the layer reads at the idle pace,
+    // not every few seconds, and the line stays.
+    const reads = feedReads(fake).length;
+    await vi.advanceTimersByTimeAsync(50_000);
+    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(1);
     expect($(".health.red a").getAttribute("href")).toBe("#/sent/w1");
-    // Resolve, on the send's page.
+    // Resolve, on the send's page (another tab): shown within the minute.
     srv.edit("w1", { status: "sent", c_in_flight: 0, c_unsent: 1, completed_at: Date.now() });
-    await vi.advanceTimersByTimeAsync(3000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(document.querySelector(".health")).toBeNull();
     expect($("#dashSent tr[data-send='w1'] .badge").textContent).toBe("sent");
   });

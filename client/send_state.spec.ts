@@ -6,6 +6,7 @@ import {
   followSends,
   type ListRead,
   readSendsNow,
+  type SendsFollower,
   type SendsUpdate,
   type StageChange,
   stageOf,
@@ -44,6 +45,7 @@ function live(
     delivery: { confirmed: 0, percent_of_accepted: 0 },
     provider: { name: "fake", halt: null },
     attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
+    next_change_at: null,
     ...over,
   };
 }
@@ -57,6 +59,7 @@ function live(
 function server() {
   const state = {
     sends: new Map<string, { send: LiveSend; rev: number }>(),
+    removed: new Map<string, number>(),
     seq: 0,
     pace: 60_000,
     skew: 0,
@@ -68,6 +71,18 @@ function server() {
   const write = (send: LiveSend) => {
     state.seq += 1;
     state.sends.set(send.id, { send, rev: state.seq });
+  };
+  /** A send deleted with its post: gone, with a tombstone at the next number. */
+  const remove = (id: string) => {
+    state.seq += 1;
+    state.sends.delete(id);
+    state.removed.set(id, state.seq);
+  };
+  /** The database reset: every send gone and the sequence back to zero. */
+  const reset = () => {
+    state.sends.clear();
+    state.removed.clear();
+    state.seq = 0;
   };
   const fake = fakeApi([
     {
@@ -82,6 +97,9 @@ function server() {
         if (raw !== null && !since) {
           return jsonResponse({ error: "bad_request", field: "since" }, 400);
         }
+        if (since && since.seq > state.seq) {
+          return jsonResponse({ error: "cursor_ahead", field: "since" }, 409);
+        }
         const now = Date.now() + state.skew;
         const all = [...state.sends.values()];
         const body: SendFeedResponse = {
@@ -90,7 +108,13 @@ function server() {
             ? all.filter((s) => s.rev > since.seq)
             : all.filter((s) => ["due", "sending", "sent"].includes(stageOf(s.send)))
           ).map((s) => s.send),
+          removed: since
+            ? [...state.removed]
+                .filter(([, rev]) => rev > since.seq)
+                .map(([id, rev]) => ({ id, rev }))
+            : [],
           cursor: cursorNow(),
+          more: false,
           read_again_at: now + state.pace,
         };
         return body;
@@ -107,13 +131,19 @@ function server() {
       phase: send.phase,
     })),
   });
-  return { state, fake, reads, write, list, cursorNow };
+  return { state, fake, reads, write, remove, reset, list, cursorNow };
 }
 
 function setHidden(hidden: boolean): void {
   Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
   document.dispatchEvent(new Event("visibilitychange"));
 }
+
+/** A follower of every send that only takes updates. */
+const on = (update: (u: SendsUpdate) => void = () => {}): SendsFollower => ({
+  update,
+  stale: () => {},
+});
 
 const moves = (changes: StageChange[]) => changes.map((c) => `${c.send.id}:${c.from}>${c.to}`);
 
@@ -160,7 +190,11 @@ describe("the send-state layer", () => {
     const from = srv.list();
     srv.write(live("x", "canceled", "canceled")); // lands after the list read
     const updates: SendsUpdate[] = [];
-    followSends(from, (u) => updates.push(u), page().signal);
+    followSends(
+      from,
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()[0]?.url.searchParams.get("since")).toBe(from.cursor);
     expect(moves(updates.flatMap((u) => u.changes))).toEqual(["x:scheduled>canceled"]);
@@ -170,7 +204,7 @@ describe("the send-state layer", () => {
   it("reads again when the server says, by the server's clock", async () => {
     srv.state.skew = 3_600_000; // the server's clock an hour ahead of the page's
     srv.state.pace = 3000;
-    followSends(srv.list(), () => {}, page().signal);
+    followSends(srv.list(), on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(3_000);
@@ -186,7 +220,11 @@ describe("the send-state layer", () => {
 
   it("reads about once a minute while nothing moves, and says nothing when nothing changed", async () => {
     const updates: SendsUpdate[] = [];
-    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(srv.reads()).toHaveLength(11); // the first, then one a minute
     expect(updates).toEqual([]);
@@ -195,7 +233,11 @@ describe("the send-state layer", () => {
   it("announces the other client's cancel of a far-scheduled send within one idle read", async () => {
     srv.write(live("far", "scheduled", "scheduled", { fire_at: NOW + 3 * 86_400_000 }));
     const updates: SendsUpdate[] = [];
-    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(10_000);
     srv.write(live("far", "canceled", "canceled")); // Claude, through the API
     await vi.advanceTimersByTimeAsync(50_000);
@@ -206,7 +248,11 @@ describe("the send-state layer", () => {
     srv.write(live("x", "scheduled", "scheduled", { fire_at: NOW + 60_000 }));
     srv.state.pace = 3000;
     const updates: SendsUpdate[] = [];
-    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(0);
     srv.write(live("x", "scheduled", "due"));
     await vi.advanceTimersByTimeAsync(3_000);
@@ -225,7 +271,7 @@ describe("the send-state layer", () => {
 
   it("pauses while the tab is hidden and reads at once when it is shown again", async () => {
     srv.state.pace = 3000;
-    followSends(srv.list(), () => {}, page().signal);
+    followSends(srv.list(), on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     setHidden(true);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -239,7 +285,7 @@ describe("the send-state layer", () => {
 
   it("gives a page opened in a hidden tab its first read, then waits to be shown", async () => {
     setHidden(true);
-    followSends(srv.list(), () => {}, page().signal);
+    followSends(srv.list(), on(), page().signal);
     await vi.advanceTimersByTimeAsync(10 * 60_000);
     expect(srv.reads()).toHaveLength(1);
   });
@@ -253,14 +299,14 @@ describe("the send-state layer", () => {
     const a = page();
     const b = page();
     const seen: string[] = [];
-    followSends(newer, () => {}, a.signal);
+    followSends(newer, on(), a.signal);
     followSend(
       {
         cursor: older.cursor,
         send: { id: "x", status: "sending" },
         progress: { phase: "progressing" },
       },
-      (s) => seen.push(`${s.total}`),
+      { update: (s) => seen.push(`${s.total}`), removed: () => {}, stale: () => {} },
       b.signal,
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -288,7 +334,11 @@ describe("the send-state layer", () => {
         send: { id: "x", status: "sending" },
         progress: { phase: "progressing" },
       },
-      (s, c) => seen.push(`${s.counts.accepted}${c ? ` ${c.from}>${c.to}` : ""}`),
+      {
+        update: (s, c) => seen.push(`${s.counts.accepted}${c ? ` ${c.from}>${c.to}` : ""}`),
+        removed: () => seen.push("removed"),
+        stale: () => {},
+      },
       page().signal,
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -308,7 +358,11 @@ describe("the send-state layer", () => {
     srv.state.pace = 3000;
     srv.write(live("x", "sending", "progressing"));
     const updates: SendsUpdate[] = [];
-    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(0);
     srv.state.fail = 500;
     srv.write(live("x", "sent", "settling"));
@@ -328,7 +382,7 @@ describe("the send-state layer", () => {
     const updates: SendsUpdate[] = [];
     followSends(
       { cursor: "from-an-older-deploy", sends: [] },
-      (u) => updates.push(u),
+      on((u) => updates.push(u)),
       page().signal,
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -339,8 +393,69 @@ describe("the send-state layer", () => {
     expect(moves(updates.flatMap((u) => u.changes))).toEqual(["x:null>sending"]);
   });
 
+  it("tells a page following every send which sends were removed", async () => {
+    srv.write(live("x", "canceled", "canceled"));
+    const updates: SendsUpdate[] = [];
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    srv.remove("x"); // its post deleted
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(updates.map((u) => u.removed)).toEqual([["x"]]);
+  });
+
+  it("tells a page following one send that it was removed", async () => {
+    srv.write(live("x", "canceled", "canceled"));
+    const seen: string[] = [];
+    followSend(
+      {
+        cursor: srv.cursorNow(),
+        send: { id: "x", status: "canceled" },
+        progress: { phase: "canceled" },
+      },
+      { update: () => seen.push("update"), removed: () => seen.push("removed"), stale: () => {} },
+      page().signal,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    srv.remove("x");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(seen).toEqual(["removed"]);
+  });
+
+  it("hands every page back to its own read when the server says the cursor is ahead of its database", async () => {
+    srv.write(live("x", "sending", "progressing"));
+    srv.write(live("y", "scheduled", "scheduled"));
+    const stale: string[] = [];
+    followSends(srv.list(), { update: () => {}, stale: () => stale.push("list") }, page().signal);
+    followSend(
+      {
+        cursor: srv.cursorNow(),
+        send: { id: "x", status: "sending" },
+        progress: { phase: "progressing" },
+      },
+      { update: () => {}, removed: () => {}, stale: () => stale.push("send") },
+      page().signal,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(srv.reads()).toHaveLength(1);
+    srv.reset(); // a local reset, or a restore
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(srv.reads()).toHaveLength(2);
+    expect(stale.sort()).toEqual(["list", "send"]);
+    // Dropped: nothing reads again until a page follows anew from a fresh read.
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(srv.reads()).toHaveLength(2);
+    followSends(srv.list(), on(), page().signal);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(srv.reads()).toHaveLength(3);
+    expect(srv.reads()[2]?.url.searchParams.get("since")).toBe(srv.list().cursor);
+  });
+
   it("reads at once when a page has just acted", async () => {
-    followSends(srv.list(), () => {}, page().signal);
+    followSends(srv.list(), on(), page().signal);
     await vi.advanceTimersByTimeAsync(2_000);
     readSendsNow(); // a cancel, a move, a Resolve
     await vi.advanceTimersByTimeAsync(0);
@@ -349,7 +464,7 @@ describe("the send-state layer", () => {
 
   it("serves a page that joins while a read is out with a read of its own", async () => {
     srv.state.pace = 3000;
-    followSends(srv.list(), () => {}, page().signal);
+    followSends(srv.list(), on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     let release = () => {};
     srv.state.hold = new Promise((r) => {
@@ -358,7 +473,7 @@ describe("the send-state layer", () => {
     await vi.advanceTimersByTimeAsync(3_000); // the next read goes out, and is held
     expect(srv.reads()).toHaveLength(2);
     const joinedAt = srv.list();
-    followSends(joinedAt, () => {}, page().signal);
+    followSends(joinedAt, on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(2); // no second read while one is out
     srv.state.hold = null;

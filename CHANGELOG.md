@@ -10,7 +10,15 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Breaking
+
+- `GET /sends/:id/deliveries` now refuses an unknown `view` with a 400 naming the field, instead of quietly showing failures.
+- A provider halt's `since` and `retry_at` (under `provider.halt` on a send's progress and in the feed) are null when the record lacks them, instead of reading as the moment of the request.
+
 ### Added
+
+- `GET /sends/feed` now reports a send deleted with its post under `removed`, so a client drops it instead of keeping a row for a send that is gone (SPEC §8); takes `limit` (default 100, at most 500), and says `more` when a read stopped short, to be read again at once; and gives each send a `next_change_at`, the earliest it can change with no one acting. This release adds a database migration: run `npm run migrate:remote -- --env <name>` before deploying, and `npm run migrate:local` for local dev.
+- `GET /sends/feed` answers a cursor ahead of the database (after a local reset or a restore) with a 409 `cursor_ahead`, and the dashboard and the Sent list then read their sends again, where before such a cursor silently reported nothing ever again.
 
 - `GET /sends/feed?since=<cursor>` reports every send that changed since a read of sends, whichever client changed it and whether a write or the clock did (turned due, missed, in flight too long, wedged), each with its phase, counts, and any problem, plus a new cursor and `read_again_at`, when to read again; without `since` it lists the sends that can change on their own. `GET /sends/:id` now carries a `cursor` too, so a client can follow one send from its own read without polling it. A cursor reads `<seq>.<at>` (the change sequence and the server's time at the read), a documented format, so a client holding cursors from several reads can compare them and follow everything from the earliest in one read (SPEC §8).
 - `npm run simulate-send -- --in 90s` schedules a demo send on the local dev server through the API (loading the demo first if the database is empty) and prints the link to watch it; it refuses a time inside the minimum lead and says why.
@@ -20,6 +28,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- An open page no longer reads every 3 seconds while a send waits on something only a person or a retry can change (the provider refusing the account, a wedged send awaiting Resolve, a provider outage between retries): it reads at the send's next retry, or about once a minute, and a fix still shows within the minute. `read_again_at` is advisory, and the reference now says so (SPEC §8).
 - A scheduled send whose fire time has passed now reports the phase `due` until the sweep starts it, instead of `scheduled` (SPEC §12).
 - Locally, simulated delivery receipts now arrive every couple of seconds on their own, as a provider's webhooks would, instead of at the minute's sweep or while a send's page is open.
 - The Worker now logs one JSON line per event, following each send from firing through its batches, halts, and receipts to completion, so Workers Logs can filter a send's whole timeline by `sendId`, and errors by `level`. No line carries a subscriber's address or token. The events and their levels are listed in SPEC §12; they replace the old tags (`MISSED_FIRE`, `STUCK_SEND`, `AMBIGUOUS_DELIVERY`, `PROVIDER_REFUSED`, `NOTIFY_FAILED`, `SETTINGS_CORRUPT`, and the rest), so update any saved log search that used them.
@@ -28,6 +37,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - Two delivery receipts for the same message arriving together (an SES Delivery and a Complaint) no longer count the recipient twice, which could leave a send reading Complete while a receipt was outstanding, or Settling forever, with counts that disagreed with its record. A Resolve that lands beside a receipt no longer miscounts either, and a sent send's counts are checked against its record when its last receipt arrives (SPEC §8).
+- `GET /sends/:id` no longer links an archive page (`archive_url`) before the send is sent, when the link would 404.
 - The dashboard and the Sent page now keep up with every send without a reload: a send that starts and finishes between two looks moves straight to the Sent table, which before stayed on "Sending now…" until you reloaded, and a settling send's Delivered count follows its receipts. A cancel, move, re-make, or new schedule made by Claude or in another tab shows within about a minute, and with nothing moving the pages look about once a minute.
 - A scheduled send's card on the dashboard and the Sent page no longer says "Sending now…" once its fire time passes: it reads "Preparing to send…" until the send starts, when the in-progress card takes over, and "Missed its fire time · N min late" in red if the send is past the server's five-minute tolerance.
 - The dashboard now keeps a refused, wedged, or long-running send in view, live, until it clears, instead of drawing its warning once at load and then dropping the send; the wedged line links to the send's page, where Resolve is. A scheduled send is flagged missed only past the server's five-minute tolerance, not the moment its fire time passes, and the Sent page's in-progress card says when a send has been in flight too long.

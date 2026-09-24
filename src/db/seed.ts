@@ -7,7 +7,7 @@
  * the normal `db/` write path. Only the fake-provider seed route calls them.
  */
 import type { PostStatus } from "./posts";
-import { NEXT_REV, raiseRevFloorStmt, type SendStatus } from "./sends";
+import { NEXT_REV, type SendStatus, tombstoneSendsStmt } from "./sends";
 import type { SubscriberStatus } from "./subscribers";
 
 export interface SeedSubscriber {
@@ -111,7 +111,7 @@ export async function resetAll(db: D1Database): Promise<void> {
   await db.batch([
     db.prepare("DELETE FROM deliveries"),
     db.prepare("DELETE FROM notifications"),
-    raiseRevFloorStmt(db),
+    tombstoneSendsStmt(db, "1"),
     db.prepare("DELETE FROM sends"),
     db.prepare("DELETE FROM images"),
     db.prepare("DELETE FROM post_revisions"),

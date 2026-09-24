@@ -354,14 +354,21 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const inQueue = (st: SendStage | null) => st === "scheduled" || st === "due";
   followSends(
     first,
-    (u: SendsUpdate) => {
-      for (const s of u.sends) {
-        reported.set(s.id, s);
-      }
-      paintLive();
-      if (u.changes.length || u.sends.some((s) => inQueue(stageOf(s)))) {
-        readSends();
-      }
+    {
+      update: (u: SendsUpdate) => {
+        for (const s of u.sends) {
+          reported.set(s.id, s);
+        }
+        for (const id of u.removed) {
+          reported.delete(id);
+        }
+        paintLive();
+        if (u.changes.length || u.removed.length || u.sends.some((s) => inQueue(stageOf(s)))) {
+          readSends();
+        }
+      },
+      // The database is behind the page's read (a reset or a restore): read it all again.
+      stale: remount,
     },
     signal,
   );

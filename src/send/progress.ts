@@ -15,6 +15,7 @@
 import type { LiveSend, SendHalt, SendPhase, SendProgress, SendSummary } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { nextChangeAt } from "./feed";
 
 /** In flight too long (SPEC §12): still `sending` past the stuck threshold. The one
  *  rule behind `attention.stuck` and the send list's `stuck`. */
@@ -145,8 +146,8 @@ export function buildSendProgress(
           reason: send.halt_reason,
           cause: send.halt_cause,
           error: send.halt_error ?? "",
-          since: send.halted_at ?? now,
-          retry_at: send.halt_retry_at ?? now,
+          since: send.halted_at,
+          retry_at: send.halt_retry_at,
         }
       : null;
   const refused = halt?.reason === "account";
@@ -160,6 +161,7 @@ export function buildSendProgress(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: providerName, halt },
     attention: { wedged, wedged_count: wedged ? counts.in_flight : 0, stuck, missed, refused },
+    next_change_at: nextChangeAt(send, now),
   };
 }
 
