@@ -480,7 +480,7 @@ describe("editor view", () => {
     expect(reads()).toHaveLength(1);
   });
 
-  it("counts the banner down on the clock, then says the send is being prepared and that the page will switch", async () => {
+  it("counts the banner down on the clock, then says in the same line that the send is being prepared", async () => {
     const linked = scheduledPost(Date.now() + 65_000);
     await open(linked.routes);
     const when = () => $("#schedWhen").textContent;
@@ -489,8 +489,10 @@ describe("editor view", () => {
     expect(when()).toMatch(/Sends in 1m 04s/);
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
     await vi.advanceTimersByTimeAsync(64_000);
-    expect(when()).toBe("Preparing to send… This page switches to the live send when it starts.");
-    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect(when()).toMatch(/^Scheduled for .+ · Preparing to send…$/);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -917,13 +919,16 @@ describe("editor view", () => {
     expect(puts()).toHaveLength(0);
   });
 
-  it("stops offering Cancel and Reschedule at the fire time, when the review window closes", async () => {
+  it("disables Cancel and Reschedule in place at the fire time, when the review window closes", async () => {
     await open(scheduledPost(Date.now() + 5_000).routes);
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
     expect($("#cancelSchedule").textContent).toBe("Cancel");
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(false);
     await vi.advanceTimersByTimeAsync(6_000);
-    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
-    expect($("#schedWhen").textContent).toMatch(/^Preparing to send…/);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
+    expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);
   });
 
   it("switches to Preparing to send at the fire time itself, on the page's clock, with no read", async () => {
@@ -934,18 +939,18 @@ describe("editor view", () => {
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
     expect($("#schedWhen").textContent).toMatch(/Sends in 0s/);
     await vi.advanceTimersByTimeAsync(1);
-    expect($("#schedWhen").textContent).toBe(
-      "Preparing to send… This page switches to the live send when it starts.",
-    );
-    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect($("#schedWhen").textContent).toMatch(/^Scheduled for .+ · Preparing to send…$/);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect(fake.calls).toHaveLength(calls); // nothing was read to get here
   });
 
-  it("keeps Cancel and Reschedule gone after the fire time when a read still lists them", async () => {
+  it("keeps Cancel and Reschedule disabled after the fire time when a read still lists them", async () => {
     const linked = scheduledPost(Date.now() + 5_000);
     await open(linked.routes);
     await vi.advanceTimersByTimeAsync(5_000);
-    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     // A read whose clock is behind the page's: still scheduled, still offering both.
     linked.sends.edit(
       "s1",
@@ -960,8 +965,9 @@ describe("editor view", () => {
     );
     await vi.advanceTimersByTimeAsync(3_000);
     expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(true);
-    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
-    expect($("#schedWhen").textContent).toMatch(/^Preparing to send…/);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
+    expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);
   });
 
   it("offers only the window controls the server lists for the send", async () => {

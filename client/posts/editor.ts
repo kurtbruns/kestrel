@@ -792,15 +792,17 @@ export async function renderEditor(
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
     // Before the fire time it counts down on the clock. From then the server refuses Cancel
-    // and Reschedule (SPEC §6), so the banner stops offering them and says the send is being
-    // prepared, and that this page moves to the live send when it starts. Past the server's
-    // missed tolerance it says how late the send is, from the server's condition.
+    // and Reschedule (SPEC §6), so the same line reads "Preparing to send…" in place of the
+    // countdown and the buttons stay where they are, disabled: the page hands off to the
+    // live send within seconds, so nothing needs to move. Past the server's missed
+    // tolerance it says how late the send is, from the server's condition.
     // The switch happens on this page's clock, at the fire time itself (a tick of its own
-    // when the fire time is inside the coming second), with no read needed. Otherwise the
-    // buttons are the server's to offer (`actions`): the clock only ever takes them away, so a
-    // read that answered before the fire time cannot bring them back after it.
+    // when the fire time is inside the coming second), with no read needed. Before it the
+    // buttons are the server's to offer (`actions`); from it the clock only disables what
+    // was offered, so a read that answered before the fire time cannot bring them back.
     let painted = "";
     let armed = 0; // the fire time an exact tick is set for, so it is set once
+    let seenOpen = false; // whether this page showed the window open, and so its buttons
     const reschedBtn = $<HTMLButtonElement>("#rescheduleSchedule");
     const cancelBtn = $<HTMLButtonElement>("#cancelSchedule");
     const offers = (name: SendAction["name"]) =>
@@ -808,9 +810,18 @@ export async function renderEditor(
     const paintBanner = () => {
       const now = Date.now();
       const due = current.phase === "due" || now >= current.fire_at;
-      reschedBtn.hidden = !offers("reschedule");
-      cancelBtn.hidden = !offers("cancel");
-      controls.hidden = due || (reschedBtn.hidden && cancelBtn.hidden);
+      if (!due) {
+        seenOpen = true;
+        reschedBtn.hidden = !offers("reschedule");
+        cancelBtn.hidden = !offers("cancel");
+      } else if (!seenOpen) {
+        // Opened after the window closed: there is nothing to show disabled.
+        reschedBtn.hidden = true;
+        cancelBtn.hidden = true;
+      }
+      reschedBtn.disabled = due;
+      cancelBtn.disabled = due;
+      controls.hidden = reschedBtn.hidden && cancelBtn.hidden;
       const markup = scheduledBannerHtml(current, due);
       const key = String(markup);
       if (key !== painted) {
@@ -1215,16 +1226,16 @@ function movedOn(send: SendView, remount: () => void): boolean {
 
 /**
  * The scheduled banner's words for where its send stands (DESIGN §9), in the cards' own
- * formats: the fire time and a countdown while the window is open; from the fire time,
- * "Preparing to send…" and that this page switches to the live send when it starts; past
- * the server's missed tolerance, how late it is, in the danger tone.
+ * formats: the fire time and a countdown while the window is open; from the fire time, the
+ * same line with "Preparing to send…" in place of the countdown; past the server's missed
+ * tolerance, how late it is, in the danger tone.
  */
 function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
   if (has(send, "missed")) {
     return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>`;
   }
   if (due) {
-    return html`<strong>${untilStr(send.fire_at, true)}</strong> This page switches to the live send when it starts.`;
+    return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at, true)}</span>`;
   }
   return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span> · cancelable until then.`;
 }
