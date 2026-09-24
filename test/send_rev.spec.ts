@@ -1,11 +1,11 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
-import { decodeSendCursor, encodeSendCursor } from "../src/send/cursor";
 import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
@@ -265,10 +265,10 @@ describe("every write to sends", () => {
 });
 
 describe("GET /sends", () => {
-  it("returns an opaque cursor at the sequence it read, which a later change passes", async () => {
+  it("returns a cursor, `<seq>.<at>` in decimal, at the sequence it read, which a later change passes", async () => {
     const a = await frozenSend(Date.now() + 3_600_000);
     const body = await listSends();
-    expect(typeof body.cursor).toBe("string");
+    expect(body.cursor).toMatch(/^\d+\.\d+$/); // the documented format any client may read
     const cursor = decodeSendCursor(body.cursor);
     expect(cursor).not.toBeNull();
     expect(cursor!.seq).toBe(await seq());
@@ -346,7 +346,19 @@ describe("the send cursor", () => {
     const cursor = { seq: 12345, at: 1_790_000_000_000 };
     expect(decodeSendCursor(encodeSendCursor(cursor))).toEqual(cursor);
     expect(decodeSendCursor(encodeSendCursor({ seq: 0, at: 0 }))).toEqual({ seq: 0, at: 0 });
-    for (const bad of ["", "12", "a.b.c", "-1.5", "1.", ".1", "ZZ.1", "1 .2", "zzzzzzzzzzzzz.1"]) {
+    for (const bad of [
+      "",
+      "12",
+      "a.b.c",
+      "-1.5",
+      "1.",
+      ".1",
+      "ZZ.1",
+      "1 .2",
+      "1a.2",
+      "1.5e3",
+      "99999999999999999999.1",
+    ]) {
       expect(decodeSendCursor(bad)).toBeNull();
     }
   });

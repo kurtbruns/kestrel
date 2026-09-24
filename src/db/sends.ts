@@ -340,6 +340,111 @@ export async function listSendsPage(
   };
 }
 
+/** The change sequence now (SPEC §8). Read before a send it will be handed back with, so
+ *  a change between the two shows in the send and after the cursor both, never neither. */
+export async function currentSendSeq(db: D1Database): Promise<number> {
+  const row = await db.prepare(`SELECT ${CURRENT_REV} AS seq`).first<{ seq: number }>();
+  return unwrap(row?.seq, "the send sequence");
+}
+
+/** A send as the feed returns it: the list projection, and, for a sending send, the retry
+ *  probe its phase needs. */
+export type FeedSendRow = SendSummary & { has_retries: number };
+
+/** What sets the feed's pace (`src/send/feed.ts`), read in the same snapshot as its rows. */
+export interface FeedPaceRow {
+  active: boolean;
+  settlingSince: number | null;
+  nextFireAt: number | null;
+}
+
+/** Where a feed read starts: the cursor's sequence and read time. */
+export interface FeedSince {
+  seq: number;
+  at: number;
+}
+
+/** The clock thresholds the feed watches for, which change a send with no write (SPEC §12). */
+export interface FeedThresholds {
+  missedMs: number;
+  stuckMs: number;
+}
+
+// The sends that can change on their own, over `?1` (now) and `?2` (the oldest completion
+// still followed): due (scheduled, fire time passed), sending, or settling (sent since then
+// with a recipient still awaiting a receipt).
+const LIVE_SEND =
+  "(status = 'scheduled' AND fire_at <= ?1) OR status = 'sending' OR (status = 'sent' AND c_accepted > 0 AND completed_at >= ?2)";
+
+// The sends that changed after a cursor, over `?1` (now), `?2` (the cursor's sequence), `?3`
+// (its read time), `?4` (the missed threshold) and `?5` (the stuck threshold): every send
+// whose `rev` is past the sequence, and every send a clock threshold changed between the
+// read time and now with no write. Each crossing is the same comparison `buildSendProgress`
+// makes, at the read time (not yet) and at now (crossed): a fire time passing (due), the
+// missed tolerance passing, the stuck threshold passing, and a lease running out, which is
+// what tells a wedged send from one finishing its last batch.
+const CHANGED_SINCE = `rev > ?2
+  OR (status = 'scheduled' AND (
+       (fire_at > ?3 AND fire_at <= ?1)
+    OR (fire_at + ?4 >= ?3 AND fire_at + ?4 < ?1)))
+  OR (status = 'sending' AND (
+       (started_at + ?5 >= ?3 AND started_at + ?5 < ?1)
+    OR (locked_until > ?3 AND locked_until <= ?1)))`;
+
+/**
+ * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
+ * `since`, every send that changed after it (`CHANGED_SINCE`); without, every send that can
+ * change on its own (`LIVE_SEND`). Soonest fire first, with `hasActiveRetries`'s indexed
+ * probe folded in for a sending send. Read in one batch with the sequence and the pace, so
+ * the three are one snapshot: a change either shows in the rows or lands after `seq`. The
+ * settling clause and the pace walk the sent sends by status, one small row each: the scan
+ * the sends table accepts at newsletter scale rather than another index.
+ */
+export async function sendFeed(
+  db: D1Database,
+  now: number,
+  since: FeedSince | null,
+  settledSince: number,
+  thresholds: FeedThresholds,
+): Promise<{ rows: FeedSendRow[]; seq: number; pace: FeedPaceRow }> {
+  const select = `SELECT ${SEND_LIST_COLS},
+         CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
+       FROM sends`;
+  const rows = since
+    ? db
+        .prepare(`${select} WHERE ${CHANGED_SINCE} ORDER BY fire_at ASC, id ASC`)
+        .bind(now, since.seq, since.at, thresholds.missedMs, thresholds.stuckMs)
+    : db
+        .prepare(`${select} WHERE ${LIVE_SEND} ORDER BY fire_at ASC, id ASC`)
+        .bind(now, settledSince);
+  const [seq, list, pace] = await db.batch([
+    db.prepare(`SELECT ${CURRENT_REV} AS seq`),
+    rows,
+    db
+      .prepare(
+        // A due send quickens the pace only within the missed tolerance: past it the sweep
+        // has not run, nothing about the send moves until it does, and the miss itself was
+        // reported by the read that crossed it.
+        `SELECT EXISTS (SELECT 1 FROM sends WHERE status = 'sending' OR (status = 'scheduled' AND fire_at <= ?1 AND fire_at + ?2 >= ?1)) AS active,
+                (SELECT MAX(completed_at) FROM sends WHERE status = 'sent' AND c_accepted > 0) AS settling_since,
+                (SELECT MIN(fire_at) FROM sends WHERE status = 'scheduled' AND fire_at > ?1) AS next_fire_at`,
+      )
+      .bind(now, thresholds.missedMs),
+  ]);
+  const p = pace?.results[0] as
+    | { active: number; settling_since: number | null; next_fire_at: number | null }
+    | undefined;
+  return {
+    rows: (list?.results ?? []) as FeedSendRow[],
+    seq: unwrap((seq?.results[0] as { seq: number } | undefined)?.seq, "the send sequence"),
+    pace: {
+      active: p?.active === 1,
+      settlingSince: p?.settling_since ?? null,
+      nextFireAt: p?.next_fire_at ?? null,
+    },
+  };
+}
+
 /** Per-recipient state rollup for a send. */
 export async function deliveryRollup(
   db: D1Database,

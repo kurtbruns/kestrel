@@ -18,11 +18,11 @@
  */
 
 import type { ReferenceResponse } from "../shared/reference";
-import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import { formatLead, MIN_LEAD_FLOOR_MS, STUCK_THRESHOLD_MS } from "../shared/sends";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
-import { HALT_BACKOFF_MS } from "./lib/time";
+import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
@@ -38,6 +38,7 @@ import * as settingsRoutes from "./routes/settings";
 import * as subscriberRoutes from "./routes/subscribers";
 import * as suppressionRoutes from "./routes/suppressions";
 import * as webhookRoutes from "./routes/webhooks";
+import { SETTLE_FOLLOW_MS } from "./send/feed";
 
 // The body types a route declares (`RouteDef.accepts`); a raw upload adds its own.
 const JSON_BODY = ["application/json"];
@@ -511,7 +512,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries the `phase` and `attention` its `GET /sends/:id/progress` reports at the same moment, so a list row and the watch never read a send differently; `stuck` repeats `attention.stuck`, sending for longer than the stuck threshold. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes; it is opaque. `recipient_count` is a snapshot of the audience while a send is scheduled; once it fires (`audience_resolved_at`), it is the audience fixed at fire, which never grows.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries the `phase` and `attention` its `GET /sends/:id/progress` reports at the same moment, so a list row and the watch never read a send differently; `stuck` repeats `attention.stuck`, sending for longer than the stuck threshold. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /sends/feed` as `since`. `recipient_count` is a snapshot of the audience while a send is scheduled; once it fires (`audience_resolved_at`), it is the audience fixed at fire, which never grows.",
       description:
         "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. The send retries on its own, spaced out the longer the halt lasts: `halt_retries` counts the halted attempts in a row and `halt_retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
@@ -540,12 +541,70 @@ export function createRouter({
       handler: sendRoutes.list,
     },
     {
+      // Before /sends/:id, which would otherwise take "feed" as an id.
+      method: "GET",
+      path: "/sends/feed",
+      access: "admin",
+      resource: "sends",
+      summary:
+        "What changed among sends since a cursor, each send with its phase, counters, and attention flags, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
+      description: `With \`since\` (the \`cursor\` from \`GET /sends\`, \`GET /sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (\`attention.missed\`), one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`attention.stuck\`), and one whose lease ran out with recipients in flight (\`attention.wedged\`). Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt). Either way each send is its id, post, subject, and times beside the same shape \`GET /sends/:id/progress\` reports, read off the send's counters, never its delivery rows, so a send reads the same here as on its watch; soonest fire first. A send removed since the cursor (only a canceled one can be, with its post) is not reported. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. \`read_again_at\` is when to read again, by the server's clock (\`now\`): about 3 seconds while a send is due (short of the missed tolerance) or sending; while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next scheduled fire time. A client that reads again then is never more than a few seconds behind a due or sending send, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a late receipt) by about a minute. Reading late or skipping a read loses nothing: the next read from the last cursor reports every send that changed in between. Reading it changes nothing.`,
+      query: [
+        {
+          name: "since",
+          description:
+            "The `cursor` of an earlier read of sends. Omit it for the sends that can change on their own. A value this API did not issue is a 400 naming the field.",
+        },
+      ],
+      example: {
+        response: {
+          now: 1768467610000,
+          sends: [
+            {
+              id: "s_xyz789",
+              post_id: "p_abc123",
+              subject: "Spring migration",
+              fire_at: 1768467600000,
+              started_at: null,
+              completed_at: null,
+              state: "scheduled",
+              phase: "due",
+              total: 1200,
+              counts: {
+                pending: 0,
+                in_flight: 0,
+                accepted: 0,
+                delivered: 0,
+                bounced: 0,
+                complained: 0,
+                skipped: 0,
+                unsent: 0,
+              },
+              dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+              delivery: { confirmed: 0, percent_of_accepted: 0 },
+              provider: { name: "ses", halt: null },
+              attention: {
+                wedged: false,
+                wedged_count: 0,
+                stuck: false,
+                missed: false,
+                refused: false,
+              },
+            },
+          ],
+          cursor: "57.1768467610000",
+          read_again_at: 1768467613000,
+        },
+      },
+      handler: sendRoutes.feed,
+    },
+    {
       method: "GET",
       path: "/sends/:id",
       access: "admin",
       resource: "sends",
       summary:
-        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent).",
+        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (published once sent). The response's `cursor` marks where this read stood among the changes to sends, to follow the send from with `GET /sends/feed`.",
       handler: sendRoutes.get,
     },
     {

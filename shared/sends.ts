@@ -1,5 +1,6 @@
 // Sends as the API carries them (SPEC §6, §8, §12): the send row and its counters, the
-// list summary, the live progress shape the watch polls, and the per-recipient record.
+// list summary, the live progress shape the watch polls, the feed the pages follow,
+// and the per-recipient record.
 // The Worker's routes produce these shapes and the editor consumes them; one definition,
 // so neither can drift.
 
@@ -172,9 +173,9 @@ export interface SendListResponse {
   sends: SendListItem[];
   page: PageMeta;
   /**
-   * Where this read stands among the changes to sends: the change sequence at the read and
-   * the server's time of it. Opaque to a client, which only hands it back to ask what
-   * changed since.
+   * Where this read stands among the changes to sends, to hand back as `since`: `<seq>.<at>`,
+   * the change sequence at the read and the server's time of it, both decimal. Two compare
+   * by those numbers (`shared/cursor.ts`).
    */
   cursor: string;
 }
@@ -234,6 +235,32 @@ export interface SendAttention {
   refused: boolean;
 }
 
+/** One send in `GET /sends/feed`: which send, and where it stands, in the `/progress` shape. */
+export interface LiveSend extends SendProgress {
+  id: string;
+  post_id: string;
+  subject: string;
+  fire_at: number;
+  started_at: number | null;
+  completed_at: number | null;
+}
+
+/** GET /sends/feed: what a client follows to keep up with sends without polling each one. */
+export interface SendFeedResponse {
+  /** The server's clock at the read, so a client times its next read by the server's clock, not its own. */
+  now: number;
+  /**
+   * With `since`, every send that changed after that cursor, whatever its state, those the
+   * clock changed with no write included (turned due, missed, in flight too long, or wedged
+   * as a lease ran out); without it, every send that can change on its own. Soonest fire first.
+   */
+  sends: LiveSend[];
+  /** Where this read stands (`<seq>.<at>`, as on `GET /sends`), to hand back as `since` on the next. */
+  cursor: string;
+  /** When to read again, by the server's clock: soon while a send moves, about once a minute while none does. */
+  read_again_at: number;
+}
+
 /** The sent record's per-recipient delivery breakdown (SPEC §8). */
 export interface DeliveryOutcomes {
   recipients: number;
@@ -257,6 +284,8 @@ export interface SendResponse {
   slug: string | null;
   archive_url: string | null;
   published: boolean;
+  /** Where this read stands among the changes to sends (`<seq>.<at>`), to follow the send from with `GET /sends/feed`. */
+  cursor: string;
 }
 
 /** The buckets GET /sends/:id/deliveries filters by, exactly as the outcomes count them, plus "all" and "failures" (bounced, complained, or unsent). */
