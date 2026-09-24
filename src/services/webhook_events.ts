@@ -40,11 +40,11 @@ export async function applyDeliveryEvents(
     });
     applied += 1;
 
-    // Prefer the event's own address; fall back to the matched delivery row's
-    // address when the event carried only a `provider_id`, so an id-keyed hard
-    // bounce or complaint still suppresses (I1) rather than silently slipping
+    // Prefer the matched delivery row's address, the form the list stores; fall back to
+    // the event's own when nothing matched (a test send or a confirmation email). An
+    // id-keyed hard bounce or complaint thus still suppresses (I1) rather than slipping
     // through and letting the address be mailed again next post.
-    const email = e.email ?? matched.email ?? undefined;
+    const email = matched.email ?? e.email;
     if (email && ((e.type === "bounced" && e.hard) || e.type === "complained")) {
       const reason = e.type === "bounced" ? "bounce" : "complaint";
       await addSuppression(db, email, reason, eventDetail(e) ?? undefined);

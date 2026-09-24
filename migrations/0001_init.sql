@@ -133,8 +133,10 @@ CREATE TABLE sends (
   rendered_html   TEXT NOT NULL,               -- frozen; carries %%UNSUBSCRIBE_URL%% sentinel
   rendered_text   TEXT NOT NULL,
   subject         TEXT NOT NULL,
-  recipient_count INTEGER NOT NULL DEFAULT 0,  -- schedule-time snapshot for display; the
-                                               -- audience is resolved when the send fires
+  recipient_count INTEGER NOT NULL DEFAULT 0,  -- schedule-time snapshot for display until
+                                               -- the send fires, then the audience at fire
+  audience_resolved_at INTEGER,                -- when the first run fixed the audience into
+                                               -- deliveries; never resolved again (SPEC §6)
   locked_until    INTEGER,                     -- send-loop lease (overlap guard)
   lease_token     TEXT,                        -- the run holding the lease
   scheduled_at    INTEGER NOT NULL,
