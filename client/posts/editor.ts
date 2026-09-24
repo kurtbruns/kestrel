@@ -85,18 +85,14 @@ export async function renderEditor(
     if (signal.aborted) {
       return; // navigated away while loading: the redirects below must not hijack that
     }
-    // A sent post is a frozen record, not editable (#147/#148): it opens the sent
-    // record view, never the editor. Redirect a stale #/edit link (or a post sent in
-    // another tab / by Claude) there instead of a locked editor.
-    if (data.post.status === "sent") {
-      location.hash = data.sent ? `#/sent/${data.sent.id}` : "#/sent";
-      return;
-    }
-    // A post whose send is in flight is no longer an editable/cancelable scheduled draft —
-    // it's an active send. Send a direct #/edit link to the live watch, not a soft-locked
-    // editor with a dead Cancel (#162).
-    if (data.sending) {
-      location.hash = `#/sent/${data.sending.id}`;
+    // A sent post is a frozen record, not editable: it opens the sent record view, never
+    // the editor. Redirect a stale #/edit link (or a post sent in another tab / by Claude)
+    // there instead of a locked editor. A post whose send is in flight is no longer an
+    // editable, cancelable scheduled draft but an active send, so its link opens the live
+    // watch, not a soft-locked editor with a dead Cancel.
+    const home = sendHome(data);
+    if (home) {
+      handOff(home);
       return;
     }
   } catch (e) {
@@ -682,7 +678,7 @@ export async function renderEditor(
 
   if (!locked) {
     // Skipped while hidden, saving, or already warned — poll GET is cheap and only
-    // re-warns on a revision we haven't surfaced yet.
+    // re-warns on a revision we haven't surfaced yet. Read at once when the tab is shown.
     const pollFreshness = async () => {
       if (saving || conflicted || document.hidden) {
         return;
@@ -706,11 +702,13 @@ export async function renderEditor(
       }
     };
     every(10000, pollFreshness, signal);
+    readWhenShown(pollFreshness, signal);
   } else {
     // A scheduled post is soft-locked here (read-only, showing the scheduled banner). If its
     // send FIRES while the editor is open, it's no longer a cancelable scheduled draft — it's
-    // an active send — so redirect to the live watch, the same as opening it fresh would
-    // (#162). Likewise jump to the record if it finishes while we're sitting here.
+    // an active send — so hand off to the live watch, the same as opening it fresh would.
+    // Likewise to the record if it finishes while we're sitting here. Read at once when
+    // the tab is shown, rather than at the next tick.
     const pollSchedule = async () => {
       if (document.hidden) {
         return;
@@ -720,16 +718,16 @@ export async function renderEditor(
         if (signal.aborted) {
           return; // a redirect must not hijack where the reader went meanwhile
         }
-        if (fresh.sending) {
-          location.hash = `#/sent/${fresh.sending.id}`;
-        } else if (fresh.post.status === "sent") {
-          location.hash = fresh.sent ? `#/sent/${fresh.sent.id}` : "#/sent";
+        const home = sendHome(fresh);
+        if (home) {
+          handOff(home);
         }
       } catch {
         /* transient — try again next tick */
       }
     };
     every(10000, pollSchedule, signal);
+    readWhenShown(pollSchedule, signal);
   }
 
   // --- open in browser ---
@@ -1077,4 +1075,39 @@ export async function renderEditor(
     };
   }
   return handle;
+}
+
+/** Where a post's send now lives, when that is no longer the editor: the watch while it
+ *  sends, the record once it has sent. */
+function sendHome(data: PostResponse): string | null {
+  if (data.sending) {
+    return `#/sent/${data.sending.id}`;
+  }
+  if (data.post.status === "sent") {
+    return data.sent ? `#/sent/${data.sent.id}` : "#/sent";
+  }
+  return null;
+}
+
+/**
+ * Move to a send's new home in place of this page's history entry (DESIGN §9): the
+ * editor URL the reader opened has become the send page, so Back goes where they came
+ * from rather than to an editor that would only hand them forward again.
+ */
+function handOff(hash: string): void {
+  location.replace(hash);
+}
+
+// A tab hidden while a poll ticks skips those ticks; shown again, it reads at once rather
+// than at the next tick, since anything may have happened meanwhile.
+function readWhenShown(read: () => unknown, signal: AbortSignal): void {
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (!document.hidden) {
+        read();
+      }
+    },
+    { signal },
+  );
 }

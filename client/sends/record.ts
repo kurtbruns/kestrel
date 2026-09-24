@@ -57,9 +57,11 @@ export async function renderSentRecord(
   }
   const { send } = data;
 
-  // A scheduled send is still cancel-to-edit: its home is the editor, not this record.
+  // A scheduled send is still cancel-to-edit: its home is the editor, not this record. The
+  // editor takes this page's history entry, so Back goes where the reader came from, never
+  // to this URL that would only hand them to the editor again (DESIGN §9).
   if (send.status === "scheduled") {
-    location.hash = `#/edit/${send.post_id}`;
+    location.replace(`#/edit/${send.post_id}`);
     return;
   }
   // A send still in flight opens the live watch, which follows it from this read.

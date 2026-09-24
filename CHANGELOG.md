@@ -58,6 +58,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A refusal warning on the dashboard and the Sent page no longer ends the provider's own message with a doubled period ("quota exceeded..").
 - A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
 - On a send's live watch, the "provider is refusing this account" banner no longer sits flush against the start time and recipient count above it.
+- Back no longer bounces you forward again after the editor hands you to a send's page: opening a sent or sending post's editor, a scheduled send's page opening its editor, and the editor moving to the live watch when the send starts now take the place of the page you were on, so Back goes where you came from. A post's editor in a background tab also catches up as soon as you switch to it, instead of up to ten seconds later.
 
 ## [1.0.0] - 2026-09-23
 

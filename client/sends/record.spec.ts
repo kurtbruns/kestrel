@@ -104,6 +104,7 @@ describe("sent record", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -306,6 +307,28 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
     expect(document.querySelector(".rec-people-table")).toBeNull();
+  });
+
+  it("hands a scheduled send's page to its editor, in place of its history entry", async () => {
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: sendView(send({ status: "scheduled", started_at: null, completed_at: null }), {
+            phase: "scheduled",
+          }),
+          outcomes: outcomes(),
+          cursor: "1.1",
+        }),
+      },
+    ]);
+    // happy-dom's replace() pushes an entry as assign() does, so the spec asserts the call.
+    const replace = vi.spyOn(location, "replace");
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(replace).toHaveBeenCalledWith("#/edit/p1"); // so Back skips this send URL
+    expect(location.hash).toBe("#/edit/p1");
+    expect(fake.unhandled).toHaveLength(0);
   });
 
   /** The feed the watch follows, answering with the send as `current()` has it, every read

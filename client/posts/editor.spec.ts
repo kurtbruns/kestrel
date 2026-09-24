@@ -274,16 +274,92 @@ describe("editor view", () => {
     expect(puts()).toEqual([]);
   });
 
-  it("redirects a sent post to its record and a post in flight to the live watch", async () => {
+  it("redirects a sent post to its record and a post in flight to the live watch, in place of its history entry", async () => {
+    // happy-dom's replace() pushes an entry as assign() does, so the spec asserts the call.
+    const replace = vi.spyOn(location, "replace");
     await open([
       { path: "/posts/p1", reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }) },
     ]);
     expect(location.hash).toBe("#/sent/x9");
+    expect(replace).toHaveBeenLastCalledWith("#/sent/x9"); // so Back skips the editor URL
     location.hash = "#/edit/p1";
     fake.restore();
     await open([{ path: "/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
     expect(location.hash).toBe("#/sent/x8");
+    expect(replace).toHaveBeenLastCalledWith("#/sent/x8");
     expect(document.querySelector("#f-markdown")).toBeNull(); // never mounted
+  });
+
+  // A scheduled post whose send the spec starts by setting `sending`.
+  function scheduledServer() {
+    const server = draftServer(draft({ status: "scheduled" }));
+    server.scheduled({ id: "s1", fire_at: 1_800_000_000_000, remade_at: null });
+    let sending: { id: string } | null = null;
+    return {
+      route: { path: "/posts/p1", reply: () => ({ ...server.get(), sending }) },
+      start: () => {
+        sending = { id: "s1" };
+      },
+    };
+  }
+  const reads = () =>
+    fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/posts/p1");
+  const setHidden = (hidden: boolean) => {
+    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+    document.dispatchEvent(new Event("visibilitychange"));
+  };
+
+  it("hands a scheduled post off to the live watch when its send starts, in place of its history entry", async () => {
+    const send = scheduledServer();
+    await open([send.route]);
+    const replace = vi.spyOn(location, "replace");
+    send.start();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(location.hash).toBe("#/sent/s1");
+    expect(replace).toHaveBeenCalledWith("#/sent/s1");
+  });
+
+  it("reads at once when a hidden tab is shown again, rather than at the next tick", async () => {
+    const send = scheduledServer();
+    await open([send.route]);
+    try {
+      setHidden(true);
+      await vi.advanceTimersByTimeAsync(10000); // a hidden tab skips its tick
+      expect(reads()).toHaveLength(1);
+      send.start();
+      setHidden(false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reads()).toHaveLength(2);
+      expect(location.hash).toBe("#/sent/s1");
+    } finally {
+      delete (document as { hidden?: boolean }).hidden;
+    }
+  });
+
+  it("reads a draft's freshness at once when a hidden tab is shown again", async () => {
+    const server = draftServer();
+    await open([{ path: "/posts/p1", reply: server.get }]);
+    try {
+      setHidden(true);
+      await vi.advanceTimersByTimeAsync(10000);
+      expect(reads()).toHaveLength(1);
+      server.elsewhere("service");
+      setHidden(false);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(reads()).toHaveLength(2);
+      expect($("#freshnessBanner").hidden).toBe(false);
+    } finally {
+      delete (document as { hidden?: boolean }).hidden;
+    }
+  });
+
+  it("stops reading on a shown tab once the editor is torn down", async () => {
+    const send = scheduledServer();
+    await open([send.route]);
+    unmount();
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads()).toHaveLength(1);
   });
 
   it("shows the error with a retry that mounts the draft", async () => {
