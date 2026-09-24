@@ -146,7 +146,7 @@ export type SendPhase =
 export interface SendProgress {
   state: SendStatus;
   phase: SendPhase;
-  /** The frozen audience size, or the schedule-time estimate before any recipient rows exist. */
+  /** The audience at fire, or the schedule-time estimate before any recipient rows exist. */
   total: number;
   counts: SendCounts;
   /** Provider hand-off: how far the send loop has gotten. */

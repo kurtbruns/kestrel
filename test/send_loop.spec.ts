@@ -186,7 +186,7 @@ describe("send loop + sweep", () => {
     expect(countTo("x@example.com")).toBe(2);
   });
 
-  it("a crash between runs resumes without resolving the audience again", async () => {
+  it("a run that halts resumes without resolving the audience again", async () => {
     await seedConfirmed("x@example.com");
     await seedConfirmed("y@example.com");
     const send = await scheduledSend(Date.now() - 1000);

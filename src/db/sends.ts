@@ -283,7 +283,7 @@ export async function deliveryRollup(
 }
 
 /**
- * How a send went, as mutually-exclusive buckets that sum to the frozen audience —
+ * How a send went, as mutually-exclusive buckets that sum to the audience at fire —
  * the numbers behind the sent record view (SPEC §8). A `deliveries` row carries two
  * orthogonal facts: the send-loop `status` (did the provider accept the hand-off) and
  * the later webhook `event` (delivered / bounced / complained). This bucketing reads
@@ -1264,7 +1264,7 @@ export interface AcceptedAwaitingEvent {
   email: string;
   provider_id: string | null;
   updated_at: number;
-  /** The send's frozen recipient count, so the simulation can scale a per-send rate
+  /** The send's recipient count (the audience at fire once it has fired), so the simulation can scale a per-send rate
    *  (e.g. a small-list complaint floor) to the audience size. */
   recipient_count: number;
 }
