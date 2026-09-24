@@ -74,6 +74,7 @@ export async function renderSentRecord(
 // as usual, scheduled = violet.
 const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
   scheduled: { label: "Scheduled", tone: "scheduled" },
+  due: { label: "Due", tone: "scheduled" },
   progressing: { label: "Sending", tone: "sending" },
   retrying: { label: "Retrying", tone: "warn" },
   "backing-off": { label: "Backing off", tone: "warn" },

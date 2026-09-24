@@ -30,7 +30,7 @@ A local send is a real send through the real API, send loop, and receipt ingest;
 
 - Before the fire time the watch URL opens the post, scheduled and cancelable (a scheduled send's home is its editor); once it fires, the same URL shows the send. Reload it after the tick if the editor is still open.
 - At the tick: the phase moves to progressing (retrying or backing-off on a failure), then the send is **sent** once every recipient is accepted or terminal.
-- Receipts arrive on the next ticks: delivered first, then bounces, then (realistic faults) a complaint about a minute later; hard bounces and complaints suppress their addresses.
+- Receipts arrive on their own clock after dispatch (the dev ticker settles them every couple of seconds, whether or not a page is open): delivered first, then bounces, then (realistic faults) a complaint about a minute later; hard bounces and complaints suppress their addresses.
 - SES realistic: needs-attention twice, first the quota (clears on its own at the retry), then the wedge, which **Resolve** clears ("assume sent" if the outbox shows the message went, which it does).
 - Test sends and confirmations are never simulated; they appear at once in `GET /api/dev/outbox`, along with every simulated message the list send delivered.
 

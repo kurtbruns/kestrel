@@ -4,14 +4,16 @@
  * One Worker exposes both handlers (spec §6, §11):
  *   - fetch()     → HTTP API + public reader pages + archive + webhooks,
  *                   dispatched by the URLPattern router (see app.ts / router.ts)
- *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts)
+ *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts); in
+ *                   local dev, also the simulated receipts on the dev ticker's own clock
  */
 
 import { createRouter } from "./app";
-import type { AppEnv } from "./env";
+import type { AppEnv, Config } from "./env";
 import { ConfigError, getConfig } from "./env";
 import { json } from "./lib/errors";
-import { log, newRun, withRun } from "./lib/log";
+import { errorText, log, newRun, withRun } from "./lib/log";
+import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./providers/simulate";
 import type { Router } from "./router";
 import { sweep } from "./send/sweep";
 
@@ -51,16 +53,29 @@ export default {
     );
   },
 
-  async scheduled(_controller, env, ctx): Promise<void> {
+  async scheduled(controller, env, ctx): Promise<void> {
     const appEnv = env as AppEnv;
+    let config: Config;
     try {
-      getConfig(appEnv);
+      config = getConfig(appEnv);
     } catch (err) {
       if (err instanceof ConfigError) {
         reportConfigError(err); // the sweep would only fail the same way, every minute
         return;
       }
       throw err;
+    }
+    if (controller.cron === RECEIPTS_CRON) {
+      // The dev ticker's receipts tick: settle the simulated receipts that have come due and
+      // nothing else, never the sweep. A no-op wherever the simulation is off.
+      ctx.waitUntil(
+        withRun(newRun(), () =>
+          drainSimulatedWebhooks(appEnv, config).catch((err: unknown) => {
+            log.error("sim.receipts_error", { error: errorText(err) });
+          }),
+        ),
+      );
+      return;
     }
     ctx.waitUntil(withRun(newRun(), () => sweep(appEnv)));
   },

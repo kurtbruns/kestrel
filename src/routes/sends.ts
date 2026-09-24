@@ -11,7 +11,6 @@ import * as sends from "../db/sends";
 import { oneOf, readJsonObject } from "../lib/body";
 import { json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
-import { drainSimulatedWebhooks, simulationActive } from "../providers/simulate";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -84,21 +83,10 @@ export async function get(c: RequestContext): Promise<Response> {
  * the denormalized counters (`sends.c_*`) — no aggregate over the audience — plus
  * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
  * the loud attention flags (§12). `deliveries` stays the source of truth; this is its
- * rebuildable cache. Both the watch view and the dashboard active-send widget poll it.
+ * rebuildable cache. Reading it changes nothing: locally, simulated receipts arrive on
+ * the dev ticker's own clock, whether or not a watch is open (SPEC §10).
  */
 export async function progress(c: RequestContext): Promise<Response> {
-  // Dev-only simulation glue: the watch polls this endpoint, so settle any now-due
-  // synthetic receipts here too (not just on the cron sweep). That makes the delivery
-  // bar advance smoothly as you watch instead of freezing between ticks — mimicking how
-  // real provider webhooks arrive continuously. A strict no-op in a deployed env (a real
-  // provider is configured there), and never allowed to fail the read.
-  if (simulationActive(c.config)) {
-    try {
-      await drainSimulatedWebhooks(c.env, c.config);
-    } catch {
-      /* best effort — the progress read must still succeed */
-    }
-  }
   const send = await sends.getSend(c.env.DB, param(c, "id"));
   if (!send) {
     throw notFound("send");

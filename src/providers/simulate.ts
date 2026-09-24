@@ -472,6 +472,15 @@ export class SimProvider implements EmailProvider {
   }
 }
 
+/**
+ * The cron value the local dev ticker (`scripts/sweep-ticker.mjs`, which spells the same
+ * string) sends every few seconds to have the scheduled handler settle the simulated receipts
+ * that have come due, and nothing else: receipts then arrive on their own clock, as a
+ * provider's webhooks do, whether or not a page is open (SPEC §10). It is not a cron
+ * expression, so no deployed trigger can carry it.
+ */
+export const RECEIPTS_CRON = "dev:receipts";
+
 /** True when the local send simulation is on: a dev-shaped env with `SIMULATE_SENDS` set. */
 export function simulationActive(config: Config): boolean {
   return config.provider === "fake" && config.simulation !== null;

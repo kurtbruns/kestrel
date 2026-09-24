@@ -11,7 +11,7 @@
  * keeps absorbing events after the send is "sent."
  */
 
-import type { SendHalt, SendPhase, SendProgress } from "../../shared/sends";
+import type { SendHalt, SendPhase, SendProgress, SendSummary } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
@@ -28,6 +28,8 @@ export function isStuck(send: Pick<SendRow, "status" | "started_at">, now: numbe
 /**
  * The live reporting phase — derived from the counters and send row, never stored:
  *   - `scheduled`       waiting in the review window (not yet fired).
+ *   - `due`             still `scheduled`, but the fire time has passed: the next sweep
+ *                       tick starts it (past the missed threshold, `attention.missed` too).
  *   - `progressing`     actively handing recipients to the provider.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
@@ -47,12 +49,13 @@ function derivePhase(
   status: SendStatus,
   counts: SendCounts,
   hasRetries: boolean,
+  due: boolean,
   wedged: boolean,
   refused: boolean,
 ): SendPhase {
   switch (status) {
     case "scheduled":
-      return "scheduled";
+      return due ? "due" : "scheduled";
     case "canceled":
       return "canceled";
     case "sent":
@@ -81,12 +84,12 @@ function round(n: number): number {
 }
 
 /**
- * Build the progress shape from a send row. `hasRetries` is the cheap EXISTS probe
- * (see `hasActiveRetries`) — pass false when the send is not `sending`, where it never
- * affects the phase.
+ * Build the progress shape from a send row (the list projection is enough: the frozen
+ * bodies play no part). `hasRetries` is the cheap EXISTS probe (see `hasActiveRetries`)
+ * — pass false when the send is not `sending`, where it never affects the phase.
  */
 export function buildSendProgress(
-  send: SendRow,
+  send: SendSummary,
   providerName: string,
   hasRetries: boolean,
   now: number,
@@ -132,7 +135,8 @@ export function buildSendProgress(
   const wedged =
     send.status === "sending" && counts.pending === 0 && counts.in_flight > 0 && !leaseHeld;
   const stuck = isStuck(send, now);
-  const missed = send.status === "scheduled" && send.fire_at < now - MISSED_THRESHOLD_MS;
+  const due = send.status === "scheduled" && send.fire_at <= now;
+  const missed = due && send.fire_at < now - MISSED_THRESHOLD_MS;
   // The provider's standing refusal, while the send is still open to be retried.
   const halt: SendHalt | null =
     send.status === "sending" && send.halt_reason
@@ -148,7 +152,7 @@ export function buildSendProgress(
 
   return {
     state: send.status,
-    phase: derivePhase(send.status, counts, hasRetries, wedged, refused),
+    phase: derivePhase(send.status, counts, hasRetries, due, wedged, refused),
     total,
     counts,
     dispatch: { done, percent: dispatchPercent, rate_per_min: ratePerMin, eta_ms: etaMs },
