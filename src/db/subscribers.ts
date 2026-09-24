@@ -1,4 +1,5 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
+import { normalizeEmail } from "../../shared/email";
 import type {
   SubscribeAction,
   Subscriber,
@@ -372,6 +373,8 @@ export async function blocksConfirmation(db: D1Database, email: string): Promise
   return row !== null;
 }
 
+/** Suppress an address, stored in its normalized form (trimmed, lowercased) whatever
+ *  the caller passes, since the audience filter compares exactly (I1). */
 export async function addSuppression(
   db: D1Database,
   email: string,
@@ -384,7 +387,7 @@ export async function addSuppression(
     .prepare(
       "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (email) DO UPDATE SET reason = excluded.reason, detail = excluded.detail, created_at = excluded.created_at WHERE suppressions.reason = ?",
     )
-    .bind(email, reason, detail ?? null, Date.now(), ERASED)
+    .bind(normalizeEmail(email), reason, detail ?? null, Date.now(), ERASED)
     .run();
 }
 

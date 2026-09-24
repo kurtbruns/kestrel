@@ -1,6 +1,7 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
  *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
 
+import { normalizeEmail } from "../../shared/email";
 import type {
   DeliveryOutcomes,
   DeliveryRecord,
@@ -1199,13 +1200,14 @@ export async function countDeliveries(
 
 // --- provider delivery events (M9: SES via SNS) -----------------------------
 
+export type DeliveryEventType = "delivered" | "bounced" | "complained";
+
 export interface DeliveryEventUpdate {
-  /** SES MessageId stored on the delivery row (preferred match key). */
+  /** The provider's message id stored on the delivery row: the match key whenever present. */
   providerId?: string;
-  /** Recipient address (fallback match, and useful when providerId is absent). */
+  /** Recipient address: the match key only when the event carries no provider id. */
   email?: string;
-  /** delivered | bounced | complained. */
-  event: string;
+  event: DeliveryEventType;
   detail?: string | null;
   /** For a `bounced` event: whether the provider reported it as a permanent (hard)
    *  bounce. Recorded as the delivery row's frozen soft/hard fact for the record view
@@ -1219,61 +1221,93 @@ export interface DeliveryEventResult {
   /** Rows updated (0 or 1). */
   changes: number;
   /**
-   * The affected row's recipient address, or null if nothing matched. Lets a
-   * caller that received an event carrying only a `provider_id` (no `email`)
-   * still recover the address for a suppression decision — the suppression
-   * guarantee (I1) must not depend on the provider echoing the recipient back.
+   * The matched row's recipient address, or null if nothing matched. Set even when the
+   * event lost to a worse one already recorded, so a caller that received an event
+   * carrying only a `provider_id` (no `email`) still recovers the address for a
+   * suppression decision: the suppression guarantee (I1) must not depend on the provider
+   * echoing the recipient back.
    */
   email: string | null;
 }
 
+// How bad an outcome is. SNS does not guarantee order, so a later event may be a better
+// one (a `delivered` after a `complained`); the record keeps the worst it has seen.
+function eventRank(event: string | null, bounceKind: string | null): number {
+  switch (event) {
+    case "complained":
+      return 4;
+    case "bounced":
+      return bounceKind === "hard" ? 3 : 2;
+    case "delivered":
+      return 1;
+    default:
+      return 0;
+  }
+}
+
 /**
- * Record an out-of-band provider event (delivered/bounced/complained) on the
- * matching delivery row. Matches by `provider_id` when present (unique per
- * delivery), else by the most recent delivery for the email. Never touches the
- * send-loop `status` — this is a separate, later signal. Returns the rows
- * updated and the affected row's address.
+ * Record an out-of-band provider event (delivered/bounced/complained) on the matching
+ * delivery row, unless the row already holds a worse outcome. An event with a provider
+ * id matches by it (unique per delivery). One whose id matches nothing may land only on
+ * the address's most recent accepted row that never learned its id, which is a recipient
+ * the publisher resolved as sent (SPEC §12), whose receipt still has to land; otherwise
+ * it is dropped, since test sends and confirmation emails have no delivery row and their
+ * events must never land on a real send's record (SPEC §8). An event carrying no provider
+ * id at all falls back to the address's most recent delivery. Never touches the
+ * send-loop `status`, which is a separate, earlier signal.
  */
 export async function markDeliveryEvent(
   db: D1Database,
   u: DeliveryEventUpdate,
 ): Promise<DeliveryEventResult> {
   const detail = u.detail ?? null;
-  // Locate the target row first so the counter delta knows the bucket it is leaving
-  // (an event can land on an `accepted` row, or overwrite an earlier event). Matching
-  // is by `provider_id` (unique per delivery) then by the recipient's most recent row.
-  let row: {
+  // Locate the target row first so the counter delta knows the bucket it is leaving (an
+  // event can land on an `accepted` row, or overwrite an earlier event).
+  type Target = {
     id: string;
     send_id: string;
     email: string;
     status: string;
     event: string | null;
-  } | null = null;
+    bounce_kind: string | null;
+  };
+  const cols = "id, send_id, email, status, event, bounce_kind";
+  let row: Target | null = null;
   if (u.providerId) {
     row = await db
-      .prepare(
-        "SELECT id, send_id, email, status, event FROM deliveries WHERE provider_id = ? LIMIT 1",
-      )
+      .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
       .bind(u.providerId)
-      .first();
-  }
-  if (!row && u.email) {
+      .first<Target>();
+    if (!row && u.email) {
+      // An id-less accepted row: resolved as sent, or an SES answer whose body was unreadable.
+      row = await db
+        .prepare(
+          `SELECT ${cols} FROM deliveries
+            WHERE email = ? AND status = 'accepted' AND (provider_id IS NULL OR provider_id = '')
+            ORDER BY updated_at DESC LIMIT 1`,
+        )
+        .bind(normalizeEmail(u.email))
+        .first<Target>();
+    }
+  } else if (u.email) {
     row = await db
-      .prepare(
-        "SELECT id, send_id, email, status, event FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1",
-      )
-      .bind(u.email)
-      .first();
+      .prepare(`SELECT ${cols} FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1`)
+      .bind(normalizeEmail(u.email))
+      .first<Target>();
   }
   if (!row) {
     return { changes: 0, email: null };
   }
 
-  const fromCol = bucketCol(row.status, row.event);
-  const toCol = bucketCol(row.status, u.event);
   // Freeze the soft/hard split as a fact of this send (SPEC §8): a bounce records the
   // provider's hard/soft signal; any other event clears it (the row is no longer a bounce).
   const bounceKind = u.event === "bounced" ? (u.hard ? "hard" : "soft") : null;
+  if (eventRank(u.event, bounceKind) < eventRank(row.event, row.bounce_kind)) {
+    return { changes: 0, email: row.email };
+  }
+
+  const fromCol = bucketCol(row.status, row.event);
+  const toCol = bucketCol(row.status, u.event);
   const stmts: D1PreparedStatement[] = [
     db
       .prepare(

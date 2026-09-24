@@ -50,6 +50,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Uploading or removing the publication logo now updates the confirmation email's preview at once, instead of leaving the old logo there until another field is edited.
 - The API reference's method badges (GET/POST/PUT/DELETE) now follow dark mode instead of staying their light-mode colors.
 - A malformed API request is now a 400 that names the problem instead of a silent no-op or a server error: a body that is not a JSON object, a field of the wrong type (named in the message and as `field` on the error), and a path with a broken percent-escape. Saving a post with a wrongly typed field, or a `base_revision` that is not a string, is refused instead of saved without that field or without the out-of-date check, and a post save must send a JSON body. A database failure while saving settings is now reported as a server error, not as a bad request.
+- A send's delivery record now shows, for each recipient, the worst outcome the provider reported for that send's message (SPEC §8). A test or confirmation email's events no longer land on the recipient's last real delivery, and a `delivered` arriving after a complaint or bounce no longer replaces it. A bounce or complaint reported for `Bob@Example.com` now suppresses the subscriber stored as `bob@example.com`.
 
 ## [0.2.0] - 2026-09-21
 

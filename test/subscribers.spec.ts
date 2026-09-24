@@ -292,6 +292,18 @@ describe("subscribing: no flood, and no reveal of who is on the list", () => {
     expect((await subs.getByEmail(env.DB, email))?.status).toBe("unsubscribed");
   });
 
+  it("stores a suppression lowercased, and keeps the erased rule across casings", async () => {
+    const email = uniqueEmail();
+    await subs.addSuppression(env.DB, email.toUpperCase(), subs.ERASED);
+    expect(await subs.isSuppressed(env.DB, email)).toBe(true);
+    await subs.addSuppression(env.DB, ` ${email.toUpperCase()} `, "bounce");
+    await subs.addSuppression(env.DB, email.toUpperCase(), subs.ERASED);
+    const rows = (await subs.listSuppressions(env.DB)).filter(
+      (r) => r.email.toLowerCase() === email,
+    );
+    expect(rows).toEqual([expect.objectContaining({ email, reason: "bounce" })]);
+  });
+
   it("a bounce or complaint on an erased address replaces the marker and blocks confirmations", async () => {
     const email = uniqueEmail();
     await subs.addSuppression(env.DB, email, subs.ERASED);
