@@ -4,9 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as subs from "../src/db/subscribers";
 import type { AppEnv, Config } from "../src/env";
 import { ResendProvider, signSvix } from "../src/providers/resend";
-import type { Recipient, RenderedEmail } from "../src/providers/types";
+import {
+  PROVIDER_REQUEST_TIMEOUT_MS,
+  type Recipient,
+  type RenderedEmail,
+} from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { neverAnswers } from "./support/provider_timeout";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
 const config = { fromAddress: "Newsletter <newsletter@send.example.com>" } as unknown as Config;
@@ -308,6 +313,20 @@ describe("ResendProvider.sendBatch", () => {
     });
     expect(result.kind).toBe("halted");
     expect(JSON.stringify(result)).not.toContain("re_test_key");
+  });
+
+  it("ends a request Resend never answers, and rejects as a request with no answer", async () => {
+    // A rejection is what the send loop reads as no answer: it re-sends the batch under its
+    // key next tick. A halt or an answered result here would be a new classification.
+    const { timeout, reason } = neverAnswers();
+    await expect(
+      makeProvider().sendBatch(rendered, one, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+        idempotencyKey: "s-key",
+      }),
+    ).rejects.toBe(reason);
+    expect(timeout).toHaveBeenCalledWith(PROVIDER_REQUEST_TIMEOUT_MS);
   });
 
   it("maps a 422 validation error to a non-retryable failure for each recipient", async () => {

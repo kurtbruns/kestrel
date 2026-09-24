@@ -6,6 +6,16 @@ import type { RenderedEmail } from "../render/render";
 
 export type { HaltCause, HaltReason, RenderedEmail };
 
+/**
+ * How long an adapter waits for the provider to answer a send request before ending it.
+ * An ended request is one with no answer, the case the send loop already handles (re-sent
+ * under its key where the provider dedupes, otherwise left in flight for Resolve), so a
+ * provider that hangs costs one timeout rather than holding the run past its lease until
+ * the Worker is stopped. Generous next to a healthy answer (well under a second), and a
+ * small share of the lease.
+ */
+export const PROVIDER_REQUEST_TIMEOUT_MS = 30_000;
+
 export interface Recipient {
   email: string;
   /** Per-recipient unsubscribe URL that replaces the sentinel at send time. */

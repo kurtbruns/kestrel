@@ -7,10 +7,11 @@ import { getProvider } from "../src/providers";
 import { SesProvider } from "../src/providers/ses";
 import { base64Bytes } from "../src/providers/ses_mime";
 import { _clearKeyCache, canonicalString, isSnsHost, type SnsEnvelope } from "../src/providers/sns";
-import type { RenderedEmail } from "../src/providers/types";
+import { PROVIDER_REQUEST_TIMEOUT_MS, type RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { SNS_TOPIC_ARN } from "./support/deploy";
+import { neverAnswers } from "./support/provider_timeout";
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -404,6 +405,20 @@ describe("SesProvider.sendBatch", () => {
         },
       ),
     ).rejects.toThrow(/connection reset/);
+  });
+
+  it("ends a request SES never answers, and throws it as the same ambiguous no-answer", async () => {
+    // The timeout carries its signal through aws4fetch's signed Request, and the abort
+    // takes the transport error's path above: thrown, so the row stays in flight for Resolve.
+    const { timeout, reason } = neverAnswers();
+    await expect(
+      newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose: "list", idempotencyKeyPrefix: "send-1" },
+      ),
+    ).rejects.toBe(reason);
+    expect(timeout).toHaveBeenCalledWith(PROVIDER_REQUEST_TIMEOUT_MS);
   });
 });
 
