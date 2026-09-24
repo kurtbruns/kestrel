@@ -62,14 +62,14 @@ describe("schema (0001_init)", () => {
       .bind(now, now)
       .run();
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, updated_at) VALUES ('d1','sn1','x@example.com','pending',?)",
+      "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('sn1','x@example.com','pending',?)",
     )
       .bind(now)
       .run();
 
     // INSERT OR IGNORE is a no-op on the dup (this is what makes resume safe).
     const res = await env.DB.prepare(
-      "INSERT OR IGNORE INTO deliveries (id, send_id, email, status, updated_at) VALUES ('d2','sn1','x@example.com','pending',?)",
+      "INSERT OR IGNORE INTO deliveries (send_id, email, status, updated_at) VALUES ('sn1','x@example.com','pending',?)",
     )
       .bind(now)
       .run();
@@ -116,5 +116,125 @@ describe("schema (0001_init)", () => {
     await insertSend("sd4", "canceled");
     await env.DB.prepare("UPDATE sends SET status = 'sent' WHERE id = 'sd1'").run();
     await insertSend("sd6", "scheduled"); // the post is active-send-free again
+  });
+
+  describe("the constraints the baseline froze with", () => {
+    const now = Date.now();
+    /** A send to hang deliveries on, made once per test id. */
+    async function aSend(id: string): Promise<void> {
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES (?, ?, 'draft', ?, ?)",
+      )
+        .bind(`p-${id}`, `p-${id}`, now, now)
+        .run();
+      await env.DB.prepare(
+        "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES (?, ?, 'sent', ?, '', '', '', ?)",
+      )
+        .bind(id, `p-${id}`, now, now)
+        .run();
+    }
+    const delivery = (sendId: string, email: string, extra = "", binds: unknown[] = []) =>
+      env.DB.prepare(
+        `INSERT INTO deliveries (send_id, email, status, updated_at${extra ? `, ${extra}` : ""}) VALUES (?, ?, 'accepted', ?${binds.map(() => ", ?").join("")})`,
+      )
+        .bind(sendId, email, now, ...binds)
+        .run();
+
+    it("is STRICT: a value of the wrong type is refused, not stored as it came", async () => {
+      const { results } = await env.DB.prepare(
+        "SELECT name FROM pragma_table_list WHERE schema = 'main' AND type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND strict = 0",
+      ).all<{ name: string }>();
+      expect(results.map((r) => r.name).filter((n) => n !== "d1_migrations")).toEqual([]);
+      await aSend("st1");
+      await expect(
+        env.DB.prepare(
+          "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES ('st1', 'a@example.com', 'pending', 'yesterday')",
+        ).run(),
+      ).rejects.toThrow(/cannot store TEXT value in INTEGER column/);
+    });
+
+    it("holds every address lowercased, admitting an erasure's placeholder", async () => {
+      await aSend("lc1");
+      await expect(delivery("lc1", "Bob@Example.com")).rejects.toThrow(/CHECK/);
+      await expect(
+        env.DB.prepare(
+          "INSERT INTO suppressions (email, reason, created_at) VALUES ('Bob@Example.com', 'bounce', ?)",
+        )
+          .bind(now)
+          .run(),
+      ).rejects.toThrow(/CHECK/);
+      await expect(
+        env.DB.prepare(
+          "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES ('lc-s', 'Bob@Example.com', 'pending', 'lc-u', ?)",
+        )
+          .bind(now)
+          .run(),
+      ).rejects.toThrow(/CHECK/);
+      await delivery("lc1", "erased:0f3a9c2e7b1d4e8f");
+    });
+
+    it("admits only the known suppression reasons and delivery events", async () => {
+      for (const reason of [
+        "bounce",
+        "complaint",
+        "manual",
+        "erased",
+        "import_bounce",
+        "import_complaint",
+      ]) {
+        await env.DB.prepare(
+          "INSERT INTO suppressions (email, reason, created_at) VALUES (?, ?, ?)",
+        )
+          .bind(`${reason}@example.com`, reason, now)
+          .run();
+      }
+      await expect(
+        env.DB.prepare(
+          "INSERT INTO suppressions (email, reason, created_at) VALUES ('x@example.com', 'spam', ?)",
+        )
+          .bind(now)
+          .run(),
+      ).rejects.toThrow(/CHECK/);
+      await aSend("ev1");
+      await expect(delivery("ev1", "ev@example.com", "event", ["opened"])).rejects.toThrow(/CHECK/);
+    });
+
+    it("keeps one delivery per provider message id, and any number with none", async () => {
+      await aSend("pv1");
+      await delivery("pv1", "a@example.com", "provider_id", ["msg-1"]);
+      await delivery("pv1", "b@example.com");
+      await delivery("pv1", "c@example.com");
+      await expect(delivery("pv1", "d@example.com", "provider_id", ["msg-1"])).rejects.toThrow(
+        /UNIQUE/,
+      );
+    });
+
+    it("refuses an image with no size", async () => {
+      await aSend("im1");
+      await expect(
+        env.DB.prepare(
+          "INSERT INTO images (id, post_id, filename, storage_key, content_type, width, height, created_at) VALUES ('im', 'p-im1', 'a.png', 'k', 'image/png', 0, 10, ?)",
+        )
+          .bind(now)
+          .run(),
+      ).rejects.toThrow(/CHECK/);
+    });
+
+    it("finds a send's stale in-flight rows and an address's deliveries through their own indexes", async () => {
+      const plan = async (sql: string) =>
+        (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>()).results
+          .map((r) => r.detail)
+          .join("\n");
+      expect(
+        await plan(
+          "SELECT COUNT(*) FROM deliveries WHERE status = 'dispatched' AND updated_at < 5",
+        ),
+      ).toMatch(/idx_deliveries_in_flight/);
+      expect(
+        await plan(
+          "SELECT id FROM deliveries WHERE email = 'a@example.com' ORDER BY updated_at DESC LIMIT 1",
+        ),
+      ).toMatch(/idx_deliveries_email/);
+    });
   });
 });

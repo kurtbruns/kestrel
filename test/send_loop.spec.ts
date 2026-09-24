@@ -303,9 +303,9 @@ describe("send loop + sweep", () => {
     // Simulate: 'gone' had a pending delivery row (confirmed at resolution),
     // then unsubscribed before dispatch.
     await env.DB.prepare(
-      "INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at) VALUES (?, ?, 'gone@example.com', 'pending', 0, ?)",
+      "INSERT OR IGNORE INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'gone@example.com', 'pending', 0, ?)",
     )
-      .bind("d-gone", send.id, Date.now())
+      .bind(send.id, Date.now())
       .run();
     await env.DB.prepare(
       "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'gone@example.com'",

@@ -789,8 +789,8 @@ export async function resolveAudience(
   const [, mark] = await db.batch([
     db
       .prepare(
-        `INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at)
-           SELECT lower(hex(randomblob(16))), ?, s.email, 'pending', 0, ?
+        `INSERT OR IGNORE INTO deliveries (send_id, email, status, attempts, updated_at)
+           SELECT ?, s.email, 'pending', 0, ?
              FROM subscribers s
             WHERE s.status = 'confirmed'
               AND s.email NOT IN (SELECT email FROM suppressions)
@@ -811,7 +811,7 @@ export async function resolveAudience(
 }
 
 export interface DeliveryWork {
-  id: string;
+  id: number;
   email: string;
   attempts: number;
   unsub_token: string | null;
@@ -831,19 +831,19 @@ export async function pendingDeliveryIds(
   db: D1Database,
   sendId: string,
   limit: number,
-): Promise<string[]> {
+): Promise<number[]> {
   const { results } = await db
     .prepare(
-      "SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' AND dispatch_key IS NULL ORDER BY rowid ASC LIMIT ?",
+      "SELECT id FROM deliveries WHERE send_id = ? AND status = 'pending' AND dispatch_key IS NULL ORDER BY id ASC LIMIT ?",
     )
     .bind(sendId, limit)
-    .all<{ id: string }>();
+    .all<{ id: number }>();
   return results.map((r) => r.id);
 }
 
 /** The hand-off state of the given rows. The ids travel as one JSON-array parameter,
  *  so a chunk of any size stays under D1's 100-parameter cap. */
-export async function fetchDeliveryWork(db: D1Database, ids: string[]): Promise<DeliveryWork[]> {
+export async function fetchDeliveryWork(db: D1Database, ids: number[]): Promise<DeliveryWork[]> {
   if (ids.length === 0) {
     return [];
   }
@@ -927,7 +927,7 @@ function keyedCounterMove(
 /** One batch to hand off: the rows it covers and the dispatch key it goes out under. */
 export interface HandOff {
   key: string;
-  ids: string[];
+  ids: number[];
 }
 
 /**
@@ -943,14 +943,14 @@ export async function dispatchFresh(
   lease: string,
   handOffs: HandOff[],
   now: number,
-): Promise<{ id: string; key: string }[]> {
+): Promise<{ id: number; key: string }[]> {
   const rows = handOffs.flatMap((h) => h.ids.map((id) => ({ id, k: h.key })));
   if (rows.length === 0) {
     return [];
   }
   const json = JSON.stringify(rows);
   const guard = holdsLease(sendId, lease);
-  const [moved] = await db.batch<{ id: string; key: string }>([
+  const [moved] = await db.batch<{ id: number; key: string }>([
     // Rows are found by primary key (the unary `+` keeps SQLite off the (send_id, status)
     // index, which would walk every pending row of the send for each group), and each
     // takes its own batch's key.
@@ -993,9 +993,9 @@ export async function redispatch(
   key: string,
   now: number,
   queuedOnly = false,
-): Promise<string[]> {
+): Promise<number[]> {
   const guard = holdsLease(sendId, lease);
-  const [, moved] = await db.batch<{ id: string }>([
+  const [, moved] = await db.batch<{ id: number }>([
     // Before the move, so it counts the rows about to leave `pending`.
     keyedCounterMove(db, sendId, lease, [key], "pending", "c_pending", "c_in_flight"),
     db
@@ -1106,10 +1106,10 @@ export async function holdBatch(
  * same key lets the provider dedupe it.
  */
 export type DeliveryOutcome =
-  | { id: string; status: "accepted"; providerId: string }
-  | { id: string; status: "unsent"; error: string }
-  | { id: string; status: "skipped" }
-  | { id: string; status: "pending"; error: string; keepKey: boolean };
+  | { id: number; status: "accepted"; providerId: string }
+  | { id: number; status: "unsent"; error: string }
+  | { id: number; status: "skipped" }
+  | { id: number; status: "pending"; error: string; keepKey: boolean };
 
 const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
   accepted: "c_accepted",
@@ -1143,7 +1143,9 @@ export async function settleDeliveries(
   const rows = outcomes.map((o) => ({
     id: o.id,
     s: o.status,
-    p: o.status === "accepted" ? o.providerId : null,
+    // An adapter that got no message id back reports it empty; the record stores that as
+    // no id, which the unique index on provider ids leaves out.
+    p: o.status === "accepted" && o.providerId !== "" ? o.providerId : null,
     e: o.status === "unsent" || o.status === "pending" ? o.error : null,
     k: o.status === "pending" && o.keepKey ? 1 : 0,
   }));
@@ -1322,7 +1324,7 @@ export async function markDeliveryEvent(
   // Locate the target row first so the counter delta knows the bucket it is leaving (an
   // event can land on an `accepted` row, or overwrite an earlier event).
   type Target = {
-    id: string;
+    id: number;
     send_id: string;
     email: string;
     status: string;

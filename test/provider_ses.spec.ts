@@ -422,9 +422,9 @@ describe("SesProvider.parseWebhook (SNS)", () => {
       .bind(now, now)
       .run();
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, provider_id, updated_at) VALUES (?, 's-ses', ?, 'accepted', ?, ?)",
+      "INSERT INTO deliveries (send_id, email, status, provider_id, updated_at) VALUES ('s-ses', ?, 'accepted', ?, ?)",
     )
-      .bind(`d-${providerId}`, email, providerId, now)
+      .bind(email, providerId, now)
       .run();
   }
 

@@ -10,6 +10,12 @@
 -- Timestamps are unix epoch milliseconds (INTEGER). Text ids are app-generated
 -- (UUID / random tokens). D1 enforces the FK declarations (foreign_keys is on) but
 -- none declares an ON DELETE action, so the app deletes children before parents in code.
+--
+-- Every table is STRICT, so a value of the wrong type is refused rather than stored as
+-- whatever it arrived as. Every email column holds the address lowercased (the app
+-- normalizes before it writes, `shared/email.ts`) and says so with a CHECK, because
+-- consent and suppression are matched by exact comparison: a mixed-case copy of an
+-- address would silently escape its own unsubscribe or suppression (I1, I2).
 
 -- ---------------------------------------------------------------- content
 
@@ -23,7 +29,7 @@ CREATE TABLE posts (
   current_revision TEXT,                       -- -> post_revisions.id (nullable until first save)
   created_at       INTEGER NOT NULL,
   updated_at       INTEGER NOT NULL
-);
+) STRICT;
 CREATE INDEX idx_posts_status ON posts (status);
 CREATE INDEX idx_posts_updated ON posts (updated_at);   -- the post list's default sort
 
@@ -34,7 +40,7 @@ CREATE TABLE post_revisions (
   metadata   TEXT NOT NULL DEFAULT '{}',       -- JSON: {subject, slug}
   author     TEXT,                             -- principal that saved this revision
   created_at INTEGER NOT NULL
-);
+) STRICT;
 CREATE INDEX idx_revisions_post ON post_revisions (post_id, created_at);
 
 CREATE TABLE images (
@@ -43,12 +49,11 @@ CREATE TABLE images (
   filename     TEXT NOT NULL,                  -- referenced by name in the Markdown
   storage_key  TEXT NOT NULL,                  -- R2 object key
   content_type TEXT NOT NULL,
-  width        INTEGER,
-  height       INTEGER,
+  width        INTEGER CHECK (width > 0),     -- null when the format's size wasn't read
+  height       INTEGER CHECK (height > 0),
   created_at   INTEGER NOT NULL,
-  UNIQUE (post_id, filename)
-);
-CREATE INDEX idx_images_post ON images (post_id);
+  UNIQUE (post_id, filename)                    -- also serves lookups by post
+) STRICT;
 
 -- ---------------------------------------------------------------- audience
 
@@ -65,7 +70,7 @@ CREATE INDEX idx_images_post ON images (post_id);
 -- would go dead in delivered mail the moment it rotated.
 CREATE TABLE subscribers (
   id              TEXT PRIMARY KEY,
-  email           TEXT NOT NULL UNIQUE,
+  email           TEXT NOT NULL UNIQUE CHECK (email = lower(email)),
   status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN ('pending', 'confirmed', 'unsubscribed')),
   confirm_token   TEXT UNIQUE,                 -- one-shot double opt-in; rotated on re-arm
@@ -75,18 +80,24 @@ CREATE TABLE subscribers (
   created_at      INTEGER NOT NULL,
   confirmed_at    INTEGER,
   unsubscribed_at INTEGER
-);
+) STRICT;
 CREATE INDEX idx_subscribers_status ON subscribers (status);
 CREATE INDEX idx_subscribers_created ON subscribers (created_at);   -- the roster's default sort
 
 -- Deliverability, not consent (SPEC §7): an address that hard-bounced or complained is
 -- excluded from every send whatever its consent state, until cleared deliberately.
+-- `erased` is the do-not-contact marker an erasure leaves (SPEC §7), the only trace of
+-- the address kept, which the person's own resubscribe lifts. The import reasons record a
+-- bounce or complaint a list brought with it from its previous service, kept apart from
+-- the ones this instance saw so the record says where each came from.
 CREATE TABLE suppressions (
-  email      TEXT PRIMARY KEY,
-  reason     TEXT NOT NULL,                    -- 'bounce' | 'complaint' | 'manual' | 'erased'
+  email      TEXT PRIMARY KEY CHECK (email = lower(email)),
+  reason     TEXT NOT NULL
+               CHECK (reason IN ('bounce', 'complaint', 'manual', 'erased',
+                                 'import_bounce', 'import_complaint')),
   detail     TEXT,
   created_at INTEGER NOT NULL
-);
+) STRICT;
 
 -- ---------------------------------------------------------------- preferences
 
@@ -98,7 +109,7 @@ CREATE TABLE settings (
   id         INTEGER PRIMARY KEY CHECK (id = 1),  -- singleton
   data       TEXT NOT NULL DEFAULT '{}',          -- JSON: the AppSettings shape
   updated_at INTEGER NOT NULL
-);
+) STRICT;
 
 -- ---------------------------------------------------------------- the record
 
@@ -163,7 +174,7 @@ CREATE TABLE sends (
   c_complained    INTEGER NOT NULL DEFAULT 0,
   c_skipped       INTEGER NOT NULL DEFAULT 0,
   c_unsent        INTEGER NOT NULL DEFAULT 0
-);
+) STRICT;
 -- (status, fire_at) serves the sweep and the status-filtered list sort; the unfiltered
 -- fire_at sort is a small scan accepted at newsletter scale rather than a third index.
 CREATE INDEX idx_sends_status_fire ON sends (status, fire_at);
@@ -200,17 +211,24 @@ CREATE UNIQUE INDEX idx_sends_one_active_per_post
 -- `dispatched`, or back in `pending` after a request that got no answer), so a resumed
 -- send re-sends exactly that batch under exactly that key and the provider dedupes it
 -- (I4). Recording the outcome clears it, which keeps its partial index small.
+--
+-- This is the table that grows largest, one row per recipient per send, so its key is the
+-- rowid itself (`INTEGER PRIMARY KEY`): no second index for the key, and pending rows
+-- work in the order they were inserted. The id never leaves the database; the record and
+-- the API name a delivery by its send and address. The address may also be an erasure's
+-- placeholder, `erased:` and lowercase hex (SPEC §7), which keeps each past record summing
+-- to its audience once the person is gone.
 CREATE TABLE deliveries (
-  id           TEXT PRIMARY KEY,
+  id           INTEGER PRIMARY KEY,
   send_id      TEXT NOT NULL REFERENCES sends (id),
-  email        TEXT NOT NULL,
+  email        TEXT NOT NULL CHECK (email = lower(email)),
   status       TEXT NOT NULL DEFAULT 'pending'
                  CHECK (status IN ('pending', 'dispatched', 'accepted', 'unsent', 'skipped')),
   provider_id  TEXT,
   error        TEXT,
   attempts     INTEGER NOT NULL DEFAULT 0,
   updated_at   INTEGER NOT NULL,
-  event        TEXT,                           -- delivered | bounced | complained
+  event        TEXT CHECK (event IN ('delivered', 'bounced', 'complained')),
   event_detail TEXT,                           -- bounce subtype / complaint feedback / diagnostic
   event_at     INTEGER,                        -- when the event was applied (epoch ms)
   bounce_kind  TEXT CHECK (bounce_kind IN ('hard', 'soft')),
@@ -218,10 +236,18 @@ CREATE TABLE deliveries (
   keyed_at     INTEGER,                        -- when that key was first sent, for the
                                                -- provider's idempotency window
   UNIQUE (send_id, email)
-);
+) STRICT;
 CREATE INDEX idx_deliveries_send_status ON deliveries (send_id, status);
-CREATE INDEX idx_deliveries_provider ON deliveries (provider_id);
+-- A provider message id names one delivery, so the webhook's match is exact; enforced
+-- here rather than assumed. An adapter records no id as null, never an empty string.
+CREATE UNIQUE INDEX idx_deliveries_provider ON deliveries (provider_id) WHERE provider_id IS NOT NULL;
 CREATE INDEX idx_deliveries_dispatch_key ON deliveries (dispatch_key) WHERE dispatch_key IS NOT NULL;
+-- The sweep's look for in-flight rows gone stale reads only the rows in flight, not every
+-- delivery ever recorded, every minute.
+CREATE INDEX idx_deliveries_in_flight ON deliveries (updated_at) WHERE status = 'dispatched';
+-- An address's deliveries across sends: a webhook event that carries only an address, and
+-- an erasure replacing the address on every row.
+CREATE INDEX idx_deliveries_email ON deliveries (email, updated_at);
 
 -- ---------------------------------------------------------------- publisher notifications
 
@@ -256,5 +282,5 @@ CREATE TABLE notifications (
   updated_at INTEGER NOT NULL,
   UNIQUE (send_id, kind, episode),
   CHECK ((send_id IS NULL) = (kind = 'test'))
-);
+) STRICT;
 CREATE INDEX idx_notifications_status ON notifications (status, created_at);

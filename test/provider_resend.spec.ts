@@ -349,9 +349,9 @@ async function seedDelivery(providerId: string, email: string): Promise<void> {
     .bind(now, now)
     .run();
   await env.DB.prepare(
-    "INSERT OR IGNORE INTO deliveries (id, send_id, email, status, provider_id, attempts, updated_at) VALUES (?, 's-wh', ?, 'accepted', ?, 0, ?)",
+    "INSERT OR IGNORE INTO deliveries (send_id, email, status, provider_id, attempts, updated_at) VALUES ('s-wh', ?, 'accepted', ?, 0, ?)",
   )
-    .bind(`d-${providerId}`, email, providerId, now)
+    .bind(email, providerId, now)
     .run();
 }
 

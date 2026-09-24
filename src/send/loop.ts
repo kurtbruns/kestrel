@@ -201,7 +201,7 @@ export async function runSend(
     let complete = true;
 
     const calls = batches.map((b) => {
-      const byAddress = new Map<string, string>();
+      const byAddress = new Map<string, number>();
       const recipients = [];
       for (const m of b.members) {
         if (m.unsub_token) {

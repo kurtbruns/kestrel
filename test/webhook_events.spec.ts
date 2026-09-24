@@ -12,11 +12,7 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 // delivery row and suppresses.
 
 /** Seed one accepted delivery (with its parent post + send, for the FK). */
-async function seedDelivery(
-  email: string,
-  providerId: string | null,
-  id = `d-${providerId}`,
-): Promise<void> {
+async function seedDelivery(email: string, providerId: string | null): Promise<void> {
   const now = Date.now();
   await env.DB.prepare(
     "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-we','p-we','sent',?,?)",
@@ -29,9 +25,9 @@ async function seedDelivery(
     .bind(now, now)
     .run();
   await env.DB.prepare(
-    "INSERT INTO deliveries (id, send_id, email, status, provider_id, updated_at) VALUES (?, 's-we', ?, 'accepted', ?, ?)",
+    "INSERT INTO deliveries (send_id, email, status, provider_id, updated_at) VALUES ('s-we', ?, 'accepted', ?, ?)",
   )
-    .bind(id, email, providerId, now)
+    .bind(email, providerId, now)
     .run();
 }
 
@@ -143,9 +139,9 @@ describe("applyDeliveryEvents: matching the right delivery", () => {
   });
 
   it("lands a receipt on a recipient resolved as sent, which has no provider id", async () => {
-    await seedDelivery("resolved@example.com", null, "d-resolved");
+    await seedDelivery("resolved@example.com", null);
     const outcome = () =>
-      env.DB.prepare("SELECT event FROM deliveries WHERE id = 'd-resolved'").first<{
+      env.DB.prepare("SELECT event FROM deliveries WHERE email = 'resolved@example.com'").first<{
         event: string | null;
       }>();
 

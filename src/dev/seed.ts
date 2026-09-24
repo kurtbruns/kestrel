@@ -889,7 +889,6 @@ function buildDeliveries(
 ): SeedDelivery[] {
   return audience.map((email, i): SeedDelivery => {
     const base: SeedDelivery = {
-      id: newId(),
       send_id: sendId,
       email,
       status: "accepted",

@@ -707,9 +707,7 @@ describe("the hand-off and close writes", () => {
         .bind(...w.binds)
         .all<{ detail: string }>();
       const details = plan.results.map((r) => r.detail).join("\n");
-      expect(details).toMatch(
-        /SEARCH deliveries USING (INDEX sqlite_autoindex_deliveries_1|PRIMARY KEY) \(id=\?\)/,
-      );
+      expect(details).toMatch(/SEARCH deliveries USING INTEGER PRIMARY KEY \(rowid=\?\)/);
       expect(details).not.toMatch(/idx_deliveries_send_status/);
     }
   });
