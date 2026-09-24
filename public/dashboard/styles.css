@@ -1268,6 +1268,12 @@ button:disabled {
   transform: none;
   filter: none;
 }
+/* Unavailable but still clickable, so the click can point at the way out (the editor's
+   Save draft while the out-of-date banner is up). Reads as disabled. */
+button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 input,
 textarea,
