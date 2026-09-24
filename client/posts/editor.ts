@@ -9,16 +9,16 @@ import type {
   PostSavedResponse,
   TestSendResponse,
 } from "../../shared/posts";
-import type { ScheduleResponse, SendResponse, SendView } from "../../shared/sends";
+import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
-import { every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
+import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
-import { has } from "../sends/progress";
+import { can, has } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { $, $$ } from "../ui/dom";
 import {
@@ -795,15 +795,31 @@ export async function renderEditor(
     // and Reschedule (SPEC §6), so the banner stops offering them and says the send is being
     // prepared, and that this page moves to the live send when it starts. Past the server's
     // missed tolerance it says how late the send is, from the server's condition.
+    // The switch happens on this page's clock, at the fire time itself (a tick of its own
+    // when the fire time is inside the coming second), with no read needed. Otherwise the
+    // buttons are the server's to offer (`actions`): the clock only ever takes them away, so a
+    // read that answered before the fire time cannot bring them back after it.
     let painted = "";
+    let armed = 0; // the fire time an exact tick is set for, so it is set once
+    const reschedBtn = $<HTMLButtonElement>("#rescheduleSchedule");
+    const cancelBtn = $<HTMLButtonElement>("#cancelSchedule");
+    const offers = (name: SendAction["name"]) =>
+      current.actions === undefined || can({ actions: current.actions }, name);
     const paintBanner = () => {
-      const due = current.phase === "due" || Date.now() >= current.fire_at;
-      controls.hidden = due;
+      const now = Date.now();
+      const due = current.phase === "due" || now >= current.fire_at;
+      reschedBtn.hidden = !offers("reschedule");
+      cancelBtn.hidden = !offers("cancel");
+      controls.hidden = due || (reschedBtn.hidden && cancelBtn.hidden);
       const markup = scheduledBannerHtml(current, due);
       const key = String(markup);
       if (key !== painted) {
         painted = key;
         setHtml(whenEl, markup);
+      }
+      if (!due && current.fire_at - now <= 1000 && current.fire_at !== armed) {
+        armed = current.fire_at;
+        at(current.fire_at, paintBanner, signal);
       }
     };
     paintBanner();
@@ -879,13 +895,11 @@ export async function renderEditor(
     }
 
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
-    const rescheduleBtn = $<HTMLButtonElement>("#rescheduleSchedule");
-    rescheduleBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount);
+    reschedBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount);
 
     // --- cancel schedule (from the scheduled banner) ---
-    const cancelScheduleBtn = $<HTMLButtonElement>("#cancelSchedule");
-    cancelScheduleBtn.onclick = () =>
-      busy(cancelScheduleBtn, "Canceling…", async () => {
+    cancelBtn.onclick = () =>
+      busy(cancelBtn, "Canceling…", async () => {
         try {
           await api(`/sends/${scheduled.id}/cancel`, { method: "POST" });
           toast("Schedule canceled");
@@ -1177,8 +1191,10 @@ export async function renderEditor(
   return handle;
 }
 
-/** What the scheduled banner reads of its send. */
-type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at">;
+/** What the scheduled banner reads of its send. `actions` is absent only until the send's
+ *  own read answers (the post's read does not carry them). */
+type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at"> &
+  Partial<Pick<SendView, "actions">>;
 
 /**
  * Whether the send has moved on from scheduled, found on the editor's own read of it: once

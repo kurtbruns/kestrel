@@ -15,7 +15,7 @@ import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
-import { freeze } from "../src/send/schedule";
+import { freeze, onTheMinute } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 
@@ -279,11 +279,14 @@ describe("the review window closes at the fire time", () => {
 
 describe("actions safe to retry, and If-Match", () => {
   it("answers a second cancel, and a move to the time the send already has, with 200 and changed false", async () => {
-    const fireAt = Date.now() + 3_600_000;
+    const fireAt = onTheMinute(Date.now() + 3_600_000);
     const send = await frozenSend(fireAt);
     const same = await post(`/sends/${send.id}/reschedule`, { fire_at: fireAt });
     expect(same.status).toBe(200);
     expect(await readJson(same)).toMatchObject({ changed: false, send: { fire_at: fireAt } });
+    // The same minute with seconds on it is the same time as stored: still no change.
+    const seconds = await post(`/sends/${send.id}/reschedule`, { fire_at: fireAt - 25_000 });
+    expect(await readJson(seconds)).toMatchObject({ changed: false, send: { fire_at: fireAt } });
     const before = (await sends.getSend(env.DB, send.id))?.rev;
     const first = await post(`/sends/${send.id}/cancel`);
     expect(await readJson(first)).toMatchObject({ changed: true, send: { status: "canceled" } });

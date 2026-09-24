@@ -58,6 +58,46 @@ export async function renderPost(
   return { rendered_html: rendered.html, rendered_text: rendered.text, subject: rendered.subject };
 }
 
+/** The sweep's cadence: it runs once a minute, on the minute (SPEC §6, the timer). */
+const MINUTE_MS = 60 * 1000;
+
+/**
+ * A requested fire time as the send will carry it: rounded up to the next whole minute, and
+ * left as it is when already on one. The sweep fires a send at the first tick at or after its
+ * fire time, and ticks fall on the minute, so a time with seconds in it would fire at the
+ * next minute anyway; carrying that minute means the countdown every client shows ends when
+ * the send actually starts, rather than up to a minute before (SPEC §6). Rounding only ever
+ * moves the time later, so it lengthens the review window and never shortens it (I6).
+ */
+export function onTheMinute(fireAt: number): number {
+  return Math.ceil(fireAt / MINUTE_MS) * MINUTE_MS;
+}
+
+/**
+ * The one gate every requested fire time passes, for schedule, Send now, and reschedule
+ * alike, from either client: refuse a time inside the deployment's minimum lead
+ * (`fire_at_too_soon`), and answer the time to store, on the minute (`onTheMinute`). The lead
+ * is checked on the time as requested, before rounding, so rounding can only add to a window
+ * that was already long enough (I6). `now` is the caller's own reading of the clock when it
+ * has one (Send now asks for exactly `now` plus the lead, which a later reading would refuse);
+ * `hint` is appended to the refusal's message.
+ */
+export function acceptFireAt(
+  requested: number,
+  minLeadMs: number,
+  { now = Date.now(), hint = "" }: { now?: number; hint?: string } = {},
+): number {
+  if (requested < now + minLeadMs) {
+    throw refusal(
+      400,
+      "fire_at_too_soon",
+      `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead${hint}`,
+      { field: "fire_at" },
+    );
+  }
+  return onTheMinute(requested);
+}
+
 /** How many times a freeze re-reads and re-renders when the settings changed under it.
  *  A template save landing in that gap is rare; a couple of retries settles it. */
 const FREEZE_RETRIES = 3;
@@ -202,9 +242,9 @@ async function windowClosed(env: AppEnv, send: SendRow, what: string) {
  * — the sweep firing a send this call just moved forward — is closed on the sweep side,
  * where `acquireLease` re-checks `fire_at` before leasing a `scheduled` send.
  *
- * A move to the time the send already has changes nothing and answers `changed: false`
- * before the minimum lead is checked, so a retried move is safe; any other time must be at
- * least `minLeadMs` out (`fire_at_too_soon`).
+ * A move to the time the send already has (on the minute, as it is stored) changes nothing
+ * and answers `changed: false` before the minimum lead is checked, so a retried move is safe;
+ * any other time passes `acceptFireAt`: at least `minLeadMs` out, stored on the minute.
  */
 export async function reschedule(
   env: AppEnv,
@@ -223,18 +263,13 @@ export async function reschedule(
   if (send.status !== "scheduled" || send.fire_at <= now) {
     throw await windowClosed(env, send, "rescheduled");
   }
-  if (send.fire_at === fireAt) {
+  // Compared on the minute it would be stored at, so a retried move is recognized
+  // whatever seconds the caller put on the time.
+  if (send.fire_at === onTheMinute(fireAt)) {
     return { send, changed: false };
   }
-  if (fireAt < now + minLeadMs) {
-    throw refusal(
-      400,
-      "fire_at_too_soon",
-      `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead`,
-      { field: "fire_at" },
-    );
-  }
-  const res = await rescheduleStmt(env.DB, sendId, fireAt, now, guard.ifMatch ?? null).run();
+  const target = acceptFireAt(fireAt, minLeadMs, { now });
+  const res = await rescheduleStmt(env.DB, sendId, target, now, guard.ifMatch ?? null).run();
   if ((res.meta.changes ?? 0) === 0) {
     // It changed between the read and the write: answer for what it is now.
     return reschedule(env, sendId, fireAt, minLeadMs, guard);
@@ -242,8 +277,8 @@ export async function reschedule(
   log.info("send.rescheduled", {
     sendId,
     postId: send.post_id,
-    fireAt: new Date(fireAt).toISOString(),
-    movedMs: fireAt - send.fire_at,
+    fireAt: new Date(target).toISOString(),
+    movedMs: target - send.fire_at,
   });
   return { send: unwrap(await getSend(env.DB, sendId), "send"), changed: true };
 }

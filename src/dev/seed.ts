@@ -49,6 +49,7 @@ import { DEFAULT_SEED, makePrng } from "../lib/prng";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
+import { onTheMinute } from "../send/schedule";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
@@ -227,7 +228,7 @@ export function buildTimeline(now: number): Timeline {
     importAt: now - 14 * WEEK,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
-    scheduledFireAt: now + 2 * DAY,
+    scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
     sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
   };
 }
@@ -1106,7 +1107,7 @@ export async function seedDatabase(
     const sentIndex = seedPost.sentIndex ?? 0;
     const completedAt = unwrap(timeline.sentAt[sentIndex], "send timeline slot");
     const sentAudience = unwrap(built.sentAudiences[sentIndex], "frozen send audience");
-    const fireAt = completedAt - 30 * 1000; // fired, then completed half a minute later
+    const fireAt = onTheMinute(completedAt) - 60 * 1000; // fired on the minute, completed within it
     const scheduledAt = fireAt - DAY; // scheduled a day ahead of the send
     const { post, revision } = renderInputFor(seedPost, completedAt, markdown);
     const result = await render({ post, revision, images }, config, branding);

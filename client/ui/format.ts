@@ -60,8 +60,9 @@ export function toLocalInput(d: Date): string {
 export function untilStr(fireAt: number, due = false): string {
   const d = fireAt - Date.now();
   if (due || d <= 0) {
-    // Past the fire time the send waits for the next sweep tick, up to a minute; nothing is
-    // sending yet, and the card leaves the queue once something is (docs/DESIGN.md §9).
+    // From the fire time the send waits for the sweep's tick on that minute (a fire time is
+    // on the minute, SPEC §6), a few seconds; nothing is sending yet, and the card leaves the
+    // queue once something is (docs/DESIGN.md §9).
     return "Preparing to send…";
   }
   const s = Math.floor(d / 1000);

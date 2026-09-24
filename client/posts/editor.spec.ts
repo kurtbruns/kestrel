@@ -924,6 +924,57 @@ describe("editor view", () => {
     expect($("#schedWhen").textContent).toMatch(/^Preparing to send…/);
   });
 
+  it("switches to Preparing to send at the fire time itself, on the page's clock, with no read", async () => {
+    // Half a second off the once-a-second tick, so only a switch at the moment itself passes.
+    await open(scheduledPost(Date.now() + 5_500).routes);
+    const calls = fake.calls.length;
+    await vi.advanceTimersByTimeAsync(5_499);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    expect($("#schedWhen").textContent).toMatch(/Sends in 0s/);
+    await vi.advanceTimersByTimeAsync(1);
+    expect($("#schedWhen").textContent).toBe(
+      "Preparing to send… This page switches to the live send when it starts.",
+    );
+    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect(fake.calls).toHaveLength(calls); // nothing was read to get here
+  });
+
+  it("keeps Cancel and Reschedule gone after the fire time when a read still lists them", async () => {
+    const linked = scheduledPost(Date.now() + 5_000);
+    await open(linked.routes);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    // A read whose clock is behind the page's: still scheduled, still offering both.
+    linked.sends.edit(
+      "s1",
+      {},
+      {
+        phase: "scheduled",
+        actions: [
+          { name: "cancel", method: "POST", path: "/sends/s1/cancel" },
+          { name: "reschedule", method: "POST", path: "/sends/s1/reschedule" },
+        ],
+      },
+    );
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(true);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(true);
+    expect($("#schedWhen").textContent).toMatch(/^Preparing to send…/);
+  });
+
+  it("offers only the window controls the server lists for the send", async () => {
+    const linked = scheduledPost();
+    linked.sends.edit(
+      "s1",
+      {},
+      { actions: [{ name: "cancel", method: "POST", path: "/sends/s1/cancel" }] },
+    );
+    await open(linked.routes);
+    expect($<HTMLElement>("#schedControls").hidden).toBe(false);
+    expect($<HTMLElement>("#cancelSchedule").hidden).toBe(false);
+    expect($<HTMLElement>("#rescheduleSchedule").hidden).toBe(true);
+  });
+
   it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
     const linked = scheduledPost(1_800_000_000_000, 1_790_000_000_000);
     await open([
