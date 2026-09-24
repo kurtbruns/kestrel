@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Added
+
+- `MIN_LEAD_SECONDS` sets the minimum lead, how long every send stays cancelable before it fires, per deployment: five minutes when unset, and never under one minute in any environment (a lower value stops the app with an error naming it). Settings shows it read-only, the editor's Schedule, Send now, and Reschedule use it instead of a fixed five minutes, and the API reference states it on the routes that enforce it (SPEC §6). Local dev ships with it at one minute; add `MIN_LEAD_SECONDS="60"` from `.dev.vars.example` to an existing `.dev.vars`.
+
 ### Fixed
 
 - A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
@@ -22,7 +26,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- `MIN_LEAD_SECONDS` sets the minimum lead, how long every send stays cancelable before it fires, per deployment: five minutes when unset, and never under one minute in any environment (a lower value stops the app with an error naming it). Settings shows it read-only, the editor's Schedule, Send now, and Reschedule use it instead of a fixed five minutes, and the API reference states it on the routes that enforce it (SPEC §6). Local dev ships with it at one minute; add `MIN_LEAD_SECONDS="60"` from `.dev.vars.example` to an existing `.dev.vars`.
 - The setup guide has a new last step, Upgrade to a new release, also in the editor's Docs tab: how to move a running instance to a newer version, including when a 0.x release needs the database rebuilt rather than migrated.
 - Kestrel now emails you when a send goes out (how many the provider accepted, how many are unsent or skipped, and a link to the record), and right away if a send runs into a problem (SPEC §8). Each event is one email. Set the address under Settings → Notifications, where you can send a test and see how the last one went. Declare a `send_email` binding named `NOTIFY` so notifications go through Cloudflare's own email and still arrive when your provider refuses the account; without it they go through your provider (see the setup guide's new Notifications step). This touches the database baseline, so rebuild the database as described in the Fixed entry about sends through Resend to 100 or more subscribers.
 - `GET /api/reference` now tags each route with the resource it acts on (posts, sends, subscribers, and so on) and lists each tier's resources, so a client can group the routes the way the reference does.
