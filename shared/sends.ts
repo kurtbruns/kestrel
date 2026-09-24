@@ -173,9 +173,9 @@ export interface SendListResponse {
   sends: SendListItem[];
   page: PageMeta;
   /**
-   * Where this read stands among the changes to sends: the change sequence at the read and
-   * the server's time of it. Opaque to a client, which only hands it back to ask what
-   * changed since.
+   * Where this read stands among the changes to sends, to hand back as `since`: `<seq>.<at>`,
+   * the change sequence at the read and the server's time of it, both decimal. Two compare
+   * by those numbers (`shared/cursor.ts`).
    */
   cursor: string;
 }
@@ -255,7 +255,7 @@ export interface SendFeedResponse {
    * as a lease ran out); without it, every send that can change on its own. Soonest fire first.
    */
   sends: LiveSend[];
-  /** Where this read stands, to hand back as `since` on the next. */
+  /** Where this read stands (`<seq>.<at>`, as on `GET /sends`), to hand back as `since` on the next. */
   cursor: string;
   /** When to read again, by the server's clock: soon while a send moves, about once a minute while none does. */
   read_again_at: number;
@@ -284,7 +284,7 @@ export interface SendResponse {
   slug: string | null;
   archive_url: string | null;
   published: boolean;
-  /** Where this read stands among the changes to sends, to follow the send from with `GET /sends/feed`. */
+  /** Where this read stands among the changes to sends (`<seq>.<at>`), to follow the send from with `GET /sends/feed`. */
   cursor: string;
 }
 

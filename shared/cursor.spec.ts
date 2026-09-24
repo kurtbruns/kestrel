@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { decodeSendCursor, earlierCursor, encodeSendCursor } from "./cursor";
 
+describe("the cursor format", () => {
+  it("is `<seq>.<at>` in decimal, as the API reference documents it for every client", () => {
+    expect(encodeSendCursor({ seq: 57, at: 1_768_467_610_000 })).toBe("57.1768467610000");
+    expect(decodeSendCursor("57.1768467610000")).toEqual({ seq: 57, at: 1_768_467_610_000 });
+  });
+});
+
 describe("earlierCursor", () => {
   it("is at or before both, in sequence and in time", () => {
     const a = encodeSendCursor({ seq: 10, at: 5_000 });
