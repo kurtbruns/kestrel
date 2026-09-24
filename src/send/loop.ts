@@ -425,12 +425,14 @@ export async function runSend(
   // already, so consent is not re-checked for them (I2 covers recipients not yet handed
   // off), and re-sending a batch with someone removed would not be the same batch to the
   // provider. Only an idempotent provider dedupes a re-send, and only while it still
-  // remembers the key. On any other (say the provider was switched mid-send), or once
-  // the key is older than the provider's memory of it, a batch waiting in the queue
-  // under its key goes back in flight, the ambiguous case that waits for Resolve (§12),
-  // rather than sitting where nothing sends or resolves it. Batches already in flight
-  // there are left exactly as they are, so they don't eat this run's budget; releasing the
-  // send leaves them in flight, which is what makes it wedged.
+  // remembers the key. On any other, or once the key is older than the provider's memory
+  // of it, a batch waiting in the queue under its key goes back in flight, the ambiguous
+  // case that waits for Resolve (§12), rather than sitting where nothing sends or resolves
+  // it. Batches already in flight there are left exactly as they are, so they don't eat
+  // this run's budget; releasing the send leaves them in flight, which is what makes it
+  // wedged. A key is known only to the provider and account that took it, so a switch to
+  // another provider with keys mid-send would re-send these batches; that switch is the
+  // developer's to time (SPEC §10, appendix, *Trusted, not guarded*).
   const keyWindow = provider.idempotencyWindowMs;
   const keyedBefore = keyWindow === undefined ? null : Date.now() - keyWindow;
   const unanswered = await sends.unansweredDispatchKeys(
