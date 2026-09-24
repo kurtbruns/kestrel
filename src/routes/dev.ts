@@ -65,7 +65,7 @@ export async function seed(c: RequestContext): Promise<Response> {
     if (logo instanceof File) {
       logoFile = {
         bytes: await logo.arrayBuffer(),
-        contentType: logo.type || "image/svg+xml",
+        contentType: logo.type || "image/png",
       };
     }
   }

@@ -435,9 +435,20 @@ describe("publication logo (issue #81)", () => {
     expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
   });
 
-  it("rejects a non-image upload with 400", async () => {
-    const res = await putLogo(Uint8Array.from([1, 2, 3]), "application/pdf");
-    expect(res.status).toBe(400);
+  it("refuses anything but a raster image with a 400 naming the formats, SVG included", async () => {
+    for (const type of ["application/pdf", "image/svg+xml"]) {
+      const res = await putLogo(new TextEncoder().encode("<svg onload=alert(1)/>"), type);
+      expect(res.status, type).toBe(400);
+      expect(((await res.json()) as { message: string }).message, type).toMatch(
+        /PNG, JPEG, WebP, or GIF/,
+      );
+    }
+    // Nothing was stored: no logo is set and none is served.
+    expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
+    expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
+    // A PNG still uploads, and so does one whose declared type carries case or parameters.
+    expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
+    expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
   });
 });
 
