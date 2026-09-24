@@ -5,7 +5,7 @@ import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
-import { STUCK_THRESHOLD_MS } from "../src/lib/time";
+import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { buildSendProgress } from "../src/send/progress";
@@ -258,6 +258,22 @@ describe("buildSendProgress — derived phase", () => {
   const phase = (over: Partial<SendRow>, hasRetries = false) =>
     buildSendProgress(mkSend(over), "fake", hasRetries, Date.now()).phase;
 
+  it("scheduled in the review window, due once the fire time passes, missed only past the threshold", () => {
+    const now = Date.now();
+    const at = (fire_at: number) =>
+      buildSendProgress(
+        mkSend({ status: "scheduled", fire_at, started_at: null }),
+        "fake",
+        false,
+        now,
+      );
+    expect(at(now + 60_000).phase).toBe("scheduled");
+    expect(at(now).phase).toBe("due"); // the fire time itself: the next tick starts it
+    const late = at(now - 60_000); // an ordinary slow tick is never a miss (SPEC §12)
+    expect([late.phase, late.attention.missed]).toEqual(["due", false]);
+    const missed = at(now - MISSED_THRESHOLD_MS - 1);
+    expect([missed.phase, missed.attention.missed]).toEqual(["due", true]);
+  });
   it("progressing while handing off with no retries", () => {
     expect(phase({ status: "sending", c_pending: 5, c_in_flight: 3 })).toBe("progressing");
   });

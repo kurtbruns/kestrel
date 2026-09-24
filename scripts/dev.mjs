@@ -28,7 +28,8 @@
  *
  * The send sweep: deployed, a cron runs it once a minute; `wrangler dev` never does. The
  * launcher runs it at every wall-clock minute instead (scripts/sweep-ticker.mjs), so a local
- * send fires, resumes, and settles when a deployed one would.
+ * send fires and resumes when a deployed one would, and settles the simulation's receipts
+ * every few seconds, as a provider's webhooks would arrive.
  *
  * Per-run overrides: `SIMULATE_SENDS`, `MIN_LEAD_SECONDS`, and `SUBREQUEST_BUDGET` set in the
  * shell are forwarded to wrangler over `.dev.vars`, so `SIMULATE_SENDS=ses npm run dev` picks
@@ -223,8 +224,9 @@ watcher.on("exit", (code) => {
     );
   }
 });
-// The send sweep, once a minute on the minute, as the deployed cron runs it. A remote
-// session runs against deployed resources, where the real cron is the one that counts.
+// The send sweep, once a minute on the minute, as the deployed cron runs it, and the
+// simulated receipts every few seconds. A remote session runs against deployed resources,
+// where the real cron and the real webhooks are the ones that count.
 const stopTicker = isRemote ? () => {} : startSweepTicker(origin);
 
 // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave the

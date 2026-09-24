@@ -24,7 +24,7 @@ export type SendRow = Send;
 export type { SendCounts };
 
 /** Read the counter columns off a send row into the API-facing `SendCounts` shape. */
-export function countsOf(send: SendRow): SendCounts {
+export function countsOf(send: SendSummary): SendCounts {
   return {
     pending: send.c_pending,
     in_flight: send.c_in_flight,

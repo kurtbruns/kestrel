@@ -160,12 +160,14 @@ export interface SendListResponse {
 
 /**
  * The live reporting phase, derived from the counters, never stored: waiting in the
- * review window; handing recipients to the provider (with or without retries); paused
- * between sweep ticks; wedged and awaiting Resolve; dispatched with receipts still
- * arriving; every accepted recipient confirmed; or canceled.
+ * review window; due (the fire time has passed and the next sweep starts it); handing
+ * recipients to the provider (with or without retries); paused between sweep ticks;
+ * wedged and awaiting Resolve; dispatched with receipts still arriving; every accepted
+ * recipient confirmed; or canceled.
  */
 export type SendPhase =
   | "scheduled"
+  | "due"
   | "progressing"
   | "retrying"
   | "backing-off"
