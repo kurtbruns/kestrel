@@ -53,7 +53,7 @@ async function rev(id: string): Promise<number> {
 /** The sequence now, read the way the list reads it. */
 async function seq(): Promise<number> {
   const row = await env.DB.prepare(
-    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), (SELECT value FROM send_rev_floor WHERE id = 1)) AS value",
+    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT value FROM send_rev_floor WHERE id = 1), 0)) AS value",
   ).first<{ value: number }>();
   return row!.value;
 }
@@ -144,6 +144,18 @@ describe("a send's rev", () => {
     expect(await rev(send.id)).toBeGreaterThan(sent);
   });
 
+  it("moves when a send completes", async () => {
+    await seedConfirmed("a@example.com");
+    const send = await frozenSend(Date.now() - 1000);
+    const lease = await sends.acquireLease(env.DB, send.id, Date.now(), 60_000);
+    const before = await rev(send.id);
+    // No recipient handed off, so only the completion itself (and its exactness pass)
+    // writes the send. The source scan below is what holds each statement to its stamp.
+    await sends.completeSend(env.DB, send.id, send.post_id, Date.now(), lease);
+    expect((await sends.getSend(env.DB, send.id))?.status).toBe("sent");
+    expect(await rev(send.id)).toBeGreaterThan(before);
+  });
+
   it("does not move on a lease renewal, but does when the lease is taken or released", async () => {
     await seedConfirmed("a@example.com");
     const send = await frozenSend(Date.now() - 1000);
@@ -178,7 +190,7 @@ describe("a send's rev", () => {
     expect(await seq()).toBe(sequence);
   });
 
-  it("never falls back when the send holding the largest number is deleted", async () => {
+  it("takes a number for a delete, so it never falls back and the removal is itself a change", async () => {
     const kept = await frozenSend(Date.now() + 3_600_000, "kept");
     const gone = await frozenSend(Date.now() + 3_600_000, "gone");
     await sends.cancelStmt(env.DB, gone.id, Date.now()).run();
@@ -188,10 +200,13 @@ describe("a send's rev", () => {
 
     await posts.deletePost(env.DB, gone.post_id);
     expect(await sends.getSend(env.DB, gone.id)).toBeNull();
-    expect(await seq()).toBe(top);
+    // A client whose cursor is at `top` listed the send; the sequence moving past it is
+    // what tells that client something it listed may be gone.
+    const removed = await seq();
+    expect(removed).toBeGreaterThan(top);
     // The next change is numbered past the deleted send's, which a cursor may already hold.
     await sends.cancelStmt(env.DB, kept.id, Date.now()).run();
-    expect(await rev(kept.id)).toBeGreaterThan(top);
+    expect(await rev(kept.id)).toBeGreaterThan(removed);
   });
 });
 
@@ -204,24 +219,44 @@ const SOURCES = import.meta.glob("../src/**/*.ts", {
 
 describe("every write to sends", () => {
   it("stamps NEXT_REV, but for the lease renewal, and every delete raises the floor first", () => {
-    const writes = /(UPDATE|INSERT(?:\s+OR\s+\w+)?\s+INTO|DELETE\s+FROM)\s+sends\b/g;
+    // Any verb that writes a table, in any case, with or without a schema or brackets.
+    const writes =
+      /\b(UPDATE(?:\s+OR\s+\w+)?|(?:INSERT(?:\s+OR\s+\w+)?|REPLACE)\s+INTO|DELETE\s+FROM)\s+(?:main\.)?\[?sends\b\]?/gi;
+    const stamp = /\brev\s*=\s*\$\{NEXT_REV\}/;
     let seen = 0;
     for (const [file, text] of Object.entries(SOURCES)) {
-      for (const match of text.matchAll(writes)) {
+      // Comments can mention SQL (or the helpers) without running it; only code counts.
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:])\/\/.*$/gm, "$1");
+      for (const match of code.matchAll(writes)) {
         seen += 1;
         const at = match.index ?? 0;
         // The statement runs to the end of the string literal it is written in, which the
         // quote opening it names (a template literal may hold `"` in an interpolation).
-        const before = text.slice(0, at);
+        const before = code.slice(0, at);
         const quote = before.lastIndexOf("`") > before.lastIndexOf('"') ? "`" : '"';
-        const rest = text.slice(at);
+        const rest = code.slice(at);
         const statement = rest.slice(0, rest.indexOf(quote));
         const where = `${file}: ${statement.slice(0, 80)}`;
-        if (match[1]?.startsWith("DELETE")) {
-          expect(text.slice(Math.max(0, at - 200), at), where).toContain("raiseRevFloorStmt(db)");
-        } else if (!statement.startsWith("UPDATE sends SET locked_until = ? WHERE")) {
+        const verb = (match[1] ?? "").toUpperCase();
+        if (verb.startsWith("DELETE")) {
+          // The floor raise is the statement just before, in the same batch.
+          expect(before.slice(-120), where).toMatch(
+            /raiseRevFloorStmt\(db\),\s*db\.prepare\(\s*["`]$/,
+          );
+        } else if (verb.startsWith("UPDATE")) {
+          if (/^UPDATE sends SET locked_until = \? WHERE/.test(statement)) {
+            continue; // the renewal, the one write that changes nothing a reader sees
+          }
+          // The SET list runs to the statement's last WHERE (a subquery in it has its own).
+          const wheres = [...statement.matchAll(/\bWHERE\b/gi)];
+          const set = statement.slice(0, wheres.at(-1)?.index ?? statement.length);
+          expect(set, where).toMatch(stamp);
+        } else {
+          // An insert names `rev` among its columns and gives it NEXT_REV.
+          const columns = statement.slice(statement.indexOf("("), statement.indexOf(")") + 1);
+          expect(columns, where).toMatch(/\brev\b/);
           // biome-ignore lint/suspicious/noTemplateCurlyInString: matches the source text of the interpolation, not a value
-          expect(statement, where).toContain("${NEXT_REV}");
+          expect(statement.slice(statement.indexOf(")") + 1), where).toContain("${NEXT_REV}");
         }
       }
     }

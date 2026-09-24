@@ -44,24 +44,30 @@ export function countsOf(send: SendSummary): SendCounts {
 // Every write that changes what a reader can see of a send sets its `rev` to NEXT_REV,
 // inside the same statement, so a client holding the sequence value it last read can ask
 // for every send that changed after it, across sends, whichever client made the change.
-// The sequence is the largest `rev` any send holds, raised by the floor that a delete
-// leaves behind (`raiseRevFloorStmt`), so a number is never handed out twice even when the
-// send that held the largest one is deleted. Rows one statement stamps share its number,
-// as rows one read sees are one snapshot. The one write that does not stamp is a lease
+// The sequence is the largest `rev` any send holds, or the floor, whichever is higher. A
+// delete takes a number of its own by raising the floor past the sequence
+// (`raiseRevFloorStmt`), so a number is never handed out twice even when the send that
+// held the largest one goes, and a floor above a client's cursor tells it that something
+// it listed may be gone. Rows one statement stamps share its number, as rows one read
+// sees are one snapshot. The one write that does not stamp is a lease
 // renewal (`renewLease`): it changes nothing a reader sees. `test/send_rev.spec.ts`
-// fails if a write to `sends` anywhere under src/ leaves NEXT_REV out.
+// fails if a write to `sends` anywhere under src/ leaves NEXT_REV out, or a delete skips
+// the floor.
 
-/** The sequence value now: every change so far is at or below it. */
+/** The sequence value now: every change so far is at or below it. Each side falls back
+ *  to 0, since SQLite's two-argument MAX is null if either is, and a null here would fail
+ *  every write to a send. */
 const CURRENT_REV =
-  "MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), (SELECT value FROM send_rev_floor WHERE id = 1))";
+  "MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT value FROM send_rev_floor WHERE id = 1), 0))";
 
 /** The number a write to a send takes: above every change before it. */
 export const NEXT_REV = `(${CURRENT_REV} + 1)`;
 
-/** Run before deleting sends, in the same batch: keeps the sequence from falling back
- *  when the send that held its largest number goes. */
+/** Run before deleting sends, in the same batch: the delete takes the next number as
+ *  the floor, so the sequence never falls back when the send that held its largest number
+ *  goes, and the removal itself is a change a cursor can be past or not. */
 export function raiseRevFloorStmt(db: D1Database): D1PreparedStatement {
-  return db.prepare(`UPDATE send_rev_floor SET value = ${CURRENT_REV} WHERE id = 1`);
+  return db.prepare(`UPDATE send_rev_floor SET value = ${NEXT_REV} WHERE id = 1`);
 }
 
 // --- denormalized counter maintenance (`sends.c_*`) --------------------------
@@ -307,7 +313,8 @@ export interface SendListPage {
  * One page of sends for `GET /sends`, read in one batch so the page, its total, and the
  * change sequence are one snapshot: a change either shows in the rows or lands after
  * `seq`, never neither. Only a `sending` send's retry probe can decide its phase, so the
- * probe runs for those rows alone.
+ * CASE skips the probe for every other row (an AND would still run it: SQLite evaluates
+ * both sides of one in a result column).
  */
 export async function listSendsPage(
   db: D1Database,
@@ -321,7 +328,7 @@ export async function listSendsPage(
     db
       .prepare(
         `SELECT ${SEND_LIST_COLS},
-                (status = 'sending' AND ${activeRetriesSql("sends.id")}) AS has_retries
+                CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
            FROM sends ${clause} ${orderByClause(page, "id")} LIMIT ? OFFSET ?`,
       )
       .bind(...binds, page.limit, page.offset),

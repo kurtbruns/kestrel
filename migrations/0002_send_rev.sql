@@ -1,13 +1,14 @@
--- 0002_send_rev — a change sequence over sends (SPEC §8: what a page shows keeps up with
+-- 0002_send_rev: a change sequence over sends (SPEC §8: what a page shows keeps up with
 -- a change made anywhere, by either client).
 --
 -- Every write that changes what a reader can see of a send gives it a `rev` above every
 -- change before it, across all sends, so a client that holds the sequence value it last
 -- read can ask for every send that changed after it and miss none. The sequence is the
--- largest `rev` any send holds; `send_rev_floor` keeps it from falling back when the send
--- holding it is deleted. The app stamps `rev` in each write (src/db/sends.ts, NEXT_REV).
+-- largest `rev` any send holds, or `send_rev_floor` when that is higher: a delete takes
+-- the next number there, so the sequence never falls back and the removal is itself a
+-- change. The app stamps `rev` in each write (src/db/sends.ts, NEXT_REV).
 
--- The floor: raised to the sequence just before sends are deleted, never lowered.
+-- The floor: set to the next number as sends are deleted, never lowered.
 CREATE TABLE send_rev_floor (
   id    INTEGER PRIMARY KEY CHECK (id = 1),   -- singleton
   value INTEGER NOT NULL
