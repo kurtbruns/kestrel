@@ -1,6 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeliveryOutcomes, Send, SendProgress } from "../../shared/sends";
-import { $, $$, type FakeApi, fakeApi, mount, resetShell, unmount } from "../test/support";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  mount,
+  resetShell,
+  typeInto,
+  unmount,
+} from "../test/support";
 import { clampPct, fmtDuration } from "./progress";
 import { renderSentRecord } from "./record";
 
@@ -181,6 +190,153 @@ describe("sent record", () => {
     expect(last?.url.searchParams.get("view")).toBe("all");
     expect($(".rec-view-btn[data-view='all']").getAttribute("aria-pressed")).toBe("true");
     expect($("#recRows").textContent).toMatch(/No recipients on this send/);
+  });
+
+  it("brings a bounce into the failures list when a settling poll moves the counts", async () => {
+    let bounced = false;
+    const settling = () =>
+      outcomes(
+        bounced
+          ? { delivered: 7, bounced: 1, unsent: 0, accepted: 2 }
+          : { delivered: 7, bounced: 0, unsent: 0, accepted: 3 },
+      );
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: send(),
+          progress: progress({ state: "sent", phase: "settling" }),
+          outcomes: settling(),
+          slug: "owls",
+          archive_url: null,
+          published: true,
+        }),
+      },
+      {
+        path: "/sends/x1/deliveries",
+        reply: (req) => {
+          const failures = bounced && req.url.searchParams.get("view") === "failures";
+          return {
+            deliveries: failures ? [rows[0]] : [],
+            view: req.url.searchParams.get("view"),
+            page: { ...page, total: failures ? 1 : 0 },
+          };
+        },
+      },
+    ]);
+    const lists = () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#recRows").textContent).toMatch(/No delivery failures/);
+    expect($(".rec-n.warn").textContent).toBe("0");
+
+    bounced = true; // a bounce receipt lands before the next tick
+    await vi.advanceTimersByTimeAsync(15000);
+    expect($(".rec-n.warn").textContent).toBe("1");
+    expect($$(".rec-people-table tbody tr")).toHaveLength(1);
+    expect($(".rec-people-table .rec-email").textContent).toBe("b@x.y");
+    expect($(".rec-people-table .rec-out").textContent).toBe("Hard bounce");
+    const reload = lists().at(-1)?.url.searchParams;
+    expect(reload?.get("view")).toBe("failures");
+    expect(reload?.get("offset")).toBe("0");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("reloads the list only when a poll moves the counts, keeping the reader's view, search, and sort", async () => {
+    let settled = outcomes({ delivered: 5, bounced: 0, unsent: 0, accepted: 5 });
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: send(),
+          progress: progress({ state: "sent", phase: "settling" }),
+          outcomes: settled,
+          slug: "owls",
+          archive_url: null,
+          published: true,
+        }),
+      },
+      {
+        path: "/sends/x1/deliveries",
+        reply: (req) => ({
+          deliveries: rows,
+          view: req.url.searchParams.get("view"),
+          page: { ...page, total: 120, offset: Number(req.url.searchParams.get("offset")) },
+        }),
+      },
+    ]);
+    const lists = () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    $(".rec-view-btn[data-view='all']").click();
+    await vi.advanceTimersByTimeAsync(10);
+    typeInto($<HTMLInputElement>(".rec-people-search"), "x.y");
+    await vi.advanceTimersByTimeAsync(250);
+    $<HTMLButtonElement>(".pager-next").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".pager-range").textContent).toBe("51–100 of 120");
+    const read = lists().length;
+
+    await vi.advanceTimersByTimeAsync(15000); // nothing new: the reader stays on page two
+    expect(lists().length).toBe(read);
+    expect($(".pager-range").textContent).toBe("51–100 of 120");
+
+    settled = outcomes({ delivered: 6, bounced: 0, unsent: 0, accepted: 4 });
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(lists().length).toBe(read + 1);
+    const reload = lists().at(-1)?.url.searchParams;
+    expect(reload?.get("view")).toBe("all");
+    expect(reload?.get("search")).toBe("x.y");
+    expect(reload?.get("sort")).toBe("email");
+    expect(reload?.get("dir")).toBe("asc");
+    expect(reload?.get("offset")).toBe("0");
+    expect($(".pager-range").textContent).toBe("1–50 of 120");
+    expect($(".rec-view-btn[data-view='all']").getAttribute("aria-pressed")).toBe("true");
+    expect($<HTMLInputElement>(".rec-people-search").value).toBe("x.y");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("lets the reader's own reload win over a poll's that answers later", async () => {
+    let settled = outcomes({ delivered: 5, bounced: 0, unsent: 0, accepted: 5 });
+    let held: ((v: unknown) => void) | null = null;
+    const release = () => held?.(null);
+    let failureReads = 0;
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: send(),
+          progress: progress({ state: "sent", phase: "settling" }),
+          outcomes: settled,
+          slug: "owls",
+          archive_url: null,
+          published: true,
+        }),
+      },
+      {
+        path: "/sends/x1/deliveries",
+        reply: (req) => {
+          const view = req.url.searchParams.get("view");
+          const answer = { deliveries: view === "failures" ? rows : [], view, page };
+          // The mount's failures read answers at once; the poll's reload is held open.
+          return view === "failures" && ++failureReads === 2
+            ? new Promise((r) => (held = r)).then(() => answer)
+            : answer;
+        },
+      },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    settled = outcomes({ delivered: 6, bounced: 0, unsent: 0, accepted: 4 });
+    await vi.advanceTimersByTimeAsync(15000); // the tick's reload is now pending
+    expect(failureReads).toBe(2);
+    $(".rec-view-btn[data-view='delivered']").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
+    release(); // the stale failures answer lands last
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
+    expect(document.querySelector(".rec-people-table")).toBeNull();
   });
 
   it("opens the live watch for a send in flight, polls, and flips to the record when it finishes", async () => {

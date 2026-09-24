@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
 
+### Fixed
+
+- A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
+
 ## [1.0.0] - 2026-09-23
 
 ### Breaking

@@ -342,6 +342,11 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
       : "";
   return `${reconciled}${suppression}`;
 }
+// Whether two readings of the record agree on every bucket, so a settling tick that
+// brought nothing new leaves the page as it is.
+function sameOutcomes(a: DeliveryOutcomes, b: DeliveryOutcomes): boolean {
+  return (Object.keys(a) as (keyof DeliveryOutcomes)[]).every((k) => a[k] === b[k]);
+}
 
 interface Outcome {
   label: string;
@@ -498,10 +503,10 @@ function renderFrozenRecord(
     viewBtn.onclick = () => window.open(archive_url, "_blank", "noopener");
   }
 
-  // The per-recipient record, its own paged/filtered state (independent of the tiles).
-  // Default view is "failures" so the rows that went wrong lead; default sort mirrors the
-  // CSV (email asc). The tiles above stay the live summary as receipts settle; this list
-  // reloads on interaction (a view/search/sort/page change, or re-clicking the view).
+  // The per-recipient record, its own paged/filtered state. Default view is "failures" so
+  // the rows that went wrong lead; default sort mirrors the CSV (email asc). It reloads on
+  // interaction (a view/search/sort/page change, or re-clicking the view), and on a settling
+  // poll that moved the tiles, so a row never contradicts the count above it.
   const dstate: DeliveryListState = {
     view: "failures",
     search: "",
@@ -512,12 +517,18 @@ function renderFrozenRecord(
   };
   const rowsEl = $("#recRows", root);
   const recPagerEl = $("#recPager", root);
+  // Loads can overlap (a poll's reload racing the reader's click), so only the latest paints.
+  let latest = 0;
   const loadDeliveries = async () => {
+    const mine = ++latest;
     try {
       const d = await api<DeliveryListResponse>(
         `/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`,
         { signal },
       );
+      if (mine !== latest) {
+        return;
+      }
       if (!d.deliveries.length) {
         setHtml(rowsEl, html`<p class="rec-people-empty muted">${deliveryEmpty(dstate)}</p>`);
         setHtml(recPagerEl, html``);
@@ -527,7 +538,9 @@ function renderFrozenRecord(
       wireSort(rowsEl, dstate, loadDeliveries);
       renderPager(recPagerEl, dstate, d.page, loadDeliveries);
     } catch (e) {
-      renderError(rowsEl, message(e), loadDeliveries);
+      if (mine === latest) {
+        renderError(rowsEl, message(e), loadDeliveries);
+      }
     }
   };
   const viewButtons = $$<HTMLButtonElement>(".rec-view-btn", root);
@@ -577,10 +590,13 @@ function renderFrozenRecord(
     });
 
   // Still settling: the record keeps absorbing delivery receipts after dispatch (§6), so
-  // poll ~15s and repaint the tiles until every accepted recipient is confirmed. Capped
-  // (~10 min) so a provider that never confirms doesn't leave the poll running forever;
-  // ends with the mount either way.
+  // poll ~15s until every accepted recipient is confirmed. A tick that moved a count
+  // repaints the tiles and reloads the list's first page in the reader's view, search, and
+  // sort; one that moved nothing leaves the list, and the reader's place in it, alone.
+  // Capped (~10 min) so a provider that never confirms doesn't leave the poll running
+  // forever; ends with the mount either way.
   if (outcomes.accepted > 0) {
+    let shown = outcomes;
     let ticks = 0;
     poll(
       15000,
@@ -593,13 +609,18 @@ function renderFrozenRecord(
           remount(); // resumed (a wedged resolve, say) → back to the watch
           return false;
         }
-        const tiles = root.querySelector(".rec-tiles");
-        const recon = root.querySelector(".rec-recon");
-        if (tiles) {
-          setHtml(tiles, outcomeTilesHtml(fresh.outcomes));
-        }
-        if (recon) {
-          recon.textContent = outcomeReconHtml(fresh.outcomes);
+        if (!sameOutcomes(shown, fresh.outcomes)) {
+          shown = fresh.outcomes;
+          const tiles = root.querySelector(".rec-tiles");
+          const recon = root.querySelector(".rec-recon");
+          if (tiles) {
+            setHtml(tiles, outcomeTilesHtml(fresh.outcomes));
+          }
+          if (recon) {
+            recon.textContent = outcomeReconHtml(fresh.outcomes);
+          }
+          dstate.offset = 0;
+          await loadDeliveries();
         }
         return fresh.outcomes.accepted > 0;
       },
