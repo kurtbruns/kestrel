@@ -22,6 +22,7 @@ import { getConfig } from "../env";
 import { errorText, log } from "../lib/log";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { type Budget, metered } from "../send/budget";
+import { isWedged } from "../send/wedged";
 import { getNotifier } from "./channel";
 import { composeNotification } from "./compose";
 
@@ -52,12 +53,7 @@ export function stillHolds(n: notifications.DueNotification, now: number): boole
     case "stuck":
       return n.send_status === "sending";
     case "wedged":
-      return (
-        n.send_status === "sending" &&
-        n.c_pending === 0 &&
-        n.c_in_flight > 0 &&
-        (n.locked_until === null || n.locked_until <= now)
-      );
+      return isWedged({ ...n, status: n.send_status });
     case "missed":
       return n.send_status === "scheduled"
         ? n.fire_at < now - MISSED_THRESHOLD_MS

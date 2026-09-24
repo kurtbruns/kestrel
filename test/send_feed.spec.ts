@@ -9,6 +9,7 @@ import {
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
+import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
@@ -193,7 +194,7 @@ describe("GET /sends/feed after a cursor", () => {
     expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
   });
 
-  it("reports a send wedged when its lease ran out", async () => {
+  it("reports a send wedged by the write that released it, and not when a lease merely runs out", async () => {
     const now = Date.now();
     const send = await scheduledSend("Wedged", now - 120_000);
     await setRow(send.id, {
@@ -202,13 +203,17 @@ describe("GET /sends/feed after a cursor", () => {
       audience_resolved_at: now - 100_000,
       c_in_flight: 3,
       c_accepted: 7,
-      locked_until: now - 10_000,
+      locked_until: now - 10_000, // a run cut off: its lease ran out, and no run has looked
     });
-    const body = await feed(await cursorReadAt(now - 20_000));
+    const since = await cursorReadAt(now - 20_000);
+    expect((await feed(since)).sends).toEqual([]); // nothing a reader sees has changed
+    // The next run looks, finds nothing it may re-send, and releases the send.
+    const lease = await sends.acquireLease(env.DB, send.id, Date.now(), 60_000);
+    await sends.releaseLease(env.DB, send.id, lease!);
+    const body = await feed(since);
     expect(body.sends.map((s) => [s.id, s.phase, s.attention.wedged])).toEqual([
       [send.id, "needs-attention", true],
     ]);
-    expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
   });
 
   it("reports a late receipt on a send past the hour it is followed at pace", async () => {

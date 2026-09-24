@@ -203,7 +203,7 @@ describe("the send lifecycle in the log", () => {
     expectNoAddress();
   });
 
-  it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick", async () => {
+  it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick from the one that left it", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
@@ -223,13 +223,14 @@ describe("the send lifecycle in the log", () => {
       unknown: 3,
     });
 
-    // Past the threshold, every tick flags the wedged send by name until Resolve.
+    // Wedged from the tick whose run left it, and flagged by name every tick until Resolve.
+    expect(lines().filter((l) => l.event === "send.wedged")).toHaveLength(1);
     vi.setSystemTime(Date.now() + STUCK_THRESHOLD_MS + 60_000);
     await sweep(env);
     await toNextTick(env.DB);
     await sweep(env);
     const wedged = lines().filter((l) => l.event === "send.wedged");
-    expect(wedged).toHaveLength(2);
+    expect(wedged).toHaveLength(3);
     expect(wedged[0]).toMatchObject({
       level: "error",
       sendId: send.id,

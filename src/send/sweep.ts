@@ -1,8 +1,9 @@
 /**
  * The reconciling sweep — runs once a minute from scheduled(). Four jobs:
  *   1. fire due sends (and loudly flag any that missed their fire time),
- *   2. resume sends left mid-flight by a crash (expired lease),
- *   3. flag anomalies (stuck sends, ambiguous in-flight deliveries),
+ *   2. resume sends left mid-flight by a crash (expired lease), never a wedged one, which
+ *      no run can move until Resolve (`WEDGED_SEND`),
+ *   3. flag anomalies (stuck sends, wedged sends awaiting Resolve),
  *   4. notify the publisher of sends that went out or ran into a problem (`notify/notify.ts`).
  *
  * A missed fire is still delivered — the render is frozen, so lateness is a
@@ -108,8 +109,8 @@ async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void
     log.error("send.stuck", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
     tick.stuck += 1;
   }
-  for (const s of await sends.staleDispatched(env.DB, now - STUCK_THRESHOLD_MS)) {
-    log.error("send.wedged", { sendId: s.send_id, postId: s.post_id, recipients: s.n });
+  for (const s of await sends.wedgedSends(env.DB)) {
+    log.error("send.wedged", { sendId: s.id, postId: s.post_id, recipients: s.c_in_flight });
     tick.wedged += 1;
   }
 

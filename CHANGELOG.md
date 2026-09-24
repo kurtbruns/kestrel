@@ -28,6 +28,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- A send is wedged, awaiting Resolve, from the moment the run that left recipients with an unknown fate hands it back, by one rule the send's page, the lists, the feed, the notification, and the log's `send.wedged` all share; before, the log flagged it only after 30 minutes. The sweep no longer runs a wedged send every minute, so its page no longer reads "progressing" for a moment each minute or reports a change when nothing changed. On Resend, recipients a cut-off run left in flight no longer read as wedged while they wait for the next run to send them again under their key (SPEC §12).
 - An open page no longer reads every 3 seconds while a send waits on something only a person or a retry can change (the provider refusing the account, a wedged send awaiting Resolve, a provider outage between retries): it reads at the send's next retry, or about once a minute, and a fix still shows within the minute. `read_again_at` is advisory, and the reference now says so (SPEC §8).
 - A scheduled send whose fire time has passed now reports the phase `due` until the sweep starts it, instead of `scheduled` (SPEC §12).
 - Locally, simulated delivery receipts now arrive every couple of seconds on their own, as a provider's webhooks would, instead of at the minute's sweep or while a send's page is open.

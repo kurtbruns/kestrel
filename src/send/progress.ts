@@ -16,6 +16,7 @@ import type { LiveSend, SendHalt, SendPhase, SendProgress, SendSummary } from ".
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { nextChangeAt } from "./feed";
+import { isWedged } from "./wedged";
 
 /** In flight too long (SPEC §12): still `sending` past the stuck threshold. The one
  *  rule behind `attention.stuck` and the send list's `stuck`. */
@@ -37,8 +38,9 @@ export function isStuck(send: Pick<SendRow, "status" | "started_at">, now: numbe
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
  *                       ticks, or, while the provider is unavailable, until the halt's
  *                       next retry (`provider.halt.retry_at`).
- *   - `needs-attention` wedged: nothing left to hand off, but recipients stuck in flight
- *                       whose fate a transport error left unknown (§12) — awaiting Resolve;
+ *   - `needs-attention` wedged: nothing left to hand off, and the last run released the
+ *                       send with recipients in flight whose fate is unknown (§12) —
+ *                       awaiting Resolve;
  *                       or refused: the provider refuses the account, which the operator
  *                       must fix before the send can go on.
  *   - `settling`        dispatch complete; delivery receipts still arriving.
@@ -129,13 +131,10 @@ export function buildSendProgress(
   const confirmed = counts.delivered + counts.bounced + counts.complained;
   const deliveryPercent = acceptedTotal > 0 ? round((100 * confirmed) / acceptedTotal) : 0;
 
-  // A wedged send is one the loop has GIVEN UP on this cycle — nothing left to hand off,
-  // rows stuck in flight, and the lease released (SPEC §12). The lease check is what keeps
-  // a normal send's final dispatched batch (pending 0, in flight > 0, lease still held while
-  // the loop finishes it) from momentarily reading as "needs attention."
-  const leaseHeld = send.locked_until != null && send.locked_until > now;
-  const wedged =
-    send.status === "sending" && counts.pending === 0 && counts.in_flight > 0 && !leaseHeld;
+  // Wedged: the last run gave up on the recipients left in flight and released its lease
+  // (`isWedged`). A run finishing its last batch, or one cut off whose lease has yet to run
+  // out and be looked at, holds or held the lease, so it never reads as needing attention.
+  const wedged = isWedged(send);
   const stuck = isStuck(send, now);
   const due = send.status === "scheduled" && send.fire_at <= now;
   const missed = due && send.fire_at < now - MISSED_THRESHOLD_MS;
