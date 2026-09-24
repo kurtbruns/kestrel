@@ -405,7 +405,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     expect(p3.deliveries).toHaveLength(2); // the tail page: 8 − 6
   });
 
-  it("searches by address and falls back to failures on an unknown view", async () => {
+  it("searches by address, and refuses an unknown view naming the field", async () => {
     const { sendId, e } = await seedRecord();
     const hit = await readJson(
       await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&search=HARD-`, {
@@ -414,10 +414,15 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     );
     expect(hit.deliveries.map((d: any) => d.email)).toEqual([e.hard]);
 
-    const bogus = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, { headers: AUTH }),
+    const bogus = await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, {
+      headers: AUTH,
+    });
+    expect(bogus.status).toBe(400);
+    expect(await readJson(bogus)).toMatchObject({ error: "bad_request", field: "view" });
+    const byDefault = await readJson(
+      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
-    expect(bogus.view).toBe("failures");
+    expect(byDefault.view).toBe("failures");
   });
 
   it("404s for an unknown send and requires auth", async () => {

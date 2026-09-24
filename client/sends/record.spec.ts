@@ -74,6 +74,7 @@ const progress = (over: Partial<SendProgress> = {}): SendProgress => ({
   delivery: { confirmed: 0, percent_of_accepted: 0 },
   provider: { name: "fake", halt: null },
   attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
+  next_change_at: null,
   ...over,
 });
 const page = { total: 2, limit: 50, offset: 0, sort: "email", dir: "asc" };

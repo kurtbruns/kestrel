@@ -31,6 +31,13 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+
+  /** The API's error code (`error` on the body), such as `cursor_ahead`, or null when the
+   *  body carried none. */
+  get code(): string | null {
+    const d = this.data as { error?: unknown } | null;
+    return typeof d?.error === "string" ? d.error : null;
+  }
 }
 
 const REAUTH_MESSAGE = "Not authorized — please sign in again.";

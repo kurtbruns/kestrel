@@ -48,9 +48,10 @@ export interface SendHalt {
   reason: HaltReason;
   cause: HaltCause | null;
   error: string;
-  since: number;
-  /** When the next retry is due. The sweep leaves the send alone until then. */
-  retry_at: number;
+  /** When refusals for this reason began; null only if the record lacks it. */
+  since: number | null;
+  /** When the next retry is due. The sweep leaves the send alone until then; null only if the record lacks it. */
+  retry_at: number | null;
 }
 
 /** The eight denormalized progress counters on a send. */
@@ -224,6 +225,14 @@ export interface SendProgress {
   provider: { name: string; halt: SendHalt | null };
   /** The loud conditions (SPEC §12) the watch surfaces; Resolve appears when `wedged`, and `refused` is the provider refusing the account, carrying its words in `provider.halt`. */
   attention: SendAttention;
+  /**
+   * The earliest moment the send can change with no one acting on it, by the server's
+   * clock: at or before the read's time while it can move at any moment (due, or sending
+   * with work in hand), a later time while it waits on the clock or the sweep (its fire
+   * time, a halt's next retry, the in-flight-too-long threshold), or null when only an
+   * action or a receipt can change it (wedged, missed, finished).
+   */
+  next_change_at: number | null;
 }
 
 /** The loud conditions on a send (SPEC §12), as `/progress` and the send list report them. */
@@ -255,10 +264,24 @@ export interface SendFeedResponse {
    * as a lease ran out); without it, every send that can change on its own. Soonest fire first.
    */
   sends: LiveSend[];
+  /** With `since`, every send removed after that cursor (deleted with its post), in sequence order; empty without it. */
+  removed: RemovedSend[];
   /** Where this read stands (`<seq>.<at>`, as on `GET /sends`), to hand back as `since` on the next. */
   cursor: string;
-  /** When to read again, by the server's clock: soon while a send moves, about once a minute while none does. */
+  /** Whether the read stopped at `limit` changes with more after `cursor`: read again at once from it. */
+  more: boolean;
+  /**
+   * When to read again, by the server's clock: soon while a send can move, about once a
+   * minute while none can, and never later than just past the next change the clock or the
+   * sweep will make. Advisory: reading sooner (right after acting) is always fine.
+   */
   read_again_at: number;
+}
+
+/** A send removed since a cursor: which, and where the removal sits in the change sequence. */
+export interface RemovedSend {
+  id: string;
+  rev: number;
 }
 
 /** The sent record's per-recipient delivery breakdown (SPEC §8). */
@@ -319,7 +342,7 @@ export interface DeliveryRecord {
 /** GET /sends/:id/deliveries */
 export interface DeliveryListResponse {
   deliveries: DeliveryRecord[];
-  view: DeliveryView | null;
+  view: DeliveryView;
   page: PageMeta;
 }
 

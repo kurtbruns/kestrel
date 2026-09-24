@@ -6,6 +6,7 @@ import { earlierCursor } from "../../shared/cursor";
 import type { LiveSend, SendListItem, SendListResponse } from "../../shared/sends";
 import { api } from "../api";
 import { noEmailProvider } from "../deployment";
+import { mount } from "../lifecycle";
 import {
   followSends,
   readSendsNow,
@@ -168,11 +169,18 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     for (const s of u.sends) {
       reported.set(s.id, s);
     }
+    for (const id of u.removed) {
+      reported.delete(id);
+    }
     paintLive();
     if (u.sends.some((s) => inQueue(stageOf(s))) || u.changes.some((c) => inQueue(c.from))) {
       loadScheduled();
     }
-    if (u.changes.some((c) => sentSide(c.to) && !sentSide(c.from))) {
+    // A removed send was canceled with its post deleted, so it may be in either section.
+    if (u.removed.length) {
+      loadScheduled();
+      loadList();
+    } else if (u.changes.some((c) => sentSide(c.to) && !sentSide(c.from))) {
       loadList();
     }
   }
@@ -192,7 +200,16 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         cursor: ok.map((r) => r.cursor).reduce(earlierCursor),
         sends: ok.flatMap((r) => r.sends),
       },
-      onUpdate,
+      {
+        update: onUpdate,
+        // The database is behind the page's reads (a reset or a restore): read it all again,
+        // unless the reader has moved on.
+        stale: () => {
+          if (!signal.aborted) {
+            mount(renderSent);
+          }
+        },
+      },
       signal,
     );
   }

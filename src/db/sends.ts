@@ -45,30 +45,38 @@ export function countsOf(send: SendSummary): SendCounts {
 // Every write that changes what a reader can see of a send sets its `rev` to NEXT_REV,
 // inside the same statement, so a client holding the sequence value it last read can ask
 // for every send that changed after it, across sends, whichever client made the change.
-// The sequence is the largest `rev` any send holds, or the floor, whichever is higher. A
-// delete takes a number of its own by raising the floor past the sequence
-// (`raiseRevFloorStmt`), so a number is never handed out twice even when the send that
-// held the largest one goes, and a floor above a client's cursor tells it that something
-// it listed may be gone. Rows one statement stamps share its number, as rows one read
-// sees are one snapshot. The one write that does not stamp is a lease
-// renewal (`renewLease`): it changes nothing a reader sees. `test/send_rev.spec.ts`
-// fails if a write to `sends` anywhere under src/ leaves NEXT_REV out, or a delete skips
-// the floor.
+// A delete takes a number too: it leaves a tombstone holding the next number
+// (`tombstoneSendsStmt`), so the removal is itself a change a cursor can be past or not,
+// and the sequence, the largest `rev` any send or tombstone holds, never falls back when
+// the send that held the largest one goes. Rows one statement stamps share its number, as
+// rows one read sees are one snapshot. The one write that does not stamp is a lease
+// renewal (`renewLease`): it changes nothing a reader sees. `test/send_rev.spec.ts` fails
+// if a write to `sends` anywhere under src/ leaves NEXT_REV out, or a delete skips the
+// tombstone.
 
 /** The sequence value now: every change so far is at or below it. Each side falls back
  *  to 0, since SQLite's two-argument MAX is null if either is, and a null here would fail
  *  every write to a send. */
 const CURRENT_REV =
-  "MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT value FROM send_rev_floor WHERE id = 1), 0))";
+  "MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT MAX(rev) FROM send_tombstones), 0))";
 
 /** The number a write to a send takes: above every change before it. */
 export const NEXT_REV = `(${CURRENT_REV} + 1)`;
 
-/** Run before deleting sends, in the same batch: the delete takes the next number as
- *  the floor, so the sequence never falls back when the send that held its largest number
- *  goes, and the removal itself is a change a cursor can be past or not. */
-export function raiseRevFloorStmt(db: D1Database): D1PreparedStatement {
-  return db.prepare(`UPDATE send_rev_floor SET value = ${NEXT_REV} WHERE id = 1`);
+/** Run before deleting the sends `where` names, in the same batch and with the same
+ *  predicate: each leaves a tombstone at the next number, which the feed reports as
+ *  removed to a client whose cursor is below it. `where` is fixed SQL over `sends`, never
+ *  user input; its values travel in `binds`. */
+export function tombstoneSendsStmt(
+  db: D1Database,
+  where: string,
+  ...binds: unknown[]
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT OR REPLACE INTO send_tombstones (id, rev) SELECT id, ${NEXT_REV} FROM sends WHERE ${where}`,
+    )
+    .bind(...binds);
 }
 
 // --- denormalized counter maintenance (`sends.c_*`) --------------------------
@@ -346,11 +354,38 @@ export async function currentSendSeq(db: D1Database): Promise<number> {
  *  probe its phase needs. */
 export type FeedSendRow = SendSummary & { has_retries: number };
 
-/** What sets the feed's pace (`src/send/feed.ts`), read in the same snapshot as its rows. */
-export interface FeedPaceRow {
-  active: boolean;
+/** A send removed after the cursor: its id, and where the removal sits in the sequence. */
+export interface RemovedSend {
+  id: string;
+  rev: number;
+}
+
+/** What of every unfinished send sets the feed's pace (`src/send/feed.ts`). */
+export type FeedPaceSend = Pick<
+  SendSummary,
+  | "status"
+  | "fire_at"
+  | "started_at"
+  | "locked_until"
+  | "halt_retry_at"
+  | "c_pending"
+  | "c_in_flight"
+>;
+
+/** One read of the feed: the sends and removals, the sequence, and what sets the pace. */
+export interface FeedRead {
+  rows: FeedSendRow[];
+  removed: RemovedSend[];
+  /** The sequence the read reached: the current one, or where it stopped at `limit`. */
+  seq: number;
+  /** The sequence now, whatever the read reached. */
+  current: number;
+  /** Whether changes past `seq` were left for the next read. */
+  more: boolean;
+  /** Every scheduled or sending send, for the pace. */
+  unfinished: FeedPaceSend[];
+  /** When the youngest settling send finished dispatch. */
   settlingSince: number | null;
-  nextFireAt: number | null;
 }
 
 /** Where a feed read starts: the cursor's sequence and read time. */
@@ -371,14 +406,26 @@ export interface FeedThresholds {
 const LIVE_SEND =
   "(status = 'scheduled' AND fire_at <= ?1) OR status = 'sending' OR (status = 'sent' AND c_accepted > 0 AND completed_at >= ?2)";
 
+// Every change after the cursor's sequence `?2`, a send's or a removal's, in sequence order.
+const CHANGES = `SELECT rev FROM sends WHERE rev > ?2
+  UNION ALL SELECT rev FROM send_tombstones WHERE rev > ?2`;
+
+// The last sequence number a limited read reports, over `?2` and `?6` (the limit): the
+// number of the limit-th change, or null when there are no more than that. A read takes
+// every change at that number, so the rows one statement stamped are never split.
+const CUT = `(SELECT rev FROM (${CHANGES}) ORDER BY rev LIMIT 1 OFFSET ?6 - 1)`;
+
+// The changes a limited read reports: past the cursor, and at or before the cut.
+const IN_PAGE = `rev > ?2 AND rev <= COALESCE(${CUT}, 9007199254740991)`;
+
 // The sends that changed after a cursor, over `?1` (now), `?2` (the cursor's sequence), `?3`
-// (its read time), `?4` (the missed threshold) and `?5` (the stuck threshold): every send
-// whose `rev` is past the sequence, and every send a clock threshold changed between the
-// read time and now with no write. Each crossing is the same comparison `buildSendProgress`
-// makes, at the read time (not yet) and at now (crossed): a fire time passing (due), the
-// missed tolerance passing, the stuck threshold passing, and a lease running out, which is
-// what tells a wedged send from one finishing its last batch.
-const CHANGED_SINCE = `rev > ?2
+// (its read time), `?4` (the missed threshold), `?5` (the stuck threshold) and `?6` (the
+// limit): every send whose `rev` is in the page, and every send a clock threshold changed
+// between the read time and now with no write, whatever the limit. Each crossing is the same
+// comparison `buildSendProgress` makes, at the read time (not yet) and at now (crossed): a
+// fire time passing (due), the missed tolerance passing, the stuck threshold passing, and a
+// lease running out, which is what tells a wedged send from one finishing its last batch.
+const CHANGED_SINCE = `(${IN_PAGE})
   OR (status = 'scheduled' AND (
        (fire_at > ?3 AND fire_at <= ?1)
     OR (fire_at + ?4 >= ?3 AND fire_at + ?4 < ?1)))
@@ -388,12 +435,13 @@ const CHANGED_SINCE = `rev > ?2
 
 /**
  * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
- * `since`, every send that changed after it (`CHANGED_SINCE`); without, every send that can
- * change on its own (`LIVE_SEND`). Soonest fire first, with `hasActiveRetries`'s indexed
- * probe folded in for a sending send. Read in one batch with the sequence and the pace, so
- * the three are one snapshot: a change either shows in the rows or lands after `seq`. The
- * settling clause and the pace walk the sent sends by status, one small row each: the scan
- * the sends table accepts at newsletter scale rather than another index.
+ * `since`, every send that changed after it (`CHANGED_SINCE`) and every send removed after
+ * it, the changes cut at `limit` in sequence order; without, every send that can change on
+ * its own (`LIVE_SEND`). Soonest fire first, with `hasActiveRetries`'s indexed probe folded
+ * in for a sending send. Read in one batch with the sequence and the pace, so they are one
+ * snapshot: a change either shows in the rows or lands after `seq`. The settling clause and
+ * the pace walk the sends by status, one small row each: the scan the sends table accepts
+ * at newsletter scale rather than another index.
  */
 export async function sendFeed(
   db: D1Database,
@@ -401,44 +449,56 @@ export async function sendFeed(
   since: FeedSince | null,
   settledSince: number,
   thresholds: FeedThresholds,
-): Promise<{ rows: FeedSendRow[]; seq: number; pace: FeedPaceRow }> {
+  limit: number,
+): Promise<FeedRead> {
   const select = `SELECT ${SEND_LIST_COLS},
          CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
        FROM sends`;
-  const rows = since
-    ? db
-        .prepare(`${select} WHERE ${CHANGED_SINCE} ORDER BY fire_at ASC, id ASC`)
-        .bind(now, since.seq, since.at, thresholds.missedMs, thresholds.stuckMs)
-    : db
-        .prepare(`${select} WHERE ${LIVE_SEND} ORDER BY fire_at ASC, id ASC`)
-        .bind(now, settledSince);
-  const [seq, list, pace] = await db.batch([
+  const statements = [
     db.prepare(`SELECT ${CURRENT_REV} AS seq`),
-    rows,
-    db
-      .prepare(
-        // A due send quickens the pace only within the missed tolerance: past it the sweep
-        // has not run, nothing about the send moves until it does, and the miss itself was
-        // reported by the read that crossed it.
-        `SELECT EXISTS (SELECT 1 FROM sends WHERE status = 'sending' OR (status = 'scheduled' AND fire_at <= ?1 AND fire_at + ?2 >= ?1)) AS active,
-                (SELECT MAX(completed_at) FROM sends WHERE status = 'sent' AND c_accepted > 0) AS settling_since,
-                (SELECT MIN(fire_at) FROM sends WHERE status = 'scheduled' AND fire_at > ?1) AS next_fire_at`,
-      )
-      .bind(now, thresholds.missedMs),
-  ]);
-  const p = pace?.results[0] as
-    | { active: number; settling_since: number | null; next_fire_at: number | null }
-    | undefined;
+    db.prepare(`SELECT ${PACE_COLS} FROM sends WHERE status IN ('scheduled', 'sending')`),
+    db.prepare(
+      "SELECT MAX(completed_at) AS at FROM sends WHERE status = 'sent' AND c_accepted > 0",
+    ),
+    since
+      ? db
+          .prepare(`${select} WHERE ${CHANGED_SINCE} ORDER BY fire_at ASC, id ASC`)
+          .bind(now, since.seq, since.at, thresholds.missedMs, thresholds.stuckMs, limit)
+      : db
+          .prepare(`${select} WHERE ${LIVE_SEND} ORDER BY fire_at ASC, id ASC`)
+          .bind(now, settledSince),
+  ];
+  if (since) {
+    statements.push(
+      db
+        .prepare(`SELECT id, rev FROM send_tombstones WHERE ${IN_PAGE} ORDER BY rev ASC`)
+        // Only ?2 and ?6 are read; the numbered parameters before them are bound empty.
+        .bind(null, since.seq, null, null, null, limit),
+      db.prepare(`SELECT ${CUT} AS cut`).bind(null, since.seq, null, null, null, limit),
+    );
+  }
+  const [seq, pace, settling, list, removed, cut] = await db.batch(statements);
+  const current = unwrap(
+    (seq?.results[0] as { seq: number } | undefined)?.seq,
+    "the send sequence",
+  );
+  const cutAt = (cut?.results[0] as { cut: number | null } | undefined)?.cut ?? null;
+  // More waits past the cut when the cut is short of the sequence now.
+  const more = cutAt !== null && cutAt < current;
   return {
     rows: (list?.results ?? []) as FeedSendRow[],
-    seq: unwrap((seq?.results[0] as { seq: number } | undefined)?.seq, "the send sequence"),
-    pace: {
-      active: p?.active === 1,
-      settlingSince: p?.settling_since ?? null,
-      nextFireAt: p?.next_fire_at ?? null,
-    },
+    removed: (removed?.results ?? []) as RemovedSend[],
+    seq: more ? cutAt : current,
+    current,
+    more,
+    unfinished: (pace?.results ?? []) as FeedPaceSend[],
+    settlingSince: (settling?.results[0] as { at: number | null } | undefined)?.at ?? null,
   };
 }
+
+// The columns `nextChangeAt` reads.
+const PACE_COLS =
+  "status, fire_at, started_at, locked_until, halt_retry_at, c_pending, c_in_flight";
 
 /** Per-recipient state rollup for a send. */
 export async function deliveryRollup(

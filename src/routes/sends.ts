@@ -11,13 +11,13 @@ import type {
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { oneOf, readJsonObject } from "../lib/body";
-import { badRequest, json, notFound } from "../lib/errors";
+import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
+import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
 import { buildLiveSend, buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
@@ -80,7 +80,8 @@ export async function get(c: RequestContext): Promise<Response> {
     progress,
     outcomes,
     slug: post?.slug ?? null, // the archive slug — names the CSV export the same way the CSV endpoint does
-    archive_url: post ? archiveUrl(c.config, post.slug) : null,
+    // Only a sent send's post is on the archive; before then the link would 404.
+    archive_url: post && send.status === "sent" ? archiveUrl(c.config, post.slug) : null,
     published: send.status === "sent",
     cursor: encodeSendCursor({ seq, at: now }),
   };
@@ -118,39 +119,87 @@ function parseSince(raw: string | null): SendCursor | null {
   return cursor;
 }
 
+/** How many changes one feed read reports at most, by default and at the most a client may ask. */
+export const FEED_DEFAULT_LIMIT = 100;
+export const FEED_MAX_LIMIT = 500;
+
+/** How far a cursor's read time may run ahead of this server's clock before it is refused:
+ *  a margin for clocks that differ a little between the places a request is served. */
+const CURSOR_CLOCK_SLACK_MS = 60_000;
+
+/** The feed's `limit`: a whole number from 1 to the most, or a 400 naming the field. */
+function parseFeedLimit(raw: string | null): number {
+  if (raw === null) {
+    return FEED_DEFAULT_LIMIT;
+  }
+  const n = /^\d+$/.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n < 1 || n > FEED_MAX_LIMIT) {
+    throw badRequest(`limit must be a whole number from 1 to ${FEED_MAX_LIMIT}`, {
+      field: "limit",
+    });
+  }
+  return n;
+}
+
 /**
  * What a client follows to keep up with sends (SPEC §8): with `since`, every send that
  * changed after that cursor, whatever its state, those the clock changed with no write
- * included; without it, every send that can change on its own. Each is in the `/progress`
- * shape, beside a new cursor and when to read again (`readAgainAt`). One read of send rows,
- * never of the delivery record, and reading it changes nothing.
+ * included, and every send removed after it; without it, every send that can change on its
+ * own. Each is in the `/progress` shape, beside a new cursor and when to read again
+ * (`readAgainAt`). One read of send rows, never of the delivery record, and reading it
+ * changes nothing.
+ *
+ * A cursor ahead of this database (a sequence above the current one, or a read time after
+ * now) is from a database since reset or restored: nothing after it would ever be reported,
+ * so it is refused with `cursor_ahead`, and the client reads its sends afresh.
  */
 export async function feed(c: RequestContext): Promise<Response> {
   const since = parseSince(c.url.searchParams.get("since"));
+  const limit = parseFeedLimit(c.url.searchParams.get("limit"));
   // Taken before the read, so a threshold the clock crosses after it is still ahead of the
   // cursor this read hands back.
   const now = Date.now();
-  const { rows, seq, pace } = await sends.sendFeed(c.env.DB, now, since, now - SETTLE_FOLLOW_MS, {
-    missedMs: MISSED_THRESHOLD_MS,
-    stuckMs: STUCK_THRESHOLD_MS,
-  });
+  const read = await sends.sendFeed(
+    c.env.DB,
+    now,
+    since,
+    now - SETTLE_FOLLOW_MS,
+    { missedMs: MISSED_THRESHOLD_MS, stuckMs: STUCK_THRESHOLD_MS },
+    limit,
+  );
+  if (since && (since.seq > read.current || since.at > now + CURSOR_CLOCK_SLACK_MS)) {
+    throw new HttpError(
+      409,
+      "cursor_ahead",
+      "since is ahead of this database (reset or restored since the cursor was read); read the sends again and follow from that read's cursor",
+      { field: "since", cursor: encodeSendCursor({ seq: read.current, at: now }) },
+    );
+  }
+  const pace = feedPace(read.unfinished, read.settlingSince, now);
   const body: SendFeedResponse = {
     now,
-    sends: rows.map(({ has_retries, ...row }) =>
+    sends: read.rows.map(({ has_retries, ...row }) =>
       buildLiveSend(row, c.config.provider, has_retries === 1, now),
     ),
-    cursor: encodeSendCursor({ seq, at: now }),
-    read_again_at: readAgainAt(pace, now),
+    removed: read.removed,
+    cursor: encodeSendCursor({ seq: read.seq, at: now }),
+    more: read.more,
+    // With more waiting, at once; otherwise the pace.
+    read_again_at: read.more ? now : readAgainAt(pace, now),
   };
   return json(body);
 }
 
-/** Validate the `view` query param against the recognized set, defaulting to `failures`
- *  (the record view opens on the rows that went wrong). */
+/** The `view` query param, defaulting to `failures` (the record view opens on the rows
+ *  that went wrong); one outside the recognized set is a 400 naming the field. */
 function parseDeliveryView(raw: string | null): sends.DeliveryView {
-  return sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)
-    ? (raw as sends.DeliveryView)
-    : "failures";
+  if (raw === null) {
+    return "failures";
+  }
+  if (!sends.DELIVERY_VIEWS.includes(raw as sends.DeliveryView)) {
+    throw badRequest(`view must be one of ${sends.DELIVERY_VIEWS.join(", ")}`, { field: "view" });
+  }
+  return raw as sends.DeliveryView;
 }
 
 /**

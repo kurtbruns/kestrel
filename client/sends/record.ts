@@ -91,7 +91,10 @@ const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   settling: "Dispatch complete — waiting on delivery receipts.",
 };
 /** When a halted send's next retry is due, relative to now (SPEC §12). */
-function nextRetry(retryAt: number): string {
+function nextRetry(retryAt: number | null): string {
+  if (retryAt === null) {
+    return "it is retried on its own";
+  }
   const wait = retryAt - Date.now();
   return wait > 0 ? `next retry in ${fmtDuration(wait)}` : "next retry due now";
 }
@@ -189,7 +192,7 @@ function watchBodyHtml(prog: SendProgress): Html {
   return html`
     ${
       halt
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>Since ${fmt(halt.since)}. No one has been marked unsent, and once this is fixed the send resumes at its next retry, ${fmt(halt.retry_at)}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>${halt.since === null ? null : `Since ${fmt(halt.since)}. `}No one has been marked unsent, and once this is fixed the send resumes at its next retry${halt.retry_at === null ? "" : `, ${fmt(halt.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">

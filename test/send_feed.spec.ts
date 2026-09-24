@@ -324,13 +324,13 @@ describe("GET /sends/feed without a cursor", () => {
 
 describe("read_again_at", () => {
   const NOW = 1_700_000_000_000;
-  const idle = { active: false, settlingSince: null, nextFireAt: null };
+  const idle = { moving: false, settlingSince: null, nextChangeAt: null };
   const settling = (ago: number) => readAgainAt({ ...idle, settlingSince: NOW - ago }, NOW) - NOW;
 
-  it("is 3 s while a send is due or sending, whatever else settles", () => {
-    expect(readAgainAt({ ...idle, active: true }, NOW)).toBe(NOW + 3000);
+  it("is 3 s while a send can move now, whatever else settles", () => {
+    expect(readAgainAt({ ...idle, moving: true }, NOW)).toBe(NOW + 3000);
     expect(
-      readAgainAt({ active: true, settlingSince: NOW - 1_000_000, nextFireAt: null }, NOW),
+      readAgainAt({ moving: true, settlingSince: NOW - 1_000_000, nextChangeAt: null }, NOW),
     ).toBe(NOW + 3000);
   });
 
@@ -343,11 +343,11 @@ describe("read_again_at", () => {
     expect(settling(SETTLE_FOLLOW_MS + 1)).toBe(60_000); // past the hour: the idle read
   });
 
-  it("is about once a minute with nothing moving, and never later than just past the next fire time", () => {
+  it("is about once a minute with nothing moving, and never later than just past the next change", () => {
     expect(readAgainAt(idle, NOW)).toBe(NOW + 60_000);
-    expect(readAgainAt({ ...idle, nextFireAt: NOW + 20_000 }, NOW)).toBe(NOW + 21_000);
-    expect(readAgainAt({ ...idle, nextFireAt: NOW + 3_600_000 }, NOW)).toBe(NOW + 60_000);
-    expect(readAgainAt({ ...idle, settlingSince: NOW, nextFireAt: NOW + 20_000 }, NOW)).toBe(
+    expect(readAgainAt({ ...idle, nextChangeAt: NOW + 20_000 }, NOW)).toBe(NOW + 21_000);
+    expect(readAgainAt({ ...idle, nextChangeAt: NOW + 3_600_000 }, NOW)).toBe(NOW + 60_000);
+    expect(readAgainAt({ ...idle, settlingSince: NOW, nextChangeAt: NOW + 20_000 }, NOW)).toBe(
       NOW + 3000,
     );
   });
@@ -365,5 +365,204 @@ describe("read_again_at", () => {
     await setRow(settled.id, { c_accepted: 0, c_delivered: 2 });
     const idleBody = await feed(since);
     expect(idleBody.read_again_at).toBe(Math.min(idleBody.now + 60_000, soon.fire_at + 1000));
+  });
+});
+
+const feedStatus = async (query: string) =>
+  SELF.fetch(`${base}/sends/feed${query}`, { headers: AUTH });
+
+describe("GET /sends/feed refuses a cursor ahead of the database", () => {
+  it("answers a sequence above the current one with cursor_ahead, naming the field", async () => {
+    const now = Date.now();
+    await scheduledSend("Far", now + 3_600_000);
+    const seq = decodeSendCursor(await listCursor())?.seq ?? 0;
+    // A cursor from before a local reset or a restore: far past anything this database holds.
+    const res = await feedStatus(`?since=${seq + 5000}.${now}`);
+    expect(res.status).toBe(409);
+    const body = (await res.json()) as { error: string; field: string; cursor: string };
+    expect(body).toMatchObject({ error: "cursor_ahead", field: "since" });
+    expect(decodeSendCursor(body.cursor)?.seq).toBe(seq);
+  });
+
+  it("answers a read time after the server's clock with cursor_ahead, beyond a minute's drift", async () => {
+    const seq = decodeSendCursor(await listCursor())?.seq ?? 0;
+    expect((await feedStatus(`?since=${seq}.${Date.now() + 10 * 60_000}`)).status).toBe(409);
+    expect((await feedStatus(`?since=${seq}.${Date.now() + 5_000}`)).status).toBe(200);
+  });
+});
+
+describe("GET /sends/feed reports removed sends", () => {
+  it("reports a canceled send deleted with its post as removed, after the cursor only", async () => {
+    const send = await scheduledSend("Dropped", Date.now() + 3_600_000);
+    await cancel(env, send.id);
+    const before = await listCursor();
+    const del = await SELF.fetch(`${base}/posts/${send.post_id}`, {
+      method: "DELETE",
+      headers: AUTH,
+    });
+    expect(del.status).toBeLessThan(300);
+
+    const body = await feed(before);
+    expect(body.sends).toEqual([]);
+    expect(body.removed.map((r) => r.id)).toEqual([send.id]);
+    // The removal is a change in the sequence: the cursor handed back is past it.
+    expect(decodeSendCursor(body.cursor)?.seq).toBe(body.removed[0]?.rev);
+    expect((await feed(body.cursor)).removed).toEqual([]);
+    expect((await feed()).removed).toEqual([]); // without a cursor nothing is removed
+  });
+});
+
+describe("GET /sends/feed limit", () => {
+  it("stops at the limit with more, and the next read from its cursor reports the rest once each", async () => {
+    const since = await listCursor();
+    const far = Date.now() + 24 * 3_600_000;
+    const made = [];
+    for (let i = 0; i < 5; i++) {
+      made.push(await scheduledSend(`S${i}`, far + i));
+    }
+    const seen: string[] = [];
+    let cursor = since;
+    let reads = 0;
+    for (;;) {
+      const res = await feedStatus(`?since=${encodeURIComponent(cursor)}&limit=2`);
+      const body = (await res.json()) as SendFeedResponse;
+      reads += 1;
+      seen.push(...body.sends.map((s) => s.id));
+      cursor = body.cursor;
+      if (!body.more) {
+        break;
+      }
+      expect(body.sends).toHaveLength(2);
+      expect(body.read_again_at).toBe(body.now); // more waits: read again at once
+    }
+    expect(reads).toBe(3);
+    expect(seen.sort()).toEqual(made.map((s) => s.id).sort());
+  });
+
+  it("reports every send the clock changed, whatever the limit", async () => {
+    const now = Date.now();
+    const a = await scheduledSend("A", now + 1000);
+    const b = await scheduledSend("B", now + 2000);
+    // Both writes before the cursor, read 5 s ago; only the clock has moved them since.
+    const since = await cursorReadAt(now - 5000);
+    await setRow(a.id, { fire_at: now - 1000 });
+    await setRow(b.id, { fire_at: now - 500 });
+    const res = await feedStatus(`?since=${encodeURIComponent(since)}&limit=1`);
+    const body = (await res.json()) as SendFeedResponse;
+    expect(body.sends.map((s) => s.id).sort()).toEqual([a.id, b.id].sort());
+    expect(body.more).toBe(false);
+  });
+
+  it("refuses a limit that is not a whole number from 1 to 500, naming the field", async () => {
+    for (const bad of ["0", "501", "abc", "2.5", "-1"]) {
+      const res = await feedStatus(`?limit=${bad}`);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ field: "limit" });
+    }
+  });
+});
+
+describe("GET /sends/feed paces from each send's next change", () => {
+  it("does not hurry for a send the provider refuses: it reads at the retry", async () => {
+    const now = Date.now();
+    const send = await scheduledSend("Refused", now - 120_000);
+    const retryAt = now + 5 * 60_000;
+    await setRow(send.id, {
+      status: "sending",
+      started_at: now - 110_000,
+      audience_resolved_at: now - 110_000,
+      c_pending: 5,
+      halt_reason: "account",
+      halt_cause: "quota",
+      halt_error: "Daily message quota exceeded",
+      halted_at: now - 100_000,
+      halt_retries: 1,
+      halt_retry_at: retryAt,
+    });
+    const body = await feed();
+    const [s] = body.sends;
+    expect(s?.attention.refused).toBe(true);
+    // The sweep takes it at the first tick within half a tick of the retry.
+    expect(s?.next_change_at).toBe(retryAt - 30_000);
+    expect(body.read_again_at).toBe(body.now + 60_000); // the retry is further off than a minute
+  });
+
+  it("wakes just past a halt's retry when that comes within the minute", async () => {
+    const now = Date.now();
+    const send = await scheduledSend("Unavailable", now - 120_000);
+    await setRow(send.id, {
+      status: "sending",
+      started_at: now - 110_000,
+      audience_resolved_at: now - 110_000,
+      c_pending: 5,
+      halt_reason: "unavailable",
+      halt_cause: "outage",
+      halt_error: "503",
+      halted_at: now - 20_000,
+      halt_retries: 1,
+      halt_retry_at: now + 50_000,
+    });
+    const body = await feed();
+    expect(body.sends[0]?.phase).toBe("backing-off");
+    expect(body.read_again_at).toBe(now + 50_000 - 30_000 + 1000);
+  });
+
+  it("does not hurry for a wedged send: only Resolve or the in-flight-too-long flag moves it", async () => {
+    const now = Date.now();
+    const send = await scheduledSend("Wedged", now - 120_000);
+    await setRow(send.id, {
+      status: "sending",
+      started_at: now - 110_000,
+      audience_resolved_at: now - 110_000,
+      c_in_flight: 2,
+      c_accepted: 8,
+      locked_until: null,
+    });
+    const body = await feed();
+    expect(body.sends[0]?.attention.wedged).toBe(true);
+    expect(body.sends[0]?.next_change_at).toBe(now - 110_000 + STUCK_THRESHOLD_MS);
+    expect(body.read_again_at).toBe(body.now + 60_000);
+  });
+
+  it("follows closely while a run holds the send, or work waits for the next tick", async () => {
+    const now = Date.now();
+    const send = await scheduledSend("Running", now - 120_000);
+    await setRow(send.id, {
+      status: "sending",
+      started_at: now - 110_000,
+      audience_resolved_at: now - 110_000,
+      c_in_flight: 2,
+      locked_until: now + 60_000,
+    });
+    let body = await feed();
+    expect(body.sends[0]?.next_change_at).toBe(body.now);
+    expect(body.read_again_at).toBe(body.now + 3000);
+    await setRow(send.id, { c_in_flight: 0, c_pending: 2, locked_until: null });
+    body = await feed();
+    expect(body.read_again_at).toBe(body.now + 3000);
+  });
+});
+
+describe("GET /sends/:id shape fixes", () => {
+  it("links the archive only once the send is sent, and leaves a halt's times null rather than now", async () => {
+    const now = Date.now();
+    const send = await scheduledSend("Unpublished", now + 3_600_000);
+    let body = (await (
+      await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+    ).json()) as SendResponse;
+    expect(body.archive_url).toBeNull();
+    expect(body.published).toBe(false);
+
+    await setRow(send.id, {
+      status: "sending",
+      started_at: now,
+      c_pending: 1,
+      halt_reason: "unavailable",
+      halt_error: "503",
+    });
+    body = (await (
+      await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+    ).json()) as SendResponse;
+    expect(body.progress.provider.halt).toMatchObject({ since: null, retry_at: null });
   });
 });
