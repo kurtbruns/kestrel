@@ -11,6 +11,7 @@ import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
+import { logged } from "./support/log";
 
 const config = () => getConfig(env);
 
@@ -259,8 +260,9 @@ describe("send loop + sweep", () => {
 
     await sweep(env);
 
-    const flagged = spy.mock.calls.some((c) => c[0] === "MISSED_FIRE");
-    expect(flagged).toBe(true);
+    expect(logged(spy)).toContainEqual(
+      expect.objectContaining({ event: "send.missed", level: "error", sendId: send.id }),
+    );
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(countTo("late@example.com")).toBe(1);
     spy.mockRestore();

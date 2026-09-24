@@ -18,6 +18,7 @@ import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { RESEND_DEPLOY } from "./support/deploy";
+import { logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
@@ -71,6 +72,7 @@ async function ticks(n: number): Promise<void> {
 
 let resend: ResendLikeProvider;
 let errors: MockInstance;
+let warnings: MockInstance;
 
 beforeEach(async () => {
   await env.DB.batch([
@@ -90,6 +92,7 @@ beforeEach(async () => {
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
   errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -279,9 +282,8 @@ describe("isolation", () => {
     expect(after.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
     expect(fakeNotifications()).toHaveLength(1); // the retry got through
-    expect(errors).toHaveBeenCalledWith(
-      "NOTIFY_FAILED",
-      expect.objectContaining({ sendId: send.id, kind: "finished" }),
+    expect(logged(warnings)).toContainEqual(
+      expect.objectContaining({ event: "notify.failed", sendId: send.id, kind: "finished" }),
     );
   });
 
@@ -319,7 +321,9 @@ describe("isolation", () => {
 
     await ticks(2);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-    expect(errors).toHaveBeenCalledWith("NOTIFY_ERROR", { error: "no channel at all" });
+    expect(logged(errors)).toContainEqual(
+      expect.objectContaining({ event: "notify.error", error: "no channel at all" }),
+    );
   });
 
   it("a tick with a backlog stays inside the subrequest budget", async () => {

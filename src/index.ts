@@ -11,6 +11,7 @@ import { createRouter } from "./app";
 import type { AppEnv } from "./env";
 import { ConfigError, getConfig } from "./env";
 import { json } from "./lib/errors";
+import { log, newRun, withRun } from "./lib/log";
 import type { Router } from "./router";
 import { sweep } from "./send/sweep";
 
@@ -38,26 +39,16 @@ let reportedConfigError: string | undefined;
 function reportConfigError(err: ConfigError): void {
   if (reportedConfigError !== err.message) {
     reportedConfigError = err.message;
-    console.error(`kestrel: invalid deploy config: ${err.message}`);
+    log.error("config.invalid", { variable: err.variable, message: err.message });
   }
 }
 
 export default {
-  async fetch(request, env, ctx): Promise<Response> {
-    const appEnv = env as AppEnv;
-    let router: Router;
-    try {
-      router = routerFor(appEnv);
-    } catch (err) {
-      if (!(err instanceof ConfigError)) {
-        throw err;
-      }
-      // Refuse every request, naming the variable to fix, rather than run on config that
-      // would do the wrong thing quietly.
-      reportConfigError(err);
-      return json({ error: "invalid_config", message: err.message, variable: err.variable }, 500);
-    }
-    return router.handle(request, appEnv, ctx);
+  fetch(request, env, ctx): Promise<Response> {
+    // Every line a request logs, including work it leaves to `waitUntil`, carries its ray.
+    return withRun(request.headers.get("cf-ray") ?? newRun(), () =>
+      handleFetch(request, env as AppEnv, ctx),
+    );
   },
 
   async scheduled(_controller, env, ctx): Promise<void> {
@@ -71,6 +62,26 @@ export default {
       }
       throw err;
     }
-    ctx.waitUntil(sweep(appEnv));
+    ctx.waitUntil(withRun(newRun(), () => sweep(appEnv)));
   },
 } satisfies ExportedHandler<Env>;
+
+async function handleFetch(
+  request: Request,
+  appEnv: AppEnv,
+  ctx: ExecutionContext,
+): Promise<Response> {
+  let router: Router;
+  try {
+    router = routerFor(appEnv);
+  } catch (err) {
+    if (!(err instanceof ConfigError)) {
+      throw err;
+    }
+    // Refuse every request, naming the variable to fix, rather than run on config that
+    // would do the wrong thing quietly.
+    reportConfigError(err);
+    return json({ error: "invalid_config", message: err.message, variable: err.variable }, 500);
+  }
+  return router.handle(request, appEnv, ctx);
+}

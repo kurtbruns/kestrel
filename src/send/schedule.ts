@@ -26,6 +26,7 @@ import { audienceCount } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
+import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
@@ -147,6 +148,12 @@ export async function reschedule(env: AppEnv, sendId: string, fireAt: number): P
   if ((res.meta.changes ?? 0) === 0) {
     throw conflict("send is not reschedulable (already sending, sent, or canceled)");
   }
+  log.info("send.rescheduled", {
+    sendId,
+    postId: send.post_id,
+    fireAt: new Date(fireAt).toISOString(),
+    movedMs: fireAt - send.fire_at,
+  });
   return unwrap(await getSend(env.DB, sendId), "send");
 }
 
@@ -173,5 +180,6 @@ export async function cancel(env: AppEnv, sendId: string): Promise<SendRow> {
   if ((res?.meta.changes ?? 0) === 0) {
     throw conflict("send is not cancelable (already sending, sent, or canceled)");
   }
+  log.info("send.canceled", { sendId, postId: send.post_id });
   return unwrap(await getSend(env.DB, sendId), "send");
 }

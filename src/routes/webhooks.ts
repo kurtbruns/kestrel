@@ -14,6 +14,7 @@
  * configured.
  */
 
+import { log } from "../lib/log";
 import { getProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { applyDeliveryEvents } from "../services/webhook_events";
@@ -21,6 +22,16 @@ import { applyDeliveryEvents } from "../services/webhook_events";
 async function handle(c: RequestContext): Promise<Response> {
   const provider = getProvider(c.config, c.env);
   const { events, response } = await provider.parseWebhook(c.req, c.env);
+  // Before the events are applied: one line a request, even a handshake or a refused
+  // signature, so a provider that has stopped calling is visible by the silence.
+  log.info("webhook.received", {
+    provider: provider.name,
+    status: response.status,
+    events: events.length,
+    delivered: events.filter((e) => e.type === "delivered").length,
+    bounced: events.filter((e) => e.type === "bounced").length,
+    complained: events.filter((e) => e.type === "complained").length,
+  });
   if (events.length > 0) {
     await applyDeliveryEvents(c.env.DB, events);
   }

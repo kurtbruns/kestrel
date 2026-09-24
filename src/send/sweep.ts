@@ -15,11 +15,16 @@
  * says its next retry is due (`HALT_BACKOFF_MS`), so waiting costs only the query.
  * Notifying gets what the sends leave plus a reserve held back up front, so a long send
  * spending every tick's budget can't starve the notification that says it is stuck.
+ *
+ * Each tick ends with one `sweep.tick` line counting what it did, and each anomaly is its
+ * own `error` line (`send.missed`, `send.stuck`, `send.ambiguous`), after the checks that
+ * found it: the log describes the tick, it never steers it (SPEC §12).
  */
 
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
+import { errorText, log } from "../lib/log";
 import { HALT_RETRY_SLACK_MS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { NOTIFY_RESERVE, notifyPublisher } from "../notify/notify";
 import { getProvider } from "../providers";
@@ -35,6 +40,9 @@ const ANOMALY_CHECKS = 2;
 export async function sweep(env: AppEnv): Promise<void> {
   const now = Date.now();
   const config = getConfig(env);
+  // What the tick found, for its `sweep.tick` line: sends due to fire and sends to resume
+  // (each run logs whether it got the lease), and the anomalies flagged.
+  const tick = { due: 0, resumable: 0, missed: 0, stuck: 0, ambiguous: 0 };
   // Handle each send at most once per tick. A transient failure releases the
   // lease, so without this a just-failed send would be retried again in the same
   // sweep; instead it waits for the next tick (the backoff).
@@ -49,9 +57,11 @@ export async function sweep(env: AppEnv): Promise<void> {
   for (const s of await sends.dueSends(db, now)) {
     const lag = now - s.fire_at;
     if (lag > MISSED_THRESHOLD_MS) {
-      console.error("MISSED_FIRE", { sendId: s.id, postId: s.post_id, lagMs: lag });
+      log.error("send.missed", { sendId: s.id, postId: s.post_id, lagMs: lag });
+      tick.missed += 1;
     }
     handled.add(s.id);
+    tick.due += 1;
     await safeRun(env, s.id, budget, window);
   }
 
@@ -66,16 +76,18 @@ export async function sweep(env: AppEnv): Promise<void> {
       continue;
     }
     handled.add(s.id);
+    tick.resumable += 1;
     await safeRun(env, s.id, budget, window);
   }
 
   // 3) Loud anomaly flags: the ANOMALY_CHECKS held back above, so on the raw handle.
   for (const s of await sends.stuckSends(env.DB, now - STUCK_THRESHOLD_MS)) {
-    console.error("STUCK_SEND", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
+    log.error("send.stuck", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
+    tick.stuck += 1;
   }
-  const ambiguous = await sends.staleDispatched(env.DB, now - STUCK_THRESHOLD_MS);
-  if (ambiguous > 0) {
-    console.error("AMBIGUOUS_DELIVERY", { count: ambiguous });
+  tick.ambiguous = await sends.staleDispatched(env.DB, now - STUCK_THRESHOLD_MS);
+  if (tick.ambiguous > 0) {
+    log.error("send.ambiguous", { recipients: tick.ambiguous });
   }
 
   // 4) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
@@ -89,13 +101,15 @@ export async function sweep(env: AppEnv): Promise<void> {
       ),
     );
   } catch (err) {
-    console.error("NOTIFY_ERROR", { error: String((err as Error)?.message ?? err) });
+    log.error("notify.error", { error: errorText(err) });
   }
 
   // Dev-only: feed any now-due synthetic delivery webhooks through the real ingest, so
   // an in-flight simulated send settles (delivered / bounced / complained) over ticks
   // exactly as a real provider's webhooks would. No-op unless the simulation is active.
   await drainSimulatedWebhooks(env, config);
+
+  log.info("sweep.tick", { ...tick, durationMs: Date.now() - now });
 }
 
 async function safeRun(
@@ -108,6 +122,6 @@ async function safeRun(
     await runSend(env, sendId, budget, window);
   } catch (err) {
     // One bad send must not stop the sweep; it will be retried next tick.
-    console.error("SEND_ERROR", { sendId, error: String((err as Error)?.message ?? err) });
+    log.error("send.error", { sendId, error: errorText(err) });
   }
 }
