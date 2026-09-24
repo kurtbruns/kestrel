@@ -6,6 +6,7 @@ import {
   condition,
   type FakeApi,
   fakeApi,
+  jsonResponse,
   mount,
   resetShell,
   sendView,
@@ -218,7 +219,7 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
-  it("reloads the list only when a poll moves the counts, keeping the reader's view, search, and sort", async () => {
+  it("reloads the list only when a poll moves the counts, keeping the reader's view, search, sort, and page", async () => {
     let settled = outcomes({ delivered: 5, bounced: 0, unsent: 0, accepted: 5 });
     fake = fakeApi([
       {
@@ -245,6 +246,8 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(10);
     typeInto($<HTMLInputElement>(".rec-people-search"), "x.y");
     await vi.advanceTimersByTimeAsync(250);
+    $<HTMLButtonElement>(".th-sort[data-sort='email']").click(); // email asc → desc
+    await vi.advanceTimersByTimeAsync(10);
     $<HTMLButtonElement>(".pager-next").click();
     await vi.advanceTimersByTimeAsync(10);
     expect($(".pager-range").textContent).toBe("51–100 of 120");
@@ -261,9 +264,9 @@ describe("sent record", () => {
     expect(reload?.get("view")).toBe("all");
     expect(reload?.get("search")).toBe("x.y");
     expect(reload?.get("sort")).toBe("email");
-    expect(reload?.get("dir")).toBe("asc");
-    expect(reload?.get("offset")).toBe("0");
-    expect($(".pager-range").textContent).toBe("1–50 of 120");
+    expect(reload?.get("dir")).toBe("desc");
+    expect(reload?.get("offset")).toBe("50");
+    expect($(".pager-range").textContent).toBe("51–100 of 120");
     expect($(".rec-view-btn[data-view='all']").getAttribute("aria-pressed")).toBe("true");
     expect($<HTMLInputElement>(".rec-people-search").value).toBe("x.y");
     expect(fake.unhandled).toHaveLength(0);
@@ -307,6 +310,102 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(10);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
     expect(document.querySelector(".rec-people-table")).toBeNull();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  // A settling record whose counts move on the second read, and a recipients list the
+  // spec answers per request.
+  const settlingRecord = (
+    deliveries: (req: { url: URL }) => unknown,
+  ): { moveCounts: () => void; lists: () => { url: URL }[] } => {
+    let settled = outcomes({ delivered: 5, bounced: 0, unsent: 0, accepted: 5 });
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({
+          send: sendView(send(), { phase: "settling" }),
+          outcomes: settled,
+          cursor: "1.1",
+        }),
+      },
+      { path: "/sends/x1/deliveries", reply: deliveries },
+    ]);
+    return {
+      moveCounts: () => {
+        settled = outcomes({
+          ...settled,
+          delivered: settled.delivered + 1,
+          accepted: settled.accepted - 1,
+        });
+      },
+      lists: () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries")),
+    };
+  };
+  const pageOf = (req: { url: URL }, total: number) => {
+    const offset = Number(req.url.searchParams.get("offset"));
+    return {
+      deliveries: offset < total ? rows : [],
+      view: req.url.searchParams.get("view"),
+      page: { ...page, total, offset },
+    };
+  };
+
+  it("moves a reader past the end of a shrunken list to its last page", async () => {
+    let total = 120;
+    const { moveCounts, lists } = settlingRecord((req) => pageOf(req, total));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    $<HTMLButtonElement>(".pager-next").click();
+    await vi.advanceTimersByTimeAsync(10);
+    $<HTMLButtonElement>(".pager-next").click();
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".pager-range").textContent).toBe("101–120 of 120");
+
+    total = 60; // the view now holds fewer rows than the reader's page starts at
+    moveCounts();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(lists().at(-2)?.url.searchParams.get("offset")).toBe("100");
+    expect(lists().at(-1)?.url.searchParams.get("offset")).toBe("50");
+    expect($(".pager-range").textContent).toBe("51–60 of 60");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("keeps the rows when a refresh's reload fails, and says so only for the reader's own", async () => {
+    let failing = false;
+    const { moveCounts } = settlingRecord((req) =>
+      failing ? jsonResponse({ error: "boom" }, 500) : pageOf(req, 120),
+    );
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($$(".rec-people-table tbody tr")).toHaveLength(2);
+
+    failing = true;
+    moveCounts();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect($$(".rec-people-table tbody tr")).toHaveLength(2); // still the reader's rows
+    expect(document.querySelector("#recRows .error, #recRows [role='alert']")).toBeNull();
+
+    $<HTMLButtonElement>(".pager-next").click(); // the reader's own load does say it failed
+    await vi.advanceTimersByTimeAsync(10);
+    expect(document.querySelector(".rec-people-table")).toBeNull();
+    expect($("#recRows").textContent).toMatch(/boom/);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("keeps keyboard focus on the same control across a refresh's repaint", async () => {
+    const { moveCounts } = settlingRecord((req) => pageOf(req, 120));
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    $<HTMLButtonElement>(".pager-next").focus();
+    moveCounts();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(document.activeElement).toBe($(".pager-next"));
+
+    $<HTMLButtonElement>(".th-sort[data-sort='email']").focus();
+    moveCounts();
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(document.activeElement).toBe($(".th-sort[data-sort='email']"));
+    expect(fake.unhandled).toHaveLength(0);
   });
 
   it("hands a scheduled send's page to its editor, in place of its history entry", async () => {

@@ -505,8 +505,9 @@ function renderFrozenRecord(
 
   // The per-recipient record, its own paged/filtered state. Default view is "failures" so
   // the rows that went wrong lead; default sort mirrors the CSV (email asc). It reloads on
-  // interaction (a view/search/sort/page change, or re-clicking the view), and on a settling
-  // poll that moved the tiles, so a row never contradicts the count above it.
+  // interaction (a view/search/sort/page change, or re-clicking the view), and on each
+  // settling refresh that moved the tiles, so the list follows the counts above it. The
+  // two are separate reads, so between refreshes they can differ by what one tick brought.
   const dstate: DeliveryListState = {
     view: "failures",
     search: "",
@@ -517,10 +518,16 @@ function renderFrozenRecord(
   };
   const rowsEl = $("#recRows", root);
   const recPagerEl = $("#recPager", root);
-  // Loads can overlap (a poll's reload racing the reader's click), so only the latest paints.
+  // Loads can overlap (a refresh's reload racing the reader's click), so only the latest
+  // paints. A load the reader started that a refresh then overtook still owes them an
+  // answer, so the refresh's failure is theirs to see.
   let latest = 0;
-  const loadDeliveries = async () => {
+  let readerWaiting = false;
+  const load = async (background: boolean): Promise<void> => {
     const mine = ++latest;
+    if (!background) {
+      readerWaiting = true;
+    }
     try {
       const d = await api<DeliveryListResponse>(
         `/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`,
@@ -529,18 +536,51 @@ function renderFrozenRecord(
       if (mine !== latest) {
         return;
       }
-      if (!d.deliveries.length) {
-        setHtml(rowsEl, html`<p class="rec-people-empty muted">${deliveryEmpty(dstate)}</p>`);
-        setHtml(recPagerEl, html``);
-        return;
+      // The reader's page, past the end now that the total shrank: the last page instead.
+      const last =
+        d.page.total > 0 ? Math.floor((d.page.total - 1) / d.page.limit) * d.page.limit : 0;
+      if (!d.deliveries.length && dstate.offset > last) {
+        dstate.offset = last;
+        return load(background);
       }
-      setHtml(rowsEl, deliveryRowsHtml(d.deliveries, dstate));
-      wireSort(rowsEl, dstate, loadDeliveries);
-      renderPager(recPagerEl, dstate, d.page, loadDeliveries);
+      readerWaiting = false;
+      keepFocus(() => {
+        if (!d.deliveries.length) {
+          setHtml(rowsEl, html`<p class="rec-people-empty muted">${deliveryEmpty(dstate)}</p>`);
+          setHtml(recPagerEl, html``);
+          return;
+        }
+        setHtml(rowsEl, deliveryRowsHtml(d.deliveries, dstate));
+        wireSort(rowsEl, dstate, loadDeliveries);
+        renderPager(recPagerEl, dstate, d.page, loadDeliveries);
+      });
     } catch (e) {
-      if (mine === latest) {
+      // A refresh that fails leaves the rows the reader is reading; the next refresh that
+      // moves the counts tries again. Only a load the reader is waiting on says so.
+      if (mine === latest && (!background || readerWaiting)) {
+        readerWaiting = false;
         renderError(rowsEl, message(e), loadDeliveries);
       }
+    }
+  };
+  const loadDeliveries = () => load(false);
+  // A repaint replaces the table and the pager, so a keyboard reader on a sort header or a
+  // pager button would lose their place: put focus back on the same control, if it's there.
+  const keepFocus = (paint: () => void) => {
+    const had = document.activeElement;
+    const within = had instanceof HTMLElement && (rowsEl.contains(had) || recPagerEl.contains(had));
+    const sortKey = within ? had.dataset.sort : undefined;
+    const pagerCls = within
+      ? ["pager-prev", "pager-next"].find((c) => had.classList.contains(c))
+      : undefined;
+    paint();
+    const again = sortKey
+      ? rowsEl.querySelector<HTMLButtonElement>(`.th-sort[data-sort="${sortKey}"]`)
+      : pagerCls
+        ? recPagerEl.querySelector<HTMLButtonElement>(`.${pagerCls}`)
+        : null;
+    if (again && !again.disabled) {
+      again.focus();
     }
   };
   const viewButtons = $$<HTMLButtonElement>(".rec-view-btn", root);
@@ -591,8 +631,8 @@ function renderFrozenRecord(
 
   // Still settling: the record keeps absorbing delivery receipts after dispatch (§6), so
   // poll ~15s until every accepted recipient is confirmed. A tick that moved a count
-  // repaints the tiles and reloads the list's first page in the reader's view, search, and
-  // sort; one that moved nothing leaves the list, and the reader's place in it, alone.
+  // repaints the tiles and reloads the list on the reader's page, in their view, search,
+  // and sort; one that moved nothing leaves the list alone.
   // Capped (~10 min) so a provider that never confirms doesn't leave the poll running
   // forever; ends with the mount either way.
   if (outcomes.accepted > 0) {
@@ -619,8 +659,7 @@ function renderFrozenRecord(
           if (recon) {
             recon.textContent = outcomeReconHtml(fresh.outcomes);
           }
-          dstate.offset = 0;
-          await loadDeliveries();
+          await load(true);
         }
         return fresh.outcomes.accepted > 0;
       },
