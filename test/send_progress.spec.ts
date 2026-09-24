@@ -476,7 +476,7 @@ describe("receipts racing for one recipient", () => {
     // One recipient still awaits a receipt, so the send is settling, not complete.
     const row = await expectCountersMatchAggregate(send.id);
     expect(row.c_accepted).toBe(1);
-    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+    expect(viewOf(row, "fake", false, Date.now()).phase).toBe("settling");
   });
 });
 
@@ -498,7 +498,7 @@ describe("a cache that drifted before the receipt rule", () => {
 
     const row = await expectCountersMatchAggregate(send.id);
     expect(row.c_accepted).toBe(1);
-    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+    expect(viewOf(row, "fake", false, Date.now()).phase).toBe("settling");
   });
 });
 
