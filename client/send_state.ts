@@ -80,6 +80,10 @@ export interface SendRead {
 // A failed read is tried again after this, doubling up to the cap while it keeps failing.
 const RETRY_MS = 3000;
 const RETRY_MAX_MS = 60_000;
+// A read that has not answered by this is cut off and counts as failed. Without it, one
+// that never settles (a dropped connection, a dev server restarted mid-request) would hold
+// `reading` for good, and the layer would never read again until the page was reloaded.
+const READ_TIMEOUT_MS = 30_000;
 
 /** One page's interest in the feed. */
 interface Follower {
@@ -139,9 +143,11 @@ function read(): void {
   const round = [...followers];
   const c = new AbortController();
   reading = c;
+  const cutOff = setTimeout(() => c.abort(), READ_TIMEOUT_MS);
   const query = since ? `?since=${encodeURIComponent(since)}` : "";
   api<SendFeedResponse>(`/sends/feed${query}`, { signal: c.signal }).then(
     (res) => {
+      clearTimeout(cutOff);
       if (reading !== c) {
         return; // stopped meanwhile
       }
@@ -162,8 +168,9 @@ function read(): void {
       arm(Math.max(0, res.read_again_at - res.now));
     },
     (err: unknown) => {
+      clearTimeout(cutOff);
       if (reading !== c) {
-        return;
+        return; // stopped meanwhile (a cut-off read is still the one out, so it goes on)
       }
       reading = null;
       readAgain = false;

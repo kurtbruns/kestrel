@@ -383,6 +383,29 @@ describe("the send-state layer", () => {
     expect(updates.map((u) => moves(u.changes))).toEqual([["x:sending>sent"]]);
   });
 
+  it("cuts off a read that never answers, and treats it as failed, so the layer keeps reading", async () => {
+    srv.state.pace = 3000;
+    srv.write(live("x", "sending", "progressing"));
+    const updates: SendsUpdate[] = [];
+    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    await vi.advanceTimersByTimeAsync(0);
+    srv.state.hold = new Promise(() => {}); // a connection that never settles
+    srv.write(live("x", "sent", "settling"));
+    await vi.advanceTimersByTimeAsync(3_000); // the read goes out, and hangs
+    expect(srv.reads()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(30_000); // cut off
+    srv.state.hold = null;
+    await vi.advanceTimersByTimeAsync(2_999);
+    expect(srv.reads()).toHaveLength(2); // backed off like any failed read
+    expect(updates).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(srv.reads()).toHaveLength(3);
+    expect(srv.reads()[2]?.url.searchParams.get("since")).toBe(
+      srv.reads()[1]?.url.searchParams.get("since"),
+    );
+    expect(updates.map((u) => moves(u.changes))).toEqual([["x:sending>sent"]]);
+  });
+
   it("starts again from what can change on its own when the server refuses its cursor", async () => {
     srv.write(live("x", "sending", "progressing"));
     const updates: SendsUpdate[] = [];
