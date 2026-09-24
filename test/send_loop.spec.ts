@@ -86,13 +86,13 @@ describe("the freeze reads the template it froze with", () => {
     const tpl = `<div>{{ post.body }} <i>{{ publication.tagline }}</i> <a href="{{ email.unsubscribeUrl }}">u</a></div>`;
     await updateSettings(env.DB, { emailTemplate: tpl });
     let bumped = false;
-    const spy = vi.spyOn(subscribersDb, "audienceEmails").mockImplementation(async (db) => {
+    const spy = vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
       // Runs after the render and before the insert, once: the "concurrent" save.
       if (!bumped) {
         bumped = true;
         await updateSettings(db, { publication: { tagline: "after" } });
       }
-      return [];
+      return 0;
     });
     try {
       const send = await freeze(env, config(), post, Date.now() + 600_000);
@@ -151,6 +151,105 @@ describe("send loop + sweep", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 2 });
     expect(countTo("x@example.com")).toBe(1);
     expect(countTo("y@example.com")).toBe(1);
+  });
+
+  it("fixes the audience at the first run: a reader who confirms mid-send gets the next post (SPEC §6)", async () => {
+    await seedConfirmed("x@example.com");
+    await seedConfirmed("y@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+
+    failFakeSendBatch(1); // the first run resolves the audience, then halts
+    await sweep(env);
+    const fired = (await sends.getSend(env.DB, send.id))!;
+    expect(fired.status).toBe("sending");
+    expect(fired.audience_resolved_at).not.toBeNull();
+    expect(fired.recipient_count).toBe(2);
+
+    await seedConfirmed("late@example.com"); // confirms while the send is in flight
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      await toNextTick(env.DB);
+      await sweep(env); // resume
+    } finally {
+      vi.useRealTimers();
+    }
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.recipient_count).toBe(2);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 2 });
+    expect(countTo("late@example.com")).toBe(0);
+
+    const next = await scheduledSend(Date.now() - 1000);
+    await sweep(env);
+    expect((await sends.getSend(env.DB, next.id))!.status).toBe("sent");
+    expect(countTo("late@example.com")).toBe(1);
+    expect(countTo("x@example.com")).toBe(2);
+  });
+
+  it("a run that halts resumes without resolving the audience again", async () => {
+    await seedConfirmed("x@example.com");
+    await seedConfirmed("y@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    const spy = vi.spyOn(sends, "resolveAudience");
+    try {
+      failFakeSendBatch(1);
+      await sweep(env);
+      expect(spy).toHaveBeenCalledTimes(1);
+      const resolvedAt = (await sends.getSend(env.DB, send.id))!.audience_resolved_at;
+
+      vi.useFakeTimers({ toFake: ["Date"] });
+      try {
+        await toNextTick(env.DB);
+        await sweep(env);
+      } finally {
+        vi.useRealTimers();
+      }
+      expect(spy).toHaveBeenCalledTimes(1);
+      const done = (await sends.getSend(env.DB, send.id))!;
+      expect(done.status).toBe("sent");
+      expect(done.audience_resolved_at).toBe(resolvedAt);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("resolveAudience inserts and marks in one guarded write, and never again", async () => {
+    await seedConfirmed("a@example.com");
+    const send = await scheduledSend(Date.now() + 600_000);
+
+    expect(await sends.resolveAudience(env.DB, send.id, Date.now())).toBe(true);
+    await seedConfirmed("b@example.com");
+    expect(await sends.resolveAudience(env.DB, send.id, Date.now())).toBe(false);
+
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect(row.recipient_count).toBe(1);
+    expect(row.c_pending).toBe(1);
+    expect(await sends.countDeliveries(env.DB, send.id, "pending")).toBe(1);
+  });
+
+  it("the scheduled snapshot counts the audience as it stood when it was taken", async () => {
+    await seedConfirmed("a@example.com");
+    await seedConfirmed("b@example.com");
+    await seedConfirmed("bounced@example.com");
+    await env.DB.prepare(
+      "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at) VALUES ('id-p', 'pending@example.com', 'pending', 'cfm-p', 'uns-p', ?)",
+    )
+      .bind(Date.now())
+      .run();
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES ('bounced@example.com', 'bounce', 'hard bounce', ?)",
+    )
+      .bind(Date.now())
+      .run();
+
+    const send = await scheduledSend(Date.now() + 600_000);
+    expect(send.recipient_count).toBe((await subscribersDb.audienceEmails(env.DB)).length);
+    expect(send.recipient_count).toBe(2);
+    expect(send.audience_resolved_at).toBeNull();
+
+    // A snapshot, not a promise: a later confirm doesn't move it while scheduled.
+    await seedConfirmed("c@example.com");
+    expect((await sends.getSend(env.DB, send.id))!.recipient_count).toBe(2);
   });
 
   it("flags a missed fire time loudly but still delivers (§12)", async () => {

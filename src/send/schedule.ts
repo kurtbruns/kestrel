@@ -22,7 +22,7 @@ import {
   settingsVersionIs,
 } from "../db/sends";
 import { readSettings } from "../db/settings";
-import { audienceEmails } from "../db/subscribers";
+import { audienceCount } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { badRequest, conflict, notFound } from "../lib/errors";
 import { newId } from "../lib/ids";
@@ -80,7 +80,7 @@ export async function freeze(
     // the insert changes zero rows and the freeze renders again with the new settings.
     const { settings, version } = await readSettings(env.DB);
     const rendered = await renderPost(env, config, post, resolveBranding(settings, config));
-    const audience = await audienceEmails(env.DB);
+    const audience = await audienceCount(env.DB);
 
     const now = Date.now();
     const id = newId();
@@ -90,7 +90,7 @@ export async function freeze(
       results = await env.DB.batch([
         insertScheduledSendStmt(
           env.DB,
-          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience.length },
+          { ...rendered, id, post_id: post.id, fire_at: fireAt, recipient_count: audience },
           now,
           settingsVersion,
         ),

@@ -337,6 +337,17 @@ export async function audienceEmails(db: D1Database): Promise<string[]> {
   return results.map((r) => r.email);
 }
 
+/** How many addresses a send would reach now: confirmed minus suppressed, the same
+ *  set `audienceEmails` lists, counted without loading it. */
+export async function audienceCount(db: D1Database): Promise<number> {
+  const row = await db
+    .prepare(
+      "SELECT COUNT(*) AS n FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions)",
+    )
+    .first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 export async function isSuppressed(db: D1Database, email: string): Promise<boolean> {
   const row = await db.prepare("SELECT 1 FROM suppressions WHERE email = ?").bind(email).first();
   return row !== null;

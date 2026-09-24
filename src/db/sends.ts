@@ -214,7 +214,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -283,7 +283,7 @@ export async function deliveryRollup(
 }
 
 /**
- * How a send went, as mutually-exclusive buckets that sum to the frozen audience —
+ * How a send went, as mutually-exclusive buckets that sum to the audience at fire —
  * the numbers behind the sent record view (SPEC §8). A `deliveries` row carries two
  * orthogonal facts: the send-loop `status` (did the provider accept the hand-off) and
  * the later webhook `event` (delivered / bounced / complained). This bucketing reads
@@ -772,33 +772,41 @@ export async function completeSend(
 }
 
 /**
- * Materialize the audience into `deliveries`, idempotently. INSERT OR IGNORE on
- * UNIQUE(send_id, email) makes re-entry a no-op, which is what lets a send resume.
+ * Fix the send's audience, once (SPEC §6, §8): confirmed subscribers minus suppressed
+ * addresses as they stand now, inserted as `pending` deliveries. One batch, so one
+ * transaction: the insert runs only while `audience_resolved_at` is null and the same
+ * batch sets it, so a crash can't leave a send marked resolved without its rows, and a
+ * resolved send is never widened by a later run. The same write sets `recipient_count`
+ * to the audience at fire and `c_pending` to the rows queued. True when this call
+ * resolved it, false when it already was.
  */
-export async function materializeAudience(
+export async function resolveAudience(
   db: D1Database,
   sendId: string,
   now: number,
-): Promise<void> {
-  // Insert the audience, then set c_pending to the true count of queued rows — an
-  // absolute set (not a delta) so it is correct on the first run and idempotent on a
-  // resume, and atomic with the insert so the counter can't diverge from a crash mid-way.
-  await db.batch([
+): Promise<boolean> {
+  const [, mark] = await db.batch([
     db
       .prepare(
         `INSERT OR IGNORE INTO deliveries (id, send_id, email, status, attempts, updated_at)
            SELECT lower(hex(randomblob(16))), ?, s.email, 'pending', 0, ?
              FROM subscribers s
             WHERE s.status = 'confirmed'
-              AND s.email NOT IN (SELECT email FROM suppressions)`,
+              AND s.email NOT IN (SELECT email FROM suppressions)
+              AND EXISTS (SELECT 1 FROM sends WHERE id = ? AND audience_resolved_at IS NULL)`,
       )
-      .bind(sendId, now),
+      .bind(sendId, now, sendId),
     db
       .prepare(
-        "UPDATE sends SET c_pending = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id AND status = 'pending' AND event IS NULL) WHERE id = ?",
+        `UPDATE sends
+            SET audience_resolved_at = ?,
+                recipient_count = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id),
+                c_pending = (SELECT COUNT(*) FROM deliveries WHERE send_id = sends.id AND status = 'pending' AND event IS NULL)
+          WHERE id = ? AND audience_resolved_at IS NULL`,
       )
-      .bind(sendId),
+      .bind(now, sendId),
   ]);
+  return (mark?.meta.changes ?? 0) > 0;
 }
 
 export interface DeliveryWork {
@@ -1288,7 +1296,7 @@ export interface AcceptedAwaitingEvent {
   email: string;
   provider_id: string | null;
   updated_at: number;
-  /** The send's frozen recipient count, so the simulation can scale a per-send rate
+  /** The send's recipient count (the audience at fire once it has fired), so the simulation can scale a per-send rate
    *  (e.g. a small-list complaint floor) to the audience size. */
   recipient_count: number;
 }
