@@ -553,8 +553,8 @@ export function cancelStmt(db: D1Database, sendId: string, now: number): D1Prepa
 }
 
 /** The predicate a post unlock carries when it runs in a batch after `cancelStmt`: the
- *  post has no active send left. When the cancel's CAS changed nothing, the send is
- *  still active and the unlock changes nothing too, so the pair lands whole or not at all. */
+ *  post has no active send left. When the cancel's CAS changed nothing because the send
+ *  is still active, the unlock changes nothing too; a failure in either rolls back both. */
 export function noActiveSendFor(postId: string): { sql: string; binds: unknown[] } {
   return {
     sql: "NOT EXISTS (SELECT 1 FROM sends WHERE post_id = ? AND status IN ('scheduled', 'sending'))",

@@ -32,7 +32,7 @@ function parseFireAt(input: unknown): number {
       if (!ISO_WITH_OFFSET.test(input.trim())) {
         throw fieldError(
           "fire_at",
-          "fire_at needs a timezone: end the timestamp with Z or an offset like +02:00, or send epoch milliseconds",
+          "fire_at must name its timezone: an ISO-8601 timestamp ending in Z or an offset like +02:00, or epoch milliseconds",
         );
       }
       return iso;

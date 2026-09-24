@@ -233,7 +233,18 @@ describe("schedule / send / cancel + soft-lock", () => {
 
     // The same instant written with an offset, as Z, as epoch millis (number or string).
     const plus2 = new Date(at.getTime() + 2 * 60 * 60 * 1000).toISOString().replace(/Z$/, "+02:00");
-    for (const fire_at of [plus2, at.toISOString(), at.getTime(), String(at.getTime())]) {
+    const minus5 = new Date(at.getTime() - 5 * 60 * 60 * 1000)
+      .toISOString()
+      .replace(/Z$/, "-05:00");
+    const lowerZ = at.toISOString().replace(/Z$/, "z");
+    for (const fire_at of [
+      plus2,
+      minus5,
+      lowerZ,
+      at.toISOString(),
+      at.getTime(),
+      String(at.getTime()),
+    ]) {
       const id = await makeDraft();
       const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
         method: "POST",
