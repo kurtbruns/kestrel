@@ -2,12 +2,14 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendFeedResponse, SendProgress } from "../shared/sends";
+import { STUCK_THRESHOLD_MS } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { Budget } from "../src/send/budget";
+import { nextChangeAt } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
@@ -188,5 +190,33 @@ describe("a run on a provider that dedupes under its key", () => {
     await runSend(env, send.id);
     expect(provider.mailed.map((m) => m.key)).toEqual(["k-cut", "k-cut", "k-cut"]);
     expect((await row(send.id)).status).toBe("sent");
+  });
+});
+
+describe("the pace around a wedge and a cut-off run", () => {
+  const NOW = 1_800_000_000_000;
+  const base = {
+    status: "sending" as const,
+    fire_at: NOW - 600_000,
+    started_at: NOW - 60_000,
+    c_pending: 0,
+    c_in_flight: 1,
+  };
+
+  it("never hurries for a wedged send, even one still carrying a past halt", () => {
+    expect(nextChangeAt({ ...base, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW)).toBe(
+      NOW - 60_000 + STUCK_THRESHOLD_MS,
+    );
+  });
+
+  it("waits for the retry of a halted send whose run was cut off, rather than reading it as moving", () => {
+    const retry = NOW + 10 * 60_000;
+    expect(
+      nextChangeAt({ ...base, c_pending: 3, locked_until: NOW - 1_000, halt_retry_at: retry }, NOW),
+    ).toBe(retry - 30_000);
+    // With no halt, a cut-off run's expired lease is taken up at the next tick.
+    expect(nextChangeAt({ ...base, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
+      NOW,
+    );
   });
 });

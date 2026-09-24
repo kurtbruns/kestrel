@@ -66,13 +66,13 @@ export type PaceFields = Pick<
  *
  * - scheduled: its fire time; once due, now, until it is past the missed tolerance, when
  *   only a sweep that is not running can start it (null).
- * - sending with a run in hand (a lease not yet released, held or run out), or work the
- *   next tick takes up (recipients queued and no halt waiting): now.
+ * - sending with a run in hand (its lease held), or work the next tick takes up
+ *   (recipients queued, or a cut-off run's lease run out, and no halt waiting): now.
  * - sending and halted: the first tick that retries it (its `halt_retry_at`, less the slack
  *   the sweep allows), or now once that has come.
- * - sending and wedged (awaiting Resolve): only the in-flight-too-long threshold, still
- *   ahead, can change it with no one acting; a halted send crosses it too, if that comes
- *   before its retry.
+ * - sending and wedged (awaiting Resolve), even with a halt left on it: only the
+ *   in-flight-too-long threshold, still ahead, can change it with no one acting; a halted
+ *   send crosses it too, if that comes before its retry.
  * - sent or canceled: null.
  */
 export function nextChangeAt(send: PaceFields, now: number): number | null {
@@ -85,16 +85,17 @@ export function nextChangeAt(send: PaceFields, now: number): number | null {
   if (send.status !== "sending") {
     return null;
   }
-  if (send.locked_until !== null) {
-    // A run holds it, or held it and was cut off: the next tick takes it up once the lease
-    // runs out, and until then it may be working.
-    return now;
+  if (send.locked_until !== null && send.locked_until > now) {
+    return now; // a run holds it, and may be working
   }
   let next: number | null = null;
-  if (send.halt_retry_at !== null) {
+  if (isWedged(send)) {
+    // The sweep no longer runs it, whatever halt it last carried: only Resolve moves it.
+  } else if (send.halt_retry_at !== null) {
+    // Halted, or a run cut off after halting it: the sweep takes it up at the retry.
     next = Math.max(now, send.halt_retry_at - HALT_RETRY_SLACK_MS);
-  } else if (!isWedged(send)) {
-    // Queued work (or nothing left, about to complete): the sweep takes it up at its tick.
+  } else {
+    // Queued work, or a run cut off whose lease has run out: the next tick takes it up.
     return now;
   }
   // Wedged or halted: the in-flight-too-long threshold is the clock's change, if still ahead.
