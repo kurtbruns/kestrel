@@ -14,6 +14,7 @@ import type {
   NotificationStatusView,
 } from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { WEDGED_SEND } from "./sends";
 
 export type { NotificationKind };
 
@@ -46,12 +47,6 @@ export interface DueNotification {
 /** The (send, kind, episode) that names one notification. */
 export type NotificationKey = Pick<DueNotification, "send_id" | "kind" | "episode">;
 
-// A send whose loop has given up on it for now: nothing left to hand off, recipients in
-// flight with an unknown fate, and no run holding it. The same test the watch applies
-// (send/progress.ts), so the notification and the status surface agree on "wedged".
-const WEDGED = `status = 'sending' AND c_pending = 0 AND c_in_flight > 0
-                AND (locked_until IS NULL OR locked_until <= ?1)`;
-
 /**
  * Record every event that has happened and has no notification yet, in one statement.
  * INSERT OR IGNORE on the (send, kind, episode) key is what makes a condition that
@@ -76,11 +71,11 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
           WHERE (status = 'scheduled' AND fire_at < ?1 - ?3)
              OR (status IN ('sending', 'sent') AND started_at >= ?2 AND started_at - fire_at > ?3)
          UNION ALL
-         SELECT id, 'wedged', 0, ?1, ?1 FROM sends WHERE ${WEDGED}
+         SELECT id, 'wedged', 0, ?1, ?1 FROM sends WHERE ${WEDGED_SEND}
          UNION ALL
          SELECT id, 'stuck', 0, ?1, ?1 FROM sends
           WHERE status = 'sending' AND started_at < ?1 - ?4
-            AND halt_reason IS NOT 'account' AND NOT (${WEDGED})
+            AND halt_reason IS NOT 'account' AND NOT (${WEDGED_SEND})
             AND NOT EXISTS (SELECT 1 FROM notifications r
                              WHERE r.send_id = sends.id AND r.kind = 'refused')`,
     )

@@ -6,9 +6,10 @@
  * genuinely ambiguous, because we cannot know whether the provider accepted them.
  * The send loop deliberately refuses to blind-retry those rows (that refusal is
  * what protects I4 without a provider idempotency key), so the send can never
- * satisfy its completion gate (`pending == 0 && dispatched == 0`). It stays
- * `sending` forever, re-run on every sweep tick and flagged (`send.stuck`, `send.wedged`),
- * with no way to act on the flag but raw SQL, were it not for this.
+ * satisfy its completion gate (`pending == 0 && dispatched == 0`). Once the run that left
+ * them releases the send it is wedged (`WEDGED_SEND`): it stays `sending`, the sweep no
+ * longer runs it, and it is flagged (`send.wedged`, then `send.stuck`), with no way to act
+ * on the flag but raw SQL, were it not for this.
  *
  * This is the one place a human resolves that ambiguity, choosing the safe outcome:
  *   - "unsent":   assume the batch never left. The addresses are simply picked up by

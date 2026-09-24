@@ -423,15 +423,13 @@ const IN_PAGE = `rev > ?2 AND rev <= COALESCE(${CUT}, 9007199254740991)`;
 // limit): every send whose `rev` is in the page, and every send a clock threshold changed
 // between the read time and now with no write, whatever the limit. Each crossing is the same
 // comparison `buildSendProgress` makes, at the read time (not yet) and at now (crossed): a
-// fire time passing (due), the missed tolerance passing, the stuck threshold passing, and a
-// lease running out, which is what tells a wedged send from one finishing its last batch.
+// fire time passing (due), the missed tolerance passing, and the stuck threshold passing. A
+// send turns wedged only by a write (`WEDGED_SEND`), so no crossing is needed for it.
 const CHANGED_SINCE = `(${IN_PAGE})
   OR (status = 'scheduled' AND (
        (fire_at > ?3 AND fire_at <= ?1)
     OR (fire_at + ?4 >= ?3 AND fire_at + ?4 < ?1)))
-  OR (status = 'sending' AND (
-       (started_at + ?5 >= ?3 AND started_at + ?5 < ?1)
-    OR (locked_until > ?3 AND locked_until <= ?1)))`;
+  OR (status = 'sending' AND started_at + ?5 >= ?3 AND started_at + ?5 < ?1)`;
 
 /**
  * One read of the send feed (SPEC §8), over send rows only, never the delivery record: with
@@ -871,9 +869,24 @@ export async function dueSends(db: D1Database, now: number): Promise<SendRow[]> 
   return results;
 }
 
+/**
+ * A wedged send (SPEC §12), as SQL over a `sends` row: sending, nothing left to hand off,
+ * recipients still in flight, and no run holding it, because the last run released its
+ * lease having left them there. A run releases only once it has recorded every answer it
+ * got, and puts back in the queue any batch it could still re-send under its key, so what
+ * it leaves in flight is exactly what nothing will re-send: recipients whose fate is
+ * unknown, awaiting Resolve. A run cut off mid-batch releases nothing (its lease runs out
+ * instead), so its batches are not wedged until the next run has looked at them. The one
+ * definition: the watch (`isWedged`), the feed, the sweep, and the notifications read it.
+ * It takes no clock, so a send turns wedged only by a write, which the feed reports.
+ */
+export const WEDGED_SEND =
+  "(status = 'sending' AND c_pending = 0 AND c_in_flight > 0 AND locked_until IS NULL)";
+
 /** Sends left mid-flight whose lease has expired, and whose halt, if they carry one, is
  *  due its next retry by `retryDueBy` (SPEC §12): resume them. A send still waiting out its
- *  backoff costs the sweep nothing past this query. */
+ *  backoff costs the sweep nothing past this query, and a wedged one is left alone: no run
+ *  can move it, only Resolve. */
 export async function resumableSends(
   db: D1Database,
   now: number,
@@ -882,9 +895,18 @@ export async function resumableSends(
   const { results } = await db
     .prepare(
       `SELECT * FROM sends WHERE status = 'sending' AND (locked_until IS NULL OR locked_until < ?)
-          AND (halt_retry_at IS NULL OR halt_retry_at <= ?) ORDER BY started_at ASC`,
+          AND (halt_retry_at IS NULL OR halt_retry_at <= ?) AND NOT ${WEDGED_SEND}
+        ORDER BY started_at ASC`,
     )
     .bind(now, retryDueBy)
+    .all<SendRow>();
+  return results;
+}
+
+/** The wedged sends (`WEDGED_SEND`), for the sweep's `send.wedged` line. */
+export async function wedgedSends(db: D1Database): Promise<SendRow[]> {
+  const { results } = await db
+    .prepare(`SELECT * FROM sends WHERE ${WEDGED_SEND} ORDER BY started_at ASC`)
     .all<SendRow>();
   return results;
 }
@@ -963,16 +985,54 @@ export async function renewLease(
   return (res.meta.changes ?? 0) > 0;
 }
 
-/** Release this run's lease so the next tick may resume the send; a no-op once another
- *  run holds it. Unlike a renewal it stamps `rev`: whether a lease is held is what tells a
- *  wedged send (given up, awaiting Resolve) from one finishing its last batch. */
-export async function releaseLease(db: D1Database, sendId: string, lease: string): Promise<void> {
-  await db
+/**
+ * Release this run's lease so the next tick may resume the send; a no-op once another run
+ * holds it. Unlike a renewal it stamps `rev`: a released lease with recipients left in
+ * flight is what makes a send wedged (`WEDGED_SEND`).
+ *
+ * `requeueKeyedSince` is for a provider that dedupes a re-send under its key: every batch
+ * still in flight under a key sent at or after it (or of unknown age) goes back to the
+ * queue, key kept, in the same batch as the release, so the next run re-sends it under
+ * that key rather than it reading as wedged. Those are batches a run cut off left behind
+ * that this run did not reach; it never re-sends anyone under a new key (I4). Null
+ * requeues whatever the key's age (a provider that remembers keys indefinitely); omit it
+ * for any other provider, whose in-flight rows only Resolve may settle.
+ */
+export async function releaseLease(
+  db: D1Database,
+  sendId: string,
+  lease: string,
+  requeueKeyedSince?: number | null,
+): Promise<void> {
+  const release = db
     .prepare(
       `UPDATE sends SET locked_until = NULL, lease_token = NULL, rev = ${NEXT_REV} WHERE id = ? AND lease_token = ?`,
     )
-    .bind(sendId, lease)
-    .run();
+    .bind(sendId, lease);
+  if (requeueKeyedSince === undefined) {
+    await release.run();
+    return;
+  }
+  const guard = holdsLease(sendId, lease);
+  const resendable = `send_id = ? AND status = 'dispatched' AND dispatch_key IS NOT NULL
+      AND (? IS NULL OR keyed_at IS NULL OR keyed_at >= ?)`;
+  const binds = [sendId, requeueKeyedSince, requeueKeyedSince];
+  await db.batch([
+    // Before the move, so it counts the rows about to leave `dispatched`; a row a receipt
+    // already reached counts in its event's bucket, which the move does not change.
+    db
+      .prepare(
+        `UPDATE sends SET c_in_flight = c_in_flight - (SELECT COUNT(*) FROM deliveries WHERE ${resendable} AND event IS NULL),
+                c_pending = c_pending + (SELECT COUNT(*) FROM deliveries WHERE ${resendable} AND event IS NULL),
+                rev = ${NEXT_REV}
+          WHERE id = ? AND lease_token = ?`,
+      )
+      .bind(...binds, ...binds, sendId, lease),
+    db
+      .prepare(`UPDATE deliveries SET status = 'pending' WHERE ${resendable} AND ${guard.sql}`)
+      .bind(...binds, ...guard.binds),
+    release,
+  ]);
 }
 
 /**
@@ -1712,30 +1772,5 @@ export async function acceptedAwaitingEvent(
     )
     .bind(limit)
     .all<AcceptedAwaitingEvent>();
-  return results;
-}
-
-/** A send with deliveries left in flight past the threshold, and how many. */
-export interface StaleDispatched {
-  send_id: string;
-  post_id: string;
-  n: number;
-}
-
-/** Dispatched rows older than a threshold, counted per send: ambiguous on non-idempotent
- *  providers, so the send is wedged until Resolve. One statement, whatever the count. */
-export async function staleDispatched(
-  db: D1Database,
-  olderThan: number,
-): Promise<StaleDispatched[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT d.send_id AS send_id, s.post_id AS post_id, COUNT(*) AS n
-         FROM deliveries d JOIN sends s ON s.id = d.send_id
-        WHERE d.status = 'dispatched' AND d.updated_at < ?
-        GROUP BY d.send_id, s.post_id`,
-    )
-    .bind(olderThan)
-    .all<StaleDispatched>();
   return results;
 }

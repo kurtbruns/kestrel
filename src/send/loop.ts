@@ -400,8 +400,23 @@ export async function runSend(
     return complete;
   };
 
+  /**
+   * Hand the send back to the sweep. On a provider that dedupes a re-send under its key,
+   * any batch still in flight under a key it remembers (one a cut-off run left that this
+   * run did not reach) goes back to the queue first, key kept, so the next run re-sends it
+   * under that key and it never reads as wedged. What is left in flight is then only what
+   * nothing will re-send, awaiting Resolve (`WEDGED_SEND`).
+   */
+  const releaseRun = async (): Promise<void> => {
+    if (!provider.idempotentRetry) {
+      await sends.releaseLease(db, sendId, lease);
+      return;
+    }
+    const window = provider.idempotencyWindowMs;
+    await sends.releaseLease(db, sendId, lease, window === undefined ? null : Date.now() - window);
+  };
   const release = async (): Promise<SendLoopResult> => {
-    await sends.releaseLease(db, sendId, lease);
+    await releaseRun();
     return result;
   };
 
@@ -414,8 +429,8 @@ export async function runSend(
   // the key is older than the provider's memory of it, a batch waiting in the queue
   // under its key goes back in flight, the ambiguous case that waits for Resolve (§12),
   // rather than sitting where nothing sends or resolves it. Batches already in flight
-  // there are left exactly as they are, so they neither eat this run's budget nor look
-  // freshly touched to the sweep's stale-delivery flag.
+  // there are left exactly as they are, so they don't eat this run's budget; releasing the
+  // send leaves them in flight, which is what makes it wedged.
   const keyWindow = provider.idempotencyWindowMs;
   const keyedBefore = keyWindow === undefined ? null : Date.now() - keyWindow;
   const unanswered = await sends.unansweredDispatchKeys(
@@ -562,7 +577,7 @@ export async function runSend(
     result.finished = true;
     log.info("send.completed", { ...tags, durationMs: Date.now() - (send.started_at ?? now) });
   } else {
-    await sends.releaseLease(db, sendId, lease);
+    await releaseRun();
   }
   // Dev-only: settle any now-due synthetic receipts from this run's fresh acceptances,
   // so the delivery bar starts filling without waiting for the next sweep. No-op unless
