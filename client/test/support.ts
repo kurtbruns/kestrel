@@ -11,6 +11,7 @@ import {
   type SendFeedResponse,
   type SendListResponse,
   type SendPhase,
+  type SendResponse,
   type SendSummary,
   type SendView,
 } from "../../shared/sends";
@@ -459,9 +460,37 @@ export function sendServer(rows: SendSummary[] = []) {
         };
       },
     },
+    {
+      // One send, as `GET /sends/:id` answers it: its view, its outcomes from the
+      // counters (the fake keeps no delivery rows; like the server's, a recipient not yet
+      // handed off counts as in flight), and where the read stood.
+      path: /^\/sends\/(?!feed$)[^/]+$/,
+      reply: (req): SendResponse | Response => {
+        const id = req.url.pathname.split("/").pop() ?? "";
+        const s = sends.get(id);
+        if (!s) {
+          return jsonResponse({ error: "not_found" }, 404);
+        }
+        const r = s.row;
+        return {
+          send: view(s, Date.now()),
+          outcomes: {
+            recipients: r.recipient_count,
+            delivered: r.c_delivered,
+            bounced: r.c_bounced,
+            complained: r.c_complained,
+            unsent: r.c_unsent,
+            skipped: r.c_skipped,
+            accepted: r.c_accepted,
+            in_flight: r.c_pending + r.c_in_flight,
+          },
+          cursor: cursor(),
+        };
+      },
+    },
   ];
   return {
-    /** The two routes, for a spec's `fakeApi` beside its own. */
+    /** The feed, the list, and one send's read, for a spec's `fakeApi` beside its own. */
     routes,
     /** Write a send: a new one, or every field of one again (`extras` replaced, not merged). */
     put,
