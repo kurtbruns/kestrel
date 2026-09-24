@@ -28,19 +28,23 @@
  * the send, Resolve is refused and can be tried again a moment later.
  */
 
-import type { ResolveResponse, StuckResolution } from "../../shared/sends";
+import type { StuckResolution } from "../../shared/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { notFound, refusal } from "../lib/errors";
 import { LEASE_TTL_MS } from "../lib/time";
-import { unwrap } from "../lib/unwrap";
-import { describeSend } from "./describe";
+import { viewSend } from "./describe";
 import { isWedged } from "./wedged";
 
-// The shapes live in shared/ so the editor reads the same definitions; the names here
-// are the Worker's own.
+// The resolution lives in shared/ so the editor reads the same definition.
 export type { StuckResolution };
-export type ResolveResult = ResolveResponse;
+
+/** What a Resolve did: how many ambiguous recipients it settled, and whether the send
+ *  then finished. The route answers with the send as it now stands beside these. */
+export interface ResolveResult {
+  resolved: number;
+  completed: boolean;
+}
 
 /** What a Resolve may carry: the `rev` the caller last read (`If-Match`), and how many
  *  ambiguous recipients it saw, so it never settles a different set than the one it meant. */
@@ -68,7 +72,7 @@ export async function resolveStuckSend(
     throw notFound("send");
   }
   const refuse = async (status: 409 | 412, code: string, message: string) =>
-    refusal(status, code, message, { send: await describeSend(env.DB, send) });
+    refusal(status, code, message, { send: await viewSend(env, send.id) });
   if (guard.ifMatch !== undefined && send.rev !== guard.ifMatch) {
     throw await refuse(
       412,
@@ -141,5 +145,5 @@ export async function resolveStuckSend(
     await sends.releaseLease(env.DB, sendId, lease);
   }
 
-  return { send: unwrap(await sends.getSend(env.DB, sendId), "send"), resolved, completed };
+  return { resolved, completed };
 }

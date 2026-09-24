@@ -5,15 +5,15 @@ import type {
   DeliveryOutcomes,
   DeliveryRecord,
   DeliveryView,
-  Send,
   SendCounts,
   SendPhase,
-  SendProgress,
   SendResponse,
+  SendView,
 } from "../../shared/sends";
-import { api, apiText } from "../api";
+import { api, apiFile } from "../api";
 import { noEmailProvider } from "../deployment";
-import { mount, poll } from "../lifecycle";
+import { every, mount, poll } from "../lifecycle";
+import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
@@ -29,8 +29,8 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * of a locked editor: how the send went over the audience at fire, with a link to the
  * archived post. A send still IN FLIGHT opens the live watch (two bars, dispatch and the
  * lagging delivery, a derived phase, a counts grid, throughput, and a provider-health
- * strip), polling /progress until dispatch completes, after which the record keeps
- * absorbing delivery receipts as they settle (SPEC §6/§8/§12).
+ * strip), following the send through the send-state layer until dispatch completes, after
+ * which the record keeps absorbing delivery receipts as they settle (SPEC §6/§8/§12).
  */
 export async function renderSentRecord(
   id: string,
@@ -62,9 +62,9 @@ export async function renderSentRecord(
     location.hash = `#/edit/${send.post_id}`;
     return;
   }
-  // A send still in flight opens the live watch, which polls /progress.
+  // A send still in flight opens the live watch, which follows it from this read.
   if (send.status === "sending") {
-    return startWatch(id, send, root, signal, remount);
+    return startWatch(data, root, signal, remount);
   }
   return renderFrozenRecord(id, data, root, signal, remount);
 }
@@ -99,7 +99,7 @@ function nextRetry(retryAt: number | null): string {
   return wait > 0 ? `next retry in ${fmtDuration(wait)}` : "next retry due now";
 }
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
-function phaseBlurb(prog: SendProgress): string {
+function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;
   if (has(prog, "refused") && halt) {
     return `The provider is refusing this account — nothing more goes out until it is fixed; ${nextRetry(halt.retry_at)}.`;
@@ -172,12 +172,12 @@ function watchCountsHtml(counts: SendCounts): Html {
 }
 
 // The dynamic half of the watch (bars + counts + health strip), repainted on each poll.
-function watchBodyHtml(prog: SendProgress): Html {
+function watchBodyHtml(prog: SendView): Html {
   const c = prog.counts;
   const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
   const rate = prog.dispatch.rate_per_min;
   const dispatchSub =
-    prog.state === "sending"
+    prog.status === "sending"
       ? `${phaseBlurb(prog)}${
           rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
         }`
@@ -196,12 +196,12 @@ function watchBodyHtml(prog: SendProgress): Html {
         : null
     }
     <div class="wbars">
-      ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.total, dispatchSub)}
+      ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.audience.count, dispatchSub)}
       ${deliveryBar(
         "Delivery — webhook-confirmed",
         prog.delivery.confirmed,
         acceptedTotal,
-        prog.total,
+        prog.audience.count,
         "Delivery lags acceptance — grey is accepted-but-unconfirmed, green fills in as receipts arrive.",
       )}
     </div>
@@ -212,11 +212,12 @@ function watchBodyHtml(prog: SendProgress): Html {
         : "no delivery failures"
     }</span></div>`;
 }
-function watchMetaHtml(send: Send, prog: SendProgress): Html {
+function watchMetaHtml(send: SendView): Html {
   const started = send.started_at ? `Started ${fmt(send.started_at)}` : "Sending now";
-  return html`${started} · ${prog.total.toLocaleString()} recipients`;
+  return html`${started} · ${send.audience.count.toLocaleString()} recipients`;
 }
-function watchHtml(send: Send, prog: SendProgress): Html {
+function watchHtml(send: SendView): Html {
+  const prog = send;
   return html`
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
@@ -225,34 +226,30 @@ function watchHtml(send: Send, prog: SendProgress): Html {
     <div class="card rec-card watch-card">
       <div class="rec-head">
         <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="watchPill">${phasePill(prog.phase)}</span></div>
-        <div class="rec-meta" id="watchMeta">${watchMetaHtml(send, prog)}</div>
+        <div class="rec-meta" id="watchMeta">${watchMetaHtml(send)}</div>
       </div>
       <div id="watchBody">${watchBodyHtml(prog)}</div>
       <p class="rec-note muted">This view updates live while the send is in flight. Delivery receipts keep arriving after dispatch finishes — the record stays accurate as they settle.</p>
     </div>`;
 }
 
-// Wire the header's Resolve control (present only when the send is wedged, §12). It
-// reuses the same modal the Sent page uses, with the in-flight count the progress reports.
-function wireWatchHeader(
-  root: HTMLElement,
-  send: Send,
-  prog: SendProgress,
-  remount: () => void,
-): void {
+// Wire the header's Resolve control (present only while the server offers it, §12). It
+// reuses the same modal the Sent page uses, with the wedged count the send reports.
+function wireWatchHeader(root: HTMLElement, send: SendView, remount: () => void): void {
   const rb = root.querySelector<HTMLButtonElement>("#resolveBtn");
   if (rb) {
-    rb.onclick = () => openResolveModal({ ...send, c_in_flight: prog.counts.in_flight }, remount);
+    const count = conditionOf(send, "wedged")?.count ?? send.counts.in_flight;
+    rb.onclick = () => openResolveModal({ id: send.id, c_in_flight: count }, remount);
   }
 }
-function paintWatch(root: HTMLElement, send: Send, prog: SendProgress): void {
+function paintWatch(root: HTMLElement, prog: SendView): void {
   const pill = root.querySelector("#watchPill");
   if (pill) {
     setHtml(pill, phasePill(prog.phase));
   }
   const meta = root.querySelector("#watchMeta");
   if (meta) {
-    setHtml(meta, watchMetaHtml(send, prog));
+    setHtml(meta, watchMetaHtml(prog));
   }
   const body = root.querySelector("#watchBody");
   if (body) {
@@ -260,45 +257,40 @@ function paintWatch(root: HTMLElement, send: Send, prog: SendProgress): void {
   }
 }
 
-async function startWatch(
-  id: string,
-  send: Send,
+function startWatch(
+  data: SendResponse,
   root: HTMLElement,
   signal: AbortSignal,
   remount: () => void,
-): Promise<void> {
-  let prog: SendProgress;
-  try {
-    prog = await api<SendProgress>(`/sends/${id}/progress`, { signal });
-  } catch (e) {
-    renderError(root, message(e), remount);
-    return;
-  }
-  if (signal.aborted) {
-    return;
-  }
-  // It may have finished between the two reads: fall through to the frozen record.
-  if (prog.state !== "sending") {
-    return remount();
-  }
-  setHtml(root, watchHtml(send, prog));
-  wireWatchHeader(root, send, prog, remount);
-  // Poll /progress (~3s) while sending; the poll ends with the mount, or with dispatch.
-  poll(
-    3000,
-    async () => {
-      const fresh = await api<SendProgress>(`/sends/${id}/progress`, { signal });
-      if (fresh.state !== "sending") {
-        remount(); // dispatch done → the frozen record (which settles)
-        return false;
-      }
-      // If Resolve just became possible, or stopped being, the header changes: re-render.
-      if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
-        setHtml(root, watchHtml(send, fresh));
-        wireWatchHeader(root, send, fresh, remount);
-      } else {
-        paintWatch(root, send, fresh);
-      }
+): void {
+  setHtml(root, watchHtml(data.send));
+  wireWatchHeader(root, data.send, remount);
+  // The latest report, repainted on the clock between reports: a halt's "next retry in …"
+  // counts down while nothing about the send is written.
+  let latest = data.send;
+  every(1000, () => paintWatch(root, latest), signal);
+  // From the page's own read, the send-state layer reports each change to the send, at the
+  // server's pace; the watch keeps no poll of its own. Once dispatch ends it re-enters as the
+  // frozen record (which settles).
+  followSend(
+    data,
+    {
+      update: (fresh) => {
+        if (fresh.status !== "sending") {
+          remount();
+          return;
+        }
+        latest = fresh;
+        // If Resolve just became possible, or stopped being, the header changes: re-render.
+        if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
+          setHtml(root, watchHtml(fresh));
+          wireWatchHeader(root, fresh, remount);
+        } else {
+          paintWatch(root, fresh);
+        }
+      },
+      removed: remount,
+      stale: remount,
     },
     signal,
   );
@@ -462,7 +454,9 @@ function renderFrozenRecord(
   signal: AbortSignal,
   remount: () => void,
 ): void {
-  const { send, outcomes, archive_url, published, slug } = data;
+  const { send, outcomes } = data;
+  // The published post, which the send's view links once it is sent.
+  const archive = send.links.archive;
   const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;
 
@@ -471,7 +465,7 @@ function renderFrozenRecord(
     html`
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
-      ${published && archive_url ? html`<button type="button" class="primary" id="viewPublished">View published post&nbsp;↗</button>` : null}
+      ${archive ? html`<button type="button" class="primary" id="viewPublished">View published post&nbsp;↗</button>` : null}
     </div>
     <div class="card rec-card">
       <div class="rec-head">
@@ -503,8 +497,8 @@ function renderFrozenRecord(
   );
 
   const viewBtn = document.getElementById("viewPublished");
-  if (viewBtn && archive_url) {
-    viewBtn.onclick = () => window.open(archive_url, "_blank", "noopener");
+  if (viewBtn && archive) {
+    viewBtn.onclick = () => window.open(archive, "_blank", "noopener");
   }
 
   // The per-recipient record, its own paged/filtered state. Default view is "failures" so
@@ -579,13 +573,13 @@ function renderFrozenRecord(
   csvBtn.onclick = () =>
     busy(csvBtn, "Exporting…", async () => {
       try {
-        const csv = await apiText(`/sends/${id}/deliveries.csv`);
-        const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+        const csv = await apiFile(send.links.deliveries_csv);
+        const url = URL.createObjectURL(new Blob([csv.text], { type: "text/csv" }));
         const a = document.createElement("a");
         a.href = url;
-        // Match the server's content-disposition (routes/sends.ts) so the file is named
-        // the same however it's fetched: the archive slug, not a re-slug of the subject.
-        a.download = `${slug ?? "send"}-deliveries.csv`;
+        // The server's name for it (the archive slug), so the file is named the same
+        // however it's fetched.
+        a.download = csv.filename ?? "deliveries.csv";
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {

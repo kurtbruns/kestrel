@@ -172,7 +172,9 @@ describe("dashboard", () => {
       }),
       post({ id: "p3", slug: "waxwings", subject: "Waxwings", status: "sent" }),
     ];
-    fake = world(posts, sendServer([send(), scheduled()]));
+    const srv = sendServer([scheduled()]);
+    srv.put(send(), { archive: "https://birds.example/archive/waxwings" });
+    fake = world(posts, srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     expect($(".dash-head h1").textContent).toBe("Birds Weekly");

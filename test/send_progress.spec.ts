@@ -8,17 +8,17 @@ import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
-import { buildSendProgress } from "../src/send/progress";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { condition, has } from "./support/conditions";
+import { viewOf } from "./support/view";
 
 // PR2 (#154, #152): the denormalized counters on `sends` are a rebuildable cache of the
 // `deliveries` bucketing, maintained in the same transactions as each recipient
 // transition. These tests pin that they stay consistent across a full send, a resume, a
-// webhook, and a resolve — and that /progress + the derived phase read off them.
+// webhook, and a resolve — and that a send's view and its derived phase read off them.
 
 const config = () => getConfig(env);
 const AUTH = await adminAuth();
@@ -158,20 +158,20 @@ describe("send counters (sends.c_*)", () => {
   });
 });
 
-describe("GET /sends/:id/progress", () => {
-  it("reports a single-row progress shape with a derived phase", async () => {
+describe("a send's view on GET /sends/:id", () => {
+  it("reports the counters and a derived phase", async () => {
     await seedConfirmed("p1@example.com");
     await seedConfirmed("p2@example.com");
     const send = await scheduledSend(Date.now() - 1000);
     await runSend(env, send.id);
 
-    const res = await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
-    expect(body.state).toBe("sent");
+    const body = ((await res.json()) as any).send;
+    expect(body.status).toBe("sent");
     // Everyone accepted, none confirmed yet → still settling.
     expect(body.phase).toBe("settling");
-    expect(body.total).toBe(2);
+    expect(body.audience).toMatchObject({ count: 2, fixed: true });
     expect(body.counts.accepted).toBe(2);
     expect(body.dispatch.percent).toBe(100);
     expect(body.delivery.confirmed).toBe(0);
@@ -185,10 +185,10 @@ describe("GET /sends/:id/progress", () => {
     failFakeSendBatch(1);
     await runSend(env, send.id); // requeues, leaves it sending with pending rows
 
-    const body = (await (
-      await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })
-    ).json()) as any;
-    expect(body.state).toBe("sending");
+    const body = (
+      (await (await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })).json()) as any
+    ).send;
+    expect(body.status).toBe("sending");
     expect(body.phase).toBe("backing-off"); // work remains, nothing in flight
     expect(body.counts.pending).toBe(1);
   });
@@ -202,9 +202,9 @@ describe("GET /sends/:id/progress", () => {
       const list = (await (
         await SELF.fetch(`${base}/sends?status=sending`, { headers: AUTH })
       ).json()) as any;
-      const progress = (await (
-        await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })
-      ).json()) as any;
+      const progress = (
+        (await (await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })).json()) as any
+      ).send;
       return [
         has(
           list.sends.find((r: any) => r.id === send.id),
@@ -222,13 +222,13 @@ describe("GET /sends/:id/progress", () => {
   });
 
   it("404s an unknown send and 401s without auth", async () => {
-    expect((await SELF.fetch(`${base}/sends/nope/progress`, { headers: AUTH })).status).toBe(404);
-    expect((await SELF.fetch(`${base}/sends/nope/progress`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/sends/nope`, { headers: AUTH })).status).toBe(404);
+    expect((await SELF.fetch(`${base}/sends/nope`)).status).toBe(401);
   });
 });
 
 // Phase derivation is pure — exercise every branch off a fabricated row.
-describe("buildSendProgress — derived phase", () => {
+describe("buildSendView — derived phase", () => {
   function mkSend(over: Partial<SendRow>): SendRow {
     return {
       id: "s",
@@ -265,17 +265,12 @@ describe("buildSendProgress — derived phase", () => {
     };
   }
   const phase = (over: Partial<SendRow>, hasRetries = false) =>
-    buildSendProgress(mkSend(over), "fake", hasRetries, Date.now()).phase;
+    viewOf(mkSend(over), "fake", hasRetries, Date.now()).phase;
 
   it("scheduled in the review window, due once the fire time passes, missed only past the threshold", () => {
     const now = Date.now();
     const at = (fire_at: number) =>
-      buildSendProgress(
-        mkSend({ status: "scheduled", fire_at, started_at: null }),
-        "fake",
-        false,
-        now,
-      );
+      viewOf(mkSend({ status: "scheduled", fire_at, started_at: null }), "fake", false, now);
     expect(at(now + 60_000).phase).toBe("scheduled");
     expect(at(now).phase).toBe("due"); // the fire time itself: the next tick starts it
     const late = at(now - 60_000); // an ordinary slow tick is never a miss (SPEC §12)
@@ -309,7 +304,7 @@ describe("buildSendProgress — derived phase", () => {
   });
   it("needs-attention, flagged refused with the provider's words, when the account is refused", () => {
     const since = Date.now() - 120_000;
-    const prog = buildSendProgress(
+    const prog = viewOf(
       mkSend({
         status: "sending",
         c_pending: 5,
@@ -331,12 +326,13 @@ describe("buildSendProgress — derived phase", () => {
       reason: "account",
       cause: "credentials",
       error: "resend batch 403: API key is not active",
+      retries: 2,
       since,
       retry_at: since + 20 * 60_000,
     });
   });
   it("backing-off, not refused, while the provider is only unavailable", () => {
-    const prog = buildSendProgress(
+    const prog = viewOf(
       mkSend({ status: "sending", c_pending: 5, halt_reason: "unavailable", halt_error: "503" }),
       "resend",
       false,
@@ -347,16 +343,11 @@ describe("buildSendProgress — derived phase", () => {
     expect(prog.provider.halt?.reason).toBe("unavailable");
   });
   it("flags a wedged send in attention with its count, but never while the lease is held", () => {
-    const wedged = buildSendProgress(
-      mkSend({ status: "sending", c_in_flight: 3 }),
-      "fake",
-      false,
-      Date.now(),
-    );
+    const wedged = viewOf(mkSend({ status: "sending", c_in_flight: 3 }), "fake", false, Date.now());
     expect(has(wedged, "wedged")).toBe(true);
     expect(condition(wedged, "wedged")?.count).toBe(3);
     // Same counts, but the loop holds the lease → actively working, not wedged.
-    const working = buildSendProgress(
+    const working = viewOf(
       mkSend({ status: "sending", c_in_flight: 3, locked_until: Date.now() + 60_000 }),
       "fake",
       false,
@@ -485,7 +476,7 @@ describe("receipts racing for one recipient", () => {
     // One recipient still awaits a receipt, so the send is settling, not complete.
     const row = await expectCountersMatchAggregate(send.id);
     expect(row.c_accepted).toBe(1);
-    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+    expect(viewOf(row, "fake", false, Date.now()).phase).toBe("settling");
   });
 });
 
@@ -507,7 +498,7 @@ describe("a cache that drifted before the receipt rule", () => {
 
     const row = await expectCountersMatchAggregate(send.id);
     expect(row.c_accepted).toBe(1);
-    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+    expect(viewOf(row, "fake", false, Date.now()).phase).toBe("settling");
   });
 });
 

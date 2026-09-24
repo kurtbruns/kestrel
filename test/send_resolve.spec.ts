@@ -116,7 +116,6 @@ describe("resolve a wedged send", () => {
 
     expect(res.resolved).toBe(1);
     expect(res.completed).toBe(true);
-    expect(res.send.status).toBe("sent");
     // The send finished and the post closed, exactly as a clean send would.
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("sent");

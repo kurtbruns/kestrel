@@ -1,23 +1,36 @@
 /**
- * A send as a refusal or an action hands it back: its `GET /sends` row, with the phase,
- * conditions, and actions read now, so a client refused (or answered) learns where the send
- * stands without a second read.
+ * A send read as a `SendView` (SPEC §8), for every route that answers with one: the send's
+ * route, every action, and every refusal that carries the send as it stands, so a client
+ * learns where the send stands without a second read. Beside it, the cursor an answer hands
+ * back: where the read stood among the changes to sends, to follow the send from.
  */
 
-import type { SendListItem, SendSummary } from "../../shared/sends";
-import { hasActiveRetries } from "../db/sends";
-import { buildListItem } from "./progress";
+import { encodeSendCursor } from "../../shared/cursor";
+import type { SendView } from "../../shared/sends";
+import { currentSendSeq, getSendViewRow } from "../db/sends";
+import { type AppEnv, getConfig } from "../env";
+import { buildSendView } from "./view";
 
-/** The send as it stands, in the `GET /sends` row shape. The frozen bodies are left out. */
-export async function describeSend(db: D1Database, send: SendSummary): Promise<SendListItem> {
-  const {
-    rendered_html: _html,
-    rendered_text: _text,
-    ...summary
-  } = send as SendSummary & {
-    rendered_html?: string;
-    rendered_text?: string;
-  };
-  const retries = summary.status === "sending" ? await hasActiveRetries(db, summary.id) : false;
-  return buildListItem(summary, retries, Date.now());
+/** The send as it stands, or null when it is gone. */
+export async function viewSend(env: AppEnv, id: string): Promise<SendView | null> {
+  const now = Date.now();
+  const row = await getSendViewRow(env.DB, id);
+  if (!row) {
+    return null;
+  }
+  const { has_retries, ...source } = row;
+  return buildSendView(source, getConfig(env), has_retries === 1, now);
+}
+
+/** The send as it stands, with the cursor to follow it from, or null when it is gone. The
+ *  sequence is read first, so whatever the view shows is at or after the cursor, and
+ *  following it misses nothing. */
+export async function viewWithCursor(
+  env: AppEnv,
+  id: string,
+): Promise<{ send: SendView; cursor: string } | null> {
+  const at = Date.now();
+  const seq = await currentSendSeq(env.DB);
+  const send = await viewSend(env, id);
+  return send ? { send, cursor: encodeSendCursor({ seq, at }) } : null;
 }

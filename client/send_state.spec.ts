@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
-import type { LiveSend, SendFeedResponse, SendPhase, SendStatus } from "../shared/sends";
+import type { SendFeedResponse, SendPhase, SendStatus, SendView } from "../shared/sends";
 import {
   followSend,
   followSends,
@@ -11,44 +11,50 @@ import {
   type StageChange,
   stageOf,
 } from "./send_state";
-import { type FakeApi, fakeApi, jsonResponse } from "./test/support";
+import { type FakeApi, fakeApi, jsonResponse, sendView } from "./test/support";
 
 const NOW = 1_700_000_000_000;
 
+/** A send as the feed reports it: a `SendView` in the given status and phase. */
 function live(
   id: string,
-  state: SendStatus,
+  status: SendStatus,
   phase: SendPhase,
-  over: Partial<LiveSend> = {},
-): LiveSend {
-  return {
-    id,
-    post_id: `p-${id}`,
-    subject: `Subject ${id}`,
-    fire_at: NOW - 30_000,
-    started_at: null,
-    completed_at: null,
-    state,
-    phase,
-    total: 10,
-    counts: {
-      pending: 0,
-      in_flight: 0,
-      accepted: 0,
-      delivered: 0,
-      bounced: 0,
-      complained: 0,
-      skipped: 0,
-      unsent: 0,
+  over: Partial<SendView> = {},
+): SendView {
+  return sendView(
+    {
+      id,
+      post_id: `p-${id}`,
+      status,
+      fire_at: NOW - 30_000,
+      subject: `Subject ${id}`,
+      recipient_count: 10,
+      locked_until: null,
+      scheduled_at: NOW - 3_600_000,
+      started_at: null,
+      completed_at: null,
+      audience_resolved_at: null,
+      remade_at: null,
+      tested_at: null,
+      halt_reason: null,
+      halt_cause: null,
+      halt_error: null,
+      halted_at: null,
+      halt_retries: 0,
+      halt_retry_at: null,
+      c_pending: 0,
+      c_in_flight: 0,
+      c_accepted: 0,
+      c_delivered: 0,
+      c_bounced: 0,
+      c_complained: 0,
+      c_skipped: 0,
+      c_unsent: 0,
+      rev: 0,
     },
-    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
-    delivery: { confirmed: 0, percent_of_accepted: 0 },
-    provider: { name: "fake", halt: null },
-    conditions: [],
-    actions: [],
-    next_change_at: null,
-    ...over,
-  };
+    { phase, ...over },
+  );
 }
 
 /**
@@ -59,7 +65,7 @@ function live(
  */
 function server() {
   const state = {
-    sends: new Map<string, { send: LiveSend; rev: number }>(),
+    sends: new Map<string, { send: SendView; rev: number }>(),
     removed: new Map<string, number>(),
     seq: 0,
     pace: 60_000,
@@ -69,7 +75,7 @@ function server() {
     hold: null as Promise<void> | null,
   };
   const cursorNow = () => encodeSendCursor({ seq: state.seq, at: Date.now() + state.skew });
-  const write = (send: LiveSend) => {
+  const write = (send: SendView) => {
     state.seq += 1;
     state.sends.set(send.id, { send, rev: state.seq });
   };
@@ -129,7 +135,7 @@ function server() {
     cursor: cursorNow(),
     sends: [...state.sends.values()].map(({ send }) => ({
       id: send.id,
-      status: send.state,
+      status: send.status,
       phase: send.phase,
     })),
   });
@@ -296,7 +302,7 @@ describe("the send-state layer", () => {
     srv.state.pace = 3000;
     srv.write(live("x", "sending", "progressing"));
     const older = srv.list();
-    srv.write(live("x", "sending", "progressing", { total: 11 }));
+    srv.write(live("x", "sending", "progressing", { rev: 11 }));
     const newer = srv.list();
     const a = page();
     const b = page();
@@ -305,10 +311,9 @@ describe("the send-state layer", () => {
     followSend(
       {
         cursor: older.cursor,
-        send: { id: "x", status: "sending" },
-        progress: { phase: "progressing" },
+        send: { id: "x", status: "sending", phase: "progressing" },
       },
-      { update: (s) => seen.push(`${s.total}`), removed: () => {}, stale: () => {} },
+      { update: (s) => seen.push(`${s.rev}`), removed: () => {}, stale: () => {} },
       b.signal,
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -333,8 +338,7 @@ describe("the send-state layer", () => {
     followSend(
       {
         cursor: srv.cursorNow(),
-        send: { id: "x", status: "sending" },
-        progress: { phase: "progressing" },
+        send: { id: "x", status: "sending", phase: "progressing" },
       },
       {
         update: (s, c) => seen.push(`${s.counts.accepted}${c ? ` ${c.from}>${c.to}` : ""}`),
@@ -415,8 +419,7 @@ describe("the send-state layer", () => {
     followSend(
       {
         cursor: srv.cursorNow(),
-        send: { id: "x", status: "canceled" },
-        progress: { phase: "canceled" },
+        send: { id: "x", status: "canceled", phase: "canceled" },
       },
       { update: () => seen.push("update"), removed: () => seen.push("removed"), stale: () => {} },
       page().signal,
@@ -435,8 +438,7 @@ describe("the send-state layer", () => {
     followSend(
       {
         cursor: srv.cursorNow(),
-        send: { id: "x", status: "sending" },
-        progress: { phase: "progressing" },
+        send: { id: "x", status: "sending", phase: "progressing" },
       },
       { update: () => {}, removed: () => {}, stale: () => stale.push("send") },
       page().signal,

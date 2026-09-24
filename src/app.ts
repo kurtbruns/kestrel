@@ -83,6 +83,73 @@ export function createRouter({
   const conditionsText = `\`conditions\` is what is wrong with the send, or worth knowing, now (SPEC §8, §12), derived by the server from the send and the same on every route, most severe first: \`missed\` (still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running), \`stuck\` (still sending ${STUCK_THRESHOLD_MS / 60_000} minutes after it started, whatever the cause), \`wedged\` (\`count\` recipients whose delivery is unknown, settled by Resolve), \`refused\` (the provider refusing the account, with its \`cause\`, its own words as \`error\`, the \`advice\` for the fix, which is outside this API, and \`retry_at\`; the send resumes on its own once the account is fixed, having consumed no one), \`provider_unavailable\` (an outage or a rate limit, retried on its own at \`retry_at\`), \`bounce_spike\` (a send finished within ${BOUNCE_SPIKE_RECENT_MS / 86_400_000} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}; \`bounced\` and \`rate\`), and \`remade\` (a template or identity change re-made the scheduled email after its last test, \`tested_at\`; a test of the post clears it). Each has a \`severity\` (\`action\`: a person must act; \`warn\`: worth a look; \`info\`), \`since\` (null when the record does not say), a \`message\` to show or relay as it stands, and the \`action\` that settles it, if any. \`actions\` is exactly what the server would accept on the send now, each \`{name, method, path}\`: \`cancel\` and \`reschedule\` while it is scheduled and its fire time is still ahead, \`resolve\` while it is wedged.`;
   const actionText =
     'Send `If-Match: "<rev>"` (the send\'s `rev` as you last read it) to act only on the send you decided about: a send that has changed since is a 412 `precondition_failed` carrying the send as it stands. That includes a change your own earlier attempt made, so a retry after a lost answer that sends `If-Match` gets the 412, with the send showing whether the act landed; a retry without it is answered `changed: false`. Every refusal carries the send as it stands in `send`, in the `GET /sends` row shape.';
+  // One send as every send route carries it, for the examples.
+  const sendExample = (over: Record<string, unknown> = {}) => ({
+    id: "s_xyz789",
+    post_id: "p_abc123",
+    subject: "Spring migration",
+    status: "sending",
+    rev: 57,
+    as_of: 1768467610000,
+    fire_at: 1768467600000,
+    scheduled_at: 1768381200000,
+    started_at: 1768467601000,
+    completed_at: null,
+    remade_at: null,
+    tested_at: 1768390000000,
+    audience: { count: 1200, fixed: true, fixed_at: 1768467601000 },
+    counts: {
+      pending: 700,
+      in_flight: 40,
+      accepted: 455,
+      delivered: 0,
+      bounced: 3,
+      complained: 1,
+      skipped: 1,
+      unsent: 0,
+    },
+    dispatch: { done: 460, percent: 38, rate_per_min: 920, eta_ms: 48000 },
+    delivery: { confirmed: 4, percent_of_accepted: 1 },
+    provider: { name: "ses", halt: null },
+    phase: "progressing",
+    conditions: [],
+    actions: [],
+    next_change_at: 1768467610000,
+    links: {
+      self: "/sends/s_xyz789",
+      email_html: "/sends/s_xyz789/email?format=html",
+      email_text: "/sends/s_xyz789/email?format=text",
+      deliveries: "/sends/s_xyz789/deliveries",
+      deliveries_csv: "/sends/s_xyz789/deliveries.csv",
+      post: "/posts/p_abc123",
+      archive: null,
+    },
+    ...over,
+  });
+  const scheduledExample = sendExample({
+    status: "scheduled",
+    fire_at: 1768554000000,
+    started_at: null,
+    audience: { count: 1200, fixed: false, fixed_at: null },
+    counts: {
+      pending: 0,
+      in_flight: 0,
+      accepted: 0,
+      delivered: 0,
+      bounced: 0,
+      complained: 0,
+      skipped: 0,
+      unsent: 0,
+    },
+    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+    delivery: { confirmed: 0, percent_of_accepted: 0 },
+    phase: "scheduled",
+    actions: [
+      { name: "cancel", method: "POST", path: "/sends/s_xyz789/cancel" },
+      { name: "reschedule", method: "POST", path: "/sends/s_xyz789/reschedule" },
+    ],
+    next_change_at: 1768554000000,
+  });
   const r = new Router();
 
   const manifest: RouteDef[] = [
@@ -500,10 +567,10 @@ export function createRouter({
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
+        ". Answers with the new send's view (as `GET /sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
       example: {
-        request: { fire_at: "2026-01-15T09:00:00Z" },
-        response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
+        request: { fire_at: "2026-01-16T09:00:00Z" },
+        response: { send: scheduledExample, cursor: "57.1768467610000" },
       },
       handler: scheduleRoutes.schedule,
     },
@@ -520,7 +587,7 @@ export function createRouter({
         lead +
         ". For that whole window the send is inside the minimum lead, so a template or identity save that would re-make it is refused until it has fired. A second call for a post already in its window answers with that send and `idempotent: true`; the other refusals are as for scheduling.",
       example: {
-        response: { send: { id: "s_xyz789", status: "scheduled", fire_at: 1768467600000 } },
+        response: { send: scheduledExample, cursor: "57.1768467610000" },
       },
       handler: scheduleRoutes.sendNow,
     },
@@ -530,13 +597,13 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries the `phase`, `conditions`, and `actions` its `GET /sends/:id/progress` reports at the same moment, so a list row and the watch never read a send differently. A row's `remade_at` says when a template or identity change re-made it while scheduled, and its `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /sends/feed` as `since`. `recipient_count` is a snapshot of the audience while a send is scheduled; once it fires (`audience_resolved_at`), it is the audience fixed at fire, which never grows.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row is the send's view, the same shape `GET /sends/:id`, the feed, and every action answer with (see `GET /sends/:id`), read at the same moment, so a list row and the watch never read a send differently. A row's `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /sends/feed` as `since`. `audience.count` is a snapshot of the audience while a send is scheduled; once it fires (`audience.fixed`), it is the audience fixed at fire, which never grows.",
       description:
-        "`halt_reason`, `halt_cause`, `halt_error`, and `halted_at` describe a `sending` send whose provider refused its last batch as a whole (SPEC §12), and are null otherwise. The send retries on its own, spaced out the longer the halt lasts: `halt_retries` counts the halted attempts in a row and `halt_retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
+        "`provider.halt` describes a `sending` send whose provider refused its last batch as a whole (SPEC §12), and is null otherwise: its `reason`, `cause`, the provider's own words as `error`, and `since`. The send retries on its own, spaced out the longer the halt lasts: `retries` counts the halted attempts in a row and `retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
         ", and worth raising only once the send carries the `stuck` condition. `account` is the provider refusing the account itself, retried " +
         retrySchedule(HALT_BACKOFF_MS.account) +
-        "; `halt_cause` names what (`credentials`, `sender`, `quota`, or `suspended`) and `halt_error` is the provider's own message. Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
+        "; `cause` names what (`credentials`, `sender`, `quota`, or `suspended`). Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
         conditionsText +
         " An unknown `status`, `failures`, `sort`, or `dir`, or a `limit` or `offset` that is not a whole number, is a 400 naming the field.",
       query: [
@@ -576,7 +643,7 @@ export function createRouter({
       resource: "sends",
       summary:
         "What changed among sends since a cursor, each send with its phase, counters, conditions, and actions, every open condition across the sends, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
-      description: `With \`since\` (the \`cursor\` from \`GET /sends\`, \`GET /sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its id, post, subject, and times beside the same shape \`GET /sends/:id/progress\` reports, read off the send's counters, never its delivery rows, so a send reads the same here as on its watch; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /sends\` or \`GET /sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry, the stuck threshold). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /sends\` and \`GET /sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
+      description: `With \`since\` (the \`cursor\` from \`GET /sends\`, \`GET /sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /sends\` or \`GET /sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry, the stuck threshold). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /sends\` and \`GET /sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
       query: [
         {
           name: "since",
@@ -592,16 +659,11 @@ export function createRouter({
         response: {
           now: 1768467610000,
           sends: [
-            {
-              id: "s_xyz789",
-              post_id: "p_abc123",
-              subject: "Spring migration",
-              fire_at: 1768467600000,
-              started_at: null,
-              completed_at: null,
-              state: "scheduled",
+            sendExample({
+              status: "scheduled",
               phase: "due",
-              total: 1200,
+              started_at: null,
+              audience: { count: 1200, fixed: false, fixed_at: null },
               counts: {
                 pending: 0,
                 in_flight: 0,
@@ -614,11 +676,7 @@ export function createRouter({
               },
               dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
               delivery: { confirmed: 0, percent_of_accepted: 0 },
-              provider: { name: "ses", halt: null },
-              conditions: [],
-              actions: [],
-              next_change_at: 1768467610000,
-            },
+            }),
           ],
           removed: [{ id: "s_old456", rev: 56 }],
           cursor: "57.1768467610000",
@@ -647,44 +705,45 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "One send: the frozen record (re-made by a template or identity change only while scheduled, `remade_at`), the delivery-outcome breakdown, and its archive URL (`archive_url`, null until the send is sent and the post published). The response's `cursor` marks where this read stood among the changes to sends, to follow the send from with `GET /sends/feed`; it carries no pace, so read the feed at once from it.",
+        "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /sends/feed` (it carries no pace, so read the feed at once from it).",
+      description:
+        "`send` is the send's view, the one shape every send route carries (the list, the feed, every action's answer and refusal), so a client keeps one copy current from any of them and tells two apart by `rev`, the higher the newer. It holds the stored facts: `status` (`scheduled`, `sending`, `sent`, `canceled`), the times, `remade_at` (a template or identity change re-made it while scheduled) and `tested_at`, and `audience` (`count`, an estimate until the send fires and the audience at fire once `fixed`, from `fixed_at`). Beside them, what the server derives as of `as_of`, the server's clock at the read: `counts` (every recipient in one bucket), `dispatch` (hand-off progress; `eta_ms` only while it is handing off, never while paused), `delivery` (receipts over accepted), `provider` (its `name`, and `halt` while the provider refuses its batches), `phase` (`scheduled`, `due`, `progressing`, `retrying`, `backing-off`, `needs-attention`, `settling`, `complete`, `canceled`), `conditions`, `actions`, and `next_change_at` (see `GET /sends/feed`). `links` names the send's other resources: the frozen email (`email_html`, `email_text`), the recipient rows and their CSV, the post, and `archive`, the published page, absolute, once the send is sent. " +
+        conditionsText +
+        " `outcomes` counts the record's recipients by outcome from its rows, summing to the audience at fire. The answer carries `ETag`: the send's `rev` and a tag of what the clock derives from it, so a request with `If-None-Match` answers 304 while nothing about the send has changed, written or derived. An action's `If-Match` takes this `ETag` or the bare `rev`.",
+      example: {
+        response: {
+          send: sendExample(),
+          outcomes: {
+            recipients: 1200,
+            delivered: 0,
+            bounced: 3,
+            complained: 1,
+            unsent: 0,
+            skipped: 1,
+            accepted: 455,
+            in_flight: 740,
+          },
+          cursor: "57.1768467610000",
+        },
+      },
       handler: sendRoutes.get,
     },
     {
       method: "GET",
-      path: "/sends/:id/progress",
+      path: "/sends/:id/email",
       access: "admin",
       resource: "sends",
       summary:
-        "Live in-flight progress: a single-row read off the counters — dispatch/delivery bars, derived phase, conditions, and actions.",
+        "The send's frozen email (I3), exactly as it will fire or went out, with the per-recipient placeholders unfilled: HTML, or its plain-text part.",
       description:
-        "A scheduled send's `phase` reads `scheduled`, then `due` once its fire time has passed, until the next sweep tick starts it. `phase` `needs-attention` is a send carrying the `wedged` or the `refused` condition. `wedged` is recipients whose delivery is unknown, left in flight by the run that last handed the send back with nothing else to hand off; the sweep no longer runs the send, and the publisher settles them with `POST /sends/:id/resolve`. `refused` is the provider refusing the account; `provider.halt` carries the same refusal as `reason`, `cause`, `error`, `since`, and `retry_at`. There is no API action for it, so relay its `message`: the cause and the fix, that the send has consumed no one, and that it resumes on its own at the next retry after the account is fixed. `provider.halt` with reason `unavailable` is an outage or a rate limit (`provider_unavailable`), and the phase reads `backing-off`. Either way `provider.halt.retry_at` is when the next retry is due: the send is retried with growing gaps, capped at an hour, and returns to every-sweep pace once a batch is answered. " +
-        conditionsText +
-        " `next_change_at` is the earliest the send can change with no one acting (see `GET /sends/feed`). This route carries no pace: to keep up with a send, follow `GET /sends/feed`.",
-      example: {
-        response: {
-          state: "sending",
-          phase: "progressing",
-          total: 1200,
-          counts: {
-            pending: 700,
-            in_flight: 40,
-            accepted: 455,
-            delivered: 300,
-            bounced: 3,
-            complained: 1,
-            skipped: 1,
-            unsent: 0,
-          },
-          dispatch: { done: 460, percent: 38, rate_per_min: 920, eta_ms: 48000 },
-          delivery: { confirmed: 304, percent_of_accepted: 40 },
-          provider: { name: "fake", halt: null },
-          conditions: [],
-          actions: [],
-          next_change_at: 1768467610000,
+        "Its own route so the send's view never carries the bodies. The HTML is served under the same no-script, no-framing headers as a post page.",
+      query: [
+        {
+          name: "format",
+          description: "`html` (default) or `text`; anything else is a 400 naming the field.",
         },
-      },
-      handler: sendRoutes.progress,
+      ],
+      handler: sendRoutes.email,
     },
     {
       method: "GET",
@@ -692,7 +751,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "The send's per-recipient delivery rows (JSON), filtered by outcome view and paginated; returns a `page` envelope. Reads the delivery rows directly (the source of truth), not the progress counters — heavier than `/progress`, so it is not a poll target.",
+        "The send's per-recipient delivery rows (JSON), filtered by outcome view and paginated; returns a `page` envelope. Reads the delivery rows directly (the source of truth), not the send's counters — heavier than the send's view, so it is not a poll target.",
       query: [
         {
           name: "view",
@@ -747,10 +806,14 @@ export function createRouter({
       resource: "sends",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
       description:
-        "The review window closes at the fire time (SPEC §6), whether or not the sweep has started the send: from then this is a 409 `window_closed`. A send canceled already answers 200 with `changed: false`, so a retried cancel is safe; otherwise `changed` is true. " +
+        "Answers with the send's view and a `cursor`. The review window closes at the fire time (SPEC §6), whether or not the sweep has started the send: from then this is a 409 `window_closed`. A send canceled already answers 200 with `changed: false`, so a retried cancel is safe; otherwise `changed` is true. " +
         actionText,
       example: {
-        response: { send: { id: "s_xyz789", status: "canceled" }, changed: true },
+        response: {
+          send: sendExample({ status: "canceled", phase: "canceled", actions: [] }),
+          cursor: "58.1768467620000",
+          changed: true,
+        },
       },
       handler: sendRoutes.cancel,
     },
@@ -768,10 +831,7 @@ export function createRouter({
         actionText,
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
-        response: {
-          send: { id: "s_xyz789", status: "scheduled", fire_at: 1768554000000 },
-          changed: true,
-        },
+        response: { send: scheduledExample, cursor: "58.1768467620000", changed: true },
       },
       handler: sendRoutes.reschedule,
     },
@@ -788,7 +848,12 @@ export function createRouter({
         actionText,
       example: {
         request: { resolution: "unsent", expected_count: 12 },
-        response: { send: { id: "s_xyz789", status: "sent" }, resolved: 12, completed: true },
+        response: {
+          send: sendExample({ status: "sent", phase: "settling", completed_at: 1768467620000 }),
+          cursor: "58.1768467620000",
+          resolved: 12,
+          completed: true,
+        },
       },
       handler: sendRoutes.resolve,
     },

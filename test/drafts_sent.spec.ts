@@ -195,7 +195,7 @@ describe("Sent list — delivery-failures filter (/sends?failures=only)", () => 
 });
 
 describe("sent record view — GET /sends/:id", () => {
-  it("returns outcome buckets that reconcile to the frozen audience, plus published", async () => {
+  it("returns outcome buckets that reconcile to the frozen audience, and the published post's link", async () => {
     const slug = `rec-${uniq()}`;
     const deliveries: SeedDelivery[] = [
       ...Array.from({ length: 5 }, (_, n) => ({
@@ -228,13 +228,12 @@ describe("sent record view — GET /sends/:id", () => {
       o.delivered + o.bounced + o.complained + o.unsent + o.skipped + o.accepted + o.in_flight;
     expect(sum).toBe(o.recipients);
 
-    // `progress` is now the single-row buildSendProgress shape (off the c_* counters),
-    // not the old per-row deliveryRollup (#166). Its counts read TRUE delivered — so a
-    // list built on it agrees with the record's own breakdown, never counting a bounced
-    // recipient as delivered (#90).
-    const p = body.progress;
-    expect(p.state).toBe("sent");
-    expect(p.total).toBe(o.recipients);
+    // The send's view reads its counts off the c_* counters, not a per-row aggregate. They
+    // read TRUE delivered — so a list built on them agrees with the record's own breakdown,
+    // never counting a bounced recipient as delivered.
+    const p = body.send;
+    expect(p.status).toBe("sent");
+    expect(p.audience.count).toBe(o.recipients);
     expect(p.counts).toMatchObject({
       delivered: o.delivered,
       bounced: o.bounced,
@@ -247,8 +246,7 @@ describe("sent record view — GET /sends/:id", () => {
     // the old "Delivered = provider-accepted" column got wrong (#90). `delivered` is 5.
     expect(p.counts.delivered).toBe(5);
 
-    expect(body.published).toBe(true);
-    expect(body.archive_url).toContain(slug);
+    expect(p.links.archive).toContain(slug);
   });
 
   it("exports the per-recipient delivery record as CSV", async () => {

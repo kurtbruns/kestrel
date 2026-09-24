@@ -1,8 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendFeedResponse, SendProgress } from "../shared/sends";
-import { STUCK_THRESHOLD_MS } from "../shared/sends";
+import { type SendFeedResponse, type SendView, STUCK_THRESHOLD_MS } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
@@ -51,8 +50,9 @@ async function scheduledSend(fireAt: number) {
   return freeze(env, getConfig(env), post, fireAt);
 }
 
-async function progress(id: string): Promise<SendProgress> {
-  return (await SELF.fetch(`${base}/sends/${id}/progress`, { headers: AUTH })).json();
+async function progress(id: string): Promise<SendView> {
+  const res = await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH });
+  return ((await res.json()) as { send: SendView }).send;
 }
 
 async function row(id: string) {

@@ -6,7 +6,7 @@ import {
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import tickerSource from "../scripts/sweep-ticker.mjs?raw";
-import type { SendProgress } from "../shared/sends";
+import type { SendView } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { type AppEnv, getConfig } from "../src/env";
@@ -106,12 +106,12 @@ describe("the receipts cron", () => {
   });
 });
 
-describe("GET /sends/:id/progress with the simulation on", () => {
+describe("GET /sends/:id with the simulation on", () => {
   it("settles nothing: reading a send never changes it", async () => {
     await settlingSend("s-read", 3);
     const ctx = createExecutionContext();
     const res = await worker.fetch(
-      new Request(`${base}/sends/s-read/progress`, { headers: AUTH }) as Request<
+      new Request(`${base}/sends/s-read`, { headers: AUTH }) as Request<
         unknown,
         IncomingRequestCfProperties
       >,
@@ -120,7 +120,7 @@ describe("GET /sends/:id/progress with the simulation on", () => {
     );
     await waitOnExecutionContext(ctx);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as SendProgress;
+    const body = ((await res.json()) as { send: SendView }).send;
     expect([body.phase, body.delivery.confirmed]).toEqual(["settling", 0]);
     expect(await delivered("s-read")).toBe(0);
     // The receipts arrive on the ticker's clock instead.

@@ -38,7 +38,7 @@ import { log } from "../lib/log";
 import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
-import { describeSend } from "./describe";
+import { viewSend } from "./describe";
 
 /** The one render a freeze performs: the post's current content and images through
  *  the single render path (I5), inside `branding` (the template plus the identity).
@@ -141,7 +141,7 @@ export async function freeze(
 /** The refusal for a post that already has its one active send, carrying that send. */
 async function activeSendExists(env: AppEnv, send: SendRow) {
   return refusal(409, "active_send_exists", "post already has an active send", {
-    send: await describeSend(env.DB, send),
+    send: await viewSend(env, send.id),
   });
 }
 
@@ -174,7 +174,7 @@ async function readForAction(env: AppEnv, sendId: string, guard: ActionGuard): P
       412,
       "precondition_failed",
       `the send has changed since rev ${guard.ifMatch} (it is at rev ${send.rev}); read it again and decide on what it is now`,
-      { send: await describeSend(env.DB, send) },
+      { send: await viewSend(env, send.id) },
     );
   }
   return send;
@@ -187,7 +187,7 @@ async function windowClosed(env: AppEnv, send: SendRow, what: string) {
       ? "its fire time has passed and it is about to send"
       : `it is ${send.status}`;
   return refusal(409, "window_closed", `send can no longer be ${what}: ${why}`, {
-    send: await describeSend(env.DB, send),
+    send: await viewSend(env, send.id),
   });
 }
 
@@ -217,7 +217,7 @@ export async function reschedule(
   const now = Date.now();
   if (send.status === "canceled") {
     throw refusal(409, "send_canceled", "send is canceled; schedule the post again instead", {
-      send: await describeSend(env.DB, send),
+      send: await viewSend(env, send.id),
     });
   }
   if (send.status !== "scheduled" || send.fire_at <= now) {

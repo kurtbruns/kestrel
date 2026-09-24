@@ -22,7 +22,7 @@ import { has } from "./support/conditions";
 
 // GET /sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever
-// client changed it and whether a write or the clock did, in the /progress shape, with when
+// client changed it and whether a write or the clock did, each as its view, with when
 // to read again. These pin what it reports after a cursor, what it lists without one, and
 // the pace it sets.
 
@@ -122,7 +122,7 @@ describe("GET /sends/feed after a cursor", () => {
     expect(scheduled.status).toBe(201);
 
     const body = await feed(since);
-    const got = Object.fromEntries(body.sends.map((s) => [s.subject, [s.state, s.phase]]));
+    const got = Object.fromEntries(body.sends.map((s) => [s.subject, [s.status, s.phase]]));
     expect(got).toEqual({
       Dropped: ["canceled", "canceled"],
       Moved: ["scheduled", "scheduled"],
@@ -279,32 +279,44 @@ describe("GET /sends/feed without a cursor", () => {
     expect(decodeSendCursor(body.cursor)?.at).toBe(body.now);
 
     const [s, g, d] = body.sends;
-    expect([d?.state, d?.phase, has(d, "missed")]).toEqual(["scheduled", "due", false]);
+    expect([d?.status, d?.phase, has(d, "missed")]).toEqual(["scheduled", "due", false]);
     expect(d).toMatchObject({ id: due.id, post_id: due.post_id, fire_at: due.fire_at });
-    expect([g?.state, g?.phase, g?.counts.pending, g?.counts.accepted]).toEqual([
+    expect([g?.status, g?.phase, g?.counts.pending, g?.counts.accepted]).toEqual([
       "sending",
       "backing-off", // work remains, nothing in flight
       5,
       3,
     ]);
     expect(g?.started_at).toBe(now - 110_000);
-    expect([s?.state, s?.phase, s?.completed_at]).toEqual(["sent", "settling", now - 240_000]);
+    expect([s?.status, s?.phase, s?.completed_at]).toEqual(["sent", "settling", now - 240_000]);
     expect(s?.delivery.confirmed).toBe(6);
   });
 
-  it("reads a send the same as its /progress does", async () => {
+  it("reads a send the same as GET /sends/:id and the list do, as one view", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     const send = await scheduledSend("Live", Date.now() - 1000);
     failFakeSendBatch(1);
     await runSend(env, send.id); // left sending, the batch back in the queue
     const [row] = (await feed()).sends;
-    const progress = await (
-      await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })
-    ).json();
-    const { id, post_id, subject, fire_at, started_at, completed_at, ...shape } = row!;
-    expect(shape).toEqual(progress);
-    expect(id).toBe(send.id);
+    const one = (
+      (await (
+        await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+      ).json()) as SendResponse
+    ).send;
+    const listed = (
+      (await (await SELF.fetch(`${base}/sends`, { headers: AUTH })).json()) as SendListResponse
+    ).sends[0];
+    // The same view on every route, but for the moment each was read at.
+    const at = (v: typeof row) => ({
+      ...v,
+      as_of: 0,
+      next_change_at: 0,
+      dispatch: { ...v!.dispatch, rate_per_min: 0, eta_ms: 0 },
+    });
+    expect(at(row)).toEqual(at(one));
+    expect(at(row)).toEqual(at(listed));
+    expect(row?.id).toBe(send.id);
   });
 
   it("eases to the idle pace once a due send is past the missed tolerance", async () => {
@@ -555,8 +567,7 @@ describe("GET /sends/:id shape fixes", () => {
     let body = (await (
       await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;
-    expect(body.archive_url).toBeNull();
-    expect(body.published).toBe(false);
+    expect(body.send.links.archive).toBeNull();
 
     await setRow(send.id, {
       status: "sending",
@@ -568,6 +579,6 @@ describe("GET /sends/:id shape fixes", () => {
     body = (await (
       await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;
-    expect(body.progress.provider.halt).toMatchObject({ since: null, retry_at: null });
+    expect(body.send.provider.halt).toMatchObject({ since: null, retry_at: null });
   });
 });

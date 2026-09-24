@@ -68,8 +68,11 @@ async function sendNow(postId: string): Promise<any> {
   return (await readJson(res)).send;
 }
 
+/** The send's view, with its frozen email beside it (read at its own route). */
 async function getSend(id: string): Promise<any> {
-  return (await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH }))).send;
+  const { send } = await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH }));
+  const html = await (await SELF.fetch(`${base}/sends/${id}/email`, { headers: AUTH })).text();
+  return { ...send, rendered_html: html };
 }
 
 async function cancel(id: string): Promise<void> {
@@ -141,7 +144,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
       expect(after.status).toBe("scheduled");
       expect(after.fire_at).toBe(before.fire_at);
       expect(after.scheduled_at).toBe(before.scheduled_at);
-      expect(after.recipient_count).toBe(before.recipient_count);
+      expect(after.audience.count).toBe(before.audience.count);
       expect(after.remade_at).toBe(body.remade[0].remade_at);
     }
     // The post read and the send list carry the mark.

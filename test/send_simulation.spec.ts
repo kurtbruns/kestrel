@@ -353,7 +353,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     const emails = await seedConfirmed(30);
     const sendId = await dueSend(e, "Kestrels");
     const progress = async () =>
-      readJson(await fetchWith(vars, `/sends/${sendId}/progress`, { headers: AUTH }));
+      (await readJson(await fetchWith(vars, `/sends/${sendId}`, { headers: AUTH }))).send;
     const addresses = async (status: string) =>
       (
         await env.DB.prepare("SELECT email FROM deliveries WHERE send_id = ? AND status = ?")

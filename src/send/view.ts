@@ -1,26 +1,23 @@
 /**
- * Derive the in-flight reporting shape for `GET /sends/:id/progress`, and for each send
- * in `GET /sends/feed` (SPEC §8, §12).
+ * Build a `SendView` (SPEC §8, §12): the one shape every route carries a send in, from the
+ * stored row, so the list, the send, the feed, and every action's answer read a send by the
+ * same rules at the same moment.
  *
  * Everything here is computed from the send row's denormalized counters (`sends.c_*`)
- * plus one cheap retry probe — no aggregate over the audience — so a poll is a
- * single-row read however large the send. The reported **phase** is derived live, not
- * stored: it is the vocabulary the watch view reports, distinct from the persisted
- * send `state`. Two numbers are reported side by side because delivery lags dispatch
- * (§6): **dispatch** (provider-accepted vs total) finishes in seconds–minutes, while
- * **delivery** (webhook-confirmed vs accepted) settles over minutes–days — the record
- * keeps absorbing events after the send is "sent."
+ * plus one cheap retry probe — no aggregate over the audience — so a view is a single-row
+ * read however large the send. The reported **phase** is derived live, not stored: it is
+ * the vocabulary the watch reports, distinct from the persisted `status`. Two numbers are
+ * reported side by side because delivery lags dispatch (§6): **dispatch** (provider-
+ * accepted vs the audience) finishes in seconds–minutes, while **delivery** (webhook-
+ * confirmed vs accepted) settles over minutes–days — the record keeps absorbing events
+ * after the send is "sent." The lease is the send loop's own business and never leaves the
+ * Worker; what it means for a reader is already in the phase, conditions, and actions.
  */
 
-import type {
-  LiveSend,
-  SendHalt,
-  SendListItem,
-  SendPhase,
-  SendProgress,
-  SendSummary,
-} from "../../shared/sends";
+import type { SendHalt, SendPhase, SendSummary, SendView } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendStatus } from "../db/sends";
+import type { Config } from "../env";
+import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
 import { isWedged } from "./wedged";
@@ -44,7 +41,7 @@ import { isWedged } from "./wedged";
  *   - `complete`        dispatched and every accepted recipient has a delivery receipt.
  *   - `canceled`        terminal, non-sent outcome.
  */
-export type { SendPhase, SendProgress };
+export type { SendPhase };
 
 function derivePhase(
   status: SendStatus,
@@ -84,17 +81,22 @@ function round(n: number): number {
   return Math.round(n);
 }
 
+/** A stored send as a view reads it: the row without its frozen bodies, and its post's
+ *  slug, which names the published post's archive page. */
+export type SendViewRow = SendSummary & { post_slug: string | null };
+
 /**
- * Build the progress shape from a send row (the list projection is enough: the frozen
- * bodies play no part). `hasRetries` is the cheap EXISTS probe (see `hasActiveRetries`)
- * — pass false when the send is not `sending`, where it never affects the phase.
+ * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
+ * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
+ * it never affects the phase. `now` is the server's clock for everything derived, carried
+ * as `as_of`.
  */
-export function buildSendProgress(
-  send: SendSummary,
-  providerName: string,
+export function buildSendView(
+  send: SendViewRow,
+  config: Pick<Config, "provider" | "archiveOrigin" | "archiveBasePath">,
   hasRetries: boolean,
   now: number,
-): SendProgress {
+): SendView {
   const counts = countsOf(send);
   const summed =
     counts.pending +
@@ -127,6 +129,7 @@ export function buildSendProgress(
   const acceptedTotal = counts.accepted + counts.delivered + counts.bounced + counts.complained;
   const confirmed = counts.delivered + counts.bounced + counts.complained;
   const deliveryPercent = acceptedTotal > 0 ? round((100 * confirmed) / acceptedTotal) : 0;
+  const id = send.id;
 
   // Wedged: the last run gave up on the recipients left in flight and released its lease
   // (`isWedged`). A run finishing its last batch, or one cut off whose lease has yet to run
@@ -140,48 +143,61 @@ export function buildSendProgress(
           reason: send.halt_reason,
           cause: send.halt_cause,
           error: send.halt_error ?? "",
+          retries: send.halt_retries,
           since: send.halted_at,
           retry_at: send.halt_retry_at,
         }
       : null;
   const refused = halt?.reason === "account";
 
+  const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused);
+  // A time to finish only while the send is handing off: paused (between ticks, halted,
+  // wedged), an average over the whole send would promise a finish that is not coming.
+  const handingOff = phase === "progressing" || phase === "retrying";
+
   return {
-    state: send.status,
-    phase: derivePhase(send.status, counts, hasRetries, due, wedged, refused),
-    total,
+    id,
+    post_id: send.post_id,
+    subject: send.subject,
+    status: send.status,
+    rev: send.rev,
+    as_of: now,
+    fire_at: send.fire_at,
+    scheduled_at: send.scheduled_at,
+    started_at: send.started_at,
+    completed_at: send.completed_at,
+    remade_at: send.remade_at,
+    tested_at: send.tested_at,
+    audience: {
+      count: total,
+      fixed: send.audience_resolved_at !== null,
+      fixed_at: send.audience_resolved_at,
+    },
     counts,
-    dispatch: { done, percent: dispatchPercent, rate_per_min: ratePerMin, eta_ms: etaMs },
+    dispatch: {
+      done,
+      percent: dispatchPercent,
+      rate_per_min: ratePerMin,
+      eta_ms: handingOff ? etaMs : null,
+    },
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
-    provider: { name: providerName, halt },
+    provider: { name: config.provider, halt },
+    phase,
     conditions: sendConditions(send, now),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
-  };
-}
-
-/** A `GET /sends` row: the list projection with its phase, conditions, and actions, read
- *  by the same rules and at the same moment as the send's `/progress`. */
-export function buildListItem(send: SendSummary, hasRetries: boolean, now: number): SendListItem {
-  const { phase, conditions, actions } = buildSendProgress(send, "", hasRetries, now);
-  return { ...send, phase, conditions, actions };
-}
-
-/** One send as `GET /sends/feed` reports it: which send, and the same progress shape
- *  `/progress` reports for it, so a page following it and its watch can't disagree. */
-export function buildLiveSend(
-  send: SendSummary,
-  providerName: string,
-  hasRetries: boolean,
-  now: number,
-): LiveSend {
-  return {
-    id: send.id,
-    post_id: send.post_id,
-    subject: send.subject,
-    fire_at: send.fire_at,
-    started_at: send.started_at,
-    completed_at: send.completed_at,
-    ...buildSendProgress(send, providerName, hasRetries, now),
+    links: {
+      self: `/sends/${id}`,
+      email_html: `/sends/${id}/email?format=html`,
+      email_text: `/sends/${id}/email?format=text`,
+      deliveries: `/sends/${id}/deliveries`,
+      deliveries_csv: `/sends/${id}/deliveries.csv`,
+      post: `/posts/${send.post_id}`,
+      // The archive serves a post's page only once it is sent: before, the link would 404.
+      archive:
+        send.status === "sent" && send.post_slug !== null
+          ? archiveUrl(config, send.post_slug)
+          : null,
+    },
   };
 }

@@ -73,7 +73,10 @@ function derivePreheader(bodyText: string): string {
 }
 
 /** The canonical archive URL of a post under this deployment (the formula lives in shared/). */
-export function archiveUrl(config: Config, slug: string): string {
+export function archiveUrl(
+  config: Pick<Config, "archiveOrigin" | "archiveBasePath">,
+  slug: string,
+): string {
   return archivePostUrl(config.archiveOrigin, config.archiveBasePath, slug);
 }
 

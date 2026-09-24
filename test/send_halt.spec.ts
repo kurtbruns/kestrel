@@ -11,13 +11,13 @@ import { SesProvider } from "../src/providers/ses";
 import type { SendBatchResult } from "../src/providers/types";
 import { Budget } from "../src/send/budget";
 import { runSend } from "../src/send/loop";
-import { buildSendProgress } from "../src/send/progress";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { nextRetry, toNextTick } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
+import { viewOf } from "./support/view";
 
 // A failure that is the provider's or the account's halts the send's run, not its
 // recipients (SPEC §6 step 5, §12): nobody is recorded unsent or spends an attempt, the
@@ -181,12 +181,7 @@ describe("a provider outage", () => {
     resend.rateLimit = 2;
     await ticks(2);
 
-    const prog = buildSendProgress(
-      (await sends.getSend(env.DB, send.id))!,
-      "resend",
-      false,
-      Date.now(),
-    );
+    const prog = viewOf((await sends.getSend(env.DB, send.id))!, "resend", false, Date.now());
     expect(prog.phase).toBe("backing-off");
     expect(prog.provider.halt).toMatchObject({ reason: "unavailable" });
     expect([has(prog, "refused"), has(prog, "stuck"), has(prog, "wedged")]).toEqual([
@@ -209,7 +204,7 @@ describe("the provider refusing the account", () => {
     const held = await expectHeld(send.id, 250);
     expect(held.halt_reason).toBe("account");
     expect(resend.requests).toBe(TICKS); // one refused request a tick, then the run stops
-    const prog = buildSendProgress(held, "resend", false, Date.now());
+    const prog = viewOf(held, "resend", false, Date.now());
     expect(prog.phase).toBe("needs-attention");
     expect(has(prog, "refused")).toBe(true);
     expect(prog.provider.halt?.error).toBe("resend batch 401: API key is invalid");
@@ -236,7 +231,7 @@ describe("the provider refusing the account", () => {
     expect(going.status).toBe("sending");
     expect(going.c_accepted).toBeGreaterThan(0);
     expect(going).toMatchObject({ halt_reason: null, halt_error: null, halted_at: null });
-    expect(has(buildSendProgress(going, "resend", false, Date.now()), "refused")).toBe(false);
+    expect(has(viewOf(going, "resend", false, Date.now()), "refused")).toBe(false);
   });
 
   it("keeps when the refusal began across ticks, and restarts it when the reason changes", async () => {
@@ -328,7 +323,7 @@ describe("the halt's backoff", () => {
     expect(minutes()).toEqual(expected);
     const held = await expectHeld(send.id, 250);
     expect(held.halt_retries).toBe(expected.length);
-    const prog = buildSendProgress(held, "resend", false, Date.now());
+    const prog = viewOf(held, "resend", false, Date.now());
     expect(prog.provider.halt?.retry_at).toBe(held.halt_retry_at);
     expect(prog.provider.halt!.retry_at).toBeGreaterThan(Date.now());
     expect(prog.phase).toBe(reason === "account" ? "needs-attention" : "backing-off");
@@ -516,12 +511,7 @@ describe("a refused batch and its key", () => {
     expect(resend.requests).toBe(before); // never re-sent under a key it can't dedupe
     expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 3 });
-    const prog = buildSendProgress(
-      (await sends.getSend(env.DB, send.id))!,
-      "resend",
-      false,
-      Date.now(),
-    );
+    const prog = viewOf((await sends.getSend(env.DB, send.id))!, "resend", false, Date.now());
     expect(has(prog, "wedged")).toBe(true);
   });
 
