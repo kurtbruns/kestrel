@@ -75,7 +75,6 @@ export interface SeedSend {
 }
 
 export interface SeedDelivery {
-  id: string;
   send_id: string;
   email: string;
   status: string;
@@ -246,11 +245,10 @@ export async function insertDeliveries(db: D1Database, rows: SeedDelivery[]): Pr
         db
           .prepare(
             `INSERT INTO deliveries
-               (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+               (send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
-            r.id,
             r.send_id,
             r.email,
             r.status,

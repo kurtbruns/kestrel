@@ -98,14 +98,13 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   let i = 0;
   for (const d of deliveries) {
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO deliveries (send_id, email, status, provider_id, error, attempts, updated_at, event, event_detail, event_at, bounce_kind) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
       .bind(
-        `d-${sendId}-${i++}`,
         sendId,
         d.email,
         d.status,
-        d.status === "accepted" ? `pid-${i}` : null,
+        d.status === "accepted" ? `pid-${sendId}-${i++}` : null,
         d.status === "unsent" ? "550 mailbox unavailable" : null,
         1,
         now,
@@ -274,7 +273,7 @@ describe("sent record view — GET /sends/:id", () => {
 
   it("exports an address a spreadsheet would read as a formula as plain text", async () => {
     const { sendId } = await seedSentSend("CSV Formulas", `csv-f-${uniq()}`, [
-      { email: "=HYPERLINK(1)@example.com", status: "accepted", event: "delivered" },
+      { email: "=hyperlink(1)@example.com", status: "accepted", event: "delivered" },
       { email: "+1@example.com", status: "unsent" },
       { email: "-1@example.com", status: "unsent" },
       { email: "@x@example.com", status: "unsent" },
@@ -282,7 +281,7 @@ describe("sent record view — GET /sends/:id", () => {
     const text = await (
       await SELF.fetch(`${base}/sends/${sendId}/deliveries.csv`, { headers: AUTH })
     ).text();
-    expect(text).toContain("'=HYPERLINK(1)@example.com,accepted,delivered,");
+    expect(text).toContain("'=hyperlink(1)@example.com,accepted,delivered,");
     expect(text).toContain("'+1@example.com,unsent,,");
     expect(text).toContain("'-1@example.com,unsent,,");
     expect(text).toContain("'@x@example.com,unsent,,");

@@ -554,7 +554,8 @@ describe("the real adapters, end to end through the loop", () => {
         return new Response(JSON.stringify(body), { status });
       }
       const batch = JSON.parse(String(init?.body)) as unknown[];
-      return new Response(JSON.stringify({ data: batch.map((_, i) => ({ id: `re_${i}` })) }));
+      // Each message gets its own id, as Resend gives it: a delivery's provider id is unique.
+      return new Response(JSON.stringify({ data: batch.map(() => ({ id: crypto.randomUUID() })) }));
     });
   }
 
@@ -614,7 +615,9 @@ describe("the real adapters, end to end through the loop", () => {
     });
     return { spy, mailed };
   }
-  const sesOk = () => new Response(JSON.stringify({ MessageId: "m" }), { status: 200 });
+  // Each message gets its own id, as SES gives it: a delivery's provider id is unique.
+  const sesOk = () =>
+    new Response(JSON.stringify({ MessageId: crypto.randomUUID() }), { status: 200 });
 
   it("an SES SendingPausedException halts after one request instead of one per recipient", async () => {
     const emails = addresses(20);

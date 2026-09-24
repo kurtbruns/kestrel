@@ -45,9 +45,9 @@ async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<v
   for (let i = 0; i < n; i++) {
     const email = `sim${i}@example.com`;
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, provider_id, attempts, updated_at) VALUES (?, ?, ?, 'accepted', ?, 1, ?)",
+      "INSERT INTO deliveries (send_id, email, status, provider_id, attempts, updated_at) VALUES (?, ?, 'accepted', ?, 1, ?)",
     )
-      .bind(`d-${sendId}-${i}`, sendId, email, `sim-${sendId}:${email}`, now - ageMs)
+      .bind(sendId, email, `sim-${sendId}:${email}`, now - ageMs)
       .run();
   }
   await sends.recomputeSendCounters(env.DB, sendId);

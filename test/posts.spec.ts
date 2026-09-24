@@ -226,9 +226,9 @@ describe("posts + revisions", () => {
     // A delivery row would exist if the send had begun; insert one so the cascade
     // is exercised even though a cancel-before-fire normally leaves none.
     await env.DB.prepare(
-      "INSERT INTO deliveries (id, send_id, email, status, updated_at) VALUES (?, ?, ?, 'pending', ?)",
+      "INSERT INTO deliveries (send_id, email, status, updated_at) VALUES (?, ?, 'pending', ?)",
     )
-      .bind("del-cascade", sendId, "x@example.com", Date.now())
+      .bind(sendId, "x@example.com", Date.now())
       .run();
 
     const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });

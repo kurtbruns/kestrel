@@ -64,9 +64,9 @@ async function insertDelivery(
   providerId?: string,
 ): Promise<void> {
   await env.DB.prepare(
-    "INSERT INTO deliveries (id, send_id, email, status, provider_id, attempts, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+    "INSERT INTO deliveries (send_id, email, status, provider_id, attempts, updated_at) VALUES (?, ?, ?, ?, 0, ?)",
   )
-    .bind(`d-${email}`, sendId, email, status, providerId ?? null, Date.now())
+    .bind(sendId, email, status, providerId ?? null, Date.now())
     .run();
 }
 
