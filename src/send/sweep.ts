@@ -36,7 +36,9 @@ export async function sweep(env: AppEnv): Promise<void> {
   // lease, so without this a just-failed send would be retried again in the same
   // sweep; instead it waits for the next tick (the backoff).
   const handled = new Set<string>();
-  const budget = new Budget(config.subrequestBudget - ANOMALY_CHECKS - NOTIFY_RESERVE);
+  const held = ANOMALY_CHECKS + NOTIFY_RESERVE;
+  const whole = new Budget(config.subrequestBudget);
+  const budget = new Budget(whole.limit - held, whole.queryLimit - held);
   const db = metered(env.DB, budget);
 
   // 1) Due scheduled sends.
@@ -75,7 +77,13 @@ export async function sweep(env: AppEnv): Promise<void> {
   // 4) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
   // notification can never delay or break a send.
   try {
-    await notifyPublisher(env, new Budget(NOTIFY_RESERVE + Math.max(0, budget.left)));
+    await notifyPublisher(
+      env,
+      new Budget(
+        NOTIFY_RESERVE + Math.max(0, budget.left),
+        NOTIFY_RESERVE + Math.max(0, budget.queriesLeft),
+      ),
+    );
   } catch (err) {
     console.error("NOTIFY_ERROR", { error: String((err as Error)?.message ?? err) });
   }

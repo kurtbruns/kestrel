@@ -81,6 +81,9 @@ export interface EmailProvider {
    *  whose fate is unknown is only re-sent inside this window; after it, a re-send is no
    *  longer deduped, so the batch waits for Resolve instead. */
   readonly idempotencyWindowMs?: number;
+  /** The most requests a second the provider takes from this account, when it holds the
+   *  sender to a rate the send loop should keep under (SES's maximum send rate). */
+  readonly maxRequestRate?: number;
 
   /** Throws only when the request got no answer at all, whose fate is then unknown. */
   sendBatch(

@@ -4,10 +4,10 @@ Kestrel treats the email provider as **transport** behind a two-method seam (`se
 
 ## How fast each provider sends
 
-A send is delivered a slice at a time, one slice per minute, and each slice stays inside the number of database queries and outbound requests Cloudflare allows one Worker invocation (`SUBREQUEST_BUDGET`, see **Provision**). Resend takes up to 100 recipients in one request, so it sends about 300 recipients a minute even on Workers Free. SES takes one recipient per request, so the same budget goes much less far:
+A send is delivered a slice at a time, one slice per minute, and each slice stays inside what Cloudflare allows one Worker invocation (`SUBREQUEST_BUDGET`, see **Provision**). Resend takes up to 100 recipients in one request, so it sends about 400 recipients a minute even on Workers Free, and tens of thousands on Workers Paid. SES takes one recipient per request, which costs far more of the budget per recipient:
 
-- **Workers Free:** about 3 recipients a minute. A send to 1,000 subscribers takes about five and a half hours.
-- **Workers Paid, with `SUBREQUEST_BUDGET` set to `1000`:** about 100 recipients a minute, so 1,000 subscribers take about ten minutes.
+- **Workers Free:** about 18 recipients a minute. A send to 1,000 subscribers takes about an hour.
+- **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** as fast as your SES account's sending rate allows, up to about 1,900 recipients a minute. At a new production account's 14 a second, that is about 700 a minute, so 10,000 subscribers take about fifteen minutes; ask AWS to raise the rate and set `SES_MAX_SEND_RATE` to match to go faster.
 
 So SES wants Workers Paid. On Workers Free, use Resend.
 
@@ -96,6 +96,8 @@ npx wrangler secret put SNS_TOPIC_ARN --env production           # the topic ARN
 ```
 
 `AWS_REGION` and `FROM_ADDRESS` are public `vars` in `wrangler.jsonc`; set `PROVIDER` to `ses` for that environment. The two AWS keys, `SNS_TOPIC_ARN`, `AWS_REGION`, and `FROM_ADDRESS` are required; `SES_CONFIGURATION_SET` is optional to the app, but without it SES publishes no events and bounces never reach the webhook.
+
+`SES_MAX_SEND_RATE` is an optional public var: your account's maximum send rate, in messages a second, from the SES console's account dashboard. The app starts requests no faster than this, because going over it gets them refused and pauses the send for at least a minute. Unset, it is 14, a new production account's rate. In the SES sandbox, which allows 1 a second, set it to `1`. Raise it when AWS raises your rate. A value that is not a whole number above zero stops the app with an error naming it, like any malformed setting.
 
 ---
 

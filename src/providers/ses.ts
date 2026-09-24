@@ -103,6 +103,8 @@ export class SesProvider implements EmailProvider {
   readonly name = "ses" as const;
   readonly maxBatch = 1;
   readonly idempotentRetry = false;
+  /** One recipient a request, so the account's send rate is its request rate. */
+  readonly maxRequestRate: number;
 
   private readonly client: AwsClient;
   private readonly region: string;
@@ -112,6 +114,7 @@ export class SesProvider implements EmailProvider {
   constructor(config: Config, env: AppEnv) {
     this.region = config.awsRegion;
     this.from = config.fromAddress;
+    this.maxRequestRate = config.sesMaxSendRate;
     this.configurationSet =
       env.SES_CONFIGURATION_SET && env.SES_CONFIGURATION_SET.length > 0
         ? env.SES_CONFIGURATION_SET

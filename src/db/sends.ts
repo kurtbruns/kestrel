@@ -903,56 +903,75 @@ export async function fetchDispatchGroup(
   return results;
 }
 
-/** A statement moving every row of one hand-off that is in `status` between two counter
- *  buckets, lease-guarded like the row write it rides with. */
+/** A statement moving every row of the hand-offs under `keys` that is in `status` between
+ *  two counter buckets, lease-guarded like the row write it rides with. */
 function keyedCounterMove(
   db: D1Database,
   sendId: string,
   lease: string,
-  key: string,
+  keys: string[],
   status: "pending" | "dispatched",
   from: CounterCol,
   to: CounterCol,
 ): D1PreparedStatement {
-  const n =
-    "(SELECT COUNT(*) FROM deliveries WHERE send_id = ? AND dispatch_key = ? AND status = ?)";
+  const n = `(SELECT COUNT(*) FROM deliveries WHERE send_id = ?
+      AND dispatch_key IN (SELECT value FROM json_each(?)) AND status = ?)`;
+  const k = JSON.stringify(keys);
   return db
     .prepare(
       `UPDATE sends SET ${from} = ${from} - ${n}, ${to} = ${to} + ${n} WHERE id = ? AND lease_token = ?`,
     )
-    .bind(sendId, key, status, sendId, key, status, sendId, lease);
+    .bind(sendId, k, status, sendId, k, status, sendId, lease);
+}
+
+/** One batch to hand off: the rows it covers and the dispatch key it goes out under. */
+export interface HandOff {
+  key: string;
+  ids: string[];
 }
 
 /**
- * Hand off fresh `pending` rows under a new dispatch key: the intent recorded before the
- * request leaves. Only rows still `pending` and never handed off move, and only while
- * `lease` holds the send; returns the ids that moved, which are the only ones to send.
+ * Hand off fresh `pending` rows, each batch under its own new dispatch key: the intent
+ * recorded before any request leaves. Several batches share the one write, so a group of
+ * one-recipient batches costs what one batch does. Only rows still `pending` and never
+ * handed off move, and only while `lease` holds the send; returns the rows that moved,
+ * with their keys, which are the only ones to send.
  */
 export async function dispatchFresh(
   db: D1Database,
   sendId: string,
   lease: string,
-  key: string,
-  ids: string[],
+  handOffs: HandOff[],
   now: number,
-): Promise<string[]> {
-  if (ids.length === 0) {
+): Promise<{ id: string; key: string }[]> {
+  const rows = handOffs.flatMap((h) => h.ids.map((id) => ({ id, k: h.key })));
+  if (rows.length === 0) {
     return [];
   }
   const guard = holdsLease(sendId, lease);
-  const [moved] = await db.batch<{ id: string }>([
+  const [moved] = await db.batch<{ id: string; key: string }>([
     db
       .prepare(
-        `UPDATE deliveries SET status = 'dispatched', dispatch_key = ?, keyed_at = ?, updated_at = ?
-          WHERE id IN (SELECT value FROM json_each(?)) AND send_id = ?
-            AND status = 'pending' AND dispatch_key IS NULL AND ${guard.sql}
-          RETURNING id`,
+        `UPDATE deliveries SET status = 'dispatched', dispatch_key = json_extract(j.value, '$.k'),
+                keyed_at = ?, updated_at = ?
+           FROM json_each(?) AS j
+          WHERE deliveries.id = json_extract(j.value, '$.id') AND deliveries.send_id = ?
+            AND deliveries.status = 'pending' AND deliveries.dispatch_key IS NULL AND ${guard.sql}
+          RETURNING deliveries.id AS id, deliveries.dispatch_key AS key`,
       )
-      .bind(key, now, now, JSON.stringify(ids), sendId, ...guard.binds),
-    // After the move, so it counts exactly the rows that took the (new) key.
-    keyedCounterMove(db, sendId, lease, key, "dispatched", "c_pending", "c_in_flight"),
+      .bind(now, now, JSON.stringify(rows), sendId, ...guard.binds),
+    // After the move, so it counts exactly the rows that took the (new) keys.
+    keyedCounterMove(
+      db,
+      sendId,
+      lease,
+      handOffs.map((h) => h.key),
+      "dispatched",
+      "c_pending",
+      "c_in_flight",
+    ),
   ]);
-  return (moved?.results ?? []).map((r) => r.id);
+  return moved?.results ?? [];
 }
 
 /**
@@ -973,7 +992,7 @@ export async function redispatch(
   const guard = holdsLease(sendId, lease);
   const [, moved] = await db.batch<{ id: string }>([
     // Before the move, so it counts the rows about to leave `pending`.
-    keyedCounterMove(db, sendId, lease, key, "pending", "c_pending", "c_in_flight"),
+    keyedCounterMove(db, sendId, lease, [key], "pending", "c_pending", "c_in_flight"),
     db
       .prepare(
         `UPDATE deliveries SET status = 'dispatched', updated_at = ?
@@ -986,65 +1005,92 @@ export async function redispatch(
   return (moved?.results ?? []).map((r) => r.id);
 }
 
+/** A halted batch going back to the queue, and whether it keeps its dispatch key. */
+export interface HeldBatch {
+  key: string;
+  keepKey: boolean;
+}
+
 /**
- * A batch the provider refused as a whole, or a request that got no answer: the failure
- * is the provider's or the account's, not the recipients', so its rows go back to
+ * Batches the provider refused as a whole, or requests that got no answer: the failure
+ * is the provider's or the account's, not the recipients', so their rows go back to
  * `pending` with no attempt spent, and the send records the halt (SPEC §12). `keepKey`
- * keeps the batch's key, so the next run re-sends that exact batch under it instead of
+ * keeps a batch's key, so the next run re-sends that exact batch under it instead of
  * folding the rows into a new one the provider could not recognize (I4); without it the
  * rows are fresh again, and go back through the consent check at hand-off (I2).
  * `halted_at` keeps the start of an unbroken run of refusals for the same reason, and
  * `halt_retries` counts the run's halts, which picks the next retry's delay from `backoff`
  * (the reason's schedule, in ms, its last step repeating): the sweep leaves the send
- * alone until `halt_retry_at`. A new reason starts its schedule from the top.
- * Lease-guarded, and three statements in all.
+ * alone until `halt_retry_at`. A new reason starts its schedule from the top. However
+ * many batches of a group halted, the send records one halt. With no `halt`, the batches
+ * were handed off but never sent (a group stopped short), so they only go back to the
+ * queue and the send's halt state is left as it was. Lease-guarded, and three statements
+ * in all (two with no halt).
  */
 export async function holdBatch(
   db: D1Database,
   sendId: string,
   lease: string,
-  key: string,
-  keepKey: boolean,
-  halt: { reason: HaltReason; cause: HaltCause; error: string },
+  held: HeldBatch[],
+  halt: { reason: HaltReason; cause: HaltCause; error: string } | null,
   backoff: readonly number[],
   now: number,
 ): Promise<void> {
+  if (held.length === 0) {
+    return;
+  }
   const guard = holdsLease(sendId, lease);
   // The halts before this one in an unbroken run for this reason, capped at the last step.
   const step = `MIN(CASE WHEN halt_reason IS ? THEN halt_retries ELSE 0 END, ${backoff.length - 1})`;
-  await db.batch([
-    // Before the move, so it counts the rows still under the key.
-    keyedCounterMove(db, sendId, lease, key, "dispatched", "c_in_flight", "c_pending"),
+  const rows = held.map((h) => ({ k: h.key, keep: h.keepKey ? 1 : 0 }));
+  const statements = [
+    // Before the move, so it counts the rows still under the keys.
+    keyedCounterMove(
+      db,
+      sendId,
+      lease,
+      held.map((h) => h.key),
+      "dispatched",
+      "c_in_flight",
+      "c_pending",
+    ),
     db
       .prepare(
         `UPDATE deliveries SET status = 'pending', error = ?, updated_at = ?,
-                dispatch_key = CASE WHEN ? THEN dispatch_key END,
-                keyed_at = CASE WHEN ? THEN keyed_at END
-          WHERE send_id = ? AND dispatch_key = ? AND status = 'dispatched' AND ${guard.sql}`,
+                dispatch_key = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN dispatch_key END,
+                keyed_at = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN keyed_at END
+           FROM json_each(?) AS j
+          WHERE deliveries.send_id = ? AND deliveries.dispatch_key = json_extract(j.value, '$.k')
+            AND deliveries.status = 'dispatched' AND ${guard.sql}`,
       )
-      .bind(halt.error, now, keepKey ? 1 : 0, keepKey ? 1 : 0, sendId, key, ...guard.binds),
-    db
-      .prepare(
-        `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
-                halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END,
-                halt_retries = CASE WHEN halt_reason IS ? THEN halt_retries + 1 ELSE 1 END,
-                halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']')
-          WHERE id = ? AND lease_token = ?`,
-      )
-      .bind(
-        halt.reason,
-        halt.cause,
-        halt.error,
-        halt.reason,
-        now,
-        halt.reason,
-        now,
-        JSON.stringify(backoff),
-        halt.reason,
-        sendId,
-        lease,
-      ),
-  ]);
+      .bind(halt?.error ?? null, now, JSON.stringify(rows), sendId, ...guard.binds),
+  ];
+  if (halt) {
+    statements.push(
+      db
+        .prepare(
+          `UPDATE sends SET halt_reason = ?, halt_cause = ?, halt_error = ?,
+                  halted_at = CASE WHEN halt_reason IS ? THEN halted_at ELSE ? END,
+                  halt_retries = CASE WHEN halt_reason IS ? THEN halt_retries + 1 ELSE 1 END,
+                  halt_retry_at = ? + json_extract(?, '$[' || ${step} || ']')
+            WHERE id = ? AND lease_token = ?`,
+        )
+        .bind(
+          halt.reason,
+          halt.cause,
+          halt.error,
+          halt.reason,
+          now,
+          halt.reason,
+          now,
+          JSON.stringify(backoff),
+          halt.reason,
+          sendId,
+          lease,
+        ),
+    );
+  }
+  await db.batch(statements);
 }
 
 /**
