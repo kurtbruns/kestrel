@@ -6,7 +6,7 @@ This page covers connecting Claude Code to a deployed Kestrel instance. Once con
 
 The app resolves every request to a `Principal`: a **human** (carries an email — your interactive login) or a **service** (Claude / automation — no email). Claude authenticates with an Access **service token**, which carries no email, so it arrives as `service`. Its edits are attributed as "Claude" — distinct from your human login — in the revision trail and the editor's concurrency notices. Nothing else changes: same routes, same gate.
 
-Local development uses a dev-signed token instead of Access; see the README's *Local: a dev-signed token* for that path. Everything below is the deployed instance.
+Local development uses a dev-signed token instead of Access; see the README's *Auth* section for that path. Everything below is the deployed instance.
 
 ## 1. Create a service token
 

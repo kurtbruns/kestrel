@@ -21,6 +21,7 @@ import notifications from "../../docs/setup/05-notifications.md";
 import archiveWebsite from "../../docs/setup/06-archive-website.md";
 import verify from "../../docs/setup/07-verify.md";
 import connectClaude from "../../docs/setup/08-connect-claude.md";
+import upgrade from "../../docs/setup/09-upgrade.md";
 import type { DocFragment } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
@@ -41,6 +42,7 @@ const SOURCES: DocSource[] = [
   { slug: "archive-website", markdown: archiveWebsite },
   { slug: "verify", markdown: verify },
   { slug: "connect-claude", markdown: connectClaude },
+  { slug: "upgrade", markdown: upgrade },
 ];
 
 /** Title = the doc's first `# H1`, so titles live in the source markdown. */

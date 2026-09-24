@@ -4,6 +4,8 @@ All notable changes to Kestrel are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Kestrel follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). How an entry is written, and how a release is cut, lives in [`.claude/rules/changelog.md`](.claude/rules/changelog.md).
 
+To move a running instance from one version to another, follow [Upgrade to a new release](docs/setup/09-upgrade.md), which is also served in the editor's Docs tab. Read every entry between your version and the target first.
+
 ## [Unreleased]
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. -->
@@ -15,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- `npm run deploy` and `npm run migrate:remote` now refuse to run without `--env`, so a bare command can no longer deploy the development config or migrate the wrong database. Run `npm run deploy -- --env staging` (or `production`), and `npm run migrate:remote -- --env staging` the same way.
 - The admin API now refuses a change a page on another site asks the publisher's browser to make, so a form or script elsewhere, even on another subdomain of your site, can't act with your session (SPEC §11). Each admin route takes only the body types it declares, listed per route in the API reference: a JSON body sent without `Content-Type: application/json` is now refused with a 415, as is a body sent to a route that takes none. The editor, Claude, and scripts that already send the header are unaffected.
 - Post image uploads must now be PNG, JPEG, WebP, or GIF, and 5 MB or smaller; an SVG, HTML, or other file is refused. A reader page, a post page, and the preview never run script and can't be framed by another site, a post's HTML can no longer submit a form or redirect its readers, the editor can't be framed either, and admin responses are never cached. In the delivery CSV, an address starting with `=`, `+`, `-`, or `@` is written with a leading `'` so a spreadsheet opens it as text. If you serve images from a media custom domain, add the headers the setup guide's archive step now describes.
 - Deploy configuration is now checked on every request instead of taken on trust (SPEC §9). An unknown or mis-cased `PROVIDER`, a missing or malformed `APP_ORIGIN`, a real provider missing a credential (SES: both AWS keys, `AWS_REGION`, `SNS_TOPIC_ARN`; Resend: `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`; both: `FROM_ADDRESS`), a non-numeric `SUBREQUEST_BUDGET`, or a real provider with an origin or `FROM_ADDRESS` still on `example.com` now stops the app with a 500 naming the variable, where before it ran and quietly faked sends or mailed example.com links. If you upgrade a deployment that relied on any of these, fix the variable the error names. The production template no longer sets `ARCHIVE_ORIGIN` or `MEDIA_PUBLIC_BASE`; add them yourself only to opt in (see the setup guide's archive step).

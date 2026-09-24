@@ -1,8 +1,15 @@
 # Connect an email sender
 
-Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §10). Two adapters ship: **SES** (the default) and **Resend**. Pick one per environment with the `PROVIDER` var (switching it from the `fake` that **Provision** deployed with) and set that provider's credentials as Worker secrets. Set the secrets first and switch `PROVIDER` last, so the app never runs with a real provider missing its credentials. Each provider's section below names the settings it requires: with `PROVIDER` set to that provider and one of them missing, the app refuses every request with an error naming it (see **Provision**) rather than failing at the first send.
+Kestrel treats the email provider as **transport** behind a two-method seam (`sendBatch` + `parseWebhook`); the app owns the list, consent, deliveries, and suppressions itself (`docs/SPEC.md` §10). Two adapters ship: **Resend**, the simplest to set up, and **Amazon SES**, cheaper at scale. Pick one per environment with the `PROVIDER` var (switching it from the `fake` that **Provision** deployed with) and set that provider's credentials as Worker secrets. Set the secrets first and switch `PROVIDER` last, so the app never runs with a real provider missing its credentials. Each provider's section below names the settings it requires: with `PROVIDER` set to that provider and one of them missing, the app refuses every request with an error naming it (see **Provision**) rather than failing at the first send.
 
-The webhook is what closes the loop: a hard bounce or a complaint arrives from the provider and suppresses the address on its own. Set it up — a sender without a working bounce/complaint webhook degrades its own deliverability.
+## How fast each provider sends
+
+A send is delivered a slice at a time, one slice per minute, and each slice stays inside the number of database queries and outbound requests Cloudflare allows one Worker invocation (`SUBREQUEST_BUDGET`, see **Provision**). Resend takes up to 100 recipients in one request, so it sends about 450 recipients a minute even on Workers Free. SES takes one recipient per request, so the same budget goes much less far:
+
+- **Workers Free:** about 5 recipients a minute. A send to 1,000 subscribers takes more than three hours.
+- **Workers Paid, with `SUBREQUEST_BUDGET` set to `1000`:** about 110 to 140 recipients a minute.
+
+So SES wants Workers Paid. On Workers Free, use Resend.
 
 ## The staging rule
 
@@ -10,13 +17,47 @@ Staging must not be able to mail a stranger. Use the provider's **sandbox** (SES
 
 ---
 
-## Option A — Amazon SES
+## Option A: Resend
+
+Resend's REST API with Svix-signed webhooks (`src/providers/resend.ts`).
+
+### 1. Verify the domain
+
+In the Resend dashboard, add and verify **`send.example.com`** as a sending domain. Verification publishes SPF/DKIM (and a return-path) records — see **Sending-domain DNS**.
+
+### 2. API key
+
+Create a Resend **API key** and set it:
+
+```bash
+npx wrangler secret put RESEND_API_KEY --env production
+```
+
+### 3. Webhook
+
+In Resend, add a **webhook** pointing at:
+
+```
+https://newsletter.example.com/webhooks/resend
+```
+
+Subscribe it to the delivery, bounce, and complaint events. Resend signs each delivery with **Svix**; copy the webhook's **signing secret** and set it — the adapter verifies every webhook against it before applying events:
+
+```bash
+npx wrangler secret put RESEND_WEBHOOK_SECRET --env production
+```
+
+Set `PROVIDER` to `resend` for that environment. `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, and `FROM_ADDRESS` are required.
+
+---
+
+## Option B: Amazon SES
 
 SESv2 `SendEmail` over HTTPS, SigV4-signed (`src/providers/ses.ts`). Events arrive through SNS.
 
 ### 1. Verify the sending identity
 
-In the SES console (in your `AWS_REGION`), verify the **domain** `send.example.com` as a sending identity — a domain identity, not just a single address, so any `…@send.example.com` From works and DKIM can be domain-signed. Verifying a domain requires publishing DNS records; do that in **Sending-domain DNS** next.
+In the SES console (in your `AWS_REGION`), verify the **domain** `send.example.com` as a sending identity — a domain identity, not just a single address, so any `…@send.example.com` From works and DKIM can be domain-signed. Verifying a domain requires publishing DNS records; do that in **Sending-domain DNS** next. That page also covers the optional custom MAIL FROM domain, which is what lets SPF align for SES.
 
 ### 2. Leave the sandbox
 
@@ -51,40 +92,6 @@ npx wrangler secret put SNS_TOPIC_ARN --env production           # the topic ARN
 ```
 
 `AWS_REGION` and `FROM_ADDRESS` are public `vars` in `wrangler.jsonc`; set `PROVIDER` to `ses` for that environment. The two AWS keys, `SNS_TOPIC_ARN`, `AWS_REGION`, and `FROM_ADDRESS` are required; `SES_CONFIGURATION_SET` is optional to the app, but without it SES publishes no events and bounces never reach the webhook.
-
----
-
-## Option B — Resend
-
-Resend's REST API with Svix-signed webhooks (`src/providers/resend.ts`).
-
-### 1. Verify the domain
-
-In the Resend dashboard, add and verify **`send.example.com`** as a sending domain. Verification publishes SPF/DKIM (and a return-path) records — see **Sending-domain DNS**.
-
-### 2. API key
-
-Create a Resend **API key** and set it:
-
-```bash
-npx wrangler secret put RESEND_API_KEY --env production
-```
-
-### 3. Webhook
-
-In Resend, add a **webhook** pointing at:
-
-```
-https://newsletter.example.com/webhooks/resend
-```
-
-Subscribe it to the delivery, bounce, and complaint events. Resend signs each delivery with **Svix**; copy the webhook's **signing secret** and set it — the adapter verifies every webhook against it before applying events:
-
-```bash
-npx wrangler secret put RESEND_WEBHOOK_SECRET --env production
-```
-
-Set `PROVIDER` to `resend` for that environment. `RESEND_API_KEY`, `RESEND_WEBHOOK_SECRET`, and `FROM_ADDRESS` are required.
 
 ---
 

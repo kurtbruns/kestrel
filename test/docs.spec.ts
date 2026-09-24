@@ -16,6 +16,7 @@ describe("docs registry (bundled from docs/setup/*.md)", () => {
       "archive-website",
       "verify",
       "connect-claude",
+      "upgrade",
     ]);
     // Titles are extracted from the markdown, not hard-coded here.
     expect(docs.find((d) => d.slug === "access")?.title).toBe("Access — the admin gate");

@@ -9,6 +9,7 @@ Rationale for the platform choice (Worker + D1 + R2 + Cron) is in `docs/SPEC.md`
 - A Cloudflare account.
 - Node 20+ and this repo cloned, with `npm install` run.
 - `npx wrangler login` (authenticates the CLI against your account).
+- If you work from a fork, set `repository.url` in `package.json` to your fork and commit it. The editor and `GET /api/version` link the running build to its commit and release through that field, and a fork inherits the upstream URL, so the links would otherwise open the upstream project. Delete the field to drop the links instead.
 
 ## 1. Create the database, bucket, and their bindings
 
@@ -63,14 +64,14 @@ While you are here, set each environment's public `vars` (these are **not** secr
 
 | Var | What it is | Example |
 | --- | --- | --- |
-| `PROVIDER` | active transport: `fake`, `ses`, or `resend` | `fake` for now; `ses` once you connect a sender |
+| `PROVIDER` | active transport: `fake`, `ses`, or `resend` | `fake` for now; `resend` or `ses` once you connect a sender |
 | `APP_ORIGIN` | the origin the app is served from (scheme and host, no path) | `https://newsletter.example.com` |
 | `ARCHIVE_BASE_PATH` | path prefix for the archive index + post pages (drives the URL *and* the route) | `/archive` |
-| `SENDING_DOMAIN` | the sending identity's domain | `send.example.com` |
+| `SENDING_DOMAIN` | the sending identity's domain, shown in Settings | `send.example.com` |
 | `FROM_ADDRESS` | the `From:` header | `Newsletter <newsletter@send.example.com>` |
 | `AWS_REGION` | SES region (ignored by Resend) | `us-east-1` |
 
-`SENDING_DOMAIN` and `FROM_ADDRESS` are the **sender** — the email's authenticated identity, fixed here at deploy time. That is a separate thing from the **publication identity** (the name, tagline, and logo that theme the reader surface and ride inside the email), which is a runtime preference the publisher sets in the app, not a deploy-time var (`docs/SPEC.md` §9). The From display name only stands in for the publication name until that preference is set.
+`FROM_ADDRESS` is the **sender**: the email's authenticated identity, fixed here at deploy time. It is the only value mail is sent from. `SENDING_DOMAIN` is informational: Settings shows it beside the From address, and the app checks only that it is a plain host off `example.com`, not that it matches `FROM_ADDRESS`. Set it to the domain part of `FROM_ADDRESS` so the two never disagree. That is a separate thing from the **publication identity** (the name, tagline, and logo that theme the reader surface and ride inside the email), which is a runtime preference the publisher sets in the app, not a deploy-time var (`docs/SPEC.md` §9). The From display name only stands in for the publication name until that preference is set.
 
 Set `PROVIDER` to `fake` in each environment for now, even though the template says `ses`. A real provider refuses to run until its secrets are set, and those come later, in **Connect an email sender**, which switches `PROVIDER` over; until then, `fake` lets you deploy and verify Access in between. The `fake` transport delivers nothing: it records a send as if every recipient accepted it, so do not schedule a real post before switching.
 
@@ -90,16 +91,18 @@ npm run typecheck
 
 ## 3. Apply the schema
 
-`migrate:remote` applies `migrations/` to the **remote** D1 for the default (development) environment. To target a named environment, pass it through to wrangler:
+`migrate:remote` applies `migrations/` to an environment's **remote** D1. It refuses to run without `--env`, since the top-level config is development:
 
 ```bash
-npx wrangler d1 migrations apply DB --remote --env staging
-npx wrangler d1 migrations apply DB --remote --env production
+npm run migrate:remote -- --env staging
+npm run migrate:remote -- --env production
 ```
 
-`migrations/` is append-only — every deploy re-applies only the migrations the target database has not seen yet, so it is safe to run repeatedly.
+It applies only the migrations that database has not seen yet, so running it again is harmless. Deploying never applies migrations: whenever the schema changes, run this yourself before the deploy that needs it. **Upgrade to a new release** covers that, including the case where a 0.x release changes the baseline migration in place and the database has to be rebuilt instead.
 
 ## 4. Deploy
+
+`npm run deploy` stamps the build, then deploys. Like `migrate:remote`, it refuses to run without `--env`:
 
 ```bash
 npm run deploy -- --env staging
@@ -132,4 +135,4 @@ The rule applies only on the zone's own hostname. A Worker also answers on its `
 
 To check it, submit the form rapidly from one machine: after the limit, Cloudflare answers with its own block page instead of the app's.
 
-At this point the Worker is live but **not yet gated** and **cannot send email**: with `PROVIDER` on `fake`, a send is recorded but reaches no one. (Deployed with `PROVIDER` on `ses` or `resend` before that provider's secrets are set, it instead answers every request with a `500` naming the first missing secret.) Do not point real subscribers at it until you have completed "Access" and "Connect an email sender." Continue with Access next.
+At this point the Worker is live, but its admin surface is **closed** and it **cannot send email**. Until Access is configured, the app has no way to verify who is asking, so every admin route (the editor's API calls, the authoring API, `/api/whoami`) answers `401`: the editor's page loads but can do nothing. The reader surface is already public. With `PROVIDER` on `fake`, a send is recorded but reaches no one. (Deployed with `PROVIDER` on `ses` or `resend` before that provider's secrets are set, it instead answers every request with a `500` naming the first missing secret.) Do not point real subscribers at it until you have completed "Access" and "Connect an email sender." Continue with Access next.
