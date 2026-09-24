@@ -582,7 +582,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "posts",
       summary:
-        "Send now: freeze and schedule one minimum lead out, cancelable until then. Idempotent per post.",
+        "Send now: freeze and schedule one minimum lead out, on the minute, cancelable until then. Idempotent per post.",
       description:
         "The same freeze as scheduling, with the template and identity as they stand, and `fire_at` set to now plus the minimum lead, rounded up to the next whole minute as every fire time is: " +
         lead +

@@ -918,7 +918,9 @@ export async function renderEditor(
         } catch (e) {
           toast(message(e));
         }
-      });
+        // `busy` hands the button back when it ends; a cancel still answering at the fire
+        // time must not re-enable it, so the clock's verdict is painted again at once.
+      }).finally(paintBanner);
   }
 
   // --- image upload: drag/drop, paste, click ---
@@ -1155,9 +1157,11 @@ export async function renderEditor(
               refused();
               return;
             }
-            await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
+            // The toast names the time the server answered, not the lead: the fire time is
+            // rounded up to the minute (SPEC §6), so it can be up to a minute past the lead.
+            const { send } = await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
             m.close();
-            toast(withNoProviderNote(`Sends in ${minLeadText()}, cancelable until then.`));
+            toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
             remount();
           } catch (e) {
             toast(message(e));

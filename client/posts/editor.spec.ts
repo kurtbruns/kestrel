@@ -17,7 +17,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
-import { toLocalInput } from "../ui/format";
+import { fmt, toLocalInput } from "../ui/format";
 import { renderEditor } from "./editor";
 
 type Draft = {
@@ -839,11 +839,17 @@ describe("editor view", () => {
 
   it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {
     const server = draftServer();
+    // Now plus the lead, rounded up to the minute, as the server answers it.
+    const fireAt = Math.ceil((Date.now() + 5 * 60_000) / 60_000) * 60_000;
     await open([
       { path: "/posts/p1", reply: server.get },
       { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
       { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
-      { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+      {
+        method: "POST",
+        path: "/posts/p1/send",
+        reply: () => ({ send: { id: "s2", fire_at: fireAt } }),
+      },
     ]);
     $("#scheduleBtn").click();
     $("#toSendNow").click();
@@ -856,7 +862,8 @@ describe("editor view", () => {
     $("#snGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(true);
-    expect($("#toasts").textContent).toMatch(/Sends in 5 minutes/);
+    // The toast names the fire time the server answered, not the lead.
+    expect($("#toasts").textContent).toContain(`Sends at ${fmt(fireAt)}, cancelable until then.`);
     expect(document.querySelector(".modal")).toBeNull();
   });
 
@@ -871,7 +878,12 @@ describe("editor view", () => {
         { path: "/posts/p1", reply: server.get },
         { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
         { path: "/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
-        { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+        {
+          method: "POST",
+          path: "/posts/p1/send",
+          // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
+          reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
+        },
       ]);
       $("#scheduleBtn").click();
       expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
@@ -884,7 +896,10 @@ describe("editor view", () => {
       );
       $("#snGo").click();
       await vi.advanceTimersByTimeAsync(0);
-      expect($("#toasts").textContent).toMatch(/Sends in 1 minute,/);
+      // A minute and a half out, not the lead's one minute: the time as rounded.
+      expect($("#toasts").textContent).toContain(
+        `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
+      );
     } finally {
       appState.appConfig = null;
     }
@@ -968,6 +983,25 @@ describe("editor view", () => {
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);
+  });
+
+  it("keeps Cancel disabled when a cancel pressed just before the fire time answers after it", async () => {
+    let answer: (r: Response) => void = () => {};
+    await open([
+      ...scheduledPost(Date.now() + 5_000).routes,
+      {
+        method: "POST",
+        path: "/sends/s1/cancel",
+        reply: () => new Promise<Response>((resolve) => (answer = resolve)),
+      },
+    ]);
+    await vi.advanceTimersByTimeAsync(4_500);
+    $("#cancelSchedule").click();
+    await vi.advanceTimersByTimeAsync(1_000); // past the fire time, the cancel still in flight
+    answer(jsonResponse({ error: "window_closed", message: "the review window has closed" }, 409));
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
   });
 
   it("offers only the window controls the server lists for the send", async () => {
