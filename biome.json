@@ -29,6 +29,10 @@
   },
   "overrides": [
     {
+      "includes": ["src/**"],
+      "linter": { "rules": { "suspicious": { "noConsole": "error" } } }
+    },
+    {
       "includes": ["test/**", "client/**/*.spec.ts", "shared/**/*.spec.ts"],
       "linter": {
         "rules": {

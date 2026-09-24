@@ -18,6 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The Worker now logs one JSON line per event, following each send from firing through its batches, halts, and receipts to completion, so Workers Logs can filter a send's whole timeline by `sendId`, and errors by `level`. No line carries a subscriber's address or token. The events and their levels are listed in SPEC §12; they replace the old tags (`MISSED_FIRE`, `STUCK_SEND`, `AMBIGUOUS_DELIVERY`, `PROVIDER_REFUSED`, `NOTIFY_FAILED`, `SETTINGS_CORRUPT`, and the rest), so update any saved log search that used them.
 - `npm run dev` now runs the send sweep once a minute, on the minute, as the deployed cron does, so a local send fires, resumes, and settles its receipts on its own instead of waiting for a hand-run trigger. The shipped `.dev.vars.example` turns the send simulation on (`SIMULATE_SENDS="resend"`); add it to an existing `.dev.vars`, and `npm run dev` names any setting yours is missing. With the simulation on, test sends and confirmation emails are no longer simulated: they appear in the dev outbox and are never refused.
 
 ### Fixed

@@ -1288,6 +1288,8 @@ export interface DeliveryEventResult {
    * echoing the recipient back.
    */
   email: string | null;
+  /** The matched row's send, or null if nothing matched. */
+  sendId: string | null;
 }
 
 // How bad an outcome is. SNS does not guarantee order, so a later event may be a better
@@ -1356,14 +1358,14 @@ export async function markDeliveryEvent(
       .first<Target>();
   }
   if (!row) {
-    return { changes: 0, email: null };
+    return { changes: 0, email: null, sendId: null };
   }
 
   // Freeze the soft/hard split as a fact of this send (SPEC §8): a bounce records the
   // provider's hard/soft signal; any other event clears it (the row is no longer a bounce).
   const bounceKind = u.event === "bounced" ? (u.hard ? "hard" : "soft") : null;
   if (eventRank(u.event, bounceKind) < eventRank(row.event, row.bounce_kind)) {
-    return { changes: 0, email: row.email };
+    return { changes: 0, email: row.email, sendId: row.send_id };
   }
 
   const fromCol = bucketCol(row.status, row.event);
@@ -1379,7 +1381,7 @@ export async function markDeliveryEvent(
     stmts.push(counterMove(db, row.send_id, fromCol, toCol, 1));
   }
   await db.batch(stmts);
-  return { changes: 1, email: row.email };
+  return { changes: 1, email: row.email, sendId: row.send_id };
 }
 
 /** An accepted recipient with no delivery event yet — a candidate for the dev send
@@ -1415,11 +1417,27 @@ export async function acceptedAwaitingEvent(
   return results;
 }
 
-/** Dispatched rows older than a threshold — ambiguous on non-idempotent providers. */
-export async function staleDispatched(db: D1Database, olderThan: number): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'dispatched' AND updated_at < ?")
+/** A send with deliveries left in flight past the threshold, and how many. */
+export interface StaleDispatched {
+  send_id: string;
+  post_id: string;
+  n: number;
+}
+
+/** Dispatched rows older than a threshold, counted per send: ambiguous on non-idempotent
+ *  providers, so the send is wedged until Resolve. One statement, whatever the count. */
+export async function staleDispatched(
+  db: D1Database,
+  olderThan: number,
+): Promise<StaleDispatched[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT d.send_id AS send_id, s.post_id AS post_id, COUNT(*) AS n
+         FROM deliveries d JOIN sends s ON s.id = d.send_id
+        WHERE d.status = 'dispatched' AND d.updated_at < ?
+        GROUP BY d.send_id, s.post_id`,
+    )
     .bind(olderThan)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+    .all<StaleDispatched>();
+  return results;
 }

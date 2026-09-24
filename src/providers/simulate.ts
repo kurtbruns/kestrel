@@ -38,11 +38,16 @@
  * Where it is faster than production, it says so: receipts that take hours (a complaint)
  * arrive within minutes, and a spent quota lifts before the send's first retry instead of
  * after a day.
+ *
+ * Each injected fault is logged as a `sim.*` event tagged with the profile (`sim.quota_spent`,
+ * `sim.quota_lifted`, `sim.request_lost`), so a simulated send's log shows what was injected
+ * beside what the app did about it.
  */
 
 import type { SimulationFaults, SimulationProfile, SimulationView } from "../../shared/settings";
 import { type AcceptedAwaitingEvent, acceptedAwaitingEvent } from "../db/sends";
 import type { AppEnv, Config } from "../env";
+import { log } from "../lib/log";
 import { hashString, makePrng } from "../lib/prng";
 import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
@@ -332,11 +337,13 @@ export class SimProvider implements EmailProvider {
   readonly maxRequestRate?: number;
 
   private readonly profile: SimProfile;
+  private readonly profileName: SimulationProfile;
   private readonly faults: SimulationFaults;
   private readonly fake = new FakeProvider();
 
   constructor(simulation: SimulationView, config: Config) {
     this.profile = PROFILES[simulation.profile]();
+    this.profileName = simulation.profile;
     this.faults = simulation.faults;
     const traits = this.profile.traits(config);
     this.maxBatch = traits.maxBatch;
@@ -374,12 +381,17 @@ export class SimProvider implements EmailProvider {
       const now = Date.now();
       if (state.quotaSpentAt === null && state.requests >= guaranteedAt(sendId, "quota")) {
         state.quotaSpentAt = now;
-        console.log("[sim] sending quota spent; the send halts until its next retry", {
+        log.info("sim.quota_spent", {
           sendId,
+          profile: this.profileName,
+          liftsAt: new Date(now + quotaHoldMs()).toISOString(),
         });
       }
       if (state.quotaSpentAt !== null && now < state.quotaSpentAt + quotaHoldMs()) {
         return { kind: "halted", halt: p.quota };
+      }
+      if (state.quotaSpentAt !== null && state.resumed === 0) {
+        log.info("sim.quota_lifted", { sendId, profile: this.profileName });
       }
     }
     // This request's place since the quota lifted, taken as it arrives: by the time it is
@@ -390,9 +402,10 @@ export class SimProvider implements EmailProvider {
     // A request lost in flight: the provider took it (it is in the outbox), but its answer
     // never came, so its fate is unknown to the send (§12).
     if (realistic && this.lost(sendId, key, state, resumed)) {
-      console.log("[sim] request lost in flight; its fate is unknown to the send", {
+      log.info("sim.request_lost", {
         sendId,
-        key,
+        profile: this.profileName,
+        recipients: recipients.length,
       });
       throw new Error(
         "simulated network error: the connection closed before the provider answered",

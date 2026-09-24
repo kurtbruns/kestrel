@@ -8,16 +8,18 @@
  *
  * It runs after the sends, reads the send record, and writes only its own table, so a
  * notification that fails, or this whole step throwing, never changes a send (I1 to I6).
- * A failure is logged as NOTIFY_FAILED and kept on the row, where the settings surface
- * shows it. A problem that has cleared by the time its notification is tried (after a
- * channel failure delayed it) is closed as cleared rather than sent, since the email is
- * written from the send as it stands and would describe something no longer true.
+ * Each delivery is logged (`notify.sent` or `notify.failed`), and a failure is also kept on
+ * the row, where the settings surface shows it. A problem that has cleared by the time its
+ * notification is tried (after a channel failure delayed it) is closed as cleared rather
+ * than sent, since the email is written from the send as it stands and would describe
+ * something no longer true.
  */
 
 import * as notifications from "../db/notifications";
 import { getSettings } from "../db/settings";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
+import { errorText, log } from "../lib/log";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { type Budget, metered } from "../send/budget";
 import { getNotifier } from "./channel";
@@ -99,10 +101,11 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
     try {
       await notifier.send(to, composeNotification(n, config), key);
       await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());
+      log.info("notify.sent", { sendId: n.send_id, kind: n.kind, channel: notifier.channel });
     } catch (err) {
-      const error = String((err as Error)?.message ?? err);
+      const error = errorText(err);
       const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
-      console.error("NOTIFY_FAILED", {
+      log.warn("notify.failed", {
         sendId: n.send_id,
         kind: n.kind,
         channel: notifier.channel,

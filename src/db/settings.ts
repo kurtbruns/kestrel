@@ -19,6 +19,7 @@ import type {
   SettingsPatchBody,
 } from "../../shared/settings";
 import { HttpError } from "../lib/errors";
+import { log } from "../lib/log";
 
 /**
  * The publication's identity. It themes the reader surface and the admin, and rides
@@ -231,15 +232,15 @@ function parseStored(data: string): Record<string, unknown> {
   if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     return parsed as Record<string, unknown>;
   }
-  console.error(
-    "SETTINGS_CORRUPT",
-    `the settings row (settings.id = 1) ${problem}; reads and writes of settings fail until it is repaired by hand`,
-    { length: data.length, head: data.slice(0, 80) },
-  );
+  // Not the stored text itself: it holds the notification address.
+  log.error("settings.corrupt", {
+    message: `the settings row (settings.id = 1) ${problem}; reads and writes of settings fail until it is repaired by hand`,
+    length: data.length,
+  });
   throw new HttpError(
     500,
     "settings_corrupt",
-    "The stored settings can't be read, so they are left as they are and nothing will save over them. The server log (SETTINGS_CORRUPT) says what's wrong.",
+    "The stored settings can't be read, so they are left as they are and nothing will save over them. The server log (settings.corrupt) says what's wrong.",
   );
 }
 

@@ -1,5 +1,7 @@
 /** Small HTTP error + JSON helpers used across routes. */
 
+import { errorText, log } from "./log";
+
 export class HttpError extends Error {
   /**
    * `details` are extra top-level fields for the JSON body, for a refusal that must
@@ -37,6 +39,10 @@ export function toErrorResponse(err: unknown): Response {
   if (err instanceof HttpError) {
     return json({ ...err.details, error: err.code, message: err.message }, err.status);
   }
-  console.error("unhandled error", err);
+  log.error("request.error", {
+    name: err instanceof Error ? err.name : typeof err,
+    error: errorText(err),
+    stack: err instanceof Error ? err.stack : undefined,
+  });
   return json({ error: "internal_error" }, 500);
 }

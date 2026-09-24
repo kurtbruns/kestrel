@@ -41,7 +41,7 @@ npm run migrate:remote -- --env staging  # apply D1 migrations to that environme
 
 ## Lint
 
-Biome's `recommended` preset is enforced at `error` everywhere and the tree is lint-clean. Specs (`test/**`, `client/**/*.spec.ts`, `shared/**/*.spec.ts`) may use `!` and `any`; `src/` and the client modules may not. A deliberate exception elsewhere carries an inline `biome-ignore` that says why. For a row read back right after writing it, use `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!`: it fails loud with a name.
+Biome's `recommended` preset is enforced at `error` everywhere and the tree is lint-clean. Specs (`test/**`, `client/**/*.spec.ts`, `shared/**/*.spec.ts`) may use `!` and `any`; `src/` and the client modules may not. A deliberate exception elsewhere carries an inline `biome-ignore` that says why. Everything under `src/` logs through `src/lib/log.ts` (`log.info` / `log.warn` / `log.error` with a dotted event from the SPEC §12 catalog), never a bare `console.*`, which `noConsole` refuses there. For a row read back right after writing it, use `unwrap(value, what)` (`src/lib/unwrap.ts`) instead of `!`: it fails loud with a name.
 
 ## Boundaries the code does not state
 

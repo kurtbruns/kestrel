@@ -6,6 +6,7 @@ import { getSettings, resolveConfirmationEmail } from "../db/settings";
 import * as subscribers from "../db/subscribers";
 import { confirmationEmail } from "../emails/system";
 import { newToken } from "../lib/ids";
+import { log } from "../lib/log";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { getProvider } from "../providers";
@@ -81,7 +82,7 @@ export async function requestSubscription(
       subscriber.confirm_attempt_at,
       created,
     );
-    console.error("confirmation email refused by the provider", sent.error);
+    log.warn("subscribe.confirmation_refused", { provider: c.config.provider, error: sent.error });
     return { kind: "failed", delivered: "no", error: sent.error };
   }
   // Sent, or it may have been: arm its link so it works if it arrived, and keep the claim,
@@ -98,7 +99,7 @@ export async function requestSubscription(
     };
   }
   if (sent.delivered === "unknown") {
-    console.error("confirmation email: fate unknown", sent.error);
+    log.warn("subscribe.confirmation_unknown", { provider: c.config.provider, error: sent.error });
     return { kind: "failed", delivered: "unknown", error: sent.error };
   }
   return {

@@ -6,6 +6,10 @@
   // when @cloudflare/vitest-pool-workers ships a newer runtime.
   "compatibility_date": "2026-08-22",
   "compatibility_flags": ["nodejs_compat"],
+  // Workers Logs, which indexes the fields of each JSON log line (src/lib/log.ts). The
+  // head_sampling_rate stays at its default of 1, in every env: sampling is per invocation,
+  // so a lower rate could drop the one sweep tick that carries a send.stuck or send.missed,
+  // and a newsletter's volume is nowhere near needing it.
   "observability": { "enabled": true },
 
   // Bundle the setup guide (docs/setup/*.md) into the Worker as Text
@@ -69,6 +73,8 @@
     "staging": {
       "name": "kestrel-staging",
       "triggers": { "crons": ["* * * * *"] },
+      // head_sampling_rate left at 1, as at the top level: a sampled-out tick could drop a
+      // send.stuck line.
       "observability": { "enabled": true },
       "d1_databases": [
         {
@@ -94,6 +100,8 @@
     "production": {
       "name": "kestrel-production",
       "triggers": { "crons": ["* * * * *"] },
+      // head_sampling_rate left at 1, as at the top level: a sampled-out tick could drop a
+      // send.stuck line.
       "observability": { "enabled": true },
       "d1_databases": [
         {

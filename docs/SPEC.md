@@ -413,6 +413,27 @@ The one failure that is not about delivery at all and is raised loudly rather th
 
 What the watch (§8) reports is a **derived phase**, computed live from the send's current signals and never stored, distinct from the stored send state, which is only the coarse lifecycle (§2). The phase is the finer story of *how* a send in flight is faring: **progressing** (handing off cleanly), **retrying** (some recipients hit a transient error and are being retried), **backing-off** (work remains but nothing is in flight: paused until the next sweep tick after a recipient's transient error, or until the next retry while the provider is unavailable), or **needs-attention** (a wedged send, or the provider refusing the account, above). A send that is sent but still absorbing receipts reports as **settling**, then **complete** once every accepted recipient is confirmed; since some accepted messages are never confirmed at all (§6), a send can settle indefinitely, and that is not a fault. Because it is derived, the phase can never disagree with the record: it is a reading of the same durable state, not a second copy of it.
 
+Beside the record, the app keeps a **log** that explains it. The record decides and the log explains: nothing reads the log to make a decision, and nothing a publisher needs is only in the log. What it adds is the *why* between the states the record shows, so a send can be followed as a timeline, deployed or simulated, without reading the database. Each line is one event with a name and a level. A line about a send names it, so one send's lines read as its history, and the lines of one sweep tick or one request are grouped together. Per-recipient work is counted, never listed, and no line ever carries a subscriber's address, a token, or a credential (the same line §9 draws for settings); a provider's own words are kept with any address in them reduced to its domain. Every event is logged, never sampled, since the one line that matters could be the one a sample dropped.
+
+The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4), or a send that should have gone out and has not (the missed fire time and the send in flight too long, above), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out; **info** for the ordinary lifecycle.
+
+| Event | Level |
+| --- | --- |
+| `sweep.tick` | info |
+| `sweep.error` | error |
+| `send.fired`, `send.batch`, `send.resumed`, `send.completed` | info |
+| `send.canceled`, `send.rescheduled` | info |
+| `send.halted`, `send.lease_lost` | warn |
+| `send.ambiguous`, `send.wedged`, `send.missed`, `send.stuck`, `send.error` | error |
+| `webhook.received`, `receipt.applied`, `suppression.added` | info |
+| `notify.sent` | info |
+| `notify.failed` | warn |
+| `notify.error` | error |
+| `subscribe.confirmation_refused`, `subscribe.confirmation_unknown` | warn |
+| `subscribe.failed` | error |
+| `request.error`, `settings.corrupt`, `config.invalid` | error |
+| `sim.quota_spent`, `sim.quota_lifted`, `sim.request_lost` (local development only, §10) | info |
+
 ---
 
 # Appendix — decisions and deferred

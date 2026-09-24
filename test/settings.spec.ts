@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
 import { adminAuth } from "./support/auth";
+import { logged } from "./support/log";
 
 const BASE = "https://kestrel.test";
 
@@ -489,7 +490,7 @@ describe("a corrupt settings row", () => {
         }
         // Nothing saved over it: the defaults never reach the row (byte for byte).
         expect(await readRow()).toEqual(before);
-        expect(errors.mock.calls.some((call) => call[0] === "SETTINGS_CORRUPT")).toBe(true);
+        expect(logged(errors).some((line) => line.event === "settings.corrupt")).toBe(true);
       } finally {
         errors.mockRestore();
         await env.DB.prepare("UPDATE settings SET data = '{}' WHERE id = 1").run();

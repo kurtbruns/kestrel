@@ -1,7 +1,8 @@
 /**
  * The in-memory notification channel for local dev and tests, as `providers/fake.ts` is
  * for sends: it records each notification and delivers nothing, so development can never
- * reach a real inbox. `failFakeNotify(n)` makes the next n deliveries throw, so a failing
+ * reach a real inbox. `notify.ts` logs each delivery (`notify.sent`, channel `fake`), without
+ * the address it went to. `failFakeNotify(n)` makes the next n deliveries throw, so a failing
  * channel is testable.
  */
 
@@ -43,6 +44,5 @@ export class FakeNotifier implements Notifier {
       throw new Error("fake notification failure");
     }
     outbox.push({ to, ...message, key, sentAt: Date.now() });
-    console.log("NOTIFY (fake, not delivered)", { to, subject: message.subject });
   }
 }

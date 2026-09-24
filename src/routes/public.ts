@@ -5,6 +5,7 @@ import type { PublicSubscribeResponse } from "../../shared/subscribers";
 import * as subscribers from "../db/subscribers";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
+import { log } from "../lib/log";
 import { htmlPage, readerPage } from "../lib/page";
 import type { RequestContext } from "../router";
 import {
@@ -124,7 +125,8 @@ export async function subscribe(c: RequestContext): Promise<Response> {
   // logged and changes nothing, so the reader can simply submit again.
   c.ctx.waitUntil(
     requestSubscription(c, email).catch((err: unknown) => {
-      console.error("subscribe failed", err instanceof Error ? err.message : String(err));
+      // The error's kind, not its text, which may carry the address being subscribed.
+      log.error("subscribe.failed", { name: err instanceof Error ? err.name : typeof err });
     }),
   );
   // One answer for every address, so a request can't learn whether it is subscribed,

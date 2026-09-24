@@ -5,6 +5,7 @@ import { normalizeEmail } from "../../shared/email";
 import * as subscribers from "../db/subscribers";
 import { fieldError, optString, readJsonObject } from "../lib/body";
 import { json } from "../lib/errors";
+import { log } from "../lib/log";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -21,6 +22,8 @@ export async function add(c: RequestContext): Promise<Response> {
   const reason = optString(body, "reason") ?? "manual";
   const detail = optString(body, "detail");
   await subscribers.addSuppression(c.env.DB, email, reason, detail);
+  // Neither the address nor the reason, which is the publisher's own free text.
+  log.info("suppression.added", { source: "manual", count: 1 });
   return json({ suppressed: email, reason }, 201);
 }
 

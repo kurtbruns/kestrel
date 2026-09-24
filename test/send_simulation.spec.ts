@@ -21,6 +21,7 @@ import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { logged } from "./support/log";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
 // per provider with the adapter's own traits, receipts through the REAL ingest
@@ -341,6 +342,11 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     vi.spyOn(crypto, "randomUUID").mockImplementation(
       () => `5e5e5e5e-0000-4000-8000-${(++ids).toString(16).padStart(12, "0")}` as const,
     );
+    const printed = [
+      vi.spyOn(console, "log").mockImplementation(() => {}),
+      vi.spyOn(console, "warn").mockImplementation(() => {}),
+      vi.spyOn(console, "error").mockImplementation(() => {}),
+    ];
     const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
     const emails = await seedConfirmed(30);
@@ -424,6 +430,32 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     row = (await sends.getSend(env.DB, sendId))!;
     expect(row.status).toBe("sent");
     expect(row.c_unsent).toBe(refused.length);
+
+    // The log tells the same story, the injected faults (tagged with the profile) beside
+    // what the app did about each (SPEC §12).
+    const story = logged(...printed).filter((line) => line.sendId === sendId);
+    const order = (event: string) => story.findIndex((line) => line.event === event);
+    expect(story.find((l) => l.event === "sim.quota_spent")).toMatchObject({ profile: "ses" });
+    expect(story.find((l) => l.event === "sim.request_lost")).toMatchObject({ profile: "ses" });
+    expect(story.find((l) => l.event === "send.halted")).toMatchObject({
+      level: "warn",
+      reason: "account",
+      cause: "quota",
+    });
+    expect(order("sim.quota_spent")).toBeLessThan(order("send.halted"));
+    expect(order("send.halted")).toBeLessThan(order("sim.quota_lifted"));
+    expect(order("sim.quota_lifted")).toBeLessThan(order("send.resumed"));
+    expect(order("sim.request_lost")).toBeLessThan(order("send.ambiguous"));
+    expect(story.filter((l) => l.event === "sim.quota_lifted")).toHaveLength(1);
+    expect(story.find((l) => l.event === "send.ambiguous")).toMatchObject({
+      level: "error",
+      cause: "no_answer",
+    });
+    for (const spy of printed) {
+      for (const call of spy.mock.calls) {
+        expect(String(call[0])).not.toMatch(/reader\d+@/);
+      }
+    }
   });
 
   it("runs clean with no faults: one tick, no halt, every receipt a delivery", async () => {

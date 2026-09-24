@@ -9,9 +9,9 @@ import type { HaltReason } from "../../shared/sends";
 // --- send loop / sweep (M6) ---
 /** How long a runSend holds its lease before another tick may resume the send. */
 export const LEASE_TTL_MS = 5 * 60 * 1000;
-/** A scheduled send later than this past its fire time is flagged MISSED_FIRE (still delivered). */
+/** A scheduled send later than this past its fire time is flagged (`send.missed`), and still delivered. */
 export const MISSED_THRESHOLD_MS = 5 * 60 * 1000;
-/** A send stuck in `sending` longer than this is flagged STUCK_SEND. In shared/, so the
+/** A send stuck in `sending` longer than this is flagged (`send.stuck`). In shared/, so the
  *  editor words the flag with the same number the server raises it at. */
 export { STUCK_THRESHOLD_MS } from "../../shared/sends";
 /**

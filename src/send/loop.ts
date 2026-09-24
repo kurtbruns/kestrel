@@ -23,12 +23,19 @@
  * that takes one recipient a request has its requests grouped (`GROUP_RECIPIENTS`) so
  * they share the D1 writes. Requests keep the provider's rate (`maxRequestRate`), and a
  * run stops starting them near the end of the tick (`pace.ts`).
+ *
+ * The run logs its send's lifecycle (SPEC §12): `send.fired` when it takes a scheduled send,
+ * one `send.batch` a group (counts, never addresses), `send.halted` and `send.resumed`
+ * around a provider's halt, `send.ambiguous` when a batch's fate becomes unknown,
+ * `send.lease_lost`, and `send.completed`. Each line is written after the step it describes
+ * and reads only what the run already holds, so logging costs no query and no decision.
  */
 
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { getConfig } from "../env";
+import { errorText, log } from "../lib/log";
 import { HALT_BACKOFF_MS, LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
@@ -96,10 +103,6 @@ function byEmail(a: DeliveryWork, b: DeliveryWork): number {
   return a.email < b.email ? -1 : a.email > b.email ? 1 : 0;
 }
 
-function errorText(err: unknown): string {
-  return String((err as Error)?.message ?? err);
-}
-
 export async function runSend(
   env: AppEnv,
   sendId: string,
@@ -135,6 +138,15 @@ export async function runSend(
   if (!lease) {
     return empty;
   }
+  const tags = { sendId, postId: send.post_id, provider: provider.name };
+  if (send.status === "scheduled") {
+    log.info("send.fired", { ...tags, lagMs: now - send.fire_at });
+  }
+  // The halt the send carried into this run, for the `send.halted` and `send.resumed`
+  // lines: the first answered batch clears it.
+  let halted = send.halt_reason
+    ? { reason: send.halt_reason, retries: send.halt_retries, at: send.halted_at }
+    : null;
   let renewAt = now + LEASE_TTL_MS / 2;
   /** Keep the lease while the run works. False once another run holds it: it owns the
    *  send now, and this run must stop without touching it. */
@@ -160,6 +172,11 @@ export async function runSend(
   }
 
   const result: SendLoopResult = { ...empty, leased: true };
+  /** Stop because another run took the lease: it owns the send now. */
+  const leaseLost = (): SendLoopResult => {
+    log.warn("send.lease_lost", tags);
+    return result;
+  };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
 
   /** One batch of a group: its rows, the key it goes out under, and whether this is its
@@ -199,6 +216,11 @@ export async function runSend(
     let requeued = 0;
     let answered = false;
     let complete = true;
+    // For the `send.batch` line: every member of the group lands in exactly one of its
+    // counts (accepted, unsent, retried, held, unknown), so they sum to `recipients`.
+    let latencyMs = 0;
+    let heldCount = 0;
+    let unknown = 0;
 
     const calls = batches.map((b) => {
       const byAddress = new Map<string, number>();
@@ -224,6 +246,7 @@ export async function runSend(
     const send = async (call: (typeof sent)[number]) => {
       await clock.pace();
       budget.request(); // the request counts whether or not it answers
+      const started = Date.now();
       try {
         const answer = await provider.sendBatch(rendered, call.recipients, {
           purpose: "list",
@@ -233,6 +256,8 @@ export async function runSend(
         return { call, answer, lost: undefined };
       } catch (err) {
         return { call, answer: null, lost: errorText(err) };
+      } finally {
+        latencyMs = Math.max(latencyMs, Date.now() - started);
       }
     };
     // The first request goes alone: a refused account or a provider that is down refuses
@@ -252,6 +277,7 @@ export async function runSend(
           keepKey: provider.idempotentRetry && !call.batch.firstAttempt,
         });
         requeued += call.batch.members.length;
+        heldCount += call.recipients.length;
       }
     }
 
@@ -267,17 +293,21 @@ export async function runSend(
             error: lost ?? "no answer",
             mayHaveSent: true,
           };
+        } else {
+          unknown += call.recipients.length; // stays in flight, awaiting Resolve (§12)
         }
       } else if (answer.kind === "halted") {
         complete = false;
         batchHalt = answer.halt;
       } else {
         answered = true;
+        let answeredFor = 0;
         for (const r of answer.results) {
           const id = byAddress.get(r.email);
           if (!id) {
             continue;
           }
+          answeredFor += 1;
           if (r.accepted) {
             outcomes.push({ id, status: "accepted", providerId: r.providerId });
             result.accepted += 1;
@@ -294,6 +324,8 @@ export async function runSend(
             result.unsent += 1;
           }
         }
+        // A recipient the answer left out stays in flight, its fate unknown.
+        unknown += Math.max(0, call.recipients.length - answeredFor);
       }
       if (batchHalt) {
         held.push({
@@ -301,6 +333,7 @@ export async function runSend(
           keepKey: provider.idempotentRetry && (batchHalt.mayHaveSent || !batch.firstAttempt),
         });
         requeued += batch.members.length;
+        heldCount += call.recipients.length;
         // An account refusal outranks a provider that is only unavailable: it is the one
         // the publisher has to act on.
         if (!halt || (halt.reason === "unavailable" && batchHalt.reason === "account")) {
@@ -310,6 +343,9 @@ export async function runSend(
     }
 
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), answered);
+    // One reading of the clock for the hold and its log line, so the `retryAt` logged is
+    // the retry time stored.
+    const heldAt = Date.now();
     await sends.holdBatch(
       db,
       sendId,
@@ -317,14 +353,49 @@ export async function runSend(
       held,
       halt,
       HALT_BACKOFF_MS[halt?.reason ?? "unavailable"],
-      Date.now(),
+      heldAt,
     );
     result.requeued += requeued;
     if (halt) {
       result.halt = halt.reason;
-      if (halt.reason === "account") {
-        console.error("PROVIDER_REFUSED", { sendId, provider: provider.name, error: halt.error });
-      }
+    }
+
+    const count = (status: DeliveryOutcome["status"]) =>
+      outcomes.filter((o) => o.status === status).length;
+    log.info("send.batch", {
+      ...tags,
+      requests: answers.length,
+      recipients: batches.reduce((n, b) => n + b.members.length, 0),
+      accepted: count("accepted"),
+      unsent: count("unsent"),
+      retried: count("pending"),
+      held: heldCount,
+      unknown,
+      latencyMs,
+    });
+    if (answered && halted) {
+      log.info("send.resumed", {
+        ...tags,
+        reason: halted.reason,
+        haltedMs: halted.at === null ? undefined : Date.now() - halted.at,
+      });
+      halted = null;
+    }
+    if (halt) {
+      // The step `holdBatch` just took from the reason's schedule.
+      const backoff = HALT_BACKOFF_MS[halt.reason];
+      const prior = halted?.reason === halt.reason ? halted.retries : 0;
+      const delay = backoff[Math.min(prior, backoff.length - 1)] ?? 0;
+      log.warn("send.halted", {
+        ...tags,
+        reason: halt.reason,
+        cause: halt.cause,
+        error: halt.error,
+        retryAt: new Date(heldAt + delay).toISOString(),
+      });
+    }
+    if (unknown > 0) {
+      log.error("send.ambiguous", { ...tags, recipients: unknown, cause: "no_answer" });
     }
     return complete;
   };
@@ -358,18 +429,23 @@ export async function runSend(
       break;
     }
     if (!(await keepLease())) {
-      return result;
+      return leaseLost();
     }
     const forgotten = keyedBefore !== null && keyedAt !== null && keyedAt < keyedBefore;
     const toResolve = !provider.idempotentRetry || forgotten;
     const moved = new Set(await sends.redispatch(db, sendId, lease, key, Date.now(), toResolve));
     if (moved.size === 0) {
       if (!(await stillLeased())) {
-        return result;
+        return leaseLost();
       }
       continue;
     }
     if (toResolve) {
+      log.error("send.ambiguous", {
+        ...tags,
+        recipients: moved.size,
+        cause: provider.idempotentRetry ? "key_forgotten" : "no_idempotency",
+      });
       continue;
     }
     const members = (await sends.fetchDispatchGroup(db, sendId, key))
@@ -425,7 +501,7 @@ export async function runSend(
       break;
     }
     if (!(await keepLease())) {
-      return result;
+      return leaseLost();
     }
     const ids = pendingIds.slice(at, at + room * batchSize);
     at += ids.length;
@@ -464,7 +540,7 @@ export async function runSend(
     );
     if (moved.size === 0) {
       if (!(await stillLeased())) {
-        return result;
+        return leaseLost();
       }
       continue;
     }
@@ -484,6 +560,7 @@ export async function runSend(
   if ((await sends.openDeliveryCount(db, sendId)) === 0) {
     await sends.completeSend(db, sendId, send.post_id, Date.now(), lease);
     result.finished = true;
+    log.info("send.completed", { ...tags, durationMs: Date.now() - (send.started_at ?? now) });
   } else {
     await sends.releaseLease(db, sendId, lease);
   }
