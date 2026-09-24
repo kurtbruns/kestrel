@@ -88,6 +88,78 @@ function round(n: number): number {
   return Math.round(n);
 }
 
+/** The sweep's cadence: one tick a minute, on the minute (SPEC §6). */
+const TICK_MS = 60_000;
+
+/** What the finish allows for the last tick's own run, past the minute it starts on. The
+ *  row keeps no record of how long a tick ran, so this is a flat few seconds: the last
+ *  tick hands off only what is left, which is at most one tick's share. */
+const TICK_RUN_MS = 5_000;
+
+/** How long after a minute boundary, with no run holding the lease, the view still takes
+ *  that minute's tick as not yet run: the cron fires a moment after the boundary, and
+ *  until the tick takes the lease the counters cannot tell it waiting from it done. A
+ *  tick that ends inside this reads as not yet run, for at most these few seconds. */
+const TICK_START_GRACE_MS = 2_000;
+
+/**
+ * How fast a send hands off and when it should finish, counted in sweep ticks (SPEC §6,
+ * §8): `perTick` recipients a tick, and `finishAt` the moment the last tick it needs
+ * should end. Null while no tick has finished, since nothing yet says how much a tick
+ * carries.
+ *
+ * A send too large for one tick goes out as a burst each minute, not a steady flow, so an
+ * average over the seconds since the start would run fast just after each burst and
+ * promise a finish ticks too soon. Counting ticks is exact up to the last tick's length:
+ * the ticks run so far are the start tick plus one per minute boundary passed, `done`
+ * over them is what a tick carries, the remaining recipients over that is the ticks
+ * still needed, and the last of them starts on the minute that many ticks ahead.
+ *
+ * While a tick is running (`running`, its run holding the lease), the counters cannot
+ * say how much of `done` that tick handed off, so it counts as half a tick: the estimate
+ * may be a tick out for the seconds a tick runs, and is exact again once it ends. If the
+ * rest fits in the running tick, the finish is that tick's end. A send that sat halted
+ * counts the ticks it waited, so its estimate runs long after it resumes.
+ */
+export function tickEstimate(
+  startedAt: number,
+  total: number,
+  done: number,
+  running: boolean,
+  now: number,
+): { perTick: number; finishAt: number } | null {
+  const remaining = Math.max(0, total - done);
+  const startTick = Math.floor(startedAt / TICK_MS);
+  const tick = Math.floor(now / TICK_MS);
+  const tickStart = tick * TICK_MS;
+  if (running) {
+    const before = tick - startTick; // ticks finished before the running one
+    if (before < 1 || done <= 0) {
+      return null; // the start tick: no tick has finished to count by
+    }
+    const perTick = done / (before + 0.5);
+    const room = perTick / 2; // what the running tick is taken to have left
+    if (remaining <= room) {
+      return { perTick, finishAt: Math.max(now, tickStart + TICK_RUN_MS) };
+    }
+    const after = Math.ceil((remaining - room) / perTick);
+    return { perTick, finishAt: tickStart + after * TICK_MS + TICK_RUN_MS };
+  }
+  // Between ticks: this minute's tick has run unless the boundary has only just passed.
+  const waiting = tick > startTick && now - tickStart < TICK_START_GRACE_MS;
+  const ran = tick - startTick + (waiting ? 0 : 1);
+  if (ran < 1 || done <= 0) {
+    return null;
+  }
+  const perTick = done / ran;
+  if (remaining === 0) {
+    return { perTick, finishAt: now };
+  }
+  const nextTick = waiting ? tickStart : tickStart + TICK_MS;
+  const ticks = Math.ceil(remaining / perTick);
+  return { perTick, finishAt: nextTick + (ticks - 1) * TICK_MS + TICK_RUN_MS };
+}
+
 /** A stored send as a view reads it: the row without its frozen bodies, and its post's
  *  slug, which names the published post's archive page. */
 export type SendViewRow = SendSummary & { post_slug: string | null };
@@ -119,19 +191,15 @@ export function buildSendView(
   const done = Math.max(0, total - counts.pending - counts.in_flight);
   const dispatchPercent = total > 0 ? round((100 * done) / total) : 0;
 
-  // Throughput / ETA from the average since the send started — cheap and single-row.
-  // A cumulative rate (not a trailing window) is enough to steer expectations here;
-  // it is only reported while actively sending.
-  let ratePerMin: number | null = null;
-  let etaMs: number | null = null;
-  if (send.status === "sending" && send.started_at != null) {
-    const elapsed = now - send.started_at;
-    if (elapsed > 0 && done > 0) {
-      ratePerMin = round((done / elapsed) * 60_000);
-      const remaining = total - done;
-      etaMs = remaining > 0 ? round((remaining * elapsed) / done) : 0;
-    }
-  }
+  // Throughput and time to finish, counted in sweep ticks (`tickEstimate`). Reported only
+  // while sending; the time to finish only while handing off (below).
+  const running = send.locked_until !== null && send.locked_until > now;
+  const estimate =
+    send.status === "sending" && send.started_at != null
+      ? tickEstimate(send.started_at, total, done, running, now)
+      : null;
+  const ratePerMin = estimate ? round(estimate.perTick) : null;
+  const etaMs = estimate ? Math.max(0, round(estimate.finishAt - now)) : null;
 
   const acceptedTotal = counts.accepted + counts.delivered + counts.bounced + counts.complained;
   const confirmed = counts.delivered + counts.bounced + counts.complained;
@@ -160,9 +228,9 @@ export function buildSendView(
 
   const phase = derivePhase(send.status, counts, hasRetries, due, wedged, refused, unavailable);
   // A time to finish only while the send is handing off: paused (backing off, halted,
-  // wedged), an average over the whole send would promise a finish that is not coming.
-  // Between ticks a healthy send is still handing off, and its average since the start
-  // already counts the waits, so its time to finish stays honest.
+  // wedged), the ticks ahead would not hand anyone off, so a finish counted from them is
+  // not coming. Between ticks a healthy send is still handing off: the estimate counts the
+  // wait for the next tick.
   const handingOff = phase === "progressing" || phase === "retrying";
 
   return {

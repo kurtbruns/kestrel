@@ -231,9 +231,9 @@ export interface SendView {
     /** Recipients the loop has finished with (accepted, unsent, or skipped). */
     done: number;
     percent: number;
-    /** Recipients accepted per minute since the send started (null when not sending). */
+    /** Recipients handed off a minute: what a sweep tick carries, averaged over the ticks run so far (null when not sending, or before the first tick has finished). */
     rate_per_min: number | null;
-    /** Rough time to finish dispatch from the average rate, while it is handing off (null otherwise, never while paused). */
+    /** Rough time to finish dispatch, counted in sweep ticks: to the end of the last tick the rest needs, the wait between ticks included. Only while it is handing off (null otherwise, never while paused, nor before the first tick has finished). */
     eta_ms: number | null;
   };
   /** Delivery confirmation, which lags acceptance. */

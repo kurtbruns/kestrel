@@ -56,6 +56,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send too large for one sweep tick no longer shows a time to finish that ignores the wait between ticks: the estimate counts the ticks the rest needs, one a minute, so it no longer reads "ETA 26s" with two minutes to go, and the rate reads what a tick carries a minute rather than the burst just after one (SPEC §8).
 - A send too large for one sweep tick no longer reads as Backing off while it waits for the next tick: it reads as progressing (Sending), with a line under the dispatch bar that it resumes on the next sweep. Backing off now means only a pause after an error: recipients waiting on a retry after a transient error, or the provider unavailable (SPEC §12).
 - A provider request that never answers now ends after 30 seconds and is treated as unanswered, instead of holding the send until the Worker is stopped.
 - Two delivery receipts for the same message arriving together (an SES Delivery and a Complaint) no longer count the recipient twice, which could leave a send reading Complete while a receipt was outstanding, or Settling forever, with counts that disagreed with its record. A Resolve that lands beside a receipt no longer miscounts either, and a sent send's counts are checked against its record when its last receipt arrives (SPEC §8).
@@ -108,6 +109,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send too large for one sweep tick no longer shows a time to finish that ignores the wait between ticks: the estimate counts the ticks the rest needs, one a minute, so it no longer reads "ETA 26s" with two minutes to go, and the rate reads what a tick carries a minute rather than the burst just after one (SPEC §8).
 - Through Resend, one invalid recipient in a batch no longer stops the rest of it: the other recipients in the batch (up to 99) are sent, and only the invalid one is recorded unsent. Before, Resend refused the whole batch and every recipient in it was marked unsent for that send.
 - Through SES, a spent daily sending quota is now reported as a quota problem, the same as Resend's, instead of as a rate limit, so the dashboard and the notification email tell you to wait for the quota or raise it (SPEC §12).
 - A send's audience is now fixed when it fires, as SPEC §6 says: a reader who confirms while a send is still going out gets the next post, not this one, and a send's recipient count on the Sent page, its record, and the bounce-spike check is its audience at fire rather than the count when it was scheduled. `GET /sends` rows carry the new `audience_resolved_at`. This touches the database baseline, so rebuild the database as described in the Fixed entry about sends through Resend to 100 or more subscribers.
@@ -144,6 +146,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send too large for one sweep tick no longer shows a time to finish that ignores the wait between ticks: the estimate counts the ticks the rest needs, one a minute, so it no longer reads "ETA 26s" with two minutes to go, and the rate reads what a tick carries a minute rather than the burst just after one (SPEC §8).
 - An edit typed while the editor was saving in the background read as saved without having been sent, and leaving the page then could lose it. It now stays unsaved and goes with the next save.
 - A test or preview of a scheduled post sends its frozen copy, exactly as it will fire, and of a sent post its record, instead of a live render that could differ from either (SPEC §5).
 - Two settings writers at once (the identity fields and the logo, or the editor and Claude) no longer overwrite each other's change.
