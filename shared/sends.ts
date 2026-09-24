@@ -114,6 +114,37 @@ export type SendSummary = Omit<Send, "rendered_html" | "rendered_text">;
  */
 export const STUCK_THRESHOLD_MS = 30 * 60 * 1000;
 
+/**
+ * The minimum lead a deployment runs with when it sets none (SPEC §6): every send spends
+ * at least this long visible and cancelable before it fires (I6). The value in force is the
+ * deployment's (`DeploymentView.minLeadMs`); this is only its default.
+ */
+export const DEFAULT_MIN_LEAD_MS = 5 * 60 * 1000;
+
+/**
+ * The least minimum lead any deployment may set: one sweep tick. The sweep runs once a
+ * minute, so a shorter window is not one the system can honestly promise (SPEC §6).
+ */
+export const MIN_LEAD_FLOOR_MS = 60 * 1000;
+
+/**
+ * The most minimum lead any deployment may set: one day. The lead bounds only the least
+ * wait before a send, never how far out one may be scheduled, so a longer one holds back
+ * every Send now and is almost certainly milliseconds typed as seconds (SPEC §6).
+ */
+export const MIN_LEAD_CEILING_MS = 24 * 60 * 60 * 1000;
+
+/** A minimum lead in words, "5 minutes" or "90 seconds", so the server's refusal and the
+ *  editor's copy name it the same way. */
+export function formatLead(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  if (seconds % 60 === 0) {
+    const minutes = seconds / 60;
+    return `${minutes} minute${minutes === 1 ? "" : "s"}`;
+  }
+  return `${seconds} seconds`;
+}
+
 /** A `GET /sends` row: the send, plus the flags the server derives for it. */
 export type SendListItem = SendSummary & {
   /** In flight too long: the same flag as the send's progress `attention.stuck`. */

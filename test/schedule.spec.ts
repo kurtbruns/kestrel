@@ -1,8 +1,9 @@
-import { SELF } from "cloudflare:test";
+import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import type { AppEnv } from "../src/env";
-import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
+import worker from "../src/index";
 import { cancel } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
 
@@ -399,7 +400,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     );
     expect(first.send.status).toBe("scheduled");
     expect(
-      Math.abs(first.send.fire_at - first.send.scheduled_at - SEND_NOW_BUFFER_MS),
+      Math.abs(first.send.fire_at - first.send.scheduled_at - DEFAULT_MIN_LEAD_MS),
     ).toBeLessThan(2000);
 
     const second = await readJson(
@@ -518,5 +519,95 @@ describe("schedule / send / cancel + soft-lock", () => {
     // fire asc → scheduled sends come back in ascending fire-time order.
     const fires = list.sends.map((s: any) => s.fire_at);
     expect(fires).toEqual([...fires].sort((a: number, b: number) => a - b));
+  });
+});
+
+// The minimum lead is the deployment's (SPEC §6): `MIN_LEAD_SECONDS`, five minutes when
+// unset. Every route that sets a fire time enforces the value the deployment names, and
+// nothing else, so a deployment on the one-minute floor can schedule a minute out.
+describe("the minimum lead is the deployment's own", () => {
+  const MINUTE_LEAD = { MIN_LEAD_SECONDS: "60" };
+
+  /** A request to the Worker under this suite's env with some vars overridden, as another
+   *  deployment's own config would set them. */
+  async function fetchWith(
+    vars: Record<string, string>,
+    path: string,
+    init: RequestInit = {},
+  ): Promise<Response> {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request(`${base}${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
+      { ...env, ...vars } as unknown as AppEnv,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+
+  const scheduleAt = (vars: Record<string, string>, id: string, fire_at: string) =>
+    fetchWith(vars, `/posts/${id}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at }),
+    });
+
+  it("schedules as close as the configured lead allows, and refuses closer, naming the lead", async () => {
+    const id = await makeDraft();
+    const tooClose = await scheduleAt(MINUTE_LEAD, id, future(30 * 1000));
+    expect(tooClose.status).toBe(400);
+    expect((await readJson(tooClose)).message).toMatch(/at least 1 minute in the future/);
+
+    // Ninety seconds out: inside the default five minutes, outside a one-minute lead.
+    const underDefault = await scheduleAt({}, id, future(90 * 1000));
+    expect(underDefault.status).toBe(400);
+    expect((await readJson(underDefault)).message).toMatch(/at least 5 minutes in the future/);
+    const ok = await scheduleAt(MINUTE_LEAD, id, future(90 * 1000));
+    expect(ok.status).toBe(201);
+    expect(await postStatus(id)).toBe("scheduled");
+  });
+
+  it("sends now at one configured lead out", async () => {
+    const id = await makeDraft();
+    const res = await fetchWith(MINUTE_LEAD, `/posts/${id}/send`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(res.status).toBe(201);
+    const { send } = await readJson(res);
+    expect(Math.abs(send.fire_at - send.scheduled_at - 60_000)).toBeLessThan(2000);
+  });
+
+  it("reschedules as close as the configured lead allows, and no closer", async () => {
+    const id = await makeDraft();
+    const { send } = await readJson(await scheduleAt({}, id, future(10 * 60 * 1000)));
+    const move = (vars: Record<string, string>, fire_at: string) =>
+      fetchWith(vars, `/sends/${send.id}/reschedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at }),
+      });
+    expect((await move({}, future(90 * 1000))).status).toBe(400);
+    expect((await move(MINUTE_LEAD, future(30 * 1000))).status).toBe(400);
+    const moved = await move(MINUTE_LEAD, future(90 * 1000));
+    expect(moved.status).toBe(200);
+    expect((await readJson(moved)).send.status).toBe("scheduled");
+  });
+
+  it("reflects the lead read-only in the settings deployment view", async () => {
+    const defaults = await readJson(await fetchWith({}, "/api/settings", { headers: AUTH }));
+    expect(defaults.deployment.minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    const minute = await readJson(await fetchWith(MINUTE_LEAD, "/api/settings", { headers: AUTH }));
+    expect(minute.deployment.minLeadMs).toBe(60_000);
+  });
+
+  it("states the lead and its floor on every route that enforces it in the API reference", async () => {
+    const ref = await readJson(await fetchWith(MINUTE_LEAD, "/api/reference", { headers: AUTH }));
+    const routes = ref.groups.flatMap((g: any) => g.routes);
+    for (const path of ["/posts/:id/schedule", "/posts/:id/send", "/sends/:id/reschedule"]) {
+      const route = routes.find((r: any) => r.path === path && r.method === "POST");
+      expect(route?.description, path).toMatch(/1 minute on this deployment/);
+      expect(route?.description, path).toMatch(/MIN_LEAD_SECONDS/);
+    }
   });
 });

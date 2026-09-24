@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { SettingsResponse } from "../../shared/settings";
 import type { ViewHandle } from "../lifecycle";
+import { appState } from "../state";
 import {
   $,
   type FakeApi,
@@ -517,6 +519,34 @@ describe("editor view", () => {
     expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(true);
     expect($("#toasts").textContent).toMatch(/Sends in 5 minutes/);
     expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  it("floors the picker and words its copy by the deployment's minimum lead, not a number of its own", async () => {
+    vi.setSystemTime(new Date(2026, 8, 23, 10, 0, 30));
+    appState.appConfig = {
+      deployment: { minLeadMs: 60_000 },
+    } as unknown as SettingsResponse;
+    try {
+      const server = draftServer();
+      await open([
+        { path: "/posts/p1", reply: server.get },
+        { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+        { path: "/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+        { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+      ]);
+      $("#scheduleBtn").click();
+      expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
+      // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
+      expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
+      $("#toSendNow").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".modal .hint").textContent).toMatch(/cancelable window of 1 minute/);
+      $("#snGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#toasts").textContent).toMatch(/Sends in 1 minute,/);
+    } finally {
+      appState.appConfig = null;
+    }
   });
 
   it("uploads a picked image and inserts it at the caret", async () => {

@@ -14,13 +14,14 @@ import { json } from "./lib/errors";
 import type { Router } from "./router";
 import { sweep } from "./send/sweep";
 
-// The archive route is config-driven (ARCHIVE_BASE_PATH), and whether the dev routes exist
-// follows devMode, but bindings are only available per-request, so build the router lazily
-// and cache it per (base path, dev mode).
+// The archive route is config-driven (ARCHIVE_BASE_PATH), whether the dev routes exist
+// follows devMode, and the reference states the minimum lead, but bindings are only
+// available per-request, so build the router lazily and cache it per (base path, dev mode,
+// lead).
 const routers = new Map<string, Router>();
 function routerFor(env: AppEnv): Router {
   const config = getConfig(env);
-  const key = `${config.archiveBasePath}|${config.devMode}`;
+  const key = `${config.archiveBasePath}|${config.devMode}|${config.minLeadMs}`;
   let router = routers.get(key);
   if (!router) {
     router = createRouter(config);

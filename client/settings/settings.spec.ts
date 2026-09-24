@@ -46,6 +46,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     authMode: "dev",
     notifyChannel: "provider",
     notifyFrom: "Birds <hello@send.birds.example>",
+    minLeadMs: 5 * 60 * 1000,
     build: {
       version: "",
       sha: "dev",

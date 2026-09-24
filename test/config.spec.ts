@@ -4,6 +4,7 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { DEFAULT_MIN_LEAD_MS, MIN_LEAD_CEILING_MS, MIN_LEAD_FLOOR_MS } from "../shared/sends";
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";
 import { type AppEnv, ConfigError, getConfig } from "../src/env";
@@ -211,6 +212,46 @@ describe("getConfig — deploy config is validated", () => {
     expect(config.provider).toBe("fake");
   });
 
+  it("resolves the minimum lead from MIN_LEAD_SECONDS, five minutes when unset (SPEC §6)", () => {
+    expect(getConfig(envWith({})).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "" })).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(MIN_LEAD_FLOOR_MS);
+    expect(getConfig(envWith({ MIN_LEAD_SECONDS: " 900 " })).minLeadMs).toBe(15 * 60 * 1000);
+    // The same floor on a real provider: there is no environment where it differs.
+    expect(getConfig(envWith({ ...SES_DEPLOY, MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(60_000);
+  });
+
+  it("refuses a minimum lead under the one-minute floor instead of raising it, in every environment", () => {
+    for (const value of ["59", "30", "1", "0", "-60", "1.5", "five", "5m"]) {
+      refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+      refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+    }
+    let message = "";
+    try {
+      getConfig(envWith({ MIN_LEAD_SECONDS: "30" }));
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/MIN_LEAD_SECONDS must be at least 60/);
+    expect(message).toMatch(/once a minute/);
+  });
+
+  it("refuses a minimum lead over a day, the likeliest a value in milliseconds, instead of clamping it", () => {
+    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "86400" })).minLeadMs).toBe(MIN_LEAD_CEILING_MS);
+    for (const value of ["86401", "300000", "9999999999999", "1e306"]) {
+      refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+      refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
+    }
+    let message = "";
+    try {
+      getConfig(envWith({ MIN_LEAD_SECONDS: "300000" }));
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/MIN_LEAD_SECONDS must be at most 86400/);
+    expect(message).toMatch(/in seconds/);
+  });
+
   it("answers every request with a 500 that names the variable", async () => {
     const broken = { ...env, PROVIDER: "SES" } as unknown as AppEnv;
     const ctx = createExecutionContext();
@@ -349,7 +390,11 @@ describe("createRouter — archive route follows the base path", () => {
   it("serves the archive at the configured base path, and 404s the old one", async () => {
     await sendPost("routed");
     const post = (await posts.getBySlug(env.DB, "routed"))!;
-    const router = createRouter({ archiveBasePath: "/archive", devMode: false });
+    const router = createRouter({
+      archiveBasePath: "/archive",
+      devMode: false,
+      minLeadMs: DEFAULT_MIN_LEAD_MS,
+    });
     const ctx = createExecutionContext();
 
     const hit = await router.handle(

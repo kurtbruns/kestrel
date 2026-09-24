@@ -93,6 +93,9 @@ function deploymentView(cfg: Config): DeploymentView {
     // the publisher knows which setup a failure points at. No credential rides either.
     notifyChannel: cfg.notifyChannel,
     notifyFrom: cfg.notifyFrom,
+    // The minimum lead (SPEC §6): deploy config, so the editor floors its pickers and words
+    // its copy by the value this deployment enforces instead of a number of its own.
+    minLeadMs: cfg.minLeadMs,
   };
 }
 
@@ -143,7 +146,7 @@ async function inUseView(db: D1Database, settings: AppSettings, cfg: Config): Pr
   const sends = await listScheduledSends(db);
   return {
     sends,
-    retry_after: insideLead(sends, Date.now()).retryAfter,
+    retry_after: insideLead(sends, cfg.minLeadMs, Date.now()).retryAfter,
     identityFields: renderedIdentityFields(settings, cfg),
   };
 }

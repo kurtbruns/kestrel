@@ -1,7 +1,8 @@
-import { SELF } from "cloudflare:test";
+import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import { SEND_NOW_BUFFER_MS } from "../src/lib/time";
+import type { AppEnv } from "../src/env";
+import worker from "../src/index";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
@@ -413,7 +414,35 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await putSettings({ emailTemplate: tpl("v2"), remake: [a.id] })).status).toBe(200);
     expect((await putSettings({ emailTemplate: tpl("v3"), remake: [a.id] })).status).toBe(200);
     expect((await getSend(a.id)).rendered_html).toContain("v3");
-    // The send-loop lease and the minimum lead are the same constant everywhere.
-    expect(SEND_NOW_BUFFER_MS).toBe(5 * 60 * 1000);
+  });
+
+  it("the lead that refuses a re-make is the deployment's own (SPEC §6)", async () => {
+    // Three minutes out: inside the default five-minute lead, outside a one-minute one. The
+    // suite runs on the default, so the send is moved there directly.
+    const a = await schedule(await makeDraft("Post A"));
+    await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+      .bind(Date.now() + 3 * 60 * 1000, a.id)
+      .run();
+    const save = async (vars: Record<string, string>) => {
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(
+        new Request(`${base}/api/settings`, {
+          method: "PUT",
+          headers: JSON_AUTH,
+          body: JSON.stringify({ emailTemplate: tpl("v2"), remake: [a.id] }),
+        }) as Request<unknown, IncomingRequestCfProperties>,
+        { ...env, ...vars } as unknown as AppEnv,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+      return res;
+    };
+    const refused = await save({});
+    expect(refused.status).toBe(409);
+    expect((await readJson(refused)).error).toBe("remake_too_close");
+    const landed = await save({ MIN_LEAD_SECONDS: "60" });
+    expect(landed.status).toBe(200);
+    expect((await readJson(landed)).remade.map((s: any) => s.id)).toEqual([a.id]);
+    expect((await getSend(a.id)).rendered_html).toContain("v2");
   });
 });

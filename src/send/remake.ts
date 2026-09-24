@@ -35,7 +35,6 @@ import {
 } from "../db/settings";
 import type { AppEnv, Config } from "../env";
 import { HttpError } from "../lib/errors";
-import { SEND_NOW_BUFFER_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
 import { brandingDiffers, resolveBranding } from "../render/template_engine";
 import { renderPost } from "./schedule";
@@ -47,13 +46,14 @@ export interface SaveOutcome {
   remade: ScheduledSendRef[];
 }
 
-/** The scheduled sends inside the minimum lead as of `now`: the ones that block a
- *  re-make, and the moment after which it is no longer blocked. */
+/** The scheduled sends inside the deployment's minimum lead as of `now`: the ones that
+ *  block a re-make, and the moment after which it is no longer blocked. */
 export function insideLead(
   scheduled: ScheduledSendRef[],
+  minLeadMs: number,
   now: number,
 ): { sends: ScheduledSendRef[]; retryAfter: number | null } {
-  const sends = scheduled.filter((s) => s.fire_at < now + SEND_NOW_BUFFER_MS);
+  const sends = scheduled.filter((s) => s.fire_at < now + minLeadMs);
   const retryAfter = sends.length ? Math.max(...sends.map((s) => s.fire_at)) : null;
   return { sends, retryAfter };
 }
@@ -89,10 +89,11 @@ function remakeTooClose(sends: ScheduledSendRef[], retryAfter: number, now: numb
 export async function checkRemake(
   db: D1Database,
   ack: string[] | null,
+  minLeadMs: number,
   now = Date.now(),
 ): Promise<ScheduledSendRef[]> {
   const scheduled = await listScheduledSends(db);
-  const lead = insideLead(scheduled, now);
+  const lead = insideLead(scheduled, minLeadMs, now);
   if (lead.retryAfter !== null) {
     throw remakeTooClose(lead.sends, lead.retryAfter, now);
   }
@@ -142,7 +143,7 @@ export async function saveSettingsRemaking(
     }
 
     const now = Date.now();
-    const scheduled = await checkRemake(env.DB, ack, now);
+    const scheduled = await checkRemake(env.DB, ack, config.minLeadMs, now);
     await runBeforeWrite();
 
     // Render every scheduled send in memory first, from its locked content (the
@@ -157,7 +158,7 @@ export async function saveSettingsRemaking(
     );
     const guard = remakeGuard(
       version,
-      now + SEND_NOW_BUFFER_MS,
+      now + config.minLeadMs,
       scheduled.map((s) => s.id),
     );
     // The settings write goes LAST: it bumps the row's version, and every statement
@@ -178,7 +179,7 @@ export async function saveSettingsRemaking(
       if ((nowVersion ?? 0) !== version) {
         continue;
       }
-      await checkRemake(env.DB, ack);
+      await checkRemake(env.DB, ack, config.minLeadMs);
       continue;
     }
     const remade: ScheduledSendRef[] = [];

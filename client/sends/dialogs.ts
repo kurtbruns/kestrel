@@ -3,6 +3,7 @@
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
 import { api } from "../api";
+import { earliestFireAt, minLeadText } from "../deployment";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
@@ -59,11 +60,11 @@ export function openRescheduleModal(
   currentFireAt: number,
   onDone: () => void,
 ): void {
-  const minStr = toLocalInput(new Date(Date.now() + 6 * 60000));
+  const minStr = toLocalInput(earliestFireAt());
   const cur = toLocalInput(new Date(currentFireAt));
   const m = modal(
     html`<h3 id="rsHead">Reschedule this post</h3>
-      <p class="hint">Move when it sends (at least 5 minutes out). The content stays frozen and the cancelable window is kept — only the time changes.</p>
+      <p class="hint">Move when it sends (at least ${minLeadText()} out). The content stays frozen and the cancelable window is kept — only the time changes.</p>
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
   );

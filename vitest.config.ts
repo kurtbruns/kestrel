@@ -35,6 +35,9 @@ export default defineConfig(async () => {
                   // sleeps + injected edge states would make the deterministic tests slow and
                   // flaky; it's a demo-only tool, exercised directly in send_simulation.spec.
                   SIMULATE_SENDS: "",
+                  // The suite runs on the default minimum lead (five minutes) whatever a
+                  // local `.dev.vars` sets for dev; a test that needs another names it.
+                  MIN_LEAD_SECONDS: "",
                 },
               },
             }),

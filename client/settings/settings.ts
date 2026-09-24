@@ -2,6 +2,7 @@
 // test recipients, and the deployment reflection.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import type {
   ConfirmationEmailCopy,
   LogoResponse,
@@ -425,6 +426,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
           <div class="set-kv-k">Image URL base</div><div class="set-kv-v"><span class="mono">${d.mediaPublicBase}</span></div>
           <div class="set-kv-k">Auth mode</div><div class="set-kv-v">${d.authMode === "access" ? "Cloudflare Access" : "Local dev token"}</div>
           <div class="set-kv-k">Cloudflare Access</div><div class="set-kv-v">${d.accessConfigured ? html`<span class="set-pill ok">${icon("check")}Configured</span>` : html`<span class="set-pill">Not configured</span>`}</div>
+          <div class="set-kv-k">Minimum lead</div><div class="set-kv-v">${formatLead(d.minLeadMs)}${d.minLeadMs === DEFAULT_MIN_LEAD_MS ? html`<span class="set-pill">default</span>` : null}</div>
         </div>
       </div>
     </section>`;

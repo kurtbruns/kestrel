@@ -20,7 +20,7 @@ cp .dev.vars.example .dev.vars      # ships a working dev setup; no edits needed
 npm run dev                         # wrangler dev on http://localhost:8787
 ```
 
-`npm run dev` applies the D1 migrations automatically on a fresh local database, so there's no separate migrate step. Locally the email transport is a dead-end fake, so nothing you do can reach a real inbox. Open the editor at **http://localhost:8787/dashboard/**. There's nothing to sign in with locally: the editor mints its own dev token and shows a **Local dev** chip, and the preview (which opens at `/`) carries an **Open dashboard** shortcut, so you're one click from the editor.
+`npm run dev` applies the D1 migrations automatically on a fresh local database, so there's no separate migrate step. Locally the email transport is a dead-end fake, so nothing you do can reach a real inbox. The shipped dev setup sets the minimum lead, the cancelable window before every send, to one minute (`MIN_LEAD_SECONDS`), the floor every environment shares; deployed, it defaults to five. Open the editor at **http://localhost:8787/dashboard/**. There's nothing to sign in with locally: the editor mints its own dev token and shows a **Local dev** chip, and the preview (which opens at `/`) carries an **Open dashboard** shortcut, so you're one click from the editor.
 
 Everything the editor does is on the HTTP API; the editor is just a client of it. Because a draft can be open in two tabs or edited by Claude at once, a stale save is rejected rather than clobbering the newer one (see `docs/SPEC.md` §4).
 

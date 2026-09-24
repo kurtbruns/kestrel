@@ -1,7 +1,8 @@
 // Reads of the deployment reflection (appState.appConfig.deployment; SPEC §9), fetched once
-// at boot: the build reference, the archive URL, and the no-provider notes.
+// at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
 import { archivePostUrl } from "../shared/archive_url";
+import { DEFAULT_MIN_LEAD_MS, formatLead } from "../shared/sends";
 import type { DeploymentView } from "../shared/settings";
 import { appState } from "./state";
 import { type Html, html } from "./ui/html";
@@ -47,6 +48,29 @@ export function archiveUrlFor(deployment: DeploymentView | null | undefined, slu
     deployment?.archiveBasePath || "",
     slug,
   );
+}
+
+/**
+ * The deployment's minimum lead (SPEC §6), the least time between a request to send and the
+ * send firing, which the server enforces on every schedule, send now, and reschedule. The
+ * default until the reflection has loaded: the editor never states a lead of its own.
+ */
+export function minLeadMs(): number {
+  return appState.appConfig?.deployment.minLeadMs ?? DEFAULT_MIN_LEAD_MS;
+}
+
+/** The minimum lead in words, "5 minutes", for the editor's hints and toasts. */
+export function minLeadText(): string {
+  return formatLead(minLeadMs());
+}
+
+/**
+ * The earliest time a send-time picker offers: one lead out, plus the minute the picker
+ * can't show (it reads to the minute) and the moment the publisher spends choosing, so the
+ * time it proposes is still outside the lead when it reaches the server.
+ */
+export function earliestFireAt(now = Date.now()): Date {
+  return new Date(now + minLeadMs() + 60_000);
 }
 
 /**
