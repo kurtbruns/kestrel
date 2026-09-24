@@ -3692,6 +3692,11 @@ button.api-copy.copied svg {
   border-color: var(--danger-line);
   background: var(--danger-bg);
 }
+/* A banner at the head of the watch (the provider refusing the account) takes the gap
+   below the header that the dispatch bar has when there is none. */
+.watch-card .health {
+  margin-top: 18px;
+}
 
 /* A wedged send on the Sends page: ambiguous in-flight deliveries that need an
    operator decision (SPEC §11). The red health-banner palette, carrying the

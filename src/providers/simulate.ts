@@ -274,8 +274,9 @@ export function resetSimulation(): void {
 /**
  * Which request of the send (counting from 1) carries a guaranteed edge state, seeded by the
  * send so a run reproduces: the quota on the 2nd to 4th, early enough that a small demo
- * reaches it, and the lost request a few after it, so the send halts, resumes, and only then
- * wedges, which is the order they are easiest to watch in.
+ * reaches it, and the lost request a few after it. The loop sends a group's requests
+ * together, so both can come in the first group; either way the watch reads halt, resume,
+ * then wedge, since a wedge shows only once nothing is left to send.
  */
 function guaranteedAt(sendId: string, state: "lost" | "quota"): number {
   const quota = 2 + (hashString(`${sendId}:quota`) % 3);

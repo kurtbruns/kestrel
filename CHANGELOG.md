@@ -23,6 +23,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
+- On a send's live watch, the "provider is refusing this account" banner no longer sits flush against the start time and recipient count above it.
 
 ## [1.0.0] - 2026-09-23
 
