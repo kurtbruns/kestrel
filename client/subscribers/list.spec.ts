@@ -77,7 +77,7 @@ describe("subscribers view", () => {
     expect($("#subList").textContent).toMatch(/No subscribers match/);
   });
 
-  it("opens the Audience tile's link as who a send reaches: confirmed, suppressed hidden", async () => {
+  it("opens the Confirmed tile's link as who a send reaches: confirmed, suppressed hidden", async () => {
     fake = fakeApi([
       {
         path: "/subscribers",
