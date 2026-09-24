@@ -16,9 +16,8 @@ export interface ListState {
   search?: string;
   sort?: string;
   dir?: SortDir;
-  /** "only" narrows to suppressed subscribers, "hide" drops them; a deliverability axis,
-   *  independent of status. */
-  suppressed?: "" | "only" | "hide";
+  /** "only" narrows to suppressed subscribers; a deliverability axis, independent of status. */
+  suppressed?: "" | "only";
   /** "only" narrows to sends with delivery failures. */
   failures?: "" | "only";
   offset: number;
@@ -66,10 +65,9 @@ export function listQuery(state: ListState): string {
 /**
  * A filter/search toolbar: search on the left, the status filter pinned right.
  * `cfg.statuses` = [{value,label}]. `cfg.suppressible` (subscribers only) adds a
- * separate suppression filter (any, suppressed only, or hide suppressed) — suppression
- * is a deliverability flag, not a consent status, so it's its own control (an
- * independent axis you can combine with a status), never an option inside the status
- * dropdown. Hiding suppressed beside Confirmed is the list a send reaches.
+ * separate "Suppressed only" toggle — suppression is a deliverability flag, not a
+ * consent status, so it's its own control (an independent axis you can combine with a
+ * status), never an option inside the status dropdown.
  * `cfg.allValue` sets what the "All statuses" option means — normally "" (no status
  * filter), but the Drafts view passes "draft,scheduled" so "All" stays scoped to the
  * two draft-side statuses rather than reaching sent posts. Omit `cfg.statuses` for a
@@ -85,7 +83,7 @@ export function listToolbar(cfg: ToolbarConfig): Html {
       )}</select>`
     : null;
   const suppressed = cfg.suppressible
-    ? html`<select class="lt-suppressed" aria-label="Filter by suppression"><option value="">All addresses</option><option value="only">Suppressed only</option><option value="hide">Hide suppressed</option></select>`
+    ? html`<label class="lt-toggle"><input type="checkbox" class="lt-suppressed"><span>Suppressed</span></label>`
     : null;
   const failures = cfg.failures
     ? html`<label class="lt-toggle"><input type="checkbox" class="lt-failures"><span>With delivery failures</span></label>`
@@ -99,12 +97,12 @@ export function listToolbar(cfg: ToolbarConfig): Html {
 /**
  * Wire the toolbar controls (within `root`) to the view's reload, seeding their values
  * from state so a deep-linked filter shows selected. Search is debounced; any change
- * resets to the first page. Status and the suppression filter are independent axes.
+ * resets to the first page. Status and the suppression toggle are independent axes.
  */
 export function wireToolbar(root: ParentNode, state: ListState, reload: () => void): void {
   const search = root.querySelector<HTMLInputElement>(".lt-search");
   const status = root.querySelector<HTMLSelectElement>(".lt-status");
-  const suppressed = root.querySelector<HTMLSelectElement>(".lt-suppressed");
+  const suppressed = root.querySelector<HTMLInputElement>(".lt-suppressed");
   const failures = root.querySelector<HTMLInputElement>(".lt-failures");
   if (search) {
     search.value = state.search || "";
@@ -127,10 +125,9 @@ export function wireToolbar(root: ParentNode, state: ListState, reload: () => vo
     };
   }
   if (suppressed) {
-    suppressed.value = state.suppressed || "";
+    suppressed.checked = state.suppressed === "only";
     suppressed.onchange = () => {
-      const v = suppressed.value;
-      state.suppressed = v === "only" || v === "hide" ? v : "";
+      state.suppressed = suppressed.checked ? "only" : "";
       state.offset = 0;
       reload();
     };

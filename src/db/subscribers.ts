@@ -309,15 +309,11 @@ export async function countSubscribers(
   return row?.n ?? 0;
 }
 
-// Who a send reaches (I1): confirmed consent, minus every suppressed address. One
-// predicate, so the send's list, its count, and the dashboard's figure cannot disagree.
-const AUDIENCE_WHERE = "status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions)";
-
 export async function counts(db: D1Database): Promise<Counts> {
   const { results } = await db
     .prepare("SELECT status, COUNT(*) AS n FROM subscribers GROUP BY status")
     .all<{ status: SubscriberStatus; n: number }>();
-  const c: Counts = { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0, audience: 0 };
+  const c: Counts = { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 };
   for (const r of results) {
     if (r.status === "pending") {
       c.pending = r.n;
@@ -327,22 +323,17 @@ export async function counts(db: D1Database): Promise<Counts> {
       c.unsubscribed = r.n;
     }
   }
-  // The two counts that read the suppressions overlay share one statement: `audience`
-  // is `audienceCount`'s set, counted beside the table it subtracts.
-  const overlay = await db
-    .prepare(
-      `SELECT (SELECT COUNT(*) FROM suppressions) AS suppressed, (SELECT COUNT(*) FROM subscribers WHERE ${AUDIENCE_WHERE}) AS audience`,
-    )
-    .first<{ suppressed: number; audience: number }>();
-  c.suppressed = overlay?.suppressed ?? 0;
-  c.audience = overlay?.audience ?? 0;
+  const sup = await db.prepare("SELECT COUNT(*) AS n FROM suppressions").first<{ n: number }>();
+  c.suppressed = sup?.n ?? 0;
   return c;
 }
 
 /** The authoritative send audience: confirmed subscribers minus suppressions (I1). */
 export async function audienceEmails(db: D1Database): Promise<string[]> {
   const { results } = await db
-    .prepare(`SELECT email FROM subscribers WHERE ${AUDIENCE_WHERE} ORDER BY email ASC`)
+    .prepare(
+      "SELECT email FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions) ORDER BY email ASC",
+    )
     .all<{ email: string }>();
   return results.map((r) => r.email);
 }
@@ -351,7 +342,9 @@ export async function audienceEmails(db: D1Database): Promise<string[]> {
  *  set `audienceEmails` lists, counted without loading it. */
 export async function audienceCount(db: D1Database): Promise<number> {
   const row = await db
-    .prepare(`SELECT COUNT(*) AS n FROM subscribers WHERE ${AUDIENCE_WHERE}`)
+    .prepare(
+      "SELECT COUNT(*) AS n FROM subscribers WHERE status = 'confirmed' AND email NOT IN (SELECT email FROM suppressions)",
+    )
     .first<{ n: number }>();
   return row?.n ?? 0;
 }

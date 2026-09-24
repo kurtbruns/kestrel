@@ -30,15 +30,11 @@ export interface SubscriberListItem extends Subscriber {
   suppression_detail: string | null;
 }
 
-/** The list's composition. The first three count consent states; `suppressed` counts the
- *  suppressions overlay, which cuts across them (a confirmed address can be suppressed). */
 export interface SubscriberCounts {
   pending: number;
   confirmed: number;
   unsubscribed: number;
   suppressed: number;
-  /** Who a send would reach now: confirmed and not suppressed (I1). At most `confirmed`. */
-  audience: number;
 }
 
 /** GET /subscribers */
