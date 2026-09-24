@@ -256,6 +256,30 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await readJson(asks)).error).toBe("remake_required");
   });
 
+  it("a scheduled send's frozen text part carries the address exactly when its frozen HTML does, and follows a re-make (SPEC §9)", async () => {
+    const text = async (id: string) =>
+      (await SELF.fetch(`${base}/sends/${id}/email?format=text`, { headers: AUTH })).text();
+    const a = await schedule(await makeDraft("Post A"));
+    // tpl() does not render the address, so neither part carries it.
+    expect((await putSettings({ publication: { address: "12 Marsh Lane" } })).status).toBe(200);
+    expect(await text(a.id)).not.toContain("12 Marsh Lane");
+
+    // Once the template renders it, the re-made copy carries it in both parts.
+    expect((await putSettings({ emailTemplate: tpl("v1", true), remake: [a.id] })).status).toBe(
+      200,
+    );
+    expect((await getSend(a.id)).rendered_html).toContain("12 Marsh Lane");
+    expect(await text(a.id)).toMatch(/\n12 Marsh Lane\n$/);
+
+    // An address change re-makes the text part too, never leaving the old address behind.
+    expect(
+      (await putSettings({ publication: { address: "13 Marsh Lane" }, remake: [a.id] })).status,
+    ).toBe(200);
+    const after = await text(a.id);
+    expect(after).toMatch(/\n13 Marsh Lane\n$/);
+    expect(after).not.toContain("12 Marsh Lane");
+  });
+
   it("is refused while any scheduled send is inside the minimum lead (409 remake_too_close), even when acknowledged, with retry_after; nothing changes", async () => {
     const a = await schedule(await makeDraft("Post A"));
     const soon = await sendNow(await makeDraft("Correction"));
