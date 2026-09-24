@@ -220,11 +220,13 @@ export class ResendProvider implements EmailProvider {
 
 /**
  * Each recipient's own outcome from a permissive batch's 2xx body. `errors` names the
- * refused items by their index in the request; `data` holds an id for each created
- * email, in request order, with the refused ones left out. A refused item is permanent
- * for that recipient alone. When the counts don't add up, which id is whose is a guess,
- * so every recipient not refused is left retryable: the batch's idempotency key makes
- * the re-send safe (I4).
+ * refused items by their index in the request, and a refused item is permanent for that
+ * recipient alone. `data` holds the created emails' ids in request order. Resend's
+ * SDKs show it leaving the refused items out, but its docs don't say so, so both
+ * layouts are read: one entry per created email, or one per request item, read by
+ * position (the two agree when nothing is refused). When neither count fits, which id
+ * is whose is a guess, so every recipient not refused is left retryable: the batch's
+ * idempotency key makes the re-send safe (I4).
  */
 function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientResult[] {
   const { data = [], errors = [] } =
@@ -236,7 +238,8 @@ function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientR
       refused.set(e.index, typeof e.message === "string" ? e.message : "");
     }
   }
-  const aligned = ids.length === recipients.length - refused.size;
+  const positional = ids.length === recipients.length;
+  const compacted = ids.length === recipients.length - refused.size;
   let next = 0;
   return recipients.map((r, i) => {
     if (refused.has(i)) {
@@ -248,7 +251,7 @@ function mapBatchResponse(recipients: Recipient[], body: unknown): PerRecipientR
         error: `Resend: ${message || "refused in batch validation"}`,
       };
     }
-    const id = aligned ? ids[next++] : undefined;
+    const id = positional ? ids[i] : compacted ? ids[next++] : undefined;
     if (id) {
       return { email: r.email, accepted: true as const, providerId: id };
     }

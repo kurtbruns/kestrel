@@ -131,6 +131,30 @@ describe("ResendProvider.sendBatch", () => {
     });
   });
 
+  // Resend's docs don't say whether `data` leaves a refused item out or keeps its slot,
+  // and the two only differ when the refused item isn't last, so both are pinned here.
+  it.each([
+    ["leaves refused items out", [{ id: "re_b" }, { id: "re_c" }]],
+    ["keeps a slot per request item", [null, { id: "re_b" }, { id: "re_c" }]],
+    ["keeps an empty slot per request item", [{}, { id: "re_b" }, { id: "re_c" }]],
+  ])("matches ids to recipients when `data` %s", async (_label, data) => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({ data, errors: [{ index: 0, message: "Invalid `to` field." }] }),
+    );
+    const recipients: Recipient[] = ["a", "b", "c"].map((x) => ({
+      email: `${x}@example.com`,
+      unsubscribeUrl: `https://app.test/u?t=${x}`,
+    }));
+    const result = await makeProvider().sendBatch(rendered, recipients, {
+      idempotencyKeyPrefix: "s",
+    });
+    expect(result.kind === "answered" && result.results).toEqual([
+      expect.objectContaining({ email: "a@example.com", accepted: false, retryable: false }),
+      { email: "b@example.com", accepted: true, providerId: "re_b" },
+      { email: "c@example.com", accepted: true, providerId: "re_c" },
+    ]);
+  });
+
   it("leaves every recipient not refused retryable when the ids don't add up", async () => {
     // Two ids for three unrefused recipients: which id is whose is a guess, so no one is
     // marked accepted on it; the re-send goes under the same idempotency key.
