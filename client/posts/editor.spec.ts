@@ -877,7 +877,9 @@ describe("editor view", () => {
       expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
       $("#toSendNow").click();
       await vi.advanceTimersByTimeAsync(0);
-      expect($(".modal .hint").textContent).toMatch(/cancelable window of 1 minute/);
+      expect($(".modal .hint").textContent).toMatch(
+        /cancelable window of at least 1 minute, on the minute/,
+      );
       $("#snGo").click();
       await vi.advanceTimersByTimeAsync(0);
       expect($("#toasts").textContent).toMatch(/Sends in 1 minute,/);

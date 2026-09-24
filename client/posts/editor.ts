@@ -1164,7 +1164,7 @@ export async function renderEditor(
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of ${minLeadText()}. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of at least ${minLeadText()}, on the minute. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
