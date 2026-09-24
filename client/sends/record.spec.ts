@@ -392,6 +392,33 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("shows the error to a reader whose own load a failing refresh overtook", async () => {
+    let held: ((v: unknown) => void) | null = null;
+    const release = () => held?.(null);
+    let failing = false;
+    const { moveCounts } = settlingRecord((req) => {
+      if (failing) {
+        return jsonResponse({ error: "boom" }, 500);
+      }
+      // The reader's page-two read is held open, so the refresh overtakes it.
+      return req.url.searchParams.get("offset") === "50"
+        ? new Promise((r) => (held = r)).then(() => pageOf(req, 120))
+        : pageOf(req, 120);
+    });
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    $<HTMLButtonElement>(".pager-next").click(); // the reader's load, now pending
+    await vi.advanceTimersByTimeAsync(10);
+    failing = true;
+    moveCounts();
+    await vi.advanceTimersByTimeAsync(15000); // the refresh's reload fails
+    expect($("#recRows").textContent).toMatch(/boom/);
+    release(); // the overtaken answer lands last and paints nothing
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#recRows").textContent).toMatch(/boom/);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("keeps keyboard focus on the same control across a refresh's repaint", async () => {
     const { moveCounts } = settlingRecord((req) => pageOf(req, 120));
     await mount((r, s) => renderSentRecord("x1", r, s));
