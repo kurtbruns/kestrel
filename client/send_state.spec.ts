@@ -387,7 +387,11 @@ describe("the send-state layer", () => {
     srv.state.pace = 3000;
     srv.write(live("x", "sending", "progressing"));
     const updates: SendsUpdate[] = [];
-    followSends(srv.list(), (u) => updates.push(u), page().signal);
+    followSends(
+      srv.list(),
+      on((u) => updates.push(u)),
+      page().signal,
+    );
     await vi.advanceTimersByTimeAsync(0);
     srv.state.hold = new Promise(() => {}); // a connection that never settles
     srv.write(live("x", "sent", "settling"));
