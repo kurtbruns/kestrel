@@ -435,7 +435,7 @@ The level carries the meaning: **error** for anything that threatens a send goin
 | `send.ambiguous`, `send.wedged`, `send.missed`, `send.stuck`, `send.error` | error |
 | `webhook.received`, `receipt.applied`, `suppression.added` | info |
 | `notify.sent` | info |
-| `notify.failed` | warn |
+| `notify.failed`, `receipt.dropped` | warn |
 | `notify.error` | error |
 | `subscribe.confirmation_refused`, `subscribe.confirmation_unknown` | warn |
 | `subscribe.failed` | error |
