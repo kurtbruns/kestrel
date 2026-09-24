@@ -14,7 +14,7 @@ import { runSend } from "../src/send/loop";
 import { buildSendProgress } from "../src/send/progress";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { toNextTick } from "./support/clock";
+import { nextRetry, toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -272,6 +272,21 @@ describe("the halt's backoff", () => {
     return () => at.map((t) => Math.round((t - at[0]!) / MIN));
   }
 
+  /** The cron minutes a backoff spec sweeps on, given the minutes its retries should land
+   *  on: each retry's own, the one after it, the one before the next retry, and the last.
+   *  A halted send's retry, once due, stays due, so a step that ran short would fire on the
+   *  tick just before the retry it names; sweeping every minute in between proves nothing
+   *  more and costs a slow CI runner seconds. */
+  function visits(retries: readonly number[], last: number): number[] {
+    const at = new Set([last]);
+    retries.forEach((r, j) => {
+      at.add(r);
+      at.add(r + 1);
+      at.add((retries[j + 1] ?? last + 1) - 1);
+    });
+    return [...at].filter((m) => m <= last).sort((a, b) => a - b);
+  }
+
   it.each([
     ["unavailable", [0, 1, 3, 8, 23, 53, 113, 173]],
     ["account", [0, 5, 20, 50, 110, 170]],
@@ -286,12 +301,16 @@ describe("the halt's backoff", () => {
       resend.rateLimit = 1_000;
     }
 
-    // Ticks on the cron's own minutes, however long each request took.
+    // Ticks on the cron's own minutes, however long each request took. The first request is
+    // on the first tick, a minute in, so each retry is due a minute past its expected one.
     const start = Date.now();
+    const due = expected.map((m) => m + 1);
     let retries = 0;
-    for (let i = 1; i <= 180; i++) {
+    for (const i of visits(due, 180)) {
       vi.setSystemTime(start + i * MIN);
+      const before = resend.requests;
       await sweep(capped());
+      expect(resend.requests - before, `minute ${i}`).toBe(due.includes(i) ? 1 : 0);
       const now = (await sends.getSend(env.DB, send.id))!;
       if (now.halt_retries > retries) {
         // Each halt schedules the next retry by the schedule's next step, capped at its last.
@@ -348,11 +367,15 @@ describe("the halt's backoff", () => {
     }
     resend.refuse = "resend batch 401: API key is invalid";
 
+    // Two hours of cron minutes. After a tick that waited, the clock jumps to the minute
+    // before the next retry falls due: a waiting tick costs the same on any minute, and a
+    // retry run early would still land on one of the ticks this visits.
+    const start = Date.now();
     let waitingTicks = 0;
-    for (let i = 0; i < 120; i++) {
+    for (let i = 1; i <= 120; i++) {
       const guard = guardD1(env.DB);
       const requests = resend.requests;
-      vi.setSystemTime(Date.now() + MIN);
+      vi.setSystemTime(start + i * MIN);
       const due = await env.DB.prepare(
         `SELECT COUNT(*) AS n FROM sends WHERE status IN ('scheduled', 'sending')
             AND (halt_retry_at IS NULL OR halt_retry_at <= ?)`,
@@ -366,9 +389,13 @@ describe("the halt's backoff", () => {
         waitingTicks += 1;
         expect(resend.requests).toBe(requests);
         expect(guard.statements).toBe(idle.statements);
+        const next = await nextRetry(env.DB);
+        if (next !== null) {
+          i = Math.max(i, Math.ceil((next - start) / MIN) - 2);
+        }
       }
     }
-    expect(waitingTicks).toBeGreaterThan(100);
+    expect(waitingTicks).toBeGreaterThan(5);
     // Every send retried on the account schedule, never once a tick.
     expect(resend.requests).toBe(5 * 5);
     for (const id of ids) {
