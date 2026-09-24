@@ -217,26 +217,30 @@ describe("SesProvider.sendBatch", () => {
     expect(text).not.toContain(UNSUB_SENTINEL);
   });
 
-  it("halts a 429 throttle as unavailable", async () => {
+  // SES reports its daily quota and its per-second rate as the same throttle; only the
+  // message tells a day's wait from a second's.
+  it.each([
+    [
+      "the daily quota",
+      { __type: "TooManyRequestsException", message: "Daily message quota exceeded." },
+      { reason: "account", cause: "quota" },
+    ],
+    [
+      "the sending rate",
+      { __type: "TooManyRequestsException", message: "Maximum sending rate exceeded." },
+      { reason: "unavailable", cause: "rate_limit" },
+    ],
+    ["a bare 429", {}, { reason: "unavailable", cause: "rate_limit" }],
+  ])("halts a 429 on %s", async (_label, body, halt) => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          __type: "TooManyRequestsException",
-          message: "Maximum sending rate exceeded.",
-        }),
-        {
-          status: 429,
-        },
-      ),
+      new Response(JSON.stringify(body), { status: 429 }),
     );
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      {
-        idempotencyKeyPrefix: "send-1",
-      },
+      { idempotencyKeyPrefix: "send-1" },
     );
-    expect(r).toMatchObject({ kind: "halted", halt: { reason: "unavailable" } });
+    expect(r).toMatchObject({ kind: "halted", halt: { ...halt, mayHaveSent: false } });
   });
 
   it("maps a permanent 400 (bad address) to a non-retryable failure", async () => {
