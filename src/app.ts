@@ -18,7 +18,7 @@
  */
 
 import type { ReferenceResponse } from "../shared/reference";
-import { formatLead, MIN_LEAD_FLOOR_MS } from "../shared/sends";
+import { formatLead, LIVE_IDS_MAX, MIN_LEAD_FLOOR_MS, SETTLE_FOLLOW_MS } from "../shared/sends";
 import { buildInfo } from "./build";
 import type { Config } from "./env";
 import { json } from "./lib/errors";
@@ -538,6 +538,63 @@ export function createRouter({
         { name: "offset", description: "Rows to skip, for pagination." },
       ],
       handler: sendRoutes.list,
+    },
+    {
+      // Before /sends/:id, which would otherwise take "live" as an id.
+      method: "GET",
+      path: "/sends/live",
+      access: "admin",
+      resource: "sends",
+      summary:
+        "The sends that can still change on their own, each with its phase, counters, and attention flags, and when the next scheduled one comes due: what a client follows to keep up with sends without polling each one.",
+      description: `\`sends\` is every send that is due (still \`scheduled\`, its fire time passed, so the next sweep tick starts it), \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), soonest fire first. Each is the send's id, post, subject, and times beside the same shape \`GET /sends/:id/progress\` reports, read off the send's counters, never its delivery rows, so a send reads the same here as on its watch. \`next_fire_at\` is the soonest fire time among scheduled sends not yet due, and \`now\` the server's clock at the read: while nothing is live there is nothing to read again until then, since a send far from its fire time changes only when someone acts on it. Name sends in \`ids\` to have them reported under \`named\` whatever their state, which is how a follower learns where a send it saw has gone (complete, canceled, or moved to a later fire time). Reading it changes nothing.`,
+      query: [
+        {
+          name: "ids",
+          description: `Comma-separated send ids to report under \`named\` when they are not in \`sends\`; at most ${LIVE_IDS_MAX}.`,
+        },
+      ],
+      example: {
+        response: {
+          now: 1768467610000,
+          sends: [
+            {
+              id: "s_xyz789",
+              post_id: "p_abc123",
+              subject: "Spring migration",
+              fire_at: 1768467600000,
+              started_at: null,
+              completed_at: null,
+              state: "scheduled",
+              phase: "due",
+              total: 1200,
+              counts: {
+                pending: 0,
+                in_flight: 0,
+                accepted: 0,
+                delivered: 0,
+                bounced: 0,
+                complained: 0,
+                skipped: 0,
+                unsent: 0,
+              },
+              dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+              delivery: { confirmed: 0, percent_of_accepted: 0 },
+              provider: { name: "ses", halt: null },
+              attention: {
+                wedged: false,
+                wedged_count: 0,
+                stuck: false,
+                missed: false,
+                refused: false,
+              },
+            },
+          ],
+          named: [],
+          next_fire_at: 1768554000000,
+        },
+      },
+      handler: sendRoutes.live,
     },
     {
       method: "GET",

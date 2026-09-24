@@ -1,21 +1,25 @@
-/** Send status surface: list, detail, cancel. Authed. */
+/** Send status surface: list, detail, the live set pages follow, cancel. Authed. */
 
-import type {
-  DeliveryListResponse,
-  SendActionResponse,
-  SendListResponse,
-  SendResponse,
+import {
+  type DeliveryListResponse,
+  LIVE_IDS_MAX,
+  type LiveSend,
+  type LiveSendsResponse,
+  SETTLE_FOLLOW_MS,
+  type SendActionResponse,
+  type SendListResponse,
+  type SendResponse,
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { oneOf, readJsonObject } from "../lib/body";
-import { json, notFound } from "../lib/errors";
+import { badRequest, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { encodeSendCursor } from "../send/cursor";
-import { buildSendProgress } from "../send/progress";
+import { buildLiveSend, buildSendProgress, isStuck } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { parseFutureFireAt } from "./schedule";
@@ -95,6 +99,44 @@ export async function progress(c: RequestContext): Promise<Response> {
   const hasRetries =
     send.status === "sending" ? await sends.hasActiveRetries(c.env.DB, send.id) : false;
   return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
+}
+
+/** The send ids named in `ids` (comma-separated), deduplicated; a 400 naming the field past
+ *  `LIVE_IDS_MAX`, since a follower names only what it last saw. */
+function parseLiveIds(raw: string | null): string[] {
+  const ids = [
+    ...new Set(
+      (raw ?? "")
+        .split(",")
+        .map((id) => id.trim())
+        .filter(Boolean),
+    ),
+  ];
+  if (ids.length > LIVE_IDS_MAX) {
+    throw badRequest(`ids names at most ${LIVE_IDS_MAX} sends`, { field: "ids" });
+  }
+  return ids;
+}
+
+/**
+ * What a page follows to keep up with sends (SPEC §8): every send that can still change
+ * on its own (due, sending, or settling within `SETTLE_FOLLOW_MS` of dispatch), each in the
+ * `/progress` shape, the sends named in `ids` as they stand, and the soonest fire time still
+ * ahead, so a follower knows when to look again. One read of send rows, never of the
+ * delivery record, and reading it changes nothing.
+ */
+export async function live(c: RequestContext): Promise<Response> {
+  const ids = parseLiveIds(c.url.searchParams.get("ids"));
+  const now = Date.now();
+  const { rows, nextFireAt } = await sends.liveSends(c.env.DB, now, now - SETTLE_FOLLOW_MS, ids);
+  const following: LiveSend[] = [];
+  const named: LiveSend[] = [];
+  for (const { live: isLive, has_retries, ...row } of rows) {
+    const send = buildLiveSend(row, c.config.provider, has_retries === 1, now);
+    (isLive ? following : named).push(send);
+  }
+  const body: LiveSendsResponse = { now, sends: following, named, next_fire_at: nextFireAt };
+  return json(body);
 }
 
 /** Validate the `view` query param against the recognized set, defaulting to `failures`

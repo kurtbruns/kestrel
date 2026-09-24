@@ -1,5 +1,6 @@
 /**
- * Derive the in-flight reporting shape for `GET /sends/:id/progress` (SPEC §8, §12).
+ * Derive the in-flight reporting shape for `GET /sends/:id/progress`, and for each send
+ * in `GET /sends/live` (SPEC §8, §12).
  *
  * Everything here is computed from the send row's denormalized counters (`sends.c_*`)
  * plus one cheap retry probe — no aggregate over the audience — so a poll is a
@@ -11,7 +12,7 @@
  * keeps absorbing events after the send is "sent."
  */
 
-import type { SendHalt, SendPhase, SendProgress, SendSummary } from "../../shared/sends";
+import type { LiveSend, SendHalt, SendPhase, SendProgress, SendSummary } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 
@@ -159,5 +160,24 @@ export function buildSendProgress(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: providerName, halt },
     attention: { wedged, wedged_count: wedged ? counts.in_flight : 0, stuck, missed, refused },
+  };
+}
+
+/** One send as `GET /sends/live` reports it: which send, and the same progress shape
+ *  `/progress` reports for it, so a page following it and its watch can't disagree. */
+export function buildLiveSend(
+  send: SendSummary,
+  providerName: string,
+  hasRetries: boolean,
+  now: number,
+): LiveSend {
+  return {
+    id: send.id,
+    post_id: send.post_id,
+    subject: send.subject,
+    fire_at: send.fire_at,
+    started_at: send.started_at,
+    completed_at: send.completed_at,
+    ...buildSendProgress(send, providerName, hasRetries, now),
   };
 }

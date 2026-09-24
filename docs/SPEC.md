@@ -279,6 +279,10 @@ A send in flight has a **live watch**. It shows the two stages: **dispatch** (pr
 
 A send in flight too long, a send wedged on an ambiguous delivery (§12), a provider refusing the account (§12), a scheduled send that missed its fire time, a bounce spike. This is the only thing that ever needs the publisher's attention, so it's the only thing that surfaces loudly. The **bounce spike** is a real signal, not an approximation: it reads a recent send's confirmed bounce count over its audience at fire and fires when that rate reaches the provider's danger zone (about 5%, the rate at which a sender is put under review), so it stays quiet through the ordinary trickle of bad addresses and speaks up only when deliverability is genuinely at risk. It is read-only reporting: it warns, it never throttles or halts a reviewed send (an automatic circuit-breaker is deliberately deferred; see the appendix). One of these conditions carries an action rather than just an alarm: a send wedged on an ambiguous in-flight delivery (§12) shows its count *and* the control to resolve it, because a wedged send whose only remedy is raw SQL isn't really inspectable.
 
+### Does what I see keep up?
+
+On its own. Every place that shows a send tells the same story about it, and follows the send while it can change without anyone acting: once its fire time has passed, while it sends, and while its receipts settle. A change the sweep makes shows everywhere the send shows within seconds, a send that starts and finishes between two looks included, and a problem stays in view until it clears. A send far from its fire time changes only when someone acts, so the surface does not keep asking about it, and it stops following a settling send after about an hour; a receipt later than that is read when the record is next opened. Following is only reading: nothing the surface reads changes a send, and a send never waits for anyone to look.
+
 ### Does the publisher have to look?
 
 No. The publisher is told by email, at an address they set (§9), when a send goes out and when a send runs into a problem, so the status surface is where they go to act rather than somewhere they must keep watching. A finished send's notification carries the record's headline numbers (accepted by the provider, unsent, and skipped) and a link to the record. The problems told are the ones above that the app cannot settle on its own, or that mean the sweep has faltered: the provider refusing the account, told at once with the provider's words and what they point to; a send in flight too long; a send wedged awaiting Resolve; and a missed fire time. The bounce spike is shown and not yet told (appendix).
@@ -467,6 +471,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Two subscriber tokens, one per job**, over one token doing both (§7).
 - **The app hosts consent and unsubscribe itself**, over leaning on the provider's list features (§3, §10).
 - **The publisher is told of each event once**, over loud meaning only the status surface, and over a reminder repeated while a condition lasts (§8, §12).
+- **The status surface follows only what can change on its own**, over every page asking on a timer of its own (§8).
 - **Preferences in the app, never secrets**, over one settings surface for both (§9).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11).

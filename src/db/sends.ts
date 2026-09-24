@@ -340,6 +340,54 @@ export async function listSendsPage(
   };
 }
 
+/** A send as the live read returns it: the list projection, whether it can still change on
+ *  its own (`live`, 0 or 1), and, for a sending send, the retry probe its phase needs. */
+export type LiveSendRow = SendSummary & { live: number; has_retries: number };
+
+// The sends that can still change on their own, over `?1` (now) and `?2` (the oldest
+// completion still followed): due (scheduled, fire time passed), sending, or settling (sent
+// since then with a recipient still awaiting a receipt). One predicate, used as both the
+// filter and the `live` column, so the two can't disagree.
+const LIVE_SEND =
+  "(status = 'scheduled' AND fire_at <= ?1) OR status = 'sending' OR (status = 'sent' AND c_accepted > 0 AND completed_at >= ?2)";
+
+/**
+ * What a page follows to keep up with sends (SPEC §8), reading send rows only, never the
+ * delivery record: every live send (`LIVE_SEND`), plus the sends named in `ids` whatever
+ * their state, soonest fire first, and the soonest fire time still ahead. `has_retries` is
+ * `hasActiveRetries`'s indexed probe, folded in for a sending send. The settling clause
+ * walks the sent sends by status, one small row each: the scan the sends table accepts at
+ * newsletter scale rather than another index.
+ */
+export async function liveSends(
+  db: D1Database,
+  now: number,
+  settledSince: number,
+  ids: string[],
+): Promise<{ rows: LiveSendRow[]; nextFireAt: number | null }> {
+  const [rows, next] = await db.batch([
+    db
+      .prepare(
+        `SELECT ${SEND_LIST_COLS}, (${LIVE_SEND}) AS live,
+           CASE WHEN status = 'sending' THEN EXISTS (
+             SELECT 1 FROM deliveries d WHERE d.send_id = sends.id
+               AND d.status IN ('pending', 'dispatched') AND d.attempts > 0
+           ) ELSE 0 END AS has_retries
+         FROM sends
+         WHERE ${LIVE_SEND} OR id IN (SELECT value FROM json_each(?3))
+         ORDER BY fire_at ASC, id ASC`,
+      )
+      .bind(now, settledSince, JSON.stringify(ids)),
+    db
+      .prepare("SELECT MIN(fire_at) AS next FROM sends WHERE status = 'scheduled' AND fire_at > ?")
+      .bind(now),
+  ]);
+  return {
+    rows: (rows?.results ?? []) as LiveSendRow[],
+    nextFireAt: (next?.results[0] as { next: number | null } | undefined)?.next ?? null,
+  };
+}
+
 /** Per-recipient state rollup for a send. */
 export async function deliveryRollup(
   db: D1Database,

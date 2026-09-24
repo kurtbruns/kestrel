@@ -12,6 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- `GET /sends/live` lists the sends that can still change on their own (due, sending, or settling), each with its phase, counts, and any problem, and says when the next scheduled send comes due, so a client can keep up with sends without polling each one (SPEC §8).
 - `npm run simulate-send -- --in 90s` schedules a demo send on the local dev server through the API (loading the demo first if the database is empty) and prints the link to watch it; it refuses a time inside the minimum lead and says why.
 - Local development can model Amazon SES or Resend: `SIMULATE_SENDS` takes `resend`, `ses`, or `1` (the generic simulation), optionally with `:none` for a run with no failures, and Settings names the provider modeled. The SES profile reaches a wedged send and Resolve, and a spent daily quota with its spaced-out retries (SPEC §10). `GET /api/settings` reflects the simulation under `deployment.simulation`.
 - `GET /sends` rows carry the same `phase` and `attention` as the send's `/progress`, and a `rev` that rises with every change a reader could see of the send, ordered across all sends; the response carries a `cursor` marking where the read stood (SPEC §8). This release adds a database migration: run `npm run migrate:remote -- --env <name>` before deploying, and `npm run migrate:local` for local dev.
