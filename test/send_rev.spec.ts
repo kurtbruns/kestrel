@@ -15,7 +15,7 @@ import { adminAuth } from "./support/auth";
 // and a list read hands back a cursor at that sequence (SPEC §8), so a client can later
 // ask what changed since and miss nothing, whichever client made the change. A lease
 // renewal is not such a change. List rows carry the same phase, conditions, and actions as the
-// send's `/progress`.
+// send's `GET /sends/:id`.
 
 const config = () => getConfig(env);
 const AUTH = await adminAuth();
@@ -296,7 +296,7 @@ describe("GET /sends", () => {
     expect(decodeSendCursor(body.cursor)?.seq).toBe(await seq());
   });
 
-  it("rows carry the phase, conditions, and actions their /progress reports, keeping every field", async () => {
+  it("rows are the view GET /sends/:id reports, and carry nothing internal", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     // scheduled, due, canceled, settling, and a send retrying a recipient
@@ -334,20 +334,37 @@ describe("GET /sends", () => {
     };
     for (const [id, phase] of Object.entries(expected)) {
       const row: any = byId.get(id);
-      const progress = await readJson(
-        await SELF.fetch(`${base}/sends/${id}/progress`, { headers: AUTH }),
-      );
+      const progress = (await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH })))
+        .send;
       expect(row.phase).toBe(phase);
       expect(row.phase).toBe(progress.phase);
       expect(row.conditions).toEqual(progress.conditions);
       expect(row.actions).toEqual(progress.actions);
       expect(row.rev).toBe(await rev(id));
-      // The existing fields stay, the internal probe and the frozen bodies stay out.
-      const stored = await sends.getSend(env.DB, id);
-      const { rendered_html: _h, rendered_text: _t, lease_token: _l, ...summary } = stored as any;
-      expect(row).toMatchObject(summary);
-      expect(row).not.toHaveProperty("has_retries");
-      expect(row).not.toHaveProperty("rendered_html");
+      // The stored facts are there, and nothing internal is: no lease, no probe, no bodies.
+      const stored = (await sends.getSend(env.DB, id))!;
+      expect(row).toMatchObject({
+        id: stored.id,
+        post_id: stored.post_id,
+        status: stored.status,
+        fire_at: stored.fire_at,
+        subject: stored.subject,
+        rev: stored.rev,
+        remade_at: stored.remade_at,
+        tested_at: stored.tested_at,
+      });
+      for (const internal of [
+        "has_retries",
+        "rendered_html",
+        "rendered_text",
+        "locked_until",
+        "lease_token",
+        "post_slug",
+        "c_pending",
+        "halt_reason",
+      ]) {
+        expect(row).not.toHaveProperty(internal);
+      }
     }
   });
 });

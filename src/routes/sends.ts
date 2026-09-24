@@ -5,25 +5,28 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   type DeliveryListResponse,
   type FeedCondition,
+  type ResolveResponse,
   type SendActionResponse,
   type SendFeedResponse,
   type SendListResponse,
   type SendResponse,
+  type SendView,
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
 import { oneOf, optCount, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
+import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
-import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
+import { viewWithCursor } from "../send/describe";
 import { feedPace, readAgainAt, SETTLE_FOLLOW_MS } from "../send/feed";
-import { buildListItem, buildLiveSend, buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
+import { buildSendView } from "../send/view";
 import { parseFireAt } from "./schedule";
 
 /** The `GET /sends` filters: each a value from its set, or absent; anything else is a 400
@@ -59,63 +62,78 @@ export async function list(c: RequestContext): Promise<Response> {
   // aggregate over deliveries and no read per row (SPEC §8). The server derives; no client
   // keeps a threshold or a phase rule of its own.
   const body: SendListResponse = {
-    sends: rows.map(({ has_retries, ...s }) => buildListItem(s, has_retries === 1, now)),
+    sends: rows.map(({ has_retries, ...s }) => buildSendView(s, c.config, has_retries === 1, now)),
     page: listPage(total, page),
     cursor: encodeSendCursor({ seq, at: now }),
   };
   return json(body);
 }
 
-export async function get(c: RequestContext): Promise<Response> {
-  // The sequence and its time come first, so whatever the send shows is at or after its
-  // cursor, and a client following it from here misses nothing.
-  const now = Date.now();
-  const seq = await sends.currentSendSeq(c.env.DB);
-  const send = await sends.getSend(c.env.DB, param(c, "id"));
-  if (!send) {
-    throw notFound("send");
+/**
+ * The entity tag of a send's view: its `rev`, and what the clock derives from it (the
+ * phase, the kinds of its conditions, its actions), so a 304 means nothing about the send
+ * has changed since, written or derived: a fire time passing turns a `scheduled` view
+ * `due` with no write, and must not be answered "unchanged". `If-Match` reads the `rev`.
+ */
+function sendEtag(view: SendView): string {
+  const derived = [
+    view.phase,
+    view.conditions.map((cond) => cond.kind).join(","),
+    view.actions.map((act) => act.name).join(","),
+  ].join(";");
+  let h = 0;
+  for (let i = 0; i < derived.length; i++) {
+    h = (Math.imul(h, 31) + derived.charCodeAt(i)) | 0;
   }
-  const post = await getPost(c.env.DB, send.post_id);
-  const [outcomes, hasRetries] = await Promise.all([
-    sends.deliveryOutcomes(c.env.DB, send.id),
-    send.status === "sending" ? sends.hasActiveRetries(c.env.DB, send.id) : Promise.resolve(false),
-  ]);
-  // The archive serves a post's frozen record only once it's sent (drafts/scheduled
-  // 404), so the link is live exactly when this send is `sent`. `outcomes` is the sent
-  // record view's per-recipient delivery breakdown (SPEC §8). `progress` is the same
-  // single-row counter shape `/progress` reports (buildSendProgress) — consolidated onto
-  // the c_* counters so this detail read no longer runs the redundant deliveryRollup
-  // aggregate (#166); it decides nothing and mails no one (I3).
-  const progress = buildSendProgress(send, c.config.provider, hasRetries, Date.now());
-  const body: SendResponse = {
-    send,
-    progress,
-    outcomes,
-    slug: post?.slug ?? null, // the archive slug — names the CSV export the same way the CSV endpoint does
-    // Only a sent send's post is on the archive; before then the link would 404.
-    archive_url: post && send.status === "sent" ? archiveUrl(c.config, post.slug) : null,
-    published: send.status === "sent",
-    cursor: encodeSendCursor({ seq, at: now }),
-  };
-  return json(body);
+  return `"${view.rev}-${(h >>> 0).toString(36)}"`;
 }
 
 /**
- * The cheap poll target for the live in-flight watch (SPEC §8). A single-row read off
- * the denormalized counters (`sends.c_*`) — no aggregate over the audience — plus
- * one indexed retry probe, shaped into dispatch/delivery progress, a derived phase, and
- * the loud attention flags (§12). `deliveries` stays the source of truth; this is its
- * rebuildable cache. Reading it changes nothing: locally, simulated receipts arrive on
- * the dev ticker's own clock, whether or not a watch is open (SPEC §10).
+ * One send: its view, the delivery-outcome breakdown of its record (SPEC §8), and the
+ * cursor to follow it from with `GET /sends/feed`. Tagged with `ETag` (`sendEtag`); a
+ * request whose `If-None-Match` still matches is answered 304 before the outcomes are
+ * counted, so a client re-reading the send pays for the aggregate only when it changed.
  */
-export async function progress(c: RequestContext): Promise<Response> {
+export async function get(c: RequestContext): Promise<Response> {
+  const id = param(c, "id");
+  // The sequence and its time come first (`viewWithCursor`), so whatever the send shows is
+  // at or after its cursor, and a client following it from here misses nothing.
+  const read = await viewWithCursor(c.env, id);
+  if (!read) {
+    throw notFound("send");
+  }
+  const { send, cursor } = read;
+  const etag = sendEtag(send);
+  const headers = { etag, "cache-control": "private, no-cache" };
+  const match = c.req.headers.get("if-none-match");
+  if (match?.split(",").some((t) => t.trim() === etag || t.trim() === `W/${etag}`)) {
+    return new Response(null, { status: 304, headers });
+  }
+  const body: SendResponse = { send, outcomes: await sends.deliveryOutcomes(c.env.DB, id), cursor };
+  return json(body, 200, headers);
+}
+
+/**
+ * The frozen email a send holds (I3), as it will fire or went out: `format=html` (the
+ * default) or `format=text`, with the per-recipient placeholders left unfilled. Its own
+ * route, so a view of the send never carries the bodies.
+ */
+export async function email(c: RequestContext): Promise<Response> {
+  const format = c.url.searchParams.get("format") ?? "html";
+  if (format !== "html" && format !== "text") {
+    throw badRequest("format must be html or text", { field: "format" });
+  }
   const send = await sends.getSend(c.env.DB, param(c, "id"));
   if (!send) {
     throw notFound("send");
   }
-  const hasRetries =
-    send.status === "sending" ? await sends.hasActiveRetries(c.env.DB, send.id) : false;
-  return json(buildSendProgress(send, c.config.provider, hasRetries, Date.now()));
+  return format === "html"
+    ? new Response(send.rendered_html, {
+        headers: { ...POST_PAGE_SECURITY_HEADERS, "content-type": "text/html; charset=utf-8" },
+      })
+    : new Response(send.rendered_text, {
+        headers: { "content-type": "text/plain; charset=utf-8" },
+      });
 }
 
 /** The `since` cursor, or null when none is given; a 400 naming the field for one this
@@ -202,7 +220,7 @@ export async function feed(c: RequestContext): Promise<Response> {
   const body: SendFeedResponse = {
     now,
     sends: read.rows.map(({ has_retries, ...row }) =>
-      buildLiveSend(row, c.config.provider, has_retries === 1, now),
+      buildSendView(row, c.config, has_retries === 1, now),
     ),
     removed: read.removed,
     cursor: encodeSendCursor({ seq: read.seq, at: now }),
@@ -300,16 +318,27 @@ export async function deliveriesCsv(c: RequestContext): Promise<Response> {
   });
 }
 
+/** An action's answer: the send as it now stands, and the cursor to follow it from. */
+async function answerWith(c: RequestContext, id: string) {
+  const read = await viewWithCursor(c.env, id);
+  if (!read) {
+    throw notFound("send");
+  }
+  return read;
+}
+
 /**
- * The `If-Match` header of an action: the `rev` the caller last read, as `"<rev>"` (the
- * `ETag` form) or bare, or undefined when absent. Anything else is a 400 naming it.
+ * The `If-Match` header of an action: the `rev` the caller last read, as `"<rev>"`, bare,
+ * or `GET /sends/:id`'s `ETag`, or undefined when absent. Anything else is a 400 naming it.
  */
 function parseIfMatch(c: RequestContext): number | undefined {
   const raw = c.req.headers.get("if-match");
   if (raw === null) {
     return undefined;
   }
-  const match = /^\s*(?:W\/)?"?(\d+)"?\s*$/.exec(raw);
+  // The bare rev, or `GET /sends/:id`'s ETag (the rev, then a tag of what the clock
+  // derives), whose rev is what an action compares.
+  const match = /^\s*(?:W\/)?"?(\d+)(?:-[0-9a-z]+)?"?\s*$/.exec(raw);
   const rev = match?.[1] === undefined ? Number.NaN : Number(match[1]);
   if (!Number.isSafeInteger(rev)) {
     throw badRequest('If-Match must be a send\'s rev, as "<rev>"', { field: "If-Match" });
@@ -318,8 +347,9 @@ function parseIfMatch(c: RequestContext): number | undefined {
 }
 
 export async function cancel(c: RequestContext): Promise<Response> {
-  const result = await cancelSend(c.env, param(c, "id"), { ifMatch: parseIfMatch(c) });
-  const body: SendActionResponse = result;
+  const id = param(c, "id");
+  const { changed } = await cancelSend(c.env, id, { ifMatch: parseIfMatch(c) });
+  const body: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(body);
 }
 
@@ -333,10 +363,11 @@ export async function cancel(c: RequestContext): Promise<Response> {
 export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   const fireAt = parseFireAt(body.fire_at);
-  const result = await rescheduleSend(c.env, param(c, "id"), fireAt, c.config.minLeadMs, {
+  const id = param(c, "id");
+  const { changed } = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs, {
     ifMatch: parseIfMatch(c),
   });
-  const response: SendActionResponse = result;
+  const response: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(response);
 }
 
@@ -345,13 +376,15 @@ export async function reschedule(c: RequestContext): Promise<Response> {
  * step for the stuck state the sweep flags but can't clear on its own (SPEC §12).
  */
 export async function resolve(c: RequestContext): Promise<Response> {
-  const body = await readJsonObject(c);
-  const outcome = oneOf(body, "resolution", ["unsent", "accepted"]);
-  const expectedCount = optCount(body, "expected_count");
+  const request = await readJsonObject(c);
+  const outcome = oneOf(request, "resolution", ["unsent", "accepted"]);
+  const expectedCount = optCount(request, "expected_count");
   const actor = c.principal?.email ?? "service";
-  const result = await resolveStuckSend(c.env, param(c, "id"), outcome, actor, {
+  const id = param(c, "id");
+  const { resolved, completed } = await resolveStuckSend(c.env, id, outcome, actor, {
     ifMatch: parseIfMatch(c),
     expectedCount,
   });
-  return json(result);
+  const body: ResolveResponse = { ...(await answerWith(c, id)), resolved, completed };
+  return json(body);
 }

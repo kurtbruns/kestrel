@@ -98,3 +98,18 @@ export async function apiText(path: string, opts: ApiOptions = {}): Promise<stri
   }
   return res.text();
 }
+
+/** A file the API serves for download: its text, and the name the server gives it in
+ *  `Content-Disposition`, if any, so a saved file is named as the server names it. */
+export async function apiFile(
+  path: string,
+  opts: ApiOptions = {},
+): Promise<{ text: string; filename: string | null }> {
+  const res = await send(path, opts);
+  if (!res.ok) {
+    throw new ApiError(res.statusText, res.status);
+  }
+  const disposition = res.headers.get("content-disposition") ?? "";
+  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? null;
+  return { text: await res.text(), filename };
+}

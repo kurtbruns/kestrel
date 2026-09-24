@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeliveryOutcomes, Send, SendProgress } from "../../shared/sends";
+import type { DeliveryOutcomes, Send, SendView } from "../../shared/sends";
 import {
   $,
   $$,
@@ -8,6 +8,7 @@ import {
   fakeApi,
   mount,
   resetShell,
+  sendView,
   typeInto,
   unmount,
 } from "../test/support";
@@ -56,28 +57,6 @@ const outcomes = (over: Partial<DeliveryOutcomes> = {}): DeliveryOutcomes => ({
   skipped: 0,
   accepted: 0,
   in_flight: 0,
-  ...over,
-});
-const progress = (over: Partial<SendProgress> = {}): SendProgress => ({
-  state: "sending",
-  phase: "progressing",
-  total: 10,
-  counts: {
-    pending: 4,
-    in_flight: 1,
-    accepted: 5,
-    delivered: 0,
-    bounced: 0,
-    complained: 0,
-    skipped: 0,
-    unsent: 0,
-  },
-  dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: 10_000 },
-  delivery: { confirmed: 0, percent_of_accepted: 0 },
-  provider: { name: "fake", halt: null },
-  conditions: [],
-  actions: [],
-  next_change_at: null,
   ...over,
 });
 const page = { total: 2, limit: 50, offset: 0, sort: "email", dir: "asc" };
@@ -133,12 +112,9 @@ describe("sent record", () => {
       {
         path: "/sends/x1",
         reply: () => ({
-          send: send(),
-          progress: progress({ state: "sent", phase: "complete" }),
+          send: sendView(send(), { phase: "complete" }),
           outcomes: outcomes(),
-          slug: "owls",
-          archive_url: "http://a/archive/owls",
-          published: true,
+          cursor: "1.1",
         }),
       },
       {
@@ -174,12 +150,9 @@ describe("sent record", () => {
       {
         path: "/sends/x1",
         reply: () => ({
-          send: send(),
-          progress: progress({ state: "sent", phase: "complete" }),
+          send: sendView(send(), { phase: "complete" }),
           outcomes: outcomes(),
-          slug: "owls",
-          archive_url: null,
-          published: true,
+          cursor: "1.1",
         }),
       },
       {
@@ -209,12 +182,9 @@ describe("sent record", () => {
       {
         path: "/sends/x1",
         reply: () => ({
-          send: send(),
-          progress: progress({ state: "sent", phase: "settling" }),
+          send: sendView(send(), { phase: "settling" }),
           outcomes: settling(),
-          slug: "owls",
-          archive_url: null,
-          published: true,
+          cursor: "1.1",
         }),
       },
       {
@@ -253,12 +223,9 @@ describe("sent record", () => {
       {
         path: "/sends/x1",
         reply: () => ({
-          send: send(),
-          progress: progress({ state: "sent", phase: "settling" }),
+          send: sendView(send(), { phase: "settling" }),
           outcomes: settled,
-          slug: "owls",
-          archive_url: null,
-          published: true,
+          cursor: "1.1",
         }),
       },
       {
@@ -310,12 +277,9 @@ describe("sent record", () => {
       {
         path: "/sends/x1",
         reply: () => ({
-          send: send(),
-          progress: progress({ state: "sent", phase: "settling" }),
+          send: sendView(send(), { phase: "settling" }),
           outcomes: settled,
-          slug: "owls",
-          archive_url: null,
-          published: true,
+          cursor: "1.1",
         }),
       },
       {
@@ -344,24 +308,52 @@ describe("sent record", () => {
     expect(document.querySelector(".rec-people-table")).toBeNull();
   });
 
-  it("opens the live watch for a send in flight, polls, and flips to the record when it finishes", async () => {
-    let state: "sending" | "sent" = "sending";
+  /** The feed the watch follows, answering with the send as `current()` has it, every read
+   *  a change (a new `rev`), read again in 3 s. */
+  const feedOf = (current: () => SendView) => {
+    let seq = 1;
+    return {
+      path: "/sends/feed",
+      reply: () => {
+        seq += 1;
+        return {
+          now: Date.now(),
+          sends: [{ ...current(), rev: seq }],
+          removed: [],
+          cursor: `${seq}.${Date.now()}`,
+          more: false,
+          conditions: [],
+          read_again_at: Date.now() + 3000,
+        };
+      },
+    };
+  };
+  const feedReads = () => fake.calls.filter((c) => c.url.pathname === "/sends/feed").length;
+
+  it("opens the live watch for a send in flight, follows it through the feed, and flips to the record when it finishes", async () => {
+    let status: "sending" | "sent" = "sending";
+    const current = () =>
+      sendView(
+        send({
+          status,
+          c_pending: 4,
+          c_in_flight: 1,
+          c_accepted: 5,
+          c_delivered: 0,
+          c_bounced: 0,
+          c_unsent: 0,
+          completed_at: null,
+        }),
+        {
+          phase: status === "sent" ? "complete" : "progressing",
+        },
+      );
     fake = fakeApi([
       {
         path: "/sends/x1",
-        reply: () => ({
-          send: send({ status: state }),
-          progress: progress({ state }),
-          outcomes: outcomes({ accepted: 0 }),
-          slug: "owls",
-          archive_url: null,
-          published: state === "sent",
-        }),
+        reply: () => ({ send: current(), outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
-      {
-        path: "/sends/x1/progress",
-        reply: () => progress({ state, phase: state === "sent" ? "complete" : "progressing" }),
-      },
+      feedOf(current),
       {
         path: "/sends/x1/deliveries",
         reply: () => ({ deliveries: [], view: "failures", page: { ...page, total: 0 } }),
@@ -373,11 +365,14 @@ describe("sent record", () => {
     expect($(".phase-pill").textContent).toBe("Sending");
     expect($$(".wbar")).toHaveLength(2);
     expect($(".wcounts").textContent).toMatch(/5.*Accepted/);
-    const polls = () => fake.calls.filter((c) => c.url.pathname.endsWith("/progress")).length;
-    expect(polls()).toBe(1);
+    // The watch keeps no poll of its own: the layer reads the feed from the page's cursor.
+    expect(feedReads()).toBe(1);
+    expect(
+      fake.calls.find((c) => c.url.pathname === "/sends/feed")?.url.searchParams.get("since"),
+    ).toBe("1.1");
     await vi.advanceTimersByTimeAsync(3000);
-    expect(polls()).toBe(2);
-    state = "sent";
+    expect(feedReads()).toBe(2);
+    status = "sent";
     await vi.advanceTimersByTimeAsync(3000);
     await vi.advanceTimersByTimeAsync(10);
     expect(document.querySelector(".watch-card")).toBeNull();
@@ -385,7 +380,7 @@ describe("sent record", () => {
   });
 
   it("puts the provider's refusal of the account at the top of the watch", async () => {
-    const refused = progress({
+    const refused = sendView(send({ status: "sending", completed_at: null }), {
       phase: "needs-attention",
       provider: {
         name: "resend",
@@ -393,6 +388,7 @@ describe("sent record", () => {
           reason: "account",
           cause: "credentials",
           error: "resend batch 403: API key is not active",
+          retries: 1,
           since: 1_000,
           retry_at: Date.now() + 12 * 60_000,
         },
@@ -404,16 +400,9 @@ describe("sent record", () => {
     fake = fakeApi([
       {
         path: "/sends/x1",
-        reply: () => ({
-          send: send({ status: "sending" }),
-          progress: refused,
-          outcomes: outcomes({ accepted: 0 }),
-          slug: "owls",
-          archive_url: null,
-          published: false,
-        }),
+        reply: () => ({ send: refused, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
-      { path: "/sends/x1/progress", reply: () => refused },
+      feedOf(() => refused),
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
@@ -427,39 +416,54 @@ describe("sent record", () => {
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
   });
 
-  it("stops polling when the reader navigates away, even with a tick's read in flight", async () => {
-    let held: ((v: unknown) => void) | null = null;
-    const release = () => held?.(null);
-    let reads = 0;
+  it("offers Resolve while the server lists it, and names its count", async () => {
+    const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
+      phase: "needs-attention",
+      conditions: [condition.wedged(2, "x1")],
+      actions: [{ name: "resolve", method: "POST", path: "/sends/x1/resolve" }],
+    });
     fake = fakeApi([
       {
         path: "/sends/x1",
-        reply: () => ({
-          send: send({ status: "sending" }),
-          progress: progress(),
-          outcomes: outcomes(),
-          slug: null,
-          archive_url: null,
-          published: false,
-        }),
+        reply: () => ({ send: wedged, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+      },
+      feedOf(() => wedged),
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    $("#resolveBtn").click();
+    expect($(".modal h3").textContent).toBe("Resolve 2 ambiguous deliveries");
+  });
+
+  it("stops following when the reader navigates away, even with a read in flight", async () => {
+    let held: ((v: unknown) => void) | null = null;
+    const release = () => held?.(null);
+    let reads = 0;
+    const view = sendView(send({ status: "sending", completed_at: null }), {
+      phase: "progressing",
+    });
+    const feed = feedOf(() => view);
+    fake = fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({ send: view, outcomes: outcomes(), cursor: "1.1" }),
       },
       {
-        path: "/sends/x1/progress",
-        // The first read answers at once (the mount); the tick's is held open.
+        path: "/sends/feed",
+        // The first read answers at once; the next is held open.
         reply: () =>
-          ++reads === 1 ? progress() : new Promise((r) => (held = r)).then(() => progress()),
+          ++reads === 1 ? feed.reply() : new Promise((r) => (held = r)).then(() => feed.reply()),
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
-    const polls = () => fake.calls.filter((c) => c.url.pathname.endsWith("/progress")).length;
-    expect(polls()).toBe(1);
-    await vi.advanceTimersByTimeAsync(3000); // the tick fires; its read is now pending
-    expect(polls()).toBe(2);
+    expect(feedReads()).toBe(1);
+    await vi.advanceTimersByTimeAsync(3000); // the next read is now pending
+    expect(feedReads()).toBe(2);
     unmount(); // what navigating away does: the pending read is cut off with the mount
     release();
     await vi.advanceTimersByTimeAsync(9000);
-    expect(polls()).toBe(2); // no reschedule
+    expect(feedReads()).toBe(2); // no reschedule
     expect(document.querySelector(".watch-card")).toBeNull(); // nothing painted back
   });
 });

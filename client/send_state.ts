@@ -4,14 +4,7 @@
 // again; the layer keeps to it.
 
 import { earlierCursor } from "../shared/cursor";
-import type {
-  LiveSend,
-  Send,
-  SendFeedResponse,
-  SendPhase,
-  SendProgress,
-  SendStatus,
-} from "../shared/sends";
+import type { SendFeedResponse, SendPhase, SendStatus, SendView } from "../shared/sends";
 import { ApiError, api } from "./api";
 
 /**
@@ -22,9 +15,9 @@ import { ApiError, api } from "./api";
  */
 export type SendStage = "scheduled" | "due" | "sending" | "sent" | "complete" | "canceled";
 
-/** A send's stage, from its state and derived phase. */
-export function stageOf(s: { state: SendStatus; phase: SendPhase }): SendStage {
-  switch (s.state) {
+/** A send's stage, from its status and derived phase. */
+export function stageOf(s: { status: SendStatus; phase: SendPhase }): SendStage {
+  switch (s.status) {
     case "scheduled":
       return s.phase === "due" ? "due" : "scheduled";
     case "sending":
@@ -38,7 +31,7 @@ export function stageOf(s: { state: SendStatus; phase: SendPhase }): SendStage {
 
 /** A send that moved since a follower last looked; `from` is null for one it had not seen. */
 export interface StageChange {
-  send: LiveSend;
+  send: SendView;
   from: SendStage | null;
   to: SendStage;
 }
@@ -46,7 +39,7 @@ export interface StageChange {
 /** What a follower of every send gets from a read that found something changed. */
 export interface SendsUpdate {
   /** Every send that changed since the follower's last update, soonest fire first. */
-  sends: LiveSend[];
+  sends: SendView[];
   /** Those whose stage moved, a send the follower had not seen included. */
   changes: StageChange[];
   /** The ids of sends removed since (deleted with their post). */
@@ -67,7 +60,7 @@ export interface SendsFollower {
 /** What a page following one send does with what the layer reads: `update` for each read
  *  that changed it, `removed` once it is deleted, `stale` as for `SendsFollower`. */
 export interface SendFollower {
-  update(send: LiveSend, change: StageChange | null): void;
+  update(send: SendView, change: StageChange | null): void;
   removed(): void;
   stale(): void;
 }
@@ -78,11 +71,10 @@ export interface ListRead {
   sends: readonly { id: string; status: SendStatus; phase: SendPhase }[];
 }
 
-/** Where a page's own read of one send (`GET /sends/:id`) stood. */
+/** Where a page's own read of one send (`GET /sends/:id`, or an action's answer) stood. */
 export interface SendRead {
   cursor: string;
-  send: Pick<Send, "id" | "status">;
-  progress: Pick<SendProgress, "phase">;
+  send: Pick<SendView, "id" | "status" | "phase">;
 }
 
 // A failed read is tried again after this, doubling up to the cap while it keeps failing.
@@ -263,9 +255,7 @@ function leave(f: Follower): void {
  * removed.
  */
 export function followSends(from: ListRead, follower: SendsFollower, signal: AbortSignal): void {
-  const seen = new Map<string, SendStage>(
-    from.sends.map((s) => [s.id, stageOf({ state: s.status, phase: s.phase })]),
-  );
+  const seen = new Map<string, SendStage>(from.sends.map((s) => [s.id, stageOf(s)]));
   join(
     {
       take(res) {
@@ -301,7 +291,7 @@ export function followSends(from: ListRead, follower: SendsFollower, signal: Abo
  */
 export function followSend(from: SendRead, follower: SendFollower, signal: AbortSignal): void {
   const id = from.send.id;
-  let seen: SendStage = stageOf({ state: from.send.status, phase: from.progress.phase });
+  let seen: SendStage = stageOf(from.send);
   join(
     {
       take(res) {

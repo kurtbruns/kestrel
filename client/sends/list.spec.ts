@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendListItem, SendSummary } from "../../shared/sends";
+import type { SendSummary, SendView } from "../../shared/sends";
 import {
   $,
   $$,
@@ -12,18 +12,10 @@ import {
   mount,
   resetShell,
   sendServer,
+  sendView,
 } from "../test/support";
 import { renderSent } from "./list";
-import {
-  activeRowHtml,
-  countdownHtml,
-  countdowns,
-  deliveredCell,
-  needsOperator,
-  rowCounts,
-  rowView,
-  type SendView,
-} from "./progress";
+import { activeRowHtml, countdownHtml, countdowns, deliveredCell, needsOperator } from "./progress";
 
 const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   id: "x1",
@@ -59,22 +51,17 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
 
 describe("deliveredCell", () => {
   it("reports webhook-confirmed delivered and names the failures worst first", () => {
-    const m = deliveredCell(rowCounts(send())).markup;
+    const m = deliveredCell(sendView(send()).counts).markup;
     expect(m).toContain(`<span class="n">147</span>`);
     expect(m).toMatch(/1 complained.*2 bounced/);
-    expect(deliveredCell(rowCounts(send({ c_bounced: 0, c_complained: 0 }))).markup).not.toContain(
-      "delivered-note",
-    );
+    expect(
+      deliveredCell(sendView(send({ c_bounced: 0, c_complained: 0 })).counts).markup,
+    ).not.toContain("delivered-note");
   });
 });
 
-const item = (s: SendSummary, over: Partial<SendListItem> = {}): SendListItem => ({
-  ...s,
-  phase: "progressing",
-  conditions: [],
-  actions: [],
-  ...over,
-});
+const item = (s: SendSummary, over: Partial<SendView> = {}): SendView =>
+  sendView(s, { phase: "progressing", ...over });
 
 describe("the in-progress card", () => {
   const sending = send({
@@ -91,10 +78,10 @@ describe("the in-progress card", () => {
     el.innerHTML = activeRowHtml(s).markup;
     return el;
   };
-  const view = (over: Partial<SendListItem> = {}, eta_ms: number | null = null): SendView => ({
-    ...rowView(item(sending, over)),
-    dispatch: { eta_ms },
-  });
+  const view = (over: Partial<SendView> = {}, eta_ms: number | null = null): SendView => {
+    const v = item(sending, over);
+    return { ...v, dispatch: { ...v.dispatch, eta_ms } };
+  };
 
   it("reads the watch's numbers: accepted over the audience, and the server's time to finish while handing off", () => {
     const el = card(view({}, 90_000));
@@ -105,14 +92,14 @@ describe("the in-progress card", () => {
     expect(el.querySelector(".active-stuck")).toBeNull();
   });
 
-  it("gives no time to finish while the send is paused, and says when it has been in flight too long", () => {
+  it("gives no time to finish when the server gives none (it gives none while paused), and says when it has been in flight too long", () => {
     const el = card(
       view(
         {
           phase: "backing-off",
           conditions: [condition.stuck()],
         },
-        90_000,
+        null,
       ),
     );
     expect($(".active-stat", el).textContent).not.toMatch(/left/);
@@ -131,12 +118,12 @@ describe("the in-progress card", () => {
 
 describe("the scheduled card's countdown", () => {
   const NOW = 1_700_000_000_000;
-  const row = (fire_at: number, over: Partial<SendListItem> = {}) =>
+  const row = (fire_at: number, over: Partial<SendView> = {}) =>
     item(send({ status: "scheduled", fire_at, started_at: null, completed_at: null }), {
       phase: "scheduled",
       ...over,
     });
-  const words = (r: SendListItem) => {
+  const words = (r: SendView) => {
     const el = document.createElement("div");
     el.innerHTML = countdownHtml(r).markup;
     const c = new AbortController();

@@ -260,6 +260,27 @@ export const SEND_LIST_SPEC: ListSpec = {
 const SEND_LIST_COLS =
   "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
+// A view's columns: the list projection and the post's slug, for the archive link.
+const VIEW_COLS = `${SEND_LIST_COLS}, (SELECT p.slug FROM posts p WHERE p.id = sends.post_id) AS post_slug`;
+
+/** A stored send as a view is built from it: the list projection and its post's slug. */
+export type SendViewSource = SendSummary & { post_slug: string | null };
+
+/** One send as a view reads it, with the retry probe its phase needs; null when it is gone. */
+export async function getSendViewRow(
+  db: D1Database,
+  id: string,
+): Promise<(SendViewSource & { has_retries: number }) | null> {
+  return db
+    .prepare(
+      `SELECT ${VIEW_COLS},
+              CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
+         FROM sends WHERE id = ?`,
+    )
+    .bind(id)
+    .first();
+}
+
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
   const binds: unknown[] = [];
@@ -302,7 +323,7 @@ export async function listSends(
 
 /** A `GET /sends` row as read: the list projection plus the retry probe, folded in so a
  *  page of rows is one statement rather than a probe per row. */
-export type SendListRow = SendSummary & { has_retries: 0 | 1 };
+export type SendListRow = SendViewSource & { has_retries: 0 | 1 };
 
 /** One page of the send list, how many sends match, and the change sequence the page
  *  was read at (SPEC §8). */
@@ -330,7 +351,7 @@ export async function listSendsPage(
     db.prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`).bind(...binds),
     db
       .prepare(
-        `SELECT ${SEND_LIST_COLS},
+        `SELECT ${VIEW_COLS},
                 CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
            FROM sends ${clause} ${orderByClause(page, "id")} LIMIT ? OFFSET ?`,
       )
@@ -352,7 +373,7 @@ export async function currentSendSeq(db: D1Database): Promise<number> {
 
 /** A send as the feed returns it: the list projection, and, for a sending send, the retry
  *  probe its phase needs. */
-export type FeedSendRow = SendSummary & { has_retries: number };
+export type FeedSendRow = SendViewSource & { has_retries: number };
 
 /** A send removed after the cursor: its id, and where the removal sits in the sequence. */
 export interface RemovedSend {
@@ -372,7 +393,7 @@ export interface FeedRead {
   more: boolean;
   /** Every send that can have a condition (scheduled, sending, or sent since `recentSince`),
    *  for the pace and the conditions roll-up. */
-  open: SendSummary[];
+  open: SendViewSource[];
   /** When the youngest settling send finished dispatch. */
   settlingSince: number | null;
 }
@@ -439,14 +460,14 @@ export async function sendFeed(
   limit: number,
   recentSince: number,
 ): Promise<FeedRead> {
-  const select = `SELECT ${SEND_LIST_COLS},
+  const select = `SELECT ${VIEW_COLS},
          CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
        FROM sends`;
   const statements = [
     db.prepare(`SELECT ${CURRENT_REV} AS seq`),
     db
       .prepare(
-        `SELECT ${SEND_LIST_COLS} FROM sends
+        `SELECT ${VIEW_COLS} FROM sends
           WHERE status IN ('scheduled', 'sending') OR (status = 'sent' AND completed_at >= ?)`,
       )
       .bind(recentSince),
@@ -484,7 +505,7 @@ export async function sendFeed(
     seq: more ? cutAt : current,
     current,
     more,
-    open: (pace?.results ?? []) as SendSummary[],
+    open: (pace?.results ?? []) as SendViewSource[],
     settlingSince: (settling?.results[0] as { at: number | null } | undefined)?.at ?? null,
   };
 }

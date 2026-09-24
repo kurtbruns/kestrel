@@ -5,8 +5,10 @@ import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
 import { json, notFound, refusal } from "../lib/errors";
+import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { viewWithCursor } from "../send/describe";
 import { freeze } from "../send/schedule";
 
 /** An ISO-8601 timestamp that names its instant: a time part ending in `Z` or `±hh:mm`. */
@@ -92,7 +94,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   rejectStrayTemplateChoice(body);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs, true);
   const send = await freeze(c.env, c.config, post, fireAt);
-  const frozen: ScheduleResponse = { send };
+  const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
 }
 
@@ -108,11 +110,14 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // Idempotent: if a send is already in flight for this post, return it.
   const active = await getActiveSendForPost(c.env.DB, post.id);
   if (active) {
-    const repeat: ScheduleResponse = { send: active, idempotent: true };
+    const repeat: ScheduleResponse = {
+      ...unwrap(await viewWithCursor(c.env, active.id), "send"),
+      idempotent: true,
+    };
     return json(repeat);
   }
 
   const send = await freeze(c.env, c.config, post, Date.now() + c.config.minLeadMs);
-  const frozen: ScheduleResponse = { send };
+  const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
 }

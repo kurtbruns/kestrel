@@ -42,8 +42,7 @@ describe("API reference is generated from the route registration", () => {
     expect(list.description).toContain(
       "retried after 5, 15, and 30 minutes and then every 60 minutes",
     );
-    const progress = defs.find((d) => d.path === "/sends/:id/progress")!;
-    expect(progress.description).toContain("retry_at");
+    expect(list.description).toContain("retry_at");
   });
 
   it("every route under the re-make rule states it in its own description (the reference is what Claude reads)", () => {

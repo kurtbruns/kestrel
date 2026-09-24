@@ -5,8 +5,8 @@ import {
   BOUNCE_SPIKE_RECENT_MS,
   type SendFeedResponse,
   type SendListResponse,
-  type SendProgress,
   type SendSummary,
+  type SendView,
   STUCK_THRESHOLD_MS,
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
@@ -41,8 +41,8 @@ async function setRow(id: string, fields: Record<string, number | string | null>
     .run();
 }
 
-async function progress(id: string): Promise<SendProgress> {
-  return readJson(await SELF.fetch(`${base}/sends/${id}/progress`, { headers: AUTH }));
+async function progress(id: string): Promise<SendView> {
+  return (await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH }))).send;
 }
 
 const post = (path: string, body?: unknown, headers: Record<string, string> = {}) =>
@@ -213,7 +213,7 @@ describe("every route reads a send the same way", () => {
     const prog = await progress(wedged.id);
     const listed = list.sends.find((s) => s.id === wedged.id);
     expect(listed?.conditions).toEqual(prog.conditions);
-    expect(detail.progress.conditions).toEqual(prog.conditions);
+    expect(detail.send.conditions).toEqual(prog.conditions);
     expect(listed?.actions).toEqual([
       { name: "resolve", method: "POST", path: `/sends/${wedged.id}/resolve` },
     ]);

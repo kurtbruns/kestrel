@@ -45,6 +45,11 @@ function future(msFromNow: number): string {
   return new Date(Date.now() + msFromNow).toISOString();
 }
 
+/** A send's frozen email, read at its own route. */
+async function emailOf(id: string): Promise<string> {
+  return (await SELF.fetch(`${base}/sends/${id}/email`, { headers: AUTH })).text();
+}
+
 async function postStatus(id: string): Promise<string> {
   const body = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
   return body.post.status;
@@ -61,7 +66,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(res.status).toBe(201);
     const { send } = await readJson(res);
     expect(send.status).toBe("scheduled");
-    expect(send.rendered_html).toContain("The Subject");
+    expect(await emailOf(send.id)).toContain("The Subject");
     expect(await postStatus(id)).toBe("scheduled");
   });
 
@@ -141,7 +146,7 @@ describe("schedule / send / cancel + soft-lock", () => {
       }),
     );
     const sendId = scheduled.send.id;
-    const frozenHtml = scheduled.send.rendered_html;
+    const frozenHtml = await emailOf(sendId);
 
     const cancel = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
       method: "POST",
@@ -159,9 +164,9 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(put.status).toBe(200);
 
     // the canceled send's frozen bytes did not change
-    const still = await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }));
-    expect(still.send.rendered_html).toBe(frozenHtml);
-    expect(still.send.rendered_html).toContain("original body");
+    const still = await emailOf(sendId);
+    expect(still).toBe(frozenHtml);
+    expect(still).toContain("original body");
 
     // cancel again → nothing to do: 200, unchanged, so a retried cancel is safe
     const twice = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
@@ -288,7 +293,7 @@ describe("schedule / send / cancel + soft-lock", () => {
       }),
     );
     const sendId = scheduled.send.id;
-    const frozenHtml = scheduled.send.rendered_html;
+    const frozenHtml = await emailOf(sendId);
 
     const newFire = future(60 * 60 * 1000);
     const res = await SELF.fetch(`${base}/sends/${sendId}/reschedule`, {
@@ -302,9 +307,9 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(send.status).toBe("scheduled");
     expect(send.fire_at).toBe(Date.parse(newFire));
     // the frozen render and audience are untouched — no re-freeze (I3)
-    expect(send.rendered_html).toBe(frozenHtml);
-    expect(send.rendered_html).toContain("frozen body");
-    expect(send.recipient_count).toBe(scheduled.send.recipient_count);
+    expect(await emailOf(sendId)).toBe(frozenHtml);
+    expect(frozenHtml).toContain("frozen body");
+    expect(send.audience).toEqual(scheduled.send.audience);
     // scheduled_at is the review window's anchor: preserved, not reset — the window is
     // moved, not restarted (I6, SPEC §6 "Moving the fire time")
     expect(send.scheduled_at).toBe(scheduled.send.scheduled_at);
@@ -377,7 +382,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(noauth.status).toBe(401);
   });
 
-  it("snapshots recipient_count at schedule time", async () => {
+  it("snapshots the audience at schedule time, as an estimate until it fires", async () => {
     const now = Date.now();
     for (let i = 0; i < 3; i++) {
       await env.DB.prepare(
@@ -394,7 +399,7 @@ describe("schedule / send / cancel + soft-lock", () => {
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       }),
     );
-    expect(send.recipient_count).toBe(3);
+    expect(send.audience).toEqual({ count: 3, fixed: false, fixed_at: null });
   });
 
   it("send-now schedules at now + buffer and is idempotent", async () => {
@@ -486,13 +491,11 @@ describe("schedule / send / cancel + soft-lock", () => {
     });
     const list = await readJson(await SELF.fetch(`${base}/sends`, { headers: AUTH }));
     expect(list.sends.length).toBeGreaterThanOrEqual(1);
-    // The list row carries the denormalized progress counters (`sends.c_*`) instead of
-    // the per-row deliveryRollup aggregate it once ran (#166) — the client derives the
-    // dispatch/delivery/wedged view straight off them.
-    expect(list.sends[0]).toHaveProperty("c_delivered");
-    expect(list.sends[0]).toHaveProperty("c_bounced");
-    expect(list.sends[0]).toHaveProperty("c_pending");
-    expect(list.sends[0]).not.toHaveProperty("progress");
+    // The list row is the send's view: its counts read off the denormalized counters
+    // (`sends.c_*`), never a per-row aggregate over the delivery record.
+    expect(list.sends[0].counts).toHaveProperty("delivered");
+    expect(list.sends[0].counts).toHaveProperty("pending");
+    expect(list.sends[0]).not.toHaveProperty("c_delivered");
 
     const noauth = await SELF.fetch(`${base}/sends`);
     expect(noauth.status).toBe(401);

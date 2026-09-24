@@ -1,9 +1,7 @@
 // Reads of the deployment reflection (appState.appConfig.deployment; SPEC §9), fetched once
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
-import { archivePostUrl } from "../shared/archive_url";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../shared/sends";
-import type { DeploymentView } from "../shared/settings";
 import { appState } from "./state";
 import { type Html, html } from "./ui/html";
 
@@ -35,19 +33,6 @@ export function buildRefParts(): BuildRefParts | null {
     ? html`<a class="build-link" href="${b.commitUrl}" target="_blank" rel="noopener">${b.sha}</a>`
     : html`${b.sha}`;
   return { version, sha };
-}
-
-/**
- * The canonical archive URL for a slug, from the read-only deployment reflection; the
- * formula is the Worker's own (shared/), only the fallbacks are the editor's: this origin
- * and no base path when the reflection hasn't loaded.
- */
-export function archiveUrlFor(deployment: DeploymentView | null | undefined, slug: string): string {
-  return archivePostUrl(
-    deployment?.archiveOrigin || location.origin,
-    deployment?.archiveBasePath || "",
-    slug,
-  );
 }
 
 /**

@@ -1,17 +1,13 @@
-// What a send's counters say, shared by the list, the record, and the dashboard: a send as
-// it stands, who needs the operator, the Delivered cell, the in-progress card, the
-// scheduled cards' countdowns, and the small number formats.
+// What a send's view says, shared by the list, the record, and the dashboard: a page's sends
+// as they stand, its conditions and actions, who needs the operator, the Delivered cell,
+// the in-progress card, the scheduled cards' countdowns, and the small number formats.
 
 import type {
   ConditionKind,
-  LiveSend,
   SendAction,
   SendCondition,
   SendCounts,
-  SendListItem,
-  SendPhase,
-  SendStatus,
-  SendSummary,
+  SendView,
 } from "../../shared/sends";
 import { every } from "../lifecycle";
 import { $$ } from "../ui/dom";
@@ -43,7 +39,7 @@ export function fmtDuration(ms: number | null | undefined): string {
  * server reads the send due, and whether it is past the missed tolerance. Empty until
  * `countdowns` words it.
  */
-export function countdownHtml(s: SendListItem): Html {
+export function countdownHtml(s: SendView): Html {
   return html`<span class="countdown" data-fire="${s.fire_at}"${s.phase === "due" && html` data-due`}${has(s, "missed") && html` data-missed`}></span>`;
 }
 
@@ -73,23 +69,6 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   return tick;
 }
 
-/**
- * What the in-progress card, the attention lines, and a Delivered cell read of a send: the
- * layer's `LiveSend` as it stands, or a page's `GET /sends` row (`rowView`) until the layer
- * reports that send.
- */
-export interface SendView {
-  id: string;
-  subject: string;
-  state: SendStatus;
-  phase: SendPhase;
-  total: number;
-  counts: SendCounts;
-  conditions: SendCondition[];
-  actions: SendAction[];
-  dispatch: { eta_ms: number | null };
-}
-
 /** Whether the server reports an open condition of `kind` on the send. */
 export const has = (s: { conditions: SendCondition[] }, kind: ConditionKind): boolean =>
   s.conditions.some((c) => c.kind === kind);
@@ -108,42 +87,19 @@ export function conditionOf<K extends ConditionKind>(
 export const can = (s: { actions: SendAction[] }, name: SendAction["name"]): boolean =>
   s.actions.some((a) => a.name === name);
 
-/** A `GET /sends` row as a send view; it carries no time to finish, which the layer's next report of the send brings. */
-export function rowView(s: SendListItem): SendView {
-  return {
-    id: s.id,
-    subject: s.subject,
-    state: s.status,
-    phase: s.phase,
-    total: s.recipient_count,
-    counts: {
-      pending: s.c_pending,
-      in_flight: s.c_in_flight,
-      accepted: s.c_accepted,
-      delivered: s.c_delivered,
-      bounced: s.c_bounced,
-      complained: s.c_complained,
-      skipped: s.c_skipped,
-      unsent: s.c_unsent,
-    },
-    conditions: s.conditions,
-    actions: s.actions,
-    dispatch: { eta_ms: null },
-  };
-}
-
 /**
- * A page's sends as they stand: each row it read, overlaid by the layer's latest report of
+ * A page's sends as they stand: each row it read, replaced by the layer's latest report of
  * that send once there is one, then every reported send it did not read. The layer reports
- * every change after the page's read, so a report is never older than the row it replaces.
+ * every change after the page's read, so a report is never older than the row it replaces;
+ * both are the one `SendView`, so nothing is converted.
  */
 export function sendsNow(
-  rows: readonly SendListItem[],
-  reported: ReadonlyMap<string, LiveSend>,
+  rows: readonly SendView[],
+  reported: ReadonlyMap<string, SendView>,
 ): SendView[] {
   const listed = new Set(rows.map((r) => r.id));
   return [
-    ...rows.map((r): SendView => reported.get(r.id) ?? rowView(r)),
+    ...rows.map((r) => reported.get(r.id) ?? r),
     ...[...reported.values()].filter((s) => !listed.has(s.id)),
   ];
 }
@@ -161,19 +117,8 @@ export function needsOperator(s: SendView): boolean {
 /** The counts a Delivered cell reads. */
 export type DeliveredCounts = Pick<SendCounts, "delivered" | "bounced" | "complained" | "unsent">;
 
-/** A `/sends` list row's counters, as a Delivered cell reads them. */
-export function rowCounts(s: SendSummary): DeliveredCounts {
-  return {
-    delivered: s.c_delivered,
-    bounced: s.c_bounced,
-    complained: s.c_complained,
-    unsent: s.c_unsent,
-  };
-}
-
 /**
- * A send's "Delivered" cell in the send lists, from its counters: a list row's (through
- * `rowCounts`), or a live send's as its receipts settle. It reports TRUE delivered
+ * A send's "Delivered" cell in the send lists, from its counts: a list row's, or a live send's as its receipts settle. It reports TRUE delivered
  * (webhook-confirmed, not provider-accepted), so the Sent list and the dashboard's Sent
  * table agree with the record view's "Delivered" for the same send, and a bounced or
  * complained recipient is never miscounted as delivered. Any bounce, complaint, or unsent
@@ -210,15 +155,16 @@ export function activeRowHtml(s: SendView): Html {
   const c = s.counts;
   const accepted = c.accepted + c.delivered + c.bounced + c.complained;
   const confirmed = c.delivered + c.bounced + c.complained;
-  const pct = s.total > 0 ? (100 * accepted) / s.total : 0;
-  const handingOff = s.phase === "progressing" || s.phase === "retrying";
-  const eta = handingOff && s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
+  const total = s.audience.count;
+  const pct = total > 0 ? (100 * accepted) / total : 0;
+  // The server gives a time to finish only while the send is handing off.
+  const eta = s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
   const stuck = conditionOf(s, "stuck");
   return html`<div class="card spread clickable active-card" data-watch="${s.id}">
       <div class="active-main">
         <a class="card-link active-subj" href="#/sent/${s.id}">${s.subject || html`<em>untitled</em>`}</a>
         <div class="active-bar"><div class="active-fill" style="width:${clampPct(pct)}%"></div></div>
-        <div class="muted active-stat">Sending — ${accepted.toLocaleString()} of ${s.total.toLocaleString()} accepted${
+        <div class="muted active-stat">Sending — ${accepted.toLocaleString()} of ${total.toLocaleString()} accepted${
           confirmed ? ` · ${confirmed.toLocaleString()} confirmed` : ""
         }${eta}</div>
         ${stuck ? html`<div class="active-stuck">${stuck.message}</div>` : null}

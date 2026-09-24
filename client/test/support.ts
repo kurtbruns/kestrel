@@ -5,15 +5,14 @@
 
 import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
 import {
-  type LiveSend,
   refusalAdvice,
   type SendAction,
   type SendCondition,
   type SendFeedResponse,
-  type SendListItem,
   type SendListResponse,
   type SendPhase,
   type SendSummary,
+  type SendView,
 } from "../../shared/sends";
 import { unmount } from "../lifecycle";
 
@@ -160,6 +159,87 @@ export interface SendExtras {
    *  account halt): a wedge, a stuck send, a bounce spike, as `condition` builds them. */
   conditions?: SendCondition[];
   eta_ms?: number | null;
+  /** The published post's page, which the server links once the send is sent. */
+  archive?: string | null;
+}
+
+/**
+ * A stored send row as the API carries it, a `SendView`, for a spec's scripted sends: the
+ * facts carried over, the counts from the counters, the audience from `recipient_count`,
+ * and plain derived fields (a phase from the status, no conditions or actions) that `over`
+ * replaces where a spec needs them.
+ */
+export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendView {
+  const counts = {
+    pending: row.c_pending,
+    in_flight: row.c_in_flight,
+    accepted: row.c_accepted,
+    delivered: row.c_delivered,
+    bounced: row.c_bounced,
+    complained: row.c_complained,
+    skipped: row.c_skipped,
+    unsent: row.c_unsent,
+  };
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    subject: row.subject,
+    status: row.status,
+    rev: row.rev,
+    as_of: Date.now(),
+    fire_at: row.fire_at,
+    scheduled_at: row.scheduled_at,
+    started_at: row.started_at,
+    completed_at: row.completed_at,
+    remade_at: row.remade_at,
+    tested_at: row.tested_at,
+    audience: {
+      count: row.recipient_count,
+      fixed: row.audience_resolved_at !== null,
+      fixed_at: row.audience_resolved_at,
+    },
+    counts,
+    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
+    delivery: {
+      confirmed: row.c_delivered + row.c_bounced + row.c_complained,
+      percent_of_accepted: 0,
+    },
+    provider: {
+      name: "fake",
+      halt:
+        row.status === "sending" && row.halt_reason
+          ? {
+              reason: row.halt_reason,
+              cause: row.halt_cause,
+              error: row.halt_error ?? "",
+              retries: row.halt_retries,
+              since: row.halted_at,
+              retry_at: row.halt_retry_at,
+            }
+          : null,
+    },
+    phase:
+      row.status === "sending"
+        ? "progressing"
+        : row.status === "sent"
+          ? row.c_accepted > 0
+            ? "settling"
+            : "complete"
+          : row.status,
+    conditions: [],
+    actions: [],
+    next_change_at: null,
+    links: {
+      self: `/sends/${row.id}`,
+      email_html: `/sends/${row.id}/email?format=html`,
+      email_text: `/sends/${row.id}/email?format=text`,
+      deliveries: `/sends/${row.id}/deliveries`,
+      deliveries_csv: `/sends/${row.id}/deliveries.csv`,
+      post: `/posts/${row.post_id}`,
+      archive: row.status === "sent" ? `https://birds.example/${row.post_id}` : null,
+    },
+    ...over,
+  };
 }
 
 /** The provider's words as a sentence, as the server ends them. */
@@ -284,54 +364,19 @@ export function sendServer(rows: SendSummary[] = []) {
           : [];
     return { phase, conditions, actions };
   };
-  const item = (s: { row: SendSummary; extras: SendExtras }, now: number): SendListItem => {
+  const view = (s: { row: SendSummary; extras: SendExtras }, now: number): SendView => {
     const { phase, conditions, actions } = derive(s, now);
-    return { ...s.row, phase, conditions, actions };
-  };
-  const live = (s: { row: SendSummary; extras: SendExtras }, now: number): LiveSend => {
-    const { row } = s;
-    const { phase, conditions, actions } = derive(s, now);
-    return {
-      id: row.id,
-      post_id: row.post_id,
-      subject: row.subject,
-      fire_at: row.fire_at,
-      started_at: row.started_at,
-      completed_at: row.completed_at,
-      state: row.status,
+    return sendView(s.row, {
+      as_of: now,
       phase,
-      total: row.recipient_count,
-      counts: {
-        pending: row.c_pending,
-        in_flight: row.c_in_flight,
-        accepted: row.c_accepted,
-        delivered: row.c_delivered,
-        bounced: row.c_bounced,
-        complained: row.c_complained,
-        skipped: row.c_skipped,
-        unsent: row.c_unsent,
-      },
-      dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: s.extras.eta_ms ?? null },
-      delivery: {
-        confirmed: row.c_delivered + row.c_bounced + row.c_complained,
-        percent_of_accepted: 0,
-      },
-      provider: {
-        name: "fake",
-        halt: row.halt_reason
-          ? {
-              reason: row.halt_reason,
-              cause: row.halt_cause,
-              error: row.halt_error ?? "",
-              since: row.halted_at ?? 0,
-              retry_at: row.halt_retry_at,
-            }
-          : null,
-      },
       conditions,
       actions,
       next_change_at: nextChange(s, now),
-    };
+      dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: s.extras.eta_ms ?? null },
+      ...(s.extras.archive === undefined
+        ? {}
+        : { links: { ...sendView(s.row).links, archive: s.extras.archive } }),
+    });
   };
   // When a send can next change with no one acting, by the Worker's rule in outline: now
   // while due short of the tolerance or sending with nothing to wait for; a halted send at
@@ -380,7 +425,7 @@ export function sendServer(rows: SendSummary[] = []) {
         const wait = moving || settling ? 3000 : 60_000;
         return {
           now,
-          sends: reported.map((s) => live(s, now)),
+          sends: reported.map((s) => view(s, now)),
           removed: since
             ? [...removed].filter(([, rev]) => rev > since.seq).map(([id, rev]) => ({ id, rev }))
             : [],
@@ -406,7 +451,7 @@ export function sendServer(rows: SendSummary[] = []) {
         const rows = [...sends.values()]
           .filter((s) => !status || s.row.status === status)
           .sort(byFire(q.get("sort") === "fire" && q.get("dir") === "asc" ? 1 : -1))
-          .map((s) => item(s, now));
+          .map((s) => view(s, now));
         return {
           sends: rows,
           page: { total: rows.length, limit: 50, offset: 0, sort: "fire", dir: "desc" },

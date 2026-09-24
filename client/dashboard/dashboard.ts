@@ -2,12 +2,11 @@
 // setup checklist, and quick actions.
 
 import type { PostListItem, PostListResponse } from "../../shared/posts";
-import type { LiveSend, SendListItem, SendListResponse, SendSummary } from "../../shared/sends";
+import type { SendListResponse, SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
-import { archiveUrlFor } from "../deployment";
 import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -19,8 +18,6 @@ import {
   deliveredCell,
   has,
   needsOperator,
-  rowCounts,
-  type SendView,
   sendsNow,
 } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
@@ -140,7 +137,7 @@ function healthHtml(alerts: HealthAlert[]): Html {
 /** The sends the active-send widget shows: in flight, and not needing the operator (that
  *  one's home is its red line). */
 const activeOf = (live: SendView[]) =>
-  live.filter((s) => s.state === "sending" && !needsOperator(s));
+  live.filter((s) => s.status === "sending" && !needsOperator(s));
 
 /** A subscriber-count tile; each deep-links into the roster on its own filter. */
 interface Tile {
@@ -180,7 +177,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   }
   let sends = first.sends;
   // Every send the layer has reported since the page's read, as it now stands.
-  const reported = new Map<string, LiveSend>();
+  const reported = new Map<string, SendView>();
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
   const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
@@ -218,12 +215,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         t.sub ? html`<span class="tile-sub">${t.sub}</span>` : null
       }</span></a>`,
   )}</div>`;
-
-  const slugById = new Map(posts.map((p) => [p.id, p.slug] as const));
-  const archiveFor = (s: SendSummary) => {
-    const slug = slugById.get(s.post_id);
-    return slug ? archiveUrlFor(deployment, slug) : null;
-  };
 
   const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
   const draftsHtml = drafts.length
@@ -271,7 +262,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${dashScheduledHtml(scheduledOf(sends))}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>
     </div>
-    <section class="dash-section"><h2>Sent</h2><div id="dashSent">${dashSentHtml(sends, archiveFor)}</div></section>
+    <section class="dash-section"><h2>Sent</h2><div id="dashSent">${dashSentHtml(sends)}</div></section>
     <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
@@ -318,7 +309,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       wireDashScheduledCards(root);
       paintAppliedNotice(root, scheduledOf(sends));
       tickCountdowns(); // the fresh cards are empty until the next tick
-      setHtml($("#dashSent", root), dashSentHtml(sends, archiveFor));
+      setHtml($("#dashSent", root), dashSentHtml(sends));
       wireDashSentRows(root);
       paintLive();
     } catch {
@@ -356,20 +347,21 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
 }
 
 /** The scheduled sends, soonest first. */
-const scheduledOf = (sends: SendListItem[]) =>
+const scheduledOf = (sends: SendView[]) =>
   sends.filter((s) => s.status === "scheduled").sort((a, b) => a.fire_at - b.fire_at);
 
 /** The dashboard's Sent table: the latest five sends that have started, each opening its
  *  page (the watch while it sends, the record once sent). */
-function dashSentHtml(sends: SendListItem[], archiveFor: (s: SendSummary) => string | null): Html {
+function dashSentHtml(sends: SendView[]): Html {
   const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
   if (!recent.length) {
     return html`<p class="muted">No sends yet.</p>`;
   }
   return html`<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
     (s) => {
-      const url = s.status === "sent" ? archiveFor(s) : null;
-      return html`<tr class="clickable" data-send="${s.id}"><td><a href="#/sent/${s.id}">${s.subject}</a></td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num delivered">${deliveredCell(rowCounts(s))}</td><td class="act">${
+      // The published post, which the send's view links once it is sent.
+      const url = s.links.archive;
+      return html`<tr class="clickable" data-send="${s.id}"><td><a href="#/sent/${s.id}">${s.subject}</a></td><td>${badge(s.status)}</td><td class="num">${s.audience.count.toLocaleString()}</td><td class="num delivered">${deliveredCell(s.counts)}</td><td class="act">${
         url
           ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
           : null
@@ -390,7 +382,7 @@ function wireDashSentRows(root: HTMLElement): void {
 }
 /** A listed send still sending or settling: its Delivered cell follows the layer's counts,
  *  so the table moves with its receipts without being read again. */
-function patchDelivered(root: HTMLElement, sends: LiveSend[]): void {
+function patchDelivered(root: HTMLElement, sends: SendView[]): void {
   for (const s of sends) {
     const cell = $$<HTMLTableRowElement>("#dashSent tr[data-send]", root)
       .find((tr) => tr.dataset.send === s.id)
@@ -409,7 +401,7 @@ function patchDelivered(root: HTMLElement, sends: LiveSend[]): void {
 // clears them there, and clearing every post hides it here. Re-painted with the
 // queue: notice() keeps one aggregate per slot, replaces it when the set changes (a
 // re-made send fired or was canceled), and clears it when the set is empty.
-function paintAppliedNotice(root: HTMLElement, scheduled: SendSummary[]): void {
+function paintAppliedNotice(root: HTMLElement, scheduled: SendView[]): void {
   const slot = $("#dashNotices", root);
   const remade = scheduled.flatMap((s) => (s.remade_at ? [{ id: s.id, at: s.remade_at }] : []));
   const at = remade.length ? Math.max(...remade.map((r) => r.at)) : 0;
@@ -422,13 +414,13 @@ function paintAppliedNotice(root: HTMLElement, scheduled: SendSummary[]): void {
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
  *  the review window needs (SPEC §8). */
-function dashScheduledHtml(scheduled: SendListItem[]): Html {
+function dashScheduledHtml(scheduled: SendView[]): Html {
   if (!scheduled.length) {
     return html`<p class="muted">Nothing scheduled.</p>`;
   }
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div></div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {
