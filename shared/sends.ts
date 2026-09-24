@@ -102,6 +102,13 @@ export interface Send {
   c_complained: number;
   c_skipped: number;
   c_unsent: number;
+  /**
+   * Where the send's last visible change sits in one app-wide sequence (SPEC §8): any
+   * change a reader could see (a cancel, a move, a re-make, a counter move, a receipt)
+   * gives the send a higher `rev` than every change before it, across all sends. A lease
+   * renewal alone does not move it.
+   */
+  rev: number;
 }
 
 /** The list view's send: everything but the large frozen bodies. */
@@ -146,9 +153,17 @@ export function formatLead(ms: number): string {
   return `${seconds} seconds`;
 }
 
-/** A `GET /sends` row: the send, plus the flags the server derives for it. */
+/**
+ * A `GET /sends` row: the send, plus what the server derives for it, by the same rule and
+ * at the same moment as its `/progress`, so a list row and the watch never read a send
+ * differently.
+ */
 export type SendListItem = SendSummary & {
-  /** In flight too long: the same flag as the send's progress `attention.stuck`. */
+  /** The live reporting phase, as `/progress` reports it. */
+  phase: SendPhase;
+  /** The loud conditions, as `/progress` reports them. */
+  attention: SendAttention;
+  /** In flight too long: the same flag as `attention.stuck`. */
   stuck: boolean;
 };
 
@@ -156,6 +171,12 @@ export type SendListItem = SendSummary & {
 export interface SendListResponse {
   sends: SendListItem[];
   page: PageMeta;
+  /**
+   * Where this read stands among the changes to sends: the change sequence at the read and
+   * the server's time of it. Opaque to a client, which only hands it back to ask what
+   * changed since.
+   */
+  cursor: string;
 }
 
 /**
@@ -201,13 +222,16 @@ export interface SendProgress {
   /** The provider, and its standing refusal of this send while one lasts. */
   provider: { name: string; halt: SendHalt | null };
   /** The loud conditions (SPEC §12) the watch surfaces; Resolve appears when `wedged`, and `refused` is the provider refusing the account, carrying its words in `provider.halt`. */
-  attention: {
-    wedged: boolean;
-    wedged_count: number;
-    stuck: boolean;
-    missed: boolean;
-    refused: boolean;
-  };
+  attention: SendAttention;
+}
+
+/** The loud conditions on a send (SPEC §12), as `/progress` and the send list report them. */
+export interface SendAttention {
+  wedged: boolean;
+  wedged_count: number;
+  stuck: boolean;
+  missed: boolean;
+  refused: boolean;
 }
 
 /** The sent record's per-recipient delivery breakdown (SPEC §8). */

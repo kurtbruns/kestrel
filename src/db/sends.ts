@@ -1,5 +1,7 @@
 /** Send queries. A `sends` row is created at schedule time and holds the frozen
- *  render (I3). State transitions use compare-and-swap (WHERE status = ...). */
+ *  render (I3). State transitions use compare-and-swap (WHERE status = ...). A write to
+ *  `sends` also stamps the change sequence by trigger (migration 0002), which D1 counts
+ *  in `meta.changes`: read a `sends` write's count as zero or not, never as a number. */
 
 import { normalizeEmail } from "../../shared/email";
 import type {
@@ -15,6 +17,7 @@ import type {
 } from "../../shared/sends";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { type ListParams, type ListSpec, orderByClause } from "../lib/list";
+import { unwrap } from "../lib/unwrap";
 
 // The row shapes live in shared/ so the editor reads the same definitions; the names
 // here are the Worker's own.
@@ -125,18 +128,22 @@ export async function recomputeSendCounters(db: D1Database, sendId: string): Pro
   await recomputeSendCountersStmt(db, sendId).run();
 }
 
-/** Whether the send still has a recipient that has been retried (attempts > 0) and is
- *  not yet terminal — the signal that separates the `retrying` phase from a clean
- *  `progressing` one. An indexed EXISTS probe (send_id, status), so it stays cheap
- *  even on a large audience and keeps `/progress` off a full aggregate. */
+/** A recipient of the send named by `sendIdExpr` that has been retried (attempts > 0)
+ *  and is not yet terminal: the signal that separates the `retrying` phase from a clean
+ *  `progressing` one. An EXISTS over the (send_id, status) index, so it stays cheap even
+ *  on a large audience. `sendIdExpr` is fixed SQL (a `?` or a column), never user input. */
+function activeRetriesSql(sendIdExpr: string): string {
+  return `EXISTS (SELECT 1 FROM deliveries d WHERE d.send_id = ${sendIdExpr} AND d.status IN ('pending', 'dispatched') AND d.attempts > 0)`;
+}
+
+/** Whether the send still has a retried recipient in flight (`activeRetriesSql`): one
+ *  probe, which keeps `/progress` off a full aggregate. */
 export async function hasActiveRetries(db: D1Database, sendId: string): Promise<boolean> {
   const row = await db
-    .prepare(
-      "SELECT 1 AS x FROM deliveries WHERE send_id = ? AND status IN ('pending', 'dispatched') AND attempts > 0 LIMIT 1",
-    )
+    .prepare(`SELECT ${activeRetriesSql("?")} AS x`)
     .bind(sendId)
     .first<{ x: number }>();
-  return row != null;
+  return row?.x === 1;
 }
 
 export type { SendSummary };
@@ -215,7 +222,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -257,14 +264,46 @@ export async function listSends(
   return results;
 }
 
-/** How many sends match `filter` — the `page.total` for the send list. */
-export async function countSends(db: D1Database, filter: SendFilter = {}): Promise<number> {
+/** A `GET /sends` row as read: the list projection plus the retry probe, folded in so a
+ *  page of rows is one statement rather than a probe per row. */
+export type SendListRow = SendSummary & { has_retries: 0 | 1 };
+
+/** One page of the send list, how many sends match, and the change sequence the page
+ *  was read at (SPEC §8). */
+export interface SendListPage {
+  rows: SendListRow[];
+  total: number;
+  seq: number;
+}
+
+/**
+ * One page of sends for `GET /sends`, read in one batch so the page, its total, and the
+ * change sequence are one snapshot: a change either shows in the rows or lands after
+ * `seq`, never neither. Only a `sending` send's retry probe can decide its phase, so the
+ * probe runs for those rows alone.
+ */
+export async function listSendsPage(
+  db: D1Database,
+  filter: SendFilter,
+  page: ListParams,
+): Promise<SendListPage> {
   const { clause, binds } = sendWhere(filter);
-  const row = await db
-    .prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`)
-    .bind(...binds)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+  const [seq, count, list] = await db.batch([
+    db.prepare("SELECT value AS seq FROM send_rev_seq WHERE id = 1"),
+    db.prepare(`SELECT COUNT(*) AS n FROM sends ${clause}`).bind(...binds),
+    db
+      .prepare(
+        `SELECT ${SEND_LIST_COLS},
+                (status = 'sending' AND ${activeRetriesSql("sends.id")}) AS has_retries
+           FROM sends ${clause} ${orderByClause(page, "id")} LIMIT ? OFFSET ?`,
+      )
+      .bind(...binds, page.limit, page.offset),
+  ]);
+  return {
+    rows: (list?.results ?? []) as SendListRow[],
+    total: (count?.results[0] as { n: number } | undefined)?.n ?? 0,
+    seq: unwrap((seq?.results[0] as { seq: number } | undefined)?.seq, "send_rev_seq value"),
+  };
 }
 
 /** Per-recipient state rollup for a send. */

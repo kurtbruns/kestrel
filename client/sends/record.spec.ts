@@ -42,6 +42,7 @@ const send = (over: Partial<Send> = {}): Send => ({
   c_complained: 0,
   c_skipped: 0,
   c_unsent: 1,
+  rev: 1,
   ...over,
 });
 const outcomes = (over: Partial<DeliveryOutcomes> = {}): DeliveryOutcomes => ({

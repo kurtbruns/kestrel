@@ -52,6 +52,9 @@ const send = (over: Partial<SendListItem> = {}): SendListItem => ({
   c_complained: 0,
   c_skipped: 0,
   c_unsent: 0,
+  rev: 1,
+  phase: "complete",
+  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
   stuck: false,
   ...over,
 });

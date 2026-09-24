@@ -251,6 +251,8 @@ Topics and segmentation, letting people subscribe to some kinds of post and not 
 
 A small status surface, readable in the editor and through the API, answers the questions the publisher will actually have. Each answer is made of the record itself, never a separate summary that could drift from it.
 
+A send reads the same wherever it appears. Its phase (§12) and anything wrong with it are worked out once, by the app, from the record, and every place that lists or shows the send reports that one answer, so the list of sends and a send's own watch never disagree about it. And every change to a send that a reader could see, whether the editor, Claude, or the app itself made it, takes its place in one order across all sends. A client can therefore tell which sends changed since it last looked, including a change the other client made to a send it was not watching, rather than trusting a snapshot that only the changes it expected would update. Renewing the hold the send loop keeps on a running send is not such a change, since it alters nothing a reader sees.
+
 ### What's scheduled, and when does it fire?
 
 The pending sends, each with its fire time and its frozen render. Because acting on the review window is what makes it real (a window no one can see into or act on isn't one, I6), each carries the actions that manage a pending send without editing its content: a **one-call cancel** and a **one-call reschedule** of the fire time (§6, which moves it without re-freezing). A send that a template or identity change has re-made (§6) says so on the post and on the status surface, until the publisher clears it or it fires, so they know an earlier test no longer stands.

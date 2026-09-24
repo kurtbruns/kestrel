@@ -14,7 +14,8 @@ import { listPage, parseListParams } from "../lib/list";
 import { archiveUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { buildSendProgress, isStuck } from "../send/progress";
+import { encodeSendCursor } from "../send/cursor";
+import { buildSendProgress } from "../send/progress";
 import { resolveStuckSend } from "../send/resolve";
 import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/schedule";
 import { parseFutureFireAt } from "./schedule";
@@ -30,22 +31,22 @@ export async function list(c: RequestContext): Promise<Response> {
   const failures = c.url.searchParams.get("failures") === "only" ? "only" : undefined;
   const filter = { status, search, failures } satisfies sends.SendFilter;
   const page = parseListParams(c.url, sends.SEND_LIST_SPEC);
-  const [total, rows] = await Promise.all([
-    sends.countSends(c.env.DB, filter),
-    sends.listSends(c.env.DB, filter, page),
-  ]);
-  // Every row already carries the denormalized c_* counters (SEND_LIST_COLS), so the
-  // list surfaces dispatch/delivery progress and the wedged signal straight off the row.
-  // The per-row `deliveryRollup` aggregate this once ran — an O(rows × audience) scan on
-  // every Sent-page load and every ~3s active-send poll — is exactly what the counters
-  // (`sends.c_*`) make redundant, so it is gone (#166). `deliveries` stays the source
-  // of truth; the counters are its rebuildable cache (SPEC §8).
-  // `stuck` is derived here, by the rule the progress poll uses, so the dashboard reads
-  // the server's flag instead of keeping a threshold of its own.
+  // One moment for the whole page: the rows' derived fields and the cursor's read time.
+  // Taken before the read, so anything the clock changes after it is still ahead of the
+  // cursor.
   const now = Date.now();
+  const { rows, total, seq } = await sends.listSendsPage(c.env.DB, filter, page);
+  // Every row carries the denormalized c_* counters and its retry probe, so each row's
+  // phase and attention come from `buildSendProgress` exactly as `/progress` builds them,
+  // with no aggregate over deliveries and no read per row (SPEC §8). The server derives;
+  // no client keeps a threshold or a phase rule of its own.
   const body: SendListResponse = {
-    sends: rows.map((s) => ({ ...s, stuck: isStuck(s, now) })),
+    sends: rows.map(({ has_retries, ...s }) => {
+      const { phase, attention } = buildSendProgress(s, c.config.provider, has_retries === 1, now);
+      return { ...s, phase, attention, stuck: attention.stuck };
+    }),
     page: listPage(total, page),
+    cursor: encodeSendCursor({ seq, at: now }),
   };
   return json(body);
 }

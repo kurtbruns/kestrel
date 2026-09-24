@@ -32,6 +32,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   c_complained: 1,
   c_skipped: 0,
   c_unsent: 0,
+  rev: 1,
   ...over,
 });
 
