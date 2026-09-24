@@ -29,7 +29,7 @@ describe("router", () => {
         path: "/subscribers",
         reply: () => ({
           subscribers: [],
-          counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 },
+          counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0, audience: 0 },
           page: { total: 0, limit: 50, offset: 0 },
         }),
       },

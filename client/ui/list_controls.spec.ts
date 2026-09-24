@@ -69,10 +69,14 @@ describe("wireToolbar", () => {
     vi.advanceTimersByTime(260);
     expect(reload).toHaveBeenCalledTimes(1);
     expect(state).toMatchObject({ search: "hawks", offset: 0 });
-    const sup = root.querySelector<HTMLInputElement>(".lt-suppressed")!;
-    sup.checked = true;
+    const sup = root.querySelector<HTMLSelectElement>(".lt-suppressed")!;
+    expect(sup.value).toBe("");
+    sup.value = "only";
     sup.onchange?.(new Event("change"));
     expect(state.suppressed).toBe("only");
+    sup.value = "hide";
+    sup.onchange?.(new Event("change"));
+    expect(state.suppressed).toBe("hide");
     vi.useRealTimers();
   });
 

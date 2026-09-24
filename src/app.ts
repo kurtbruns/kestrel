@@ -878,7 +878,7 @@ export function createRouter({
       summary:
         "List subscribers with by-status counts. Filter, sort, and paginate via query params; returns a `page` envelope.",
       description:
-        "Consent status and suppression are separate axes: `status` filters the roster; `suppressed` is an overlay facet. Pass `email` instead to look up one subscriber.",
+        "Consent status and suppression are separate axes: `status` filters the roster; `suppressed` is an overlay facet. The `counts` cover the whole list whatever the filter: `pending`, `confirmed`, and `unsubscribed` by consent status, `suppressed` for the overlay (a confirmed address can also be suppressed), and `audience` for who a send would reach now, confirmed and not suppressed, which is the roster at `status=confirmed&suppressed=hide`. Pass `email` instead to look up one subscriber.",
       query: [
         {
           name: "status",

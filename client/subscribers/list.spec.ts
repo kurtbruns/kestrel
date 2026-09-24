@@ -4,7 +4,7 @@ import { addSubscriberModal } from "./dialogs";
 import { renderSubscribers } from "./list";
 
 const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
-const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1 };
+const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1, audience: 1 };
 const subs = [
   {
     id: "s1",
@@ -73,8 +73,25 @@ describe("subscribers view", () => {
     await mount((r, s) => renderSubscribers("suppressed", r, s));
     await settle();
     expect(fake.calls[0]?.url.searchParams.get("suppressed")).toBe("only");
-    expect($<HTMLInputElement>(".lt-suppressed").checked).toBe(true);
+    expect($<HTMLSelectElement>(".lt-suppressed").value).toBe("only");
     expect($("#subList").textContent).toMatch(/No subscribers match/);
+  });
+
+  it("opens the Confirmed tile's link as who a send reaches: confirmed, suppressed hidden", async () => {
+    fake = fakeApi([
+      {
+        path: "/subscribers",
+        reply: () => ({ counts, subscribers: [], page: { ...page, total: 0 } }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers("audience", r, s));
+    await settle();
+    const q = fake.calls[0]?.url.searchParams;
+    expect(q?.get("status")).toBe("confirmed");
+    expect(q?.get("suppressed")).toBe("hide");
+    expect($<HTMLSelectElement>(".lt-status").value).toBe("confirmed");
+    expect($<HTMLSelectElement>(".lt-suppressed").value).toBe("hide");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("adds a subscriber through the double opt-in and says what happened", async () => {
