@@ -40,6 +40,8 @@ export interface Secrets {
   AWS_ACCESS_KEY_ID?: string;
   AWS_SECRET_ACCESS_KEY?: string;
   SES_CONFIGURATION_SET?: string;
+  /** The SES account's maximum send rate, in messages a second (optional). */
+  SES_MAX_SEND_RATE?: string;
   SNS_TOPIC_ARN?: string;
   /** Resend. */
   RESEND_API_KEY?: string;
@@ -121,6 +123,12 @@ export interface Config {
   fromAddress: string;
   /** AWS region for SES. */
   awsRegion: string;
+  /**
+   * The SES account's maximum send rate, in messages a second, which the send loop paces
+   * to: going over it is a throttle, which halts the send for at least a minute. Defaults
+   * to 14, a new production account's rate; the SES sandbox allows 1.
+   */
+  sesMaxSendRate: number;
   /** Cloudflare Access (optional; enables JWT validation when both are set). */
   accessTeamDomain?: string;
   accessAud?: string;
@@ -154,8 +162,9 @@ export interface Config {
   /**
    * How many subrequests (D1 statements plus outbound requests) one invocation of the
    * send path may make: the send loop stops starting batches before it would pass this,
-   * and the next sweep tick continues. Defaults to the Workers Free plan's 50, so a new
-   * deployment is correct on any plan; Workers Paid allows 1,000 D1 queries.
+   * and the next sweep tick continues. D1 statements are held to Cloudflare's own cap of
+   * 1,000 besides (`budget.ts`). Defaults to the Workers Free plan's 50, so a new
+   * deployment is correct on any plan; Workers Paid allows 10,000.
    */
   subrequestBudget: number;
   /** The channel notifications to the publisher go through (see `NotifyChannel`). */
@@ -165,6 +174,8 @@ export interface Config {
   notifyFrom: string;
 }
 
+/** A new SES production account's maximum send rate, in messages a second. */
+export const DEFAULT_SES_MAX_SEND_RATE = 14;
 /** The Workers Free plan's per-invocation subrequest limit, the default budget. */
 export const DEFAULT_SUBREQUEST_BUDGET = 50;
 /** The least a sweep tick needs to find a send and deliver one batch of it, beside what it
@@ -240,6 +251,8 @@ export function getConfig(env: AppEnv): Config {
     sendingDomain: env.SENDING_DOMAIN,
     fromAddress: env.FROM_ADDRESS,
     awsRegion: env.AWS_REGION,
+    sesMaxSendRate:
+      readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE) ?? DEFAULT_SES_MAX_SEND_RATE,
     accessTeamDomain,
     accessAud: orUndefined(env.ACCESS_AUD),
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),

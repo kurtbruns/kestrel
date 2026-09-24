@@ -69,7 +69,11 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
   const now = Date.now();
 
   await notifications.recordNotifications(db, now);
-  const room = Math.min(MAX_PER_TICK, Math.floor((budget.left - (OPEN_COST - 1)) / EACH_COST));
+  const room = Math.min(
+    MAX_PER_TICK,
+    Math.floor((budget.left - (OPEN_COST - 1)) / EACH_COST),
+    budget.queriesLeft - (OPEN_COST - 1),
+  );
   if (room < 1) {
     return;
   }
@@ -91,7 +95,7 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       continue;
     }
     const key = `${n.send_id}-${n.kind}-${n.episode}`;
-    budget.spend(); // the channel's request, which counts whether or not it succeeds
+    budget.request(); // the channel's request, which counts whether or not it succeeds
     try {
       await notifier.send(to, composeNotification(n, config), key);
       await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());

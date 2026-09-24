@@ -19,7 +19,10 @@
  * Only a recipient's own retryable failure counts toward `MAX_DELIVERY_ATTEMPTS`.
  *
  * A run spends against the invocation's subrequest budget (`budget.ts`) and stops
- * starting batches while it can still close cleanly; the next tick continues.
+ * starting batches while it can still close cleanly; the next tick continues. A provider
+ * that takes one recipient a request has its requests grouped (`GROUP_RECIPIENTS`) so
+ * they share the D1 writes. Requests keep the provider's rate (`maxRequestRate`), and a
+ * run stops starting them near the end of the tick (`pace.ts`).
  */
 
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
@@ -29,13 +32,9 @@ import { getConfig } from "../env";
 import { HALT_BACKOFF_MS, LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/time";
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
-import type {
-  BatchHalt,
-  HaltReason,
-  PerRecipientResult,
-  SendBatchResult,
-} from "../providers/types";
+import type { BatchHalt, HaltReason } from "../providers/types";
 import { Budget, metered } from "./budget";
+import { SendWindow } from "./pace";
 
 export interface SendLoopResult {
   sendId: string;
@@ -52,20 +51,37 @@ export interface SendLoopResult {
 /** The most recipients in one batch, whatever the provider allows. */
 const MAX_CHUNK = 500;
 
-// What a run can cost, in subrequests (D1 statements plus provider requests), so it
+/**
+ * The fewest recipients one hand-off write covers. A provider that takes one recipient a
+ * request (SES) would otherwise pay a whole batch's D1 writes for each recipient, so its
+ * requests go in groups this size that share the writes: about half a D1 statement a
+ * recipient instead of five. It is also the most recipients a run cut off mid-group can
+ * leave waiting for Resolve on such a provider, which has no idempotency key to re-send
+ * under (SPEC §12). A provider that batches this many or more sends one batch a group.
+ */
+const GROUP_RECIPIENTS = 10;
+// What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
 /** Opening: read the send, take the lease, resolve the audience (2), list the
  *  unanswered batches and the fresh rows. */
 const OPEN_COST = 6;
-/** One batch: read its rows, close any no longer to be mailed (2), renew the lease,
- *  hand off (2), the provider request, record the outcomes (2). A halted batch records
- *  its hold in 3 instead, but then only releases the lease, which fits the close. */
-const CHUNK_COST = 9;
+/** One group, besides a request for each of its batches: read its rows, close any no
+ *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2). A
+ *  group with a halted batch also records the hold (3), but then the run only releases
+ *  the lease, which leaves that much of the close unspent. */
+const GROUP_COST = 8;
+/** What a group usually costs, besides its requests: the read, the hand-off, and the
+ *  record. Sizes the read of fresh rows, which may read more than a run gets to. */
+const GROUP_TYPICAL_COST = 5;
+/** Re-sending one unanswered batch, besides its request: renew the lease, hand it off
+ *  again (2), read its rows, record the outcomes (2). */
+const REDO_COST = 6;
 /** Closing: count what is left, then complete the send (3) or release the lease. */
 const CLOSE_COST = 4;
-/** The least a run needs to be worth starting. */
-export const MIN_RUN_COST = OPEN_COST + CHUNK_COST + CLOSE_COST;
+/** The least a run needs to be worth starting: its opening, one group of one request,
+ *  and its close. */
+export const MIN_RUN_COST = OPEN_COST + GROUP_COST + 1 + CLOSE_COST;
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -88,6 +104,7 @@ export async function runSend(
   env: AppEnv,
   sendId: string,
   budget: Budget = new Budget(getConfig(env).subrequestBudget),
+  window?: SendWindow,
 ): Promise<SendLoopResult> {
   const empty: SendLoopResult = {
     sendId,
@@ -134,7 +151,6 @@ export async function runSend(
     renewAt = Date.now() + LEASE_TTL_MS / 2;
     return sends.renewLease(db, sendId, lease, Date.now() + LEASE_TTL_MS);
   };
-  const canStartBatch = () => budget.affords(CHUNK_COST + CLOSE_COST);
 
   // The first run fixes the audience (SPEC §6); every later run works the rows that
   // exist, so a reader who confirms mid-send gets the next post, not this one. The guard
@@ -146,128 +162,170 @@ export async function runSend(
   const result: SendLoopResult = { ...empty, leased: true };
   const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
 
+  /** One batch of a group: its rows, the key it goes out under, and whether this is its
+   *  first request under that key. */
+  interface Batch {
+    key: string;
+    members: DeliveryWork[];
+    firstAttempt: boolean;
+  }
+
+  // The tick's clock when the sweep runs this, so every send it runs keeps one pace and
+  // one deadline; a run of its own gets its own.
+  const clock = window ?? new SendWindow(provider.maxRequestRate);
+
   /**
-   * Put a halted batch back in the queue, no attempt spent, and record the halt. It keeps
-   * its key only while its fate is unknown: this attempt may have been accepted, or an
-   * earlier one may have (a batch is only ever re-sent under its key because an earlier
-   * attempt left its fate unknown). A batch refused on its first attempt provably reached
-   * no one, so it goes back as fresh rows, which re-checks each recipient's consent when
-   * it is handed off again (I2) and leaves nothing under a key for another provider to
-   * mistake for an ambiguous delivery.
+   * Send a group of handed-off batches, each under its own key, and record every answer
+   * in one write. False when any batch got no per-recipient answer, which ends the run.
+   *
+   * A halted batch goes back to the queue, no attempt spent, and the send records the
+   * halt. It keeps its key only while its fate is unknown: this attempt may have been
+   * accepted, or an earlier one may have (a batch is only ever re-sent under its key
+   * because an earlier attempt left its fate unknown). A batch refused on its first
+   * attempt provably reached no one, so it goes back as fresh rows, which re-checks each
+   * recipient's consent when it is handed off again (I2) and leaves nothing under a key
+   * for another provider to mistake for an ambiguous delivery. A request with no answer
+   * at all goes back the same way on an idempotent provider, under its key, to be re-sent
+   * as-is next tick; on any other it stays `dispatched`, the ambiguous case that waits for
+   * Resolve (§12).
+   *
+   * The group's requests go out together, each started no sooner than the provider's
+   * rate allows, so a group costs about one request's wait rather than one per batch.
    */
-  const hold = async (
-    key: string,
-    halt: BatchHalt,
-    members: number,
-    firstAttempt: boolean,
-  ): Promise<void> => {
-    const keepKey = provider.idempotentRetry && (halt.mayHaveSent || !firstAttempt);
+  const deliver = async (batches: Batch[]): Promise<boolean> => {
+    const outcomes: DeliveryOutcome[] = [];
+    const held: sends.HeldBatch[] = [];
+    let halt: BatchHalt | null = null;
+    let requeued = 0;
+    let answered = false;
+    let complete = true;
+
+    const calls = batches.map((b) => {
+      const byAddress = new Map<string, string>();
+      const recipients = [];
+      for (const m of b.members) {
+        if (m.unsub_token) {
+          byAddress.set(m.email, m.id);
+          recipients.push({
+            email: m.email,
+            unsubscribeUrl: `${config.appOrigin}/unsubscribe?token=${m.unsub_token}`,
+          });
+        } else {
+          // Its subscriber record is gone, so there is no unsubscribe link to address the
+          // message with; never send without one (I2).
+          outcomes.push({ id: m.id, status: "unsent", error: "no subscriber record" });
+          result.unsent += 1;
+        }
+      }
+      return { batch: b, byAddress, recipients };
+    });
+
+    const sent = calls.filter((c) => c.recipients.length > 0);
+    const send = async (call: (typeof sent)[number]) => {
+      await clock.pace();
+      budget.request(); // the request counts whether or not it answers
+      try {
+        const answer = await provider.sendBatch(rendered, call.recipients, {
+          idempotencyKeyPrefix: sendId,
+          idempotencyKey: call.batch.key,
+        });
+        return { call, answer, lost: undefined };
+      } catch (err) {
+        return { call, answer: null, lost: errorText(err) };
+      }
+    };
+    // The first request goes alone: a refused account or a provider that is down refuses
+    // the whole group, and each retry of a long halt would otherwise pay for every one.
+    // The rest go together once it is answered.
+    const [first, ...rest] = sent;
+    const answers = first ? [await send(first)] : [];
+    const probe = answers[0]?.answer;
+    if (probe?.kind === "answered") {
+      answers.push(...(await Promise.all(rest.map(send))));
+    } else {
+      // Handed off but never sent: back to the queue with the halted one, no key kept
+      // (none of them reached the provider on this attempt).
+      for (const call of rest) {
+        held.push({
+          key: call.batch.key,
+          keepKey: provider.idempotentRetry && !call.batch.firstAttempt,
+        });
+        requeued += call.batch.members.length;
+      }
+    }
+
+    for (const { call, answer, lost } of answers) {
+      const { batch, byAddress } = call;
+      let batchHalt: BatchHalt | null = null;
+      if (answer === null) {
+        complete = false;
+        if (provider.idempotentRetry) {
+          batchHalt = {
+            reason: "unavailable",
+            cause: "outage",
+            error: lost ?? "no answer",
+            mayHaveSent: true,
+          };
+        }
+      } else if (answer.kind === "halted") {
+        complete = false;
+        batchHalt = answer.halt;
+      } else {
+        answered = true;
+        for (const r of answer.results) {
+          const id = byAddress.get(r.email);
+          if (!id) {
+            continue;
+          }
+          if (r.accepted) {
+            outcomes.push({ id, status: "accepted", providerId: r.providerId });
+            result.accepted += 1;
+          } else if (r.retryable) {
+            outcomes.push({
+              id,
+              status: "pending",
+              error: r.error,
+              keepKey: provider.idempotentRetry,
+            });
+            result.requeued += 1;
+          } else {
+            outcomes.push({ id, status: "unsent", error: r.error });
+            result.unsent += 1;
+          }
+        }
+      }
+      if (batchHalt) {
+        held.push({
+          key: batch.key,
+          keepKey: provider.idempotentRetry && (batchHalt.mayHaveSent || !batch.firstAttempt),
+        });
+        requeued += batch.members.length;
+        // An account refusal outranks a provider that is only unavailable: it is the one
+        // the publisher has to act on.
+        if (!halt || (halt.reason === "unavailable" && batchHalt.reason === "account")) {
+          halt = batchHalt;
+        }
+      }
+    }
+
+    await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), answered);
     await sends.holdBatch(
       db,
       sendId,
       lease,
-      key,
-      keepKey,
+      held,
       halt,
-      HALT_BACKOFF_MS[halt.reason],
+      HALT_BACKOFF_MS[halt?.reason ?? "unavailable"],
       Date.now(),
     );
-    result.requeued += members;
-    result.halt = halt.reason;
-    if (halt.reason === "account") {
-      console.error("PROVIDER_REFUSED", { sendId, provider: provider.name, error: halt.error });
-    }
-  };
-
-  /**
-   * Send one handed-off batch under its key and record the answer in one write. False
-   * when the batch got no per-recipient answer, which ends the run. A halt goes back to
-   * the queue (`hold`). So does a request with no answer at all on an idempotent
-   * provider, under its key, to be re-sent as-is next tick; on any other it stays
-   * `dispatched`, the ambiguous case that waits for Resolve (§12). `firstAttempt` is
-   * whether this is the batch's first request under its key.
-   */
-  const deliver = async (
-    key: string,
-    members: DeliveryWork[],
-    firstAttempt: boolean,
-  ): Promise<boolean> => {
-    const outcomes: DeliveryOutcome[] = [];
-    const byAddress = new Map<string, string>();
-    const recipients = [];
-    for (const m of members) {
-      if (m.unsub_token) {
-        byAddress.set(m.email, m.id);
-        recipients.push({
-          email: m.email,
-          unsubscribeUrl: `${config.appOrigin}/unsubscribe?token=${m.unsub_token}`,
-        });
-      } else {
-        // Its subscriber record is gone, so there is no unsubscribe link to address the
-        // message with; never send without one (I2).
-        outcomes.push({ id: m.id, status: "unsent", error: "no subscriber record" });
+    result.requeued += requeued;
+    if (halt) {
+      result.halt = halt.reason;
+      if (halt.reason === "account") {
+        console.error("PROVIDER_REFUSED", { sendId, provider: provider.name, error: halt.error });
       }
     }
-
-    let results: PerRecipientResult[] = [];
-    if (recipients.length > 0) {
-      budget.spend(); // the provider request, which counts whether or not it answers
-      let answer: SendBatchResult;
-      try {
-        answer = await provider.sendBatch(rendered, recipients, {
-          idempotencyKeyPrefix: sendId,
-          idempotencyKey: key,
-        });
-      } catch (err) {
-        if (provider.idempotentRetry) {
-          const halt: BatchHalt = {
-            reason: "unavailable",
-            cause: "outage",
-            error: errorText(err),
-            mayHaveSent: true,
-          };
-          await hold(key, halt, members.length, firstAttempt);
-        }
-        return false;
-      }
-      if (answer.kind === "halted") {
-        await hold(key, answer.halt, members.length, firstAttempt);
-        return false;
-      }
-      results = answer.results;
-    }
-
-    for (const r of results) {
-      const id = byAddress.get(r.email);
-      if (!id) {
-        continue;
-      }
-      if (r.accepted) {
-        outcomes.push({ id, status: "accepted", providerId: r.providerId });
-        result.accepted += 1;
-      } else if (r.retryable) {
-        outcomes.push({
-          id,
-          status: "pending",
-          error: r.error,
-          keepKey: provider.idempotentRetry,
-        });
-        result.requeued += 1;
-      } else {
-        outcomes.push({ id, status: "unsent", error: r.error });
-        result.unsent += 1;
-      }
-    }
-    await sends.settleDeliveries(
-      db,
-      sendId,
-      lease,
-      "dispatched",
-      outcomes,
-      Date.now(),
-      recipients.length > 0,
-    );
-    return true;
+    return complete;
   };
 
   const release = async (): Promise<SendLoopResult> => {
@@ -295,7 +353,7 @@ export async function runSend(
     keyedBefore,
   );
   for (const { key, keyedAt } of unanswered) {
-    if (!canStartBatch()) {
+    if (!budget.affords(REDO_COST + CLOSE_COST, 1) || clock.startsLeft() < 1) {
       break;
     }
     if (!(await keepLease())) {
@@ -333,24 +391,43 @@ export async function runSend(
       result.unsent += members.length;
       continue;
     }
-    if (!(await deliver(key, members, false))) {
+    if (!(await deliver([{ key, members, firstAttempt: false }]))) {
       return release();
     }
   }
 
-  // Then fresh rows, as many batches as the budget leaves room for.
+  // Then fresh rows, a group at a time, as many groups as the budget and the run's window
+  // leave room for. The read is sized by what a group usually costs, so the run spends its
+  // whole budget; rows it doesn't reach stay `pending` for the next tick.
   const batchSize = Math.min(provider.maxBatch, MAX_CHUNK);
-  const affordable = Math.floor((budget.left - CLOSE_COST - 1) / CHUNK_COST);
+  const groupCalls = Math.max(1, Math.floor(GROUP_RECIPIENTS / batchSize));
+  const groups = Math.min(
+    Math.floor((budget.queriesLeft - CLOSE_COST - 1) / GROUP_TYPICAL_COST),
+    Math.floor((budget.left - CLOSE_COST - 1) / (GROUP_TYPICAL_COST + groupCalls)),
+  );
   const pendingIds =
-    affordable > 0 ? await sends.pendingDeliveryIds(db, sendId, affordable * batchSize) : [];
+    groups > 0 ? await sends.pendingDeliveryIds(db, sendId, groups * groupCalls * batchSize) : [];
+  /** How many requests the next group may make: its full size, or fewer when the budget
+   *  or the tick's time is short, so a tight budget still sends; zero once the run should
+   *  stop. */
+  const nextGroupCalls = (): number => {
+    const byQueries = budget.queriesLeft >= GROUP_COST + CLOSE_COST ? groupCalls : 0;
+    return Math.max(
+      0,
+      Math.min(byQueries, budget.left - GROUP_COST - CLOSE_COST, clock.startsLeft()),
+    );
+  };
 
-  for (const ids of chunk(pendingIds, batchSize)) {
-    if (!canStartBatch()) {
+  for (let at = 0; at < pendingIds.length; ) {
+    const room = nextGroupCalls();
+    if (room < 1) {
       break;
     }
     if (!(await keepLease())) {
       return result;
     }
+    const ids = pendingIds.slice(at, at + room * batchSize);
+    at += ids.length;
     const work = await sends.fetchDeliveryWork(db, ids);
 
     // Honor unsubscribe/suppression at the last moment (I2), and cap retries.
@@ -372,18 +449,17 @@ export async function runSend(
       continue;
     }
 
-    // Record intent before the network call, under a key this batch keeps until its
+    // Record intent before any request leaves, each batch under a key it keeps until its
     // answer is recorded.
-    const key = `${sendId}-${crypto.randomUUID()}`;
-    const moved = new Set(
-      await sends.dispatchFresh(
-        db,
-        sendId,
-        lease,
-        key,
-        live.map((l) => l.id),
-        Date.now(),
-      ),
+    const handOffs = chunk(live, batchSize).map((members) => ({
+      key: `${sendId}-${crypto.randomUUID()}`,
+      ids: members.map((m) => m.id),
+    }));
+    const moved = new Map(
+      (await sends.dispatchFresh(db, sendId, lease, handOffs, Date.now())).map((r) => [
+        r.id,
+        r.key,
+      ]),
     );
     if (moved.size === 0) {
       if (!(await stillLeased())) {
@@ -391,8 +467,14 @@ export async function runSend(
       }
       continue;
     }
-    const members = live.filter((l) => moved.has(l.id)).sort(byEmail);
-    if (!(await deliver(key, members, true))) {
+    const batches = handOffs
+      .map((h) => ({
+        key: h.key,
+        members: live.filter((l) => moved.get(l.id) === h.key).sort(byEmail),
+        firstAttempt: true,
+      }))
+      .filter((b) => b.members.length > 0);
+    if (!(await deliver(batches))) {
       return release();
     }
   }

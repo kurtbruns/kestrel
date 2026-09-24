@@ -14,6 +14,7 @@ const config: Config = {
   sendingDomain: "send.example",
   fromAddress: "News <news@send.example>",
   awsRegion: "us-east-1",
+  sesMaxSendRate: 14,
   devMode: false,
   simulateSends: false,
   subrequestBudget: 50,

@@ -1,30 +1,53 @@
 /**
  * The per-invocation subrequest budget for the send path (SPEC §6).
  *
- * A Worker invocation may make only so many subrequests, and on Cloudflare every D1
- * statement and every outbound `fetch` counts: 50 on the Workers Free plan, 1,000 D1
- * queries on Workers Paid. A run that hits the cap throws partway through, usually while
- * recording what the provider just accepted, so the send loop spends against this budget
- * instead and stops starting new batches while it can still close cleanly. `metered`
- * counts the D1 side for real; the loop charges each provider request itself.
+ * Cloudflare caps one Worker invocation twice over: every D1 statement and every outbound
+ * `fetch` is a subrequest (50 on Workers Free; 10,000 by default on Workers Paid, more if
+ * configured), and D1 statements have their own cap besides (1,000 on any plan, each
+ * statement of a batch counted). A run that hits either cap throws partway through,
+ * usually while recording what the provider just accepted, so the send loop spends
+ * against both meters here instead and stops starting new batches while it can still
+ * close cleanly. `metered` counts the D1 side for real; the loop charges each provider
+ * request itself with `request`.
  */
 
+/** Cloudflare's cap on D1 statements in one invocation, on every plan. */
+export const D1_QUERY_LIMIT = 1000;
+
 export class Budget {
-  private used = 0;
+  private queries = 0;
+  private requests = 0;
 
-  constructor(readonly limit: number) {}
+  /** `limit` caps D1 statements and requests together; `queryLimit` caps D1 statements
+   *  alone, and is never above `limit` or Cloudflare's D1 cap. */
+  constructor(
+    readonly limit: number,
+    readonly queryLimit: number = Math.min(limit, D1_QUERY_LIMIT),
+  ) {}
 
-  /** Record `n` subrequests made (or about to be). */
-  spend(n = 1): void {
-    this.used += n;
+  /** Record `n` D1 statements run (or about to be). */
+  query(n = 1): void {
+    this.queries += n;
   }
 
+  /** Record `n` outbound requests made (or about to be). */
+  request(n = 1): void {
+    this.requests += n;
+  }
+
+  /** Subrequests of any kind still allowed. */
   get left(): number {
-    return this.limit - this.used;
+    return this.limit - this.queries - this.requests;
   }
 
-  affords(n: number): boolean {
-    return this.left >= n;
+  /** D1 statements still allowed, which is never more than `left`. */
+  get queriesLeft(): number {
+    return Math.min(this.queryLimit - this.queries, this.left);
+  }
+
+  /** Whether `queries` more D1 statements and `requests` more outbound requests fit. */
+  affords(queries: number, requests = 0): boolean {
+    return this.queriesLeft >= queries && this.left >= queries + requests;
   }
 }
 
@@ -40,19 +63,19 @@ export function metered(db: D1Database, budget: Budget): D1Database {
     const charged = {
       bind: (...values: unknown[]) => wrap(stmt.bind(...values)),
       first: (column?: string) => {
-        budget.spend();
+        budget.query();
         return column === undefined ? stmt.first() : stmt.first(column);
       },
       run: () => {
-        budget.spend();
+        budget.query();
         return stmt.run();
       },
       all: () => {
-        budget.spend();
+        budget.query();
         return stmt.all();
       },
       raw: (options?: { columnNames?: false }) => {
-        budget.spend();
+        budget.query();
         return stmt.raw(options);
       },
     };
@@ -62,11 +85,11 @@ export function metered(db: D1Database, budget: Budget): D1Database {
   const handle = {
     prepare: (sql: string) => wrap(db.prepare(sql)),
     batch: (statements: D1PreparedStatement[]) => {
-      budget.spend(statements.length);
+      budget.query(statements.length);
       return db.batch(statements.map((s) => inner.get(s) ?? s));
     },
     exec: (sql: string) => {
-      budget.spend();
+      budget.query();
       return db.exec(sql);
     },
   };

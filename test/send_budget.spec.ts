@@ -5,6 +5,7 @@ import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import {
   ConfigError,
+  DEFAULT_SES_MAX_SEND_RATE,
   DEFAULT_SUBREQUEST_BUDGET,
   getConfig,
   MIN_SUBREQUEST_BUDGET,
@@ -12,14 +13,22 @@ import {
 import { HALT_BACKOFF_MS, LEASE_TTL_MS } from "../src/lib/time";
 import { NOTIFY_RESERVE } from "../src/notify/notify";
 import * as providers from "../src/providers";
-import { Budget } from "../src/send/budget";
+import { Budget, D1_QUERY_LIMIT } from "../src/send/budget";
 import { MIN_RUN_COST, runSend } from "../src/send/loop";
+import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
+
+/** SES-shaped: one recipient a request and no idempotency key. */
+class SesLikeProvider extends ResendLikeProvider {
+  override readonly maxBatch: number = 1;
+  override readonly idempotentRetry: boolean = false;
+  override readonly idempotencyWindowMs: number | undefined = undefined;
+}
 
 const addresses = (n: number, tag = "r") =>
   Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
@@ -296,7 +305,9 @@ describe("lease ownership", () => {
     await sends.releaseLease(env.DB, send.id, stale);
     expect(await sends.renewLease(env.DB, send.id, stale, now + LEASE_TTL_MS)).toBe(false);
     const ids = await sends.pendingDeliveryIds(env.DB, send.id, 10);
-    expect(await sends.dispatchFresh(env.DB, send.id, stale, "k-stale", ids, now)).toEqual([]);
+    expect(
+      await sends.dispatchFresh(env.DB, send.id, stale, [{ key: "k-stale", ids }], now),
+    ).toEqual([]);
     await sends.settleDeliveries(
       env.DB,
       send.id,
@@ -331,15 +342,16 @@ describe("lease ownership", () => {
       .run();
     const successor = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
     const ids = await sends.pendingDeliveryIds(env.DB, send.id, 10);
-    expect(await sends.dispatchFresh(env.DB, send.id, successor, "k1", ids, now)).toHaveLength(2);
+    expect(
+      await sends.dispatchFresh(env.DB, send.id, successor, [{ key: "k1", ids }], now),
+    ).toHaveLength(2);
 
     expect(await sends.redispatch(env.DB, send.id, stale, "k1", now)).toEqual([]);
     await sends.holdBatch(
       env.DB,
       send.id,
       stale,
-      "k1",
-      true,
+      [{ key: "k1", keepKey: true }],
       { reason: "unavailable", cause: "outage", error: "stale" },
       HALT_BACKOFF_MS.unavailable,
       now,
@@ -361,5 +373,357 @@ describe("lease ownership", () => {
       { key: "k1", keyedAt: now },
     ]);
     expect(row.halt_reason).toBeNull(); // nor record a halt on the successor's send
+  });
+});
+
+describe("the budget's two meters", () => {
+  it("holds D1 statements to Cloudflare's cap however high the subrequest limit is", () => {
+    const b = new Budget(10_000);
+    expect(b.queryLimit).toBe(D1_QUERY_LIMIT);
+    b.query(D1_QUERY_LIMIT - 5);
+    expect(b.affords(5)).toBe(true);
+    expect(b.affords(6)).toBe(false);
+    // Requests still fit under the subrequest limit once D1 is spent.
+    expect(b.affords(0, 8_000)).toBe(true);
+  });
+
+  it("counts D1 statements and requests together against the subrequest limit", () => {
+    const b = new Budget(50);
+    expect(b.queryLimit).toBe(50);
+    b.query(30);
+    b.request(15);
+    expect(b.left).toBe(5);
+    expect(b.queriesLeft).toBe(5);
+    expect(b.affords(3, 2)).toBe(true);
+    expect(b.affords(3, 3)).toBe(false);
+  });
+});
+
+describe("a one-recipient provider's groups", () => {
+  let ses: SesLikeProvider;
+
+  beforeEach(() => {
+    ses = new SesLikeProvider();
+    vi.mocked(providers.getProvider).mockReturnValue(ses);
+  });
+
+  it("shares the D1 writes, so a recipient costs about half a statement", async () => {
+    const emails = addresses(3000);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const { guard, env: capped } = guarded();
+
+    // Workers Paid: 10,000 subrequests, of which D1 may be 1,000.
+    const budget = new Budget(10_000);
+    const result = await runSend(capped, send.id, budget);
+
+    expect(guard.statements).toBeLessThanOrEqual(D1_QUERY_LIMIT);
+    expect(result.accepted).toBeGreaterThan(1500);
+    expect(guard.statements / result.accepted).toBeLessThan(0.6);
+    expect(ses.requests).toBe(result.accepted);
+    expect(emails.every((e) => ses.timesMailed(e) <= 1)).toBe(true);
+  });
+
+  it("still sends on the Workers Free budget, shrinking a group to fit", async () => {
+    const emails = addresses(60);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    const { guard, env: capped } = guarded();
+    const limit = getConfig(capped).subrequestBudget;
+    expect(limit).toBe(50);
+
+    const statementsBefore = guard.statements;
+    await sweep(capped);
+    const spent = guard.statements - statementsBefore + ses.requests;
+
+    expect(spent).toBeLessThanOrEqual(limit);
+    expect(ses.requests).toBeGreaterThanOrEqual(15);
+    expect((await sends.deliveryRollup(env.DB, send.id)).accepted).toBe(ses.requests);
+  });
+
+  it("a run cut off after a group's requests leaves at most a group for Resolve, and re-mails no one", async () => {
+    const emails = addresses(25);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+
+    // The group is handed off and sent, then the run dies before recording the answers.
+    const original = sends.settleDeliveries;
+    const settle = vi.spyOn(sends, "settleDeliveries").mockImplementation(async (...args) => {
+      if (args[3] === "dispatched") {
+        throw new Error("invocation cut off");
+      }
+      return original(...args);
+    });
+    await expect(runSend(env, send.id)).rejects.toThrow("invocation cut off");
+    settle.mockRestore();
+    const mailedFirst = ses.mailed.length;
+    expect(mailedFirst).toBe(10);
+
+    // The lease runs out, and later ticks finish the send around the unknown group.
+    await env.DB.prepare("UPDATE sends SET locked_until = ? WHERE id = ?")
+      .bind(Date.now() - 1, send.id)
+      .run();
+    for (let i = 0; i < 4; i += 1) {
+      await tick();
+    }
+
+    const rollup = await sends.deliveryRollup(env.DB, send.id);
+    expect(rollup).toEqual({ accepted: 15, dispatched: 10 });
+    expect(emails.every((e) => ses.timesMailed(e) === 1)).toBe(true);
+    expect(ses.mailed.length).toBe(25);
+  });
+
+  it("a paused account costs one request a retry, not one per recipient in the group", async () => {
+    await seedConfirmed(addresses(30));
+    const send = await dueSend();
+    ses.refuse = "SendingPausedException";
+
+    await runSend(env, send.id);
+
+    expect(ses.requests).toBe(1);
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect(row.halt_reason).toBe("account");
+    expect(row.c_in_flight).toBe(0);
+    expect(row.c_pending).toBe(30);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ pending: 30 });
+  });
+
+  it("starts requests no faster than the provider's rate", async () => {
+    vi.useRealTimers();
+    const paced = new (class extends SesLikeProvider {
+      readonly maxRequestRate = 50;
+      readonly starts: number[] = [];
+      override async sendBatch(...args: Parameters<SesLikeProvider["sendBatch"]>) {
+        this.starts.push(performance.now());
+        return super.sendBatch(...args);
+      }
+    })();
+    vi.mocked(providers.getProvider).mockReturnValue(paced);
+    await seedConfirmed(addresses(10));
+    const send = await dueSend();
+
+    await runSend(env, send.id);
+
+    expect(paced.starts).toHaveLength(10);
+    const first = paced.starts[0]!;
+    const last = paced.starts[paced.starts.length - 1]!;
+    // Ten starts at 50 a second span at least nine 20 ms gaps.
+    expect(last - first).toBeGreaterThanOrEqual(9 * 20 - 5);
+  });
+});
+
+/** SES-shaped, answering each request by a script: `ok` accepts, `rate` is a throttle,
+ *  `refuse` an account refusal, and `lost` mails the recipient but loses the answer. */
+class ScriptedSesProvider extends SesLikeProvider {
+  script: ("ok" | "rate" | "lost" | "refuse")[] = [];
+  private calls = 0;
+  override async sendBatch(...args: Parameters<SesLikeProvider["sendBatch"]>) {
+    const step = this.script[this.calls] ?? "ok";
+    this.calls += 1;
+    if (step === "rate") {
+      this.rateLimit = 1;
+    } else if (step === "refuse") {
+      this.refuse = "SendingPausedException";
+    } else if (step === "lost") {
+      this.loseAnswers = 1;
+    }
+    try {
+      return await super.sendBatch(...args);
+    } finally {
+      this.refuse = null;
+    }
+  }
+}
+
+describe("a group whose requests are answered differently", () => {
+  let ses: ScriptedSesProvider;
+
+  beforeEach(() => {
+    ses = new ScriptedSesProvider();
+    vi.mocked(providers.getProvider).mockReturnValue(ses);
+  });
+
+  it("records each answer, keeps the lost one for Resolve, and halts for the account", async () => {
+    const emails = addresses(5);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    ses.script = ["ok", "ok", "rate", "lost", "refuse"];
+
+    await runSend(env, send.id);
+
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({
+      accepted: 2,
+      dispatched: 1,
+      pending: 2,
+    });
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect(row.halt_reason).toBe("account");
+    expect([row.c_accepted, row.c_in_flight, row.c_pending]).toEqual([2, 1, 2]);
+    // The throttled and refused batches provably reached no one, so they keep no key.
+    const keyed = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND status = 'pending' AND dispatch_key IS NOT NULL",
+    )
+      .bind(send.id)
+      .first<{ n: number }>();
+    expect(keyed!.n).toBe(0);
+    // Mailed are exactly the accepted two and the one whose answer was lost.
+    const reached = await env.DB.prepare(
+      "SELECT email FROM deliveries WHERE send_id = ? AND status IN ('accepted', 'dispatched') ORDER BY email",
+    )
+      .bind(send.id)
+      .all<{ email: string }>();
+    expect(ses.mailed.map((m) => m.to).sort()).toEqual(reached.results.map((r) => r.email));
+  });
+
+  it("re-checks consent for a group that never went out after its first request halted", async () => {
+    const emails = addresses(10);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    ses.script = ["refuse"];
+
+    await runSend(env, send.id);
+    expect(ses.requests).toBe(1);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ pending: 10 });
+
+    // One of the group unsubscribes while the send waits out the refusal.
+    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+      .bind(emails[5])
+      .run();
+    await tick();
+
+    expect(ses.timesMailed(emails[5]!)).toBe(0);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 9, skipped: 1 });
+  });
+
+  it("returns never-sent batches to the queue without touching the send's halt", async () => {
+    await seedConfirmed(addresses(3));
+    const send = await dueSend();
+    const now = Date.now();
+    const lease = (await sends.acquireLease(env.DB, send.id, now, LEASE_TTL_MS))!;
+    await sends.resolveAudience(env.DB, send.id, now);
+    await env.DB.prepare(
+      "UPDATE sends SET halt_reason = 'unavailable', halt_cause = 'outage', halt_retries = 2 WHERE id = ?",
+    )
+      .bind(send.id)
+      .run();
+    const ids = await sends.pendingDeliveryIds(env.DB, send.id, 10);
+    await sends.dispatchFresh(env.DB, send.id, lease, [{ key: "k1", ids }], now);
+
+    await sends.holdBatch(
+      env.DB,
+      send.id,
+      lease,
+      [{ key: "k1", keepKey: false }],
+      null,
+      HALT_BACKOFF_MS.unavailable,
+      now,
+    );
+
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect([row.halt_reason, row.halt_cause, row.halt_retries]).toEqual([
+      "unavailable",
+      "outage",
+      2,
+    ]);
+    expect([row.c_pending, row.c_in_flight]).toEqual([3, 0]);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ pending: 3 });
+  });
+});
+
+describe("the tick's clock", () => {
+  let ses: SesLikeProvider;
+
+  beforeEach(() => {
+    ses = new SesLikeProvider();
+    vi.mocked(providers.getProvider).mockReturnValue(ses);
+  });
+
+  it("starts nothing once the tick's window has closed, and leaves the send to the next tick", async () => {
+    await seedConfirmed(addresses(5));
+    const send = await dueSend();
+
+    await runSend(env, send.id, new Budget(1000), new SendWindow(undefined, 0));
+
+    expect(ses.requests).toBe(0);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ pending: 5 });
+    expect((await sends.getSend(env.DB, send.id))!.locked_until).toBeNull();
+  });
+
+  it("keeps one pace and one deadline across every send in the tick", async () => {
+    vi.useRealTimers();
+    await seedConfirmed(addresses(10));
+    const a = await dueSend();
+    const b = await dueSend();
+    // 100 a second in a 60 ms window: at most seven starts, whichever send makes them.
+    const window = new SendWindow(100, 60);
+    const budget = new Budget(1000);
+
+    await runSend(env, a.id, budget, window);
+    const afterA = ses.requests;
+    await runSend(env, b.id, budget, window);
+
+    expect(afterA).toBeGreaterThan(0);
+    expect(afterA).toBeLessThanOrEqual(7);
+    expect(ses.requests).toBe(afterA);
+  });
+});
+
+describe("the hand-off and close writes", () => {
+  it("find their rows by primary key, never by walking the send's pending rows", async () => {
+    const emails = addresses(12);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    // One reader leaves before the send, so the close write runs too.
+    await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+      .bind(emails[0])
+      .run();
+    const seen: { sql: string; binds: unknown[] }[] = [];
+    const prepare = env.DB.prepare.bind(env.DB);
+    const spying = {
+      ...env.DB,
+      batch: env.DB.batch.bind(env.DB),
+      prepare: (sql: string) => {
+        const stmt = prepare(sql);
+        const bind = stmt.bind.bind(stmt);
+        stmt.bind = (...binds: unknown[]) => {
+          seen.push({ sql, binds });
+          return bind(...binds);
+        };
+        return stmt;
+      },
+    } as unknown as D1Database;
+    vi.mocked(providers.getProvider).mockReturnValue(new SesLikeProvider());
+
+    await runSend({ ...env, DB: spying } as AppEnv, send.id, new Budget(1000));
+
+    const writes = seen.filter(
+      (s) =>
+        /UPDATE deliveries SET status = 'dispatched',\s+dispatch_key =/.test(s.sql) ||
+        /UPDATE deliveries SET\s+status = json_extract/.test(s.sql),
+    );
+    expect(writes.length).toBeGreaterThanOrEqual(3); // hand-offs, the close, the records
+    for (const w of writes) {
+      const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${w.sql}`)
+        .bind(...w.binds)
+        .all<{ detail: string }>();
+      const details = plan.results.map((r) => r.detail).join("\n");
+      expect(details).toMatch(
+        /SEARCH deliveries USING (INDEX sqlite_autoindex_deliveries_1|PRIMARY KEY) \(id=\?\)/,
+      );
+      expect(details).not.toMatch(/idx_deliveries_send_status/);
+    }
+  });
+});
+
+describe("SES_MAX_SEND_RATE", () => {
+  const rateFor = (v: string | undefined) =>
+    getConfig({ ...env, SES_MAX_SEND_RATE: v } as AppEnv).sesMaxSendRate;
+
+  it("defaults to a new production account's rate, takes the account's own, and refuses a typo", () => {
+    expect(rateFor(undefined)).toBe(DEFAULT_SES_MAX_SEND_RATE);
+    expect(rateFor("1")).toBe(1);
+    expect(rateFor("200")).toBe(200);
+    expect(() => rateFor("fast")).toThrow(ConfigError);
+    expect(() => rateFor("0")).toThrow(/SES_MAX_SEND_RATE/);
   });
 });

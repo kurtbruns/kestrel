@@ -15,6 +15,7 @@ import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
+import { LEASE_TTL_MS } from "../src/lib/time";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
@@ -88,6 +89,26 @@ afterEach(() => {
 });
 
 describe("resolve a wedged send", () => {
+  it("waits for a run in progress, whose in-flight rows may still be answered", async () => {
+    const send = await sendingSend();
+    await insertDelivery(send.id, "amb@example.com", "dispatched");
+    await insertDelivery(send.id, "flying@example.com", "pending");
+    const lease = (await sends.acquireLease(env.DB, send.id, Date.now(), LEASE_TTL_MS))!;
+
+    await expect(
+      resolveStuckSend(env, send.id, "unsent", "tester@example.com"),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 1, pending: 1 });
+
+    // Once the run lets go, Resolve settles the row and hands the send back to the sweep.
+    await sends.releaseLease(env.DB, send.id, lease);
+    const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
+    expect(res.resolved).toBe(1);
+    expect(res.completed).toBe(false);
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect([row.status, row.locked_until]).toEqual(["sending", null]);
+  });
+
   it("drives a lone dispatched row to completion, marked unsent (assumed not sent)", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "amb@example.com", "dispatched");
