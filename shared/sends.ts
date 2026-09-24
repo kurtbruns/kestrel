@@ -123,7 +123,8 @@ export const DEFAULT_MIN_LEAD_MS = 5 * 60 * 1000;
 
 /**
  * The least minimum lead any deployment may set: one sweep tick. The sweep runs once a
- * minute, so a shorter window is not one the system can honestly promise (SPEC §6).
+ * minute, so a shorter lead would still be kept, but the tick, not the lead, would decide
+ * when a send fires, a precision the system doesn't have (SPEC §6).
  */
 export const MIN_LEAD_FLOOR_MS = 60 * 1000;
 

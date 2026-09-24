@@ -114,7 +114,7 @@ async function main() {
       TAG,
       `--in ${flags.in} is inside this server's minimum lead of ${words(minLeadMs)}.`,
       `Every send stays visible and cancelable at least that long before it fires, so it can be stopped (docs/SPEC.md §6).`,
-      `The floor is 1 minute in every environment, local dev included: the send sweep runs once a minute, so no shorter window can be promised.${lower}`,
+      `The floor is 1 minute in every environment, local dev included: the send sweep runs once a minute, so under that the tick, not the lead, would decide when a send fires.${lower}`,
     );
   }
 

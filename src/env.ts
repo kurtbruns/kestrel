@@ -10,7 +10,7 @@
  * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
  * (an unknown provider, a missing origin, a real provider without its credentials or still
  * on the template's example.com placeholders, a minimum lead under the sweep's one-minute
- * tick) throws a `ConfigError` naming the variable.
+ * tick or over a day) throws a `ConfigError` naming the variable.
  */
 
 import {
@@ -89,7 +89,7 @@ export interface OptionalVars {
   SUBREQUEST_BUDGET?: string;
   /**
    * The minimum lead in seconds (SPEC §6): how long every send stays visible and cancelable
-   * before it fires, at the least. Unset means five minutes; below sixty is refused.
+   * before it fires, at the least. Unset means five minutes; below sixty or above a day (86400) is refused.
    */
   MIN_LEAD_SECONDS?: string;
   /**
@@ -444,8 +444,8 @@ function readPositiveInt(name: string, v: string | undefined): number | undefine
 
 /**
  * `MIN_LEAD_SECONDS` in milliseconds, or the default when unset. One floor in every
- * environment, local dev included: the sweep runs once a minute, so a shorter lead is a
- * window the app cannot honestly promise. The ceiling, one day, catches a value in
+ * environment, local dev included: the sweep runs once a minute, so under that the tick,
+ * not the lead, would decide when a send fires. The ceiling, one day, catches a value in
  * milliseconds. A value outside the two is refused rather than clamped, so a deployment
  * never runs on a lead other than the one it names.
  */
@@ -457,7 +457,7 @@ function readMinLead(v: string | undefined): number {
   if (seconds * 1000 < MIN_LEAD_FLOOR_MS) {
     throw new ConfigError(
       "MIN_LEAD_SECONDS",
-      `must be at least ${MIN_LEAD_FLOOR_MS / 1000}, not "${v?.trim()}": the send sweep runs once a minute, so no send can be promised a window shorter than ${formatLead(MIN_LEAD_FLOOR_MS)}`,
+      `must be at least ${MIN_LEAD_FLOOR_MS / 1000}, not "${v?.trim()}": the send sweep runs once a minute, so under ${formatLead(MIN_LEAD_FLOOR_MS)} the tick, not the lead, would decide when a send fires`,
     );
   }
   if (seconds * 1000 > MIN_LEAD_CEILING_MS) {
