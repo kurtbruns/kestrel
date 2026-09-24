@@ -1191,8 +1191,7 @@ export interface DeliveryEventResult {
 }
 
 // How bad an outcome is. SNS does not guarantee order, so a later event may be a better
-// one (a `delivered` after a `complained`); the record keeps the worst it has seen. A
-// hard bounce outranks a soft one, since it suppressed the address.
+// one (a `delivered` after a `complained`); the record keeps the worst it has seen.
 function eventRank(event: string | null, bounceKind: string | null): number {
   switch (event) {
     case "complained":
