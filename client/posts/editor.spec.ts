@@ -330,6 +330,46 @@ describe("editor view", () => {
     expect(document.querySelector("#freshKeep")).toBeNull(); // nothing to keep editing
   });
 
+  it("makes Save draft unavailable while the out-of-date banner is up, pointing at it instead of pretending to save", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/posts/p1", reply: server.get },
+      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    // happy-dom has no layout, so scrollIntoView is only observable as a call.
+    const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    server.elsewhere("service");
+    await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+    const banner = $("#freshnessBanner");
+    expect(banner.hidden).toBe(false);
+    // The copy names the control that works, and says saving waits on it.
+    expect(banner.textContent).toMatch(/Saving is paused until you choose/);
+    expect(banner.textContent).toMatch(/Keep editing to keep yours/);
+    typeInto(body(), "mine");
+    const save = $<HTMLButtonElement>("#saveBtn");
+    expect(save.getAttribute("aria-disabled")).toBe("true");
+    expect(save.title).toMatch(/Reload or Keep editing/);
+    // A click, or the save shortcut, saves nothing and never shows Saving…; it brings the
+    // banner into view instead.
+    save.click();
+    handle().manualSave?.();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(0);
+    expect(save.textContent).toBe("Save draft");
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    expect(intoView).toHaveBeenCalledTimes(2);
+    expect(intoView.mock.contexts[0]).toBe(banner);
+    // Keep editing is the decision: the button is live again, and saves over the newer base.
+    $("#freshKeep").click();
+    expect(save.hasAttribute("aria-disabled")).toBe(false);
+    expect(save.hasAttribute("title")).toBe(false);
+    save.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    expect(puts()[0]?.json()).toMatchObject({ markdown: "mine", base_revision: "r2" });
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("flushes a dirty draft on navigation and marks it saved as sent", async () => {
     const server = draftServer();
     await open([

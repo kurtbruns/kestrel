@@ -599,10 +599,32 @@ export async function renderEditor(
     }
   }
   if (saveBtn) {
-    saveBtn.onclick = () =>
+    saveBtn.onclick = () => {
+      // While the out-of-date banner is up a save is paused (notify, never clobber: SPEC
+      // §4), so the button reads as unavailable and a click (or ⌘S) does not pretend to
+      // save: it points at the banner, whose Reload or Keep editing is the next step.
+      // aria-disabled, not disabled, so the click still lands to do that.
+      if (conflicted) {
+        freshnessEl.scrollIntoView({ block: "nearest" });
+        return;
+      }
       busy(saveBtn, "Saving…", () => saveDraft(false).catch((e) => toast(message(e)))).finally(
         refreshDirty,
       );
+    };
+  }
+  // Save draft follows the banner: unavailable while it asks for a decision, and says why.
+  function paintSaveBtn() {
+    if (!saveBtn) {
+      return;
+    }
+    if (conflicted) {
+      saveBtn.setAttribute("aria-disabled", "true");
+      saveBtn.title = "Saving is paused: choose Reload or Keep editing above";
+    } else {
+      saveBtn.removeAttribute("aria-disabled");
+      saveBtn.removeAttribute("title");
+    }
   }
 
   // Leaving the editor saves in the background instead of prompting. Capture the
@@ -669,6 +691,7 @@ export async function renderEditor(
 
   function clearConflict() {
     conflicted = false;
+    paintSaveBtn();
     revisions.clearWarning();
     freshnessEl.hidden = true;
     setHtml(freshnessEl, html``);
@@ -678,6 +701,7 @@ export async function renderEditor(
       return;
     }
     conflicted = true; // pauses autosave; makes the leave guard prompt
+    paintSaveBtn();
     revisions.noteWarned(conflict);
     if (conflict.kind === "locked") {
       setHtml(
@@ -688,7 +712,7 @@ export async function renderEditor(
       const who = friendlyAuthor(conflict.author);
       setHtml(
         freshnessEl,
-        html`<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? html` — last edited by <strong>${who}</strong>` : null}. Reload to load that version (discards your unsaved edits), or keep editing to overwrite it on your next save.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`,
+        html`<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? html` — last edited by <strong>${who}</strong>` : null}. Saving is paused until you choose: Reload to load that version (discards your unsaved edits), or Keep editing to keep yours, and your next save overwrites that version.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`,
       );
     }
     freshnessEl.hidden = false;
