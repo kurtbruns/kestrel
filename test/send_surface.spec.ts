@@ -171,6 +171,17 @@ describe("conditions: one server rule for each kind", () => {
     });
   });
 
+  it("reports no halt on a wedged send, which nothing will retry", () => {
+    const wedged = row({
+      c_in_flight: 1,
+      halt_reason: "account",
+      halt_cause: "quota",
+      halt_error: "quota exceeded",
+      halt_retry_at: NOW - 60_000,
+    });
+    expect(kinds(wedged)).toEqual(["wedged"]);
+  });
+
   it("offers cancel and reschedule only inside the window, and Resolve only while wedged", () => {
     const names = (s: SendSummary) => sendActions(s, NOW).map((a) => a.name);
     expect(names(row({ status: "scheduled", fire_at: NOW + 1 }))).toEqual(["cancel", "reschedule"]);
@@ -230,6 +241,20 @@ describe("every route reads a send the same way", () => {
     expect(test.status).toBe(200);
     expect((await readJson(test)).frozen).toBe(true);
     expect((await sends.getSend(env.DB, send.id))?.tested_at).not.toBeNull();
+    expect(has(await progress(send.id), "remade")).toBe(false);
+  });
+});
+
+describe("a test racing a re-make", () => {
+  it("does not mark the re-made copy tested when the test read the copy before the re-make", async () => {
+    const send = await frozenSend(Date.now() + 3_600_000, "Raced");
+    const readAt = Date.now();
+    await setRow(send.id, { remade_at: readAt + 5 }); // the re-make lands while the test is out
+    await sends.markTested(env.DB, send.id, readAt, readAt + 10);
+    expect((await sends.getSend(env.DB, send.id))?.tested_at).toBeNull();
+    expect(has(await progress(send.id), "remade")).toBe(true);
+    // A test that read the re-made copy does settle it.
+    await sends.markTested(env.DB, send.id, readAt + 6, readAt + 20);
     expect(has(await progress(send.id), "remade")).toBe(false);
   });
 });

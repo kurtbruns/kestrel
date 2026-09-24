@@ -132,6 +132,9 @@ export async function test(c: RequestContext): Promise<Response> {
     throw fieldError("to", "to must be an email address");
   }
 
+  // When the copy was read, so the test marks the send tested only if no re-make replaced
+  // that copy while the provider was answering.
+  const readAt = Date.now();
   const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
@@ -153,7 +156,7 @@ export async function test(c: RequestContext): Promise<Response> {
   // A test of a scheduled send's frozen copy is the sign-off the re-make rule asks for
   // (SPEC §6, §8): record it, which settles the send's `remade` condition.
   if (frozen && res?.accepted === true) {
-    await markTested(c.env.DB, frozen.id, Date.now());
+    await markTested(c.env.DB, frozen.id, readAt, Date.now());
   }
 
   const result: TestSendResponse = {

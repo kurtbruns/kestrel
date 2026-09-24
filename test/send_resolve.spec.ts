@@ -219,6 +219,22 @@ describe("resolve a wedged send", () => {
     expect(res.resolved).toBe(2);
   });
 
+  it("answers not_wedged, not run_in_progress, when another Resolve finished the send while this one checked", async () => {
+    const send = await sendingSend();
+    await insertDelivery(send.id, "amb@example.com", "dispatched");
+    const real = sends.acquireLease;
+    const spy = vi.spyOn(sends, "acquireLease").mockImplementationOnce(async (db, id, now, ttl) => {
+      // The other tab's Resolve lands between this one's checks and its lease.
+      spy.mockRestore();
+      await resolveStuckSend(env, send.id, "accepted", "other tab");
+      return real(db, id, now, ttl);
+    });
+    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toMatchObject({
+      status: 409,
+      code: "not_wedged",
+    });
+  });
+
   it("rejects resolving a missing send", async () => {
     await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toThrow();
   });

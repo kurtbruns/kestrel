@@ -103,6 +103,19 @@ export async function resolveStuckSend(
 
   const lease = await sends.acquireLease(env.DB, sendId, now, LEASE_TTL_MS);
   if (!lease) {
+    // It changed between the checks and the lease: answer for what it is now (another
+    // Resolve may have finished it), carrying the send as it now stands.
+    const current = await sends.getSend(env.DB, sendId);
+    if (current && guard.ifMatch !== undefined && current.rev !== guard.ifMatch) {
+      throw await refuse(
+        412,
+        "precondition_failed",
+        `the send has changed since rev ${guard.ifMatch} (it is at rev ${current.rev}); read it again before resolving`,
+      );
+    }
+    if (!current || !isWedged(current)) {
+      throw await refuse(409, "not_wedged", "send is no longer wedged");
+    }
     throw await refuse(
       409,
       "run_in_progress",

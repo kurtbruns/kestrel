@@ -795,13 +795,21 @@ export function cancelStmt(
 }
 
 /** Record that the scheduled send's frozen copy was tested (SPEC §8), which settles a
- *  re-made send's `remade` condition. A no-op once it has fired. */
-export async function markTested(db: D1Database, sendId: string, now: number): Promise<void> {
+ *  re-made send's `remade` condition: only if the copy the test read, at `readAt`, is still
+ *  the send's copy (no re-make since), so a test racing a re-make never marks the new copy
+ *  tested. A no-op once it has fired. */
+export async function markTested(
+  db: D1Database,
+  sendId: string,
+  readAt: number,
+  now: number,
+): Promise<void> {
   await db
     .prepare(
-      `UPDATE sends SET tested_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
+      `UPDATE sends SET tested_at = ?, rev = ${NEXT_REV}
+        WHERE id = ? AND status = 'scheduled' AND (remade_at IS NULL OR remade_at <= ?)`,
     )
-    .bind(now, sendId)
+    .bind(now, sendId, readAt)
     .run();
 }
 

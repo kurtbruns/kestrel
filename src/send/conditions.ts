@@ -106,7 +106,10 @@ export function sendConditions(send: SendSummary, now: number): SendCondition[] 
         count: n,
       });
     }
-    if (send.halt_reason === "account") {
+    // A wedged send is no longer retried, whatever halt it last carried, so it does not
+    // report one: only Resolve moves it.
+    const retried = !isWedged(send);
+    if (retried && send.halt_reason === "account") {
       const advice = refusalAdvice(send.halt_cause);
       out.push({
         kind: "refused",
@@ -119,7 +122,7 @@ export function sendConditions(send: SendSummary, now: number): SendCondition[] 
         advice,
         retry_at: send.halt_retry_at,
       });
-    } else if (send.halt_reason === "unavailable") {
+    } else if (retried && send.halt_reason === "unavailable") {
       out.push({
         kind: "provider_unavailable",
         severity: "info",
