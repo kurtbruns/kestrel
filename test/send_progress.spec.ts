@@ -382,3 +382,149 @@ describe("resolve keeps counters consistent", () => {
     expect(row.c_in_flight).toBe(0);
   });
 });
+
+/**
+ * A D1 handle whose batches wait until `n` of them have been asked for, then run in the
+ * order asked: every caller's reads land before any caller's write, the interleaving two
+ * webhooks for one message produce when they arrive together.
+ */
+function batchesMeetAt(db: D1Database, n: number): D1Database {
+  let waiting = 0;
+  let open!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    open = resolve;
+  });
+  let chain = Promise.resolve();
+  return new Proxy(db, {
+    get(target, prop) {
+      if (prop === "batch") {
+        return async (statements: D1PreparedStatement[]) => {
+          waiting += 1;
+          if (waiting >= n) {
+            open();
+          }
+          await gate;
+          const run = chain.then(() => target.batch(statements));
+          chain = run.then(
+            () => undefined,
+            () => undefined,
+          );
+          return run;
+        };
+      }
+      const value = Reflect.get(target, prop);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+describe("receipts racing for one recipient", () => {
+  it("move the counters once, from where the winner left the row", async () => {
+    await seedConfirmed("race@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    await runSend(env, send.id);
+    const providerId = `fake-${send.id}:race@example.com`;
+
+    // An SES Delivery and a Complaint for the same message, both reading the row as
+    // accepted before either writes.
+    const db = batchesMeetAt(env.DB, 2);
+    const at = Date.now();
+    await Promise.all([
+      sends.markDeliveryEvent(db, { providerId, event: "delivered", at }),
+      sends.markDeliveryEvent(db, { providerId, event: "complained", at }),
+    ]);
+
+    const row = await expectCountersMatchAggregate(send.id);
+    expect(row.c_complained).toBe(1);
+    expect(row.c_delivered).toBe(0);
+    expect(row.c_accepted).toBe(0);
+  });
+
+  it("leave a worse outcome in place when the better one loses the race", async () => {
+    await seedConfirmed("race2@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    await runSend(env, send.id);
+    const providerId = `fake-${send.id}:race2@example.com`;
+
+    const db = batchesMeetAt(env.DB, 2);
+    const at = Date.now();
+    await Promise.all([
+      sends.markDeliveryEvent(db, { providerId, event: "complained", at }),
+      sends.markDeliveryEvent(db, { providerId, event: "delivered", at }),
+    ]);
+
+    const row = await expectCountersMatchAggregate(send.id);
+    expect(row.c_complained).toBe(1);
+    expect(row.c_delivered).toBe(0);
+    const outcomes = await sends.deliveryOutcomes(env.DB, send.id);
+    expect(outcomes.complained).toBe(1);
+  });
+
+  it("check the counters against the record when a receipt turns a sent send complete", async () => {
+    await seedConfirmed("s1@example.com");
+    await seedConfirmed("s2@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    await runSend(env, send.id);
+    // A cache that has drifted one short, as the race above used to leave it.
+    await env.DB.prepare("UPDATE sends SET c_accepted = 1, c_delivered = 1 WHERE id = ?")
+      .bind(send.id)
+      .run();
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: `fake-${send.id}:s1@example.com` },
+    ]);
+
+    // One recipient still awaits a receipt, so the send is settling, not complete.
+    const row = await expectCountersMatchAggregate(send.id);
+    expect(row.c_accepted).toBe(1);
+    expect(buildSendProgress(row, "fake", false, Date.now()).phase).toBe("settling");
+  });
+});
+
+describe("resolve counts only the rows it moves", () => {
+  it("leaves a row a receipt already reached in its event's bucket", async () => {
+    await seedConfirmed("r1@example.com");
+    await seedConfirmed("r2@example.com");
+    await seedConfirmed("r3@example.com");
+    const send = await scheduledSend(Date.now() - 1000);
+    await runSend(env, send.id);
+    // Two recipients left in flight with their fate unknown, one still queued so the send
+    // cannot complete (completion rebuilds the counters, which would hide a bad move).
+    await env.DB.batch([
+      env.DB.prepare(
+        "UPDATE sends SET status = 'sending', completed_at = NULL, locked_until = NULL, lease_token = NULL WHERE id = ?",
+      ).bind(send.id),
+      env.DB.prepare(
+        "UPDATE deliveries SET status = 'dispatched', provider_id = NULL, event = NULL WHERE send_id = ? AND email IN ('r1@example.com', 'r2@example.com')",
+      ).bind(send.id),
+      env.DB.prepare(
+        "UPDATE deliveries SET status = 'pending', provider_id = NULL, event = NULL WHERE send_id = ? AND email = 'r3@example.com'",
+      ).bind(send.id),
+    ]);
+    await sends.recomputeSendCounters(env.DB, send.id);
+    // A receipt carrying only the address lands on one of the in-flight rows.
+    await sends.markDeliveryEvent(env.DB, {
+      email: "r1@example.com",
+      event: "delivered",
+      at: Date.now(),
+    });
+    await expectCountersMatchAggregate(send.id);
+
+    const lease = await sends.acquireLease(env.DB, send.id, Date.now(), 60_000);
+    const resolved = await sends.resolveDispatched(
+      env.DB,
+      send.id,
+      lease!,
+      "unsent",
+      "test",
+      Date.now(),
+    );
+
+    expect(resolved).toBe(2);
+    const row = await expectCountersMatchAggregate(send.id);
+    expect(row.c_in_flight).toBe(0);
+    expect(row.c_unsent).toBe(1);
+    expect(row.c_delivered).toBe(1);
+    expect(row.c_pending).toBe(1);
+  });
+});

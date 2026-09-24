@@ -76,8 +76,11 @@ export function raiseRevFloorStmt(db: D1Database): D1PreparedStatement {
 // eight mutually-exclusive buckets, the webhook `event` winning over the send-loop
 // `status`. Every transition below moves a recipient between buckets by adjusting
 // two columns by ±n, batched atomically with the `deliveries` write so the cache
-// can never partially diverge from the source of truth. `recomputeSendCounters`
-// rebuilds them from the aggregate (backfill, and the exactness pass at completion).
+// can never partially diverge from the source of truth. A move counts only the rows
+// its write changes: it runs under the same predicate as the write, or counts the rows
+// in the same batch, never from a read taken earlier, which a concurrent write could
+// have made stale. `recomputeSendCounters` rebuilds them from the aggregate (backfill,
+// the exactness pass at completion, and when a receipt turns a sent send complete).
 
 const COUNTER_COLS = [
   "c_pending",
@@ -117,29 +120,18 @@ function bucketCol(status: string, event: string | null): CounterCol {
   }
 }
 
-/** A statement moving `n` recipients between two counter buckets of one send. The
- *  column names come from the fixed `CounterCol` union, never user input. */
-function counterMove(
-  db: D1Database,
-  sendId: string,
-  from: CounterCol,
-  to: CounterCol,
-  n: number,
-): D1PreparedStatement {
-  return db
-    .prepare(
-      `UPDATE sends SET ${from} = ${from} - ?, ${to} = ${to} + ?, rev = ${NEXT_REV} WHERE id = ?`,
-    )
-    .bind(n, n, sendId);
-}
-
 /**
  * Rebuild the eight counters from `deliveries` (the source of truth) for one send,
  * bucketed exactly as `deliveryOutcomes`. The counters are a cache, so this both
  * backfills the counters and runs as the exactness pass when a send completes,
- * guaranteeing the permanent record's numbers equal the aggregate.
+ * guaranteeing the permanent record's numbers equal the aggregate. `when` is fixed SQL
+ * over the send row that narrows when it runs, never user input.
  */
-export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1PreparedStatement {
+export function recomputeSendCountersStmt(
+  db: D1Database,
+  sendId: string,
+  when?: string,
+): D1PreparedStatement {
   return db
     .prepare(
       `UPDATE sends SET
@@ -152,7 +144,7 @@ export function recomputeSendCountersStmt(db: D1Database, sendId: string): D1Pre
          c_skipped    = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'skipped'),
          c_unsent     = (SELECT COUNT(*) FROM deliveries d WHERE d.send_id = sends.id AND d.event IS NULL AND d.status = 'unsent'),
          rev          = ${NEXT_REV}
-       WHERE id = ?`,
+       WHERE id = ?${when ? ` AND ${when}` : ""}`,
     )
     .bind(sendId);
 }
@@ -1411,27 +1403,31 @@ export async function resolveDispatched(
   now: number,
 ): Promise<number> {
   const guard = holdsLease(sendId, lease);
-  const res = await db
-    .prepare(
-      `UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ?
-        WHERE send_id = ? AND status = 'dispatched' AND ${guard.sql}`,
-    )
-    .bind(outcome, note, now, sendId, ...guard.binds)
-    .run();
-  const n = res.meta.changes ?? 0;
-  if (n > 0) {
-    // A dispatched row carries no webhook event yet, so it leaves c_in_flight for the
-    // adjudicated terminal bucket.
-    await counterMove(
-      db,
-      sendId,
-      "c_in_flight",
-      outcome === "unsent" ? "c_unsent" : "c_accepted",
-      n,
-    ).run();
-  }
-  return n;
+  const to: CounterCol = outcome === "unsent" ? "c_unsent" : "c_accepted";
+  // One batch, the counter move first so it counts the rows about to move: the two land
+  // together or not at all. Only rows with no receipt leave `c_in_flight`; one a receipt
+  // already reached counts in its event's bucket, which the new status does not change.
+  const [, moved] = await db.batch([
+    db
+      .prepare(
+        `UPDATE sends SET c_in_flight = c_in_flight - (${DISPATCHED_NO_EVENT}),
+                ${to} = ${to} + (${DISPATCHED_NO_EVENT}), rev = ${NEXT_REV}
+          WHERE id = ? AND lease_token = ?`,
+      )
+      .bind(sendId, sendId, sendId, lease),
+    db
+      .prepare(
+        `UPDATE deliveries SET status = ?, error = ?, dispatch_key = NULL, keyed_at = NULL, updated_at = ?
+          WHERE send_id = ? AND status = 'dispatched' AND ${guard.sql}`,
+      )
+      .bind(outcome, note, now, sendId, ...guard.binds),
+  ]);
+  return moved?.meta.changes ?? 0;
 }
+
+/** A send's in-flight rows no receipt has reached, over one `?` (the send id). */
+const DISPATCHED_NO_EVENT =
+  "SELECT COUNT(*) FROM deliveries WHERE send_id = ? AND status = 'dispatched' AND event IS NULL";
 
 export async function countDeliveries(
   db: D1Database,
@@ -1494,6 +1490,9 @@ function eventRank(event: string | null, bounceKind: string | null): number {
   }
 }
 
+/** How many times a receipt re-reads its row when another write changed it in between. */
+const RECEIPT_RETRIES = 3;
+
 /**
  * Record an out-of-band provider event (delivered/bounced/complained) on the matching
  * delivery row, unless the row already holds a worse outcome. An event with a provider
@@ -1504,71 +1503,114 @@ function eventRank(event: string | null, bounceKind: string | null): number {
  * events must never land on a real send's record (SPEC §8). An event carrying no provider
  * id at all falls back to the address's most recent delivery. Never touches the
  * send-loop `status`, which is a separate, earlier signal.
+ *
+ * The row write is a compare-and-swap on what was read (`status`, `event`, `bounce_kind`),
+ * and the counter move rides in the same batch under the same predicate, so the two land
+ * together or not at all. Two receipts for one message racing (an SES Delivery and a
+ * Complaint) cannot both move the recipient out of the bucket it was read in: the loser
+ * changes nothing, reads the row again, and moves it from where the winner left it.
  */
 export async function markDeliveryEvent(
   db: D1Database,
   u: DeliveryEventUpdate,
 ): Promise<DeliveryEventResult> {
   const detail = u.detail ?? null;
-  // Locate the target row first so the counter delta knows the bucket it is leaving (an
-  // event can land on an `accepted` row, or overwrite an earlier event).
-  type Target = {
-    id: number;
-    send_id: string;
-    email: string;
-    status: string;
-    event: string | null;
-    bounce_kind: string | null;
-  };
-  const cols = "id, send_id, email, status, event, bounce_kind";
-  let row: Target | null = null;
-  if (u.providerId) {
-    row = await db
-      .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
-      .bind(u.providerId)
-      .first<Target>();
-    if (!row && u.email) {
-      // An id-less accepted row: resolved as sent, or an SES answer whose body was unreadable.
-      row = await db
-        .prepare(
-          `SELECT ${cols} FROM deliveries
-            WHERE email = ? AND status = 'accepted' AND (provider_id IS NULL OR provider_id = '')
-            ORDER BY updated_at DESC LIMIT 1`,
-        )
-        .bind(normalizeEmail(u.email))
-        .first<Target>();
-    }
-  } else if (u.email) {
-    row = await db
-      .prepare(`SELECT ${cols} FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1`)
-      .bind(normalizeEmail(u.email))
-      .first<Target>();
-  }
-  if (!row) {
-    return { changes: 0, email: null, sendId: null };
-  }
-
   // Freeze the soft/hard split as a fact of this send (SPEC §8): a bounce records the
   // provider's hard/soft signal; any other event clears it (the row is no longer a bounce).
   const bounceKind = u.event === "bounced" ? (u.hard ? "hard" : "soft") : null;
-  if (eventRank(u.event, bounceKind) < eventRank(row.event, row.bounce_kind)) {
-    return { changes: 0, email: row.email, sendId: row.send_id };
+  let row: ReceiptTarget | null = null;
+  for (let attempt = 0; attempt < RECEIPT_RETRIES; attempt++) {
+    row = await findReceiptTarget(db, u);
+    if (!row) {
+      return { changes: 0, email: null, sendId: null };
+    }
+    if (eventRank(u.event, bounceKind) < eventRank(row.event, row.bounce_kind)) {
+      return { changes: 0, email: row.email, sendId: row.send_id };
+    }
+    // The row as read: every statement below applies only while it still stands.
+    const unchanged = "id = ? AND status = ? AND event IS ? AND bounce_kind IS ?";
+    const was = [row.id, row.status, row.event, row.bounce_kind];
+    const fromCol = bucketCol(row.status, row.event);
+    const toCol = bucketCol(row.status, u.event);
+    const stmts: D1PreparedStatement[] = [];
+    if (fromCol !== toCol) {
+      // Before the row write, so both read the row as it was. The column names come from
+      // the fixed `CounterCol` union, never user input.
+      stmts.push(
+        db
+          .prepare(
+            `UPDATE sends SET ${fromCol} = ${fromCol} - 1, ${toCol} = ${toCol} + 1, rev = ${NEXT_REV}
+              WHERE id = ? AND EXISTS (SELECT 1 FROM deliveries WHERE ${unchanged})`,
+          )
+          .bind(row.send_id, ...was),
+      );
+    }
+    stmts.push(
+      db
+        .prepare(
+          `UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?, bounce_kind = ? WHERE ${unchanged}`,
+        )
+        .bind(u.event, detail, u.at, bounceKind, ...was),
+    );
+    if (fromCol === "c_accepted") {
+      // The receipt that may have confirmed a sent send's last accepted recipient: check
+      // the counters against the record as it turns complete, so `complete` is never read
+      // off a cache that has drifted (SPEC §12).
+      stmts.push(recomputeSendCountersStmt(db, row.send_id, "status = 'sent' AND c_accepted = 0"));
+    }
+    const results = await db.batch(stmts);
+    const write = results[fromCol !== toCol ? 1 : 0];
+    if ((write?.meta.changes ?? 0) > 0) {
+      return { changes: 1, email: row.email, sendId: row.send_id };
+    }
   }
+  // Still losing to other writes after every retry: record nothing rather than guess. The
+  // provider redelivers a webhook it gets no success for; this one was answered, so it is
+  // dropped, but only under a sustained storm of writes to the same row.
+  return { changes: 0, email: row?.email ?? null, sendId: row?.send_id ?? null };
+}
 
-  const fromCol = bucketCol(row.status, row.event);
-  const toCol = bucketCol(row.status, u.event);
-  const stmts: D1PreparedStatement[] = [
-    db
+/** The delivery row a receipt lands on, and the bucket it is leaving. */
+interface ReceiptTarget {
+  id: number;
+  send_id: string;
+  email: string;
+  status: string;
+  event: string | null;
+  bounce_kind: string | null;
+}
+
+/** Find the row a receipt matches, by the rules `markDeliveryEvent` states. */
+async function findReceiptTarget(
+  db: D1Database,
+  u: DeliveryEventUpdate,
+): Promise<ReceiptTarget | null> {
+  const cols = "id, send_id, email, status, event, bounce_kind";
+  if (u.providerId) {
+    const row = await db
+      .prepare(`SELECT ${cols} FROM deliveries WHERE provider_id = ? LIMIT 1`)
+      .bind(u.providerId)
+      .first<ReceiptTarget>();
+    if (row || !u.email) {
+      return row;
+    }
+    // An id-less accepted row: resolved as sent, or an SES answer whose body was unreadable.
+    return db
       .prepare(
-        "UPDATE deliveries SET event = ?, event_detail = ?, event_at = ?, bounce_kind = ? WHERE id = ?",
+        `SELECT ${cols} FROM deliveries
+          WHERE email = ? AND status = 'accepted' AND (provider_id IS NULL OR provider_id = '')
+          ORDER BY updated_at DESC LIMIT 1`,
       )
-      .bind(u.event, detail, u.at, bounceKind, row.id),
-  ];
-  if (fromCol !== toCol) {
-    stmts.push(counterMove(db, row.send_id, fromCol, toCol, 1));
+      .bind(normalizeEmail(u.email))
+      .first<ReceiptTarget>();
   }
-  await db.batch(stmts);
-  return { changes: 1, email: row.email, sendId: row.send_id };
+  if (u.email) {
+    return db
+      .prepare(`SELECT ${cols} FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1`)
+      .bind(normalizeEmail(u.email))
+      .first<ReceiptTarget>();
+  }
+  return null;
 }
 
 /** An accepted recipient with no delivery event yet — a candidate for the dev send
