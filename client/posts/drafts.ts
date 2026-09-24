@@ -1,7 +1,10 @@
-// The drafts list (draft + scheduled).
+// The drafts list (draft + scheduled), kept current with its posts' sends.
 
 import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
+import type { SendListResponse } from "../../shared/sends";
 import { api } from "../api";
+import { mount } from "../lifecycle";
+import { followSends } from "../send_state";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
@@ -64,10 +67,16 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   const listEl = $("#list", root);
   const pagerEl = $("#postsPager", root);
 
-  async function load() {
+  // The posts on screen, so a report of a send knows whether it touches this page.
+  let listed = new Set<string>();
+  // A background reload (a send changed) that fails leaves the list the reader is reading;
+  // only a load the reader started shows the error.
+  const reload = () => load(false);
+  async function load(background: boolean) {
     try {
       const data = await api<PostListResponse>(`/posts?${listQuery(state)}`, { signal });
       const posts = data.posts;
+      listed = new Set(posts.map((p) => p.id));
       if (!posts.length) {
         // "Filtered" = a real narrowing beyond the default drafts scope (a search, or a
         // single-status pick) — so a fresh, empty list still reads as an invitation.
@@ -93,7 +102,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
           },
         )}</tbody></table></div>`,
       );
-      wireSort(listEl, state, load);
+      wireSort(listEl, state, reload);
       for (const tr of $$<HTMLTableRowElement>("tr[data-id]", listEl)) {
         tr.onclick = (e) => {
           const t = e.target;
@@ -125,19 +134,44 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
             items.push({
               label: "Delete draft",
               danger: true,
-              onClick: () => confirmDelete(id, load),
+              onClick: () => confirmDelete(id, reload),
             });
           }
           openMenu(b, items);
         };
       }
-      renderPager(pagerEl, state, data.page, load);
+      renderPager(pagerEl, state, data.page, reload);
     } catch (e) {
-      renderError(listEl, e instanceof Error ? e.message : String(e), load);
+      if (!background) {
+        renderError(listEl, e instanceof Error ? e.message : String(e), reload);
+      }
     }
   }
-  wireToolbar(root, state, load);
-  load();
+  wireToolbar(root, state, reload);
+  // Where sends stood before the list was read, so the layer reports every change to a
+  // listed post's send from then on: one that starts goes out of Drafts, a cancel makes its
+  // post a draft again, and a move changes its fire time, whichever client made it
+  // (DESIGN §9). Only the cursor is wanted from this read.
+  let since: SendListResponse;
+  try {
+    since = await api<SendListResponse>("/sends?status=scheduled&limit=1", { signal });
+  } catch (e) {
+    renderError(listEl, e instanceof Error ? e.message : String(e), () => mount(renderDrafts));
+    return;
+  }
+  await load(false);
+  followSends(
+    { cursor: since.cursor, sends: [] },
+    {
+      update({ sends, removed }) {
+        if (sends.some((s) => listed.has(s.post_id)) || removed.length) {
+          void load(true);
+        }
+      },
+      stale: () => mount(renderDrafts),
+    },
+    signal,
+  );
 }
 
 function confirmDelete(pid: string, reload: () => unknown): void {

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewHandle } from "./lifecycle";
 import { installRouter } from "./router";
-import { $, type FakeApi, fakeApi, mount, resetShell, settle } from "./test/support";
+import { $, type FakeApi, fakeApi, mount, resetShell, sendServer, settle } from "./test/support";
 
 // The router's listeners are installed once by boot; here once per file, which is what a
 // page gets. hashchange is dispatched by hand so the spec does not depend on whether the
@@ -23,6 +23,7 @@ describe("router", () => {
   beforeEach(() => {
     resetShell();
     fake = fakeApi([
+      ...sendServer().routes, // Drafts follows its posts' sends
       { path: "/posts", reply: () => ({ posts: [], page: { total: 0, limit: 50, offset: 0 } }) },
       {
         path: "/subscribers",
