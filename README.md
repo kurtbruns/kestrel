@@ -48,7 +48,7 @@ npm run simulate-send -- --in 90s
 
 It loads the demo first if the database is empty, moves the demo's scheduled post to that time (or schedules a new post), and prints the link to watch it. The send fires at the next sweep tick after that time, as deployed. `--profile ses` checks the server simulates SES, and `--punctual` fires it the moment it comes due instead of at the next minute.
 
-The dev server's log tells the same send's story as one JSON line per event (`send.fired`, `send.batch`, `send.completed`, and the rest of the catalog in [SPEC §12](docs/SPEC.md#12-failure-posture)). Deployed, the same lines land in Workers Logs with their fields indexed: in the Cloudflare dashboard, open the Worker's **Logs** tab and filter on `sendId` equal to the send's id (the last part of its watch URL) to read that send's timeline, or on `level` equal to `error` to see what needs a look.
+The dev server's log tells the same send's story as one JSON line per event (`send.fired`, `send.batch`, `send.completed`, and the rest of the catalog in [SPEC §12](docs/SPEC.md#12-failure-posture)). Deployed, the same lines land in Workers Logs, where filtering on a send's `sendId` reads its timeline; [Verify it works](docs/setup/07-verify.md#7-logs) shows how.
 
 Return to the empty first-run state anytime:
 

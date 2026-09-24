@@ -36,7 +36,7 @@ Prove the provider's events reach the app and suppress the address on their own.
 
 Then check:
 
-- [ ] The event arrives at the webhook (`/webhooks/ses` or `/webhooks/resend`) and passes signature verification. For SES, confirm the SNS subscription shows **Confirmed** (the app completes the handshake automatically) and the Worker logs show the event applied.
+- [ ] The event arrives at the webhook (`/webhooks/ses` or `/webhooks/resend`) and passes signature verification. For SES, confirm the SNS subscription shows **Confirmed** (the app completes the handshake automatically) and the Worker logs show a `webhook.received` event followed by `receipt.applied`.
 - [ ] The simulated address appears **suppressed** in the editor, whatever its consent state, and is excluded from every subsequent send (I1).
 
 ## 5. Send-now review window
@@ -47,6 +47,14 @@ Then check:
 
 - [ ] Under **Settings → Notifications**, **Send a test notification** arrives at your address, and **Sent through** names the channel you meant (Cloudflare's email once the `NOTIFY` binding is declared).
 - [ ] The first send that goes out brings a **Sent:** notification with its numbers and a link to its record (`docs/SPEC.md` §8).
+
+## 7. Logs
+
+The Worker logs one JSON line per event (the catalog is in `docs/SPEC.md` §12), and Workers Logs indexes each line's fields. In the Cloudflare dashboard, open the Worker's **Observability → Logs** view.
+
+- [ ] Filter on `event` equal to `sweep.tick`: a line arrives every minute, the cron at work.
+- [ ] Filter on `sendId` equal to the id of the send from the steps above (the last part of its URL in the editor): its lines read as its timeline, `send.fired`, then `send.batch`, then `send.completed`, then its receipts.
+- [ ] Filter on `level` equal to `error`: nothing, on a healthy instance. Anything here is worth a look.
 
 ---
 

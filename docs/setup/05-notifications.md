@@ -17,9 +17,9 @@ Two things decide where the email goes and how it gets there, and they sit on op
 
 **Your newsletter's provider (the fallback).** Without the binding, notifications go through SES or Resend, from your `FROM_ADDRESS`, like a test email. There is nothing to set up, and every notification works except one: when the provider refuses your account, the email about it is refused as well. The refusal still shows on the dashboard, the Sent page, and the send's page, and the failed notification shows under **Settings → Notifications**. On SES in the sandbox, your address must be verified in SES too.
 
-The channel is fixed at deploy; Kestrel never falls back from one to the other mid-send. A notification that fails is retried once a minute, up to five tries, and the failure is shown in Settings and logged as `NOTIFY_FAILED`.
+The channel is fixed at deploy; Kestrel never falls back from one to the other mid-send. A notification that fails is retried once a minute, up to five tries, and the failure is shown in Settings and logged as a `notify.failed` event.
 
-Development never reaches a real inbox: locally, notifications go to an in-memory stand-in whatever you declare, show in the `wrangler dev` log as `NOTIFY (fake, not delivered)`, and are listed by `GET /api/dev/outbox`.
+Development never reaches a real inbox: locally, notifications go to an in-memory stand-in whatever you declare, show in the `wrangler dev` log as a `notify.sent` event on the `fake` channel, and are listed by `GET /api/dev/outbox`.
 
 ## Set up Cloudflare's email
 

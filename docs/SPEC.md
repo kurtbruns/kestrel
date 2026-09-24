@@ -413,34 +413,26 @@ The one failure that is not about delivery at all and is raised loudly rather th
 
 What the watch (§8) reports is a **derived phase**, computed live from the send's current signals and never stored, distinct from the stored send state, which is only the coarse lifecycle (§2). The phase is the finer story of *how* a send in flight is faring: **progressing** (handing off cleanly), **retrying** (some recipients hit a transient error and are being retried), **backing-off** (work remains but nothing is in flight: paused until the next sweep tick after a recipient's transient error, or until the next retry while the provider is unavailable), or **needs-attention** (a wedged send, or the provider refusing the account, above). A send that is sent but still absorbing receipts reports as **settling**, then **complete** once every accepted recipient is confirmed; since some accepted messages are never confirmed at all (§6), a send can settle indefinitely, and that is not a fault. Because it is derived, the phase can never disagree with the record: it is a reading of the same durable state, not a second copy of it.
 
-Beside the record, the app keeps a **log** that explains it. The record decides and the log explains: nothing reads the log to make a decision, and nothing a publisher needs is only in the log. What it adds is the *why* between the states the record shows, so a send can be followed as a timeline, deployed or simulated, without reading the database. Each line is one event with a name and a level, and carries the send it is about, so one send's lines read as its history, and the lines of one sweep tick or one request are grouped together. Per-recipient work is counted, never listed, and no line ever carries a subscriber's address, a token, or a credential (the same line §9 draws for settings); a provider's own words are kept with any address in them reduced to its domain. Every event is logged, never sampled, since the one line that matters could be the one a sample dropped.
+Beside the record, the app keeps a **log** that explains it. The record decides and the log explains: nothing reads the log to make a decision, and nothing a publisher needs is only in the log. What it adds is the *why* between the states the record shows, so a send can be followed as a timeline, deployed or simulated, without reading the database. Each line is one event with a name and a level. A line about a send names it, so one send's lines read as its history, and the lines of one sweep tick or one request are grouped together. Per-recipient work is counted, never listed, and no line ever carries a subscriber's address, a token, or a credential (the same line §9 draws for settings); a provider's own words are kept with any address in them reduced to its domain. Every event is logged, never sampled, since the one line that matters could be the one a sample dropped.
 
-The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4) or its going out at all once its window closes (I6), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out; **info** for the ordinary lifecycle.
+The level carries the meaning: **error** for anything that threatens a send going out at most once to each person (I4), or a send that should have gone out and has not (the missed fire time and the send in flight too long, above), and for any failure nothing else handled; **warn** for a halt or a refusal the app is waiting out; **info** for the ordinary lifecycle.
 
-| Event | Level | What it says |
-| --- | --- | --- |
-| `sweep.tick` | info | A tick ran: how many sends were due or resumable, the anomalies it flagged, and how long it took. |
-| `send.fired` | info | A scheduled send started, and how late against its fire time. |
-| `send.batch` | info | One group of requests: recipients, accepted, failed, retried, held, and the provider's latency. |
-| `send.halted` | warn | The provider halted the send (unavailable, or refusing the account), with its words and when the next retry is due. |
-| `send.resumed` | info | A halted send's batch was answered again. |
-| `send.completed` | info | The send is sent. |
-| `send.canceled`, `send.rescheduled` | info | The publisher canceled a scheduled send, or moved its fire time. |
-| `send.lease_lost` | warn | A run stopped because another took over the send. |
-| `send.ambiguous` | error | Recipients whose fate is unknown now wait for Resolve. |
-| `send.missed` | error | A scheduled send missed its fire time. |
-| `send.stuck` | error | A send has been in flight too long. |
-| `send.error` | error | A run failed unexpectedly; the next tick tries again. |
-| `webhook.received` | info | A provider's webhook arrived, with how many events of each kind. |
-| `receipt.applied` | info | Receipts recorded against a send, counted by kind. |
-| `suppression.added` | info | Addresses suppressed, from a hard bounce, a complaint, or by hand, counted. |
-| `notify.sent` | info | The publisher was told of an event (§8). |
-| `notify.failed` | warn | A notification did not get through and will be tried again, or has been given up. |
-| `notify.error` | error | Notifying failed as a whole for this tick; no send was affected. |
-| `sim.quota_spent`, `sim.quota_lifted`, `sim.request_lost` | info | In local development only, a fault the send simulation injected (§10), tagged with the provider it models. |
-| `subscribe.confirmation_refused`, `subscribe.confirmation_unknown` | warn | A confirmation email was refused by the provider, or its fate is unknown. |
-| `subscribe.failed` | error | A subscribe request failed after its answer was given. |
-| `request.error`, `settings.corrupt`, `config.invalid` | error | A request failed with an unhandled error, the stored settings cannot be read, or the deploy configuration is invalid. |
+| Event | Level |
+| --- | --- |
+| `sweep.tick` | info |
+| `sweep.error` | error |
+| `send.fired`, `send.batch`, `send.resumed`, `send.completed` | info |
+| `send.canceled`, `send.rescheduled` | info |
+| `send.halted`, `send.lease_lost` | warn |
+| `send.ambiguous`, `send.wedged`, `send.missed`, `send.stuck`, `send.error` | error |
+| `webhook.received`, `receipt.applied`, `suppression.added` | info |
+| `notify.sent` | info |
+| `notify.failed` | warn |
+| `notify.error` | error |
+| `subscribe.confirmation_refused`, `subscribe.confirmation_unknown` | warn |
+| `subscribe.failed` | error |
+| `request.error`, `settings.corrupt`, `config.invalid` | error |
+| `sim.quota_spent`, `sim.quota_lifted`, `sim.request_lost` (local development only, §10) | info |
 
 ---
 

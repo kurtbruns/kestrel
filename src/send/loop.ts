@@ -216,7 +216,11 @@ export async function runSend(
     let requeued = 0;
     let answered = false;
     let complete = true;
+    // For the `send.batch` line: every member of the group lands in exactly one of its
+    // counts (accepted, unsent, retried, held, unknown), so they sum to `recipients`.
     let latencyMs = 0;
+    let heldCount = 0;
+    let unknown = 0;
 
     const calls = batches.map((b) => {
       const byAddress = new Map<string, number>();
@@ -273,10 +277,10 @@ export async function runSend(
           keepKey: provider.idempotentRetry && !call.batch.firstAttempt,
         });
         requeued += call.batch.members.length;
+        heldCount += call.recipients.length;
       }
     }
 
-    let unknown = 0;
     for (const { call, answer, lost } of answers) {
       const { batch, byAddress } = call;
       let batchHalt: BatchHalt | null = null;
@@ -290,18 +294,20 @@ export async function runSend(
             mayHaveSent: true,
           };
         } else {
-          unknown += call.recipients.length;
+          unknown += call.recipients.length; // stays in flight, awaiting Resolve (§12)
         }
       } else if (answer.kind === "halted") {
         complete = false;
         batchHalt = answer.halt;
       } else {
         answered = true;
+        let answeredFor = 0;
         for (const r of answer.results) {
           const id = byAddress.get(r.email);
           if (!id) {
             continue;
           }
+          answeredFor += 1;
           if (r.accepted) {
             outcomes.push({ id, status: "accepted", providerId: r.providerId });
             result.accepted += 1;
@@ -318,6 +324,8 @@ export async function runSend(
             result.unsent += 1;
           }
         }
+        // A recipient the answer left out stays in flight, its fate unknown.
+        unknown += Math.max(0, call.recipients.length - answeredFor);
       }
       if (batchHalt) {
         held.push({
@@ -325,6 +333,7 @@ export async function runSend(
           keepKey: provider.idempotentRetry && (batchHalt.mayHaveSent || !batch.firstAttempt),
         });
         requeued += batch.members.length;
+        heldCount += call.recipients.length;
         // An account refusal outranks a provider that is only unavailable: it is the one
         // the publisher has to act on.
         if (!halt || (halt.reason === "unavailable" && batchHalt.reason === "account")) {
@@ -334,6 +343,9 @@ export async function runSend(
     }
 
     await sends.settleDeliveries(db, sendId, lease, "dispatched", outcomes, Date.now(), answered);
+    // One reading of the clock for the hold and its log line, so the `retryAt` logged is
+    // the retry time stored.
+    const heldAt = Date.now();
     await sends.holdBatch(
       db,
       sendId,
@@ -341,7 +353,7 @@ export async function runSend(
       held,
       halt,
       HALT_BACKOFF_MS[halt?.reason ?? "unavailable"],
-      Date.now(),
+      heldAt,
     );
     result.requeued += requeued;
     if (halt) {
@@ -353,11 +365,11 @@ export async function runSend(
     log.info("send.batch", {
       ...tags,
       requests: answers.length,
-      recipients: answers.reduce((n, a) => n + a.call.recipients.length, 0),
+      recipients: batches.reduce((n, b) => n + b.members.length, 0),
       accepted: count("accepted"),
-      failed: count("unsent"),
+      unsent: count("unsent"),
       retried: count("pending"),
-      held: requeued,
+      held: heldCount,
       unknown,
       latencyMs,
     });
@@ -379,7 +391,7 @@ export async function runSend(
         reason: halt.reason,
         cause: halt.cause,
         error: halt.error,
-        retryAt: new Date(Date.now() + delay).toISOString(),
+        retryAt: new Date(heldAt + delay).toISOString(),
       });
     }
     if (unknown > 0) {

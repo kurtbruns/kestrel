@@ -1417,11 +1417,27 @@ export async function acceptedAwaitingEvent(
   return results;
 }
 
-/** Dispatched rows older than a threshold — ambiguous on non-idempotent providers. */
-export async function staleDispatched(db: D1Database, olderThan: number): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS n FROM deliveries WHERE status = 'dispatched' AND updated_at < ?")
+/** A send with deliveries left in flight past the threshold, and how many. */
+export interface StaleDispatched {
+  send_id: string;
+  post_id: string;
+  n: number;
+}
+
+/** Dispatched rows older than a threshold, counted per send: ambiguous on non-idempotent
+ *  providers, so the send is wedged until Resolve. One statement, whatever the count. */
+export async function staleDispatched(
+  db: D1Database,
+  olderThan: number,
+): Promise<StaleDispatched[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT d.send_id AS send_id, s.post_id AS post_id, COUNT(*) AS n
+         FROM deliveries d JOIN sends s ON s.id = d.send_id
+        WHERE d.status = 'dispatched' AND d.updated_at < ?
+        GROUP BY d.send_id, s.post_id`,
+    )
     .bind(olderThan)
-    .first<{ n: number }>();
-  return row?.n ?? 0;
+    .all<StaleDispatched>();
+  return results;
 }

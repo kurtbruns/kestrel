@@ -10,8 +10,9 @@
  *
  * No address, token, or credential goes in a field (the line SPEC §9 draws for settings).
  * Field values are scalars only, so a row, an error object, or a recipient list can't be
- * dumped whole, and every string is scrubbed of anything address-shaped on the way out,
- * so a provider's or an exception's own text can't carry one through either.
+ * dumped whole, and every string is scrubbed on the way out, of anything address-shaped
+ * and of any token in a URL, so a provider's or an exception's own text (or a stack) can't
+ * carry one through either.
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
@@ -45,12 +46,18 @@ export function newRun(): string {
 }
 
 // An address anywhere in a string: the local part goes, the domain stays, so a provider's
-// "domain not verified" still says which domain while no subscriber is named.
-const ADDRESS = /[^\s<>"'(),;:@]+@([A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+)/g;
+// "domain not verified" still says which domain while no subscriber is named. Wide on
+// purpose, since a miss leaks and an over-match only blurs a line: a quoted local part,
+// an `@` URL-encoded as `%40`, a domain in any script, a single label, or an IP literal.
+const ADDRESS =
+  /(?:"[^"\r\n]*"|[^\s<>"'(),;:@/?&=[\]]+?)(?:@|%40)(\[[^\]\s]*\]|[\p{L}\p{N}_-]+(?:\.[\p{L}\p{N}_-]+)*)/giu;
+// A token in a URL (`/unsubscribe?token=…`, `/confirm?token=…`), which would let whoever
+// reads the line act as that subscriber.
+const TOKEN = /([?&;]token=)[^&\s"'#<>]+/gi;
 
-/** A string with every address in it reduced to its domain. */
+/** A string with every address in it reduced to its domain and every URL token removed. */
 export function scrub(text: string): string {
-  return text.replace(ADDRESS, "…@$1");
+  return text.replace(ADDRESS, "…@$1").replace(TOKEN, "$1…");
 }
 
 function emit(level: LogLevel, event: string, fields: LogFields): void {
@@ -76,9 +83,14 @@ function emit(level: LogLevel, event: string, fields: LogFields): void {
 }
 
 /**
- * The logger. `event` is a dotted name from the catalog in SPEC §12 (`send.batch`); the
- * level carries meaning: `error` for what threatens I4 or I6 or went unhandled, `warn` for
- * halts and refusals, `info` for lifecycle.
+ * The logger. `event` is a dotted name from the catalog in SPEC §12 (`send.batch`), which
+ * a new event joins. The level carries the meaning, so pick it by this rule:
+ *   - `error`: something could mail a person twice (I4), a send that should have gone out
+ *     has not (missed, stuck, wedged), or a failure nothing else handled. Worth a look.
+ *   - `warn`: the app is waiting something out that it recovers from on its own (a halt,
+ *     a refusal, a lost lease, a notification to retry), but a person may want to know.
+ *   - `info`: the ordinary lifecycle, and the counts of work done.
+ * Work over many recipients is one line of counts, never a line each.
  */
 export const log = {
   error: (event: string, fields: LogFields = {}): void => emit("error", event, fields),

@@ -16,9 +16,11 @@
  * Notifying gets what the sends leave plus a reserve held back up front, so a long send
  * spending every tick's budget can't starve the notification that says it is stuck.
  *
- * Each tick ends with one `sweep.tick` line counting what it did, and each anomaly is its
- * own `error` line (`send.missed`, `send.stuck`, `send.ambiguous`), after the checks that
- * found it: the log describes the tick, it never steers it (SPEC §12).
+ * Each tick ends with one `sweep.tick` line counting what it did, even when it throws
+ * (then with `ok: false`, after a `sweep.error`), and each anomaly is its own `error` line
+ * per send (`send.missed`, `send.stuck`, `send.wedged`), repeated every tick the condition
+ * lasts, after the check that found it: the log describes the tick, it never steers it
+ * (SPEC §12).
  */
 
 import * as sends from "../db/sends";
@@ -37,12 +39,33 @@ import { SendWindow } from "./pace";
  *  they run whatever the sends spent. */
 const ANOMALY_CHECKS = 2;
 
+/** What a tick found, for its `sweep.tick` line: sends due to fire and sends to resume
+ *  (each run logs what it did), and the sends flagged. */
+interface TickCounts {
+  due: number;
+  resumable: number;
+  missed: number;
+  stuck: number;
+  wedged: number;
+}
+
 export async function sweep(env: AppEnv): Promise<void> {
   const now = Date.now();
+  const tick: TickCounts = { due: 0, resumable: 0, missed: 0, stuck: 0, wedged: 0 };
+  let ok = false;
+  try {
+    await runTick(env, now, tick);
+    ok = true;
+  } catch (err) {
+    log.error("sweep.error", { error: errorText(err) });
+    throw err;
+  } finally {
+    log.info("sweep.tick", { ...tick, ok, durationMs: Date.now() - now });
+  }
+}
+
+async function runTick(env: AppEnv, now: number, tick: TickCounts): Promise<void> {
   const config = getConfig(env);
-  // What the tick found, for its `sweep.tick` line: sends due to fire and sends to resume
-  // (each run logs whether it got the lease), and the anomalies flagged.
-  const tick = { due: 0, resumable: 0, missed: 0, stuck: 0, ambiguous: 0 };
   // Handle each send at most once per tick. A transient failure releases the
   // lease, so without this a just-failed send would be retried again in the same
   // sweep; instead it waits for the next tick (the backoff).
@@ -85,9 +108,9 @@ export async function sweep(env: AppEnv): Promise<void> {
     log.error("send.stuck", { sendId: s.id, postId: s.post_id, startedAt: s.started_at });
     tick.stuck += 1;
   }
-  tick.ambiguous = await sends.staleDispatched(env.DB, now - STUCK_THRESHOLD_MS);
-  if (tick.ambiguous > 0) {
-    log.error("send.ambiguous", { recipients: tick.ambiguous });
+  for (const s of await sends.staleDispatched(env.DB, now - STUCK_THRESHOLD_MS)) {
+    log.error("send.wedged", { sendId: s.send_id, postId: s.post_id, recipients: s.n });
+    tick.wedged += 1;
   }
 
   // 4) Tell the publisher: the reserve plus whatever the sends left. Last, and caught, so a
@@ -108,8 +131,6 @@ export async function sweep(env: AppEnv): Promise<void> {
   // an in-flight simulated send settles (delivered / bounced / complained) over ticks
   // exactly as a real provider's webhooks would. No-op unless the simulation is active.
   await drainSimulatedWebhooks(env, config);
-
-  log.info("sweep.tick", { ...tick, durationMs: Date.now() - now });
 }
 
 async function safeRun(
