@@ -713,6 +713,63 @@ describe("sent record", () => {
     expect($(".wbar-sub").textContent).toContain("next retry in 9 min");
   });
 
+  // A send in flight, as the page's read and the feed both report it from `current()`.
+  const watching = (current: () => SendView) =>
+    fakeApi([
+      {
+        path: "/sends/x1",
+        reply: () => ({ send: current(), outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+      },
+      feedOf(current),
+    ]);
+  const inFlight = () =>
+    send({
+      status: "sending",
+      c_pending: 4,
+      c_accepted: 5,
+      c_delivered: 0,
+      c_bounced: 0,
+      c_unsent: 0,
+      completed_at: null,
+    });
+
+  it("flags a send in flight too long in amber, in the server's words, until it clears", async () => {
+    let stuck = true;
+    const current = () =>
+      sendView(inFlight(), {
+        phase: "progressing",
+        conditions: stuck ? [condition.stuck()] : [],
+      });
+    fake = watching(current);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($("#watchBody .health.amber").textContent).toContain(
+      "Still sending 31 minutes after it started",
+    );
+    stuck = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(document.querySelector("#watchBody .health.amber")).toBeNull();
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("gives no rate or time to finish while the send is paused, and both while it hands off", async () => {
+    let paused = true;
+    const current = () =>
+      sendView(inFlight(), {
+        phase: paused ? "backing-off" : "progressing",
+        // The server gives a time to finish only while the send is handing off.
+        dispatch: { done: 5, percent: 50, rate_per_min: 30, eta_ms: paused ? null : 120_000 },
+      });
+    fake = watching(current);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(10);
+    expect($(".wbar-sub").textContent).not.toMatch(/\/min|ETA/);
+    paused = false;
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($(".wbar-sub").textContent).toMatch(/~30\/min · ETA 2 min/);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("offers Resolve while the server lists it, and names its count", async () => {
     const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
       phase: "needs-attention",

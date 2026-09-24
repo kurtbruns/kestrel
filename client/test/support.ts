@@ -508,6 +508,8 @@ export function sendServer(rows: SendSummary[] = []) {
       sends.delete(id);
       removed.set(id, seq);
     },
+    /** Where a read now stands, as a list route would hand it back (`GET /posts` carries one). */
+    cursor,
   };
 }
 

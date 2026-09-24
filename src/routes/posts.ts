@@ -1,5 +1,6 @@
 /** Post CRUD + revision history. All routes are authed (admin surface). */
 
+import { encodeSendCursor } from "../../shared/cursor";
 import type {
   PostListResponse,
   PostResponse,
@@ -8,7 +9,7 @@ import type {
 } from "../../shared/posts";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
-import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import { currentSendSeq, getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -107,11 +108,19 @@ export async function listPosts(c: RequestContext): Promise<Response> {
   const search = c.url.searchParams.get("search") ?? undefined;
   const filter = { status, search } satisfies posts.PostFilter;
   const page = parseListParams(c.url, posts.POST_LIST_SPEC);
+  // The send sequence and its time come first, so whatever the rows show of their sends is
+  // at or after the cursor, and a client following them from here misses nothing.
+  const now = Date.now();
+  const seq = await currentSendSeq(c.env.DB);
   const [total, rows] = await Promise.all([
     posts.countPosts(c.env.DB, filter),
     posts.listPosts(c.env.DB, filter, page),
   ]);
-  const body: PostListResponse = { posts: rows, page: listPage(total, page) };
+  const body: PostListResponse = {
+    posts: rows,
+    page: listPage(total, page),
+    cursor: encodeSendCursor({ seq, at: now }),
+  };
   return json(body);
 }
 

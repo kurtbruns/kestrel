@@ -178,10 +178,14 @@ function watchBodyHtml(prog: SendView): Html {
   const c = prog.counts;
   const acceptedTotal = c.accepted + c.delivered + c.bounced + c.complained;
   const rate = prog.dispatch.rate_per_min;
+  // The server gives a time to finish only while the send is handing off, never while it
+  // is paused (backing off, refused, or wedged). The rate goes with it: it is an average
+  // since the send started, so beside a pause it would promise progress nothing is making.
+  const eta = prog.dispatch.eta_ms;
   const dispatchSub =
     prog.status === "sending"
       ? `${phaseBlurb(prog)}${
-          rate ? ` · ~${rate.toLocaleString()}/min · ETA ${fmtDuration(prog.dispatch.eta_ms)}` : ""
+          eta ? `${rate ? ` · ~${rate.toLocaleString()}/min` : ""} · ETA ${fmtDuration(eta)}` : ""
         }`
       : "Dispatch complete.";
   const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);
@@ -191,7 +195,11 @@ function watchBodyHtml(prog: SendView): Html {
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");
+  // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
+  // page's card give the same condition, in the server's words.
+  const stuck = conditionOf(prog, "stuck");
   return html`
+    ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
     ${
       refused
         ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${refused.error}</div><div>${refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once this is fixed the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
