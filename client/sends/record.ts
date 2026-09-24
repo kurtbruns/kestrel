@@ -12,7 +12,7 @@ import type {
 } from "../../shared/sends";
 import { api, apiFile } from "../api";
 import { noEmailProvider } from "../deployment";
-import { every, mount, poll } from "../lifecycle";
+import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
@@ -315,7 +315,6 @@ function outcomeTilesHtml(outcomes: DeliveryOutcomes): Html {
 }
 function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
   const total = outcomes.recipients;
-  const residual = outcomes.accepted + outcomes.skipped + outcomes.in_flight;
   const parts = [`${outcomes.delivered.toLocaleString()} delivered`];
   if (outcomes.bounced) {
     parts.push(`${outcomes.bounced.toLocaleString()} bounced`);
@@ -326,8 +325,19 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
   if (outcomes.unsent) {
     parts.push(`${outcomes.unsent.toLocaleString()} unsent`);
   }
-  if (residual) {
-    parts.push(`${residual.toLocaleString()} accepted, awaiting a delivery receipt`);
+  // Each leftover recipient is named for what it is: only an accepted one can still get a
+  // receipt. A skipped one was left out at hand-off (unsubscribed or suppressed by then)
+  // and never mailed, so it is final (SPEC §6, §8), and one in flight is still being handed.
+  if (outcomes.accepted) {
+    parts.push(`${outcomes.accepted.toLocaleString()} accepted, awaiting a delivery receipt`);
+  }
+  if (outcomes.skipped) {
+    parts.push(
+      `${outcomes.skipped.toLocaleString()} skipped (unsubscribed or suppressed before hand-off, never mailed)`,
+    );
+  }
+  if (outcomes.in_flight) {
+    parts.push(`${outcomes.in_flight.toLocaleString()} in flight`);
   }
   const reconciled = `All ${total.toLocaleString()} accounted for: ${parts.join(", ")}.`;
   // The suppression note is scoped to what actually suppresses: hard bounces and complaints,
@@ -457,6 +467,10 @@ function renderFrozenRecord(
   remount: () => void,
 ): void {
   const { send, outcomes } = data;
+  if (send.status === "canceled") {
+    renderCanceled(send, root);
+    return;
+  }
   // The published post, which the send's view links once it is sent.
   const archive = send.links.archive;
   const total = outcomes.recipients;
@@ -471,7 +485,7 @@ function renderFrozenRecord(
     </div>
     <div class="card rec-card">
       <div class="rec-head">
-        <h1>${send.subject || html`<em>untitled</em>`}</h1>
+        <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
         <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
       </div>
       <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
@@ -629,41 +643,73 @@ function renderFrozenRecord(
       }
     });
 
-  // Still settling: the record keeps absorbing delivery receipts after dispatch (§6), so
-  // poll ~15s until every accepted recipient is confirmed. A tick that moved a count
-  // repaints the tiles and reloads the list on the reader's page, in their view, search,
-  // and sort; one that moved nothing leaves the list alone.
-  // Capped (~10 min) so a provider that never confirms doesn't leave the poll running
-  // forever; ends with the mount either way.
-  if (outcomes.accepted > 0) {
-    let shown = outcomes;
-    let ticks = 0;
-    poll(
-      15000,
-      async () => {
-        if (++ticks > 40) {
-          return false; // stop chasing receipts that may never arrive
+  // The record keeps absorbing delivery receipts after dispatch (§6), and follows them
+  // through the send-state layer at the server's pace (DESIGN §9): closely while they
+  // arrive, easing off as they slow, then about once a minute, for as long as the page is
+  // open, since a complaint can land long after the last delivery. Each report carries the
+  // send's counters, which give every tile, so a read that brings nothing costs nothing
+  // here. One that moved a count repaints the tiles and reloads the list on the reader's
+  // page, in their view, search, and sort; the pill turns from Settling to Complete in place.
+  let shown = outcomes;
+  followSend(
+    data,
+    {
+      update(fresh) {
+        if (fresh.status === "sending") {
+          remount(); // resumed (a Resolve that put recipients back, say) → back to the watch
+          return;
         }
-        const fresh = await api<SendResponse>(`/sends/${id}`, { signal });
-        if (fresh.send.status === "sending") {
-          remount(); // resumed (a wedged resolve, say) → back to the watch
-          return false;
+        setHtml($("#recPill", root), phasePill(fresh.phase));
+        const now = outcomesOf(fresh);
+        if (sameOutcomes(shown, now)) {
+          return;
         }
-        if (!sameOutcomes(shown, fresh.outcomes)) {
-          shown = fresh.outcomes;
-          const tiles = root.querySelector(".rec-tiles");
-          const recon = root.querySelector(".rec-recon");
-          if (tiles) {
-            setHtml(tiles, outcomeTilesHtml(fresh.outcomes));
-          }
-          if (recon) {
-            recon.textContent = outcomeReconHtml(fresh.outcomes);
-          }
-          await load(true);
-        }
-        return fresh.outcomes.accepted > 0;
+        shown = now;
+        setHtml($(".rec-tiles", root), outcomeTilesHtml(now));
+        $(".rec-recon", root).textContent = outcomeReconHtml(now);
+        void load(true);
       },
-      signal,
-    );
-  }
+      removed: remount,
+      stale: remount,
+    },
+    signal,
+  );
+}
+
+/** A sent send's outcomes from its counters: the same buckets as the record's own read,
+ *  one per recipient, over the audience fixed at fire. As there, a recipient not yet handed
+ *  off (pending) counts as in flight. */
+function outcomesOf(send: SendView): DeliveryOutcomes {
+  const c = send.counts;
+  return {
+    recipients: send.audience.count,
+    delivered: c.delivered,
+    bounced: c.bounced,
+    complained: c.complained,
+    unsent: c.unsent,
+    skipped: c.skipped,
+    accepted: c.accepted,
+    in_flight: c.pending + c.in_flight,
+  };
+}
+
+/**
+ * A canceled send's page: it never fired, so there is no audience, outcome, or published
+ * post to show, only that it was canceled, when, and when it would have sent.
+ */
+function renderCanceled(send: SendView, root: HTMLElement): void {
+  setHtml(
+    root,
+    html`
+    <div class="editor-head">
+      <a href="#/sent" class="back">← Sent</a>
+    </div>
+    <div class="card rec-card">
+      <div class="rec-head">
+        <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
+        <div class="rec-meta">Canceled ${fmt(send.completed_at)} · was scheduled for ${fmt(send.fire_at)}</div>
+      </div>
+      <p class="rec-note muted">This send was canceled before it fired, so no one was mailed.</p>
+    </div>`,
+  );
 }
