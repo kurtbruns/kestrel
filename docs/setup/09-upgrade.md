@@ -31,15 +31,17 @@ If you deploy from an untouched clone with no commits of your own, `git fetch --
 
 ## 3. Apply the schema
 
-Until 1.0.0, Kestrel changes its database schema by editing the baseline migration in place rather than adding a new one. A database that already ran the old baseline has no way to take the new one, so a 0.x release that changes the schema needs the database **rebuilt**, not migrated. The changelog entry for that release says so ("This touches the database baseline, so rebuild the database").
-
-**If no entry between your version and the target touches the baseline,** apply migrations as usual. This is harmless when there is nothing new:
+From 1.0.0 the database schema only ever changes by adding a new migration, which this step applies to the database you already have, keeping everything in it. Run it on every upgrade; it is harmless when there is nothing new:
 
 ```bash
 npm run migrate:remote -- --env staging
 ```
 
-**If an entry does,** rebuild the environment's database. A rebuild starts the database empty: posts, subscribers, consent, the send record, and your settings are all gone. Links in emails you already sent stop working too: archive links find no post, and unsubscribe links find no subscriber. Images stay in R2, but nothing refers to them any more. Pick a moment with no send scheduled or in progress, and keep an export as a record. For staging (use `kestrel-production` for production, or whatever you named the database in **Provision**):
+### Coming from a 0.x release
+
+Before 1.0.0, Kestrel changed its schema by editing the baseline migration in place rather than adding a new one. A database that ran a 0.x baseline has no way to take the 1.0.0 one, so moving from any 0.x release to 1.0.0 or later needs the database **rebuilt**, not migrated. This happens once: after it, every upgrade is the command above.
+
+Rebuild the environment's database. A rebuild starts the database empty: posts, subscribers, consent, the send record, and your settings are all gone. Links in emails you already sent stop working too: archive links find no post, and unsubscribe links find no subscriber. Images stay in R2, but nothing refers to them any more. Pick a moment with no send scheduled or in progress, and keep an export as a record. For staging (use `kestrel-production` for production, or whatever you named the database in **Provision**):
 
 ```bash
 npx wrangler d1 export kestrel-staging --remote --output kestrel-staging-backup.sql
@@ -55,8 +57,6 @@ npm run migrate:remote -- --env staging
 ```
 
 The export is a record of what was there, not something to load back: it matches the old schema, not the new one. Run the deploy in the next step right away, since the Worker still running is the old release.
-
-From 1.0.0 the baseline is frozen, and this step only ever applies new migrations to the database you already have.
 
 ## 4. Deploy
 
