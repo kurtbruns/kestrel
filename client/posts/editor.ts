@@ -15,7 +15,7 @@ import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
-import { every, mount, onAbort, type ViewHandle } from "../lifecycle";
+import { every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
 import { has } from "../sends/progress";
@@ -108,25 +108,29 @@ export async function renderEditor(
       handOff(home);
       return;
     }
-    if (data.scheduled) {
-      sendRead = await api<SendResponse>(`/sends/${data.scheduled.id}`, { signal });
-      if (signal.aborted) {
-        return;
-      }
-      // It moved on between the two reads: started (its page now), or canceled (a draft
-      // again, which a fresh read of the post shows).
-      if (sendRead.send.status === "sending" || sendRead.send.status === "sent") {
-        handOff(`#/sent/${sendRead.send.id}`);
-        return;
-      }
-      if (sendRead.send.status === "canceled") {
-        remount();
-        return;
-      }
-    }
   } catch (e) {
     renderError(root, message(e), remount);
     return;
+  }
+  if (data.scheduled) {
+    try {
+      sendRead = await api<SendResponse>(`/sends/${data.scheduled.id}`, { signal });
+    } catch (e) {
+      if (signal.aborted) {
+        return;
+      }
+      // A send is deleted only with its post, so the post went between the two reads.
+      if (e instanceof ApiError && e.status === 404) {
+        toast("This post was deleted elsewhere.");
+        handOff("#/drafts");
+        return;
+      }
+      // Any other failure leaves the post readable: the editor opens with its banner from
+      // the post's own read, and follows the send once a later read of it succeeds.
+    }
+    if (signal.aborted || (sendRead && movedOn(sendRead.send, remount))) {
+      return;
+    }
   }
   const { post, markdown, scheduled } = data;
 
@@ -751,10 +755,15 @@ export async function renderEditor(
       }
     });
 
-  if (locked && scheduled && sendRead) {
-    // The send as last reported: this page's read of it, then each read of the send-state
-    // layer that found it changed, whichever client changed it (DESIGN §9).
-    let current: SendView = sendRead.send;
+  if (locked && scheduled) {
+    // The send as last reported: this page's read of it (or, until that succeeds, what the
+    // post's read says of it), then each read of the send-state layer that found it
+    // changed, whichever client changed it (DESIGN §9).
+    let current: BannerSend = sendRead?.send ?? {
+      ...scheduled,
+      phase: "scheduled",
+      conditions: [],
+    };
     const whenEl = $("#schedWhen");
     const controls = $("#schedControls");
     // --- the banner: the cards' countdown, and the review window closing at the fire time ---
@@ -796,33 +805,54 @@ export async function renderEditor(
     // A move, a re-make, or a cancel made elsewhere (by Claude or another tab) shows in
     // place, and when the send starts this page hands off to its send page, which is the
     // send's home from then on, saying why the page changed.
-    followSend(
-      sendRead,
-      {
-        update(send: SendView, change: StageChange | null) {
-          current = send;
-          if (change?.to === "sending" || change?.to === "sent" || change?.to === "complete") {
-            toast("Your send started, so this page switched to its live watch.");
-            handOff(`#/sent/${send.id}`);
-            return;
-          }
-          if (change?.to === "canceled") {
-            toast("The schedule was canceled elsewhere, so this post is a draft again.");
-            remount();
-            return;
-          }
-          paintBanner();
-          showRemade();
+    const follow = (from: SendResponse) =>
+      followSend(
+        from,
+        {
+          update(send: SendView, change: StageChange | null) {
+            current = send;
+            if (change?.to === "sending" || change?.to === "sent" || change?.to === "complete") {
+              toast("Your send started, so this page switched to its live watch.");
+              handOff(`#/sent/${send.id}`);
+              return;
+            }
+            if (change?.to === "canceled") {
+              toast("The schedule was canceled elsewhere, so this post is a draft again.");
+              remount();
+              return;
+            }
+            paintBanner();
+            showRemade();
+          },
+          removed() {
+            toast("This post was deleted elsewhere.");
+            handOff("#/drafts");
+          },
+          // The layer's cursor ran ahead of the database: read the post and its send again.
+          stale: remount,
         },
-        removed() {
-          toast("This post was deleted elsewhere.");
-          handOff("#/drafts");
+        signal,
+      );
+    if (sendRead) {
+      follow(sendRead);
+    } else {
+      // The send's read failed: try it again, spaced out, and follow from the first that
+      // answers. A failure throws, which the poll takes as "try again".
+      poll(
+        5000,
+        async () => {
+          const read = await api<SendResponse>(`/sends/${scheduled.id}`, { signal });
+          if (!movedOn(read.send, remount)) {
+            current = read.send;
+            paintBanner();
+            showRemade();
+            follow(read);
+          }
+          return false;
         },
-        // The layer's cursor ran ahead of the database: read the post and its send again.
-        stale: remount,
-      },
-      signal,
-    );
+        signal,
+      );
+    }
 
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
     const rescheduleBtn = $<HTMLButtonElement>("#rescheduleSchedule");
@@ -1123,15 +1153,35 @@ export async function renderEditor(
   return handle;
 }
 
+/** What the scheduled banner reads of its send. */
+type BannerSend = Pick<SendView, "id" | "fire_at" | "phase" | "conditions" | "remade_at">;
+
+/**
+ * Whether the send has moved on from scheduled, found on the editor's own read of it: once
+ * it has started its send page is its home, and once canceled its post is a draft again,
+ * which a fresh read of the post shows.
+ */
+function movedOn(send: SendView, remount: () => void): boolean {
+  if (send.status === "sending" || send.status === "sent") {
+    handOff(`#/sent/${send.id}`);
+    return true;
+  }
+  if (send.status === "canceled") {
+    remount();
+    return true;
+  }
+  return false;
+}
+
 /**
  * The scheduled banner's words for where its send stands (DESIGN §9), in the cards' own
  * formats: the fire time and a countdown while the window is open; from the fire time,
  * "Preparing to send…" and that this page switches to the live send when it starts; past
  * the server's missed tolerance, how late it is, in the danger tone.
  */
-function scheduledBannerHtml(send: SendView, due: boolean): Html {
+function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
   if (has(send, "missed")) {
-    return html`<span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>`;
+    return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown countdown-missed">${lateStr(send.fire_at)}</span>`;
   }
   if (due) {
     return html`<strong>${untilStr(send.fire_at, true)}</strong> This page switches to the live send when it starts.`;

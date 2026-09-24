@@ -462,7 +462,8 @@ export function sendServer(rows: SendSummary[] = []) {
     },
     {
       // One send, as `GET /sends/:id` answers it: its view, its outcomes from the
-      // counters (the fake keeps no delivery rows), and where the read stood.
+      // counters (the fake keeps no delivery rows; like the server's, a recipient not yet
+      // handed off counts as in flight), and where the read stood.
       path: /^\/sends\/(?!feed$)[^/]+$/,
       reply: (req): SendResponse | Response => {
         const id = req.url.pathname.split("/").pop() ?? "";
@@ -481,7 +482,7 @@ export function sendServer(rows: SendSummary[] = []) {
             unsent: r.c_unsent,
             skipped: r.c_skipped,
             accepted: r.c_accepted,
-            in_flight: r.c_in_flight,
+            in_flight: r.c_pending + r.c_in_flight,
           },
           cursor: cursor(),
         };
