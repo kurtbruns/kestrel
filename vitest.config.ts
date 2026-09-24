@@ -38,6 +38,10 @@ export default defineConfig(async () => {
                   // The suite runs on the default minimum lead (five minutes) whatever a
                   // local `.dev.vars` sets for dev; a test that needs another names it.
                   MIN_LEAD_SECONDS: "",
+                  // And on the default subrequest budget (Workers Free), which the budget and
+                  // halt specs size their sends against, whatever a `.dev.vars` sets to model
+                  // Workers Paid; a test that needs another names it.
+                  SUBREQUEST_BUDGET: "",
                 },
               },
             }),

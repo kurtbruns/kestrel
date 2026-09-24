@@ -21,77 +21,26 @@ import { existsSync } from "node:fs";
  */
 import { readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { readDevPort } from "./dev-port.mjs";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { baseUrl, devToken, fail, parseArgs } from "./dev-api.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
-/** Split argv into `--flag value` / `--flag=value` pairs and bare positionals, so the
- *  base URL / port positional and the scale flags can be given in any order. */
-function parseArgs(argv) {
-  const flags = {};
-  const positional = [];
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    const eq = /^--([^=]+)=(.*)$/.exec(a);
-    if (eq) {
-      flags[eq[1]] = eq[2];
-    } else if (a.startsWith("--")) {
-      flags[a.slice(2)] = argv[i + 1] ?? "";
-      i++;
-    } else {
-      positional.push(a);
-    }
-  }
-  return { flags, positional };
-}
-
-function baseUrl(positional) {
-  const arg = positional[0];
-  if (arg) {
-    return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
-  }
-  const port = process.env.PORT || readDevPort() || "8787";
-  return `http://localhost:${port}`;
-}
-
-// Mint a local admin token from the dev-only bootstrap endpoint — the same one the
-// editor uses. Needs no `.dev.vars`; it 404s on any non-dev transport.
-async function devToken(base) {
-  let res;
-  try {
-    res = await fetch(`${base}/api/dev/token?kind=service`);
-  } catch (err) {
-    console.error(`[seed] could not reach ${base}. Is the dev server running? (npm run dev)`);
-    console.error(`       ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
-  }
-  if (res.status === 404) {
-    console.error(
-      "[seed] /api/dev/token is unavailable: seeding only works on a local dev server (fake transport, no Access, APP_ORIGIN on localhost).",
-    );
-    process.exit(1);
-  }
-  if (!res.ok) {
-    console.error(`[seed] could not mint a dev token: ${res.status} ${res.statusText}`);
-    process.exit(1);
-  }
-  return (await res.json()).token;
-}
-
-async function main() {
-  const { flags, positional } = parseArgs(process.argv.slice(2));
-  const base = baseUrl(positional);
+/**
+ * Reset the dev server's database and load the demo, with its cover image and logo, as
+ * `token`. `size` and `seed` scale the list as `--size` and `--seed` do. Resolves the
+ * worker's summary, or exits saying why it couldn't.
+ */
+export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
   const params = new URLSearchParams();
-  if (flags.size) {
-    params.set("size", flags.size);
+  if (size) {
+    params.set("size", size);
   }
-  if (flags.seed) {
-    params.set("seed", flags.seed);
+  if (seed) {
+    params.set("seed", seed);
   }
   const qs = params.toString();
   const url = `${base}/api/dev/seed${qs ? `?${qs}` : ""}`;
-  const token = await devToken(base);
 
   const form = new FormData();
   const CONTENT_TYPE = {
@@ -112,7 +61,7 @@ async function main() {
     form.set("kestrel", new Blob([bytes], { type }), coverName);
   } else {
     console.warn(
-      "[seed] no scripts/seed-assets/kestrel.{webp,jpg,jpeg,png,gif} found — seeding without the cover image.\n" +
+      `[${tag}] no scripts/seed-assets/kestrel.{webp,jpg,jpeg,png,gif} found — seeding without the cover image.\n` +
         "        Drop the kestrel photo there and re-run `npm run seed` to fill it in.",
     );
   }
@@ -124,7 +73,7 @@ async function main() {
     const bytes = await readFile(logoPath);
     form.set("logo", new Blob([bytes], { type: "image/svg+xml" }), "windbreak-logo.svg");
   } else {
-    console.warn("[seed] no scripts/seed-assets/windbreak-logo.svg — seeding without the logo.");
+    console.warn(`[${tag}] no scripts/seed-assets/windbreak-logo.svg — seeding without the logo.`);
   }
 
   let res;
@@ -135,18 +84,23 @@ async function main() {
       body: form,
     });
   } catch (err) {
-    console.error(`[seed] could not reach ${url}. Is the dev server running? (npm run dev)`);
-    console.error(`       ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    fail(
+      tag,
+      `could not reach ${url}. Is the dev server running? (npm run dev)`,
+      err instanceof Error ? err.message : String(err),
+    );
   }
-
   if (!res.ok) {
-    console.error(`[seed] request failed: ${res.status} ${res.statusText}`);
-    console.error(await res.text());
-    process.exit(1);
+    fail(tag, `request failed: ${res.status} ${res.statusText}`, await res.text());
   }
+  return res.json();
+}
 
-  const summary = await res.json();
+async function main() {
+  const { flags, positional } = parseArgs(process.argv.slice(2));
+  const base = baseUrl(positional[0]);
+  const token = await devToken(base, "seed");
+  const summary = await seedDemo(base, token, { size: flags.size, seed: flags.seed });
   console.log("[seed] done:");
   if (flags.size) {
     console.log(`  size: ~${flags.size} requested (approximate; PRNG-seeded)`);
@@ -169,4 +123,7 @@ async function main() {
   }
 }
 
-main();
+// Run when invoked (`npm run seed`); `simulate-send` imports `seedDemo` instead.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  main();
+}

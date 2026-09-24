@@ -335,6 +335,8 @@ Email asks for things the other channels never would, and this is what the syste
 
 The email provider is treated as **transport**: it carries the message and reports what happened, behind a narrow, two-method seam. One method sends a batch and returns a per-recipient accept or reject; the other verifies a provider webhook's signature and normalizes it into a delivered, bounced, or complained event. Everything provider-specific lives inside the adapter. Two adapters ship out of the box: **Resend**, the simplest to set up, and **Amazon SES**, cheaper at scale. Resend accepts an idempotency key, so a retry of an unanswered request is deduplicated; SES does not, so the ambiguous in-flight case of §12 is SES's. They differ most at the webhook, and the seam absorbs the difference. The seam is held at the *intersection* of what providers offer: the app owns the list, the consent, the deliveries, and the suppressions itself, and never leans on a provider's managed suppression or list-hosting; a provider's own suppression list may sit underneath as a redundant net, but the app's record is the one that counts. That is what makes swapping providers a swap and not a migration, and why a fake in-memory adapter behind the same seam can exercise the whole send-and-resume path with no network.
 
+The same seam lets **local development model a real provider**. A simulation stands in for the provider on sends to the list: it takes a real adapter's traits (how many recipients a request carries, whether a lost request can be re-sent safely) and answers failures the way that adapter reports them, so the send loop, its halts and resumption, the wedged send and Resolve (§12), and the delivery receipts all run as they would deployed, reaching no inbox. It models only the list: a test send and a confirmation go straight through, never refused, since they are the publisher's own checks and a reader's sign-up rather than the delivery being modeled. Where the simulation is faster than a provider it is only for the waiting that would stall a local run: a complaint that takes days to arrive comes in minutes, and a spent quota lifts by the send's first retry. Everything else about sending keeps production's timing locally, the once-a-minute sweep and the minimum lead's one-minute floor included (§6).
+
 ---
 
 ## 11. Domains and deployment
@@ -373,7 +375,7 @@ Three environments, each with its own database, its own storage, and, the load-b
 
 | | Database | Email transport | Access |
 | --- | --- | --- | --- |
-| Development (local) | Local, disposable | Dead-end: the fake in-memory adapter | localhost only |
+| Development (local) | Local, disposable | Dead-end: the fake in-memory adapter, which can simulate a real provider (§10) | localhost only |
 | Staging (deployed) | Separate | Provider sandbox or test domain: only addresses the developer owns | Behind access control |
 | Production (deployed) | Real | Real provider, real sending domain | Behind access control |
 

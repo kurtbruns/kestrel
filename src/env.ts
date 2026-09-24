@@ -20,6 +20,13 @@ import {
   MIN_LEAD_FLOOR_MS,
 } from "../shared/sends";
 import {
+  SIMULATION_FAULTS,
+  SIMULATION_PROFILES,
+  type SimulationFaults,
+  type SimulationProfile,
+  type SimulationView,
+} from "../shared/settings";
+import {
   isProviderName,
   PROVIDER_NAMES,
   type ProviderName,
@@ -54,10 +61,10 @@ export interface Secrets {
   RESEND_API_KEY?: string;
   RESEND_WEBHOOK_SECRET?: string;
   /**
-   * Dev-only opt-in for the seeded send simulation (SPEC §10). When truthy in a
-   * dev-shaped env, the fake transport is swapped for the pacing/edge-state simulation
-   * so an in-flight send is watchable; unset (the default) keeps the plain, instant
-   * fake. Ships commented in `.dev.vars.example`; never set in a deployed env.
+   * The local send simulation (SPEC §10): which provider it models, `resend`, `ses`, or
+   * `generic` (`1`), optionally with `:none` for no injected failures; `off` or unset for
+   * the plain, instant fake. Honored only in a dev-shaped env, so never in a deployed one.
+   * `.dev.vars.example` ships it on.
    */
   SIMULATE_SENDS?: string;
 }
@@ -165,12 +172,12 @@ export interface Config {
    */
   devAuthSecret?: string;
   /**
-   * Whether to run the dev-only seeded send simulation instead of the plain fake
-   * transport (SPEC §10). True only in a dev-shaped env with `SIMULATE_SENDS` set —
-   * structurally false once deployed (a real provider is configured there), so it can
-   * never pace or fabricate events against a real inbox. Opt-in; the default is off.
+   * The local send simulation that stands in for a provider on list sends (SPEC §10), or
+   * null for the plain fake. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
+   * it is structurally null once deployed (a real provider is configured there) and can
+   * never pace or fabricate events against a real inbox.
    */
-  simulateSends: boolean;
+  simulation: SimulationView | null;
   /**
    * How many subrequests (D1 statements plus outbound requests) one invocation of the
    * send path may make: the send loop stops starting batches before it would pass this,
@@ -280,9 +287,9 @@ export function getConfig(env: AppEnv): Config {
     // deployed env, so the reader surface stays clean of any admin link there.
     devMode: devAuthSecret !== undefined,
     devAuthSecret,
-    // Only ever active in a dev-shaped env; a deployed env runs a real provider, so the
+    // Only ever read in a dev-shaped env; a deployed env runs a real provider, so the
     // simulation can never engage there whatever the var says.
-    simulateSends: devShaped && isTruthy(env.SIMULATE_SENDS),
+    simulation: devShaped ? readSimulation(env.SIMULATE_SENDS) : null,
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
       readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
@@ -462,13 +469,34 @@ function readMinLead(v: string | undefined): number {
   return seconds * 1000;
 }
 
-/** Treat the usual "on" spellings as truthy for a dev opt-in flag. */
-function isTruthy(v: string | undefined): boolean {
-  if (!v) {
-    return false;
+/** The spellings that turn the simulation off, and those that pick the generic profile. */
+const SIMULATION_OFF = new Set(["", "0", "off", "false", "no"]);
+const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
+
+/**
+ * `SIMULATE_SENDS` as a profile and fault level, or null for the plain fake: `off` (or
+ * unset), a profile (`generic`, or `1`, `resend`, `ses`), and optionally `:realistic` (the
+ * default) or `:none`. Anything else is refused rather than read as off, so a typo can't
+ * quietly turn the simulation off or pick the wrong provider.
+ */
+function readSimulation(v: string | undefined): SimulationView | null {
+  const raw = (v ?? "").trim().toLowerCase();
+  if (SIMULATION_OFF.has(raw)) {
+    return null;
   }
-  const s = v.trim().toLowerCase();
-  return s === "1" || s === "true" || s === "yes" || s === "on";
+  const [name = "", faults = "realistic", ...rest] = raw.split(":");
+  const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
+  if (
+    rest.length > 0 ||
+    !(SIMULATION_PROFILES as readonly string[]).includes(profile) ||
+    !(SIMULATION_FAULTS as readonly string[]).includes(faults)
+  ) {
+    throw new ConfigError(
+      "SIMULATE_SENDS",
+      `must be off, or one of ${SIMULATION_PROFILES.join(", ")} (or 1), optionally followed by :${SIMULATION_FAULTS.join(" or :")}, not "${v?.trim()}"`,
+    );
+  }
+  return { profile: profile as SimulationProfile, faults: faults as SimulationFaults };
 }
 
 function parseEmailList(v: string | undefined): string[] | undefined {

@@ -11,6 +11,7 @@ import {
   mount,
   resetShell,
   typeInto,
+  unmount,
 } from "../test/support";
 import { renderSettings } from "./settings";
 
@@ -47,6 +48,7 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
     notifyChannel: "provider",
     notifyFrom: "Birds <hello@send.birds.example>",
     minLeadMs: 5 * 60 * 1000,
+    simulation: null,
     build: {
       version: "",
       sha: "dev",
@@ -112,6 +114,28 @@ describe("settings view", () => {
     expect($("#logoRemove").hidden).toBe(true);
     expect(bar().hidden).toBe(true);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("reflects the minimum lead and a local send simulation read-only, as deploy config", async () => {
+    const row = (label: string) =>
+      $$(".set-kv-k")
+        .find((k) => k.textContent === label)
+        ?.nextElementSibling?.textContent?.trim();
+    await open();
+    expect(row("Minimum lead")).toBe("5 minutesdefault");
+    expect(row("Email provider")).toBe("Amazon SES");
+    unmount();
+    fake.restore();
+    const local = response();
+    local.deployment = {
+      ...local.deployment,
+      provider: "fake",
+      minLeadMs: 60_000,
+      simulation: { profile: "ses", faults: "none" },
+    };
+    await open([{ path: "/api/settings", reply: () => local }]);
+    expect(row("Minimum lead")).toBe("1 minute");
+    expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
   });
 
   it("offers the mailing address as an Add row until one is added, with Remove to take it back", async () => {

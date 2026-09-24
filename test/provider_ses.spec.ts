@@ -178,6 +178,7 @@ describe("SesProvider.sendBatch", () => {
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       {
+        purpose: "list",
         idempotencyKeyPrefix: "send-1",
       },
     );
@@ -238,7 +239,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
     );
     expect(r).toMatchObject({ kind: "halted", halt: { ...halt, mayHaveSent: false } });
   });
@@ -253,7 +254,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
     );
     expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
   });
@@ -274,6 +275,7 @@ describe("SesProvider.sendBatch", () => {
       renderedFixture(),
       [{ email: "bad addr@example.com", unsubscribeUrl: UNSUB }],
       {
+        purpose: "list",
         idempotencyKeyPrefix: "send-1",
       },
     );
@@ -289,6 +291,7 @@ describe("SesProvider.sendBatch", () => {
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
       {
+        purpose: "list",
         idempotencyKeyPrefix: "send-1",
       },
     );
@@ -309,7 +312,7 @@ describe("SesProvider.sendBatch", () => {
       const r = await newProvider().sendBatch(
         renderedFixture(),
         [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-        { idempotencyKeyPrefix: "send-1" },
+        { purpose: "list", idempotencyKeyPrefix: "send-1" },
       );
       expect(r).toEqual({
         kind: "halted",
@@ -336,7 +339,7 @@ describe("SesProvider.sendBatch", () => {
     const r = await newProvider().sendBatch(
       renderedFixture(),
       [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      { idempotencyKeyPrefix: "send-1" },
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
     );
     expect(r).toMatchObject({
       kind: "halted",
@@ -366,13 +369,19 @@ describe("SesProvider.sendBatch", () => {
       );
     const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, { idempotencyKeyPrefix: "s" }),
+      await newProvider().sendBatch(renderedFixture(), one, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+      }),
     ).toMatchObject({
       kind: "halted",
       halt: { reason: "account", cause: "sender" },
     });
     expect(
-      await newProvider().sendBatch(renderedFixture(), one, { idempotencyKeyPrefix: "s" }),
+      await newProvider().sendBatch(renderedFixture(), one, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+      }),
     ).toMatchObject({
       kind: "answered",
       results: [{ accepted: false, retryable: false }],
@@ -390,6 +399,7 @@ describe("SesProvider.sendBatch", () => {
         renderedFixture(),
         [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
         {
+          purpose: "list",
           idempotencyKeyPrefix: "send-1",
         },
       ),

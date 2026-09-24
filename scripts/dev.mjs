@@ -25,12 +25,22 @@
  * missing, apply them before starting. This is a no-op on a populated shadow
  * (`migrations apply` self-skips) and is skipped for `--remote`, so it never touches
  * the preview or production DB. (Kestrel has no dev seed, so there's nothing to seed.)
+ *
+ * The send sweep: deployed, a cron runs it once a minute; `wrangler dev` never does. The
+ * launcher runs it at every wall-clock minute instead (scripts/sweep-ticker.mjs), so a local
+ * send fires, resumes, and settles when a deployed one would.
+ *
+ * Per-run overrides: `SIMULATE_SENDS`, `MIN_LEAD_SECONDS`, and `SUBREQUEST_BUDGET` set in the
+ * shell are forwarded to wrangler over `.dev.vars`, so `SIMULATE_SENDS=ses npm run dev` picks
+ * a simulation profile for one run without editing a file.
  */
 import { spawn, spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { clearDevPort, writeDevPort } from "./dev-port.mjs";
+import { startSweepTicker } from "./sweep-ticker.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -156,6 +166,41 @@ const originArgs = isRemote
       `MEDIA_PUBLIC_BASE:${origin}/media`,
     ];
 
+// The dev settings a shell may set for one run (see the header). `--var` wins over
+// `.dev.vars`, so the shell's value is the one the Worker sees. An empty one is left out:
+// forwarded, it would override `.dev.vars` with the app's default (`MIN_LEAD_SECONDS=`
+// would quietly bring back the five-minute lead).
+const OVERRIDABLE = ["SIMULATE_SENDS", "MIN_LEAD_SECONDS", "SUBREQUEST_BUDGET"];
+const overrideArgs = isRemote
+  ? []
+  : OVERRIDABLE.filter((name) => process.env[name]?.trim()).flatMap((name) => [
+      "--var",
+      `${name}:${process.env[name]}`,
+    ]);
+
+// A `.dev.vars` copied before a setting was added to `.dev.vars.example` runs without it (the
+// app's default, not the dev setup's), so name what's missing rather than let the dev server
+// quietly differ from the one the README describes.
+if (!isRemote) {
+  const keys = (file) =>
+    new Set(
+      [...readFileSync(file, "utf8").matchAll(/^\s*([A-Z][A-Z0-9_]*)\s*=/gm)].map((m) => m[1]),
+    );
+  const example = join(ROOT, ".dev.vars.example");
+  const local = join(ROOT, ".dev.vars");
+  if (!existsSync(local)) {
+    console.warn("[dev] no .dev.vars: run `cp .dev.vars.example .dev.vars` for the dev setup");
+  } else if (existsSync(example)) {
+    const have = keys(local);
+    const missing = [...keys(example)].filter((k) => !have.has(k));
+    if (missing.length > 0) {
+      console.warn(
+        `[dev] .dev.vars has no ${missing.join(", ")}; copy ${missing.length === 1 ? "it" : "them"} from .dev.vars.example`,
+      );
+    }
+  }
+}
+
 // Record the port we're binding so a separate `npm run seed` / `npm run reset` in
 // another terminal targets THIS worktree's server instead of defaulting to 8787
 // (see scripts/dev-port.mjs). Cleared on exit; a stale value self-heals on next start.
@@ -177,25 +222,34 @@ watcher.on("exit", (code) => {
     );
   }
 });
+// The send sweep, once a minute on the minute, as the deployed cron runs it. A remote
+// session runs against deployed resources, where the real cron is the one that counts.
+const stopTicker = isRemote ? () => {} : startSweepTicker(origin);
+
 // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave the
-// watcher behind rewriting dist/ forever. Stop it, then re-raise: `once`
-// means the re-raised signal meets the default disposition and ends us as it always did
-// (a terminal Ctrl-C reaches the whole group, watcher included, and behaves the same).
+// watcher behind rewriting dist/ forever, or the ticker calling a server that is gone. Stop
+// both, then re-raise: `once` means the re-raised signal meets the default disposition and
+// ends us as it always did (a terminal Ctrl-C reaches the whole group, watcher included,
+// and behaves the same).
 for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
   process.once(signal, () => {
+    stopTicker();
     watcher.kill();
     process.kill(process.pid, signal);
   });
 }
 
-const child = spawn("wrangler", ["dev", "--port", port, ...originArgs, ...passthrough], {
-  stdio: "inherit",
-});
+const child = spawn(
+  "wrangler",
+  ["dev", "--port", port, ...originArgs, ...overrideArgs, ...passthrough],
+  { stdio: "inherit" },
+);
 
 // Propagate the child's fate so `npm run dev` exits with wrangler's own status: mirror
 // a fatal signal by re-raising it on ourselves, otherwise exit with its code.
 child.on("exit", (code, signal) => {
   clearDevPort();
+  stopTicker();
   watcher.kill();
   if (signal) {
     process.kill(process.pid, signal);

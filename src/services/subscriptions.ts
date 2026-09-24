@@ -134,6 +134,7 @@ async function sendConfirmation(
     result = await provider.sendBatch(message, recipients, {
       // One key per confirmation sent, never reused: a provider that dedupes by key
       // would otherwise swallow a deliberate resend as a repeat of the first.
+      purpose: "confirmation",
       idempotencyKeyPrefix: `confirm-${subscriber.id}-${attemptAt}`,
     });
   } catch (err) {

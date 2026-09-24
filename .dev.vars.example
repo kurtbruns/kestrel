@@ -33,12 +33,18 @@ RESEND_WEBHOOK_SECRET=""   # Svix signing secret for webhook verification
 # wrangler.jsonc. Below 60 or above 86400 (one day) is refused.
 MIN_LEAD_SECONDS="60"
 
-# --- Dev send simulation (optional; local only) ---
-# Swap the instant `fake` transport for a seeded simulation that paces a send over real
-# time and produces a believable outcome mix (transient retries, a rate-limit pause on a
-# large send, a few transport failures, plus delayed delivered/bounced/complained
-# webhooks), so the in-flight watch view (#/sent/:id of a `sending` send) is actually
-# watchable. Off by default; only honored in a dev-shaped env (fake transport, no
-# Access, APP_ORIGIN on localhost), never deployed. Uncomment to enable, then restart
-# `npm run dev`.
-# SIMULATE_SENDS="1"
+# --- Send simulation (local only) ---
+# On a list send, local dev stands in for a real provider instead of accepting everything
+# at once: the provider's batch size and pace, its failures, and delivery receipts that
+# arrive after the send (delivered, bounced, complained), all through the real send loop.
+# Test sends and confirmations go straight to the dev outbox (GET /api/dev/outbox),
+# unsimulated. The profile names the provider modeled:
+#   resend   Resend: 100 recipients a request, an idempotency key (a lost request is re-sent)
+#   ses      Amazon SES: one recipient a request, no key (a lost request waits for Resolve),
+#            and its daily quota running out once a send; slow on the default
+#            SUBREQUEST_BUDGET, as SES is on Workers Free
+#   1        a generic provider paced to be watched: small, slow batches
+# Add ":none" (e.g. "ses:none") for a clean run with no failures, or set "off" for the
+# plain instant fake. For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
+# Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
+SIMULATE_SENDS="resend"
