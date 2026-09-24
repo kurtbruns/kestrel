@@ -12,27 +12,24 @@
  * keeps absorbing events after the send is "sent."
  */
 
-import type { LiveSend, SendHalt, SendPhase, SendProgress, SendSummary } from "../../shared/sends";
-import { countsOf, type SendCounts, type SendRow, type SendStatus } from "../db/sends";
-import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import type {
+  LiveSend,
+  SendHalt,
+  SendListItem,
+  SendPhase,
+  SendProgress,
+  SendSummary,
+} from "../../shared/sends";
+import { countsOf, type SendCounts, type SendStatus } from "../db/sends";
+import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
 import { isWedged } from "./wedged";
-
-/** In flight too long (SPEC §12): still `sending` past the stuck threshold. The one
- *  rule behind `attention.stuck` and the send list's `stuck`. */
-export function isStuck(send: Pick<SendRow, "status" | "started_at">, now: number): boolean {
-  return (
-    send.status === "sending" &&
-    send.started_at != null &&
-    now - send.started_at > STUCK_THRESHOLD_MS
-  );
-}
 
 /**
  * The live reporting phase — derived from the counters and send row, never stored:
  *   - `scheduled`       waiting in the review window (not yet fired).
  *   - `due`             still `scheduled`, but the fire time has passed: the next sweep
- *                       tick starts it (past the missed threshold, `attention.missed` too).
+ *                       tick starts it (past the missed threshold, the `missed` condition too).
  *   - `progressing`     actively handing recipients to the provider.
  *   - `retrying`        handing off, but with recipients already retried (transient errors).
  *   - `backing-off`     work remains but nothing is in flight — paused between sweep
@@ -135,9 +132,7 @@ export function buildSendProgress(
   // (`isWedged`). A run finishing its last batch, or one cut off whose lease has yet to run
   // out and be looked at, holds or held the lease, so it never reads as needing attention.
   const wedged = isWedged(send);
-  const stuck = isStuck(send, now);
   const due = send.status === "scheduled" && send.fire_at <= now;
-  const missed = due && send.fire_at < now - MISSED_THRESHOLD_MS;
   // The provider's standing refusal, while the send is still open to be retried.
   const halt: SendHalt | null =
     send.status === "sending" && send.halt_reason
@@ -159,9 +154,17 @@ export function buildSendProgress(
     dispatch: { done, percent: dispatchPercent, rate_per_min: ratePerMin, eta_ms: etaMs },
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: providerName, halt },
-    attention: { wedged, wedged_count: wedged ? counts.in_flight : 0, stuck, missed, refused },
+    conditions: sendConditions(send, now),
+    actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
   };
+}
+
+/** A `GET /sends` row: the list projection with its phase, conditions, and actions, read
+ *  by the same rules and at the same moment as the send's `/progress`. */
+export function buildListItem(send: SendSummary, hasRetries: boolean, now: number): SendListItem {
+  const { phase, conditions, actions } = buildSendProgress(send, "", hasRetries, now);
+  return { ...send, phase, conditions, actions };
 }
 
 /** One send as `GET /sends/feed` reports it: which send, and the same progress shape

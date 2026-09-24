@@ -4,14 +4,16 @@
 // does, with only the network replaced. Imported by specs only; never part of the bundle.
 
 import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
-import type {
-  LiveSend,
-  SendAttention,
-  SendFeedResponse,
-  SendListItem,
-  SendListResponse,
-  SendPhase,
-  SendSummary,
+import {
+  type LiveSend,
+  refusalAdvice,
+  type SendAction,
+  type SendCondition,
+  type SendFeedResponse,
+  type SendListItem,
+  type SendListResponse,
+  type SendPhase,
+  type SendSummary,
 } from "../../shared/sends";
 import { unmount } from "../lifecycle";
 
@@ -154,9 +156,56 @@ export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: stri
 export interface SendExtras {
   /** The phase, when not the one a spec's plain row implies (see `sendServer`). */
   phase?: SendPhase;
-  attention?: Partial<SendAttention>;
+  /** Conditions beyond the ones a plain row implies (missed by the clock, refused by an
+   *  account halt): a wedge, a stuck send, a bounce spike, as `condition` builds them. */
+  conditions?: SendCondition[];
   eta_ms?: number | null;
 }
+
+/** The provider's words as a sentence, as the server ends them. */
+const words = (error: string | null) => {
+  const text = error?.trim() || "no detail given";
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+};
+
+/** Conditions as the server words them, for a spec's scripted sends. */
+export const condition = {
+  wedged: (count: number, id = "x"): SendCondition => ({
+    kind: "wedged",
+    severity: "action",
+    since: null,
+    message: `The provider never answered for ${count} recipient${count === 1 ? "" : "s"}, so whether they were mailed is unknown.`,
+    action: { name: "resolve", method: "POST", path: `/sends/${id}/resolve` },
+    count,
+  }),
+  stuck: (): SendCondition => ({
+    kind: "stuck",
+    severity: "warn",
+    since: null,
+    message: "Still sending 31 minutes after it started; it may be retrying.",
+    action: null,
+  }),
+  refused: (error: string, retryAt: number | null): SendCondition => ({
+    kind: "refused",
+    severity: "action",
+    since: 1_000,
+    message: `The provider is refusing the account: ${error} Replace the provider's API key or credentials in the deployment's secrets.`,
+    action: null,
+    cause: "credentials",
+    error,
+    advice: "Replace the provider's API key or credentials in the deployment's secrets.",
+    retry_at: retryAt,
+  }),
+  bounceSpike: (bounced: number, rate: number): SendCondition => ({
+    kind: "bounce_spike",
+    severity: "warn",
+    since: null,
+    message: `${bounced} recipients bounced (${Math.round(100 * rate)}%), at or above the 5% at which providers put a sender under review.`,
+    action: null,
+    bounced,
+    rate,
+  }),
+};
 
 // The server's missed tolerance (MISSED_THRESHOLD_MS in src/lib/time.ts).
 const MISSED_MS = 5 * 60_000;
@@ -198,23 +247,50 @@ export function sendServer(rows: SendSummary[] = []) {
               ? "settling"
               : "complete"
             : "canceled");
-    const attention: SendAttention = {
-      wedged: false,
-      wedged_count: 0,
-      stuck: false,
-      missed: row.status === "scheduled" && now >= row.fire_at + MISSED_MS,
-      refused: row.status === "sending" && row.halt_reason === "account",
-      ...extras.attention,
-    };
-    return { phase, attention };
+    const conditions: SendCondition[] = [];
+    if (row.status === "scheduled" && now >= row.fire_at + MISSED_MS) {
+      conditions.push({
+        kind: "missed",
+        severity: "action",
+        since: row.fire_at + MISSED_MS,
+        message: "The fire time passed and the send has not started.",
+        action: null,
+      });
+    }
+    if (row.status === "sending" && row.halt_reason === "account") {
+      conditions.push({
+        kind: "refused",
+        severity: "action",
+        since: row.halted_at,
+        message: `The provider is refusing the account: ${words(row.halt_error)} ${refusalAdvice(row.halt_cause)} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
+        action: null,
+        cause: row.halt_cause,
+        error: row.halt_error ?? "",
+        advice: refusalAdvice(row.halt_cause),
+        retry_at: row.halt_retry_at,
+      });
+    }
+    conditions.push(...(extras.conditions ?? []));
+    // What the server would take now: the window's controls until the fire time, Resolve
+    // while wedged.
+    const actions: SendAction[] =
+      row.status === "scheduled" && now < row.fire_at
+        ? [
+            { name: "cancel", method: "POST", path: `/sends/${row.id}/cancel` },
+            { name: "reschedule", method: "POST", path: `/sends/${row.id}/reschedule` },
+          ]
+        : conditions.some((c) => c.kind === "wedged")
+          ? [{ name: "resolve", method: "POST", path: `/sends/${row.id}/resolve` }]
+          : [];
+    return { phase, conditions, actions };
   };
   const item = (s: { row: SendSummary; extras: SendExtras }, now: number): SendListItem => {
-    const { phase, attention } = derive(s, now);
-    return { ...s.row, phase, attention, stuck: attention.stuck };
+    const { phase, conditions, actions } = derive(s, now);
+    return { ...s.row, phase, conditions, actions };
   };
   const live = (s: { row: SendSummary; extras: SendExtras }, now: number): LiveSend => {
     const { row } = s;
-    const { phase, attention } = derive(s, now);
+    const { phase, conditions, actions } = derive(s, now);
     return {
       id: row.id,
       post_id: row.post_id,
@@ -252,7 +328,8 @@ export function sendServer(rows: SendSummary[] = []) {
             }
           : null,
       },
-      attention,
+      conditions,
+      actions,
       next_change_at: nextChange(s, now),
     };
   };
@@ -261,11 +338,12 @@ export function sendServer(rows: SendSummary[] = []) {
   // its retry (less the sweep's half-tick of slack); a scheduled one at its fire time.
   const nextChange = (s: { row: SendSummary; extras: SendExtras }, now: number) => {
     const { row } = s;
-    const { attention } = derive(s, now);
+    const { conditions } = derive(s, now);
+    const kinds = new Set(conditions.map((c) => c.kind));
     if (row.status === "scheduled") {
-      return row.fire_at > now ? row.fire_at : attention.missed ? null : now;
+      return row.fire_at > now ? row.fire_at : kinds.has("missed") ? null : now;
     }
-    if (row.status !== "sending" || attention.wedged) {
+    if (row.status !== "sending" || kinds.has("wedged")) {
       return null;
     }
     return row.halt_retry_at === null ? now : Math.max(now, row.halt_retry_at - 30_000);
@@ -308,6 +386,13 @@ export function sendServer(rows: SendSummary[] = []) {
             : [],
           cursor: cursor(),
           more: false,
+          conditions: all.flatMap((s) =>
+            derive(s, now).conditions.map((c) => ({
+              ...c,
+              send_id: s.row.id,
+              subject: s.row.subject,
+            })),
+          ),
           read_again_at: Math.min(now + wait, ahead.length ? Math.min(...ahead) + 1000 : Infinity),
         };
       },

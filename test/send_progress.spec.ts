@@ -13,6 +13,7 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
+import { condition, has } from "./support/conditions";
 
 // PR2 (#154, #152): the denormalized counters on `sends` are a rebuildable cache of the
 // `deliveries` bucketing, maintained in the same transactions as each recipient
@@ -174,7 +175,7 @@ describe("GET /sends/:id/progress", () => {
     expect(body.counts.accepted).toBe(2);
     expect(body.dispatch.percent).toBe(100);
     expect(body.delivery.confirmed).toBe(0);
-    expect(body.attention.wedged).toBe(false);
+    expect(has(body, "wedged")).toBe(false);
     expect(body.provider.name).toBe("fake");
   });
 
@@ -204,7 +205,13 @@ describe("GET /sends/:id/progress", () => {
       const progress = (await (
         await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })
       ).json()) as any;
-      return [list.sends.find((r: any) => r.id === send.id).stuck, progress.attention.stuck];
+      return [
+        has(
+          list.sends.find((r: any) => r.id === send.id),
+          "stuck",
+        ),
+        has(progress, "stuck"),
+      ];
     };
     expect(await read()).toEqual([false, false]);
     // Started past the stuck threshold (SPEC §12): both surfaces say so.
@@ -238,6 +245,7 @@ describe("buildSendProgress — derived phase", () => {
       completed_at: null,
       audience_resolved_at: Date.now() - 60_000,
       remade_at: null,
+      tested_at: null,
       halt_reason: null,
       halt_cause: null,
       halt_error: null,
@@ -271,9 +279,9 @@ describe("buildSendProgress — derived phase", () => {
     expect(at(now + 60_000).phase).toBe("scheduled");
     expect(at(now).phase).toBe("due"); // the fire time itself: the next tick starts it
     const late = at(now - 60_000); // an ordinary slow tick is never a miss (SPEC §12)
-    expect([late.phase, late.attention.missed]).toEqual(["due", false]);
+    expect([late.phase, has(late, "missed")]).toEqual(["due", false]);
     const missed = at(now - MISSED_THRESHOLD_MS - 1);
-    expect([missed.phase, missed.attention.missed]).toEqual(["due", true]);
+    expect([missed.phase, has(missed, "missed")]).toEqual(["due", true]);
   });
   it("progressing while handing off with no retries", () => {
     expect(phase({ status: "sending", c_pending: 5, c_in_flight: 3 })).toBe("progressing");
@@ -317,8 +325,8 @@ describe("buildSendProgress — derived phase", () => {
       Date.now(),
     );
     expect(prog.phase).toBe("needs-attention");
-    expect(prog.attention.refused).toBe(true);
-    expect(prog.attention.wedged).toBe(false);
+    expect(has(prog, "refused")).toBe(true);
+    expect(has(prog, "wedged")).toBe(false);
     expect(prog.provider.halt).toEqual({
       reason: "account",
       cause: "credentials",
@@ -335,7 +343,7 @@ describe("buildSendProgress — derived phase", () => {
       Date.now(),
     );
     expect(prog.phase).toBe("backing-off");
-    expect(prog.attention.refused).toBe(false);
+    expect(has(prog, "refused")).toBe(false);
     expect(prog.provider.halt?.reason).toBe("unavailable");
   });
   it("flags a wedged send in attention with its count, but never while the lease is held", () => {
@@ -345,8 +353,8 @@ describe("buildSendProgress — derived phase", () => {
       false,
       Date.now(),
     );
-    expect(wedged.attention.wedged).toBe(true);
-    expect(wedged.attention.wedged_count).toBe(3);
+    expect(has(wedged, "wedged")).toBe(true);
+    expect(condition(wedged, "wedged")?.count).toBe(3);
     // Same counts, but the loop holds the lease → actively working, not wedged.
     const working = buildSendProgress(
       mkSend({ status: "sending", c_in_flight: 3, locked_until: Date.now() + 60_000 }),
@@ -354,7 +362,7 @@ describe("buildSendProgress — derived phase", () => {
       false,
       Date.now(),
     );
-    expect(working.attention.wedged).toBe(false);
+    expect(has(working, "wedged")).toBe(false);
   });
 });
 

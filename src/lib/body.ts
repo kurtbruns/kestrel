@@ -103,6 +103,18 @@ export function optStringOrNull(
   throw fieldError(path(key, at), `${path(key, at)} must be a string or null`);
 }
 
+/** An optional whole number of at least 0: absent is `undefined`; anything else is a 400. */
+export function optCount(o: JsonObject, key: string, at?: string): number | undefined {
+  const v = o[key];
+  if (v === undefined) {
+    return undefined;
+  }
+  if (typeof v !== "number" || !Number.isSafeInteger(v) || v < 0) {
+    throw fieldError(path(key, at), `${path(key, at)} must be a whole number of at least 0`);
+  }
+  return v;
+}
+
 /** An optional list of strings: absent is `undefined`; anything else but a string array is a 400. */
 export function optStringList(o: JsonObject, key: string, at?: string): string[] | undefined {
   const v = o[key];

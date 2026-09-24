@@ -31,38 +31,83 @@
 import type { ResolveResponse, StuckResolution } from "../../shared/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
-import { conflict, notFound } from "../lib/errors";
+import { notFound, refusal } from "../lib/errors";
 import { LEASE_TTL_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
+import { describeSend } from "./describe";
+import { isWedged } from "./wedged";
 
 // The shapes live in shared/ so the editor reads the same definitions; the names here
 // are the Worker's own.
 export type { StuckResolution };
 export type ResolveResult = ResolveResponse;
 
-/** Adjudicate the ambiguous (`dispatched`) rows of a wedged send. */
+/** What a Resolve may carry: the `rev` the caller last read (`If-Match`), and how many
+ *  ambiguous recipients it saw, so it never settles a different set than the one it meant. */
+export interface ResolveGuard {
+  ifMatch?: number;
+  expectedCount?: number;
+}
+
+/**
+ * Adjudicate the ambiguous (`dispatched`) rows of a wedged send. Refused, each with its
+ * own code and the send as it stands: `precondition_failed` when the send has changed
+ * since the `rev` the caller read, `run_in_progress` while a run holds it, `not_wedged`
+ * when it is not wedged (`isWedged`: nothing to resolve, or a run still to look at it),
+ * and `count_changed` when the ambiguous count is not the one the caller saw.
+ */
 export async function resolveStuckSend(
   env: AppEnv,
   sendId: string,
   outcome: StuckResolution,
   actor: string,
+  guard: ResolveGuard = {},
 ): Promise<ResolveResult> {
   const send = await sends.getSend(env.DB, sendId);
   if (!send) {
     throw notFound("send");
   }
-  if (send.status !== "sending") {
-    throw conflict("only a send in 'sending' can have ambiguous deliveries to resolve");
+  const refuse = async (status: 409 | 412, code: string, message: string) =>
+    refusal(status, code, message, { send: await describeSend(env.DB, send) });
+  if (guard.ifMatch !== undefined && send.rev !== guard.ifMatch) {
+    throw await refuse(
+      412,
+      "precondition_failed",
+      `the send has changed since rev ${guard.ifMatch} (it is at rev ${send.rev}); read it again before resolving`,
+    );
   }
-  const dispatched = await sends.countDeliveries(env.DB, sendId, "dispatched");
-  if (dispatched === 0) {
-    throw conflict("send has no ambiguous (dispatched) deliveries to resolve");
+  const now = Date.now();
+  if (send.status === "sending" && send.locked_until !== null && send.locked_until > now) {
+    throw await refuse(
+      409,
+      "run_in_progress",
+      "this send is being worked on right now; try Resolve again in a moment",
+    );
+  }
+  if (!isWedged(send)) {
+    throw await refuse(
+      409,
+      "not_wedged",
+      send.status === "sending"
+        ? "send is not wedged: it still has recipients to hand off, or a run has yet to look at those in flight"
+        : `send is ${send.status}, with no ambiguous deliveries to resolve`,
+    );
+  }
+  if (guard.expectedCount !== undefined && guard.expectedCount !== send.c_in_flight) {
+    throw await refuse(
+      409,
+      "count_changed",
+      `the send has ${send.c_in_flight} ambiguous recipients, not the ${guard.expectedCount} expected; read it again before resolving`,
+    );
   }
 
-  const now = Date.now();
   const lease = await sends.acquireLease(env.DB, sendId, now, LEASE_TTL_MS);
   if (!lease) {
-    throw conflict("this send is being worked on right now; try Resolve again in a moment");
+    throw await refuse(
+      409,
+      "run_in_progress",
+      "this send is being worked on right now; try Resolve again in a moment",
+    );
   }
   const note =
     outcome === "unsent"

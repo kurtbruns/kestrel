@@ -721,7 +721,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(page2.subscribers.map((s: any) => s.email)).toEqual([`${marker}-c@example.com`]);
   });
 
-  it("an out-of-whitelist sort falls back to the default (never 500s), including prototype keys", async () => {
+  it("an out-of-whitelist sort is a 400 naming the field (never a 500), including prototype keys", async () => {
     const marker = `srt-${Date.now()}-${seq++}`;
     await addPending(`${marker}@example.com`);
     // `constructor`/`toString`/`hasOwnProperty` are inherited Object keys: the whitelist
@@ -730,10 +730,8 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
       const res = await SELF.fetch(`${base}/subscribers?sort=${bogus}&search=${marker}`, {
         headers: AUTH,
       });
-      expect(res.status).toBe(200);
-      const body = await readJson(res);
-      expect(body.page.sort).toBe("joined"); // fell back to the default
-      expect(body.subscribers.map((s: any) => s.email)).toEqual([`${marker}@example.com`]);
+      expect(res.status).toBe(400);
+      expect(await readJson(res)).toMatchObject({ error: "bad_request", field: "sort" });
     }
   });
 

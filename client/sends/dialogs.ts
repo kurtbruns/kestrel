@@ -33,9 +33,10 @@ export function openResolveModal(
   const doResolve = (btn: HTMLButtonElement, resolution: StuckResolution, verb: string) =>
     busy(btn, "Resolving…", async () => {
       try {
+        // The count the reader decided on: the server refuses if it has moved since.
         const res = await api<ResolveResponse>(`/sends/${send.id}/resolve`, {
           method: "POST",
-          json: { resolution },
+          json: { resolution, expected_count: n },
         });
         m.close();
         toast(res.completed ? "Send completed" : `Marked ${verb}`);

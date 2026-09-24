@@ -4,7 +4,7 @@ import { formatLead, type ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import { getActiveSendForPost } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
-import { json, notFound } from "../lib/errors";
+import { json, notFound, refusal } from "../lib/errors";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { freeze } from "../send/schedule";
@@ -17,7 +17,7 @@ const ISO_WITH_OFFSET = /T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$
  * epoch millis, or throw a 400. A timestamp without an offset is refused rather than
  * read as UTC: an API caller meaning the publisher's local 9am would fire hours off.
  */
-function parseFireAt(input: unknown): number {
+export function parseFireAt(input: unknown): number {
   if (typeof input === "number" && Number.isFinite(input)) {
     return input;
   }
@@ -57,9 +57,11 @@ export function parseFutureFireAt(
   const fireAt = parseFireAt(input);
   if (fireAt < Date.now() + minLeadMs) {
     const hint = immediateHint ? "; use POST /posts/:id/send for the soonest send" : "";
-    throw fieldError(
-      "fire_at",
+    throw refusal(
+      400,
+      "fire_at_too_soon",
       `fire_at must be at least ${formatLead(minLeadMs)} in the future, this deployment's minimum lead${hint}`,
+      { field: "fire_at" },
     );
   }
   return fireAt;

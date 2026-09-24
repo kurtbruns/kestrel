@@ -12,11 +12,20 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
+- Sends report what is wrong with them as `conditions` and what can be done as `actions`, in place of `attention` and `stuck`, on `GET /sends` rows, `GET /sends/:id/progress`, `GET /sends/:id`, and the feed. Each condition (`missed`, `stuck`, `wedged`, `refused`, `provider_unavailable`, `bounce_spike`, `remade`) carries a severity, when it began, the server's own words, and the action that settles it, if any; `actions` lists exactly the cancel, reschedule, or Resolve the server would take now (SPEC §8).
+- A scheduled send can no longer be canceled or rescheduled once its fire time has passed, even before the sweep starts it: the review window closes at the fire time (SPEC §6), and the API answers 409 `window_closed`.
+- Scheduling, Send now, cancel, reschedule, and Resolve refuse with a code per reason (`window_closed`, `send_canceled`, `post_not_draft`, `active_send_exists`, `subject_required`, `fire_at_too_soon`, `settings_changed`, `not_wedged`, `run_in_progress`, `count_changed`, `precondition_failed`) instead of `conflict` or `bad_request`, each carrying the send as it stands where there is one.
+- Canceling a send that is already canceled answers 200 with `changed: false` instead of a 409, and a reschedule to the time a send already has answers the same way, so a retried request is safe.
+- Resolve now works only on a wedged send, and answers 409 `not_wedged` otherwise; before, it could settle ambiguous recipients while others were still waiting to be handed off.
+- Every list (`GET /sends`, `/posts`, `/subscribers`, `/sends/:id/deliveries`) refuses a `sort` or `dir` it does not list, or a `limit` or `offset` that is not a whole number, with a 400 naming the field, and `GET /sends` does the same for an unknown `status` or `failures`, instead of quietly reading them as the default.
 - `GET /sends/:id/deliveries` now refuses an unknown `view` with a 400 naming the field, instead of quietly showing failures.
 - A provider halt's `since` and `retry_at` (under `provider.halt` on a send's progress and in the feed) are null when the record lacks them, instead of reading as the moment of the request.
 
 ### Added
 
+- Cancel, reschedule, and Resolve take `If-Match: "<rev>"` and refuse with a 412 if the send has changed since the caller read it; Resolve also takes `expected_count`, refused if the number of ambiguous recipients has moved; and cancel and reschedule answers say whether anything `changed`.
+- Each `GET /sends/feed` read now lists every open condition across the sends, whether or not they changed, so one read shows every problem.
+- The bounce-spike warning is now worked out by the server and reported on the send, so Claude sees it as the dashboard does, and a re-made scheduled send reports `remade` until a test of its re-made email is sent. This release adds a database migration: run `npm run migrate:remote -- --env <name>` before deploying, and `npm run migrate:local` for local dev.
 - `GET /sends/feed` now reports a send deleted with its post under `removed`, so a client drops it instead of keeping a row for a send that is gone (SPEC §8); takes `limit` (default 100, at most 500), and says `more` when a read stopped short, to be read again at once; and gives each send a `next_change_at`, the earliest it can change with no one acting. This release adds a database migration: run `npm run migrate:remote -- --env <name>` before deploying, and `npm run migrate:local` for local dev.
 - `GET /sends/feed` answers a cursor ahead of the database (after a local reset or a restore) with a 409 `cursor_ahead`, and the dashboard and the Sent list then read their sends again, where before such a cursor silently reported nothing ever again.
 
@@ -28,6 +37,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- The Sent page's scheduled card and the editor's scheduled banner stop offering Cancel and Reschedule at the send's fire time, and the banner reads "Preparing to send…" until the send starts. The dashboard's warnings and the Sent page's attention cards use the server's own words for each problem, and the bounce-spike line links to the send.
 - A send is wedged, awaiting Resolve, from the moment the run that left recipients with an unknown fate hands it back, by one rule the send's page, the lists, the feed, the notification, and the log's `send.wedged` all share; before, the log flagged it only after 30 minutes. The sweep no longer runs a wedged send every minute, so its page no longer reads "progressing" for a moment each minute or reports a change when nothing changed. On Resend, recipients a cut-off run left in flight no longer read as wedged while they wait for the next run to send them again under their key (SPEC §12).
 - An open page no longer reads every 3 seconds while a send waits on something only a person or a retry can change (the provider refusing the account, a wedged send awaiting Resolve, a provider outage between retries): it reads at the send's next retry, or about once a minute, and a fix still shows within the minute. `read_again_at` is advisory, and the reference now says so (SPEC §8).
 - A scheduled send whose fire time has passed now reports the phase `due` until the sweep starts it, instead of `scheduled` (SPEC §12).

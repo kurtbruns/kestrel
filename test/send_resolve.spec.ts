@@ -68,6 +68,8 @@ async function insertDelivery(
   )
     .bind(sendId, email, status, providerId ?? null, Date.now())
     .run();
+  // The counters follow the rows, as every write in the app keeps them (they decide wedged).
+  await sends.recomputeSendCounters(env.DB, sendId);
 }
 
 beforeEach(async () => {
@@ -92,21 +94,18 @@ describe("resolve a wedged send", () => {
   it("waits for a run in progress, whose in-flight rows may still be answered", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "amb@example.com", "dispatched");
-    await insertDelivery(send.id, "flying@example.com", "pending");
     const lease = (await sends.acquireLease(env.DB, send.id, Date.now(), LEASE_TTL_MS))!;
 
     await expect(
       resolveStuckSend(env, send.id, "unsent", "tester@example.com"),
-    ).rejects.toMatchObject({ status: 409 });
-    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 1, pending: 1 });
+    ).rejects.toMatchObject({ status: 409, code: "run_in_progress" });
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 1 });
 
-    // Once the run lets go, Resolve settles the row and hands the send back to the sweep.
+    // Once the run lets go (leaving the row in flight: the send is wedged), Resolve settles it.
     await sends.releaseLease(env.DB, send.id, lease);
     const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
     expect(res.resolved).toBe(1);
-    expect(res.completed).toBe(false);
-    const row = (await sends.getSend(env.DB, send.id))!;
-    expect([row.status, row.locked_until]).toEqual(["sending", null]);
+    expect(res.completed).toBe(true);
   });
 
   it("drives a lone dispatched row to completion, marked unsent (assumed not sent)", async () => {
@@ -171,33 +170,53 @@ describe("resolve a wedged send", () => {
     expect(row?.error).toContain("tester@example.com");
   });
 
-  it("does not complete a send that still has pending rows, but resolves the ambiguous ones", async () => {
+  it("refuses a send that still has recipients to hand off: it is not wedged yet", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "amb@example.com", "dispatched");
     await insertDelivery(send.id, "todo@example.com", "pending");
 
-    const res = await resolveStuckSend(env, send.id, "unsent", "tester@example.com");
-
-    expect(res.resolved).toBe(1);
-    expect(res.completed).toBe(false);
-    // Still sending — the sweep will deliver the pending recipient on the next tick.
-    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
-    expect(await sends.countDeliveries(env.DB, send.id, "dispatched")).toBe(0);
-    expect(await sends.countDeliveries(env.DB, send.id, "pending")).toBe(1);
+    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toMatchObject({
+      status: 409,
+      code: "not_wedged",
+    });
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ dispatched: 1, pending: 1 });
   });
 
-  it("rejects resolving a send with no ambiguous deliveries", async () => {
+  it("refuses a send with no ambiguous deliveries, naming why and carrying the send", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "ok@example.com", "accepted", "ses-msg-ok");
 
-    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toThrow(/no ambiguous/);
+    const err = await resolveStuckSend(env, send.id, "unsent", "t").catch((e) => e);
+    expect(err).toMatchObject({ status: 409, code: "not_wedged" });
+    expect(err.details.send).toMatchObject({ id: send.id, status: "sending", actions: [] });
   });
 
-  it("rejects resolving a send that is not sending", async () => {
+  it("refuses a send that is not sending", async () => {
     const { post } = await posts.createPost(env.DB, { subject: "S", markdown: "# H\n\nb" }, "t");
     const send = await freeze(env, config(), post, Date.now() + 3_600_000); // still scheduled
 
-    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toThrow(/only a send/);
+    await expect(resolveStuckSend(env, send.id, "unsent", "t")).rejects.toMatchObject({
+      code: "not_wedged",
+    });
+  });
+
+  it("refuses when the ambiguous count is not the one the caller saw, or the send moved on from its rev", async () => {
+    const send = await sendingSend();
+    await insertDelivery(send.id, "a1@example.com", "dispatched");
+    await insertDelivery(send.id, "a2@example.com", "dispatched");
+    const row = (await sends.getSend(env.DB, send.id))!;
+
+    await expect(
+      resolveStuckSend(env, send.id, "unsent", "t", { expectedCount: 1 }),
+    ).rejects.toMatchObject({ status: 409, code: "count_changed" });
+    await expect(
+      resolveStuckSend(env, send.id, "unsent", "t", { ifMatch: row.rev - 1 }),
+    ).rejects.toMatchObject({ status: 412, code: "precondition_failed" });
+    const res = await resolveStuckSend(env, send.id, "unsent", "t", {
+      ifMatch: row.rev,
+      expectedCount: 2,
+    });
+    expect(res.resolved).toBe(2);
   });
 
   it("rejects resolving a missing send", async () => {

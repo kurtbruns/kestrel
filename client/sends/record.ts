@@ -20,7 +20,7 @@ import { type Html, html, setHtml } from "../ui/html";
 import { type ListState, renderPager, th, wireSort } from "../ui/list_controls";
 import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
-import { clampPct, fmtDuration, refusalAdvice } from "./progress";
+import { can, clampPct, conditionOf, fmtDuration, has } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -101,7 +101,7 @@ function nextRetry(retryAt: number | null): string {
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendProgress): string {
   const halt = prog.provider.halt;
-  if (prog.attention.refused && halt) {
+  if (has(prog, "refused") && halt) {
     return `The provider is refusing this account — nothing more goes out until it is fixed; ${nextRetry(halt.retry_at)}.`;
   }
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
@@ -188,11 +188,11 @@ function watchBodyHtml(prog: SendProgress): Html {
     : `Provider: ${prog.provider?.name || "—"}`;
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
-  const halt = prog.attention.refused ? prog.provider.halt : null;
+  const refused = conditionOf(prog, "refused");
   return html`
     ${
-      halt
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${halt.error}</div><div>${refusalAdvice(halt.cause)}</div><div>${halt.since === null ? null : `Since ${fmt(halt.since)}. `}No one has been marked unsent, and once this is fixed the send resumes at its next retry${halt.retry_at === null ? "" : `, ${fmt(halt.retry_at)}`}.</div></div></div>`
+      refused
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${refused.error}</div><div>${refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once this is fixed the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">
@@ -220,7 +220,7 @@ function watchHtml(send: Send, prog: SendProgress): Html {
   return html`
     <div class="editor-head">
       <a href="#/sent" class="back">← Sent</a>
-      ${prog.attention?.wedged ? html`<button type="button" class="primary" id="resolveBtn">Resolve…</button>` : null}
+      ${can(prog, "resolve") ? html`<button type="button" class="primary" id="resolveBtn">Resolve…</button>` : null}
     </div>
     <div class="card rec-card watch-card">
       <div class="rec-head">
@@ -292,8 +292,8 @@ async function startWatch(
         remount(); // dispatch done → the frozen record (which settles)
         return false;
       }
-      // If it just wedged, the header needs the Resolve control it didn't have: re-render.
-      if (fresh.attention?.wedged && !root.querySelector("#resolveBtn")) {
+      // If Resolve just became possible, or stopped being, the header changes: re-render.
+      if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
         setHtml(root, watchHtml(send, fresh));
         wireWatchHeader(root, send, fresh, remount);
       } else {

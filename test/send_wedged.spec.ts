@@ -18,6 +18,7 @@ import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
+import { condition, has } from "./support/conditions";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // Wedged has one definition (SPEC §12): sending, nothing left to hand off, recipients in
@@ -103,7 +104,7 @@ describe("a wedged send", () => {
       expect(now.rev).toBe(wedged.rev); // never leased and released again
       expect(now.locked_until).toBeNull();
       const p = await progress(send.id);
-      expect([p.phase, p.attention.wedged, p.attention.wedged_count]).toEqual([
+      expect([p.phase, has(p, "wedged"), condition(p, "wedged")?.count]).toEqual([
         "needs-attention",
         true,
         3,

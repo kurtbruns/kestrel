@@ -3,6 +3,7 @@ import type { SendListItem, SendSummary } from "../../shared/sends";
 import {
   $,
   $$,
+  condition,
   type FakeApi,
   type FakeRoute,
   fakeApi,
@@ -37,6 +38,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   completed_at: 1_001_000,
   audience_resolved_at: 1_000_000,
   remade_at: null,
+  tested_at: null,
   halt_reason: null,
   halt_cause: null,
   halt_error: null,
@@ -69,8 +71,8 @@ describe("deliveredCell", () => {
 const item = (s: SendSummary, over: Partial<SendListItem> = {}): SendListItem => ({
   ...s,
   phase: "progressing",
-  attention: { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false },
-  stuck: false,
+  conditions: [],
+  actions: [],
   ...over,
 });
 
@@ -108,22 +110,22 @@ describe("the in-progress card", () => {
       view(
         {
           phase: "backing-off",
-          attention: { wedged: false, wedged_count: 0, stuck: true, missed: false, refused: false },
+          conditions: [condition.stuck()],
         },
         90_000,
       ),
     );
     expect($(".active-stat", el).textContent).not.toMatch(/left/);
     expect($(".active-stuck", el).textContent).toBe(
-      "In progress over 30 minutes; it may be retrying.",
+      "Still sending 31 minutes after it started; it may be retrying.",
     );
   });
 
   it("belongs to the attention block instead when the send needs the operator", () => {
-    const flags = { wedged: false, wedged_count: 0, stuck: false, missed: false, refused: false };
     expect(needsOperator(view())).toBe(false);
-    expect(needsOperator(view({ attention: { ...flags, wedged: true } }))).toBe(true);
-    expect(needsOperator(view({ attention: { ...flags, refused: true } }))).toBe(true);
+    expect(needsOperator(view({ conditions: [condition.wedged(1)] }))).toBe(true);
+    expect(needsOperator(view({ conditions: [condition.refused("no", null)] }))).toBe(true);
+    expect(needsOperator(view({ conditions: [condition.stuck()] }))).toBe(false);
   });
 });
 
@@ -163,7 +165,15 @@ describe("the scheduled card's countdown", () => {
     const missed = words(
       row(NOW - 12 * 60_000, {
         phase: "due",
-        attention: { wedged: false, wedged_count: 0, stuck: false, missed: true, refused: false },
+        conditions: [
+          {
+            kind: "missed",
+            severity: "action",
+            since: NOW - 7 * 60_000,
+            message: "The fire time passed and the send has not started.",
+            action: null,
+          },
+        ],
       }),
     );
     expect(missed.textContent).toBe("Missed its fire time · 12 min late");
@@ -348,6 +358,25 @@ describe("sent view", () => {
     expect(feedReads(fake)).toHaveLength(2);
   });
 
+  it("offers a scheduled card's Cancel and Reschedule only while the server would take them, hiding them at the fire time", async () => {
+    const srv = sendServer([scheduled({ fire_at: NOW + 5_000 })]);
+    fake = world(srv);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    const controls = () => $<HTMLElement>("#scheduled [data-closes]");
+    expect(controls().hidden).toBe(false);
+    expect($("[data-cancel='sch']").textContent).toBe("Cancel");
+    // The fire time passes: the window has closed, and the card hides them by the clock,
+    // before the layer's read for the fire time.
+    await vi.advanceTimersByTimeAsync(5_500);
+    expect(controls().hidden).toBe(true);
+    // That read sees the send due and re-reads the queue: a due send carries no window
+    // actions, so its card offers none.
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(document.querySelector("#scheduled [data-cancel]")).toBeNull();
+    expect(document.querySelector("#scheduled [data-reschedule]")).toBeNull();
+  });
+
   it("shows the other client's cancel, move, and new schedule within one idle read", async () => {
     const srv = sendServer([scheduled(), send()]);
     fake = world(srv);
@@ -463,7 +492,7 @@ describe("sent view", () => {
       sending({ id: "wedge", subject: "Kinglets", c_pending: 0, c_accepted: 149, c_in_flight: 1 }),
       {
         phase: "needs-attention",
-        attention: { wedged: true, wedged_count: 1 },
+        conditions: [condition.wedged(1, "wedge")],
       },
     );
     fake = world(srv, [
@@ -485,7 +514,7 @@ describe("sent view", () => {
     await vi.advanceTimersByTimeAsync(10);
     await vi.advanceTimersByTimeAsync(6000);
     const card = $("#stuck .stuck-card");
-    expect(card.textContent).toMatch(/1 ambiguous delivery/);
+    expect(card.textContent).toMatch(/never answered for 1 recipient/);
     expect($("a", card).getAttribute("href")).toBe("#/sent/wedge");
     $<HTMLButtonElement>("[data-resolve='wedge']", card).click();
     $("#rUnsent").click();

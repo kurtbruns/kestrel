@@ -26,6 +26,18 @@ export const unauthorized = (message?: string) => new HttpError(401, "unauthoriz
 export const forbidden = (message?: string) => new HttpError(403, "forbidden", message);
 export const notFound = (message?: string) => new HttpError(404, "not_found", message);
 export const conflict = (message?: string) => new HttpError(409, "conflict", message);
+/**
+ * A refusal with a code of its own, so a client tells one reason from another without
+ * parsing the message: `window_closed`, `not_wedged`, and the rest the API reference
+ * lists per route. `details` carries what the client needs next, such as the send as it
+ * stands.
+ */
+export const refusal = (
+  status: 400 | 409 | 412,
+  code: string,
+  message: string,
+  details?: Record<string, unknown>,
+) => new HttpError(status, code, message, details);
 export const unsupportedMediaType = (message?: string) =>
   new HttpError(415, "unsupported_media_type", message);
 

@@ -138,7 +138,7 @@ export async function renderEditor(
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><span>Scheduled for <strong>${fmt(scheduled.fire_at)}</strong>, cancelable until it sends.</span><span class="row"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen">Scheduled for <strong>${fmt(scheduled.fire_at)}</strong>, cancelable until then.</span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="editorNotices"></div>
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
@@ -750,6 +750,23 @@ export async function renderEditor(
     });
 
   if (locked && scheduled) {
+    // --- the review window closes at the fire time (SPEC §6) ---
+    // From then the server refuses Cancel and Reschedule, so the banner stops offering
+    // them, by the clock, and says the send is being prepared until it starts (when the
+    // editor hands off to its send page).
+    const closeWindow = () => {
+      if (Date.now() < scheduled.fire_at) {
+        return;
+      }
+      const controls = document.querySelector<HTMLElement>("#schedControls");
+      if (controls && !controls.hidden) {
+        controls.hidden = true;
+        setHtml($("#schedWhen"), html`Preparing to send…`);
+      }
+    };
+    closeWindow();
+    every(1000, closeWindow, signal);
+
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
     const rescheduleBtn = $<HTMLButtonElement>("#rescheduleSchedule");
     rescheduleBtn.onclick = () => openRescheduleModal(scheduled.id, scheduled.fire_at, remount);

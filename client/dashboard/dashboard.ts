@@ -2,13 +2,7 @@
 // setup checklist, and quick actions.
 
 import type { PostListItem, PostListResponse } from "../../shared/posts";
-import {
-  type LiveSend,
-  type SendListItem,
-  type SendListResponse,
-  type SendSummary,
-  STUCK_THRESHOLD_MS,
-} from "../../shared/sends";
+import type { LiveSend, SendListItem, SendListResponse, SendSummary } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
@@ -19,12 +13,12 @@ import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
 import {
   activeRowHtml,
+  conditionOf,
   countdownHtml,
   countdowns,
   deliveredCell,
+  has,
   needsOperator,
-  providerWords,
-  refusalAdvice,
   rowCounts,
   type SendView,
   sendsNow,
@@ -45,14 +39,6 @@ import { badge, copyText, renderError } from "../ui/widgets";
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
 
-// SES puts a sender under review at a 5% bounce rate, so that danger-zone threshold is
-// what the health line treats as a "bounce spike" (SPEC §8/§12). It sits well above the
-// dev send simulator's normal ~2% simulated bounce rate (src/providers/simulate.ts), so a
-// demo send never false-alarms. A small absolute floor keeps a tiny audience's inherently
-// noisy rate (one bad address out of a handful) from tripping it.
-const BOUNCE_SPIKE_RATE = 0.05;
-const BOUNCE_SPIKE_MIN = 3;
-
 /** One line of the health block: red needs a decision, amber a look. */
 interface HealthAlert {
   level: "red" | "amber";
@@ -60,14 +46,16 @@ interface HealthAlert {
 }
 
 // Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case, loud
-// only when something needs attention. What a send is in the middle of is the server's
-// flags on each send as it stands (the page's rows, overlaid by the layer's reports), so a
-// line appears within a read of its condition and stays until the condition clears; the
-// bounce spike reads the recent sent sends, a live one's counts as its receipts settle.
-function computeHealth(live: SendView[], sends: SendListItem[]): HealthAlert[] {
+// only when something needs attention. Every line is a condition the server reports on a
+// send as it stands (the page's rows, overlaid by the layer's reports), so a line appears
+// within a read of its condition and stays until the condition clears, and the dashboard
+// keeps no rule of its own: the bounce spike included, which the server reads off each
+// recently sent send. Only the loud kinds are lines here; a re-made send's note and a
+// provider outage short of the stuck threshold are shown where the send is.
+function computeHealth(live: SendView[]): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
-  const missed = live.filter((s) => s.attention.missed);
+  const missed = live.filter((s) => has(s, "missed"));
   if (missed.length) {
     alerts.push({
       level: "red",
@@ -77,69 +65,62 @@ function computeHealth(live: SendView[], sends: SendListItem[]): HealthAlert[] {
   // A send wedged on ambiguous in-flight rows needs a decision, not just patience: red,
   // linking to where Resolve is (its page; the Sent page for several), and kept out of the
   // in-progress lines below so it isn't reported twice (SPEC §12).
-  const wedged = live.filter((s) => s.attention.wedged);
+  const wedged = live.flatMap((s) => {
+    const c = conditionOf(s, "wedged");
+    return c ? [{ s, count: c.count }] : [];
+  });
   const [firstWedged] = wedged;
   if (firstWedged) {
-    const n = wedged.reduce((sum, s) => sum + s.attention.wedged_count, 0);
+    const n = wedged.reduce((sum, w) => sum + w.count, 0);
     const noun = n === 1 ? "delivery" : "deliveries";
     alerts.push({
       level: "red",
       text:
         wedged.length === 1
-          ? html`<a href="#/sent/${firstWedged.id}">${firstWedged.subject}</a> has ${n} ambiguous ${noun} awaiting a decision; resolve ${n === 1 ? "it" : "them"} on its page.`
+          ? html`<a href="#/sent/${firstWedged.s.id}">${firstWedged.s.subject}</a> has ${n} ambiguous ${noun} awaiting a decision; resolve ${n === 1 ? "it" : "them"} on its page.`
           : html`${n} ambiguous ${noun} across <a href="#/sent">${wedged.length} sends</a> await a decision; resolve them on the Sent page.`,
     });
   }
   // The provider refusing the account stops every send it touches until the operator
-  // fixes the account (SPEC §12): one red line, carrying the provider's own words.
-  const refused = live.filter((s) => s.attention.refused);
+  // fixes the account (SPEC §12): one red line, in the server's words for it.
+  const refused = live.flatMap((s) => {
+    const c = conditionOf(s, "refused");
+    return c ? [{ s, c }] : [];
+  });
   const [firstRefused] = refused;
   if (firstRefused) {
     // One send links to its watch; several, to the Sent page that lists them all.
     const which =
       refused.length === 1
-        ? html`<a href="#/sent/${firstRefused.id}">${firstRefused.subject}</a>`
+        ? html`<a href="#/sent/${firstRefused.s.id}">${firstRefused.s.subject}</a>`
         : html`<a href="#/sent">${refused.length} sends</a>`;
-    const halt = firstRefused.provider.halt;
-    alerts.push({
-      level: "red",
-      text: html`The email provider is refusing this account, pausing ${which}: ${providerWords(halt?.error)} ${refusalAdvice(halt?.cause ?? null)} Sending resumes on its own.`,
-    });
+    alerts.push({ level: "red", text: html`${which}: ${firstRefused.c.message}` });
   }
   // A healthy in-progress send is NOT surfaced here: the active-send widget below is its
   // home (a bar and a Watch link). The health line is loud-only, so it keeps just the
-  // *stuck* case: a send the server flags as in flight too long.
-  const stuck = live.filter((s) => s.attention.stuck && !needsOperator(s));
-  if (stuck.length) {
+  // *stuck* case: a send the server reports in flight too long.
+  const stuck = live.filter((s) => has(s, "stuck") && !needsOperator(s));
+  const [firstStuck] = stuck;
+  if (firstStuck) {
     alerts.push({
       level: "amber",
-      text: `A send has been in progress over ${STUCK_THRESHOLD_MS / 60000} minutes — it may be retrying.`,
+      text:
+        stuck.length === 1
+          ? html`<a href="#/sent/${firstStuck.id}">${firstStuck.subject}</a>: ${conditionOf(firstStuck, "stuck")?.message}`
+          : html`<a href="#/sent">${stuck.length} sends</a> have been sending longer than they should; they may be retrying.`,
     });
   }
-  // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
-  // is in the danger zone. This reads the true webhook-confirmed bounce count (the send's
-  // `c_bounced` counter, or a settling send's live count) over the audience at fire
-  // (`recipient_count`), not the old send-time-`unsent` proxy, which couldn't see
-  // asynchronous bounce events at all. The threshold is BOUNCE_SPIKE_RATE; the absolute
-  // floor keeps a tiny audience's noisy rate from tripping it. Read-only reporting: it
-  // never throttles or halts a send (§12 leaves an automatic deliverability
-  // circuit-breaker deferred).
-  const liveBounced = new Map(live.map((s) => [s.id, s.counts.bounced]));
-  const spiky = sends
-    .filter((s) => s.status === "sent")
-    .slice(0, 5)
-    .map((s) => ({ s, bounced: liveBounced.get(s.id) ?? s.c_bounced ?? 0 }))
-    .find(
-      ({ s, bounced }) =>
-        s.recipient_count > 0 &&
-        bounced >= BOUNCE_SPIKE_MIN &&
-        bounced / s.recipient_count >= BOUNCE_SPIKE_RATE,
-    );
-  if (spiky) {
-    const pct = Math.round((100 * spiky.bounced) / spiky.s.recipient_count);
+  // Bounce spike (SPEC §8): the server's reading of a recent send's confirmed bounces over
+  // its audience at fire. Read-only reporting: it never throttles or halts a send.
+  const spiky = live.flatMap((s) => {
+    const c = conditionOf(s, "bounce_spike");
+    return c ? [{ s, c }] : [];
+  });
+  const [firstSpike] = spiky;
+  if (firstSpike) {
     alerts.push({
       level: "amber",
-      text: `Elevated bounce rate (${pct}%) on a recent send — check the Sent page.`,
+      text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
     });
   }
   return alerts;
@@ -282,7 +263,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
-    <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported), sends))}</div>
+    <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported)))}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div id="dashNotices"></div>
@@ -346,7 +327,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   };
   const paintLive = () => {
     const now = sendsNow(sends, reported);
-    setHtml($("#dashHealth", root), healthHtml(computeHealth(now, sends)));
+    setHtml($("#dashHealth", root), healthHtml(computeHealth(now)));
     setHtml($("#dashActive", root), dashActiveHtml(activeOf(now)));
     wireDashActiveCards(root);
     patchDelivered(root, [...reported.values()]);

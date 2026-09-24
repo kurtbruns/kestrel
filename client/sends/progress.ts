@@ -2,16 +2,16 @@
 // it stands, who needs the operator, the Delivered cell, the in-progress card, the
 // scheduled cards' countdowns, and the small number formats.
 
-import {
-  type LiveSend,
-  type SendAttention,
-  type SendCounts,
-  type SendHalt,
-  type SendListItem,
-  type SendPhase,
-  type SendStatus,
-  type SendSummary,
-  STUCK_THRESHOLD_MS,
+import type {
+  ConditionKind,
+  LiveSend,
+  SendAction,
+  SendCondition,
+  SendCounts,
+  SendListItem,
+  SendPhase,
+  SendStatus,
+  SendSummary,
 } from "../../shared/sends";
 import { every } from "../lifecycle";
 import { $$ } from "../ui/dom";
@@ -44,7 +44,7 @@ export function fmtDuration(ms: number | null | undefined): string {
  * `countdowns` words it.
  */
 export function countdownHtml(s: SendListItem): Html {
-  return html`<span class="countdown" data-fire="${s.fire_at}"${s.phase === "due" && html` data-due`}${s.attention.missed && html` data-missed`}></span>`;
+  return html`<span class="countdown" data-fire="${s.fire_at}"${s.phase === "due" && html` data-due`}${has(s, "missed") && html` data-missed`}></span>`;
 }
 
 /**
@@ -52,11 +52,16 @@ export function countdownHtml(s: SendListItem): Html {
  * "Sends in …" before the fire time; "Preparing to send…" from the fire time (by the clock,
  * or sooner when the server already reads the send due) until the send starts and its card
  * leaves the queue; and, past the server's missed tolerance, how late it is, in the danger
- * tone. Returns the tick, for a section that re-renders its cards: a fresh cell is empty
- * until the next tick paints it.
+ * tone. A card's window controls (`data-closes`, Cancel and Reschedule) hide at the fire
+ * time, when the review window closes (SPEC §6) and the server would refuse them, rather
+ * than wait for the next read. Returns the tick, for a section that re-renders its cards:
+ * a fresh cell is empty until the next tick paints it.
  */
 export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   const tick = () => {
+    for (const el of $$<HTMLElement>("[data-closes]", root)) {
+      el.hidden = Date.now() >= Number(el.dataset.closes);
+    }
     for (const el of $$<HTMLElement>("[data-fire]", root)) {
       const fire = Number(el.dataset.fire);
       const missed = el.dataset.missed !== undefined;
@@ -67,9 +72,6 @@ export function countdowns(root: ParentNode, signal: AbortSignal): () => void {
   every(1000, tick, signal);
   return tick;
 }
-
-// The refusal advice lives in shared/, so the notification that emails it words it the same way.
-export { refusalAdvice } from "../../shared/sends";
 
 /** The provider's words for a refusal, as a sentence the copy around them can follow: their
  *  own closing stop kept ("…quota exceeded."), one added only when they have none. */
@@ -90,10 +92,28 @@ export interface SendView {
   phase: SendPhase;
   total: number;
   counts: SendCounts;
-  attention: SendAttention;
+  conditions: SendCondition[];
+  actions: SendAction[];
   dispatch: { eta_ms: number | null };
-  provider: { halt: Pick<SendHalt, "cause" | "error"> | null };
 }
+
+/** Whether the server reports an open condition of `kind` on the send. */
+export const has = (s: { conditions: SendCondition[] }, kind: ConditionKind): boolean =>
+  s.conditions.some((c) => c.kind === kind);
+
+/** The send's open condition of `kind`, as the server words it, if any. */
+export function conditionOf<K extends ConditionKind>(
+  s: { conditions: SendCondition[] },
+  kind: K,
+): Extract<SendCondition, { kind: K }> | undefined {
+  return s.conditions.find((c) => c.kind === kind) as
+    | Extract<SendCondition, { kind: K }>
+    | undefined;
+}
+
+/** Whether the server would take the action on the send now: a control is offered only then. */
+export const can = (s: { actions: SendAction[] }, name: SendAction["name"]): boolean =>
+  s.actions.some((a) => a.name === name);
 
 /** A `GET /sends` row as a send view; it carries no time to finish, which the layer's next report of the send brings. */
 export function rowView(s: SendListItem): SendView {
@@ -113,9 +133,9 @@ export function rowView(s: SendListItem): SendView {
       skipped: s.c_skipped,
       unsent: s.c_unsent,
     },
-    attention: s.attention,
+    conditions: s.conditions,
+    actions: s.actions,
     dispatch: { eta_ms: null },
-    provider: { halt: s.halt_reason ? { cause: s.halt_cause, error: s.halt_error ?? "" } : null },
   };
 }
 
@@ -130,7 +150,7 @@ export function sendsNow(
 ): SendView[] {
   const listed = new Set(rows.map((r) => r.id));
   return [
-    ...rows.map((r) => reported.get(r.id) ?? rowView(r)),
+    ...rows.map((r): SendView => reported.get(r.id) ?? rowView(r)),
     ...[...reported.values()].filter((s) => !listed.has(s.id)),
   ];
 }
@@ -139,10 +159,10 @@ export function sendsNow(
  * A send that needs the operator rather than patience (SPEC §12): wedged on ambiguous
  * deliveries, which only Resolve can settle without risking a double-mail (I4), or refused
  * by the provider, which only a fix to the account lifts. Its home is the attention block,
- * not the in-progress cards. The server decides both flags, so every page agrees.
+ * not the in-progress cards. The server decides both conditions, so every page agrees.
  */
 export function needsOperator(s: SendView): boolean {
-  return s.attention.wedged || s.attention.refused;
+  return has(s, "wedged") || has(s, "refused");
 }
 
 /** The counts a Delivered cell reads. */
@@ -200,6 +220,7 @@ export function activeRowHtml(s: SendView): Html {
   const pct = s.total > 0 ? (100 * accepted) / s.total : 0;
   const handingOff = s.phase === "progressing" || s.phase === "retrying";
   const eta = handingOff && s.dispatch.eta_ms ? ` · ~${fmtDuration(s.dispatch.eta_ms)} left` : "";
+  const stuck = conditionOf(s, "stuck");
   return html`<div class="card spread clickable active-card" data-watch="${s.id}">
       <div class="active-main">
         <a class="card-link active-subj" href="#/sent/${s.id}">${s.subject || html`<em>untitled</em>`}</a>
@@ -207,11 +228,7 @@ export function activeRowHtml(s: SendView): Html {
         <div class="muted active-stat">Sending — ${accepted.toLocaleString()} of ${s.total.toLocaleString()} accepted${
           confirmed ? ` · ${confirmed.toLocaleString()} confirmed` : ""
         }${eta}</div>
-        ${
-          s.attention.stuck
-            ? html`<div class="active-stuck">In progress over ${STUCK_THRESHOLD_MS / 60_000} minutes; it may be retrying.</div>`
-            : null
-        }
+        ${stuck ? html`<div class="active-stuck">${stuck.message}</div>` : null}
       </div>
       <a class="ghost-link" href="#/sent/${s.id}">Watch&nbsp;→</a>
     </div>`;

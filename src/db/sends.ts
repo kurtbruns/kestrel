@@ -258,7 +258,7 @@ export const SEND_LIST_SPEC: ListSpec = {
 // but carries the denormalized counters, so a list row is enough for the Sent-page
 // active row and the dashboard active-send widget without a second per-send read.
 const SEND_LIST_COLS =
-  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
+  "id, post_id, status, fire_at, subject, recipient_count, locked_until, scheduled_at, started_at, completed_at, audience_resolved_at, remade_at, tested_at, halt_reason, halt_cause, halt_error, halted_at, halt_retries, halt_retry_at, c_pending, c_in_flight, c_accepted, c_delivered, c_bounced, c_complained, c_skipped, c_unsent, rev";
 
 function sendWhere(filter: SendFilter): { clause: string; binds: unknown[] } {
   const where: string[] = [];
@@ -360,18 +360,6 @@ export interface RemovedSend {
   rev: number;
 }
 
-/** What of every unfinished send sets the feed's pace (`src/send/feed.ts`). */
-export type FeedPaceSend = Pick<
-  SendSummary,
-  | "status"
-  | "fire_at"
-  | "started_at"
-  | "locked_until"
-  | "halt_retry_at"
-  | "c_pending"
-  | "c_in_flight"
->;
-
 /** One read of the feed: the sends and removals, the sequence, and what sets the pace. */
 export interface FeedRead {
   rows: FeedSendRow[];
@@ -382,8 +370,9 @@ export interface FeedRead {
   current: number;
   /** Whether changes past `seq` were left for the next read. */
   more: boolean;
-  /** Every scheduled or sending send, for the pace. */
-  unfinished: FeedPaceSend[];
+  /** Every send that can have a condition (scheduled, sending, or sent since `recentSince`),
+   *  for the pace and the conditions roll-up. */
+  open: SendSummary[];
   /** When the youngest settling send finished dispatch. */
   settlingSince: number | null;
 }
@@ -448,13 +437,19 @@ export async function sendFeed(
   settledSince: number,
   thresholds: FeedThresholds,
   limit: number,
+  recentSince: number,
 ): Promise<FeedRead> {
   const select = `SELECT ${SEND_LIST_COLS},
          CASE WHEN status = 'sending' THEN ${activeRetriesSql("sends.id")} ELSE 0 END AS has_retries
        FROM sends`;
   const statements = [
     db.prepare(`SELECT ${CURRENT_REV} AS seq`),
-    db.prepare(`SELECT ${PACE_COLS} FROM sends WHERE status IN ('scheduled', 'sending')`),
+    db
+      .prepare(
+        `SELECT ${SEND_LIST_COLS} FROM sends
+          WHERE status IN ('scheduled', 'sending') OR (status = 'sent' AND completed_at >= ?)`,
+      )
+      .bind(recentSince),
     db.prepare(
       "SELECT MAX(completed_at) AS at FROM sends WHERE status = 'sent' AND c_accepted > 0",
     ),
@@ -489,14 +484,10 @@ export async function sendFeed(
     seq: more ? cutAt : current,
     current,
     more,
-    unfinished: (pace?.results ?? []) as FeedPaceSend[],
+    open: (pace?.results ?? []) as SendSummary[],
     settlingSince: (settling?.results[0] as { at: number | null } | undefined)?.at ?? null,
   };
 }
-
-// The columns `nextChangeAt` reads.
-const PACE_COLS =
-  "status, fire_at, started_at, locked_until, halt_retry_at, c_pending, c_in_flight";
 
 /** Per-recipient state rollup for a send. */
 export async function deliveryRollup(
@@ -762,28 +753,56 @@ export function insertScheduledSendStmt(
     );
 }
 
-/** Move a scheduled send's fire time, nothing else. A CAS on `status = 'scheduled'`:
- *  `meta.changes === 0` means the send has left the review window (or never existed). */
+/** The review window as a CAS (SPEC §6): still scheduled, and its fire time still ahead of
+ *  `now`. The window closes at the fire time, whether or not the sweep has started the
+ *  send. With `rev`, also that the send is as the caller last read it (`If-Match`). */
+function inWindowAt(now: number, rev: number | null): { sql: string; binds: unknown[] } {
+  return {
+    sql: "status = 'scheduled' AND fire_at > ? AND (? IS NULL OR rev = ?)",
+    binds: [now, rev, rev],
+  };
+}
+
+/** Move a scheduled send's fire time, nothing else, inside its review window (`inWindowAt`):
+ *  `meta.changes === 0` means the window has closed, or the send changed from `rev`. */
 export function rescheduleStmt(
   db: D1Database,
   sendId: string,
   fireAt: number,
+  now: number,
+  rev: number | null = null,
 ): D1PreparedStatement {
+  const guard = inWindowAt(now, rev);
   return db
-    .prepare(
-      `UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
-    )
-    .bind(fireAt, sendId);
+    .prepare(`UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`)
+    .bind(fireAt, sendId, ...guard.binds);
 }
 
-/** Cancel a scheduled send. The same CAS as `rescheduleStmt`: a send that has begun
- *  sending, or is already sent or canceled, changes zero rows. */
-export function cancelStmt(db: D1Database, sendId: string, now: number): D1PreparedStatement {
+/** Cancel a scheduled send inside its review window, the same CAS as `rescheduleStmt`: a
+ *  send due, sending, sent, or canceled changes zero rows. */
+export function cancelStmt(
+  db: D1Database,
+  sendId: string,
+  now: number,
+  rev: number | null = null,
+): D1PreparedStatement {
+  const guard = inWindowAt(now, rev);
   return db
     .prepare(
-      `UPDATE sends SET status = 'canceled', completed_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
+      `UPDATE sends SET status = 'canceled', completed_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`,
     )
-    .bind(now, sendId);
+    .bind(now, sendId, ...guard.binds);
+}
+
+/** Record that the scheduled send's frozen copy was tested (SPEC §8), which settles a
+ *  re-made send's `remade` condition. A no-op once it has fired. */
+export async function markTested(db: D1Database, sendId: string, now: number): Promise<void> {
+  await db
+    .prepare(
+      `UPDATE sends SET tested_at = ?, rev = ${NEXT_REV} WHERE id = ? AND status = 'scheduled'`,
+    )
+    .bind(now, sendId)
+    .run();
 }
 
 /** The predicate a post unlock carries when it runs in a batch after `cancelStmt`: the

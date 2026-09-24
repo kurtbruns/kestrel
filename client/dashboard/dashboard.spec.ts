@@ -8,6 +8,7 @@ import { confirmUnsubscribe } from "../subscribers/dialogs";
 import {
   $,
   $$,
+  condition,
   type FakeApi,
   type FakeRoute,
   fakeApi,
@@ -50,6 +51,7 @@ const send = (over: Partial<SendSummary> = {}): SendSummary => ({
   completed_at: NOW - 3_500_000,
   audience_resolved_at: NOW - 3_600_000,
   remade_at: null,
+  tested_at: null,
   halt_reason: null,
   halt_cause: null,
   halt_error: null,
@@ -248,11 +250,11 @@ describe("dashboard", () => {
     const srv = sendServer([scheduled({ id: "m1", post_id: "p9", fire_at: NOW - 6 * 60_000 })]);
     srv.put(sending({ id: "w1", subject: "Kinglets", c_pending: 0, c_in_flight: 2 }), {
       phase: "needs-attention",
-      attention: { wedged: true, wedged_count: 2 },
+      conditions: [condition.wedged(2, "w1")],
     });
     srv.put(sending({ id: "ok1", c_pending: 5, started_at: NOW - 11 * 60_000 }));
     srv.put(sending({ id: "st1", c_pending: 5, c_in_flight: 1, started_at: NOW - 31 * 60_000 }), {
-      attention: { stuck: true },
+      conditions: [condition.stuck()],
     });
     fake = world([post()], srv);
     await mount(renderDashboard);
@@ -263,7 +265,7 @@ describe("dashboard", () => {
     expect(lines).toEqual([
       "1 scheduled send passed the fire time without going out.",
       "Kinglets has 2 ambiguous deliveries awaiting a decision; resolve them on its page.",
-      "A send has been in progress over 30 minutes — it may be retrying.",
+      "Swifts: Still sending 31 minutes after it started; it may be retrying.",
     ]);
     // The wedged line leads to where Resolve is: the send's own page.
     expect($("a", health).getAttribute("href")).toBe("#/sent/w1");
@@ -272,7 +274,9 @@ describe("dashboard", () => {
         .map((c) => c.dataset.watch)
         .sort(),
     ).toEqual(["ok1", "st1"]);
-    expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(/over 30 minutes/);
+    expect($("[data-watch='st1'] .active-stuck").textContent).toMatch(
+      /31 minutes after it started/,
+    );
     // The missed send's own card says how late it is, in the danger tone.
     expect(countdown("p9").textContent).toBe("Missed its fire time · 6 min late");
     expect(countdown("p9").classList.contains("countdown-missed")).toBe(true);
@@ -360,7 +364,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "The email provider is refusing this account, pausing 2 sends: Resend 401 invalid_api_key: API key is invalid. Replace the provider's API key or credentials in the deployment's secrets. Sending resumes on its own.",
+      "2 sends: The provider is refusing the account: Resend 401 invalid_api_key: API key is invalid. Replace the provider's API key or credentials in the deployment's secrets. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
@@ -368,12 +372,18 @@ describe("dashboard", () => {
   });
 
   it("flags an elevated bounce rate on a recent send, amber", async () => {
-    fake = world([post()], sendServer([send({ c_delivered: 90, c_bounced: 10 })]));
+    // The server reads the spike off the send (SPEC §8); the dashboard only shows it.
+    const srv = sendServer();
+    srv.put(send({ c_delivered: 90, c_bounced: 10 }), {
+      conditions: [condition.bounceSpike(10, 0.1)],
+    });
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const health = $(".health");
     expect(health.classList.contains("amber")).toBe(true);
-    expect(health.textContent).toMatch(/Elevated bounce rate \(10%\)/);
+    expect(health.textContent).toMatch(/10 recipients bounced \(10%\)/);
+    expect($("a", health).getAttribute("href")).toBe("#/sent/x1");
   });
 
   it("shows the first-run checklist when nothing is written and no one is on the list, and its New post creates one", async () => {
@@ -493,7 +503,9 @@ describe("dashboard", () => {
       { phase: "needs-attention" },
     );
     await vi.advanceTimersByTimeAsync(3000);
-    expect($(".health.red").textContent).toMatch(/refusing this account, pausing Swifts: ses 429/);
+    expect($(".health.red").textContent).toMatch(
+      /Swifts: The provider is refusing the account: ses 429/,
+    );
     // The provider's words end in a period already: the line adds none of its own.
     expect($(".health.red").textContent).toMatch(/quota exceeded\. Wait for the provider's/);
     expect($(".health a").getAttribute("href")).toBe("#/sent/x3");
@@ -511,7 +523,7 @@ describe("dashboard", () => {
     const srv = sendServer();
     srv.put(sending({ id: "w1", subject: "Kinglets", c_accepted: 99, c_in_flight: 1 }), {
       phase: "needs-attention",
-      attention: { wedged: true, wedged_count: 1 },
+      conditions: [condition.wedged(1, "w1")],
     });
     fake = world([post()], srv);
     await mount(renderDashboard);

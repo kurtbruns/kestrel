@@ -185,11 +185,12 @@ describe("Sent list — delivery-failures filter (/sends?failures=only)", () => 
     expect(ids).toEqual([bounced, unsent].sort());
     expect(ids).not.toContain(clean);
 
-    // Any other value is ignored, not an error — the flag is `only` or absent.
-    const junk = await readJson(
-      await SELF.fetch(`${base}/sends?search=${marker}&failures=yes`, { headers: AUTH }),
-    );
-    expect(junk.page.total).toBe(3);
+    // Any other value is refused, naming the field: the flag is `only` or absent.
+    const junk = await SELF.fetch(`${base}/sends?search=${marker}&failures=yes`, {
+      headers: AUTH,
+    });
+    expect(junk.status).toBe(400);
+    expect(await readJson(junk)).toMatchObject({ error: "bad_request", field: "failures" });
   });
 });
 

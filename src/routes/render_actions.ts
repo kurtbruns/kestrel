@@ -16,7 +16,7 @@ import type { TemplateTestResponse } from "../../shared/settings";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
-import { getActiveSendForPost, latestSentSendForPost } from "../db/sends";
+import { getActiveSendForPost, latestSentSendForPost, markTested } from "../db/sends";
 import { getSettings } from "../db/settings";
 import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/body";
 import { badRequest, json, notFound } from "../lib/errors";
@@ -149,6 +149,12 @@ export async function test(c: RequestContext): Promise<Response> {
     }),
     recipients,
   );
+
+  // A test of a scheduled send's frozen copy is the sign-off the re-make rule asks for
+  // (SPEC §6, §8): record it, which settles the send's `remade` condition.
+  if (frozen && res?.accepted === true) {
+    await markTested(c.env.DB, frozen.id, Date.now());
+  }
 
   const result: TestSendResponse = {
     sent: res?.accepted === true,

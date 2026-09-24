@@ -30,18 +30,33 @@ import { busy, renderError, toast } from "../ui/widgets";
 import { openRescheduleModal, openResolveModal } from "./dialogs";
 import {
   activeRowHtml,
+  can,
+  conditionOf,
   countdownHtml,
   countdowns,
   deliveredCell,
   needsOperator,
-  providerWords,
-  refusalAdvice,
   rowCounts,
   type SendView,
   sendsNow,
 } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** A scheduled card's Reschedule and Cancel: offered while the server would take them, and
+ *  hidden at the fire time, when the review window closes (SPEC §6), by the countdown's
+ *  tick rather than the next read. */
+function windowControls(s: SendListItem) {
+  const buttons = [
+    can(s, "reschedule")
+      ? html`<button class="ghost" data-reschedule="${s.id}">Reschedule</button>`
+      : null,
+    can(s, "cancel") ? html`<button class="ghost" data-cancel="${s.id}">Cancel</button>` : null,
+  ];
+  return buttons.some(Boolean)
+    ? html`<div class="row" data-closes="${s.fire_at}">${buttons}</div>`
+    : null;
+}
 
 export async function renderSent(root: HTMLElement, signal: AbortSignal): Promise<void> {
   // The dispatch side: the still-cancelable Scheduled queue on top, then the frozen Sent
@@ -116,25 +131,31 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // The sends that need the operator (SPEC §12), each an attention card that stays until
   // its condition clears: repainted from every report of the layer.
   function renderStuck(live: SendView[]) {
-    const wedged = live.filter((s) => s.attention.wedged);
     // A refused send carries no control: the fix is in the provider's account or the
-    // deployment's secrets, and the send resumes on its own once it lands.
-    const refused = live.filter((s) => s.attention.refused);
+    // deployment's secrets, and the send resumes on its own once it lands. Each card is the
+    // server's words for its condition.
+    const refused = live.flatMap((s) => {
+      const c = conditionOf(s, "refused");
+      return c ? [{ s, c }] : [];
+    });
+    const wedged = live.flatMap((s) => {
+      const c = conditionOf(s, "wedged");
+      return c ? [{ s, c }] : [];
+    });
     setHtml(
       stuckEl,
       html`${refused.map(
-        (s) =>
-          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${providerWords(s.provider.halt?.error)} ${refusalAdvice(s.provider.halt?.cause ?? null)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
-      )}${wedged.map((s) => {
-        const n = s.attention.wedged_count;
-        const noun = n === 1 ? "delivery" : "deliveries";
-        return html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+        ({ s, c }) =>
+          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">${c.message}</div></div></div></div>`,
+      )}${wedged.map(({ s, c }) => {
+        // Resolve is offered while the server would take it.
+        return html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">${c.message}</div></div></div>${can(s, "resolve") ? html`<button class="primary" data-resolve="${s.id}">Resolve…</button>` : null}</div>`;
       })}`,
     );
     for (const b of $$<HTMLButtonElement>("[data-resolve]", stuckEl)) {
-      const s = wedged.find((x) => x.id === b.dataset.resolve);
-      if (s) {
-        b.onclick = () => openResolveModal({ id: s.id, c_in_flight: s.counts.in_flight }, afterAct);
+      const w = wedged.find((x) => x.s.id === b.dataset.resolve);
+      if (w) {
+        b.onclick = () => openResolveModal({ id: w.s.id, c_in_flight: w.c.count }, afterAct);
       }
     }
   }
@@ -244,7 +265,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       }
       const { sends } = res;
       const schedCard = (s: SendListItem) =>
-        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
+        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div>${windowControls(s)}</div>`;
       const [first, ...rest] = sends;
       if (!first) {
         setHtml(schedEl, html`<p class="muted">Nothing scheduled.</p>`);

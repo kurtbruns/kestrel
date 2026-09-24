@@ -15,6 +15,7 @@ import { buildSendProgress } from "../src/send/progress";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { nextRetry, toNextTick } from "./support/clock";
+import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -188,7 +189,11 @@ describe("a provider outage", () => {
     );
     expect(prog.phase).toBe("backing-off");
     expect(prog.provider.halt).toMatchObject({ reason: "unavailable" });
-    expect(prog.attention).toMatchObject({ refused: false, stuck: false, wedged: false });
+    expect([has(prog, "refused"), has(prog, "stuck"), has(prog, "wedged")]).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });
 
@@ -206,7 +211,7 @@ describe("the provider refusing the account", () => {
     expect(resend.requests).toBe(TICKS); // one refused request a tick, then the run stops
     const prog = buildSendProgress(held, "resend", false, Date.now());
     expect(prog.phase).toBe("needs-attention");
-    expect(prog.attention.refused).toBe(true);
+    expect(has(prog, "refused")).toBe(true);
     expect(prog.provider.halt?.error).toBe("resend batch 401: API key is invalid");
     const refusedSince = prog.provider.halt?.since;
     expect(refusedSince).toBe(held.halted_at);
@@ -231,7 +236,7 @@ describe("the provider refusing the account", () => {
     expect(going.status).toBe("sending");
     expect(going.c_accepted).toBeGreaterThan(0);
     expect(going).toMatchObject({ halt_reason: null, halt_error: null, halted_at: null });
-    expect(buildSendProgress(going, "resend", false, Date.now()).attention.refused).toBe(false);
+    expect(has(buildSendProgress(going, "resend", false, Date.now()), "refused")).toBe(false);
   });
 
   it("keeps when the refusal began across ticks, and restarts it when the reason changes", async () => {
@@ -327,7 +332,7 @@ describe("the halt's backoff", () => {
     expect(prog.provider.halt?.retry_at).toBe(held.halt_retry_at);
     expect(prog.provider.halt!.retry_at).toBeGreaterThan(Date.now());
     expect(prog.phase).toBe(reason === "account" ? "needs-attention" : "backing-off");
-    expect(prog.attention.stuck).toBe(true); // a long halt is still raised
+    expect(has(prog, "stuck")).toBe(true); // a long halt is still raised
   });
 
   it("returns to every-tick pace the moment a batch is answered", async () => {
@@ -517,7 +522,7 @@ describe("a refused batch and its key", () => {
       false,
       Date.now(),
     );
-    expect(prog.attention.wedged).toBe(true);
+    expect(has(prog, "wedged")).toBe(true);
   });
 
   it("delivers to everyone after a switch to a provider without idempotency, nothing left for Resolve", async () => {
