@@ -1,10 +1,18 @@
-// The sent list: scheduled sends with their countdowns, the active send, and the record
-// of what has gone out.
+// The sent list: scheduled sends with their countdowns, the sends in progress and any that
+// need the operator, and the record of what has gone out, kept current by the send-state
+// layer (docs/DESIGN.md §9).
 
-import type { SendListResponse, SendSummary } from "../../shared/sends";
+import { earlierCursor } from "../../shared/cursor";
+import type { LiveSend, SendListItem, SendListResponse } from "../../shared/sends";
 import { api } from "../api";
 import { noEmailProvider } from "../deployment";
-import { poll } from "../lifecycle";
+import {
+  followSends,
+  readSendsNow,
+  type SendStage,
+  type SendsUpdate,
+  stageOf,
+} from "../send_state";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
@@ -21,12 +29,15 @@ import { busy, renderError, toast } from "../ui/widgets";
 import { openRescheduleModal, openResolveModal } from "./dialogs";
 import {
   activeRowHtml,
+  countdownHtml,
   countdowns,
   deliveredCell,
-  isRefused,
-  isWedged,
   needsOperator,
+  providerWords,
   refusalAdvice,
+  rowCounts,
+  type SendView,
+  sendsNow,
 } from "./progress";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -63,23 +74,32 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   const pagerEl = $("#sendsPager", root);
   const tickCountdowns = countdowns(root, signal);
 
-  // Resolving a wedged send or canceling a scheduled one touches several sections at
-  // once, so refresh them together.
-  function reloadAll() {
+  // The sends in flight as the page last read them, and every send the layer has reported
+  // since, as it now stands: together, what the attention and in-progress sections show.
+  let sendingRows: SendListItem[] = [];
+  // Until a read of the sends in flight succeeds, the In progress slot keeps its error and
+  // Retry: the layer reports only sends that change, so one refused for an hour would
+  // otherwise never show.
+  let liveRead = false;
+  // Each section paints only its latest read, so a slow earlier one (a queue read for a
+  // send turning due, landing after the one for its start) never paints over a newer one.
+  let scheduledReads = 0;
+  let listReads = 0;
+  const reported = new Map<string, LiveSend>();
+
+  // Resolving a wedged send or canceling a scheduled one touches several sections at once:
+  // re-read the two this page reads itself, and have the layer read now, so the attention
+  // and in-progress sections catch up with the act rather than at the next read.
+  function afterAct() {
     loadScheduled();
     loadList();
-    refreshSending();
+    readSendsNow();
   }
 
-  // The in-flight set drives two sections, the wedged attention block (§12) and the
-  // in-progress active rows, so one fetch renders both. Tracking the set's signature
-  // lets us tell a real transition (a send fired or finished) from a mere bar advance:
-  // on a transition we also refresh the scheduled queue (it lost this send) and the sent
-  // list (it gained it), so a fired post leaves the scheduled slot and lands in the
-  // records without a manual reload. Polled every 3s (matching the watch + dashboard).
-  let sentActiveSig = "";
-  function renderActive(sends: SendSummary[]) {
-    const active = sends.filter((s) => !needsOperator(s));
+  // The sends in progress: a card each, with a live bar, for every send still sending that
+  // doesn't need the operator (that one's home is the attention block above).
+  function renderActive(live: SendView[]) {
+    const active = live.filter((s) => s.state === "sending" && !needsOperator(s));
     setHtml(
       activeEl,
       active.length ? html`<h2>In progress</h2>${active.map(activeRowHtml)}` : html``,
@@ -92,63 +112,122 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       };
     }
   }
-  function renderStuck(sends: SendSummary[]) {
-    const wedged = sends.filter(isWedged);
+  // The sends that need the operator (SPEC §12), each an attention card that stays until
+  // its condition clears: repainted from every report of the layer.
+  function renderStuck(live: SendView[]) {
+    const wedged = live.filter((s) => s.attention.wedged);
     // A refused send carries no control: the fix is in the provider's account or the
     // deployment's secrets, and the send resumes on its own once it lands.
-    const refused = sends.filter(isRefused);
+    const refused = live.filter((s) => s.attention.refused);
     setHtml(
       stuckEl,
       html`${refused.map(
         (s) =>
-          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${s.halt_error ?? "no detail given"}. ${refusalAdvice(s.halt_cause)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
+          html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">The provider is refusing this account, so the send is paused where it is: ${providerWords(s.provider.halt?.error)} ${refusalAdvice(s.provider.halt?.cause ?? null)} No one has been marked unsent; it resumes on its own once the account is fixed.</div></div></div></div>`,
       )}${wedged.map((s) => {
-        const n = s.c_in_flight || 0;
+        const n = s.attention.wedged_count;
         const noun = n === 1 ? "delivery" : "deliveries";
-        return html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong>${s.subject}</strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
+        return html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">${n} ambiguous ${noun} — this send can't finish until you resolve ${n === 1 ? "it" : "them"}.</div></div></div><button class="primary" data-resolve="${s.id}">Resolve…</button></div>`;
       })}`,
     );
     for (const b of $$<HTMLButtonElement>("[data-resolve]", stuckEl)) {
       const s = wedged.find((x) => x.id === b.dataset.resolve);
       if (s) {
-        b.onclick = () => openResolveModal(s, reloadAll);
+        b.onclick = () => openResolveModal({ id: s.id, c_in_flight: s.counts.in_flight }, afterAct);
       }
     }
   }
-  async function refreshSending() {
-    let sends: SendSummary[];
-    try {
-      ({ sends } = await api<SendListResponse>("/sends?status=sending&limit=200", { signal }));
-    } catch {
-      // Non-fatal: the in-flight sections just stay empty if this probe fails.
-      setHtml(stuckEl, html``);
-      setHtml(activeEl, html``);
+  // A listed send's Delivered cell follows the layer's counts, so the table moves with its
+  // receipts (a late one included) without being read again.
+  function patchDelivered() {
+    for (const s of reported.values()) {
+      const cell = $$<HTMLTableRowElement>("tr[data-id]", listEl)
+        .find((tr) => tr.dataset.id === s.id)
+        ?.querySelector("td.delivered");
+      if (cell) {
+        setHtml(cell, deliveredCell(s.counts));
+      }
+    }
+  }
+  function paintLive() {
+    const live = sendsNow(sendingRows, reported);
+    renderStuck(live);
+    if (liveRead) {
+      renderActive(live);
+    }
+    patchDelivered();
+  }
+  // Each report moves sends between this page's sections, whoever changed them. Any change
+  // to a send in (or leaving) the queue re-reads it: a cancel, a move, a re-make, or a new
+  // schedule by the other client, the fire time passing, a miss, a start. A send reaching
+  // the sent side re-reads the records; one that went due to sent between two reads is one
+  // change, and still lands there. Everything else is a report's own numbers.
+  const inQueue = (st: SendStage | null) => st === "scheduled" || st === "due";
+  const sentSide = (st: SendStage | null) => st === "sent" || st === "complete";
+  function onUpdate(u: SendsUpdate) {
+    for (const s of u.sends) {
+      reported.set(s.id, s);
+    }
+    paintLive();
+    if (u.sends.some((s) => inQueue(stageOf(s))) || u.changes.some((c) => inQueue(c.from))) {
+      loadScheduled();
+    }
+    if (u.changes.some((c) => sentSide(c.to) && !sentSide(c.from))) {
+      loadList();
+    }
+  }
+
+  // The layer follows every send from where the page's own reads stood, the earliest of
+  // them, so nothing that changed after any of those reads is missed. A section whose first
+  // read failed starts it from its Retry instead.
+  let following = false;
+  function follow(reads: (SendListResponse | null)[]) {
+    const ok = reads.filter((r): r is SendListResponse => r !== null);
+    if (following || !ok.length) {
       return;
     }
-    renderStuck(sends);
-    renderActive(sends);
-    const sig = sends
-      .map((s) => s.id)
-      .sort()
-      .join(",");
-    if (sig !== sentActiveSig) {
-      sentActiveSig = sig;
-      loadScheduled(); // a fired send left the queue; the next one moves up
-      loadList(); // a finished send joins the records
+    following = true;
+    followSends(
+      {
+        cursor: ok.map((r) => r.cursor).reduce(earlierCursor),
+        sends: ok.flatMap((r) => r.sends),
+      },
+      onUpdate,
+      signal,
+    );
+  }
+
+  // The sends in flight, for the attention and in-progress sections; from then on the
+  // layer's reports keep them current.
+  async function loadLive(): Promise<SendListResponse | null> {
+    try {
+      const res = await api<SendListResponse>("/sends?status=sending&limit=200", { signal });
+      sendingRows = res.sends;
+      liveRead = true;
+      paintLive();
+      return res;
+    } catch (e) {
+      renderError(activeEl, message(e), async () => follow([await loadLive()]));
+      return null;
     }
   }
 
   // The upcoming queue, soonest-first: the next send to fire (and the one you'd reach
   // for the cancel window on) sits at the top. Fetched on its own so it shows every
   // scheduled send regardless of the table's paging/filter below.
-  async function loadScheduled() {
+  async function loadScheduled(): Promise<SendListResponse | null> {
+    const mine = ++scheduledReads;
     try {
-      const { sends } = await api<SendListResponse>(
+      const res = await api<SendListResponse>(
         "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
         { signal },
       );
-      const schedCard = (s: SendSummary) =>
-        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
+      if (mine !== scheduledReads) {
+        return res; // a later read paints
+      }
+      const { sends } = res;
+      const schedCard = (s: SendListItem) =>
+        html`<div class="card spread clickable sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div><div class="row"><button class="ghost" data-reschedule="${s.id}">Reschedule</button><button class="ghost" data-cancel="${s.id}">Cancel</button></div></div>`;
       const [first, ...rest] = sends;
       if (!first) {
         setHtml(schedEl, html`<p class="muted">Nothing scheduled.</p>`);
@@ -189,7 +268,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       for (const b of $$<HTMLButtonElement>("[data-reschedule]", schedEl)) {
         const s = sends.find((x) => x.id === b.dataset.reschedule);
         if (s) {
-          b.onclick = () => openRescheduleModal(s.id, s.fire_at, reloadAll);
+          b.onclick = () => openRescheduleModal(s.id, s.fire_at, afterAct);
         }
       }
       for (const b of $$<HTMLButtonElement>("[data-cancel]", schedEl)) {
@@ -198,24 +277,32 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
             try {
               await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
               toast("Canceled");
-              // A cancel drops it from the queue and flips it to canceled in the table.
-              reloadAll();
+              // A cancel drops it from the queue, and a due send from the layer's reads.
+              afterAct();
             } catch (e) {
               toast(message(e));
             }
           });
       }
       tickCountdowns();
+      return res;
     } catch (e) {
-      renderError(schedEl, message(e), loadScheduled);
+      if (mine === scheduledReads) {
+        renderError(schedEl, message(e), async () => follow([await loadScheduled()]));
+      }
+      return null;
     }
   }
 
   // The frozen Sent records: every completed post, each opening its read-only record
   // view. Sent-only, so no status column; the "When" is the send's completion.
-  async function loadList() {
+  async function loadList(): Promise<SendListResponse | null> {
+    const mine = ++listReads;
     try {
       const data = await api<SendListResponse>(`/sends?${listQuery(state)}`, { signal });
+      if (mine !== listReads) {
+        return data; // a later read paints
+      }
       const sends = data.sends;
       if (!sends.length) {
         setHtml(
@@ -229,7 +316,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
           }</p>`,
         );
         setHtml(pagerEl, html``);
-        return;
+        return data;
       }
       // Cells are named (subject / recipients / delivered) and the count is wrapped in
       // `.n` so the ≤720px layout can stack a row and label its numbers from CSS alone.
@@ -237,7 +324,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         listEl,
         html`<div class="table-wrap"><table class="list-table sent-table stacks"><colgroup><col><col class="c-date"><col class="c-num"><col class="c-delivered"></colgroup><thead><tr>${th("Subject", "subject", state)}${th("When", "fire", state)}${th("Recipients", "recipients", state, "num")}<th class="num">Delivered</th></tr></thead><tbody>${sends.map(
           (s) =>
-            html`<tr class="clickable" data-id="${s.id}"><td class="subject"><a href="#/sent/${s.id}">${s.subject}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.recipient_count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(s)}</td></tr>`,
+            html`<tr class="clickable" data-id="${s.id}"><td class="subject"><a href="#/sent/${s.id}">${s.subject}</a></td><td class="muted">${fmt(s.completed_at ?? s.fire_at)}</td><td class="num recipients"><span class="n">${s.recipient_count.toLocaleString()}</span></td><td class="num delivered">${deliveredCell(rowCounts(s))}</td></tr>`,
         )}</tbody></table></div>`,
       );
       wireSort(listEl, state, loadList);
@@ -250,15 +337,19 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         };
       }
       renderPager(pagerEl, state, data.page, loadList);
+      patchDelivered();
+      return data;
     } catch (e) {
-      renderError(listEl, message(e), loadList);
+      if (mine === listReads) {
+        renderError(listEl, message(e), async () => follow([await loadList()]));
+      }
+      return null;
     }
   }
 
   wireToolbar(root, state, loadList);
-  reloadAll();
-  // Poll the in-flight sections every 3s (matching the watch + dashboard): the active
-  // bar advances, and a fired/finished send moves through the queue → in-progress →
-  // records on its own. Ends with the mount.
-  poll(3000, refreshSending, signal);
+  // The queue, the sends in flight, and the records are this page's own reads; from them
+  // the layer follows every send for the life of the mount, so a send moves through the
+  // queue, in progress, and the records on its own.
+  follow(await Promise.all([loadScheduled(), loadLive(), loadList()]));
 }

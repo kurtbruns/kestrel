@@ -27,6 +27,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- The dashboard and the Sent page now keep up with every send without a reload: a send that starts and finishes between two looks moves straight to the Sent table, which before stayed on "Sending now…" until you reloaded, and a settling send's Delivered count follows its receipts. A cancel, move, re-make, or new schedule made by Claude or in another tab shows within about a minute, and with nothing moving the pages look about once a minute.
+- A scheduled send's card on the dashboard and the Sent page no longer says "Sending now…" once its fire time passes: it reads "Preparing to send…" until the send starts, when the in-progress card takes over, and "Missed its fire time · N min late" in red if the send is past the server's five-minute tolerance.
+- The dashboard now keeps a refused, wedged, or long-running send in view, live, until it clears, instead of drawing its warning once at load and then dropping the send; the wedged line links to the send's page, where Resolve is. A scheduled send is flagged missed only past the server's five-minute tolerance, not the moment its fire time passes, and the Sent page's in-progress card says when a send has been in flight too long.
+- A refusal warning on the dashboard and the Sent page no longer ends the provider's own message with a doubled period ("quota exceeded..").
 - A sent post's recipient list now updates as delivery receipts arrive, like the outcome counts above it, so the Failures tab no longer says there are no failures while the counts show a bounce. Before, it only caught up when you reloaded the page.
 - On a send's live watch, the "provider is refusing this account" banner no longer sits flush against the start time and recipient count above it.
 

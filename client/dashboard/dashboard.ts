@@ -3,6 +3,7 @@
 
 import type { PostListItem, PostListResponse } from "../../shared/posts";
 import {
+  type LiveSend,
   type SendListItem,
   type SendListResponse,
   type SendSummary,
@@ -13,16 +14,20 @@ import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subs
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import { archiveUrlFor } from "../deployment";
-import { mount, poll } from "../lifecycle";
+import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
+import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
 import {
   activeRowHtml,
+  countdownHtml,
   countdowns,
   deliveredCell,
-  isRefused,
-  isWedged,
   needsOperator,
+  providerWords,
   refusalAdvice,
+  rowCounts,
+  type SendView,
+  sendsNow,
 } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { appState } from "../state";
@@ -54,33 +59,40 @@ interface HealthAlert {
   text: string | Html;
 }
 
-// Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case,
-// loud only when something needs attention. Derived from GET /sends.
-function computeHealth(sends: SendListItem[]): HealthAlert[] {
-  const now = Date.now();
+// Health (SPEC §8 "is anything wrong", §12 loud failure): calm in the common case, loud
+// only when something needs attention. What a send is in the middle of is the server's
+// flags on each send as it stands (the page's rows, overlaid by the layer's reports), so a
+// line appears within a read of its condition and stays until the condition clears; the
+// bounce spike reads the recent sent sends, a live one's counts as its receipts settle.
+function computeHealth(live: SendView[], sends: SendListItem[]): HealthAlert[] {
   const alerts: HealthAlert[] = [];
-  const missed = sends.filter((s) => s.status === "scheduled" && s.fire_at <= now);
+  // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
+  const missed = live.filter((s) => s.attention.missed);
   if (missed.length) {
     alerts.push({
       level: "red",
       text: `${missed.length} scheduled send${missed.length === 1 ? "" : "s"} passed the fire time without going out.`,
     });
   }
-  const sending = sends.filter((s) => s.status === "sending");
-  // A send wedged on ambiguous in-flight rows needs a decision, not just patience —
-  // flag it red and actionable, and keep it out of the generic in-progress lines
-  // below so it isn't reported twice (SPEC §12; resolve on the Sends page).
-  const wedged = sending.filter(isWedged);
-  if (wedged.length) {
-    const n = wedged.reduce((sum, s) => sum + (s.c_in_flight || 0), 0);
+  // A send wedged on ambiguous in-flight rows needs a decision, not just patience: red,
+  // linking to where Resolve is (its page; the Sent page for several), and kept out of the
+  // in-progress lines below so it isn't reported twice (SPEC §12).
+  const wedged = live.filter((s) => s.attention.wedged);
+  const [firstWedged] = wedged;
+  if (firstWedged) {
+    const n = wedged.reduce((sum, s) => sum + s.attention.wedged_count, 0);
+    const noun = n === 1 ? "delivery" : "deliveries";
     alerts.push({
       level: "red",
-      text: `${n} ambiguous ${n === 1 ? "delivery needs" : "deliveries need"} a decision — resolve on the Sent page.`,
+      text:
+        wedged.length === 1
+          ? html`<a href="#/sent/${firstWedged.id}">${firstWedged.subject}</a> has ${n} ambiguous ${noun} awaiting a decision; resolve ${n === 1 ? "it" : "them"} on its page.`
+          : html`${n} ambiguous ${noun} across <a href="#/sent">${wedged.length} sends</a> await a decision; resolve them on the Sent page.`,
     });
   }
   // The provider refusing the account stops every send it touches until the operator
   // fixes the account (SPEC §12): one red line, carrying the provider's own words.
-  const refused = sending.filter(isRefused);
+  const refused = live.filter((s) => s.attention.refused);
   const [firstRefused] = refused;
   if (firstRefused) {
     // One send links to its watch; several, to the Sent page that lists them all.
@@ -88,15 +100,16 @@ function computeHealth(sends: SendListItem[]): HealthAlert[] {
       refused.length === 1
         ? html`<a href="#/sent/${firstRefused.id}">${firstRefused.subject}</a>`
         : html`<a href="#/sent">${refused.length} sends</a>`;
+    const halt = firstRefused.provider.halt;
     alerts.push({
       level: "red",
-      text: html`The email provider is refusing this account, pausing ${which}: ${firstRefused.halt_error ?? "no detail given"}. ${refusalAdvice(firstRefused.halt_cause)} Sending resumes on its own.`,
+      text: html`The email provider is refusing this account, pausing ${which}: ${providerWords(halt?.error)} ${refusalAdvice(halt?.cause ?? null)} Sending resumes on its own.`,
     });
   }
-  // A healthy in-progress send is NOT surfaced here — the live active-send widget below is
-  // its home (a bar + a Watch link, kept live by the poll). The health line is loud-only,
-  // so it keeps just the *stuck* case: a send the server flags as in flight too long.
-  const stuck = sending.filter((s) => s.stuck && !needsOperator(s));
+  // A healthy in-progress send is NOT surfaced here: the active-send widget below is its
+  // home (a bar and a Watch link). The health line is loud-only, so it keeps just the
+  // *stuck* case: a send the server flags as in flight too long.
+  const stuck = live.filter((s) => s.attention.stuck && !needsOperator(s));
   if (stuck.length) {
     alerts.push({
       level: "amber",
@@ -104,25 +117,26 @@ function computeHealth(sends: SendListItem[]): HealthAlert[] {
     });
   }
   // Bounce spike (SPEC §8 "is anything wrong", §12): a recent send whose real bounce rate
-  // is in the danger zone. This reads the true webhook-confirmed bounce count off the send
-  // row's `c_bounced` counter over the audience at fire (`recipient_count`) — not the old
-  // send-time-`unsent` proxy, which couldn't see asynchronous bounce events at all. The
-  // threshold is BOUNCE_SPIKE_RATE; the absolute floor keeps a tiny audience's noisy rate
-  // from tripping it. Read-only reporting — it never throttles or halts a send (§12 leaves
-  // an automatic deliverability circuit-breaker deferred).
+  // is in the danger zone. This reads the true webhook-confirmed bounce count (the send's
+  // `c_bounced` counter, or a settling send's live count) over the audience at fire
+  // (`recipient_count`), not the old send-time-`unsent` proxy, which couldn't see
+  // asynchronous bounce events at all. The threshold is BOUNCE_SPIKE_RATE; the absolute
+  // floor keeps a tiny audience's noisy rate from tripping it. Read-only reporting: it
+  // never throttles or halts a send (§12 leaves an automatic deliverability
+  // circuit-breaker deferred).
+  const liveBounced = new Map(live.map((s) => [s.id, s.counts.bounced]));
   const spiky = sends
     .filter((s) => s.status === "sent")
     .slice(0, 5)
-    .find((s) => {
-      const bounced = s.c_bounced || 0;
-      return (
+    .map((s) => ({ s, bounced: liveBounced.get(s.id) ?? s.c_bounced ?? 0 }))
+    .find(
+      ({ s, bounced }) =>
         s.recipient_count > 0 &&
         bounced >= BOUNCE_SPIKE_MIN &&
-        bounced / s.recipient_count >= BOUNCE_SPIKE_RATE
-      );
-    });
+        bounced / s.recipient_count >= BOUNCE_SPIKE_RATE,
+    );
   if (spiky) {
-    const pct = Math.round((100 * (spiky.c_bounced || 0)) / spiky.recipient_count);
+    const pct = Math.round((100 * spiky.bounced) / spiky.s.recipient_count);
     alerts.push({
       level: "amber",
       text: `Elevated bounce rate (${pct}%) on a recent send — check the Sent page.`,
@@ -130,6 +144,22 @@ function computeHealth(sends: SendListItem[]): HealthAlert[] {
   }
   return alerts;
 }
+
+/** The health block: nothing at all when nothing needs attention. */
+function healthHtml(alerts: HealthAlert[]): Html {
+  if (!alerts.length) {
+    return html``;
+  }
+  const level = alerts.some((i) => i.level === "red") ? "red" : "amber";
+  return html`<div class="health ${level}"><span class="health-dot">⚠️</span><div>${alerts.map(
+    (i) => html`<div>${i.text}</div>`,
+  )}</div></div>`;
+}
+
+/** The sends the active-send widget shows: in flight, and not needing the operator (that
+ *  one's home is its red line). */
+const activeOf = (live: SendView[]) =>
+  live.filter((s) => s.state === "sending" && !needsOperator(s));
 
 /** A subscriber-count tile; each deep-links into the roster on its own filter. */
 interface Tile {
@@ -149,7 +179,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   setHtml(view, html`<div class="dash" id="dash"><p class="muted">Loading…</p></div>`);
   const root = $("#dash", view);
   let posts: PostListItem[];
-  let sends: SendListItem[];
+  let first: SendListResponse;
   let counts: SubscriberCounts;
   try {
     // The health line scans every send and the archive-link slug map needs every post,
@@ -161,12 +191,15 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       api<SubscriberListResponse>("/subscribers", { signal }),
     ]);
     posts = p.posts;
-    sends = s.sends;
+    first = s;
     counts = subs.counts;
   } catch (e) {
     renderError(root, e instanceof Error ? e.message : String(e), remount);
     return;
   }
+  let sends = first.sends;
+  // Every send the layer has reported since the page's read, as it now stands.
+  const reported = new Map<string, LiveSend>();
   const pub = derivePublication(appState.appConfig);
   const deployment = appState.appConfig?.deployment ?? null;
   const totalSubs = counts.confirmed + counts.pending + counts.unsubscribed + counts.suppressed;
@@ -184,23 +217,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     wireDashActions(root, remount);
     return;
   }
-
-  // No news is good news: the health line appears only when something needs
-  // attention (SPEC §8 / §12 — the only thing that ever surfaces loudly).
-  const health = computeHealth(sends);
-  const level = health.some((i) => i.level === "red") ? "red" : "amber";
-  const healthHtml = health.length
-    ? html`<div class="health ${level}"><span class="health-dot">⚠️</span><div>${health.map(
-        (i) => html`<div>${i.text}</div>`,
-      )}</div></div>`
-    : null;
-
-  // Active-send widget: when a send is in flight (and not wedged — that's a red health
-  // line above), show it with a live mini dispatch bar, an ETA, and a Watch link into the
-  // record view's live watch (#154). A glanceable entry point sitting with the health area.
-  // It lives in its own `#dashActive` container and is polled live (below), so its bar
-  // advances and it appears/clears without a manual reload.
-  const activeSends = sends.filter((s) => s.status === "sending" && !needsOperator(s));
 
   // Each tile deep-links into the roster pre-filtered on its criterion
   // (#/subscribers/<filter>), so a count is a way in, not just a number.
@@ -222,32 +238,11 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       }</span></a>`,
   )}</div>`;
 
-  const scheduled = sends
-    .filter((s) => s.status === "scheduled")
-    .sort((a, b) => a.fire_at - b.fire_at);
-  const nextUpHtml = dashScheduledHtml(scheduled);
-
   const slugById = new Map(posts.map((p) => [p.id, p.slug] as const));
-  const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
-  const recentHtml = recent.length
-    ? html`<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
-        (s) => {
-          const slug = slugById.get(s.post_id);
-          const url = slug ? archiveUrlFor(deployment, slug) : null;
-          // A sent row opens its record view (#148); the subject is the keyboard target.
-          const isSent = s.status === "sent";
-          const subj = isSent ? html`<a href="#/sent/${s.id}">${s.subject}</a>` : s.subject;
-          const cells = html`<td>${subj}</td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num">${deliveredCell(s)}</td><td class="act">${
-            url && isSent
-              ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
-              : null
-          }</td>`;
-          return isSent
-            ? html`<tr class="clickable" data-send="${s.id}">${cells}</tr>`
-            : html`<tr>${cells}</tr>`;
-        },
-      )}</tbody></table></div>`
-    : html`<p class="muted">No sends yet.</p>`;
+  const archiveFor = (s: SendSummary) => {
+    const slug = slugById.get(s.post_id);
+    return slug ? archiveUrlFor(deployment, slug) : null;
+  };
 
   const drafts = posts.filter((p) => p.status === "draft").slice(0, 5);
   const draftsHtml = drafts.length
@@ -277,6 +272,9 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // scheduled sends, so the eye lands on the queue right after reading one.
   const quickHtml = html`<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
+  // No news is good news: the health block appears only when something needs attention
+  // (SPEC §8 / §12, the only thing that ever surfaces loudly). The active-send widget sits
+  // with it, a glanceable entry into the watch while a send is in flight.
   setHtml(
     root,
     html`
@@ -284,15 +282,15 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
-    ${healthHtml}
-    <div id="dashActive">${dashActiveHtml(activeSends)}</div>
+    <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported), sends))}</div>
+    <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
     <div id="dashNotices"></div>
     <div class="dash-cols">
-      <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${nextUpHtml}</div></section>
+      <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${dashScheduledHtml(scheduledOf(sends))}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>
     </div>
-    <section class="dash-section"><h2>Sent</h2>${recentHtml}</section>
+    <section class="dash-section"><h2>Sent</h2><div id="dashSent">${dashSentHtml(sends, archiveFor)}</div></section>
     <section class="dash-section"><h2>Quick actions</h2>${quickHtml}</section>
     <div class="dash-cols">
       <section class="dash-section"><h2>Publication</h2>${pubCardHtml}</section>
@@ -311,7 +309,88 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       }
     };
   }
-  // Recent-sends rows carry a SEND id (not a post id) and open the record view.
+  wireDashSentRows(root);
+  wireDashActiveCards(root);
+  wireDashScheduledCards(root);
+  paintAppliedNotice(root, scheduledOf(sends));
+  const tickCountdowns = countdowns(root, signal);
+  tickCountdowns();
+
+  // From here the send-state layer keeps the send sections current (docs/DESIGN.md §9),
+  // following every send from where the page's own read stood. Each report repaints what it
+  // carries directly (the health block, the active-send widget, a listed send's Delivered).
+  // A stage change, or any change to a scheduled or due send (a cancel, a move, a re-make,
+  // a new schedule, the fire time passing, a miss), reads the sends again for the queue,
+  // the notice, and the Sent table, whoever made it: a send that went due to sent between
+  // two reads lands straight in the Sent table, and the other client's move shows within
+  // one idle read.
+  let reading = 0;
+  const readSends = async () => {
+    const mine = ++reading;
+    try {
+      const fresh = await api<SendListResponse>("/sends?limit=200", { signal });
+      if (mine !== reading) {
+        return; // a later change's read is the one to paint
+      }
+      sends = fresh.sends;
+      setHtml($("#dashScheduled", root), dashScheduledHtml(scheduledOf(sends)));
+      wireDashScheduledCards(root);
+      paintAppliedNotice(root, scheduledOf(sends));
+      tickCountdowns(); // the fresh cards are empty until the next tick
+      setHtml($("#dashSent", root), dashSentHtml(sends, archiveFor));
+      wireDashSentRows(root);
+      paintLive();
+    } catch {
+      /* a background read: the sections keep their last render until the next change */
+    }
+  };
+  const paintLive = () => {
+    const now = sendsNow(sends, reported);
+    setHtml($("#dashHealth", root), healthHtml(computeHealth(now, sends)));
+    setHtml($("#dashActive", root), dashActiveHtml(activeOf(now)));
+    wireDashActiveCards(root);
+    patchDelivered(root, [...reported.values()]);
+  };
+  const inQueue = (st: SendStage | null) => st === "scheduled" || st === "due";
+  followSends(
+    first,
+    (u: SendsUpdate) => {
+      for (const s of u.sends) {
+        reported.set(s.id, s);
+      }
+      paintLive();
+      if (u.changes.length || u.sends.some((s) => inQueue(stageOf(s)))) {
+        readSends();
+      }
+    },
+    signal,
+  );
+}
+
+/** The scheduled sends, soonest first. */
+const scheduledOf = (sends: SendListItem[]) =>
+  sends.filter((s) => s.status === "scheduled").sort((a, b) => a.fire_at - b.fire_at);
+
+/** The dashboard's Sent table: the latest five sends that have started, each opening its
+ *  page (the watch while it sends, the record once sent). */
+function dashSentHtml(sends: SendListItem[], archiveFor: (s: SendSummary) => string | null): Html {
+  const recent = sends.filter((s) => s.status === "sent" || s.status === "sending").slice(0, 5);
+  if (!recent.length) {
+    return html`<p class="muted">No sends yet.</p>`;
+  }
+  return html`<div class="table-wrap"><table><thead><tr><th>Subject</th><th>Status</th><th class="num">Recipients</th><th class="num">Delivered</th><th></th></tr></thead><tbody>${recent.map(
+    (s) => {
+      const url = s.status === "sent" ? archiveFor(s) : null;
+      return html`<tr class="clickable" data-send="${s.id}"><td><a href="#/sent/${s.id}">${s.subject}</a></td><td>${badge(s.status)}</td><td class="num">${s.recipient_count.toLocaleString()}</td><td class="num delivered">${deliveredCell(rowCounts(s))}</td><td class="act">${
+        url
+          ? html`<a class="ghost-link" href="${url}" target="_blank" rel="noopener">Archive&nbsp;↗</a>`
+          : null
+      }</td></tr>`;
+    },
+  )}</tbody></table></div>`;
+}
+// Sent-table rows carry a SEND id (not a post id) and open the send's page.
+function wireDashSentRows(root: HTMLElement): void {
   for (const tr of $$<HTMLTableRowElement>("tr[data-send]", root)) {
     tr.onclick = (e) => {
       const t = e.target;
@@ -320,15 +399,18 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       }
     };
   }
-  wireDashActiveCards(root);
-  wireDashScheduledCards(root);
-  paintAppliedNotice(root, scheduled);
-  const tickCountdowns = countdowns(root, signal);
-  tickCountdowns();
-  // Keep the send sections live: advance the active-send widget's bar, and when a send
-  // starts or finishes, refresh the Scheduled queue so a fired post clears out of it (its
-  // home is now the In-progress widget, then the records). Ends with the mount.
-  liveSendSections(root, signal, tickCountdowns);
+}
+/** A listed send still sending or settling: its Delivered cell follows the layer's counts,
+ *  so the table moves with its receipts without being read again. */
+function patchDelivered(root: HTMLElement, sends: LiveSend[]): void {
+  for (const s of sends) {
+    const cell = $$<HTMLTableRowElement>("#dashSent tr[data-send]", root)
+      .find((tr) => tr.dataset.send === s.id)
+      ?.querySelector("td.delivered");
+    if (cell) {
+      setHtml(cell, deliveredCell(s.counts));
+    }
+  }
 }
 
 // The dashboard's applied-change notice (SPEC §8): one aggregate over every scheduled
@@ -352,13 +434,13 @@ function paintAppliedNotice(root: HTMLElement, scheduled: SendSummary[]): void {
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
  *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
  *  the review window needs (SPEC §8). */
-function dashScheduledHtml(scheduled: SendSummary[]): Html {
+function dashScheduledHtml(scheduled: SendListItem[]): Html {
   if (!scheduled.length) {
     return html`<p class="muted">Nothing scheduled.</p>`;
   }
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted"><span class="countdown" data-fire="${s.fire_at}"></span> · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.recipient_count} recipients</div></div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {
@@ -373,7 +455,7 @@ function wireDashScheduledCards(root: HTMLElement): void {
 }
 
 /** The dashboard active-send section (nothing when nothing is in flight). */
-function dashActiveHtml(active: SendSummary[]): Html {
+function dashActiveHtml(active: SendView[]): Html {
   if (!active.length) {
     return html``;
   }
@@ -389,58 +471,6 @@ function wireDashActiveCards(root: HTMLElement): void {
         location.hash = `#/sent/${card.dataset.watch}`;
       }
     };
-  }
-}
-// Poll the in-flight set (~3s) and repaint ONLY the widget container in place — it slides
-// in as a send starts, advances, and clears when it finishes, with no full-page re-render
-// (a full re-render flashed the whole dashboard as the send started). The health line and
-// Sent table is a glance snapshot that refreshes on navigation. Ends with the mount.
-function liveSendSections(
-  root: HTMLElement,
-  signal: AbortSignal,
-  tickCountdowns: () => void,
-): void {
-  let activeSig = "";
-  poll(
-    3000,
-    async () => {
-      const { sends } = await api<SendListResponse>("/sends?status=sending&limit=200", {
-        signal,
-      });
-      const active = sends.filter((s) => !needsOperator(s));
-      setHtml($("#dashActive", root), dashActiveHtml(active));
-      wireDashActiveCards(root);
-      // On a transition (a send started or finished) the scheduled queue changed — a fired
-      // send left it — so refresh just that section in place (no full-page re-render).
-      const sig = active
-        .map((s) => s.id)
-        .sort()
-        .join(",");
-      if (sig !== activeSig) {
-        activeSig = sig;
-        await refreshScheduled(root, signal, tickCountdowns);
-      }
-    },
-    signal,
-  );
-}
-async function refreshScheduled(
-  root: HTMLElement,
-  signal: AbortSignal,
-  tickCountdowns: () => void,
-): Promise<void> {
-  const el = $("#dashScheduled", root);
-  try {
-    const { sends } = await api<SendListResponse>(
-      "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
-      { signal },
-    );
-    setHtml(el, dashScheduledHtml(sends));
-    wireDashScheduledCards(root);
-    paintAppliedNotice(root, sends);
-    tickCountdowns(); // the fresh cards are empty until the next tick
-  } catch {
-    /* non-fatal — the scheduled section keeps its last render */
   }
 }
 

@@ -2043,6 +2043,13 @@ th.num .th-sort {
   font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
+/* A send in flight too long (SPEC §12) says so on its card, in the amber the dashboard's
+   health line gives the same condition. */
+.active-stuck {
+  margin-top: 4px;
+  font-size: 12.5px;
+  color: var(--warn-fg);
+}
 
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {
@@ -2510,6 +2517,11 @@ button.linkbtn:hover {
   /* The scheduled violet (DESIGN §3), so the fire-time countdown on the scheduled
      cards (Sent page + dashboard) carries the same "scheduled" cue as the pill. */
   color: var(--status-scheduled-fg);
+}
+/* Past the server's missed tolerance the countdown says how late the send is, in the
+   danger tone: a missed fire time needs a look (DESIGN §9). */
+.countdown.countdown-missed {
+  color: var(--danger-fg);
 }
 /* Scheduled cards — the dashboard's "Scheduled" section and the Sent page's next-up
    queue — take the violet fill + border so a queued send reads as scheduled at a
