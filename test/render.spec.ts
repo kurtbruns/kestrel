@@ -150,6 +150,46 @@ describe("render (the single render path)", async () => {
     expect(result.text).toContain("View in browser: https://arc.example/archive/weekly-news");
   });
 
+  it("ends the text part's footer with the mailing address only when one is set (SPEC §9)", async () => {
+    const input = { post: post(), revision: revision("body"), images: [] };
+    const footer = [
+      "body",
+      "",
+      "—",
+      "Powered by Kestrel",
+      "View in browser: https://arc.example/archive/weekly-news",
+      `Unsubscribe: ${UNSUB_SENTINEL}`,
+    ];
+    const blank = await render(input, config);
+    expect(blank.text).toBe([...footer, ""].join("\n"));
+    const set = await render(input, config, {
+      ...defaultBranding(),
+      address: "PO Box 1142, Portland, OR 97207",
+    });
+    expect(set.text).toBe([...footer, "PO Box 1142, Portland, OR 97207", ""].join("\n"));
+  });
+
+  it("leaves the address out of the text part while the template leaves out its placeholder, so the parts agree (SPEC §9)", async () => {
+    const input = { post: post(), revision: revision("body"), images: [] };
+    const address = "PO Box 1142, Portland, OR 97207";
+    const without = await render(input, config, {
+      ...defaultBranding(),
+      template: '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a>',
+      address,
+    });
+    expect(without.html).not.toContain(address);
+    expect(without.text).not.toContain(address);
+    expect(without.text.endsWith(`Unsubscribe: ${UNSUB_SENTINEL}\n`)).toBe(true);
+    const withIt = await render(input, config, {
+      ...defaultBranding(),
+      template:
+        '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a><p>{{ publication.address }}</p>',
+      address,
+    });
+    expect(withIt.html).toContain(address);
+    expect(withIt.text.endsWith(`Unsubscribe: ${UNSUB_SENTINEL}\n${address}\n`)).toBe(true);
+  });
+
   it("substituteRecipient replaces the per-recipient sentinels", async () => {
     const result = await render({ post: post(), revision: revision("hi"), images: [] }, config);
     const sub = substituteRecipient(result, {

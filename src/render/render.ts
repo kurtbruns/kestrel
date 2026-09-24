@@ -23,6 +23,7 @@ import {
   type EmailBranding,
   fillDeliveryTokens,
   fillEmailTemplate,
+  identityFieldsInUse,
   inlineEmailCss,
   type RenderContext,
   SENTTO_SENTINEL,
@@ -138,6 +139,15 @@ export async function render(
   // serves (I3). Comments (the archive anchors) and the sentinel survive inlining.
   const html = await inlineEmailCss(shell);
 
+  // The text part's footer is fixed, not the template's, but it carries the mailing
+  // address exactly when the HTML part does: a set address the template renders (SPEC
+  // §9). Keyed on the template in effect, so the two parts of one email never disagree
+  // and the re-make guard, which watches the identity fields the template renders,
+  // already covers the text part too.
+  const address =
+    branding.address !== "" && identityFieldsInUse(template).includes("address")
+      ? [branding.address]
+      : [];
   const text = [
     contentText,
     "",
@@ -145,6 +155,7 @@ export async function render(
     "Powered by Kestrel",
     `View in browser: ${viewInBrowserUrl}`,
     `Unsubscribe: ${UNSUB_SENTINEL}`,
+    ...address,
     "",
   ].join("\n");
 
