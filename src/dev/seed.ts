@@ -94,7 +94,7 @@ const SEED_POSTS: SeedPost[] = [
 
 Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
 
-The app is named after a small falcon with an unusual way of hunting. Where other falcons chase, a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel) *waits*. It turns into the wind and beats its wings just hard enough to cancel it out, holding its head perfectly still while it watches the grass below. It's called **wind-hovering**, and the kestrel only drops when it's sure.
+The app is named after a small falcon called a kestrel. The easiest way to spot one is by how it hunts: it faces into the wind and hangs in place, head perfectly still, watching the ground below. This is called **wind-hovering**, and you can read more about it on [Wikipedia](https://en.wikipedia.org/wiki/Common_kestrel). Here's what a kestrel looks like:
 
 ![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
 
@@ -127,7 +127,7 @@ So what sets Kestrel apart from the countless other platforms and services?
 
 Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
 
-*P.S.* Speaking of lists and keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
+*P.S.* Speaking of lists and in keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
   },
   {
     id: "5eed0002-0000-4000-8000-000000000002",
