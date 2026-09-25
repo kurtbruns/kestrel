@@ -137,26 +137,17 @@ Publishing a newsletter comes down to one thing: a direct line to the people who
     sentIndex: 2, // the most recent send
     markdown: `# Working with robots
 
-Anything you can do in Kestrel's editor, you can ask Claude to do instead. Claude works through the same API as the editor, on your behalf, so it can draft, proofread, and schedule a post, but it can't do anything you couldn't do yourself.
+Give Claude a piece of writing and ask for it to go out to the list on Friday morning, and it does the thing you asked for.
 
-Where that helps most is the part of publishing that makes people nervous: getting an issue out the door. It's also the kind of thing you can do from your phone, away from your desk.
+Kestrel is a full-fledged application built for publishers, and it's designed with this in mind:
 
-## One issue, start to finish
+1. Posts are written in Markdown.
+2. Everything is built on an API.
+3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
 
-1. **Saturday afternoon:** "Proofread Sunday's issue, fix any typos, and send me a test." Claude makes the edits and sends the test to your inbox.
-2. **After you've read it:** "Looks good. Schedule it for 8 a.m. tomorrow." The send waits in its review window, where you can still cancel it.
-3. **Saturday night:** "Change Tuesday to Wednesday in the second paragraph." A scheduled post is locked, so Claude cancels the send, makes the edit, sends a fresh test, and schedules it again for the same time.
-4. **Sunday morning:** "Did it go out okay?" Claude reads the send's record: how many subscribers it reached, and whether anything bounced.
-
-## What stays in your hands
-
-- **The review window.** Every send Claude schedules waits in the same cancelable window as yours, and Claude can't shorten it.
-- **Nothing gets overwritten.** If you edit a post while Claude is working on it, the later save is refused instead of quietly replacing the other.
-- **You can see who did what.** Claude's edits are marked as Claude's.
+Scheduling and publishing can be stressful. Did the last-minute fix make it in? Will the issue you moved still go out on time? With Kestrel, you can ask Claude for a last-minute edit, a new send time, or a new order for a series of scheduled issues, and be confident it will just work. Every send Claude schedules still waits in the same cancelable review window as yours, and once it goes out, you can ask Claude to confirm it went the way you intended.
 
 > Let the robot do the typing. Keep the decision for yourself.
-
----
 
 The next issue is already scheduled. You can find it in the dashboard, and cancel it if you'd rather it didn't go.`,
   },
