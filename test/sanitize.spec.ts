@@ -15,6 +15,17 @@ describe("sanitizeEmailHtml (hygiene pass)", () => {
     expect(out).toBe("<p>Keep reading</p><button>Go</button>");
   });
 
+  it("drops the app's inert markers from the body, so a post can't open an email-only region", () => {
+    const out = sanitizeEmailHtml(
+      "<p>a</p><!--kestrel:email--><p>b</p><!--/kestrel:email--><!-- kestrel:masthead --><!-- a note -->",
+    );
+    expect(out).toBe("<p>a</p><p>b</p><!-- a note -->");
+    // Nested so that one pass would reassemble a marker.
+    expect(sanitizeEmailHtml("<p>a</p><!--kest<!--kestrel:-->rel:email--><p>b</p>")).not.toMatch(
+      /<!--kestrel:email-->/,
+    );
+  });
+
   it("strips inline event handlers", () => {
     const out = sanitizeEmailHtml('<img src="x.png" onerror="steal()" alt="a">');
     expect(out).not.toMatch(/onerror/i);

@@ -18,6 +18,15 @@ export function sanitizeEmailHtml(html: string): string {
   // re-aims every relative link), and <form> (a submit from the app's own origin). A
   // form's fields stay, inert.
   out = out.replace(/<\/?(?:meta|base|form)\b[^>]*>/gi, "");
+  // Drop the app's own inert markers (`<!--kestrel:…-->`): the render places them around
+  // the post, never inside it, so one in the body could only open or close an email-only
+  // region, or stand in for a chrome anchor, and hide part of the post from the archive.
+  // Repeated until none is left, so markers nested to reassemble after one pass can't.
+  let before: string;
+  do {
+    before = out;
+    out = out.replace(/<!--[\s\S]*?-->/g, (c) => (/kestrel:/i.test(c) ? "" : c));
+  } while (out !== before);
   // Strip inline event-handler attributes (onclick, onerror, ...).
   out = out.replace(/\son[a-z]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, "");
   // Neutralize script URL schemes wherever they appear in attributes.

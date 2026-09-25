@@ -3,10 +3,17 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
+import { updateSettings } from "../src/db/settings";
 import { getConfig } from "../src/env";
 import { archiveIndexPage, landingPage } from "../src/lib/page";
-import { clearFakeOutbox } from "../src/providers/fake";
-import { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, UNSUB_SENTINEL } from "../src/render/render";
+import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
+import {
+  ARCHIVE_HEAD_ANCHOR,
+  ARCHIVE_MASTHEAD_ANCHOR,
+  EMAIL_ONLY_CLOSE,
+  EMAIL_ONLY_OPEN,
+  UNSUB_SENTINEL,
+} from "../src/render/render";
 import type { RequestContext } from "../src/router";
 import { archiveIndex, landing } from "../src/routes/archive";
 import { freeze } from "../src/send/schedule";
@@ -58,9 +65,9 @@ describe("archive / view-in-browser", () => {
     // <h1> now carries an inline serif style; the text and structure are intact).
     expect(body).toContain(">Hello</h1>");
     expect(body).toContain("the permanent record");
-    // The unsubscribe sentinel is substituted for a generic link.
+    // No unsubscribe sentinel reaches the page. The built-in template's link is email-only,
+    // so it's left out; one outside a region becomes the generic link (tested below).
     expect(body).not.toContain(UNSUB_SENTINEL);
-    expect(body).toContain("/unsubscribe");
     // The browser-only masthead replaces its inert anchor and links back to the archive
     // index (same origin as the post), not the app landing page.
     expect(body).not.toContain(ARCHIVE_MASTHEAD_ANCHOR);
@@ -83,6 +90,54 @@ describe("archive / view-in-browser", () => {
     expect(body).not.toContain(ARCHIVE_HEAD_ANCHOR);
     expect(body).toContain("fonts.googleapis.com/css2?family=Fraunces");
     expect(body).toContain("background:#fbfbfa!important");
+  });
+
+  it("keeps the built-in footer's email-only part in the sent email and leaves it off the archive page", async () => {
+    await updateSettings(env.DB, { publication: { address: "12 Marsh Lane" } });
+    try {
+      const post = await sendPost("Footer", "the post");
+      const send = (await latestSentSendForPost(env.DB, post.id))!;
+      // The frozen record keeps the whole footer, the region between inert markers.
+      expect(send.rendered_html).toContain(EMAIL_ONLY_OPEN);
+      expect(send.rendered_html).toContain(EMAIL_ONLY_CLOSE);
+
+      // The sent email carries every part: the recipient's unsubscribe link, view in
+      // browser, and the address.
+      const [sent] = fakeOutbox();
+      expect(sent!.html).toContain("uns-a");
+      expect(sent!.html).toContain(">Unsubscribe</a>");
+      expect(sent!.html).toContain(">View in browser</a>");
+      expect(sent!.html).toContain("12 Marsh Lane");
+
+      // The archive page keeps the post, the sign-off, and "Powered by Kestrel", and
+      // leaves out the inbox links and the address.
+      const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
+      expect(body).toContain("the post");
+      expect(body).toContain('class="signoff"');
+      expect(body).toContain("Powered by Kestrel");
+      expect(body).not.toContain(">Unsubscribe</a>");
+      expect(body).not.toContain(">View in browser</a>");
+      expect(body).not.toContain("12 Marsh Lane");
+      expect(body).not.toContain("kestrel:email");
+    } finally {
+      await updateSettings(env.DB, { publication: { address: "" } });
+    }
+  });
+
+  it("serves a footer outside any region on the archive page, as before regions existed", async () => {
+    await updateSettings(env.DB, {
+      emailTemplate:
+        '{{ .Post.Body }}<p class="foot"><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></p>',
+    });
+    try {
+      const post = await sendPost("No Region", "the post");
+      const send = (await latestSentSendForPost(env.DB, post.id))!;
+      expect(send.rendered_html).not.toContain(EMAIL_ONLY_OPEN);
+      const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
+      expect(body).toContain('href="http://localhost:8787/unsubscribe"');
+    } finally {
+      await updateSettings(env.DB, { emailTemplate: "" });
+    }
   });
 
   it("404s for an unknown slug", async () => {

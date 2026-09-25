@@ -2,8 +2,15 @@ import { describe, expect, it } from "vitest";
 import type { ImageRow } from "../src/db/images";
 import type { PostRow, RevisionRow } from "../src/db/posts";
 import type { Config } from "../src/env";
-import { render, SENTTO_SENTINEL, substituteRecipient, UNSUB_SENTINEL } from "../src/render/render";
-import { defaultBranding } from "../src/render/template_engine";
+import {
+  omitEmailOnly,
+  render,
+  SENTTO_SENTINEL,
+  substituteRecipient,
+  UNSUB_SENTINEL,
+} from "../src/render/render";
+import { emailOnlyRegionsWhole } from "../src/render/template";
+import { DEFAULT_EMAIL_TEMPLATE, defaultBranding } from "../src/render/template_engine";
 
 const config: Config = {
   provider: "fake",
@@ -333,5 +340,41 @@ describe("render (the single render path)", async () => {
     // Defense in depth: an unsubscribe-less template can never ship (I2).
     expect(result.html).toContain(UNSUB_SENTINEL);
     expect(result.warnings.join(" ")).toMatch(/template invalid/i);
+  });
+});
+
+describe("email-only regions the HTML parser rearranges", () => {
+  const input = { post: post(), revision: revision("POSTBODY"), images: [] };
+  const withTemplate = (template: string) =>
+    render(input, config, { ...defaultBranding(), template });
+
+  it("falls back to the default when a table pushes the post into a region, so the archive keeps the post", async () => {
+    // Valid as text, but the parser moves the post ahead of the <table>, inside the region.
+    const result = await withTemplate(
+      '{{ if .IsEmail }}<table><tr><td><a href="{{ .Email.UnsubscribeURL }}">u</a></td></tr>{{ end }}{{ .Post.Body }}</table>',
+    );
+    expect(result.warnings.join(" ")).toMatch(/doesn't wrap whole elements, using the default/);
+    expect(result.html).toBe((await withTemplate(DEFAULT_EMAIL_TEMPLATE)).html);
+    expect(omitEmailOnly(result.html)).toContain("POSTBODY");
+  });
+
+  it("falls back to the default when a region tag sits inside an attribute", async () => {
+    const result = await withTemplate(
+      '{{ .Post.Body }}<a title="{{ if .IsEmail }}">x</a><a href="{{ .Email.UnsubscribeURL }}">u</a>{{ end }}',
+    );
+    expect(result.warnings.join(" ")).toMatch(/using the default/);
+  });
+
+  it("renders the built-in template's own region whole, since the fallback trusts it", async () => {
+    expect(emailOnlyRegionsWhole((await withTemplate(DEFAULT_EMAIL_TEMPLATE)).html)).toBe(true);
+  });
+
+  it("keeps a region that wraps whole elements, even inside a table cell", async () => {
+    const result = await withTemplate(
+      '{{ .Post.Body }}<table><tr><td>{{ if .IsEmail }}<a href="{{ .Email.UnsubscribeURL }}">u</a><br>{{ end }}</td></tr></table>',
+    );
+    expect(result.warnings.join(" ")).not.toMatch(/using the default/);
+    expect(omitEmailOnly(result.html)).toContain("POSTBODY");
+    expect(omitEmailOnly(result.html)).not.toContain(">u</a>");
   });
 });

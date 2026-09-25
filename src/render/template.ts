@@ -19,6 +19,73 @@ export const ARCHIVE_MASTHEAD_ANCHOR = "<!--kestrel:masthead-->";
  *  display serif loads only on the hosted page — never in a sent email (I3). */
 export const ARCHIVE_HEAD_ANCHOR = "<!--kestrel:head-->";
 
+/** Inert markers around an email-only region, which the template marks with
+ *  `{{ if .IsEmail }} … {{ end }}`. The frozen render keeps the region's content between
+ *  them, so the sent email carries it (mail clients ignore the comments); the archive
+ *  route removes each marked span with `omitEmailOnly`, so the public page leaves out
+ *  inbox furniture (an unsubscribe link, the mailing address) and nothing else (I3). */
+export const EMAIL_ONLY_OPEN = "<!--kestrel:email-->";
+export const EMAIL_ONLY_CLOSE = "<!--/kestrel:email-->";
+
+/** The frozen render as the public page shows it: every email-only region removed,
+ *  markers included. A render without markers (a template with no region, or a send
+ *  frozen before regions existed) comes back unchanged. */
+export function omitEmailOnly(html: string): string {
+  return html.replace(EMAIL_ONLY_REGION, "");
+}
+
+const EMAIL_ONLY_REGION = /<!--kestrel:email-->([\s\S]*?)<!--\/kestrel:email-->/g;
+
+/** Elements with no closing tag, which a region may hold without closing. */
+const VOID_ELEMENTS = new Set([
+  "area",
+  "base",
+  "br",
+  "col",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "link",
+  "meta",
+  "source",
+  "track",
+  "wbr",
+]);
+
+/**
+ * Whether every email-only region in a parsed (CSS-inlined) render is whole elements,
+ * so `omitEmailOnly` leaves well-formed markup and removes nothing outside the region.
+ * Validation checks the template's text, but the HTML parser can still rearrange it: a
+ * region tag inside an attribute, a region opened in one element and closed in another,
+ * or content a table pushes out ahead of itself (foster-parenting), which can carry the
+ * post into a region. A region passes when its tags balance and no tag is cut in half:
+ * the serializer escapes `<` and `>` in text, so a bare one left after removing whole
+ * tags means a marker sat inside a tag.
+ */
+export function emailOnlyRegionsWhole(html: string): boolean {
+  for (const m of html.matchAll(EMAIL_ONLY_REGION)) {
+    const span = (m[1] ?? "")
+      .replace(/<!--[\s\S]*?-->/g, "")
+      .replace(/<(style|script)\b[^>]*>[\s\S]*?<\/\1>/gi, "");
+    const open: string[] = [];
+    for (const t of span.matchAll(/<(\/?)([a-zA-Z][\w-]*)\b[^<>]*>/g)) {
+      const name = (t[2] ?? "").toLowerCase();
+      if (t[1]) {
+        if (open.pop() !== name) {
+          return false;
+        }
+      } else if (!VOID_ELEMENTS.has(name) && !t[0].endsWith("/>")) {
+        open.push(name);
+      }
+    }
+    if (open.length > 0 || /[<>]/.test(span.replace(/<\/?[a-zA-Z][\w-]*\b[^<>]*>/g, ""))) {
+      return false;
+    }
+  }
+  return true;
+}
+
 /** Display serif for content headings — the publication's editorial voice, shared
  *  with the reader chrome's `--r-serif` (lib/page.ts); keep the two in step. Baked
  *  into the frozen render so the archive page and the email agree (I3). Fraunces is

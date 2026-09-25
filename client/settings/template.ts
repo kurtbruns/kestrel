@@ -81,6 +81,15 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
       { token: "{{ .Email.ViewInBrowserURL }}", desc: "The archived post's permanent URL." },
     ],
   },
+  {
+    group: "Email only",
+    vars: [
+      {
+        token: "{{ if .IsEmail }} … {{ end }}",
+        desc: "Shown in the email, left out of the archived post: for the unsubscribe link, view in browser, and the address. Can't hold {{ .Post.Body }} or another region.",
+      },
+    ],
+  },
 ];
 
 // Two starting points; the publisher edits the HTML freely from there. Identity sits
@@ -190,10 +199,10 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   </table>
 
   <div class="footer">
-    Powered by Kestrel ·
+    Powered by Kestrel{{ if .IsEmail }} ·
     <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
     <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
-    <div class="address">{{ .Publication.Address }}</div>
+    <div class="address">{{ .Publication.Address }}</div>{{ end }}
   </div>
 </div>`,
   },
@@ -255,10 +264,10 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   <hr class="rule" />
 
   <div class="footer">
-    Powered by Kestrel ·
+    Powered by Kestrel{{ if .IsEmail }} ·
     <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
     <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
-    <div class="address">{{ .Publication.Address }}</div>
+    <div class="address">{{ .Publication.Address }}</div>{{ end }}
   </div>
 </div>`,
   },
@@ -280,12 +289,15 @@ const EMAIL_TEMPLATE_SAMPLE_BODY =
 // Fill logic-less {{ token }} placeholders from a flat context. {{ .Post.Body }} (the
 // rendered Markdown) and {{ .Publication.Logo }} (built with its own escaping) are raw
 // HTML; every other value is escaped, so a stray < or "
-// in a name can't break the surrounding markup. An unknown token renders empty. A string
+// in a name can't break the surrounding markup. An unknown token renders empty, and the
+// region tags ({{ if .IsEmail }}, {{ end }}) render nothing: the sample is the email, which
+// carries the region's content. A string
 // builder by nature: the template is the publisher's own HTML, filled in and vouched for
 // at the preview's boundary (mountSampleEmailPreview).
 const RAW_TOKENS = new Set([".Post.Body", ".Publication.Logo"]);
 function fillEmailTemplate(template: string, ctx: Record<string, string>): string {
-  return String(template).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
+  const unmarked = String(template).replace(/\{\{\s*(?:if\b[^}]*|end)\s*\}\}/g, "");
+  return unmarked.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
     RAW_TOKENS.has(key) ? ctx[key] || "" : escapeHtml(ctx[key] ?? ""),
   );
 }
