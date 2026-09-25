@@ -75,6 +75,38 @@ export function htmlPage(title: string, bodyHtml: string, status = 200): Respons
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
 
+/* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
+   developer into the editor. Shown solely on a dev-shaped instance and rendered as
+   over-the-page dev chrome — deliberately not the publication's own identity — so
+   it reads as tooling, never as part of the reader surface. Absent once deployed.
+   Self-contained, because it rides two stylesheets: the reader shell's and, on a
+   post page, the browser-only chrome injected into the frozen render, which has none
+   of the reader tokens (so the font is set here rather than inherited). */
+const DEV_BADGE_STYLE = `
+/* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only element
+   the reader surface carries. That badge is app chrome, not the publication's
+   identity, so it wears the app's action color, matching a Primary action, rather
+   than the reader ink; keep these values in sync with styles.css. This is the
+   single, deliberate exception to "the reader surface is not styled from the admin
+   tokens" (DESIGN.md, reader-surface note). */
+:root { --k-accent:#3355cc; --k-accent-contrast:#ffffff; }
+@media (prefers-color-scheme: dark) { :root { --k-accent:#7d9bff; --k-accent-contrast:#10131f; } }
+.r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
+         font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
+         font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
+         background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
+         box-shadow:0 6px 20px rgba(0,0,0,.22); }
+.r-dev:hover { filter:brightness(1.08); }
+/* Inverted badge — solid contrast fill, accent-colored text — so the tiny "DEV"
+   label clears WCAG AA on the accent pill in both themes (a translucent tint left
+   it ~3.6:1). */
+.r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+                    padding:2px 7px; border-radius:999px;
+                    background:var(--k-accent-contrast); color:var(--k-accent); }
+.r-dev:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+@media (prefers-color-scheme: dark) { .r-dev:focus-visible { outline-color:#60a5fa; } }
+`;
+
 const READER_STYLE = `
 :root {
   color-scheme: light dark;
@@ -85,17 +117,9 @@ const READER_STYLE = `
   /* The masthead sits on the card surface with a hairline rule (the footer's top
      rule, mirrored); the eyebrow/link accent inherits the ink color. */
   --brand-ink:currentColor;
-  /* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only
-     element the reader surface carries — the "Open dashboard" pill. That badge is
-     app chrome, not the publication's identity, so it wears the app's action color
-     rather than the reader ink; keep these values in sync with styles.css. This is
-     the single, deliberate exception to "the reader surface is not styled from the
-     admin tokens" (DESIGN.md, reader-surface note). */
-  --k-accent:#3355cc; --k-accent-contrast:#ffffff;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199;
-          --k-accent:#7d9bff; --k-accent-contrast:#10131f; }
+  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font-family:var(--r-sans); background:var(--r-bg); color:var(--r-ink); line-height:1.6; }
@@ -156,24 +180,7 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
-/* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
-   developer into the editor. Shown solely on a dev-shaped instance and rendered as
-   over-the-page dev chrome — deliberately not the publication's own identity — so
-   it reads as tooling, never as part of the reader surface. Absent once deployed.
-   It wears the app's brand accent (--k-accent, DESIGN.md §3), matching a Primary
-   action, so a shortcut INTO the app reads as the app — not the reader's ink. */
-.r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
-         font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
-         background:var(--k-accent); color:var(--k-accent-contrast); border:1px solid var(--k-accent);
-         box-shadow:0 6px 20px rgba(0,0,0,.22); }
-.r-dev:hover { filter:brightness(1.08); }
-/* Inverted badge — solid contrast fill, accent-colored text — so the tiny "DEV"
-   label clears WCAG AA on the accent pill in both themes (a translucent tint left
-   it ~3.6:1). */
-.r-dev .r-dev-tag { font-size:9.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
-                    padding:2px 7px; border-radius:999px;
-                    background:var(--k-accent-contrast); color:var(--k-accent); }
-
+${DEV_BADGE_STYLE}
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
 @media (max-width:560px) {
@@ -229,13 +236,24 @@ export interface ReaderIdentity {
  *  developer straight into `/dashboard`. Rendered only when `url` is set — the
  *  callers pass it solely on a dev-shaped instance (`config.devMode`), where
  *  `/dashboard` carries no Access wall — so it is structurally absent once deployed
- *  and never turns the public front door into a link toward the admin gate. */
+ *  and never turns a public page into a link toward the admin gate. */
 function devDashboardBadge(url?: string): string {
   // The "DEV" chip flags it as tooling; the title spells out the scope for anyone
   // who wonders whether it ships — it never does (see the doc above).
   return url
     ? `<a class="r-dev" href="${escapeHtmlAttr(url)}" title="Shown only on your local dev server"><span class="r-dev-tag">Dev</span>Open dashboard &rarr;</a>`
     : "";
+}
+
+/** The dev-only shortcut's browser-only chrome for a hosted post page, which is not
+ *  a reader shell: its stylesheet for the head anchor and the pill for the masthead
+ *  anchor. The archive route fills them into the served page only, so neither reaches
+ *  the frozen render or a sent email (I3). Both empty when `url` is unset, as it is on
+ *  every deployed instance. */
+export function archiveDevDashboardChrome(url?: string): { head: string; masthead: string } {
+  return url
+    ? { head: `<style>${DEV_BADGE_STYLE}</style>`, masthead: devDashboardBadge(url) }
+    : { head: "", masthead: "" };
 }
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"

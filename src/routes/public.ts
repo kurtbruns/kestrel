@@ -14,7 +14,7 @@ import {
   confirmSubscription,
   requestSubscription,
 } from "../services/subscriptions";
-import { readerIdentity } from "./archive";
+import { devDashboardUrl, readerIdentity } from "./archive";
 
 function wantsHtml(c: RequestContext): boolean {
   const accept = c.req.headers.get("accept") ?? "";
@@ -88,6 +88,7 @@ function subscribePage(
     homeUrl: `${c.config.appOrigin}/`,
     title: `Subscribe · ${identity.name}`,
     mainHtml,
+    devDashboardUrl: devDashboardUrl(c.config),
     status,
   });
 }

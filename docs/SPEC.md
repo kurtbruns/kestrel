@@ -163,7 +163,7 @@ A **post page** serves that post's frozen render (I3). When the archive lives on
 
 No script runs on a reader page, and none can be framed by another site. A post's body is the author's HTML, written by hand or by Claude from material it read, and it is served from the same origin as the admin surface, so the page itself forbids script rather than trusting the render to have removed it. For the same reason nothing in a post can submit a form or send the reader elsewhere on arrival: a form on that origin would act with the publisher's session. The publisher's preview holds to the same rules.
 
-On a local dev instance only, the landing page and archive index also carry a small, clearly marked shortcut into the editor, a developer convenience that is structurally absent once deployed. It is the one deliberate exception to never linking toward admin, allowed because a local instance has no access wall in front of the editor; §11 states the rule and the carve-out.
+On a local dev instance only, the landing page, the archive index, each post page, and the subscribe pages also carry a small, clearly marked shortcut into the editor, a developer convenience that is structurally absent once deployed. On a post page it is browser-only chrome like the masthead, so it is never in the frozen copy or a sent email (I3). The confirm and unsubscribe pages, which a reader reaches only from a link in an email, do not carry it. It is the one deliberate exception to never linking toward admin, allowed because a local instance has no access wall in front of the editor; §11 states the rule and the carve-out.
 
 ---
 

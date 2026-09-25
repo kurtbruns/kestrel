@@ -22,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- On a local dev server, the "Open dashboard" shortcut now also shows on each archived post page and the subscribe pages, not only the landing page and archive index; a deployed instance still never shows it (SPEC §5).
 - Version numbers count releases rather than follow semver: every release bumps the middle number, even one with breaking changes, which are listed under *Breaking* with any steps under *Upgrading*; a patch release is fixes only.
 
 ## [1.1.0] - 2026-09-24

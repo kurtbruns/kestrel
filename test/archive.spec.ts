@@ -15,7 +15,8 @@ import {
   UNSUB_SENTINEL,
 } from "../src/render/render";
 import type { RequestContext } from "../src/router";
-import { archiveIndex, landing } from "../src/routes/archive";
+import { archiveIndex, archivePage, landing } from "../src/routes/archive";
+import { subscribeForm } from "../src/routes/public";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -90,6 +91,27 @@ describe("archive / view-in-browser", () => {
     expect(body).not.toContain(ARCHIVE_HEAD_ANCHOR);
     expect(body).toContain("fonts.googleapis.com/css2?family=Fraunces");
     expect(body).toContain("background:#fbfbfa!important");
+  });
+
+  it("carries the dev-only dashboard pill as browser-only chrome, never in the frozen or sent bytes (I3, §5)", async () => {
+    const post = await sendPost("Pill", "you can find it in the dashboard");
+    const send = (await latestSentSendForPost(env.DB, post.id))!;
+    // The record and the email a reader got hold no trace of the pill or its styles.
+    for (const html of [send.rendered_html, fakeOutbox()[0]!.html]) {
+      expect(html).not.toContain("r-dev");
+      expect(html).not.toContain("Open dashboard");
+      expect(html).not.toContain("/dashboard/");
+    }
+
+    // The test env is dev-shaped, so the hosted page fills the pill into the masthead
+    // slot and its stylesheet into the head slot, the same accent pill the landing
+    // page wears.
+    const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
+    expect(body).toContain('class="r-dev"');
+    expect(body).toContain('href="http://localhost:8787/dashboard/"');
+    expect(body).toContain("--k-accent:#3355cc");
+    expect(body.indexOf(".r-dev {")).toBeLessThan(body.indexOf("</head>"));
+    expect(body.indexOf('class="k-mast"')).toBeLessThan(body.indexOf('class="r-dev"'));
   });
 
   it("keeps the built-in footer's email-only part in the sent email and leaves it off the archive page", async () => {
@@ -323,13 +345,17 @@ describe("reader surface — no admin link once deployed (§11)", () => {
 // (devMode:false) branch of `devDashboardUrl(config)` is otherwise never hit
 // end-to-end, and dropping that gate would break §11 without failing a test.
 describe("reader routes gate the pill on config.devMode (§11)", () => {
-  function ctxFor(devMode: boolean): RequestContext {
+  function ctxFor(
+    devMode: boolean,
+    path = "/",
+    params: Record<string, string> = {},
+  ): RequestContext {
     return {
-      req: new Request(`${base}/`),
+      req: new Request(`${base}${path}`),
       env,
       ctx: createExecutionContext(),
-      url: new URL(`${base}/`),
-      params: {},
+      url: new URL(`${base}${path}`),
+      params,
       config: { ...getConfig(env), devMode },
     };
   }
@@ -347,6 +373,25 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     await publish("A Post", 1_000);
     const on = await (await archiveIndex(ctxFor(true))).text();
     const off = await (await archiveIndex(ctxFor(false))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("/dashboard");
+  });
+
+  it("a post page renders the pill and its styles only when devMode is true", async () => {
+    const post = await publish("A Post", 1_000);
+    const ctx = (devMode: boolean) => ctxFor(devMode, `/archive/${post.slug}`, { slug: post.slug });
+    const on = await (await archivePage(ctx(true))).text();
+    const off = await (await archivePage(ctx(false))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
+    expect(off).not.toContain("/dashboard");
+  });
+
+  it("the subscribe page renders the pill only when devMode is true", async () => {
+    const on = await (await subscribeForm(ctxFor(true, "/subscribe"))).text();
+    const off = await (await subscribeForm(ctxFor(false, "/subscribe"))).text();
     expect(on).toContain('class="r-dev"');
     expect(off).not.toContain('class="r-dev"');
     expect(off).not.toContain("/dashboard");
