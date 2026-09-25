@@ -94,11 +94,11 @@ const SEED_POSTS: SeedPost[] = [
 
 Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
 
-The app is named after a small falcon with an unusual way of hunting.
+The app is named after a small falcon with an unusual way of hunting. Where other falcons chase, a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel) *waits*. It turns into the wind and beats its wings just hard enough to cancel it out, holding its head perfectly still while it watches the grass below. It's called **wind-hovering**, and the kestrel only drops when it's sure.
 
-![A kestrel in flight, wings spread over a green field](kestrel.jpg)
+![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
 
-Where other falcons chase, a kestrel *waits*. It turns into the wind and beats its wings just hard enough to cancel it out, holding its head perfectly still while it watches the grass below. It's called **wind-hovering**, and the kestrel only drops when it's sure.
+*A male Canarian kestrel in strong wind. Taken in Funchal, Madeira by [u/treecreaper](https://www.reddit.com/r/birdsofprey/comments/1rlew5p/canarian_kestrel/).*
 
 ## Why that fits a newsletter
 
@@ -107,56 +107,56 @@ An email can't be unsent, so Kestrel holds still before it commits:
 - **Write** in Markdown, in the web editor or with Claude.
 - **Preview** the exact email your subscribers will get.
 - **Schedule** it behind a review window you can cancel.
-- **Send** it to a double opt-in list, and archive it for good.
-
-[More on the common kestrel →](https://en.wikipedia.org/wiki/Common_kestrel)`,
+- **Send** it to a double opt-in list, and archive it for good.`,
   },
   {
     id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "you-keep-what-matters",
-    subject: "You keep what matters",
+    slug: "an-old-fashioned-list",
+    subject: "An old-fashioned list",
     kind: "sent",
     sentIndex: 1,
-    markdown: `# You keep what matters
+    markdown: `# An old-fashioned list
 
-Most newsletter platforms rent you access to your own audience. Kestrel runs on your own Cloudflare account, so the parts a newsletter is actually made of stay yours.
+The idea behind Kestrel is simple, old-fashioned even. You keep a list of subscribers, and you write and schedule emails to it. People join the list by entering their email address in a form and confirming it.
 
-## The list
+So what sets Kestrel apart from the countless other platforms and services?
 
-Your subscribers live in your own database, not a vendor's.
+- **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
+- **Flexibility.** Your newsletter might not be the main place you publish, but you still want a way to reach your audience.
+- **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in the next email.
 
-## The consent
+Either way, the list stays yours: the subscribers, the record of their consent, the record of every delivery, and a permanent page for every issue, like this one.
 
-Every subscription is double opt-in, and each confirmation and unsubscribe is recorded. The proof that you had permission stays with you.
-
-## The delivery
-
-Each send records who received which issue. Hard bounces and spam complaints suppress an address on their own, so it's never mailed again.
-
-## The archive
-
-Every issue gets a permanent public page, like this one, so the links you send keep working.
-
-> Your audience. Your data. Your newsletter.`,
+*P.S.* Speaking of lists and keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
   },
   {
     id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "write-preview-schedule-send",
-    subject: "Write, preview, schedule, send",
+    slug: "working-with-robots",
+    subject: "Working with robots",
     kind: "sent",
     sentIndex: 2, // the most recent send
-    markdown: `# Write, preview, schedule, send
+    markdown: `# Working with robots
 
-Every issue of Field Notes goes through the same four steps, whether it's written in the web editor or handed to Claude. Both work through the same API, so the result is the same either way.
+Kestrel has two ways in, and they lead through the same door. One is the web editor. The other is Claude. Both use the same API, so anything you can do by hand, Claude can do for you, and nothing Claude does is hidden from the editor.
 
-1. **Write** in Markdown. Headings, *emphasis*, lists, quotes, images, and [links](https://commonmark.org/help/) all carry through to the email.
-2. **Preview** the exact email, both the HTML and the plain-text version, not an approximation. Then send yourself a test.
-3. **Schedule** it. The send waits behind a countdown, and until it fires you can cancel it or move it.
-4. **Send** to confirmed subscribers only. If a send is interrupted, it picks up where it left off without mailing anyone twice.
+## What that looks like
+
+1. You ask Claude to draft an issue from your notes, a blog post, or a video transcript.
+2. It writes the post and sends you a test.
+3. You read the test, ask for changes, and approve it.
+4. Claude schedules it, and the send waits in the review window like any other.
+
+## The guard rails
+
+- **The review window still applies.** Its length is set when Kestrel is deployed, not through the API, so Claude can't shorten it.
+- **Edits don't collide.** If you and Claude change the same draft at once, the later save is refused instead of quietly overwriting the other.
+- **You can see who did what.** Claude's edits are marked as Claude's.
+
+> Let the robot do the typing. Keep the decision for yourself.
 
 ---
 
-Next issue: a closer look at that review window.`,
+The next issue is already scheduled. You can find it in the dashboard, and cancel it if you'd rather it didn't go.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
@@ -208,8 +208,8 @@ Nothing you do to a draft reaches the list until you schedule it and its window 
 *(Draft. Notes, not an issue yet.)*
 
 TODO:
-- drafting an issue with Claude, through the same API as the editor
 - reading a send's record: accepted, bounced, complained
+- the plain-text version every email carries
 - putting the archive on your own domain`,
   },
 ];
@@ -1007,7 +1007,7 @@ export async function seedDatabase(
   await updateSettings(db, {
     publication: {
       name: "Field Notes",
-      tagline: "A demo publication of Kestrel",
+      tagline: "A demo publication",
       address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
     testRecipients: ["editor@fieldnotes.example", "proof@fieldnotes.example"],
