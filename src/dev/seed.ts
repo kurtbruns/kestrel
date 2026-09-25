@@ -94,7 +94,7 @@ const SEED_POSTS: SeedPost[] = [
 
 Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
 
-The app is named after a small falcon called a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel). One way to spot a kestrel is by how it hunts using a technique called wind-hovering. The bird faces into the wind and hovers in place, watching the ground below for prey. Here's what a kestrel looks like:
+The app is named after a small falcon called a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel). One way to spot a kestrel is by how it hunts, using a technique called wind-hovering. The bird faces into the wind and hovers in place, watching the ground below for prey. Here's what a kestrel looks like:
 
 ![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
 
@@ -137,19 +137,21 @@ Publishing a newsletter comes down to one thing: a direct line to the people who
     sentIndex: 2, // the most recent send
     markdown: `# Working with robots
 
-Kestrel has two ways in, and they lead through the same door. One is the web editor. The other is Claude. Both use the same API, so anything you can do by hand, Claude can do for you, and nothing Claude does is hidden from the editor.
+Anything you can do in Kestrel's editor, you can ask Claude to do instead. Claude works through the same API as the editor, on your behalf, so it can draft, proofread, and schedule a post, but it can't do anything you couldn't do yourself.
 
-## What that looks like
+Where that helps most is the part of publishing that makes people nervous: getting an issue out the door. It's also the kind of thing you can do from your phone, away from your desk.
 
-1. You ask Claude to draft an issue from your notes, a blog post, or a video transcript.
-2. It writes the post and sends you a test.
-3. You read the test, ask for changes, and approve it.
-4. Claude schedules it, and the send waits in the review window like any other.
+## One issue, start to finish
 
-## The guard rails
+1. **Saturday afternoon:** "Proofread Sunday's issue, fix any typos, and send me a test." Claude makes the edits and sends the test to your inbox.
+2. **After you've read it:** "Looks good. Schedule it for 8 a.m. tomorrow." The send waits in its review window, where you can still cancel it.
+3. **Saturday night:** "Change Tuesday to Wednesday in the second paragraph." A scheduled post is locked, so Claude cancels the send, makes the edit, sends a fresh test, and schedules it again for the same time.
+4. **Sunday morning:** "Did it go out okay?" Claude reads the send's record: how many subscribers it reached, and whether anything bounced.
 
-- **The review window still applies.** Its length is set when Kestrel is deployed, not through the API, so Claude can't shorten it.
-- **Edits don't collide.** If you and Claude change the same draft at once, the later save is refused instead of quietly overwriting the other.
+## What stays in your hands
+
+- **The review window.** Every send Claude schedules waits in the same cancelable window as yours, and Claude can't shorten it.
+- **Nothing gets overwritten.** If you edit a post while Claude is working on it, the later save is refused instead of quietly replacing the other.
 - **You can see who did what.** Claude's edits are marked as Claude's.
 
 > Let the robot do the typing. Keep the decision for yourself.
