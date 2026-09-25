@@ -184,7 +184,7 @@ const IDENTITY_TOKENS: ReadonlyArray<[token: string, fields: IdentityField[]]> =
 
 /**
  * The identity fields `template` renders. The identity reaches the frozen bytes only
- * through the `publication.*` tokens, so a field the template does not reference is
+ * through the `.Publication.*` tokens, so a field the template does not reference is
  * not an input to the email: changing it alters no scheduled send, and the re-make
  * guard (SPEC §9) leaves it alone. The built-in template renders all four.
  */

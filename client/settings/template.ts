@@ -299,7 +299,7 @@ export interface TemplateIdentity {
 }
 
 // Sample values the template preview binds — mirrors the render path's context, with
-// email.* standing in for per-recipient values. The logo is the real one or none, never
+// .Email.* standing in for per-recipient values. The logo is the real one or none, never
 // a stand-in: the preview shows the sign-off the email will carry.
 function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
   const name = id.name || "Your publication";
