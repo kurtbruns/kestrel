@@ -408,17 +408,22 @@ describe("a one-recipient provider's groups", () => {
   });
 
   it("shares the D1 writes, so a recipient costs about half a statement", async () => {
-    const emails = addresses(3000);
+    // Workers Paid's 10,000 subrequests, with the D1 cap scaled down from 1,000 so the run
+    // stays quick. Three recipients a statement is more than the cap can reach (about two),
+    // so the run stops on D1 statements, not on running out of rows, and its fixed cost is
+    // spread over enough groups (about 57 here) to leave the per-recipient share in view.
+    const queryLimit = 300;
+    const emails = addresses(3 * queryLimit);
     await seedConfirmed(emails);
     const send = await dueSend();
     const { guard, env: capped } = guarded();
 
-    // Workers Paid: 10,000 subrequests, of which D1 may be 1,000.
-    const budget = new Budget(10_000);
+    const budget = new Budget(10_000, queryLimit);
     const result = await runSend(capped, send.id, budget);
 
-    expect(guard.statements).toBeLessThanOrEqual(D1_QUERY_LIMIT);
-    expect(result.accepted).toBeGreaterThan(1500);
+    expect(guard.statements).toBeLessThanOrEqual(queryLimit);
+    expect(result.accepted).toBeLessThan(emails.length);
+    expect(result.accepted).toBeGreaterThan(1.5 * queryLimit);
     expect(guard.statements / result.accepted).toBeLessThan(0.6);
     expect(ses.requests).toBe(result.accepted);
     expect(emails.every((e) => ses.timesMailed(e) <= 1)).toBe(true);

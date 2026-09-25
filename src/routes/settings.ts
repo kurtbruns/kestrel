@@ -134,7 +134,7 @@ function renderedIdentityFields(settings: AppSettings, cfg: Config): IdentityFie
  *  §9). Advice, never a refusal: whether a publication needs an address is the
  *  publisher's call, and a template may carry one written in by hand. */
 const ADDRESS_NOT_PRINTED =
-  "You've added a mailing address in Settings, but this template doesn't include the {{ publication.address }} field. If you send promotional email, add it to the footer. If you've written your address into the template yourself, or don't need to provide one, you can ignore this or remove the address in Settings.";
+  "You've added a mailing address in Settings, but this template doesn't include the {{ .Publication.Address }} field. If you send promotional email, add it to the footer. If you've written your address into the template yourself, or don't need to provide one, you can ignore this or remove the address in Settings.";
 
 /** The scheduled sends a template or identity change would re-make (SPEC §9), the
  *  moment after which a save stops being refused for the lead, and the identity fields

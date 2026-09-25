@@ -170,16 +170,16 @@ describe("publication identity (issue #81)", () => {
 
 describe("email template (wired to the render path)", () => {
   const withUnsub = (extra = "") =>
-    `<div>{{ post.body }}${extra}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
+    `<div>{{ .Post.Body }}${extra}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
   it("returns a concrete default template even when none is stored", async () => {
     const { body } = await getSettings();
-    expect(body.settings.emailTemplate).toContain("{{ post.body }}");
-    expect(body.settings.emailTemplate).toContain("{{ email.unsubscribeUrl }}");
+    expect(body.settings.emailTemplate).toContain("{{ .Post.Body }}");
+    expect(body.settings.emailTemplate).toContain("{{ .Email.UnsubscribeURL }}");
   });
 
   it("persists a valid template and reflects it back", async () => {
-    const tpl = withUnsub(`<a href="{{ email.viewInBrowserUrl }}">View</a>`);
+    const tpl = withUnsub(`<a href="{{ .Email.ViewInBrowserURL }}">View</a>`);
     const put = await putSettings({ emailTemplate: tpl });
     expect(put.status).toBe(200);
     expect(((await put.json()) as { warnings: string[] }).warnings).toEqual([]);
@@ -187,14 +187,14 @@ describe("email template (wired to the render path)", () => {
   });
 
   it("rejects a template with no unsubscribe link (400) — every email must be leavable", async () => {
-    const res = await putSettings({ emailTemplate: "<div>{{ post.body }}</div>" });
+    const res = await putSettings({ emailTemplate: "<div>{{ .Post.Body }}</div>" });
     expect(res.status).toBe(400);
     expect(((await res.json()) as { message?: string }).message ?? "").toMatch(/unsubscribe/i);
   });
 
   it("rejects a template with no post body (400)", async () => {
     const res = await putSettings({
-      emailTemplate: '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a>',
+      emailTemplate: '<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a>',
     });
     expect(res.status).toBe(400);
   });
@@ -213,7 +213,7 @@ describe("email template (wired to the render path)", () => {
     expect(res.status).toBe(400);
     // The previously saved template is untouched — no silent reset to the default.
     const stored = (await getSettings()).body.settings.emailTemplate;
-    expect(stored).toContain("{{ email.unsubscribeUrl }}");
+    expect(stored).toContain("{{ .Email.UnsubscribeURL }}");
     expect(stored).not.toContain("Powered by Kestrel");
   });
 
@@ -229,13 +229,13 @@ describe("email template (wired to the render path)", () => {
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
     const ADDRESS = "PO Box 1142, Portland, OR 97207";
     const notPrinted =
-      /mailing address in Settings, but this template doesn't include the \{\{ publication\.address \}\} field/;
+      /mailing address in Settings, but this template doesn't include the \{\{ \.Publication\.Address \}\} field/;
     const warningsOf = async (res: Response) =>
       ((await res.json()) as { warnings: string[] }).warnings;
     const printsAddress = withUnsub(
-      '<a href="{{ email.viewInBrowserUrl }}">View</a><div>{{ publication.address }}</div>',
+      '<a href="{{ .Email.ViewInBrowserURL }}">View</a><div>{{ .Publication.Address }}</div>',
     );
-    const dropsAddress = withUnsub('<a href="{{ email.viewInBrowserUrl }}">View</a>');
+    const dropsAddress = withUnsub('<a href="{{ .Email.ViewInBrowserURL }}">View</a>');
 
     it("warns, and saves, a template that leaves out an address that is set", async () => {
       await putSettings({ publication: { address: ADDRESS } });

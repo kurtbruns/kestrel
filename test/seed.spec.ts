@@ -189,17 +189,17 @@ describe("dev seed (Field Notes dataset)", () => {
   });
 
   it("re-seeding resets the settings singleton, dropping stale operator config", async () => {
-    // An operator whose saved template predates the email.* token migration (it still
-    // uses footer.*), plus a custom identity. resetAll clears settings, and the seed
+    // An operator whose saved template predates the Hugo-style placeholder names (it
+    // still uses post.body and email.unsubscribeUrl), plus a custom identity. resetAll clears settings, and the seed
     // re-populates only the demo's own — so a re-seed can't carry the stale row forward.
     await updateSettings(env.DB, {
       publication: { name: "Old Name" },
       emailTemplate:
-        '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
+        '<div>{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>',
     });
     await seedDatabase(env, config());
     const s = await getSettings(env.DB);
-    expect(s.emailTemplate).toBe(""); // back to the built-in email.* default
+    expect(s.emailTemplate).toBe(""); // back to the built-in default
     expect(s.publication.name).toBe("Field Notes"); // the demo's identity, not the old one
   });
 });

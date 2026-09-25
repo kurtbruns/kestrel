@@ -15,7 +15,7 @@ import type { Config } from "../env";
 import { buildImageMap } from "./image_urls";
 import { markdownToHtml } from "./markdown";
 import { sanitizeEmailHtml } from "./sanitize";
-import { emailLayout } from "./template";
+import { emailLayout, emailOnlyRegionsWhole } from "./template";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   type DeliveryContext,
@@ -32,7 +32,14 @@ import {
 } from "./template_engine";
 import { htmlToText } from "./text";
 
-export { ARCHIVE_HEAD_ANCHOR, ARCHIVE_MASTHEAD_ANCHOR, archiveMasthead } from "./template";
+export {
+  ARCHIVE_HEAD_ANCHOR,
+  ARCHIVE_MASTHEAD_ANCHOR,
+  archiveMasthead,
+  EMAIL_ONLY_CLOSE,
+  EMAIL_ONLY_OPEN,
+  omitEmailOnly,
+} from "./template";
 export { SENTTO_SENTINEL, UNSUB_SENTINEL };
 
 /** Widest image column an email client will show for our 600px content column. */
@@ -120,24 +127,37 @@ export async function render(
   }
 
   const context: RenderContext = {
-    "post.body": cleanHtml,
-    "post.subject": subject,
-    "publication.name": branding.name,
-    "publication.tagline": branding.tagline,
-    "publication.logoUrl": branding.logoUrl,
-    "publication.logo": emailLogoHtml(branding.logoUrl, branding.name),
-    "publication.address": branding.address,
-    "email.viewInBrowserUrl": viewInBrowserUrl,
+    ".Post.Body": cleanHtml,
+    ".Post.Subject": subject,
+    ".Publication.Name": branding.name,
+    ".Publication.Tagline": branding.tagline,
+    ".Publication.LogoURL": branding.logoUrl,
+    ".Publication.Logo": emailLogoHtml(branding.logoUrl, branding.name),
+    ".Publication.Address": branding.address,
+    ".Email.ViewInBrowserURL": viewInBrowserUrl,
   };
   // fillEmailTemplate freezes the delivery-phase tokens (the unsubscribe URL and sent-to
   // address) to their sentinels here; substituteRecipient fills them per recipient. Those
   // sentinels are the only per-recipient edits — everything else is identical bytes (I3).
-  const body = fillEmailTemplate(template, context);
-  const shell = emailLayout({ subject, preheader: derivePreheader(contentText), bodyHtml: body });
+  const preheader = derivePreheader(contentText);
   // Inline the template's <style> onto elements (mail clients strip <style>); this is
   // the last step, so the frozen bytes are exactly what ships and what the archive
   // serves (I3). Comments (the archive anchors) and the sentinel survive inlining.
-  const html = await inlineEmailCss(shell);
+  const renderWith = (tpl: string) =>
+    inlineEmailCss(emailLayout({ subject, preheader, bodyHtml: fillEmailTemplate(tpl, context) }));
+  let html = await renderWith(template);
+  // An email-only region the HTML parser rearranged (a region tag inside an attribute,
+  // across elements, or around content a table pushed out, possibly the post) would make
+  // the archive page drop more than the region or break its markup. The template's text
+  // passed validation, so this shows only once parsed: fall back to the default, as for
+  // an invalid template, and say so on preview and test.
+  if (template !== DEFAULT_EMAIL_TEMPLATE && !emailOnlyRegionsWhole(html)) {
+    warnings.push(
+      "email template's {{ if .IsEmail }} region doesn't wrap whole elements, using the default — keep each region's {{ if .IsEmail }} and {{ end }} inside the same element, outside any attribute, and not directly inside a <table> or <tr>.",
+    );
+    template = DEFAULT_EMAIL_TEMPLATE;
+    html = await renderWith(template);
+  }
 
   // The text part's footer is fixed, not the template's, but it carries the mailing
   // address exactly when the HTML part does: a set address the template renders (SPEC

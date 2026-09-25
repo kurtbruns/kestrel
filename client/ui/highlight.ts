@@ -12,7 +12,7 @@ import { escapeHtml as esc, type Html, unsafeHtml } from "./html";
 // colors and at-rules. Logic-less templates need nothing heavier, so this stays
 // inside the dashboard's framework-free, no-build ethos (no CodeMirror, no bundler).
 function hlTokens(s: string): string {
-  return s.replace(/\{\{\s*[\w.]+\s*\}\}/g, (m) => `<span class="cx-var">${m}</span>`);
+  return s.replace(/\{\{\s*(?:if\s+)?[\w.]+\s*\}\}/g, (m) => `<span class="cx-var">${m}</span>`);
 }
 function hlHtml(raw: string): string {
   let s = esc(raw);

@@ -51,24 +51,24 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     group: "Post",
     vars: [
       {
-        token: "{{ post.body }}",
+        token: "{{ .Post.Body }}",
         desc: "Your post's Markdown, rendered to HTML — the body slot.",
       },
-      { token: "{{ post.subject }}", desc: "The post's subject line." },
+      { token: "{{ .Post.Subject }}", desc: "The post's subject line." },
     ],
   },
   {
     group: "Publication",
     vars: [
-      { token: "{{ publication.name }}", desc: "Publication name (from Identity, above)." },
-      { token: "{{ publication.tagline }}", desc: "Your tagline." },
+      { token: "{{ .Publication.Name }}", desc: "Publication name (from Identity, above)." },
+      { token: "{{ .Publication.Tagline }}", desc: "Your tagline." },
       {
-        token: "{{ publication.logo }}",
+        token: "{{ .Publication.Logo }}",
         desc: "Your logo as an image, or nothing when no logo is set.",
       },
-      { token: "{{ publication.logoUrl }}", desc: "Absolute URL of your logo, or empty." },
+      { token: "{{ .Publication.LogoURL }}", desc: "Absolute URL of your logo, or empty." },
       {
-        token: "{{ publication.address }}",
+        token: "{{ .Publication.Address }}",
         desc: "Your mailing address, if you’ve added one in Settings; empty otherwise. Keep it in the footer if you send promotional email.",
       },
     ],
@@ -76,9 +76,18 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
   {
     group: "Email",
     vars: [
-      { token: "{{ email.sentTo }}", desc: "The recipient's address (filled per send)." },
-      { token: "{{ email.unsubscribeUrl }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ email.viewInBrowserUrl }}", desc: "The archived post's permanent URL." },
+      { token: "{{ .Email.SentTo }}", desc: "The recipient's address (filled per send)." },
+      { token: "{{ .Email.UnsubscribeURL }}", desc: "Their one-click unsubscribe link." },
+      { token: "{{ .Email.ViewInBrowserURL }}", desc: "The archived post's permanent URL." },
+    ],
+  },
+  {
+    group: "Email only",
+    vars: [
+      {
+        token: "{{ if .IsEmail }} … {{ end }}",
+        desc: "Shown in the email, left out of the archived post: for the unsubscribe link, view in browser, and the address. Can't hold {{ .Post.Body }} or another region.",
+      },
     ],
   },
 ];
@@ -175,25 +184,25 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
 </style>
 
 <div class="email">
-  {{ post.body }}
+  {{ .Post.Body }}
 
   <hr class="rule" />
 
   <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td class="logo-cell">{{ publication.logo }}</td>
+      <td class="logo-cell">{{ .Publication.Logo }}</td>
       <td>
-        <div class="name">{{ publication.name }}</div>
-        <div class="tagline">{{ publication.tagline }}</div>
+        <div class="name">{{ .Publication.Name }}</div>
+        <div class="tagline">{{ .Publication.Tagline }}</div>
       </td>
     </tr>
   </table>
 
   <div class="footer">
-    Powered by Kestrel ·
-    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
-    <div class="address">{{ publication.address }}</div>
+    Powered by Kestrel{{ if .IsEmail }} ·
+    <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
+    <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
+    <div class="address">{{ .Publication.Address }}</div>{{ end }}
   </div>
 </div>`,
   },
@@ -250,15 +259,15 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
 </style>
 
 <div class="email">
-  {{ post.body }}
+  {{ .Post.Body }}
 
   <hr class="rule" />
 
   <div class="footer">
-    Powered by Kestrel ·
-    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
-    <div class="address">{{ publication.address }}</div>
+    Powered by Kestrel{{ if .IsEmail }} ·
+    <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
+    <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
+    <div class="address">{{ .Publication.Address }}</div>{{ end }}
   </div>
 </div>`,
   },
@@ -268,7 +277,7 @@ const isExampleKey = (k: string): k is ExampleKey => Object.hasOwn(EMAIL_TEMPLAT
 // Sample post body for the preview — representative prose inside a called-out slot,
 // so it's unmistakable where a real post's rendered Markdown lands. Its typography
 // comes from the template's own .email rules (the callout frame + label are a
-// preview device, not part of the email). In a real send {{ post.body }} is the
+// preview device, not part of the email). In a real send {{ .Post.Body }} is the
 // rendered Markdown.
 const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<div style="position:relative;border:1px dashed #93a7e6;border-radius:8px;padding:20px 14px 8px;margin:0 0 6px">' +
@@ -277,15 +286,18 @@ const EMAIL_TEMPLATE_SAMPLE_BODY =
   '<p style="margin:0">Dolor sit amet, consectetur adipiscing elit. Proin sed ex ipsum. Suspendisse vulputate nisi et odio dapibus, quis pellentesque felis sollicitudin. Proin vel cursus enim. Phasellus sollicitudin malesuada elementum. Suspendisse euismod eros turpis, ut mollis est imperdiet ut. Sed luctus accumsan erat, at eleifend purus eleifend quis.</p>' +
   "</div>";
 
-// Fill logic-less {{ token }} placeholders from a flat context. {{ post.body }} (the
-// rendered Markdown) and {{ publication.logo }} (built with its own escaping) are raw
+// Fill logic-less {{ token }} placeholders from a flat context. {{ .Post.Body }} (the
+// rendered Markdown) and {{ .Publication.Logo }} (built with its own escaping) are raw
 // HTML; every other value is escaped, so a stray < or "
-// in a name can't break the surrounding markup. An unknown token renders empty. A string
+// in a name can't break the surrounding markup. An unknown token renders empty, and the
+// region tags ({{ if .IsEmail }}, {{ end }}) render nothing: the sample is the email, which
+// carries the region's content. A string
 // builder by nature: the template is the publisher's own HTML, filled in and vouched for
 // at the preview's boundary (mountSampleEmailPreview).
-const RAW_TOKENS = new Set(["post.body", "publication.logo"]);
+const RAW_TOKENS = new Set([".Post.Body", ".Publication.Logo"]);
 function fillEmailTemplate(template: string, ctx: Record<string, string>): string {
-  return String(template).replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
+  const unmarked = String(template).replace(/\{\{\s*(?:if\b[^}]*|end)\s*\}\}/g, "");
+  return unmarked.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, key: string) =>
     RAW_TOKENS.has(key) ? ctx[key] || "" : escapeHtml(ctx[key] ?? ""),
   );
 }
@@ -299,21 +311,21 @@ export interface TemplateIdentity {
 }
 
 // Sample values the template preview binds — mirrors the render path's context, with
-// email.* standing in for per-recipient values. The logo is the real one or none, never
+// .Email.* standing in for per-recipient values. The logo is the real one or none, never
 // a stand-in: the preview shows the sign-off the email will carry.
 function templateSampleCtx(id: TemplateIdentity): Record<string, string> {
   const name = id.name || "Your publication";
   return {
-    "post.body": EMAIL_TEMPLATE_SAMPLE_BODY,
-    "post.subject": "The starlings are back",
-    "publication.name": name,
-    "publication.tagline": id.tagline || "Your tagline",
-    "publication.logoUrl": id.logoUrl,
-    "publication.logo": emailLogoHtml(id.logoUrl, name),
-    "publication.address": id.address,
-    "email.sentTo": "you@example.com",
-    "email.unsubscribeUrl": "#unsubscribe",
-    "email.viewInBrowserUrl": "#view-in-browser",
+    ".Post.Body": EMAIL_TEMPLATE_SAMPLE_BODY,
+    ".Post.Subject": "The starlings are back",
+    ".Publication.Name": name,
+    ".Publication.Tagline": id.tagline || "Your tagline",
+    ".Publication.LogoURL": id.logoUrl,
+    ".Publication.Logo": emailLogoHtml(id.logoUrl, name),
+    ".Publication.Address": id.address,
+    ".Email.SentTo": "you@example.com",
+    ".Email.UnsubscribeURL": "#unsubscribe",
+    ".Email.ViewInBrowserURL": "#view-in-browser",
   };
 }
 
@@ -415,7 +427,7 @@ interface TemplateSaved {
 export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
     root,
-    html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ post.body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`,
+    html`<div class="tpl-page"><div class="page-head"><div class="page-head-row"><h1>Email template</h1><span id="tplInUse"></span></div><p class="set-lede set-page-lede">The template controls the look and feel of the emails you send. You write it as HTML with a <code>&lt;style&gt;</code> block and <code>{{ variables }}</code> Kestrel fills in; your post’s Markdown is rendered into <code>{{ .Post.Body }}</code>.</p></div><div id="tplBody" class="muted">Loading…</div></div>`,
   );
   const bodyEl = $("#tplBody", root);
   let data: SettingsResponse;
@@ -459,7 +471,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       <div class="set-email-stage" id="tplStage">
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ email.* }}</code> values are set for each recipient when the post sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
+      <div class="set-preview-cap">Your post’s Markdown fills the body, and the <code>{{ .Email.* }}</code> values are set for each recipient when the post sends. Email clients render differently, so send yourself a test to see it in a real inbox.</div>
     </div>
 
     <div class="set-card">
@@ -479,8 +491,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
             </div>
             <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
-              <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ post.body }}</span>
-              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ email.unsubscribeUrl }}</span>
+              <span class="set-req-pill" id="reqBody"><span class="dot"></span>{{ .Post.Body }}</span>
+              <span class="set-req-pill" id="reqUnsub"><span class="dot"></span>{{ .Email.UnsubscribeURL }}</span>
             </div>
           </div>
           <div class="set-tpl-editor-wrap" id="tplEditorWrap">
@@ -544,13 +556,13 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const reqBodyEl = $("#reqBody");
   const reqUnsubEl = $("#reqUnsub");
   const paintReq = () => {
-    reqBodyEl.className = `set-req-pill ${/\{\{\s*post\.body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
-    reqUnsubEl.className = `set-req-pill ${/\{\{\s*email\.unsubscribeUrl\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+    reqBodyEl.className = `set-req-pill ${/\{\{\s*\.Post\.Body\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
+    reqUnsubEl.className = `set-req-pill ${/\{\{\s*\.Email\.UnsubscribeURL\s*\}\}/.test(tplEditor.value) ? "ok" : "bad"}`;
   };
 
   // Save + Discard live in the shared bottom save bar (onSave/onDiscard below); the
   // page never renders its own Save button. A rejected save (e.g. a template missing
-  // {{ email.unsubscribeUrl }}, a 400) is a blocking error, so it shows IN the bar
+  // {{ .Email.UnsubscribeURL }}, a 400) is a blocking error, so it shows IN the bar
   // (which stays up, right beside Save). Warnings are advisory and describe the
   // template that was just saved, so they stay inline under the editor.
   const bar = savebar.attach({ onSave: onSaveTemplate, onDiscard: revertTemplate }, signal);

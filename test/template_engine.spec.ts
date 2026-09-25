@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EMAIL_ONLY_CLOSE, EMAIL_ONLY_OPEN, omitEmailOnly } from "../src/render/template";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   type DeliveryContext,
@@ -16,20 +17,20 @@ import {
 // Render-phase context only — the delivery-phase tokens (unsubscribe URL, sent-to) carry
 // no value here; fillEmailTemplate freezes them to their sentinels for the delivery pass.
 const ctx: RenderContext = {
-  "post.body": "<h1>Hi</h1><p>body & more</p>",
-  "post.subject": "Subject",
-  "publication.name": 'Ben & "Co"',
-  "publication.tagline": "tag",
-  "publication.logoUrl": "https://media.example/logo?v=1",
-  "publication.logo": '<img class="logo" src="https://media.example/logo?v=1" alt="" />',
-  "publication.address": "1 Main St",
-  "email.viewInBrowserUrl": "https://arc.example/archive/x",
+  ".Post.Body": "<h1>Hi</h1><p>body & more</p>",
+  ".Post.Subject": "Subject",
+  ".Publication.Name": 'Ben & "Co"',
+  ".Publication.Tagline": "tag",
+  ".Publication.LogoURL": "https://media.example/logo?v=1",
+  ".Publication.Logo": '<img class="logo" src="https://media.example/logo?v=1" alt="" />',
+  ".Publication.Address": "1 Main St",
+  ".Email.ViewInBrowserURL": "https://arc.example/archive/x",
 };
 
 describe("fillEmailTemplate (render pass)", () => {
   it("inserts post.body raw and escapes every other render-phase value", () => {
     const out = fillEmailTemplate(
-      '<a href="{{ email.viewInBrowserUrl }}">{{ publication.name }}</a>{{ post.body }}',
+      '<a href="{{ .Email.ViewInBrowserURL }}">{{ .Publication.Name }}</a>{{ .Post.Body }}',
       ctx,
     );
     // Body HTML is inserted verbatim…
@@ -41,10 +42,10 @@ describe("fillEmailTemplate (render pass)", () => {
   });
 
   it("freezes a delivery-phase token to its sentinel, not to a render value", () => {
-    // The author writes {{ email.unsubscribeUrl }}, but it resolves at DELIVERY — so the
+    // The author writes {{ .Email.UnsubscribeURL }}, but it resolves at DELIVERY — so the
     // render pass leaves the frozen sentinel behind, whatever the render context holds.
     const out = fillEmailTemplate(
-      '<a href="{{ email.unsubscribeUrl }}">u</a>Sent to {{ email.sentTo }}',
+      '<a href="{{ .Email.UnsubscribeURL }}">u</a>Sent to {{ .Email.SentTo }}',
       ctx,
     );
     expect(out).toContain(`href="${UNSUB_SENTINEL}"`);
@@ -58,8 +59,8 @@ describe("fillEmailTemplate (render pass)", () => {
 
 describe("fillDeliveryTokens (delivery pass)", () => {
   const recipient: DeliveryContext = {
-    "email.unsubscribeUrl": "https://app.example/unsubscribe?token=abc&uid=42",
-    "email.sentTo": "reader+<x>@example.com",
+    ".Email.UnsubscribeURL": "https://app.example/unsubscribe?token=abc&uid=42",
+    ".Email.SentTo": "reader+<x>@example.com",
   };
 
   it("fills the unsubscribe URL raw and the sent-to address attribute-safe in HTML", () => {
@@ -84,7 +85,7 @@ describe("fillDeliveryTokens (delivery pass)", () => {
     const frozen = `<a href="${UNSUB_SENTINEL}">u</a><span>${SENTTO_SENTINEL}</span>`;
     const out = fillDeliveryTokens(
       frozen,
-      { "email.unsubscribeUrl": "https://app.example/unsubscribe", "email.sentTo": "" },
+      { ".Email.UnsubscribeURL": "https://app.example/unsubscribe", ".Email.SentTo": "" },
       "html",
     );
     expect(out).toBe('<a href="https://app.example/unsubscribe">u</a><span></span>');
@@ -97,17 +98,17 @@ describe("validateEmailTemplate", () => {
   });
 
   it("errors when the unsubscribe link or the body is missing", () => {
-    expect(validateEmailTemplate("<div>{{ post.body }}</div>").errors.join(" ")).toMatch(
+    expect(validateEmailTemplate("<div>{{ .Post.Body }}</div>").errors.join(" ")).toMatch(
       /unsubscribe/i,
     );
     expect(
-      validateEmailTemplate('<a href="{{ email.unsubscribeUrl }}">x</a>').errors.join(" "),
-    ).toMatch(/post\.body/);
+      validateEmailTemplate('<a href="{{ .Email.UnsubscribeURL }}">x</a>').errors.join(" "),
+    ).toMatch(/\.Post\.Body/);
   });
 
   it("warns on a missing view-in-browser link, unknown variables, and <script>", () => {
     const v = validateEmailTemplate(
-      '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">u</a>{{ mystery }}<script>x</script>',
+      '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a>{{ mystery }}<script>x</script>',
     );
     expect(v.errors).toEqual([]);
     const w = v.warnings.join(" ");
@@ -116,22 +117,94 @@ describe("validateEmailTemplate", () => {
     expect(w).toMatch(/script/i);
   });
 
+  it("treats a pre-rename placeholder as an unknown variable, with no alias", () => {
+    const v = validateEmailTemplate(
+      '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>',
+    );
+    expect(v.errors.join(" ")).toMatch(/\{\{ \.Post\.Body \}\}/);
+    expect(v.errors.join(" ")).toMatch(/\{\{ \.Email\.UnsubscribeURL \}\}/);
+    expect(v.warnings.join(" ")).toMatch(/\{\{ post\.body \}\} is not a known variable/);
+    expect(fillEmailTemplate("<p>{{ publication.name }}</p>", ctx)).toBe("<p></p>");
+  });
+
   it("warns on an <img> whose src is the bare logo URL, which is broken while no logo is set", () => {
     const base =
-      '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">u</a><a href="{{ email.viewInBrowserUrl }}">v</a>';
-    const warned = validateEmailTemplate(`${base}<img alt="" src="{{ publication.logoUrl }}">`);
-    expect(warned.warnings.join(" ")).toMatch(/publication\.logo \}\}/);
+      '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>';
+    const warned = validateEmailTemplate(`${base}<img alt="" src="{{ .Publication.LogoURL }}">`);
+    expect(warned.warnings.join(" ")).toMatch(/\.Publication\.Logo \}\}/);
     // The logo URL used elsewhere, and the logo token itself, are fine.
     expect(
-      validateEmailTemplate(`${base}<a href="{{ publication.logoUrl }}">logo</a>`).warnings,
+      validateEmailTemplate(`${base}<a href="{{ .Publication.LogoURL }}">logo</a>`).warnings,
     ).toEqual([]);
-    expect(validateEmailTemplate(`${base}{{ publication.logo }}`).warnings).toEqual([]);
+    expect(validateEmailTemplate(`${base}{{ .Publication.Logo }}`).warnings).toEqual([]);
+  });
+});
+
+describe("email-only regions ({{ if .IsEmail }} … {{ end }})", () => {
+  const base =
+    '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>';
+  const errorsOf = (tpl: string) => validateEmailTemplate(tpl).errors.join(" ");
+
+  it("keeps the region's content between inert markers, filled like the rest", () => {
+    const out = fillEmailTemplate(
+      "<p>{{ .Post.Subject }}</p>{{ if .IsEmail }}<p>{{ .Publication.Address }}</p>{{end}}",
+      ctx,
+    );
+    expect(out).toBe(`<p>Subject</p>${EMAIL_ONLY_OPEN}<p>1 Main St</p>${EMAIL_ONLY_CLOSE}`);
+  });
+
+  it("drops the whole region, markers included, for the public page", () => {
+    const frozen = `<p>a</p>${EMAIL_ONLY_OPEN}<p>b</p>${EMAIL_ONLY_CLOSE}<p>c</p>${EMAIL_ONLY_OPEN}d${EMAIL_ONLY_CLOSE}`;
+    expect(omitEmailOnly(frozen)).toBe("<p>a</p><p>c</p>");
+    expect(omitEmailOnly("<p>no region</p>")).toBe("<p>no region</p>");
+  });
+
+  it("accepts a region, even one holding the only unsubscribe link, and doesn't read {{ end }} as a variable", () => {
+    expect(
+      validateEmailTemplate(
+        '{{ .Post.Body }}{{ if .IsEmail }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>{{ end }}',
+      ),
+    ).toEqual({ errors: [], warnings: [] });
+  });
+
+  it("refuses an unclosed region, a stray {{ end }}, and a nested region", () => {
+    expect(errorsOf(`${base}{{ if .IsEmail }}x`)).toMatch(/never closed/);
+    expect(errorsOf(`${base}x{{ end }}`)).toMatch(/\{\{ end \}\} has no/);
+    expect(errorsOf(`${base}{{ if .IsEmail }}a{{ if .IsEmail }}b{{ end }}{{ end }}`)).toMatch(
+      /can't contain another/,
+    );
+  });
+
+  it("refuses the post body inside a region, since the archived post would be empty", () => {
+    expect(
+      errorsOf(
+        '{{ if .IsEmail }}{{ .Post.Body }}{{ end }}<a href="{{ .Email.UnsubscribeURL }}">u</a>',
+      ),
+    ).toMatch(/\{\{ \.Post\.Body \}\} can't be inside/);
+  });
+
+  it("refuses {{ else }}, names an empty {{ if }} cleanly, and warns on braces it doesn't fill", () => {
+    expect(errorsOf(`${base}{{ if .IsEmail }}a{{ else }}b{{ end }}`)).toMatch(
+      /\{\{ else \}\} isn't supported/,
+    );
+    expect(errorsOf(`${base}{{ if }}a{{ end }}`)).toMatch(/^\{\{ if \}\} isn't supported/);
+    const trimmed = validateEmailTemplate(`${base}{{- if .IsEmail -}}a{{- end -}}`);
+    expect(trimmed.warnings.join(" ")).toMatch(
+      /\{\{- if \.IsEmail -\}\} isn't something Kestrel fills/,
+    );
+  });
+
+  it("refuses any condition but .IsEmail, once, without a second error for its {{ end }}", () => {
+    const errors = validateEmailTemplate(`${base}{{ if .Publication.Address }}a{{ end }}`).errors;
+    expect(errors).toEqual([
+      "{{ if .Publication.Address }} isn't supported. The one condition is {{ if .IsEmail }}.",
+    ]);
   });
 });
 
 describe("identityFieldsInUse", () => {
   it("reads the logo token as rendering the logo and, as its alt text, the name", () => {
-    expect(identityFieldsInUse("{{ publication.logo }}")).toEqual(["logoUrl", "name"]);
+    expect(identityFieldsInUse("{{ .Publication.Logo }}")).toEqual(["logoUrl", "name"]);
     expect(identityFieldsInUse(DEFAULT_EMAIL_TEMPLATE).sort()).toEqual([
       "address",
       "logoUrl",
