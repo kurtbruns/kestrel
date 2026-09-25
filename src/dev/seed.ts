@@ -117,15 +117,15 @@ An email can't be unsent, so Kestrel holds still before it commits:
     sentIndex: 1,
     markdown: `# An old-fashioned list
 
-The idea behind Kestrel is simple, old-fashioned even. You keep a list of subscribers, and you write and schedule emails to it. People join the list by entering their email address in a form and confirming it.
+The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
 
 So what sets Kestrel apart from the countless other platforms and services?
 
 - **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
-- **Flexibility.** Your newsletter might not be the main place you publish, but you still want a way to reach your audience.
+- **Ownership.** You own the application, so you decide how the newsletter fits into the way you already publish. It can be a quick note when there's something new to share, or a longer piece of writing every weekend.
 - **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in the next email.
 
-Either way, the list stays yours: the subscribers, the record of their consent, the record of every delivery, and a permanent page for every issue, like this one.
+Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
 
 *P.S.* Speaking of lists and keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
   },
