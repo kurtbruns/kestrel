@@ -746,6 +746,8 @@ describe("editor view", () => {
   });
 
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
+    // Pinned before the picked fire time, so the send is still inside its window.
+    vi.setSystemTime(new Date(2026, 8, 23, 10, 0, 0));
     const server = draftServer(draft({ subject: "" }));
     const sends = sendServer();
     await open([
