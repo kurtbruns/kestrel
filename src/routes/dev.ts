@@ -6,7 +6,7 @@
  * router built for another config still 404s.
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
- *   POST /api/dev/seed  → reset the DB and load the local "Windbreak" dataset.
+ *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
  *                         Optional multipart files: `kestrel` → the cover image,
  *                         `logo` → the publication logo. Optional query: `size`
  *                         (100 / 1k / 10k / 100k) scales the list via a seeded PRNG,

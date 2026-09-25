@@ -33,17 +33,17 @@ async function deliveriesFor(sendId: string): Promise<{ email: string; event: st
   return results;
 }
 
-describe("dev seed (Windbreak dataset)", () => {
+describe("dev seed (Field Notes dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
 
     // The demo ships a branded identity so the reader surface isn't the bare fallback,
     // and default test recipients so "Send test email" is pre-filled out of the box.
     const seededSettings = await getSettings(env.DB);
-    expect(seededSettings.publication.name).toBe("Windbreak");
+    expect(seededSettings.publication.name).toBe("Field Notes");
     expect(seededSettings.testRecipients).toEqual([
-      "editor@windbreak.example",
-      "proof@windbreak.example",
+      "editor@fieldnotes.example",
+      "proof@fieldnotes.example",
     ]);
 
     expect(summary.subscribers).toEqual({
@@ -132,7 +132,7 @@ describe("dev seed (Windbreak dataset)", () => {
     await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: { ...(await adminAuth()), "content-type": "application/json" },
-      body: JSON.stringify({ publication: { name: "Windbreak" } }),
+      body: JSON.stringify({ publication: { name: "Field Notes" } }),
     });
 
     const res = await SELF.fetch(`${base}/api/dev/reset`, {
@@ -157,10 +157,10 @@ describe("dev seed (Windbreak dataset)", () => {
 
   it("serves a seeded sent post's frozen render at its archive URL, cover ref intact", async () => {
     await seedDatabase(env, config());
-    const res = await SELF.fetch(`${base}/archive/the-hovering-hunter`);
+    const res = await SELF.fetch(`${base}/archive/why-a-kestrel`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("The hovering hunter");
+    expect(body).toContain("Why a kestrel");
     // The cover image resolves to the R2-served media URL (bytes land via the route).
     expect(body).toContain("/media/posts/5eed0001-0000-4000-8000-000000000001/kestrel.jpg");
     expect(body).not.toContain("%%UNSUBSCRIBE_URL%%");
@@ -168,7 +168,7 @@ describe("dev seed (Windbreak dataset)", () => {
 
   it("keeps drafts and the scheduled post out of the public archive", async () => {
     await seedDatabase(env, config());
-    for (const slug of ["the-secret-life-of-robins", "waxwings-and-fieldfares"]) {
+    for (const slug of ["try-editing-this-draft", "the-review-window"]) {
       const res = await SELF.fetch(`${base}/archive/${slug}`);
       expect(res.status).toBe(404);
     }
@@ -200,6 +200,6 @@ describe("dev seed (Windbreak dataset)", () => {
     await seedDatabase(env, config());
     const s = await getSettings(env.DB);
     expect(s.emailTemplate).toBe(""); // back to the built-in email.* default
-    expect(s.publication.name).toBe("Windbreak"); // the demo's identity, not the old one
+    expect(s.publication.name).toBe("Field Notes"); // the demo's identity, not the old one
   });
 });

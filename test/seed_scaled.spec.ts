@@ -12,7 +12,7 @@ import {
 import { getConfig } from "../src/env";
 
 // The parametric seed (issue #149): a `size` selects a PRNG-driven list scaled to an
-// approximate target, while the default (no size) keeps the curated Windbreak dataset
+// approximate target, while the default (no size) keeps the curated Field Notes dataset
 // unchanged (guarded in detail by seed.spec.ts). These tests lock the pieces the scale
 // depends on — a reproducible PRNG, a collision-free email generator that reaches 100k,
 // and a lifecycle that still fluctuates and keeps low outcome rates at scale.

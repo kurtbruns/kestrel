@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The demo loaded by `npm run seed` is now **Field Notes**, a generic publication whose posts show off the editor, the email render, the review window, and drafts, in place of the Windbreak birding newsletter.
+
 ## [1.1.0] - 2026-09-24
 
 **Upgrading from 1.0.0.** This is a minor release that carries breaking changes to the sends API (see *Breaking*): no instance of 1.0.0 was deployed, so the version stays in the 1.x line rather than moving to 2.0.0. It adds one database migration: run `npm run migrate:remote -- --env <name>` before deploying. Update any script or agent prompt that reads sends. For local development, run `npm run migrate:local`; a local database that ran a pre-release build's migrations is rebuilt instead: stop `wrangler dev`, delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.

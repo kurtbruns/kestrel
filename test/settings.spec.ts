@@ -281,7 +281,7 @@ describe("confirmation email copy (SPEC §7)", () => {
   it("persists edited copy (trimmed) and reflects it back", async () => {
     const put = await putSettings({
       confirmationEmail: {
-        subject: "  Confirm your Windbreak subscription  ",
+        subject: "  Confirm your Field Notes subscription  ",
         body: "One tap and you're in.",
         buttonLabel: "Yes, confirm",
         reassurance: "",
@@ -289,7 +289,7 @@ describe("confirmation email copy (SPEC §7)", () => {
     });
     expect(put.status).toBe(200);
     const ce = (await getSettings()).body.settings.confirmationEmail;
-    expect(ce.subject).toBe("Confirm your Windbreak subscription");
+    expect(ce.subject).toBe("Confirm your Field Notes subscription");
     expect(ce.body).toBe("One tap and you're in.");
     expect(ce.buttonLabel).toBe("Yes, confirm");
     // A blank reassurance line is allowed (it simply drops the footer).

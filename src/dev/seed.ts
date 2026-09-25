@@ -1,6 +1,7 @@
 /**
- * The local demo dataset: a nature/birdwatching newsletter, "Windbreak", seeded
- * as a publication that has been running for a few months — not a thin static snapshot.
+ * The local demo dataset: "Field Notes", a newsletter about running a small newsletter whose
+ * posts each show off part of the app, seeded as a publication that has been running for a
+ * few months — not a thin static snapshot.
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an initial import of already-confirmed subscribers backdated before the first post,
@@ -83,121 +84,148 @@ interface SeedPost {
 const SEED_POSTS: SeedPost[] = [
   {
     id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "welcome-to-windbreak",
-    subject: "Welcome to Windbreak",
+    slug: "welcome-to-field-notes",
+    subject: "Welcome to Field Notes",
     kind: "sent",
     sentIndex: 0, // the launch post — the oldest in the archive
-    markdown: `# Welcome to the hedgerow
+    markdown: `# Welcome to Field Notes
 
-Thanks for being here. **Windbreak** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
+Thanks for subscribing. **Field Notes** is a short letter about running a small newsletter: writing it, sending it, and looking after the list you earn.
 
-Every issue is one idea you can use on your next walk:
+It's also the demo publication Kestrel loads when you run \`npm run seed\`, so every issue doubles as a tour. Each one covers one part of the job:
 
-- something to **look** for,
-- something to **listen** for,
-- and one small fact that makes it stick.
+- how an issue is **written** and previewed,
+- how it's **scheduled** and sent,
+- and what the record **keeps** afterwards.
 
-That's the whole plan. No apps to buy, no life list to keep — just a standing invitation to slow down for twenty minutes and notice what's already there.
+The subscribers, sends, and bounces in the dashboard are sample data, shaped like a list a few months old. None of it reaches a real inbox.
 
 See you in the next one.`,
   },
   {
     id: KESTREL_POST_ID,
-    slug: "the-hovering-hunter",
-    subject: "The hovering hunter",
+    slug: "why-a-kestrel",
+    subject: "Why a kestrel",
     kind: "sent",
     sentIndex: 1, // the flagship, with the cover photo
     hasCover: true,
-    markdown: `# The hovering hunter
+    markdown: `# Why a kestrel
 
-There is no mistaking a kestrel at work. Where other falcons chase, the kestrel *waits* — hanging in the air on fast-beating wings, head utterly still, reading the grass below for the twitch of a vole.
+Most falcons chase. The kestrel *waits*. It hangs in the air on fast-beating wings, head perfectly still, and watches the grass below until it's sure.
 
 ![A common kestrel hovering over a meadow](kestrel.jpg)
 
-That stillness has a name: **wind-hovering**. The bird faces into the breeze and beats just hard enough to cancel it out, so its eyes stay fixed in space while its body does all the work.
+That stillness is called **wind-hovering**: the bird faces into the breeze and flies just hard enough to cancel it out. Its body works so its eyes don't have to move.
 
-## What to look for
+## The same idea, applied to email
 
-- **Size** — smaller than a pigeon, with long pointed wings and a long tail.
-- **Colour** — a warm chestnut back; males add a blue-grey head and tail.
-- **Behaviour** — the hover is the giveaway. Nothing else our size holds station like this.
+An email can't be unsent, so Kestrel holds still before it commits:
 
-Kestrels can see ultraviolet, which lets them follow the UV-bright urine trails voles leave along their runs — a hidden map laid over an ordinary field.
+- **Preview** shows the exact email a subscriber will get, made by the same code as the send.
+- **Test** mails that same email to your own inboxes.
+- **Schedule** sets a fire time in the future, and until it arrives you can cancel the send or move it.
 
-Next time you pass a motorway verge, look up. That still point over the long grass is very likely this bird.
+> Nothing goes out the moment you click. Every send waits in a window you can still walk back.
 
 [More on the common kestrel →](https://en.wikipedia.org/wiki/Common_kestrel)`,
   },
   {
     id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "autumn-skies",
-    subject: "Autumn skies",
+    slug: "markdown-in-your-inbox",
+    subject: "Markdown in your inbox",
     kind: "sent",
     sentIndex: 2, // the most recent send
-    markdown: `# Autumn skies
+    markdown: `# Markdown in your inbox
 
-The first real cold front of autumn does something to the air. Overnight the hedgerows fill with birds that simply weren't there the day before.
+You write every issue in Markdown, and Kestrel turns it into an email that holds up in the mail apps people actually use. This issue is a sampler: each piece below is here to show how it comes out.
 
-## Who's on the move
+## Text
 
-- **Swallows and martins**, lining the wires before the long haul south.
-- **Redwings and fieldfares**, arriving from Scandinavia to strip the berries.
-- **Skeins of geese**, low and loud at first light.
+Paragraphs, **bold**, *italic*, and [links](https://commonmark.org/help/) all come through. So does \`inline code\`, for when you mention a command.
 
-Migration isn't a single event so much as a river — a few nights of hard passage, then a lull, then another push when the wind turns kind.
+## Lists
 
-Grab a flask, find a gap in the treeline, and give the sky twenty quiet minutes. This is the season that rewards standing still.`,
+Bulleted, for things that go together:
+
+- one idea per issue,
+- a subject line that says what's inside,
+- a link worth clicking.
+
+Numbered, for steps:
+
+1. Write the draft.
+2. Preview it, and send yourself a test.
+3. Schedule it, then let the review window do its job.
+
+## Quotes
+
+> Write the newsletter you'd want to get, and send it when it's ready.
+
+## Code
+
+\`\`\`
+npm run seed
+npm run simulate-send -- --in 90s
+\`\`\`
+
+---
+
+That's the whole kit. Everything else is writing.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "waxwings-and-fieldfares",
-    subject: "Waxwings and fieldfares",
+    slug: "the-review-window",
+    subject: "The review window",
     kind: "scheduled",
-    markdown: `# Waxwings and fieldfares
+    markdown: `# The review window
 
-When the berries ripen and the north turns hard, the supermarket car parks fill up — with **waxwings**. These punk-crested wanderers arrive in irruption years to gorge on rowan and cotoneaster, often in the most unglamorous corners of town.
+If you're reading this in the dashboard, it hasn't gone out yet. This issue is **scheduled**: it has a fire time, and until that moment it's only a plan.
 
-## Worth the detour
+## Before it fires
 
-- **Waxwings** — trilling flocks, sleek fawn bodies, a flash of yellow and red in the wing.
-- **Fieldfares** — bold, chuckling thrushes working the hedges in loose parties.
-- **Bramblings** — hiding among the chaffinches under the beeches.
+- **Cancel** the send, and the post is an editable draft again.
+- **Reschedule** it to a different time, without touching what was reviewed.
+- **Send a test** to check the frozen email one more time.
 
-Keep an eye on the berry trees near the shops this month. Some of the best winter birding happens where nobody thinks to look.`,
+When the fire time arrives, the window closes. Kestrel takes the list as it stands (confirmed subscribers, minus anyone who bounced or complained), mails each address once, and records every delivery. After that, this issue has a permanent page in the archive.
+
+To watch that happen locally, run \`npm run simulate-send\`: it moves this issue a minute or two out and prints the address of its send view.`,
   },
   {
     id: "5eed0006-0000-4000-8000-000000000006",
-    slug: "the-secret-life-of-robins",
-    subject: "The secret life of robins",
+    slug: "try-editing-this-draft",
+    subject: "Try editing this draft",
     kind: "draft",
     daysAgo: 2,
-    markdown: `# The secret life of robins
+    markdown: `# Try editing this draft
 
-*(Draft — notes toward the next issue.)*
+*(Draft. Nobody has seen this but you.)*
 
-The robin following your spade isn't being friendly; it's being opportunistic. In the woods it does the same thing behind wild boar, waiting for turned earth to expose a meal.
+This post is here to experiment on. Change a word, add a heading, drop in an image, and watch the preview follow.
 
-TODO:
-- the myth of the "friendly" robin
-- why both sexes hold winter territory
-- that they'll sing under a streetlight all night`,
+A few things to try:
+
+- **Preview** shows the email exactly as a subscriber will get it.
+- **Send test** mails it to the test inboxes in Settings. In this demo they're \`fieldnotes.example\` addresses, which never reach a real inbox.
+- **Schedule** puts it in the queue behind the review window.
+
+Nothing you do to a draft reaches the list until you schedule it and its window closes.`,
   },
   {
     id: "5eed0007-0000-4000-8000-000000000007",
-    slug: "the-ethics-of-backyard-feeding",
-    subject: "The ethics of backyard feeding",
+    slug: "ideas-for-next-month",
+    subject: "Ideas for next month",
     kind: "draft",
     daysAgo: 6,
-    markdown: `# The ethics of backyard feeding
+    markdown: `# Ideas for next month
 
-*(Draft — still thinking this one through.)*
-
-Feeding garden birds is one of the most popular ways people connect with wildlife — and it isn't automatically harmless. Dirty feeders spread disease; the wrong food does more harm than good.
+*(Draft. Notes, not an issue yet.)*
 
 TODO:
-- clean feeders on a schedule (and why)
-- what never to put out
-- feeding as a supplement, not a dependency`,
+- what double opt-in is for, and why the list is smaller (and better) for it
+- reading a send's record: accepted, bounced, complained
+- unsubscribes: one click, honored at once
+- the archive as the permanent home for every issue`,
   },
 ];
 
@@ -639,7 +667,7 @@ function buildAudience(t: Timeline): BuiltAudience {
 // --- scaled audience (parametric seed) --------------------------------------
 
 /** Options for a parametric seed. `size` is the approximate confirmed-now list size (an
- *  approximate target, not exact); absent, the curated Windbreak dataset is loaded
+ *  approximate target, not exact); absent, the curated Field Notes dataset is loaded
  *  unchanged. `seed` makes a given `(size, seed)` reproducible. */
 export interface SeedOptions {
   size?: number;
@@ -965,7 +993,7 @@ export interface SeedSummary {
 }
 
 /**
- * Reset the database and load the Windbreak demo dataset. `kestrelFile` and
+ * Reset the database and load the Field Notes demo dataset. `kestrelFile` and
  * `logoFile`, when provided, are written to R2 (the post cover, and the publication
  * logo) — both are supplied by `scripts/seed.mjs` from `scripts/seed-assets/`, so
  * the seed carries no bundled bytes. The cover is referenced by the post either
@@ -986,18 +1014,18 @@ export async function seedDatabase(
   await resetAll(db);
 
   // Give the demo a real identity so the reader surface, subscribe form, and post
-  // pages are branded out of the box as the mock publication, "Windbreak". The default
+  // pages are branded out of the box as the mock publication, "Field Notes". The default
   // test recipients are the publisher's own proofing inboxes (they bypass the
   // subscribe/consent flow, §7), so "Send test email" pre-fills them out of the box and
   // that path is exercised without hand-typing an address. `.example` is the reserved
   // demo TLD, so these can never reach a real inbox even under a live provider.
   await updateSettings(db, {
     publication: {
-      name: "Windbreak",
-      tagline: "for the birds",
+      name: "Field Notes",
+      tagline: "Notes on keeping a small newsletter",
       address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
-    testRecipients: ["editor@windbreak.example", "proof@windbreak.example"],
+    testRecipients: ["editor@fieldnotes.example", "proof@fieldnotes.example"],
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.
