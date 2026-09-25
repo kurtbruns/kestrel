@@ -9,7 +9,7 @@ paths:
 
 # Keeping Kestrel's changelog
 
-`CHANGELOG.md` is the human-readable record of what changed between releases. It exists so an operator can upgrade their own instance safely, and so getkestrel.dev can pin its docs to a tagged version and see the delta on each bump. It follows [Keep a Changelog](https://keepachangelog.com/) and [semver](https://semver.org/): the running instance reports its `package.json` version (see the build stamp), so the version people see is the one this file describes.
+`CHANGELOG.md` is the human-readable record of what changed between releases. It exists so an operator can upgrade their own instance safely, and so getkestrel.dev can pin its docs to a tagged version and see the delta on each bump. It follows [Keep a Changelog](https://keepachangelog.com/), and its versions are `MAJOR.RELEASE.PATCH` (below), not semver: the running instance reports its `package.json` version (see the build stamp), so the version people see is the one this file describes.
 
 ## Add an entry in the same commit as the change
 
@@ -21,7 +21,7 @@ A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.c
 
 ## How to write the line
 
-- **Section.** Group under `Added`, `Changed`, `Fixed`, or `Breaking`. A `Breaking` entry also decides the next release is a major bump.
+- **Section.** Group under `Added`, `Changed`, `Fixed`, or `Breaking`. A `Breaking` entry means the next release can't be a patch.
 - **Level.** One line, written for the person running Kestrel: what changed for them, not the mechanism. Cite a `docs/SPEC.md` section if it helps; never a file or symbol.
 - **Voice.** Match the entries already there. No PR or issue numbers (the repo's comment style keeps those out of prose).
 - **Upgrade steps go once.** What an operator must do to upgrade (apply a migration, add a setting, rebuild a local database) lives in the *Upgrading* paragraph at the top of the release, never on an entry, so a later entry added above or below can't strand a pointer to it. A change that adds a step updates that paragraph in the same commit.
@@ -45,4 +45,8 @@ A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.c
 
    A tag and a release are separate objects: pushing the tag alone leaves the Releases page empty. The notes are the changelog section verbatim, so the two never say different things, and `--verify-tag` refuses to run before the tag is on the remote, so a release can never mint its own tag at the wrong commit.
 
-Pick the number by semver against the last tag: a `Breaking` entry forces a major bump; new features are a minor bump; fixes alone are a patch.
+Pick the number against the last tag. Versions are `MAJOR.RELEASE.PATCH`, not semver: Kestrel is an app its operators upgrade, so the changelog, not the number, says what breaks.
+
+- **Major:** only when the maintainer decides (a rewrite, or an upgrade that can't be made in one step), never because of a `Breaking` entry. It resets the other two: `1.4.2` → `2.0.0`.
+- **Release:** any release with more than fixes, breaking changes included: `1.1.0` → `1.2.0`.
+- **Patch:** fixes only: `1.2.0` → `1.2.1`. Never a feature or a `Breaking` entry.
