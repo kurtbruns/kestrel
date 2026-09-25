@@ -1,8 +1,8 @@
 /**
- * The local demo dataset: "Field Notes", a short nature newsletter about one kestrel in one
- * field, seeded as a publication that has been running for a few months — not a thin static
- * snapshot. The posts read as a real newsletter, and between them use what the render path
- * handles (a cover image, headings, emphasis, both kinds of list, a quote, links, a rule).
+ * The local demo dataset: "Field Notes", a demo publication whose issues walk through what
+ * Kestrel does, seeded as a publication that has been running for a few months — not a thin
+ * static snapshot. Between them the posts use what the render path handles (a cover image,
+ * headings, emphasis, both kinds of list, a quote, links, a rule).
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an initial import of already-confirmed subscribers backdated before the first post,
@@ -84,139 +84,133 @@ interface SeedPost {
 
 const SEED_POSTS: SeedPost[] = [
   {
-    id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "first-sighting",
-    subject: "First sighting",
-    kind: "sent",
-    sentIndex: 0, // the launch post — the oldest in the archive
-    markdown: `# First sighting
-
-It started with a shape over the field behind the library: a small bird holding perfectly still in a stiff wind, as if someone had pinned it to the sky.
-
-I didn't know what it was. I stood on the path long enough that a dog walker asked if I was all right. When it finally dropped into the grass, I went home and looked it up. A **kestrel**.
-
-That was in the spring. I've been back most mornings since, and this letter is where the notes go.
-
-## What to expect
-
-- A short issue every few weeks.
-- Whatever the field is doing: the kestrel, mostly, and whoever else turns up.
-- A link or two worth your time.
-
-Thanks for signing up. See you out there.`,
-  },
-  {
     id: KESTREL_POST_ID,
     slug: "the-hovering-hunter",
     subject: "The hovering hunter",
     kind: "sent",
-    sentIndex: 1, // the flagship, with the cover photo
+    sentIndex: 0, // the launch post, the oldest in the archive, with the cover photo
     hasCover: true,
     markdown: `# The hovering hunter
 
-Most mornings she's there by eight, working the long grass along the east edge of the field.
+Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
+
+The app is named after a small falcon with an unusual way of hunting.
 
 ![A kestrel in flight, wings spread over a green field](kestrel.jpg)
 
-Where a falcon like the peregrine chases, a kestrel *waits*. She turns into the wind and beats her wings just hard enough to cancel it out, so her body works while her head stays fixed in the air. It's called **wind-hovering**, and from the path it looks effortless. It isn't.
+Where other falcons chase, a kestrel *waits*. It turns into the wind and beats its wings just hard enough to cancel it out, holding its head perfectly still while it watches the grass below. It's called **wind-hovering**, and the kestrel only drops when it's sure.
 
-## What to look for
+## Why that fits a newsletter
 
-- **Size:** a little smaller than a pigeon, with long pointed wings and a long tail.
-- **Color:** warm chestnut above. Males have a blue-grey head and tail, like the one in the photo. Mine is a female, browner all over and barred.
-- **The hover:** the giveaway. Nothing else that size holds still in the air like that.
+An email can't be unsent, so Kestrel holds still before it commits:
 
-Kestrels can see ultraviolet light, which helps: voles mark their runs with urine that shows up in it, so the field she's reading isn't the one I see.
-
-## From the notebook
-
-> Hovered six times along the fence line before she dropped. Came up with nothing. Tried again a little further on.
-
-Most attempts miss. I've stopped counting them, which is probably a sign I've started counting something else.
+- **Write** in Markdown, in the web editor or with Claude.
+- **Preview** the exact email your subscribers will get.
+- **Schedule** it behind a review window you can cancel.
+- **Send** it to a double opt-in list, and archive it for good.
 
 [More on the common kestrel →](https://en.wikipedia.org/wiki/Common_kestrel)`,
   },
   {
+    id: "5eed0004-0000-4000-8000-000000000004",
+    slug: "you-keep-what-matters",
+    subject: "You keep what matters",
+    kind: "sent",
+    sentIndex: 1,
+    markdown: `# You keep what matters
+
+Most newsletter platforms rent you access to your own audience. Kestrel runs on your own Cloudflare account, so the parts a newsletter is actually made of stay yours.
+
+## The list
+
+Your subscribers live in your own database, not a vendor's.
+
+## The consent
+
+Every subscription is double opt-in, and each confirmation and unsubscribe is recorded. The proof that you had permission stays with you.
+
+## The delivery
+
+Each send records who received which issue. Hard bounces and spam complaints suppress an address on their own, so it's never mailed again.
+
+## The archive
+
+Every issue gets a permanent public page, like this one, so the links you send keep working.
+
+> Your audience. Your data. Your newsletter.`,
+  },
+  {
     id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "list-making",
-    subject: "List making",
+    slug: "write-preview-schedule-send",
+    subject: "Write, preview, schedule, send",
     kind: "sent",
     sentIndex: 2, // the most recent send
-    markdown: `# List making
+    markdown: `# Write, preview, schedule, send
 
-Every birder I've met keeps a list, even the ones who say they don't.
+Every issue of Field Notes goes through the same four steps, whether it's written in the web editor or handed to Claude. Both work through the same API, so the result is the same either way.
 
-The serious ones keep several: a life list, a year list, a county list, a list of birds seen from a moving train. If you want to see where that leads, [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) is a documentary about the people who take it furthest. It will either send you across the country for a single warbler or put you off binoculars for good.
-
-## My lists, such as they are
-
-1. Birds seen from the field: 31.
-2. Birds seen *from the path to the field*: 34, because a heron flew over the car park once.
-3. Mornings the kestrel was there when I arrived: I stopped keeping this one.
-
-A list is a way of paying attention, but it always pulls you toward the next bird. The other way is to stay with one. J. A. Baker spent ten years following peregrines along the Essex coast, and *The Peregrine* folds them into a single winter. No list at all, just one bird, watched closely enough to change the person watching.
-
-I'm not there. But I've noticed I check the fence posts before I check the sky.
+1. **Write** in Markdown. Headings, *emphasis*, lists, quotes, images, and [links](https://commonmark.org/help/) all carry through to the email.
+2. **Preview** the exact email, both the HTML and the plain-text version, not an approximation. Then send yourself a test.
+3. **Schedule** it. The send waits behind a countdown, and until it fires you can cancel it or move it.
+4. **Send** to confirmed subscribers only. If a send is interrupted, it picks up where it left off without mailing anyone twice.
 
 ---
 
-Next time: the first frost, and what the cold does to the field.`,
+Next issue: a closer look at that review window.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "first-frost",
-    subject: "First frost",
+    slug: "the-review-window",
+    subject: "The review window",
     kind: "scheduled",
-    markdown: `# First frost
+    markdown: `# The review window
 
-The field was white this morning, every stem of grass furred with ice, and the kestrel wasn't hovering.
+This issue is **scheduled**: it has a fire time, and until that moment it's only a plan.
 
-She was on the third fence post from the gate, hunched and watching. Hovering costs a lot of energy, and in the cold kestrels hunt from a perch more often, waiting for movement instead of searching for it. The same patience, just cheaper.
+## Before it fires
 
-## What changed overnight
+- **Cancel** the send, and the post is an editable draft again.
+- **Reschedule** it to a different time, without touching what was reviewed.
+- **Send a test** to check the email one more time.
 
-- **The tracks showed.** The frost kept every footprint: fox, rabbit, and mine, going round in circles.
-- **The sound went.** Frozen grass doesn't rustle, so anything moving in it is louder.
-- **New company.** A loose flock of thrushes had found the berries along the fence.
+When the fire time arrives, the window closes. Kestrel takes the list as it stands (confirmed subscribers, minus anyone who bounced or complained), mails each address once, and records every delivery. After that, this issue gets its permanent page in the archive.
 
-I stood there until my hands stopped working. She dropped once, straight down off the post, and came up with something small. Then she went back to the same post, as if nothing had happened.
-
-More next time, if the weather holds.`,
+To watch that happen locally, run \`npm run simulate-send\`: it moves this issue a minute or two out and prints the address of its send view.`,
   },
   {
     id: "5eed0006-0000-4000-8000-000000000006",
-    slug: "owls-after-dark",
-    subject: "Owls after dark",
+    slug: "try-editing-this-draft",
+    subject: "Try editing this draft",
     kind: "draft",
     daysAgo: 2,
-    markdown: `# Owls after dark
+    markdown: `# Try editing this draft
 
-*(Draft. Notes toward a later issue.)*
+*(Draft. Nobody has seen this but you.)*
 
-Walked the field at dusk for the first time. Heard an owl from the trees behind the library, twice, then nothing.
+This post is here to experiment on. Change a word, add a heading, drop in an image, and watch the preview follow.
 
-TODO:
-- go back on a still night, and wait longer
-- where does the kestrel roost when it's dark?
-- ask at the library who else walks here at night`,
+A few things to try:
+
+- **Preview** shows the email exactly as a subscriber will get it.
+- **Send test** mails it to the test inboxes in Settings. In this demo they're \`fieldnotes.example\` addresses, which never reach a real inbox.
+- **Schedule** puts it in the queue behind the review window.
+
+Nothing you do to a draft reaches the list until you schedule it and its window closes.`,
   },
   {
     id: "5eed0007-0000-4000-8000-000000000007",
-    slug: "the-years-list",
-    subject: "The year's list",
+    slug: "ideas-for-next-month",
+    subject: "Ideas for next month",
     kind: "draft",
     daysAgo: 6,
-    markdown: `# The year's list
+    markdown: `# Ideas for next month
 
-*(Draft. To finish in December.)*
-
-1. Kestrel
-2. Heron (over the car park, still counts)
-3. …
+*(Draft. Notes, not an issue yet.)*
 
 TODO:
-- the final count
-- the one that got away`,
+- drafting an issue with Claude, through the same API as the editor
+- reading a send's record: accepted, bounced, complained
+- putting the archive on your own domain`,
   },
 ];
 
@@ -1013,7 +1007,7 @@ export async function seedDatabase(
   await updateSettings(db, {
     publication: {
       name: "Field Notes",
-      tagline: "Notes from one small field",
+      tagline: "A demo publication of Kestrel",
       address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
     testRecipients: ["editor@fieldnotes.example", "proof@fieldnotes.example"],
