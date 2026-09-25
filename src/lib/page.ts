@@ -42,16 +42,25 @@ input { font:inherit; font-size:16px; padding:10px; width:100%; border:1px solid
 @media (prefers-color-scheme: dark) { .btn:focus-visible, input:focus-visible, a:focus-visible { outline-color:#60a5fa; } }
 `;
 
-export function htmlPage(title: string, bodyHtml: string, status = 200): Response {
+/** A small card page (confirm, unsubscribe, not found). `devDashboardUrl` is the
+ *  dev-only editor shortcut (SPEC §5/§11), passed solely on a dev-shaped instance; the
+ *  card has none of the reader tokens, so the pill brings its own stylesheet. */
+export function htmlPage(
+  title: string,
+  bodyHtml: string,
+  status = 200,
+  devDashboardUrl?: string,
+): Response {
+  const devStyle = devDashboardUrl ? `<style>${DEV_BADGE_STYLE}</style>` : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>${CARD_STYLE}</style>
+<style>${CARD_STYLE}</style>${devStyle}
 </head>
-<body><div class="wrap">${bodyHtml}</div></body>
+<body><div class="wrap">${bodyHtml}</div>${devDashboardBadge(devDashboardUrl)}</body>
 </html>`;
   return new Response(doc, {
     status,
@@ -79,9 +88,10 @@ const READER_BG_DARK = "#12110f";
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
    over-the-page dev chrome — deliberately not the publication's own identity — so
    it reads as tooling, never as part of the reader surface. Absent once deployed.
-   Self-contained, because it rides two stylesheets: the reader shell's and, on a
-   post page, the browser-only chrome injected into the frozen render, which has none
-   of the reader tokens (so the font is set here rather than inherited). */
+   Self-contained, because it rides three kinds of page: the reader shell, the small
+   card pages, and a post page (as browser-only chrome injected into the frozen
+   render). The last two have none of the reader tokens, so the font is set here
+   rather than inherited. */
 const DEV_BADGE_STYLE = `
 /* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only element
    the reader surface carries. That badge is app chrome, not the publication's

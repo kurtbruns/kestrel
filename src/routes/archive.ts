@@ -129,6 +129,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
       "Not found",
       `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
       404,
+      devDashboardUrl(c.config),
     );
   }
   // Four edits to the frozen record on the way to the browser (I3), all at reserved

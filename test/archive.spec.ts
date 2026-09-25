@@ -16,7 +16,7 @@ import {
 } from "../src/render/render";
 import type { RequestContext } from "../src/router";
 import { archiveIndex, archivePage, landing } from "../src/routes/archive";
-import { subscribeForm } from "../src/routes/public";
+import { confirmLanding, subscribeForm, unsubscribeLanding } from "../src/routes/public";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -395,5 +395,35 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     expect(on).toContain('class="r-dev"');
     expect(off).not.toContain('class="r-dev"');
     expect(off).not.toContain("/dashboard");
+  });
+
+  // The card pages: confirm and unsubscribe, which a local developer reaches from a
+  // link in a test email, and the post 404. Each has its own stylesheet, so the pill
+  // brings its own.
+  it("the card pages render the pill and its styles only when devMode is true", async () => {
+    await ensureSubscriber();
+    const cards: [string, (c: RequestContext) => Promise<Response>, string][] = [
+      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope"],
+      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a"],
+      ["unsubscribe (invalid link)", unsubscribeLanding, "/unsubscribe?token=nope"],
+      ["post not found", archivePage, "/archive/missing"],
+    ];
+    for (const [name, handler, path] of cards) {
+      const params = { slug: "missing" };
+      const on = await (await handler(ctxFor(true, path, params))).text();
+      const off = await (await handler(ctxFor(false, path, params))).text();
+      expect(on, name).toContain('class="r-dev"');
+      expect(on, name).toContain("--k-accent:#3355cc");
+      expect(off, name).not.toContain("r-dev");
+      expect(off, name).not.toContain("--k-accent");
+      expect(off, name).not.toContain("/dashboard");
+    }
+  });
+
+  it("the one-click unsubscribe POST still answers plain text, with no page chrome", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("unsubscribed");
   });
 });
