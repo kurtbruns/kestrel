@@ -84,6 +84,15 @@ describe("starting templates", () => {
       );
     }
   });
+
+  it("marks each footer's inbox links as email-only, and the sample (the email) shows them with no tags", () => {
+    for (const ex of Object.values(EMAIL_TEMPLATE_EXAMPLES)) {
+      expect(ex.html).toContain("{{ if .IsEmail }}");
+      const filled = sampleEmailHtml(ex.html, id);
+      expect(filled).toContain(">Unsubscribe</a>");
+      expect(filled).not.toContain("{{");
+    }
+  });
 });
 
 describe("template view", () => {

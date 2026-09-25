@@ -16,6 +16,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - Email template placeholders take Hugo-style names: `{{ .Post.Body }}`, `{{ .Publication.Name }}`, `{{ .Email.UnsubscribeURL }}`, and so on (SPEC §9). An old name is an unknown variable, so a template still on the old names is refused for want of the body and unsubscribe placeholders.
 
+### Added
+
+- The email template can mark a region email-only with `{{ if .IsEmail }} … {{ end }}`: every email carries it, and the archived post leaves it out. The built-in and starting templates mark their unsubscribe and view-in-browser links and the mailing address, so the public page no longer shows them (SPEC §5, §9).
+
 ## [1.1.0] - 2026-09-24
 
 **Upgrading from 1.0.0.** This is a minor release that carries breaking changes to the sends API (see *Breaking*): no instance of 1.0.0 was deployed, so the version stays in the 1.x line rather than moving to 2.0.0. It adds one database migration: run `npm run migrate:remote -- --env <name>` before deploying. Update any script or agent prompt that reads sends. For local development, run `npm run migrate:local`; a local database that ran a pre-release build's migrations is rebuilt instead: stop `wrangler dev`, delete `.wrangler/state/v3/d1`, and run `npm run migrate:local`.

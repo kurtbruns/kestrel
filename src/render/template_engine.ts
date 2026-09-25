@@ -1,6 +1,8 @@
 /**
  * The email template engine: a publisher-authored HTML layout with a `<style>` block
- * and logic-less `{{ variables }}`, filled and CSS-inlined at render time (SPEC §9).
+ * and logic-less `{{ .Variables }}`, filled and CSS-inlined at render time (SPEC §9). One
+ * construct goes beyond a placeholder: `{{ if .IsEmail }} … {{ end }}` marks a region as
+ * email-only, which the render keeps between inert markers and the archive page omits.
  *
  * One token registry (`TOKENS`) is the single source of truth for every variable — the
  * pass that fills it (`render` vs `delivery`) and how its value is escaped. Two resolvers
@@ -28,6 +30,7 @@ import type { AppSettings } from "../db/settings";
 import { BRANDING_LOGO_KEY } from "../db/settings";
 import type { Config } from "../env";
 import { escapeHtmlAttr } from "../lib/html";
+import { EMAIL_ONLY_CLOSE, EMAIL_ONLY_OPEN } from "./template";
 
 // --- the token registry -----------------------------------------------------------
 // One place declares every {{ variable }} a template may use: which pass fills it and
@@ -118,12 +121,31 @@ const DELIVERY_TOKENS: { key: DeliveryKey; escaping: Escaping; sentinel: string 
 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
 
-/** RENDER pass. Substitute `{{ token }}` for each render-phase token (escaped per the
- *  registry; `.Post.Body` raw) and freeze each delivery-phase token to its sentinel, so
- *  the per-recipient pass can fill it later. Logic-less: a token is only ever replaced
- *  by a value. An unknown token renders empty (validation warns). */
+/** A region tag: `{{ if <condition> }}` (the condition in group 1) or `{{ end }}` (no
+ *  group 1). Read before placeholders, since `TOKEN` would take `{{ end }}` for one. */
+const REGION_TAG = /\{\{\s*(?:if\b\s*([^}]*?)|end)\s*\}\}/g;
+
+/** The one condition a region may take. */
+const IS_EMAIL = ".IsEmail";
+
+/** The template with its region tags turned into the inert markers. A tag validation
+ *  refuses (any other condition) renders empty, as an unknown placeholder does. */
+function markEmailOnlyRegions(html: string): string {
+  return html.replace(REGION_TAG, (_m, cond: string | undefined) => {
+    if (cond === undefined) {
+      return EMAIL_ONLY_CLOSE;
+    }
+    return cond === IS_EMAIL ? EMAIL_ONLY_OPEN : "";
+  });
+}
+
+/** RENDER pass. Mark the email-only regions, then substitute `{{ token }}` for each
+ *  render-phase token (escaped per the registry; `.Post.Body` raw) and freeze each
+ *  delivery-phase token to its sentinel, so the per-recipient pass can fill it later.
+ *  Logic-less: a token is only ever replaced by a value, and a region is kept whole in
+ *  the frozen bytes, not decided here. An unknown token renders empty (validation warns). */
 export function fillEmailTemplate(html: string, ctx: RenderContext): string {
-  return html.replace(TOKEN, (_m, key: string) => {
+  return markEmailOnlyRegions(html).replace(TOKEN, (_m, key: string) => {
     const spec = (TOKENS as Record<string, TokenSpec>)[key];
     if (!spec) {
       return "";
@@ -163,7 +185,7 @@ export function fillDeliveryTokens(
 /** Every `{{ token }}` name a template references, known or not. */
 export function templateTokens(html: string): Set<string> {
   const tokens = new Set<string>();
-  for (const m of html.matchAll(TOKEN)) {
+  for (const m of html.replace(REGION_TAG, "").matchAll(TOKEN)) {
     if (m[1]) {
       tokens.add(m[1]);
     }
@@ -216,6 +238,50 @@ export interface TemplateValidation {
 /** An `<img>` whose `src` is the bare logo URL: empty, so broken, while no logo is set. */
 const LOGO_URL_AS_IMG_SRC = /<img\b[^>]*\bsrc\s*=\s*["']?\s*\{\{\s*\.Publication\.LogoURL\s*\}\}/i;
 
+/** `{{ .Post.Body }}`, looked for inside an email-only region. */
+const POST_BODY = /\{\{\s*\.Post\.Body\s*\}\}/;
+
+/** What is wrong with a template's email-only regions: a condition other than
+ *  `.IsEmail`, a region inside another, an `{{ end }}` with nothing to close, a region
+ *  never closed, or the post body inside one (the public page would have no post). An
+ *  unsupported condition still opens a region, so its own `{{ end }}` isn't reported too. */
+function regionErrors(html: string): string[] {
+  const errors: string[] = [];
+  let openAt = -1;
+  for (const m of html.matchAll(REGION_TAG)) {
+    const cond = m[1];
+    const at = m.index ?? 0;
+    if (cond === undefined) {
+      if (openAt < 0) {
+        errors.push("{{ end }} has no {{ if .IsEmail }} to close.");
+      } else if (POST_BODY.test(html.slice(openAt, at))) {
+        errors.push(
+          "{{ .Post.Body }} can't be inside {{ if .IsEmail }}: the archived post would have no content.",
+        );
+      }
+      openAt = -1;
+      continue;
+    }
+    if (cond !== IS_EMAIL) {
+      const tag = cond ? `{{ if ${cond} }}` : "{{ if }}";
+      errors.push(`${tag} isn't supported. The one condition is {{ if .IsEmail }}.`);
+    }
+    if (openAt >= 0) {
+      errors.push("An email-only region can't contain another. Close the first with {{ end }}.");
+    }
+    openAt = at + m[0].length;
+  }
+  if (openAt >= 0) {
+    errors.push("{{ if .IsEmail }} is never closed. Add {{ end }} after the email-only part.");
+  }
+  if (/\{\{\s*else\s*\}\}/.test(html)) {
+    errors.push(
+      "{{ else }} isn't supported. A region is shown in the email and left out of the archived post; there is no alternative.",
+    );
+  }
+  return errors;
+}
+
 /** Check a template for the variables an email can't do without (errors) and for
  *  likely mistakes (warnings). Errors block the send; warnings are surfaced but
  *  allowed. The unsubscribe error is load-bearing: no email may ship without a way
@@ -225,6 +291,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   const warnings: string[] = [];
   const tokens = templateTokens(html);
 
+  errors.push(...regionErrors(html));
   if (!tokens.has(".Post.Body")) {
     errors.push("Every email must include {{ .Post.Body }} to render the content of the post.");
   }
@@ -239,6 +306,16 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {
       warnings.push(`{{ ${t} }} is not a known variable and will render empty.`);
+    }
+  }
+  // Anything else in braces (Hugo's `{{- -}}` trim, a function call) is neither a
+  // placeholder nor a region tag, so it would ship as written.
+  for (const m of html
+    .replace(REGION_TAG, "")
+    .replace(TOKEN, "")
+    .matchAll(/\{\{[^}]*\}\}/g)) {
+    if (!/^\{\{\s*else\s*\}\}$/.test(m[0])) {
+      warnings.push(`${m[0]} isn't something Kestrel fills, so it will show as written.`);
     }
   }
   if (LOGO_URL_AS_IMG_SRC.test(html)) {
@@ -323,7 +400,8 @@ export function defaultBranding(): EmailBranding {
 
 /** The built-in template — a signed sign-off (logo, name, tagline) over a "Powered by
  *  Kestrel · Unsubscribe · View in browser" footer, with the mailing address under it
- *  (an empty line while none is set). With no logo set, the logo cell is empty and
+ *  (an empty line while none is set). All but "Powered by Kestrel" is email-only, so the
+ *  archived post keeps the sign-off and a footer but no inbox links or address. With no logo set, the logo cell is empty and
  *  collapses, so the sign-off is the name and tagline alone. Authored with a `<style>` block;
  *  the render path inlines it. Sent out of the box when the operator sets no template. */
 export const DEFAULT_EMAIL_TEMPLATE = `<style>
@@ -415,9 +493,9 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
   </table>
 
   <div class="footer">
-    Powered by Kestrel ·
+    Powered by Kestrel{{ if .IsEmail }} ·
     <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
     <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
-    <div class="address">{{ .Publication.Address }}</div>
+    <div class="address">{{ .Publication.Address }}</div>{{ end }}
   </div>
 </div>`;

@@ -4,9 +4,9 @@
  * path (every sent post), and each post page — a sent Send's frozen rendered_html,
  * the reviewed, delivered copy (I3), with edits that leave the content untouched and
  * only fill reserved anchors: the per-recipient unsubscribe sentinel becomes a generic
- * manage-subscription link (a public page has no single recipient), and the inert
+ * manage-subscription link (a public page has no single recipient), the inert
  * anchors become browser-only chrome (masthead + the display font and reader ground)
- * that never ships in an email.
+ * that never ships in an email, and the template's email-only regions are left out.
  */
 
 import { getBySlug } from "../db/posts";
@@ -26,6 +26,7 @@ import {
   ARCHIVE_MASTHEAD_ANCHOR,
   archiveMasthead,
   archiveUrl,
+  omitEmailOnly,
 } from "../render/render";
 import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
@@ -129,11 +130,11 @@ export async function archivePage(c: RequestContext): Promise<Response> {
       404,
     );
   }
-  // Three edits to the frozen record on the way to the browser (I3), all filling
-  // reserved anchors — none touches the reviewed content: the generic unsubscribe
-  // link (no single recipient here), the browser-only masthead, and the hosted-page
-  // <head> chrome (display-serif links + the reader-ground background) — web-only,
-  // never in a sent email.
+  // Four edits to the frozen record on the way to the browser (I3), all at reserved
+  // markers — none touches the reviewed content: the generic unsubscribe link (no single
+  // recipient here), the browser-only masthead, the hosted-page <head> chrome
+  // (display-serif links + the reader-ground background) — web-only, never in a sent
+  // email — and the template's email-only regions, which the page leaves out.
   const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
     name: identity.name,
@@ -146,7 +147,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   // link (no single recipient here) and an empty sent-to address (redacted so none leaks).
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
   const html = fillDeliveryTokens(
-    send.rendered_html,
+    omitEmailOnly(send.rendered_html),
     { ".Email.UnsubscribeURL": `${c.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
     "html",
   )

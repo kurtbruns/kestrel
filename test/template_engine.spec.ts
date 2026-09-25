@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { EMAIL_ONLY_CLOSE, EMAIL_ONLY_OPEN, omitEmailOnly } from "../src/render/template";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   type DeliveryContext,
@@ -136,6 +137,68 @@ describe("validateEmailTemplate", () => {
       validateEmailTemplate(`${base}<a href="{{ .Publication.LogoURL }}">logo</a>`).warnings,
     ).toEqual([]);
     expect(validateEmailTemplate(`${base}{{ .Publication.Logo }}`).warnings).toEqual([]);
+  });
+});
+
+describe("email-only regions ({{ if .IsEmail }} … {{ end }})", () => {
+  const base =
+    '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>';
+  const errorsOf = (tpl: string) => validateEmailTemplate(tpl).errors.join(" ");
+
+  it("keeps the region's content between inert markers, filled like the rest", () => {
+    const out = fillEmailTemplate(
+      "<p>{{ .Post.Subject }}</p>{{ if .IsEmail }}<p>{{ .Publication.Address }}</p>{{end}}",
+      ctx,
+    );
+    expect(out).toBe(`<p>Subject</p>${EMAIL_ONLY_OPEN}<p>1 Main St</p>${EMAIL_ONLY_CLOSE}`);
+  });
+
+  it("drops the whole region, markers included, for the public page", () => {
+    const frozen = `<p>a</p>${EMAIL_ONLY_OPEN}<p>b</p>${EMAIL_ONLY_CLOSE}<p>c</p>${EMAIL_ONLY_OPEN}d${EMAIL_ONLY_CLOSE}`;
+    expect(omitEmailOnly(frozen)).toBe("<p>a</p><p>c</p>");
+    expect(omitEmailOnly("<p>no region</p>")).toBe("<p>no region</p>");
+  });
+
+  it("accepts a region, even one holding the only unsubscribe link, and doesn't read {{ end }} as a variable", () => {
+    expect(
+      validateEmailTemplate(
+        '{{ .Post.Body }}{{ if .IsEmail }}<a href="{{ .Email.UnsubscribeURL }}">u</a><a href="{{ .Email.ViewInBrowserURL }}">v</a>{{ end }}',
+      ),
+    ).toEqual({ errors: [], warnings: [] });
+  });
+
+  it("refuses an unclosed region, a stray {{ end }}, and a nested region", () => {
+    expect(errorsOf(`${base}{{ if .IsEmail }}x`)).toMatch(/never closed/);
+    expect(errorsOf(`${base}x{{ end }}`)).toMatch(/\{\{ end \}\} has no/);
+    expect(errorsOf(`${base}{{ if .IsEmail }}a{{ if .IsEmail }}b{{ end }}{{ end }}`)).toMatch(
+      /can't contain another/,
+    );
+  });
+
+  it("refuses the post body inside a region, since the archived post would be empty", () => {
+    expect(
+      errorsOf(
+        '{{ if .IsEmail }}{{ .Post.Body }}{{ end }}<a href="{{ .Email.UnsubscribeURL }}">u</a>',
+      ),
+    ).toMatch(/\{\{ \.Post\.Body \}\} can't be inside/);
+  });
+
+  it("refuses {{ else }}, names an empty {{ if }} cleanly, and warns on braces it doesn't fill", () => {
+    expect(errorsOf(`${base}{{ if .IsEmail }}a{{ else }}b{{ end }}`)).toMatch(
+      /\{\{ else \}\} isn't supported/,
+    );
+    expect(errorsOf(`${base}{{ if }}a{{ end }}`)).toMatch(/^\{\{ if \}\} isn't supported/);
+    const trimmed = validateEmailTemplate(`${base}{{- if .IsEmail -}}a{{- end -}}`);
+    expect(trimmed.warnings.join(" ")).toMatch(
+      /\{\{- if \.IsEmail -\}\} isn't something Kestrel fills/,
+    );
+  });
+
+  it("refuses any condition but .IsEmail, once, without a second error for its {{ end }}", () => {
+    const errors = validateEmailTemplate(`${base}{{ if .Publication.Address }}a{{ end }}`).errors;
+    expect(errors).toEqual([
+      "{{ if .Publication.Address }} isn't supported. The one condition is {{ if .IsEmail }}.",
+    ]);
   });
 });
 
