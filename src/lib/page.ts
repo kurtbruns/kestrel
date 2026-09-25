@@ -202,14 +202,15 @@ export const FRAUNCES_FONT_LINKS =
  *  (an email needs inline styles); overriding an inline style takes `!important` (plus
  *  the `body …` prefix for specificity). The masthead is browser-only and carries no
  *  inline color, so it's a plain rule — light value, then a dark `@media` override,
- *  no `!important` needed. Its text is the email's muted zinc, lifted in dark to
- *  `#a1a1aa` (~7:1 on the reader ground; the light `#71717a` was ~3.9:1 there). */
+ *  no `!important` needed. The publication name takes the email's body ink, so it reads
+ *  as the page's title rather than a caption; the date stays muted, at `#52525b` in light
+ *  (~7:1 on the reader ground; `#71717a` was ~3.9:1) and `#a1a1aa` in dark (~7:1). */
 export const ARCHIVE_POST_HEAD =
   FRAUNCES_FONT_LINKS +
   `<style>body.k-bg,body .k-bg,body .k-card{background:${READER_BG_LIGHT}!important}` +
-  `.k-mast{color:#71717a;border-bottom:1px solid #e4e4e7}` +
+  `.k-mast{color:#52525b;border-bottom:1px solid #e4e4e7}.k-mast a{color:#18181b}` +
   `@media(prefers-color-scheme:dark){body.k-bg,body .k-bg,body .k-card{background:${READER_BG_DARK}!important}` +
-  `.k-mast{color:#a1a1aa;border-bottom-color:#2e2e33}}</style>`;
+  `.k-mast{color:#a1a1aa;border-bottom-color:#2e2e33}.k-mast a{color:#ededed}}</style>`;
 
 /** One post as the reader surface lists it: its title, its archive URL, and a display date. */
 export interface ArchiveIndexPost {
