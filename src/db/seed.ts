@@ -103,7 +103,7 @@ function chunk<T>(items: T[], size: number): T[][] {
  * Includes the `settings` singleton, so a reset — or a re-seed — starts from a clean
  * settings row rather than merging the demo's identity onto stale operator config. That
  * matters for determinism: without it, a template or logo saved before a schema/token
- * change (e.g. a pre-`email.*` template still using `footer.*`) would survive a re-seed,
+ * change (e.g. a template still on older placeholder names) would survive a re-seed,
  * because the seed's `updateSettings` merges rather than replaces. Settings live in D1;
  * the branding logo's R2 bytes are the caller's to clear (see the dev reset route).
  */

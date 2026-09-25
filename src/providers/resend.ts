@@ -143,8 +143,8 @@ export class ResendProvider implements EmailProvider {
   ): Promise<SendBatchResult> {
     const elements: ResendBatchElement[] = recipients.map((r) => {
       const final = substituteRecipient(rendered, {
-        "email.unsubscribeUrl": r.unsubscribeUrl,
-        "email.sentTo": r.email,
+        ".Email.UnsubscribeURL": r.unsubscribeUrl,
+        ".Email.SentTo": r.email,
       });
       return {
         from: this.from,

@@ -120,14 +120,14 @@ export async function render(
   }
 
   const context: RenderContext = {
-    "post.body": cleanHtml,
-    "post.subject": subject,
-    "publication.name": branding.name,
-    "publication.tagline": branding.tagline,
-    "publication.logoUrl": branding.logoUrl,
-    "publication.logo": emailLogoHtml(branding.logoUrl, branding.name),
-    "publication.address": branding.address,
-    "email.viewInBrowserUrl": viewInBrowserUrl,
+    ".Post.Body": cleanHtml,
+    ".Post.Subject": subject,
+    ".Publication.Name": branding.name,
+    ".Publication.Tagline": branding.tagline,
+    ".Publication.LogoURL": branding.logoUrl,
+    ".Publication.Logo": emailLogoHtml(branding.logoUrl, branding.name),
+    ".Publication.Address": branding.address,
+    ".Email.ViewInBrowserURL": viewInBrowserUrl,
   };
   // fillEmailTemplate freezes the delivery-phase tokens (the unsubscribe URL and sent-to
   // address) to their sentinels here; substituteRecipient fills them per recipient. Those

@@ -746,6 +746,9 @@ describe("editor view", () => {
   });
 
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
+    // A "now" before the picked fire time (2026-09-25 15:00 local), so the scheduled
+    // banner never reads it as already missed, whenever the suite runs.
+    vi.setSystemTime(new Date(2026, 8, 24, 10, 0));
     const server = draftServer(draft({ subject: "" }));
     const sends = sendServer();
     await open([

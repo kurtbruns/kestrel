@@ -25,7 +25,7 @@ const DEFAULT_COPY = {
 const settings = (over: Partial<SettingsView> = {}): SettingsView => ({
   testRecipients: ["me@b.c"],
   publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
-  emailTemplate: '<div>{{ post.body }}<a href="{{ email.unsubscribeUrl }}">out</a></div>',
+  emailTemplate: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
   confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
   confirmationEmailDefault: DEFAULT_COPY,
   notifications: { to: "" },

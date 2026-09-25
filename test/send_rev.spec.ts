@@ -24,7 +24,7 @@ const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
 
 const tpl = (marker: string) =>
-  `<div>{{ post.body }}<p>${marker} · {{ publication.name }}</p><a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
+  `<div>{{ .Post.Body }}<p>${marker} · {{ .Publication.Name }}</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
 async function seedConfirmed(email: string): Promise<void> {
   const now = Date.now();

@@ -10,7 +10,7 @@ const escapeAttr = (s: string): string =>
     .replace(/'/g, "&#39;");
 
 /**
- * What `{{ publication.logo }}` fills: the logo as an `<img>`, or nothing at all when no
+ * What `{{ .Publication.Logo }}` fills: the logo as an `<img>`, or nothing at all when no
  * logo is set. An `<img src="">` is a broken image in every mail client, and a sent
  * email is frozen into the permanent archive, so a missing logo renders no element
  * rather than an empty one. `alt` is the publication name.

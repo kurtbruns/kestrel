@@ -69,23 +69,23 @@ export const SENTTO_SENTINEL = "%%SENT_TO%%";
 /** THE token registry — the one place each variable's phase + escaping is declared.
  *  Order is cosmetic (it drives `EMAIL_TEMPLATE_VARIABLES`); resolution is keyed. */
 const TOKENS = {
-  "post.body": { phase: "render", escaping: "raw" },
-  "post.subject": { phase: "render", escaping: "attr" },
-  "publication.name": { phase: "render", escaping: "attr" },
-  "publication.tagline": { phase: "render", escaping: "attr" },
-  "publication.logoUrl": { phase: "render", escaping: "attr" },
+  ".Post.Body": { phase: "render", escaping: "raw" },
+  ".Post.Subject": { phase: "render", escaping: "attr" },
+  ".Publication.Name": { phase: "render", escaping: "attr" },
+  ".Publication.Tagline": { phase: "render", escaping: "attr" },
+  ".Publication.LogoURL": { phase: "render", escaping: "attr" },
   // The whole logo `<img>`, or nothing when no logo is set (shared/email_logo.ts builds
   // it, escaping its attributes), so a template never ships `<img src="">`.
-  "publication.logo": { phase: "render", escaping: "raw" },
-  "publication.address": { phase: "render", escaping: "attr" },
-  "email.viewInBrowserUrl": { phase: "render", escaping: "attr" },
+  ".Publication.Logo": { phase: "render", escaping: "raw" },
+  ".Publication.Address": { phase: "render", escaping: "attr" },
+  ".Email.ViewInBrowserURL": { phase: "render", escaping: "attr" },
   // Delivery-phase (per recipient). Unsubscribe stays `raw` so the delivered bytes are
   // byte-for-byte the pre-unification output (I5); the URL is app-generated (origin +
   // token), not user content, so raw is safe. Routing it through `attr` would &-escape a
   // multi-param URL — a deliberate, separately-tracked change. The sent-to address is
   // `attr`: it lands in markup, so it's attribute-safe-escaped.
-  "email.unsubscribeUrl": { phase: "delivery", escaping: "raw", sentinel: UNSUB_SENTINEL },
-  "email.sentTo": { phase: "delivery", escaping: "attr", sentinel: SENTTO_SENTINEL },
+  ".Email.UnsubscribeURL": { phase: "delivery", escaping: "raw", sentinel: UNSUB_SENTINEL },
+  ".Email.SentTo": { phase: "delivery", escaping: "attr", sentinel: SENTTO_SENTINEL },
 } as const satisfies Record<string, TokenSpec>;
 
 type TokenKey = keyof typeof TOKENS;
@@ -119,7 +119,7 @@ const DELIVERY_TOKENS: { key: DeliveryKey; escaping: Escaping; sentinel: string 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
 
 /** RENDER pass. Substitute `{{ token }}` for each render-phase token (escaped per the
- *  registry; `post.body` raw) and freeze each delivery-phase token to its sentinel, so
+ *  registry; `.Post.Body` raw) and freeze each delivery-phase token to its sentinel, so
  *  the per-recipient pass can fill it later. Logic-less: a token is only ever replaced
  *  by a value. An unknown token renders empty (validation warns). */
 export function fillEmailTemplate(html: string, ctx: RenderContext): string {
@@ -174,17 +174,17 @@ export function templateTokens(html: string): Set<string> {
 export type { IdentityField };
 
 const IDENTITY_TOKENS: ReadonlyArray<[token: string, fields: IdentityField[]]> = [
-  ["publication.name", ["name"]],
-  ["publication.tagline", ["tagline"]],
-  ["publication.logoUrl", ["logoUrl"]],
+  [".Publication.Name", ["name"]],
+  [".Publication.Tagline", ["tagline"]],
+  [".Publication.LogoURL", ["logoUrl"]],
   // The logo image carries the name as its alt text.
-  ["publication.logo", ["logoUrl", "name"]],
-  ["publication.address", ["address"]],
+  [".Publication.Logo", ["logoUrl", "name"]],
+  [".Publication.Address", ["address"]],
 ];
 
 /**
  * The identity fields `template` renders. The identity reaches the frozen bytes only
- * through the `publication.*` tokens, so a field the template does not reference is
+ * through the `.Publication.*` tokens, so a field the template does not reference is
  * not an input to the email: changing it alters no scheduled send, and the re-make
  * guard (SPEC §9) leaves it alone. The built-in template renders all four.
  */
@@ -214,7 +214,7 @@ export interface TemplateValidation {
 }
 
 /** An `<img>` whose `src` is the bare logo URL: empty, so broken, while no logo is set. */
-const LOGO_URL_AS_IMG_SRC = /<img\b[^>]*\bsrc\s*=\s*["']?\s*\{\{\s*publication\.logoUrl\s*\}\}/i;
+const LOGO_URL_AS_IMG_SRC = /<img\b[^>]*\bsrc\s*=\s*["']?\s*\{\{\s*\.Publication\.LogoURL\s*\}\}/i;
 
 /** Check a template for the variables an email can't do without (errors) and for
  *  likely mistakes (warnings). Errors block the send; warnings are surfaced but
@@ -225,16 +225,16 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   const warnings: string[] = [];
   const tokens = templateTokens(html);
 
-  if (!tokens.has("post.body")) {
-    errors.push("Every email must include {{ post.body }} to render the content of the post.");
+  if (!tokens.has(".Post.Body")) {
+    errors.push("Every email must include {{ .Post.Body }} to render the content of the post.");
   }
-  if (!tokens.has("email.unsubscribeUrl")) {
+  if (!tokens.has(".Email.UnsubscribeURL")) {
     errors.push(
-      "Every email must carry an unsubscribe link. Add {{ email.unsubscribeUrl }} to the template.",
+      "Every email must carry an unsubscribe link. Add {{ .Email.UnsubscribeURL }} to the template.",
     );
   }
-  if (!tokens.has("email.viewInBrowserUrl")) {
-    warnings.push("Add {{ email.viewInBrowserUrl }} so readers can open the post in a browser.");
+  if (!tokens.has(".Email.ViewInBrowserURL")) {
+    warnings.push("Add {{ .Email.ViewInBrowserURL }} so readers can open the post in a browser.");
   }
   for (const t of tokens) {
     if (!KNOWN_VARS.has(t)) {
@@ -243,7 +243,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
   }
   if (LOGO_URL_AS_IMG_SRC.test(html)) {
     warnings.push(
-      "An <img> whose src is {{ publication.logoUrl }} shows as a broken image while no logo is set. Use {{ publication.logo }}, which renders the image only when there is one.",
+      "An <img> whose src is {{ .Publication.LogoURL }} shows as a broken image while no logo is set. Use {{ .Publication.Logo }}, which renders the image only when there is one.",
     );
   }
   if (/<script[\s/>]/i.test(html)) {
@@ -400,24 +400,24 @@ export const DEFAULT_EMAIL_TEMPLATE = `<style>
 </style>
 
 <div class="email">
-  {{ post.body }}
+  {{ .Post.Body }}
 
   <hr class="rule" />
 
   <table class="signoff" role="presentation" cellpadding="0" cellspacing="0">
     <tr>
-      <td class="logo-cell">{{ publication.logo }}</td>
+      <td class="logo-cell">{{ .Publication.Logo }}</td>
       <td>
-        <div class="name">{{ publication.name }}</div>
-        <div class="tagline">{{ publication.tagline }}</div>
+        <div class="name">{{ .Publication.Name }}</div>
+        <div class="tagline">{{ .Publication.Tagline }}</div>
       </td>
     </tr>
   </table>
 
   <div class="footer">
     Powered by Kestrel ·
-    <a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> ·
-    <a href="{{ email.viewInBrowserUrl }}">View in browser</a>
-    <div class="address">{{ publication.address }}</div>
+    <a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> ·
+    <a href="{{ .Email.ViewInBrowserURL }}">View in browser</a>
+    <div class="address">{{ .Publication.Address }}</div>
   </div>
 </div>`;

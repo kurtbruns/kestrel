@@ -106,8 +106,8 @@ export async function preview(c: RequestContext): Promise<Response> {
 export async function previewPage(c: RequestContext): Promise<Response> {
   const { email } = await loadPostEmail(c);
   const html = substituteRecipient(email, {
-    "email.unsubscribeUrl": genericUnsubscribeUrl(c),
-    "email.sentTo": "",
+    ".Email.UnsubscribeURL": genericUnsubscribeUrl(c),
+    ".Email.SentTo": "",
   }).html;
   return new Response(html, {
     headers: {
@@ -176,7 +176,7 @@ export async function test(c: RequestContext): Promise<Response> {
 /** How many addresses one template test may fan out to (matches the settings cap). */
 const MAX_TEMPLATE_TEST_RECIPIENTS = 20;
 
-// A synthetic post that stands in for {{ post.body }} when testing the TEMPLATE
+// A synthetic post that stands in for {{ .Post.Body }} when testing the TEMPLATE
 // itself — there's no real post to render, so this sample supplies one. It flows
 // through the same render() as a real send (I5); only the body's source differs.
 // The prose mirrors the on-page sample preview so the inbox test matches what the
