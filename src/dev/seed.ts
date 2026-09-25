@@ -94,20 +94,20 @@ const SEED_POSTS: SeedPost[] = [
 
 Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
 
-The app is named after a small falcon called a kestrel. The easiest way to spot one is by how it hunts: it faces into the wind and hangs in place, head perfectly still, watching the ground below. This is called **wind-hovering**, and you can read more about it on [Wikipedia](https://en.wikipedia.org/wiki/Common_kestrel). Here's what a kestrel looks like:
+The app is named after a small falcon called a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel). One way to spot a kestrel is by how it hunts using a technique called wind-hovering. The bird faces into the wind and hovers in place, watching the ground below for prey. Here's what a kestrel looks like:
 
 ![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
 
 *A male Canarian kestrel in strong wind. Taken in Funchal, Madeira by [u/treecreaper](https://www.reddit.com/r/birdsofprey/comments/1rlew5p/canarian_kestrel/).*
 
-## Why that fits a newsletter
+## What Kestrel does
 
-An email can't be unsent, so Kestrel holds still before it commits:
+Kestrel is a self-hosted newsletter app. With it you:
 
-- **Write** in Markdown, in the web editor or with Claude.
-- **Preview** the exact email your subscribers will get.
-- **Schedule** it behind a review window you can cancel.
-- **Send** it to a double opt-in list, and archive it for good.`,
+- **Write** in Markdown, in the web editor or with Claude. Try it on one of the drafts.
+- **Preview** the exact email your subscribers will get, and send yourself a test.
+- **Schedule** it behind a review window you can cancel. The next issue is waiting in its window now.
+- **Send** it to a double opt-in list. Every issue gets a permanent page in the archive, like this one.`,
   },
   {
     id: "5eed0004-0000-4000-8000-000000000004",
