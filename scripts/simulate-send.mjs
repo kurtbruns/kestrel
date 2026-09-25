@@ -31,7 +31,7 @@ import { triggerSweep } from "./sweep-ticker.mjs";
 
 const TAG = "simulate-send";
 /** The demo's scheduled post (src/dev/seed.ts): the one a demo send moves when it can. */
-const DEMO_SCHEDULED_SLUG = "the-review-window";
+const DEMO_SCHEDULED_SLUG = "first-frost";
 /** Covers the request's trip, so a send asked for exactly one lead out isn't refused as
  *  just inside it by the time the server reads the clock. */
 const SLACK_MS = 2000;

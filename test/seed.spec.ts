@@ -157,10 +157,10 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("serves a seeded sent post's frozen render at its archive URL, cover ref intact", async () => {
     await seedDatabase(env, config());
-    const res = await SELF.fetch(`${base}/archive/why-a-kestrel`);
+    const res = await SELF.fetch(`${base}/archive/the-hovering-hunter`);
     expect(res.status).toBe(200);
     const body = await res.text();
-    expect(body).toContain("Why a kestrel");
+    expect(body).toContain("The hovering hunter");
     // The cover image resolves to the R2-served media URL (bytes land via the route).
     expect(body).toContain("/media/posts/5eed0001-0000-4000-8000-000000000001/kestrel.jpg");
     expect(body).not.toContain("%%UNSUBSCRIBE_URL%%");
@@ -168,7 +168,7 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("keeps drafts and the scheduled post out of the public archive", async () => {
     await seedDatabase(env, config());
-    for (const slug of ["try-editing-this-draft", "the-review-window"]) {
+    for (const slug of ["owls-after-dark", "first-frost"]) {
       const res = await SELF.fetch(`${base}/archive/${slug}`);
       expect(res.status).toBe(404);
     }

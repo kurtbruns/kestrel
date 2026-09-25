@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- The demo loaded by `npm run seed` is now **Field Notes**, a generic publication whose posts show off the editor, the email render, the review window, and drafts, in place of the Windbreak birding newsletter.
+- The demo loaded by `npm run seed` is now **Field Notes**, a short nature newsletter about one kestrel that reads as a real publication while its posts use the cover image, lists, quotes, and links the email render supports, in place of the Windbreak birding newsletter.
 
 ## [1.1.0] - 2026-09-24
 

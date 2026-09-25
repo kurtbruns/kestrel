@@ -34,7 +34,7 @@ Out of the box the app loads empty, the way a new publisher first sees it. To ex
 npm run seed
 ```
 
-This loads a sample publication called **Field Notes** with example data to show how the application looks in practice. View it at `/dashboard/` and at an archived post like **http://localhost:8787/archive/why-a-kestrel**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
+This loads a sample publication called **Field Notes** with example data to show how the application looks in practice. View it at `/dashboard/` and at an archived post like **http://localhost:8787/archive/the-hovering-hunter**. To inspect it at scale, add a reproducible size (`100` / `1k` / `10k` / `100k`):
 
 ```bash
 npm run seed -- --size 10k

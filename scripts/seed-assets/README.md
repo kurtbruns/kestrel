@@ -3,7 +3,7 @@
 Static files used by the local demo seed (`npm run seed`). `scripts/seed.mjs`
 uploads each through the running dev server, which stores it in local R2.
 
-- **`kestrel.<ext>`** — the cover photo for the "Why a kestrel" sample post.
+- **`kestrel.<ext>`** — the cover photo for the "The hovering hunter" sample post.
   `scripts/seed.mjs` looks for `kestrel.webp`, `.jpg`, `.jpeg`, `.png`, or `.gif`
   (in that order), uploads the first it finds, and the worker records the matching
   `images` row. WebP, PNG, GIF and JPEG all work — browsers render them all. If no
