@@ -73,8 +73,8 @@ export function deliverToOutbox(
     // Named by the caller and address, not the key, so a test can predict it.
     const providerId = `fake-${opts.idempotencyKeyPrefix}:${r.email}`;
     const final = substituteRecipient(rendered, {
-      "email.unsubscribeUrl": r.unsubscribeUrl,
-      "email.sentTo": r.email,
+      ".Email.UnsubscribeURL": r.unsubscribeUrl,
+      ".Email.SentTo": r.email,
     });
     sentKeys.set(key, providerId);
     outbox.push({

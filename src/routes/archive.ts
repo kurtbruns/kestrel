@@ -147,7 +147,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
   const html = fillDeliveryTokens(
     send.rendered_html,
-    { "email.unsubscribeUrl": `${c.config.appOrigin}/unsubscribe`, "email.sentTo": "" },
+    { ".Email.UnsubscribeURL": `${c.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
     "html",
   )
     .split(ARCHIVE_MASTHEAD_ANCHOR)

@@ -174,7 +174,7 @@ describe("render (the single render path)", async () => {
     const address = "PO Box 1142, Portland, OR 97207";
     const without = await render(input, config, {
       ...defaultBranding(),
-      template: '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a>',
+      template: '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a>',
       address,
     });
     expect(without.html).not.toContain(address);
@@ -183,7 +183,7 @@ describe("render (the single render path)", async () => {
     const withIt = await render(input, config, {
       ...defaultBranding(),
       template:
-        '{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a><p>{{ publication.address }}</p>',
+        '{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a><p>{{ .Publication.Address }}</p>',
       address,
     });
     expect(withIt.html).toContain(address);
@@ -193,8 +193,8 @@ describe("render (the single render path)", async () => {
   it("substituteRecipient replaces the per-recipient sentinels", async () => {
     const result = await render({ post: post(), revision: revision("hi"), images: [] }, config);
     const sub = substituteRecipient(result, {
-      "email.unsubscribeUrl": "https://app.example/u/abc",
-      "email.sentTo": "reader@example.com",
+      ".Email.UnsubscribeURL": "https://app.example/u/abc",
+      ".Email.SentTo": "reader@example.com",
     });
     expect(sub.subject).toBe(result.subject);
     expect(sub.html).not.toContain(UNSUB_SENTINEL);
@@ -202,11 +202,11 @@ describe("render (the single render path)", async () => {
     expect(sub.text).not.toContain(UNSUB_SENTINEL);
   });
 
-  it("fills {{ email.sentTo }} with the recipient's address at delivery", async () => {
+  it("fills {{ .Email.SentTo }} with the recipient's address at delivery", async () => {
     const branding = {
       template:
-        '<div class="email">{{ post.body }}<footer>Sent to {{ email.sentTo }} · ' +
-        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></footer></div>',
+        '<div class="email">{{ .Post.Body }}<footer>Sent to {{ .Email.SentTo }} · ' +
+        '<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></footer></div>',
       name: "N",
       tagline: "t",
       logoUrl: "",
@@ -220,8 +220,8 @@ describe("render (the single render path)", async () => {
     // Frozen with the sentinel, not any recipient address (I3).
     expect(result.html).toContain(SENTTO_SENTINEL);
     const sub = substituteRecipient(result, {
-      "email.unsubscribeUrl": "https://app.example/u/abc",
-      "email.sentTo": "reader@example.com",
+      ".Email.UnsubscribeURL": "https://app.example/u/abc",
+      ".Email.SentTo": "reader@example.com",
     });
     expect(sub.html).not.toContain(SENTTO_SENTINEL);
     expect(sub.html).toContain("reader@example.com");
@@ -232,8 +232,8 @@ describe("render (the single render path)", async () => {
     // did, for a fixed (post, template, recipient) — the unification changes no wire byte.
     const branding = {
       template:
-        '<div class="email">{{ post.body }}<footer>Sent to {{ email.sentTo }} · ' +
-        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></footer></div>',
+        '<div class="email">{{ .Post.Body }}<footer>Sent to {{ .Email.SentTo }} · ' +
+        '<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></footer></div>',
       name: "N",
       tagline: "t",
       logoUrl: "",
@@ -250,8 +250,8 @@ describe("render (the single render path)", async () => {
     const url = "https://app.example/unsubscribe?token=abc&uid=42";
     const sentTo = "reader@example.com";
     const sub = substituteRecipient(result, {
-      "email.unsubscribeUrl": url,
-      "email.sentTo": sentTo,
+      ".Email.UnsubscribeURL": url,
+      ".Email.SentTo": sentTo,
     });
     expect(sub.html).toBe(
       result.html.split(UNSUB_SENTINEL).join(url).split(SENTTO_SENTINEL).join(sentTo),
@@ -265,9 +265,9 @@ describe("render (the single render path)", async () => {
   it("fills the template with the publication identity + a custom template's markup", async () => {
     const branding = {
       template:
-        '<div class="email">{{ post.body }}<footer>{{ publication.name }} · ' +
-        '<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a> · ' +
-        '<a href="{{ email.viewInBrowserUrl }}">View in browser</a></footer></div>',
+        '<div class="email">{{ .Post.Body }}<footer>{{ .Publication.Name }} · ' +
+        '<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> · ' +
+        '<a href="{{ .Email.ViewInBrowserURL }}">View in browser</a></footer></div>',
       name: "Windbreak",
       tagline: "Field notes",
       logoUrl: "https://media.example/branding/logo?v=1",
@@ -319,7 +319,7 @@ describe("render (the single render path)", async () => {
 
   it("falls back to the default template (with a warning) when the active one is invalid", async () => {
     const branding = {
-      template: "<div>{{ post.body }}</div>", // no unsubscribe → invalid
+      template: "<div>{{ .Post.Body }}</div>", // no unsubscribe → invalid
       name: "",
       tagline: "",
       logoUrl: "",

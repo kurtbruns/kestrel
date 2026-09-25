@@ -19,7 +19,7 @@ import {
   sampleEmailHtml,
 } from "./template";
 
-const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ post.body }}<a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
+const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
 const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
   settings: {
@@ -111,14 +111,14 @@ describe("template view", () => {
     await open();
     expect($("#tplInUse").textContent).toContain("No posts scheduled");
     expect(editor().value).toBe(TEMPLATE);
-    expect($("#tplHl code").textContent).toContain("{{ post.body }}");
+    expect($("#tplHl code").textContent).toContain("{{ .Post.Body }}");
     expect($$("#tplHl .cx-var")).toHaveLength(2); // the two tokens, highlighted
     expect($("#tplGutter").textContent).toBe("1\n2\n");
     expect($("#reqBody").className).toBe("set-req-pill ok");
     expect($("#reqUnsub").className).toBe("set-req-pill ok");
     expect($("#tplTestLbl").textContent).toBe("Send test email");
     expect($$(".set-tpl-var code").map((c) => c.textContent)).toContain(
-      "{{ email.unsubscribeUrl }}",
+      "{{ .Email.UnsubscribeURL }}",
     );
     expect(bar().hidden).toBe(true);
     expect(fake.unhandled).toEqual([]);
@@ -126,7 +126,7 @@ describe("template view", () => {
 
   it("an edit raises the save bar, flips the test button, and predicts a missing required variable", async () => {
     await open();
-    typeInto(editor(), "<div>{{ post.body }}</div>");
+    typeInto(editor(), "<div>{{ .Post.Body }}</div>");
     expect(bar().classList.contains("show")).toBe(true);
     expect($("#reqUnsub").className).toBe("set-req-pill bad");
     expect($("#tplTestLbl").textContent).toBe("Save & send test");
@@ -142,7 +142,7 @@ describe("template view", () => {
         path: "/api/settings",
         reply: () => ({
           settings: { ...response().settings, emailTemplate: stored },
-          warnings: ["No {{ email.viewInBrowserUrl }} link."],
+          warnings: ["No {{ .Email.ViewInBrowserURL }} link."],
           remade: [],
         }),
       },
@@ -154,7 +154,7 @@ describe("template view", () => {
     expect(put?.json()).toEqual({ emailTemplate: `${TEMPLATE} ` });
     expect(editor().value).toBe(stored);
     expect($("#tplMsgs").hidden).toBe(false);
-    expect($("#tplMsgs").textContent).toBe("No {{ email.viewInBrowserUrl }} link.");
+    expect($("#tplMsgs").textContent).toBe("No {{ .Email.ViewInBrowserURL }} link.");
     expect($("#toasts").textContent).toMatch(/Template saved with warnings/);
     expect(bar().classList.contains("show")).toBe(false);
     expect(appState.appConfig?.settings.emailTemplate).toBe(stored);
@@ -173,12 +173,12 @@ describe("template view", () => {
           ),
       },
     ]);
-    typeInto(editor(), "<div>{{ post.body }}</div>");
+    typeInto(editor(), "<div>{{ .Post.Body }}</div>");
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(bar().classList.contains("is-error")).toBe(true);
     expect($(".savebar-msg").textContent).toMatch(/no unsubscribe link/);
-    expect(editor().value).toBe("<div>{{ post.body }}</div>");
+    expect(editor().value).toBe("<div>{{ .Post.Body }}</div>");
     expect($("#toasts").textContent).toBe(""); // the bar says it; no toast over it
   });
 
@@ -295,7 +295,7 @@ describe("template view", () => {
 
 describe("sample email preview", () => {
   const SIGNOFF =
-    '<div class="email">{{ post.body }}<table><tr><td class="logo-cell">{{ publication.logo }}</td><td>{{ publication.name }}</td></tr></table></div>';
+    '<div class="email">{{ .Post.Body }}<table><tr><td class="logo-cell">{{ .Publication.Logo }}</td><td>{{ .Publication.Name }}</td></tr></table></div>';
   const identity = { name: "Birds Weekly", tagline: "", address: "" };
 
   function preview(logoUrl: string): HTMLElement {

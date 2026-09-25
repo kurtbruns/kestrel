@@ -25,9 +25,9 @@ const PNG_1x1 = Uint8Array.from(
 /** A valid template whose footer carries `marker`, renders the name and the logo, and
  *  (optionally) the address, so a test can tell which branding a frozen copy is on. */
 const tpl = (marker: string, withAddress = false) =>
-  `<div>{{ post.body }}<p class="foot">${marker} · {{ publication.name }} · <img src="{{ email.unsubscribeUrl }}">${
-    withAddress ? " · {{ publication.address }}" : ""
-  }</p><a href="{{ email.unsubscribeUrl }}">Unsubscribe</a></div>`;
+  `<div>{{ .Post.Body }}<p class="foot">${marker} · {{ .Publication.Name }} · <img src="{{ .Email.UnsubscribeURL }}">${
+    withAddress ? " · {{ .Publication.Address }}" : ""
+  }</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
 async function putSettings(patch: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/settings`, {
@@ -177,7 +177,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
 
     // The logo: the template renders it (an <img> of the logo url is not in tpl(), so
     // switch to one that does), then upload without and with the acknowledgement.
-    const withLogo = `${tpl("v1")}<img src="{{ publication.logoUrl }}">`;
+    const withLogo = `${tpl("v1")}<img src="{{ .Publication.LogoURL }}">`;
     expect((await putSettings({ emailTemplate: withLogo, remake: [a.id] })).status).toBe(200);
     const fd = () => {
       const f = new FormData();

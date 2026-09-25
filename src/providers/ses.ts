@@ -186,8 +186,8 @@ export class SesProvider implements EmailProvider {
     r: Recipient,
   ): Promise<PerRecipientResult | BatchHalt> {
     const final = substituteRecipient(rendered, {
-      "email.unsubscribeUrl": r.unsubscribeUrl,
-      "email.sentTo": r.email,
+      ".Email.UnsubscribeURL": r.unsubscribeUrl,
+      ".Email.SentTo": r.email,
     });
     const raw = buildRawMessage({
       from: this.from,

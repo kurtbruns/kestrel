@@ -37,7 +37,7 @@ export interface PublicationLogo {
 export interface PublicationSettings {
   name: string;
   tagline: string;
-  /** Postal mailing address, optional; printed where the template puts `{{ publication.address }}` ("" = none). */
+  /** Postal mailing address, optional; printed where the template puts `{{ .Publication.Address }}` ("" = none). */
   address: string;
   logo: PublicationLogo | null;
 }

@@ -84,7 +84,7 @@ describe("the freeze reads the template it froze with", () => {
     // first render: the send that lands carries the tagline saved in the gap.
     await updateSettings(env.DB, { publication: { tagline: "before" } });
     const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-    const tpl = `<div>{{ post.body }} <i>{{ publication.tagline }}</i> <a href="{{ email.unsubscribeUrl }}">u</a></div>`;
+    const tpl = `<div>{{ .Post.Body }} <i>{{ .Publication.Tagline }}</i> <a href="{{ .Email.UnsubscribeURL }}">u</a></div>`;
     await updateSettings(env.DB, { emailTemplate: tpl });
     let bumped = false;
     const spy = vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {

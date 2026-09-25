@@ -195,7 +195,7 @@ describe("dev seed (Windbreak dataset)", () => {
     await updateSettings(env.DB, {
       publication: { name: "Old Name" },
       emailTemplate:
-        '<div>{{ post.body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
+        '<div>{{ .Post.Body }}<a href="{{ footer.unsubscribeUrl }}">Unsubscribe</a></div>',
     });
     await seedDatabase(env, config());
     const s = await getSettings(env.DB);
