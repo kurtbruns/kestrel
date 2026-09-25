@@ -2,7 +2,7 @@
 
 All notable changes to Kestrel are recorded here.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and Kestrel follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html). How an entry is written, and how a release is cut, lives in [`.claude/rules/changelog.md`](.claude/rules/changelog.md).
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). A version is `MAJOR.RELEASE.PATCH`, which looks like [Semantic Versioning](https://semver.org/spec/v2.0.0.html) but is not: the major changes rarely, at the maintainer's call; the release counts releases and goes up with each one, whether or not it breaks anything; and a patch is fixes only, never a feature or a break. So a release can carry breaking changes without a new major: they are listed under *Breaking*, with what to do in its *Upgrading* paragraph, and moving from `1.1` to `1.2` means reading them. How an entry is written, and how a release is cut, lives in [`.claude/rules/changelog.md`](.claude/rules/changelog.md).
 
 To move a running instance from one version to another, follow [Upgrade to a new release](docs/setup/09-upgrade.md), which is also served in the editor's Docs tab. Read every entry between your version and the target first.
 
@@ -19,6 +19,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Added
 
 - The email template can mark a region email-only with `{{ if .IsEmail }} … {{ end }}`: every email carries it, and the archived post leaves it out. The built-in and starting templates mark their unsubscribe and view-in-browser links and the mailing address, so the public page no longer shows them (SPEC §5, §9).
+
+### Changed
+
+- Version numbers count releases rather than follow semver: every release bumps the middle number, even one with breaking changes, which are listed under *Breaking* with any steps under *Upgrading*; a patch release is fixes only.
 
 ## [1.1.0] - 2026-09-24
 
