@@ -145,11 +145,9 @@ Kestrel is a full-fledged application built for publishers, and it's designed wi
 2. Everything is built on an API.
 3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
 
-Scheduling and publishing can be stressful. Did the last-minute fix make it in? Will the issue you moved still go out on time? With Kestrel, you can ask Claude for a last-minute edit, a new send time, or a new order for a series of scheduled issues, and be confident it will just work. Every send Claude schedules still waits in the same cancelable review window as yours, and once it goes out, you can ask Claude to confirm it went the way you intended.
+Publishing and scheduling can be stressful, especially when you want to make last-minute edits. Kestrel is built to make that easier. Ask Claude for the change, check that it's done, and sleep easy knowing the issue is set to go out.
 
-> Let the robot do the typing. Keep the decision for yourself.
-
-The next issue is already scheduled. You can find it in the dashboard, and cancel it if you'd rather it didn't go.`,
+The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
