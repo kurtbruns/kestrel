@@ -7,8 +7,9 @@
  *
  *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
  *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
- *                         Optional multipart files: `kestrel` → the cover image,
- *                         `logo` → the publication logo. Optional query: `size`
+ *                         Optional multipart files: `image` (repeatable, named
+ *                         `<bundle>/<file>`) → an image a demo post shows, `logo` → the
+ *                         publication logo. Optional query: `size`
  *                         (100 / 1k / 10k / 100k) scales the list via a seeded PRNG,
  *                         and `seed` pins it; absent, the curated demo list loads.
  */
@@ -16,7 +17,7 @@
 import { mintDevToken } from "../auth/dev_token";
 import { resetAll } from "../db/seed";
 import { BRANDING_LOGO_KEY } from "../db/settings";
-import { parseSeedSize, seedDatabase } from "../dev/seed";
+import { type DemoImageFile, parseSeedSize, seedDatabase } from "../dev/seed";
 import { json, notFound } from "../lib/errors";
 import type { RequestContext } from "../router";
 
@@ -47,19 +48,21 @@ export async function token(c: RequestContext): Promise<Response> {
 export async function seed(c: RequestContext): Promise<Response> {
   requireDevMode(c);
 
-  let kestrelFile: { bytes: ArrayBuffer; contentType: string; filename: string } | undefined;
+  const images: DemoImageFile[] = [];
   let logoFile: { bytes: ArrayBuffer; contentType: string } | undefined;
   const ct = c.req.headers.get("content-type") ?? "";
   if (ct.includes("multipart/form-data")) {
     const form = await c.req.formData();
-    const file = form.get("kestrel");
-    if (file instanceof File) {
-      const filename = (file.name || "kestrel.jpg").split(/[\\/]/).pop() || "kestrel.jpg";
-      kestrelFile = {
-        bytes: await file.arrayBuffer(),
-        contentType: file.type || "image/jpeg",
-        filename,
-      };
+    for (const file of form.getAll("image")) {
+      // `<bundle>/<file>`: the post's folder under demo/posts, then the image beside it.
+      const filename = file instanceof File ? file.name.replaceAll("\\", "/") : "";
+      if (file instanceof File && /^[\w.-]+\/[\w.-]+$/.test(filename)) {
+        images.push({
+          bytes: await file.arrayBuffer(),
+          contentType: file.type || "application/octet-stream",
+          filename,
+        });
+      }
     }
     const logo = form.get("logo");
     if (logo instanceof File) {
@@ -79,7 +82,7 @@ export async function seed(c: RequestContext): Promise<Response> {
   const seed = Number.isFinite(seedNum) ? seedNum : undefined;
   const options = size != null ? { size, seed } : undefined;
 
-  const summary = await seedDatabase(c.env, c.config, kestrelFile, logoFile, options);
+  const summary = await seedDatabase(c.env, c.config, images, logoFile, options);
   return json(summary);
 }
 

@@ -162,7 +162,7 @@ describe("dev seed (Field Notes dataset)", () => {
     const body = await res.text();
     expect(body).toContain("The hovering hunter");
     // The cover image resolves to the R2-served media URL (bytes land via the route).
-    expect(body).toContain("/media/posts/5eed0001-0000-4000-8000-000000000001/kestrel.jpg");
+    expect(body).toContain("/media/posts/5eed0001-0000-4000-8000-000000000001/kestrel.webp");
     expect(body).not.toContain("%%UNSUBSCRIBE_URL%%");
   });
 
