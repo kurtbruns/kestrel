@@ -14,7 +14,7 @@ import {
   confirmSubscription,
   requestSubscription,
 } from "../services/subscriptions";
-import { readerIdentity } from "./archive";
+import { devDashboardUrl, readerIdentity } from "./archive";
 
 function wantsHtml(c: RequestContext): boolean {
   const accept = c.req.headers.get("accept") ?? "";
@@ -88,6 +88,7 @@ function subscribePage(
     homeUrl: `${c.config.appOrigin}/`,
     title: `Subscribe · ${identity.name}`,
     mainHtml,
+    devDashboardUrl: devDashboardUrl(c.config),
     status,
   });
 }
@@ -146,16 +147,17 @@ export async function subscribe(c: RequestContext): Promise<Response> {
  *  every link in a message, and only the owner's click is consent (I1, SPEC §7). */
 export async function confirmLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
-  return confirmStatePage(await confirmLinkState(c.env.DB, token), token);
+  return confirmStatePage(c, await confirmLinkState(c.env.DB, token), token);
 }
 
 /** The Confirm button's POST: the one request that records consent. */
 export async function confirm(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
-  return confirmStatePage(await confirmSubscription(c.env.DB, token), token);
+  return confirmStatePage(c, await confirmSubscription(c.env.DB, token), token);
 }
 
-function confirmStatePage(state: ConfirmLinkState, token: string): Response {
+function confirmStatePage(c: RequestContext, state: ConfirmLinkState, token: string): Response {
+  const dev = devDashboardUrl(c.config);
   switch (state.kind) {
     case "ready":
       return htmlPage(
@@ -167,6 +169,8 @@ function confirmStatePage(state: ConfirmLinkState, token: string): Response {
 <input type="hidden" name="token" value="${escapeHtmlAttr(token)}">
 <button type="submit" class="btn">Confirm subscription</button>
 </form>`,
+        200,
+        dev,
       );
     case "confirmed":
       return htmlPage(
@@ -174,6 +178,8 @@ function confirmStatePage(state: ConfirmLinkState, token: string): Response {
         `<h1 style="margin-top:0;">You're subscribed 🎉</h1><p>Thanks for confirming <strong>${escapeHtml(
           state.subscriber.email,
         )}</strong>. You'll hear from us soon.</p>`,
+        200,
+        dev,
       );
     case "expired":
       // A fresh link goes through the ordinary subscribe path, cooldown and all.
@@ -187,12 +193,14 @@ function confirmStatePage(state: ConfirmLinkState, token: string): Response {
 <button type="submit" class="btn">Send a new link</button>
 </form>`,
         410,
+        dev,
       );
     case "invalid":
       return htmlPage(
         "Invalid link",
         `<h1 style="margin-top:0;">This link is invalid</h1><p><a href="/subscribe">Subscribe again</a> to get a new one.</p>`,
         400,
+        dev,
       );
   }
 }
@@ -200,13 +208,21 @@ function confirmStatePage(state: ConfirmLinkState, token: string): Response {
 export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
   const row = await subscribers.getByUnsubToken(c.env.DB, token);
+  const dev = devDashboardUrl(c.config);
   if (!row) {
-    return htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400);
+    return htmlPage(
+      "Invalid link",
+      `<h1 style="margin-top:0;">This link is invalid</h1>`,
+      400,
+      dev,
+    );
   }
   if (row.status === "unsubscribed") {
     return htmlPage(
       "Unsubscribed",
       `<h1 style="margin-top:0;">You're unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
+      200,
+      dev,
     );
   }
   return htmlPage(
@@ -217,15 +233,18 @@ export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
 <form method="post" action="/unsubscribe?token=${encodeURIComponent(token)}">
 <button type="submit" class="btn btn-danger">Unsubscribe</button>
 </form>`,
+    200,
+    dev,
   );
 }
 
 export async function unsubscribe(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
   const row = await subscribers.unsubscribeByToken(c.env.DB, token);
+  const dev = devDashboardUrl(c.config);
   if (!row) {
     return wantsHtml(c)
-      ? htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400)
+      ? htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400, dev)
       : new Response("invalid token", { status: 400 });
   }
   // Plain 200 for the RFC 8058 one-click POST; a friendly page for humans.
@@ -233,6 +252,8 @@ export async function unsubscribe(c: RequestContext): Promise<Response> {
     ? htmlPage(
         "Unsubscribed",
         `<h1 style="margin-top:0;">You've been unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
+        200,
+        dev,
       )
     : new Response("unsubscribed", { status: 200 });
 }

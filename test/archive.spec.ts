@@ -15,7 +15,14 @@ import {
   UNSUB_SENTINEL,
 } from "../src/render/render";
 import type { RequestContext } from "../src/router";
-import { archiveIndex, landing } from "../src/routes/archive";
+import { archiveIndex, archivePage, landing } from "../src/routes/archive";
+import {
+  confirmLanding,
+  subscribe,
+  subscribeForm,
+  unsubscribe,
+  unsubscribeLanding,
+} from "../src/routes/public";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -90,6 +97,27 @@ describe("archive / view-in-browser", () => {
     expect(body).not.toContain(ARCHIVE_HEAD_ANCHOR);
     expect(body).toContain("fonts.googleapis.com/css2?family=Fraunces");
     expect(body).toContain("background:#fbfbfa!important");
+  });
+
+  it("carries the dev-only dashboard pill as browser-only chrome, never in the frozen or sent bytes (I3, §5)", async () => {
+    const post = await sendPost("Pill", "you can find it in the dashboard");
+    const send = (await latestSentSendForPost(env.DB, post.id))!;
+    // The record and the email a reader got hold no trace of the pill or its styles.
+    for (const html of [send.rendered_html, fakeOutbox()[0]!.html]) {
+      expect(html).not.toContain("r-dev");
+      expect(html).not.toContain("Open dashboard");
+      expect(html).not.toContain("/dashboard/");
+    }
+
+    // The test env is dev-shaped, so the hosted page fills the pill into the masthead
+    // slot and its stylesheet into the head slot, the same accent pill the landing
+    // page wears.
+    const body = await (await SELF.fetch(`${base}/archive/${post.slug}`)).text();
+    expect(body).toContain('class="r-dev"');
+    expect(body).toContain('href="http://localhost:8787/dashboard/"');
+    expect(body).toContain("--k-accent:#3355cc");
+    expect(body.indexOf(".r-dev {")).toBeLessThan(body.indexOf("</head>"));
+    expect(body.indexOf('class="k-mast"')).toBeLessThan(body.indexOf('class="r-dev"'));
   });
 
   it("keeps the built-in footer's email-only part in the sent email and leaves it off the archive page", async () => {
@@ -301,7 +329,8 @@ describe("reader surface — no admin link once deployed (§11)", () => {
     // The tooltip spells out the dev-only scope for anyone who wonders if it ships.
     expect(withLink).toContain("Shown only on your local dev server");
     expect(deployed).not.toContain("/dashboard");
-    expect(deployed).not.toContain('class="r-dev"');
+    expect(deployed).not.toContain("r-dev");
+    expect(deployed).not.toContain("--k-accent");
   });
 
   it("archive index omits the dashboard link when devDashboardUrl is unset", async () => {
@@ -312,7 +341,8 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       posts: [],
     }).text();
     expect(deployed).not.toContain("/dashboard");
-    expect(deployed).not.toContain('class="r-dev"');
+    expect(deployed).not.toContain("r-dev");
+    expect(deployed).not.toContain("--k-accent");
   });
 });
 
@@ -323,13 +353,18 @@ describe("reader surface — no admin link once deployed (§11)", () => {
 // (devMode:false) branch of `devDashboardUrl(config)` is otherwise never hit
 // end-to-end, and dropping that gate would break §11 without failing a test.
 describe("reader routes gate the pill on config.devMode (§11)", () => {
-  function ctxFor(devMode: boolean): RequestContext {
+  function ctxFor(
+    devMode: boolean,
+    path = "/",
+    params: Record<string, string> = {},
+    init?: RequestInit,
+  ): RequestContext {
     return {
-      req: new Request(`${base}/`),
+      req: new Request(`${base}${path}`, init),
       env,
       ctx: createExecutionContext(),
-      url: new URL(`${base}/`),
-      params: {},
+      url: new URL(`${base}${path}`),
+      params,
       config: { ...getConfig(env), devMode },
     };
   }
@@ -339,7 +374,8 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     const on = await (await landing(ctxFor(true))).text();
     const off = await (await landing(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');
-    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
     expect(off).not.toContain("/dashboard");
   });
 
@@ -348,7 +384,119 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     const on = await (await archiveIndex(ctxFor(true))).text();
     const off = await (await archiveIndex(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');
-    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
     expect(off).not.toContain("/dashboard");
+  });
+
+  it("a post page renders the pill and its styles only when devMode is true", async () => {
+    const post = await publish("A Post", 1_000);
+    const ctx = (devMode: boolean) => ctxFor(devMode, `/archive/${post.slug}`, { slug: post.slug });
+    const on = await (await archivePage(ctx(true))).text();
+    const off = await (await archivePage(ctx(false))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
+    expect(off).not.toContain("/dashboard");
+  });
+
+  it("the subscribe page renders the pill only when devMode is true", async () => {
+    const on = await (await subscribeForm(ctxFor(true, "/subscribe"))).text();
+    const off = await (await subscribeForm(ctxFor(false, "/subscribe"))).text();
+    expect(on).toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
+    expect(off).not.toContain("/dashboard");
+  });
+
+  // The card pages: confirm and unsubscribe, which a local developer reaches from a
+  // link in a test email, and the post 404. Each has its own stylesheet, so the pill
+  // brings its own.
+  it("the card pages render the pill and its styles only when devMode is true", async () => {
+    await ensureSubscriber();
+    const now = Date.now();
+    // A pending subscriber with a live link (the confirm page's "ready" state), one
+    // whose link lapsed long ago ("expired"), and one already unsubscribed.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('p','p@example.com','pending','cfm-p','uns-p',?,?)",
+      ).bind(now, now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('x','x@example.com','pending','cfm-x','uns-x',?,1)",
+      ).bind(now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?)",
+      ).bind(now, now),
+    ]);
+    const html = { method: "POST", headers: { accept: "text/html" } };
+    const badForm = {
+      method: "POST",
+      headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
+      body: "email=not-an-email",
+    };
+    // Each row: the case, its handler and path, a phrase only that state's page shows
+    // (so the row provably reached it), and the request's method, headers, and body.
+    const cards: [
+      string,
+      (c: RequestContext) => Promise<Response>,
+      string,
+      string,
+      RequestInit?,
+    ][] = [
+      ["confirm (ready)", confirmLanding, "/confirm?token=cfm-p", "Confirm your subscription"],
+      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", "You're subscribed"],
+      ["confirm (expired)", confirmLanding, "/confirm?token=cfm-x", "This link has expired"],
+      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope", "This link is invalid"],
+      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a", "Unsubscribe?"],
+      [
+        "unsubscribe (already)",
+        unsubscribeLanding,
+        "/unsubscribe?token=uns-u",
+        "You're unsubscribed",
+      ],
+      [
+        "unsubscribe (invalid link)",
+        unsubscribeLanding,
+        "/unsubscribe?token=nope",
+        "This link is invalid",
+      ],
+      // The POST's page for a person. It unsubscribes `uns-p`, so it runs after the
+      // pages that read that subscriber, and repeating it answers the same page.
+      [
+        "unsubscribe POST (invalid link)",
+        unsubscribe,
+        "/unsubscribe?token=nope",
+        "This link is invalid",
+        html,
+      ],
+      [
+        "unsubscribe POST (done)",
+        unsubscribe,
+        "/unsubscribe?token=uns-p",
+        "You've been unsubscribed",
+        html,
+      ],
+      ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
+      ["post not found", archivePage, "/archive/missing", "Not found"],
+    ];
+    for (const [name, handler, path, shows, init] of cards) {
+      const params = { slug: "missing" };
+      // A fresh Request per call, since a form body can be read only once.
+      const on = await (await handler(ctxFor(true, path, params, init))).text();
+      const off = await (await handler(ctxFor(false, path, params, init))).text();
+      expect(on, name).toContain(shows);
+      expect(on, name).toContain('class="r-dev"');
+      expect(on, name).toContain("--k-accent:#3355cc");
+      expect(off, name).not.toContain("r-dev");
+      expect(off, name).not.toContain("--k-accent");
+      expect(off, name).not.toContain("/dashboard");
+    }
+  });
+
+  it("the one-click unsubscribe POST still answers plain text, with no page chrome", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("unsubscribed");
   });
 });

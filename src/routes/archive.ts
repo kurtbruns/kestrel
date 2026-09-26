@@ -15,6 +15,7 @@ import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
 import {
   ARCHIVE_POST_HEAD,
+  archiveDevDashboardChrome,
   archiveIndexPage,
   htmlPage,
   landingPage,
@@ -70,7 +71,7 @@ function archiveHomeUrl(config: Config): string {
 /** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
  *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
  *  a deployed public page never points at the Access-gated editor (SPEC §5, §11). */
-function devDashboardUrl(config: Config): string | undefined {
+export function devDashboardUrl(config: Config): string | undefined {
   return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
 }
 
@@ -128,13 +129,15 @@ export async function archivePage(c: RequestContext): Promise<Response> {
       "Not found",
       `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
       404,
+      devDashboardUrl(c.config),
     );
   }
   // Four edits to the frozen record on the way to the browser (I3), all at reserved
   // markers — none touches the reviewed content: the generic unsubscribe link (no single
-  // recipient here), the browser-only masthead, the hosted-page <head> chrome
-  // (display-serif links + the reader-ground background) — web-only, never in a sent
-  // email — and the template's email-only regions, which the page leaves out.
+  // recipient here), the browser-only masthead (plus, in local dev only, the "Open
+  // dashboard" pill), the hosted-page <head> chrome (display-serif links + the
+  // reader-ground background) — web-only, never in a sent email — and the template's
+  // email-only regions, which the page leaves out.
   const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
     name: identity.name,
@@ -143,6 +146,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(c.config),
   });
+  const dev = archiveDevDashboardChrome(devDashboardUrl(c.config));
   // Fill the delivery-phase tokens for a recipient-agnostic page: a generic unsubscribe
   // link (no single recipient here) and an empty sent-to address (redacted so none leaks).
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
@@ -152,9 +156,9 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     "html",
   )
     .split(ARCHIVE_MASTHEAD_ANCHOR)
-    .join(masthead)
+    .join(masthead + dev.masthead)
     .split(ARCHIVE_HEAD_ANCHOR)
-    .join(ARCHIVE_POST_HEAD);
+    .join(ARCHIVE_POST_HEAD + dev.head);
   return new Response(html, {
     headers: {
       ...POST_PAGE_SECURITY_HEADERS,
