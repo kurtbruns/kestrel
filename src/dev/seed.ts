@@ -145,7 +145,7 @@ Kestrel is a full-fledged application built for publishers, and it's designed wi
 2. Everything is built on an API.
 3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
 
-Publishing and scheduling can be stressful, especially when it comes to last-minute edits. Kestrel is built on the idea that a robot that proofreads and schedules things correctly gives you, the publisher, peace of mind that everything will work as expected.
+Publishing and scheduling can be stressful, especially when it comes to last-minute edits. With Kestrel, you can ask Claude to proofread and schedule for you, and trust that it's done right.
 
 The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
   },
