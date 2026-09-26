@@ -52,7 +52,7 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     vars: [
       {
         token: "{{ .Post.Body }}",
-        desc: "Your post's Markdown, rendered to HTML — the body slot.",
+        desc: "Your post's Markdown, rendered to HTML.",
       },
       { token: "{{ .Post.Subject }}", desc: "The post's subject line." },
     ],
@@ -78,7 +78,7 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     vars: [
       { token: "{{ .Email.SentTo }}", desc: "The recipient's address (filled per send)." },
       { token: "{{ .Email.UnsubscribeURL }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ .Email.ViewInBrowserURL }}", desc: "The archived post's permanent URL." },
+      { token: "{{ .Email.ViewInBrowserURL }}", desc: "The web version's permanent URL." },
     ],
   },
   {
@@ -86,7 +86,7 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     vars: [
       {
         token: "{{ if .IsEmail }} … {{ end }}",
-        desc: "Shown in the email, left out of the archived post: for the unsubscribe link, view in browser, and the address. Can't hold {{ .Post.Body }} or another region.",
+        desc: "Reports whether this is the email or the web version. Put your unsubscribe link and address inside; the web version leaves them out.",
       },
     ],
   },
@@ -510,7 +510,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       <div class="set-card-pad">
         <div class="set-tpl-varhead">
           <h3 class="set-tpl-vartitle">Variables</h3>
-          <p class="field-hint">Kestrel replaces these variables with real values when you send an email. Type a variable exactly as shown, or it renders as empty. Double-click a variable to select it, then copy.</p>
+          <p class="field-hint">Kestrel replaces these variables with real values when you send an email. Type a variable exactly as shown, or it renders as empty.</p>
         </div>
         <div class="set-tpl-vars-body">${templateVarsHtml()}</div>
       </div>
