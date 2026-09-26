@@ -275,8 +275,8 @@ describe("render (the single render path)", async () => {
         '<div class="email">{{ .Post.Body }}<footer>{{ .Publication.Name }} · ' +
         '<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a> · ' +
         '<a href="{{ .Email.ViewInBrowserURL }}">View in browser</a></footer></div>',
-      name: "Windbreak",
-      tagline: "Field notes",
+      name: "Field Notes",
+      tagline: "Notes on keeping a small newsletter",
       logoUrl: "https://media.example/branding/logo?v=1",
       address: "123 Marsh Lane",
     };
@@ -285,7 +285,7 @@ describe("render (the single render path)", async () => {
       config,
       branding,
     );
-    expect(result.html).toContain("Windbreak");
+    expect(result.html).toContain("Field Notes");
     expect(result.html).toContain(UNSUB_SENTINEL);
     // The view-in-browser variable is filled with the archive URL.
     expect(result.html).toContain("https://arc.example/archive/weekly-news");
@@ -294,22 +294,22 @@ describe("render (the single render path)", async () => {
 
   it("renders the built-in sign-off without an image when no logo is set, and with it when one is", async () => {
     const input = { post: post(), revision: revision("# Hi\n\nbody"), images: [] };
-    const bare = await render(input, config, { ...defaultBranding(), name: "Windbreak" });
+    const bare = await render(input, config, { ...defaultBranding(), name: "Field Notes" });
     // No <img src=""> in the email, and so none on the permanent archive page (I3).
     expect(bare.html).not.toMatch(/<img[^>]*class="logo"/);
     expect(bare.html).not.toMatch(/src=""/);
-    expect(bare.html).toContain("Windbreak");
+    expect(bare.html).toContain("Field Notes");
 
     const logoUrl = "https://media.example/branding/logo?v=1";
     const signed = await render(input, config, {
       ...defaultBranding(),
-      name: "Windbreak",
+      name: "Field Notes",
       logoUrl,
     });
     expect(signed.html).toMatch(
       /<img[^>]*class="logo"[^>]*src="https:\/\/media\.example\/branding\/logo\?v=1"/,
     );
-    expect(signed.html).toMatch(/<img[^>]*alt="Windbreak"/);
+    expect(signed.html).toMatch(/<img[^>]*alt="Field Notes"/);
   });
 
   it("ships light+dark support: advertises the color-scheme and keeps a dark @media block", async () => {

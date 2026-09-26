@@ -24,6 +24,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - On a local dev server, the "Open dashboard" shortcut now shows on every public page, including each archived post and the subscribe, confirm, and unsubscribe pages, not only the landing page and archive index; a deployed instance still never shows it (SPEC §5).
 - Version numbers count releases rather than follow semver: every release bumps the middle number, even one with breaking changes, which are listed under *Breaking* with any steps under *Upgrading*; a patch release is fixes only.
+- The demo loaded by `npm run seed` is now **Field Notes**, a demo publication whose issues walk through what Kestrel does while using the cover image, headings, lists, and links the email render supports, in place of the Windbreak birding newsletter.
+
+### Fixed
+
+- An archived post's masthead shows the publication name in the body text color and the date at a readable contrast, instead of both in a faint grey.
 
 ## [1.1.0] - 2026-09-24
 

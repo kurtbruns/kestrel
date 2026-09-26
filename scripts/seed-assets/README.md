@@ -10,7 +10,7 @@ uploads each through the running dev server, which stores it in local R2.
   `kestrel.*` is present the seed still runs; the post references the image, so
   dropping the file in and re-running `npm run seed` fills it in — but until then
   that one image 404s in the rendered post.
-- **`windbreak-logo.png`** — the publication logo for the demo, 512 px square (a
+- **`field-notes-logo.png`** — the publication logo for the demo, 512 px square (a
   PNG, since the logo rides in every email and most email apps don't show SVG). Uploaded as the
   branding asset; the worker writes it to R2 and records the logo metadata, so the
   reader masthead and dashboard sidebar show it in place of the initial-letter tile.

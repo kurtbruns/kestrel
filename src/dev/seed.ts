@@ -1,10 +1,12 @@
 /**
- * The local demo dataset: a nature/birdwatching newsletter, "Windbreak", seeded
- * as a publication that has been running for a few months — not a thin static snapshot.
+ * The local demo dataset: "Field Notes", a demo publication whose issues walk through what
+ * Kestrel does, seeded as a publication that has been running for a few months — not a thin
+ * static snapshot. Between them the posts use what the render path handles (a cover image,
+ * headings, emphasis, both kinds of list, links).
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an initial import of already-confirmed subscribers backdated before the first post,
- * three completed sends spread over time, and — in between — new confirmations (the
+ * four completed sends spread over time, and — in between — new confirmations (the
  * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
  * complaint that become suppressions. The upshot is that every completed send freezes
  * the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
@@ -82,122 +84,127 @@ interface SeedPost {
 
 const SEED_POSTS: SeedPost[] = [
   {
-    id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "welcome-to-windbreak",
-    subject: "Welcome to Windbreak",
-    kind: "sent",
-    sentIndex: 0, // the launch post — the oldest in the archive
-    markdown: `# Welcome to the hedgerow
-
-Thanks for being here. **Windbreak** is a short letter about paying closer attention to the wildlife on your own doorstep — no rare-bird chasing required.
-
-Every issue is one idea you can use on your next walk:
-
-- something to **look** for,
-- something to **listen** for,
-- and one small fact that makes it stick.
-
-That's the whole plan. No apps to buy, no life list to keep — just a standing invitation to slow down for twenty minutes and notice what's already there.
-
-See you in the next one.`,
-  },
-  {
     id: KESTREL_POST_ID,
     slug: "the-hovering-hunter",
     subject: "The hovering hunter",
     kind: "sent",
-    sentIndex: 1, // the flagship, with the cover photo
+    sentIndex: 0, // the launch post, the oldest in the archive, with the cover photo
     hasCover: true,
     markdown: `# The hovering hunter
 
-There is no mistaking a kestrel at work. Where other falcons chase, the kestrel *waits* — hanging in the air on fast-beating wings, head utterly still, reading the grass below for the twitch of a vole.
+Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
 
-![A common kestrel hovering over a meadow](kestrel.jpg)
+The app is named after a small falcon called a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel). One way to spot a kestrel is by how it hunts, using a technique called wind-hovering. The bird faces into the wind and hovers in place, watching the ground below for prey. Here's what a kestrel looks like:
 
-That stillness has a name: **wind-hovering**. The bird faces into the breeze and beats just hard enough to cancel it out, so its eyes stay fixed in space while its body does all the work.
+![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
 
-## What to look for
+*A male Canarian kestrel in strong wind. Taken in Funchal, Madeira by [u/treecreaper](https://www.reddit.com/r/birdsofprey/comments/1rlew5p/canarian_kestrel/).*
 
-- **Size** — smaller than a pigeon, with long pointed wings and a long tail.
-- **Colour** — a warm chestnut back; males add a blue-grey head and tail.
-- **Behaviour** — the hover is the giveaway. Nothing else our size holds station like this.
-
-Kestrels can see ultraviolet, which lets them follow the UV-bright urine trails voles leave along their runs — a hidden map laid over an ordinary field.
-
-Next time you pass a motorway verge, look up. That still point over the long grass is very likely this bird.
-
-[More on the common kestrel →](https://en.wikipedia.org/wiki/Common_kestrel)`,
+To see what Kestrel can do, open the dashboard and try editing one of the drafts.`,
   },
   {
-    id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "autumn-skies",
-    subject: "Autumn skies",
+    id: "5eed0004-0000-4000-8000-000000000004",
+    slug: "an-old-fashioned-list",
+    subject: "An old-fashioned list",
     kind: "sent",
-    sentIndex: 2, // the most recent send
-    markdown: `# Autumn skies
+    sentIndex: 1,
+    markdown: `# An old-fashioned list
 
-The first real cold front of autumn does something to the air. Overnight the hedgerows fill with birds that simply weren't there the day before.
+The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
 
-## Who's on the move
+So what sets Kestrel apart from the countless other platforms and services?
 
-- **Swallows and martins**, lining the wires before the long haul south.
-- **Redwings and fieldfares**, arriving from Scandinavia to strip the berries.
-- **Skeins of geese**, low and loud at first light.
+- **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
+- **Ownership.** You own the application, so you decide how the newsletter fits into the way you already publish. It can be a quick note when there's something new to share, or a longer piece of writing every weekend.
+- **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in a coming email.
 
-Migration isn't a single event so much as a river — a few nights of hard passage, then a lull, then another push when the wind turns kind.
+Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
 
-Grab a flask, find a gap in the treeline, and give the sky twenty quiet minutes. This is the season that rewards standing still.`,
+*P.S.* Speaking of lists and in keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "waxwings-and-fieldfares",
-    subject: "Waxwings and fieldfares",
+    slug: "publishing",
+    subject: "Publishing",
+    kind: "sent",
+    sentIndex: 2,
+    markdown: `# Publishing
+
+Every issue follows the same path, from a draft to a permanent page on the web.
+
+1. **Write** the post in Markdown, in the editor or with Claude, and preview the exact email your subscribers will get.
+2. **Schedule it.** The send waits in a review window until its fire time. Until then, you can cancel it or move it.
+3. **Send yourself a test**, and read it where it counts: in a real inbox. A test of a scheduled post is the exact email that will go out.
+4. **It goes out.** When the window closes, Kestrel sends to your confirmed subscribers, skips anyone who bounced or complained, mails each address once, and records every delivery.
+5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
+
+The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
+  },
+  {
+    id: "5eed0002-0000-4000-8000-000000000002",
+    slug: "working-with-robots",
+    subject: "Working with robots",
+    kind: "sent",
+    sentIndex: 3, // the most recent send
+    markdown: `# Working with robots
+
+Give Claude a piece of writing and ask it to schedule an email to the list for Friday morning, and it does the thing you asked for.
+
+Kestrel is a full-fledged application built for publishers, and it's designed with this in mind:
+
+1. Posts are written in Markdown.
+2. Everything is built on an API.
+3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
+
+Publishing and scheduling can be stressful, especially when it comes to last-minute edits. With Kestrel, you can ask Claude to proofread and schedule for you, and trust that it's done right.
+
+The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
+  },
+  {
+    id: "5eed0003-0000-4000-8000-000000000003",
+    slug: "a-quick-note",
+    subject: "A quick note",
     kind: "scheduled",
-    markdown: `# Waxwings and fieldfares
+    markdown: `# A quick note
 
-When the berries ripen and the north turns hard, the supermarket car parks fill up — with **waxwings**. These punk-crested wanderers arrive in irruption years to gorge on rowan and cotoneaster, often in the most unglamorous corners of town.
+Not every issue has to be long. Sometimes the best newsletter is a quick note that there's something new to read, watch, or listen to.
 
-## Worth the detour
-
-- **Waxwings** — trilling flocks, sleek fawn bodies, a flash of yellow and red in the wing.
-- **Fieldfares** — bold, chuckling thrushes working the hedges in loose parties.
-- **Bramblings** — hiding among the chaffinches under the beeches.
-
-Keep an eye on the berry trees near the shops this month. Some of the best winter birding happens where nobody thinks to look.`,
+Thanks for reading Field Notes.`,
   },
   {
     id: "5eed0006-0000-4000-8000-000000000006",
-    slug: "the-secret-life-of-robins",
-    subject: "The secret life of robins",
+    slug: "try-editing-this-draft",
+    subject: "Try editing this draft",
     kind: "draft",
     daysAgo: 2,
-    markdown: `# The secret life of robins
+    markdown: `# Try editing this draft
 
-*(Draft — notes toward the next issue.)*
+*(Draft. Nobody has seen this but you.)*
 
-The robin following your spade isn't being friendly; it's being opportunistic. In the woods it does the same thing behind wild boar, waiting for turned earth to expose a meal.
+This post is here to experiment on. Change a word, add a heading, drop in an image, and watch the preview follow.
 
-TODO:
-- the myth of the "friendly" robin
-- why both sexes hold winter territory
-- that they'll sing under a streetlight all night`,
+A few things to try:
+
+- **Preview** shows the email exactly as a subscriber will get it.
+- **Send test** mails it to the test inboxes in Settings. In this demo they're \`fieldnotes.example\` addresses, which never reach a real inbox.
+- **Schedule** puts it in the queue behind the review window.
+
+Nothing you do to a draft reaches the list until you schedule it and its window closes.`,
   },
   {
     id: "5eed0007-0000-4000-8000-000000000007",
-    slug: "the-ethics-of-backyard-feeding",
-    subject: "The ethics of backyard feeding",
+    slug: "ideas-for-next-month",
+    subject: "Ideas for next month",
     kind: "draft",
     daysAgo: 6,
-    markdown: `# The ethics of backyard feeding
+    markdown: `# Ideas for next month
 
-*(Draft — still thinking this one through.)*
-
-Feeding garden birds is one of the most popular ways people connect with wildlife — and it isn't automatically harmless. Dirty feeders spread disease; the wrong food does more harm than good.
+*(Draft. Notes, not an issue yet.)*
 
 TODO:
-- clean feeders on a schedule (and why)
-- what never to put out
-- feeding as a supplement, not a dependency`,
+- reading a send's record: accepted, bounced, complained
+- the plain-text version every email carries
+- why double opt-in is worth the smaller list`,
   },
 ];
 
@@ -208,28 +215,32 @@ TODO:
  *
  *  Read as a story from the top: the list is imported, post #1 goes out, the list
  *  grows and sheds a few readers, post #2 goes out (and draws a bounce and a
- *  complaint just after), it grows again, then post #3 goes out. */
+ *  complaint just after), it grows again, then posts #3 and #4 go out. */
 interface Timeline {
   now: number;
   importAt: number;
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   scheduledFireAt: number;
-  /** The three completed sends, oldest first — indexed by `SeedPost.sentIndex`. Each also
-   *  anchors the churn wave it prompts and bounds the growth cohort confirmed after it: the
-   *  gaps between these are where sign-ups and unsubscribes are dispersed. */
-  sentAt: [number, number, number];
+  /** The four completed sends, oldest first — indexed by `SeedPost.sentIndex`. The first
+   *  three each anchor the churn wave they prompt, and all of them bound the growth cohort
+   *  confirmed after them: the gaps between these are where sign-ups and unsubscribes are
+   *  dispersed. */
+  sentAt: number[];
 }
 
 export function buildTimeline(now: number): Timeline {
-  const send2At = now - 7 * WEEK;
+  // A weekly newsletter: four sends a week apart, the last five days ago, and the scheduled
+  // issue two days out, a week after it. The list was imported just before the first.
+  const first = now - 26 * DAY;
+  const send2At = first + WEEK;
   return {
     now,
-    importAt: now - 14 * WEEK,
+    importAt: first - 12 * DAY,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
-    sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
+    sentAt: [first, send2At, first + 2 * WEEK, first + 3 * WEEK],
   };
 }
 
@@ -469,7 +480,7 @@ interface BuiltAudience {
   subscribers: SeedSubscriber[];
   suppressions: SeedSuppression[];
   /** The mailable audience frozen at each completed send (sorted emails), oldest first. */
-  sentAudiences: [string[], string[], string[]];
+  sentAudiences: string[][];
   /** The bounce/complaint webhook events attributed to send #2 (reported just after it,
    *  and the source of this dataset's suppressions), keyed by recipient email. Applied to
    *  that send's delivery rows so the record carries the event that shadowed each address. */
@@ -544,9 +555,9 @@ function buildAudience(t: Timeline): BuiltAudience {
   const IMPORT = 140;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
   const churnWaves = [
-    { sentAt: t.sentAt[0], count: 6 }, // wave after #1 — leaves before #2
-    { sentAt: t.sentAt[1], count: 5 }, // wave after #2 — leaves before #3
-    { sentAt: t.sentAt[2], count: 4 }, // wave after #3 — still gone today
+    { sentAt: unwrap(t.sentAt[0], "send timeline slot"), count: 6 }, // after #1, gone before #2
+    { sentAt: unwrap(t.sentAt[1], "send timeline slot"), count: 5 }, // after #2, gone before #3
+    { sentAt: unwrap(t.sentAt[2], "send timeline slot"), count: 4 }, // after #3, gone before #4
   ];
   // One entry per churner, waves interleaved round by round; `inWave` (the round) feeds the
   // front-loaded unsub spike so early members leave sooner than later ones.
@@ -578,7 +589,7 @@ function buildAudience(t: Timeline): BuiltAudience {
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
   // first post right up to today — the list is still growing, it doesn't stop at the last
   // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
-  // most), and the stream spans all three sends, so every completed send freezes a different,
+  // most), and the stream spans every send, so every completed send freezes a different,
   // growing slice while the newest confirmations sit near "now".
   const GROWTH = 32;
   const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
@@ -601,7 +612,7 @@ function buildAudience(t: Timeline): BuiltAudience {
 
   // Two core subscribers draw a hard bounce and a spam complaint just after post #2.
   // Both stay confirmed (suppression is orthogonal to consent, §7) but are suppressed
-  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3 and today.
+  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3, #4, and today.
   const bounceEmail = unwrap(coreEmails[3], "core subscriber");
   const complaintEmail = unwrap(coreEmails[9], "core subscriber");
   const suppressions: SeedSuppression[] = [
@@ -619,11 +630,7 @@ function buildAudience(t: Timeline): BuiltAudience {
     },
   ];
 
-  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
-    string[],
-    string[],
-    string[],
-  ];
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
   // The bounce and complaint were reported just after post #2, so their delivery events
   // belong to that send alone (see the loop in seedDatabase).
   const sendTwoEvents = new Map<string, DeliveryEvent>([
@@ -639,7 +646,7 @@ function buildAudience(t: Timeline): BuiltAudience {
 // --- scaled audience (parametric seed) --------------------------------------
 
 /** Options for a parametric seed. `size` is the approximate confirmed-now list size (an
- *  approximate target, not exact); absent, the curated Windbreak dataset is loaded
+ *  approximate target, not exact); absent, the curated Field Notes dataset is loaded
  *  unchanged. `seed` makes a given `(size, seed)` reproducible. */
 export interface SeedOptions {
   size?: number;
@@ -768,7 +775,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     const wave = waveBySlot.get(slot);
     if (wave != null) {
       const sentAt = unwrap(t.sentAt[wave], "send timeline slot");
-      const nextAt = wave < 2 ? unwrap(t.sentAt[wave + 1], "send timeline slot") : t.now;
+      const nextAt = t.sentAt[wave + 1] ?? t.now; // before the next send, or today after the last
       make("unsubscribed", createdAt, createdAt, churnAt(sentAt, nextAt));
     } else {
       coreEmails.push(make("confirmed", createdAt, createdAt, null));
@@ -799,7 +806,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   }
 
   // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
-  // they were mailed by #1 and #2, then shadowed out of #3 and today). Disjoint draws, so
+  // they were mailed by #1 and #2, then shadowed out of #3, #4, and today). Disjoint draws, so
   // no address is both bounced and complained.
   const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate * jitter(0.3)));
   const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
@@ -831,11 +838,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     sendTwoEvents.set(email, { event: "complained", detail: "abuse", at: t.complaintAt });
   });
 
-  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
-    string[],
-    string[],
-    string[],
-  ];
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
   return { subscribers, suppressions, sentAudiences, sendTwoEvents };
 }
 
@@ -965,7 +968,7 @@ export interface SeedSummary {
 }
 
 /**
- * Reset the database and load the Windbreak demo dataset. `kestrelFile` and
+ * Reset the database and load the Field Notes demo dataset. `kestrelFile` and
  * `logoFile`, when provided, are written to R2 (the post cover, and the publication
  * logo) — both are supplied by `scripts/seed.mjs` from `scripts/seed-assets/`, so
  * the seed carries no bundled bytes. The cover is referenced by the post either
@@ -986,18 +989,18 @@ export async function seedDatabase(
   await resetAll(db);
 
   // Give the demo a real identity so the reader surface, subscribe form, and post
-  // pages are branded out of the box as the mock publication, "Windbreak". The default
+  // pages are branded out of the box as the mock publication, "Field Notes". The default
   // test recipients are the publisher's own proofing inboxes (they bypass the
   // subscribe/consent flow, §7), so "Send test email" pre-fills them out of the box and
   // that path is exercised without hand-typing an address. `.example` is the reserved
   // demo TLD, so these can never reach a real inbox even under a live provider.
   await updateSettings(db, {
     publication: {
-      name: "Windbreak",
-      tagline: "for the birds",
+      name: "Field Notes",
+      tagline: "A demo publication",
       address: "123 Beep Boop Lane, San Francisco, CA 94131",
     },
-    testRecipients: ["editor@windbreak.example", "proof@windbreak.example"],
+    testRecipients: ["editor@fieldnotes.example", "proof@fieldnotes.example"],
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.

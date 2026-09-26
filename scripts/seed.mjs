@@ -68,12 +68,14 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
 
   // The publication logo. Committed (unlike the cover photo), so it normally just
   // rides along; the worker writes it to R2 and records the branding metadata.
-  const logoPath = join(coverDir, "windbreak-logo.png");
+  const logoPath = join(coverDir, "field-notes-logo.png");
   if (existsSync(logoPath)) {
     const bytes = await readFile(logoPath);
-    form.set("logo", new Blob([bytes], { type: "image/png" }), "windbreak-logo.png");
+    form.set("logo", new Blob([bytes], { type: "image/png" }), "field-notes-logo.png");
   } else {
-    console.warn(`[${tag}] no scripts/seed-assets/windbreak-logo.png — seeding without the logo.`);
+    console.warn(
+      `[${tag}] no scripts/seed-assets/field-notes-logo.png — seeding without the logo.`,
+    );
   }
 
   let res;

@@ -151,7 +151,7 @@ export function archiveMasthead(opts: {
   return (
     `<div class="k-mast" style="display:flex;justify-content:space-between;align-items:baseline;gap:16px;` +
     `font-family:${FONT};font-size:13px;line-height:1.5;padding-bottom:14px;margin-bottom:28px;">` +
-    `<a href="${url}" style="color:inherit;text-decoration:none;font-weight:600;font-size:15px;font-family:${HEADING_FONT};"><span style="font-family:${FONT};font-weight:500;">&larr;</span>&nbsp;${name}</a>` +
+    `<a href="${url}" style="text-decoration:none;font-weight:600;font-size:15px;font-family:${HEADING_FONT};"><span style="font-family:${FONT};font-weight:500;">&larr;</span>&nbsp;${name}</a>` +
     `<span style="white-space:nowrap;">${date}</span>` +
     `</div>`
   );
