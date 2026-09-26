@@ -41,8 +41,9 @@
   // KESTREL_CLIENT_DEV). watch_dir is pinned to src/ (wrangler's default, made explicit):
   // under `wrangler dev` this re-runs only on Worker edits, while client/ and public/
   // edits are handled by the watch that scripts/dev.mjs runs beside it — the two must not
-  // both react to the same change.
-  "build": { "command": "node scripts/build-client.mjs", "watch_dir": "./src" },
+  // both react to the same change. demo/ is watched too: its Markdown is bundled into the
+  // Worker (src/dev/demo.ts), so an edit there has to rebuild it before the next seed.
+  "build": { "command": "node scripts/build-client.mjs", "watch_dir": ["./src", "./demo"] },
 
   "d1_databases": [
     {

@@ -30,7 +30,7 @@ import { seedDemo } from "./seed.mjs";
 import { triggerSweep } from "./sweep-ticker.mjs";
 
 const TAG = "simulate-send";
-/** The demo's scheduled post (src/dev/seed.ts): the one a demo send moves when it can. */
+/** The demo's scheduled post (`demo/posts/5-a-quick-note.md`): the one a demo send moves when it can. */
 const DEMO_SCHEDULED_SLUG = "a-quick-note";
 /** Covers the request's trip, so a send asked for exactly one lead out isn't refused as
  *  just inside it by the time the server reads the clock. */

@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 /*
- * Load the local "Field Notes" demo dataset into the running dev server.
+ * Load the local demo publication into the running dev server.
  *
  * This is a thin wrapper around the dev-only `POST /api/dev/seed` route (fake
  * transport only): it mints a local admin token from `/api/dev/token`, attaches the
- * cover photo from `scripts/seed-assets/kestrel.jpg` if present, and POSTs. The
+ * images the demo refers to (each image a post shows, from beside it in its bundle, and
+ * the logo `publication.md` names), and POSTs. The posts themselves are bundled into the worker. The
  * worker itself does the reset, the render, and the R2 write — so this needs the
  * dev server up (`npm run dev`), and it never talks to D1/R2 directly.
  *
@@ -19,7 +20,7 @@
  * `--size`, the curated story-shaped list (~155 subscribers) loads unchanged.
  */
 import { existsSync, realpathSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { baseUrl, devToken, fail, parseArgs } from "./dev-api.mjs";
@@ -50,32 +51,51 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
     ".png": "image/png",
     ".gif": "image/gif",
   };
-  const coverDir = join(root, "scripts", "seed-assets");
-  const coverName = [".webp", ".jpg", ".jpeg", ".png", ".gif"]
-    .map((ext) => `kestrel${ext}`)
-    .find((name) => existsSync(join(coverDir, name)));
-  if (coverName) {
-    const bytes = await readFile(join(coverDir, coverName));
-    const type =
-      CONTENT_TYPE[coverName.slice(coverName.lastIndexOf("."))] || "application/octet-stream";
-    form.set("kestrel", new Blob([bytes], { type }), coverName);
-  } else {
-    console.warn(
-      `[${tag}] no scripts/seed-assets/kestrel.{webp,jpg,jpeg,png,gif} found — seeding without the cover image.\n` +
-        "        Drop the kestrel photo there and re-run `npm run seed` to fill it in.",
-    );
-  }
+  // The images are the files in `demo/` that the demo refers to, so those files are the only
+  // place to change them. The worker parses the posts and front matter for everything else.
+  const demoDir = join(root, "demo");
+  const frontMatterValue = (text, key) => {
+    const block = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
+    const line = block.split("\n").find((l) => l.startsWith(`${key}:`));
+    return line?.slice(key.length + 1).trim() || undefined;
+  };
+  // `rel` is the file's path under demo/; `name` is what the worker is told it's called.
+  const attach = async (field, rel, name, what) => {
+    const path = join(demoDir, rel);
+    if (!existsSync(path)) {
+      console.warn(`[${tag}] no demo/${rel} — seeding without the ${what}.`);
+      return;
+    }
+    const type = CONTENT_TYPE[rel.slice(rel.lastIndexOf("."))] || "application/octet-stream";
+    form.append(field, new Blob([await readFile(path)], { type }), name);
+  };
 
-  // The publication logo. Committed (unlike the cover photo), so it normally just
-  // rides along; the worker writes it to R2 and records the branding metadata.
-  const logoPath = join(coverDir, "field-notes-logo.png");
-  if (existsSync(logoPath)) {
-    const bytes = await readFile(logoPath);
-    form.set("logo", new Blob([bytes], { type: "image/png" }), "field-notes-logo.png");
-  } else {
-    console.warn(
-      `[${tag}] no scripts/seed-assets/field-notes-logo.png — seeding without the logo.`,
-    );
+  // Each post is a page bundle, `demo/posts/<bundle>/index.md` with its images beside it.
+  // Every image the post shows by a bare filename (`![…](kestrel.webp)`) is uploaded as
+  // `<bundle>/<file>`, and the worker attaches it to that post (see src/dev/demo.ts).
+  const postsDir = join(demoDir, "posts");
+  for (const bundle of (await readdir(postsDir, { withFileTypes: true }))
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)) {
+    const text = await readFile(join(postsDir, bundle, "index.md"), "utf8");
+    const shown = new Set();
+    for (const [, name] of text.matchAll(/!\[[^\]]*\]\(\s*([^)\s]+)/g)) {
+      if (!name.includes("/") && !name.includes(":")) {
+        shown.add(name);
+      }
+    }
+    for (const name of shown) {
+      await attach(
+        "image",
+        `posts/${bundle}/${name}`,
+        `${bundle}/${name}`,
+        `image ${bundle}/${name}`,
+      );
+    }
+  }
+  const logo = frontMatterValue(await readFile(join(demoDir, "publication.md"), "utf8"), "logo");
+  if (logo) {
+    await attach("logo", logo, logo, "logo");
   }
 
   let res;
@@ -115,7 +135,7 @@ async function main() {
     `  posts: ${summary.posts.sent} sent, ${summary.posts.scheduled} scheduled, ${summary.posts.draft} draft`,
   );
   console.log(
-    `  deliveries: ${summary.deliveries}  •  cover image written: ${summary.coverImageBytesWritten}  •  logo written: ${summary.logoWritten}`,
+    `  deliveries: ${summary.deliveries}  •  images written: ${summary.imagesWritten}  •  logo written: ${summary.logoWritten}`,
   );
   console.log("");
   console.log("  view it:");

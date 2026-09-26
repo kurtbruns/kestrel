@@ -52,161 +52,24 @@ import { unwrap } from "../lib/unwrap";
 import { render } from "../render/render";
 import { resolveBranding } from "../render/template_engine";
 import { onTheMinute } from "../send/schedule";
+import { type DemoPost, loadDemo } from "./demo";
 
 const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
 const HOUR = 60 * 60 * 1000;
 
-/** The kestrel post's post id is fixed so the cover image's storage key is stable
- *  across re-seeds. The cover filename follows whatever file is supplied (jpg, webp,
- *  png, …); when none is, it falls back to this default and the reference 404s until
- *  a file is dropped in. */
-const KESTREL_POST_ID = "5eed0001-0000-4000-8000-000000000001";
-const DEFAULT_COVER_FILENAME = "kestrel.jpg";
-
-type SeedPostKind = "sent" | "scheduled" | "draft";
-
-interface SeedPost {
-  id: string;
-  slug: string;
-  subject: string;
-  markdown: string;
-  kind: SeedPostKind;
-  /** Sent posts only: which completed send on the timeline this is (0 = oldest).
-   *  The send time and the frozen audience both come from that timeline slot. */
-  sentIndex?: number;
-  /** Draft posts only: how long ago the draft was last touched. */
-  daysAgo?: number;
-  hasCover?: boolean;
+/** An image file `scripts/seed.mjs` uploads from a post's bundle, named `<bundle>/<file>`. */
+export interface DemoImageFile {
+  bytes: ArrayBuffer;
+  contentType: string;
+  filename: string;
 }
 
-// --- the posts --------------------------------------------------------------
-
-const SEED_POSTS: SeedPost[] = [
-  {
-    id: KESTREL_POST_ID,
-    slug: "the-hovering-hunter",
-    subject: "The hovering hunter",
-    kind: "sent",
-    sentIndex: 0, // the launch post, the oldest in the archive, with the cover photo
-    hasCover: true,
-    markdown: `# The hovering hunter
-
-Welcome to Field Notes, a demo publication of the Kestrel application. Everything here, from the subscribers to the sends to this archive, is sample data, so look around and change whatever you like.
-
-The app is named after a small falcon called a [kestrel](https://en.wikipedia.org/wiki/Common_kestrel). One way to spot a kestrel is by how it hunts, using a technique called wind-hovering. The bird faces into the wind and hovers in place, watching the ground below for prey. Here's what a kestrel looks like:
-
-![A male Canarian kestrel in flight, wings spread over a green field](kestrel.jpg)
-
-*A male Canarian kestrel in strong wind. Taken in Funchal, Madeira by [u/treecreaper](https://www.reddit.com/r/birdsofprey/comments/1rlew5p/canarian_kestrel/).*
-
-To see what Kestrel can do, open the dashboard and try editing one of the drafts.`,
-  },
-  {
-    id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "an-old-fashioned-list",
-    subject: "An old-fashioned list",
-    kind: "sent",
-    sentIndex: 1,
-    markdown: `# An old-fashioned list
-
-The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
-
-So what sets Kestrel apart from the countless other platforms and services?
-
-- **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
-- **Ownership.** You own the application, so you decide how the newsletter fits into the way you already publish. It can be a quick note when there's something new to share, or a longer piece of writing every weekend.
-- **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in a coming email.
-
-Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
-
-*P.S.* Speaking of lists and in keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
-  },
-  {
-    id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "publishing",
-    subject: "Publishing",
-    kind: "sent",
-    sentIndex: 2,
-    markdown: `# Publishing
-
-Every issue follows the same path, from a draft to a permanent page on the web.
-
-1. **Write** the post in Markdown, in the editor or with Claude, and preview the exact email your subscribers will get.
-2. **Schedule it.** The send waits in a review window until its fire time. Until then, you can cancel it or move it.
-3. **Send yourself a test**, and read it where it counts: in a real inbox. A test of a scheduled post is the exact email that will go out.
-4. **It goes out.** When the window closes, Kestrel sends to your confirmed subscribers, skips anyone who bounced or complained, mails each address once, and records every delivery.
-5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
-
-The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
-  },
-  {
-    id: "5eed0002-0000-4000-8000-000000000002",
-    slug: "working-with-robots",
-    subject: "Working with robots",
-    kind: "sent",
-    sentIndex: 3, // the most recent send
-    markdown: `# Working with robots
-
-Give Claude a piece of writing and ask it to schedule an email to the list for Friday morning, and it does the thing you asked for.
-
-Kestrel is a full-fledged application built for publishers, and it's designed with this in mind:
-
-1. Posts are written in Markdown.
-2. Everything is built on an API.
-3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
-
-Publishing and scheduling can be stressful, especially when it comes to last-minute edits. With Kestrel, you can ask Claude to proofread and schedule for you, and trust that it's done right.
-
-The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
-  },
-  {
-    id: "5eed0003-0000-4000-8000-000000000003",
-    slug: "a-quick-note",
-    subject: "A quick note",
-    kind: "scheduled",
-    markdown: `# A quick note
-
-Not every issue has to be long. Sometimes the best newsletter is a quick note that there's something new to read, watch, or listen to.
-
-Thanks for reading Field Notes.`,
-  },
-  {
-    id: "5eed0006-0000-4000-8000-000000000006",
-    slug: "try-editing-this-draft",
-    subject: "Try editing this draft",
-    kind: "draft",
-    daysAgo: 2,
-    markdown: `# Try editing this draft
-
-*(Draft. Nobody has seen this but you.)*
-
-This post is here to experiment on. Change a word, add a heading, drop in an image, and watch the preview follow.
-
-A few things to try:
-
-- **Preview** shows the email exactly as a subscriber will get it.
-- **Send test** mails it to the test inboxes in Settings. In this demo they're \`fieldnotes.example\` addresses, which never reach a real inbox.
-- **Schedule** puts it in the queue behind the review window.
-
-Nothing you do to a draft reaches the list until you schedule it and its window closes.`,
-  },
-  {
-    id: "5eed0007-0000-4000-8000-000000000007",
-    slug: "ideas-for-next-month",
-    subject: "Ideas for next month",
-    kind: "draft",
-    daysAgo: 6,
-    markdown: `# Ideas for next month
-
-*(Draft. Notes, not an issue yet.)*
-
-TODO:
-- reading a send's record: accepted, bounced, complained
-- the plain-text version every email carries
-- why double opt-in is worth the smaller list`,
-  },
-];
+/** A demo post's id comes from its place in `demo/posts` (the first file is …0001), so a
+ *  re-seed keeps each post's editor URL and the cover image's storage key the same. */
+function demoPostId(position: number): string {
+  return `5eed${String(position).padStart(4, "0")}-0000-4000-8000-${String(position).padStart(12, "0")}`;
+}
 
 // --- the timeline -----------------------------------------------------------
 
@@ -222,7 +85,7 @@ interface Timeline {
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   scheduledFireAt: number;
-  /** The four completed sends, oldest first — indexed by `SeedPost.sentIndex`. The first
+  /** The four completed sends, oldest first — the demo's sent posts take them in order. The first
    *  three each anchor the churn wave they prompt, and all of them bound the growth cohort
    *  confirmed after them: the gaps between these are where sign-ups and unsubscribes are
    *  dispersed. */
@@ -930,25 +793,25 @@ function buildDeliveries(
 // --- render helpers ---------------------------------------------------------
 
 function renderInputFor(
-  seedPost: SeedPost,
+  id: string,
+  demoPost: DemoPost,
   at: number,
   markdown: string,
 ): { post: PostRow; revision: RevisionRow } {
   const post: PostRow = {
-    id: seedPost.id,
-    slug: seedPost.slug,
-    subject: seedPost.subject,
-    status:
-      seedPost.kind === "draft" ? "draft" : seedPost.kind === "scheduled" ? "scheduled" : "sent",
-    current_revision: `${seedPost.id}-rev`,
+    id,
+    slug: demoPost.slug,
+    subject: demoPost.subject,
+    status: demoPost.status,
+    current_revision: `${id}-rev`,
     created_at: at,
     updated_at: at,
   };
   const revision: RevisionRow = {
-    id: `${seedPost.id}-rev`,
-    post_id: seedPost.id,
+    id: `${id}-rev`,
+    post_id: id,
     markdown,
-    metadata: JSON.stringify({ subject: seedPost.subject, slug: seedPost.slug }),
+    metadata: JSON.stringify({ subject: demoPost.subject, slug: demoPost.slug }),
     author: "seed",
     created_at: at,
   };
@@ -962,45 +825,54 @@ export interface SeedSummary {
   audience: number;
   posts: { sent: number; scheduled: number; draft: number };
   deliveries: number;
-  coverImageBytesWritten: boolean;
+  /** How many of the images the posts show had their bytes supplied and written to R2. */
+  imagesWritten: number;
   logoWritten: boolean;
   urls: { archive: string[]; admin: string };
 }
 
 /**
- * Reset the database and load the Field Notes demo dataset. `kestrelFile` and
- * `logoFile`, when provided, are written to R2 (the post cover, and the publication
- * logo) — both are supplied by `scripts/seed.mjs` from `scripts/seed-assets/`, so
- * the seed carries no bundled bytes. The cover is referenced by the post either
+ * Reset the database and load the demo publication: its identity and posts come from the
+ * Markdown under `demo/` (see `loadDemo`), its subscribers and send history from the
+ * timeline here. `imageFiles` and `logoFile`, when provided, are written to R2 (the images
+ * the posts show, and the publication logo) — both are supplied by `scripts/seed.mjs` from
+ * `demo/`, so the seed carries no bundled bytes. The cover is referenced by the post either
  * way (dropping the file in and re-seeding fills it), so it 404s until present; the
  * logo just falls back to the initial-letter tile when absent.
  */
 export async function seedDatabase(
   env: AppEnv,
   config: Config,
-  kestrelFile?: { bytes: ArrayBuffer; contentType: string; filename: string },
+  imageFiles: DemoImageFile[] = [],
   logoFile?: { bytes: ArrayBuffer; contentType: string },
   options?: SeedOptions,
 ): Promise<SeedSummary> {
   const db = env.DB;
   const now = Date.now();
   const timeline = buildTimeline(now);
+  const demo = loadDemo();
+  const sentPosts = demo.posts.filter((p) => p.status === "sent").length;
+  if (sentPosts > timeline.sentAt.length) {
+    throw new Error(
+      `demo/posts has ${sentPosts} sent posts, but the seed timeline has ${timeline.sentAt.length} sends`,
+    );
+  }
 
   await resetAll(db);
 
   // Give the demo a real identity so the reader surface, subscribe form, and post
-  // pages are branded out of the box as the mock publication, "Field Notes". The default
+  // pages are branded out of the box as the demo publication (`demo/publication.md`). The default
   // test recipients are the publisher's own proofing inboxes (they bypass the
   // subscribe/consent flow, §7), so "Send test email" pre-fills them out of the box and
   // that path is exercised without hand-typing an address. `.example` is the reserved
   // demo TLD, so these can never reach a real inbox even under a live provider.
   await updateSettings(db, {
     publication: {
-      name: "Field Notes",
-      tagline: "A demo publication",
-      address: "123 Beep Boop Lane, San Francisco, CA 94131",
+      name: demo.publication.name,
+      tagline: demo.publication.tagline,
+      address: demo.publication.address,
     },
-    testRecipients: ["editor@fieldnotes.example", "proof@fieldnotes.example"],
+    testRecipients: demo.publication.testRecipients,
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.
@@ -1030,31 +902,36 @@ export async function seedDatabase(
 
   const audience = await audienceEmails(db); // the authoritative confirmed-minus-suppressed list
 
-  // Cover image: use the supplied file's own name (so a .webp stays a .webp), write
-  // the bytes if given, and record the row either way so the rendered post resolves
-  // the reference. R2 serves back whatever content type we store — browsers render
-  // webp, png, gif and jpeg alike, so any of them works for the cover.
-  const coverFilename = kestrelFile?.filename || DEFAULT_COVER_FILENAME;
-  const coverKey = `posts/${KESTREL_POST_ID}/${coverFilename}`;
-  const coverDims = kestrelFile ? probeImageDimensions(new Uint8Array(kestrelFile.bytes)) : null;
-  const coverRow: ImageRow = {
-    id: newId(),
-    post_id: KESTREL_POST_ID,
-    filename: coverFilename,
-    storage_key: coverKey,
-    content_type: kestrelFile?.contentType || "image/jpeg",
-    width: coverDims?.width ?? null,
-    height: coverDims?.height ?? null,
-    created_at: now,
-  };
-  let coverImageBytesWritten = false;
-  if (kestrelFile) {
-    await env.MEDIA.put(coverKey, kestrelFile.bytes, {
-      httpMetadata: { contentType: coverRow.content_type },
-    });
-    coverImageBytesWritten = true;
+  // Post images: each post's Markdown shows its images by filename, and each file sits beside
+  // the post's `index.md` in its bundle. The row is recorded either way so the render
+  // resolves the reference; the bytes land in R2 when `scripts/seed.mjs` supplied the file
+  // (missing, that one image 404s until it's back).
+  const uploaded = new Map(imageFiles.map((f) => [f.filename, f]));
+  const imagesByPost = new Map<number, ImageRow[]>();
+  let imageBytesWritten = 0;
+  for (const [i, demoPost] of demo.posts.entries()) {
+    for (const name of demoPost.images) {
+      const position = i + 1;
+      const file = uploaded.get(`${demoPost.bundle}/${name}`);
+      const key = `posts/${demoPostId(position)}/${name}`;
+      const dims = file ? probeImageDimensions(new Uint8Array(file.bytes)) : null;
+      const row: ImageRow = {
+        id: newId(),
+        post_id: demoPostId(position),
+        filename: name,
+        storage_key: key,
+        content_type: file?.contentType || "application/octet-stream",
+        width: dims?.width ?? null,
+        height: dims?.height ?? null,
+        created_at: now,
+      };
+      if (file) {
+        await env.MEDIA.put(key, file.bytes, { httpMetadata: { contentType: row.content_type } });
+        imageBytesWritten++;
+      }
+      imagesByPost.set(position, [...(imagesByPost.get(position) ?? []), row]);
+    }
   }
-  const coverImages: ImageRow[] = [coverRow];
 
   const counts = {
     sent: 0,
@@ -1068,29 +945,34 @@ export async function seedDatabase(
   // publication's branding (identity + default template) resolved above.
   const branding = resolveBranding(await getSettings(db), config);
 
-  for (const seedPost of SEED_POSTS) {
-    const images = seedPost.hasCover ? coverImages : [];
-    // Point the cover reference at the actual cover filename (e.g. kestrel.webp).
-    const markdown = seedPost.hasCover
-      ? seedPost.markdown.replace("kestrel.jpg", coverFilename)
-      : seedPost.markdown;
-
-    if (seedPost.kind === "draft") {
-      const at = now - (seedPost.daysAgo ?? 2) * DAY;
-      const { post, revision } = renderInputFor(seedPost, at, markdown);
+  let sentIndex = 0;
+  for (const [i, demoPost] of demo.posts.entries()) {
+    const id = demoPostId(i + 1);
+    const images = imagesByPost.get(i + 1) ?? [];
+    const markdown = demoPost.markdown;
+    const insertPostWithImages = async (post: PostRow, revision: RevisionRow) => {
       await insertPost(db, post, revision);
+      for (const image of images) {
+        await insertImage(db, image);
+      }
+    };
+
+    if (demoPost.status === "draft") {
+      const at = now - (demoPost.editedDaysAgo ?? 2) * DAY;
+      const { post, revision } = renderInputFor(id, demoPost, at, markdown);
+      await insertPostWithImages(post, revision);
       counts.draft++;
       continue;
     }
 
-    if (seedPost.kind === "scheduled") {
+    if (demoPost.status === "scheduled") {
       const at = now;
-      const { post, revision } = renderInputFor(seedPost, at, markdown);
+      const { post, revision } = renderInputFor(id, demoPost, at, markdown);
       const result = await render({ post, revision, images }, config, branding);
-      await insertPost(db, post, revision);
+      await insertPostWithImages(post, revision);
       await insertSend(db, {
         id: newId(),
-        post_id: seedPost.id,
+        post_id: id,
         status: "scheduled",
         fire_at: timeline.scheduledFireAt,
         rendered_html: result.html,
@@ -1107,21 +989,17 @@ export async function seedDatabase(
 
     // sent — its send time and frozen audience come from its timeline slot, so the
     // recipient count and delivery rows reflect the list AS IT WAS then (not today).
-    const sentIndex = seedPost.sentIndex ?? 0;
     const completedAt = unwrap(timeline.sentAt[sentIndex], "send timeline slot");
     const sentAudience = unwrap(built.sentAudiences[sentIndex], "frozen send audience");
     const fireAt = onTheMinute(completedAt) - 60 * 1000; // fired on the minute, completed within it
     const scheduledAt = fireAt - DAY; // scheduled a day ahead of the send
-    const { post, revision } = renderInputFor(seedPost, completedAt, markdown);
+    const { post, revision } = renderInputFor(id, demoPost, completedAt, markdown);
     const result = await render({ post, revision, images }, config, branding);
-    await insertPost(db, post, revision);
-    if (seedPost.hasCover) {
-      await insertImage(db, coverRow);
-    }
+    await insertPostWithImages(post, revision);
     const sendId = newId();
     await insertSend(db, {
       id: sendId,
-      post_id: seedPost.id,
+      post_id: id,
       status: "sent",
       fire_at: fireAt,
       rendered_html: result.html,
@@ -1146,7 +1024,8 @@ export async function seedDatabase(
     await recomputeSendCounters(db, sendId);
     counts.sent++;
     counts.deliveries += deliveries.length;
-    archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${seedPost.slug}`);
+    archiveUrls.push(`${config.archiveOrigin}${config.archiveBasePath}/${demoPost.slug}`);
+    sentIndex++;
   }
 
   const bucket = (status: SeedSubscriber["status"]) =>
@@ -1163,7 +1042,7 @@ export async function seedDatabase(
     audience: audience.length,
     posts: { sent: counts.sent, scheduled: counts.scheduled, draft: counts.draft },
     deliveries: counts.deliveries,
-    coverImageBytesWritten,
+    imagesWritten: imageBytesWritten,
     logoWritten,
     urls: { archive: archiveUrls, admin: `${config.appOrigin}/dashboard/` },
   };
