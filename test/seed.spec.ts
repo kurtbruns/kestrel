@@ -12,8 +12,8 @@ const base = "https://kestrel.test";
 const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
-// stream to today, and churns across three completed sends, so the mailable audience
-// fluctuates 140 → 147 → 151 and settles at 155 today (157 confirmed − 2 suppressed). These
+// stream to today, and churns across four completed sends, so the mailable audience
+// fluctuates 140 → 147 → 151 → 152 and settles at 155 today (157 confirmed − 2 suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
 const CONFIRMED = 157;
@@ -21,8 +21,8 @@ const PENDING = 3;
 const UNSUBSCRIBED = 15;
 const SUPPRESSED = 2;
 const AUDIENCE_NOW = CONFIRMED - SUPPRESSED; // 155
-const SENT_RECIPIENTS = [140, 147, 151]; // oldest → newest
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 438
+const SENT_RECIPIENTS = [140, 147, 151, 152]; // oldest → newest
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 590
 
 /** Delivery rows for one send (email + any post-send event) — proves the record is real
  *  rows, not a summary count. */
@@ -53,7 +53,7 @@ describe("dev seed (Field Notes dataset)", () => {
     });
     expect(summary.suppressions).toBe(SUPPRESSED);
     expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (I1)
-    expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
 
     const c = await counts(env.DB);
@@ -68,7 +68,7 @@ describe("dev seed (Field Notes dataset)", () => {
     expect(audience).toHaveLength(AUDIENCE_NOW);
 
     const sends = await listSends(env.DB);
-    expect(sends.filter((s) => s.status === "sent")).toHaveLength(3);
+    expect(sends.filter((s) => s.status === "sent")).toHaveLength(4);
     expect(sends.filter((s) => s.status === "scheduled")).toHaveLength(1);
     // The scheduled post fires in the future — a visible, cancelable window (I6) — and
     // targets today's list, distinct from the frozen historical audiences below.
@@ -168,7 +168,7 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("keeps drafts and the scheduled post out of the public archive", async () => {
     await seedDatabase(env, config());
-    for (const slug of ["try-editing-this-draft", "publishing-workflow"]) {
+    for (const slug of ["try-editing-this-draft", "a-quick-note"]) {
       const res = await SELF.fetch(`${base}/archive/${slug}`);
       expect(res.status).toBe(404);
     }
@@ -177,7 +177,7 @@ describe("dev seed (Field Notes dataset)", () => {
   it("is idempotent — re-seeding resets and reloads to the same counts", async () => {
     await seedDatabase(env, config());
     const summary = await seedDatabase(env, config());
-    expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
     const c = await counts(env.DB);
     expect(c).toEqual({

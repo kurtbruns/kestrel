@@ -6,7 +6,7 @@
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an initial import of already-confirmed subscribers backdated before the first post,
- * three completed sends spread over time, and — in between — new confirmations (the
+ * four completed sends spread over time, and — in between — new confirmations (the
  * list grows) and unsubscribes (the list churns), plus a hard bounce and a spam
  * complaint that become suppressions. The upshot is that every completed send freezes
  * the audience AS IT WAS at that moment: someone who unsubscribes after post #2 is
@@ -100,21 +100,32 @@ The app is named after a small falcon called a [kestrel](https://en.wikipedia.or
 
 *A male Canarian kestrel in strong wind. Taken in Funchal, Madeira by [u/treecreaper](https://www.reddit.com/r/birdsofprey/comments/1rlew5p/canarian_kestrel/).*
 
-## What Kestrel does
+To see what Kestrel can do, open the dashboard and try editing one of the drafts.`,
+  },
+  {
+    id: "5eed0005-0000-4000-8000-000000000005",
+    slug: "workflow",
+    subject: "Workflow",
+    kind: "sent",
+    sentIndex: 1,
+    markdown: `# Workflow
 
-Kestrel is a self-hosted newsletter app. With it you:
+Every issue follows the same path, from a draft to a permanent page on the web.
 
-- **Write** in Markdown, in the web editor or with Claude. Try it on one of the drafts.
-- **Preview** the exact email your subscribers will get, and send yourself a test.
-- **Schedule** it behind a review window you can cancel. The next issue is waiting in its window now.
-- **Send** it to a double opt-in list. Every issue gets a permanent page in the archive, like this one.`,
+1. **Write** the post in Markdown, in the editor or with Claude, and preview the exact email your subscribers will get.
+2. **Send yourself a test**, and read it where it counts: in a real inbox.
+3. **Schedule it.** The send waits in a review window until its fire time. Until then, you can cancel it, move it, or send another test.
+4. **It goes out.** When the window closes, Kestrel sends to your confirmed subscribers, skips anyone who bounced or complained, mails each address once, and records every delivery.
+5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
+
+The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
   },
   {
     id: "5eed0004-0000-4000-8000-000000000004",
     slug: "an-old-fashioned-list",
     subject: "An old-fashioned list",
     kind: "sent",
-    sentIndex: 1,
+    sentIndex: 2,
     markdown: `# An old-fashioned list
 
 The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
@@ -134,7 +145,7 @@ Publishing a newsletter comes down to one thing: a direct line to the people who
     slug: "working-with-robots",
     subject: "Working with robots",
     kind: "sent",
-    sentIndex: 2, // the most recent send
+    sentIndex: 3, // the most recent send
     markdown: `# Working with robots
 
 Give Claude a piece of writing and ask it to schedule an email to the list for Friday morning, and it does the thing you asked for.
@@ -150,21 +161,15 @@ Publishing and scheduling can be stressful, especially when it comes to last-min
 The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
   },
   {
-    id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "publishing-workflow",
-    subject: "Publishing workflow",
+    id: "5eed0003-0000-4000-8000-000000000003",
+    slug: "a-quick-note",
+    subject: "A quick note",
     kind: "scheduled",
-    markdown: `# Publishing workflow
+    markdown: `# A quick note
 
-Every issue follows the same path, from a draft to a permanent page on the web.
+Not every issue has to be long. Sometimes the best newsletter is a quick note that there's something new to read, watch, or listen to.
 
-1. **Write** the post in Markdown, in the editor or with Claude, and preview the exact email your subscribers will get.
-2. **Send yourself a test**, and read it where it counts: in a real inbox.
-3. **Schedule it.** The send waits in a review window until its fire time. Until then, you can cancel it, move it, or send another test.
-4. **It goes out.** When the window closes, Kestrel sends to your confirmed subscribers, skips anyone who bounced or complained, mails each address once, and records every delivery.
-5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
-
-The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
+Thanks for reading Field Notes.`,
   },
   {
     id: "5eed0006-0000-4000-8000-000000000006",
@@ -210,17 +215,18 @@ TODO:
  *
  *  Read as a story from the top: the list is imported, post #1 goes out, the list
  *  grows and sheds a few readers, post #2 goes out (and draws a bounce and a
- *  complaint just after), it grows again, then post #3 goes out. */
+ *  complaint just after), it grows again, then posts #3 and #4 go out. */
 interface Timeline {
   now: number;
   importAt: number;
   bounceAt: number; // hard bounce reported just after #2
   complaintAt: number; // spam complaint reported just after #2
   scheduledFireAt: number;
-  /** The three completed sends, oldest first — indexed by `SeedPost.sentIndex`. Each also
-   *  anchors the churn wave it prompts and bounds the growth cohort confirmed after it: the
-   *  gaps between these are where sign-ups and unsubscribes are dispersed. */
-  sentAt: [number, number, number];
+  /** The four completed sends, oldest first — indexed by `SeedPost.sentIndex`. The first
+   *  three each anchor the churn wave they prompt, and all of them bound the growth cohort
+   *  confirmed after them: the gaps between these are where sign-ups and unsubscribes are
+   *  dispersed. */
+  sentAt: number[];
 }
 
 export function buildTimeline(now: number): Timeline {
@@ -231,7 +237,7 @@ export function buildTimeline(now: number): Timeline {
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
-    sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK],
+    sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK, now - WEEK],
   };
 }
 
@@ -471,7 +477,7 @@ interface BuiltAudience {
   subscribers: SeedSubscriber[];
   suppressions: SeedSuppression[];
   /** The mailable audience frozen at each completed send (sorted emails), oldest first. */
-  sentAudiences: [string[], string[], string[]];
+  sentAudiences: string[][];
   /** The bounce/complaint webhook events attributed to send #2 (reported just after it,
    *  and the source of this dataset's suppressions), keyed by recipient email. Applied to
    *  that send's delivery rows so the record carries the event that shadowed each address. */
@@ -546,9 +552,9 @@ function buildAudience(t: Timeline): BuiltAudience {
   const IMPORT = 140;
   const importStep = (10 * DAY) / IMPORT; // spread across ~10 days, all before send #1
   const churnWaves = [
-    { sentAt: t.sentAt[0], count: 6 }, // wave after #1 — leaves before #2
-    { sentAt: t.sentAt[1], count: 5 }, // wave after #2 — leaves before #3
-    { sentAt: t.sentAt[2], count: 4 }, // wave after #3 — still gone today
+    { sentAt: unwrap(t.sentAt[0], "send timeline slot"), count: 6 }, // after #1, gone before #2
+    { sentAt: unwrap(t.sentAt[1], "send timeline slot"), count: 5 }, // after #2, gone before #3
+    { sentAt: unwrap(t.sentAt[2], "send timeline slot"), count: 4 }, // after #3, gone before #4
   ];
   // One entry per churner, waves interleaved round by round; `inWave` (the round) feeds the
   // front-loaded unsub spike so early members leave sooner than later ones.
@@ -580,7 +586,7 @@ function buildAudience(t: Timeline): BuiltAudience {
   // Organic growth: confirmed sign-ups arriving in one continuous stream from just after the
   // first post right up to today — the list is still growing, it doesn't stop at the last
   // historical send. Each confirms shortly after signing up (double opt-in is near-instant for
-  // most), and the stream spans all three sends, so every completed send freezes a different,
+  // most), and the stream spans every send, so every completed send freezes a different,
   // growing slice while the newest confirmations sit near "now".
   const GROWTH = 32;
   const growthStart = unwrap(t.sentAt[0], "send timeline slot") + 3 * DAY;
@@ -603,7 +609,7 @@ function buildAudience(t: Timeline): BuiltAudience {
 
   // Two core subscribers draw a hard bounce and a spam complaint just after post #2.
   // Both stay confirmed (suppression is orthogonal to consent, §7) but are suppressed
-  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3 and today.
+  // from then on, so they were mailed by #1 and #2 yet shadowed out of #3, #4, and today.
   const bounceEmail = unwrap(coreEmails[3], "core subscriber");
   const complaintEmail = unwrap(coreEmails[9], "core subscriber");
   const suppressions: SeedSuppression[] = [
@@ -621,11 +627,7 @@ function buildAudience(t: Timeline): BuiltAudience {
     },
   ];
 
-  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
-    string[],
-    string[],
-    string[],
-  ];
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
   // The bounce and complaint were reported just after post #2, so their delivery events
   // belong to that send alone (see the loop in seedDatabase).
   const sendTwoEvents = new Map<string, DeliveryEvent>([
@@ -770,7 +772,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     const wave = waveBySlot.get(slot);
     if (wave != null) {
       const sentAt = unwrap(t.sentAt[wave], "send timeline slot");
-      const nextAt = wave < 2 ? unwrap(t.sentAt[wave + 1], "send timeline slot") : t.now;
+      const nextAt = t.sentAt[wave + 1] ?? t.now; // before the next send, or today after the last
       make("unsubscribed", createdAt, createdAt, churnAt(sentAt, nextAt));
     } else {
       coreEmails.push(make("confirmed", createdAt, createdAt, null));
@@ -801,7 +803,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
   }
 
   // Suppressions: a hard bounce and a spam complaint cohort, both drawn from the core (so
-  // they were mailed by #1 and #2, then shadowed out of #3 and today). Disjoint draws, so
+  // they were mailed by #1 and #2, then shadowed out of #3, #4, and today). Disjoint draws, so
   // no address is both bounced and complained.
   const bounceCount = Math.max(1, Math.round(n * SCALE.bounceRate * jitter(0.3)));
   const complaintCount = Math.max(1, Math.round(n * SCALE.complaintRate * jitter(0.3)));
@@ -833,11 +835,7 @@ export function buildScaledAudience(t: Timeline, size: number, rand: () => numbe
     sendTwoEvents.set(email, { event: "complained", detail: "abuse", at: t.complaintAt });
   });
 
-  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at)) as [
-    string[],
-    string[],
-    string[],
-  ];
+  const sentAudiences = t.sentAt.map((at) => mailableAt(subscribers, suppressions, at));
   return { subscribers, suppressions, sentAudiences, sendTwoEvents };
 }
 

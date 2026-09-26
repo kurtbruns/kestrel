@@ -105,10 +105,11 @@ describe("buildScaledAudience", () => {
     expect(confirmed).toBeLessThan(11_500);
     expect(confirmed).not.toBe(10_000); // organic — not the exact round target
 
-    // The three frozen audiences fluctuate — none equal, all non-empty.
-    const [a, b, c] = built.sentAudiences;
-    expect(a.length).toBeGreaterThan(0);
-    expect(new Set([a.length, b.length, c.length]).size).toBe(3);
+    // The four frozen audiences fluctuate — none equal, all non-empty.
+    const sizes = built.sentAudiences.map((audience) => audience.length);
+    expect(sizes).toHaveLength(4);
+    expect(Math.min(...sizes)).toBeGreaterThan(0);
+    expect(new Set(sizes).size).toBe(4);
 
     // Suppressions stay a small fraction of the list (a realistic bounce+complaint rate).
     expect(built.suppressions.length).toBeGreaterThanOrEqual(2);
@@ -136,7 +137,7 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
   it("loads a spec-valid scaled dataset and is idempotent", async () => {
     const summary = await seedDatabase(env, config(), undefined, undefined, { size: 100, seed: 7 });
 
-    expect(summary.posts).toEqual({ sent: 3, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
     // Confirmed-now ≈ the requested 100 (PRNG-jittered so it reads organic, not exactly 100).
     expect(summary.subscribers.confirmed).toBeGreaterThan(80);
     expect(summary.subscribers.confirmed).toBeLessThan(120);
@@ -147,7 +148,7 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     const sent = (await listSends(env.DB))
       .filter((s) => s.status === "sent")
       .sort((x, y) => x.fire_at - y.fire_at);
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(4);
     const recipients = sent.map((s) => s.recipient_count);
     // The frozen audiences fluctuate (not all equal) and differ from today's list. At this
     // small size two of the three can coincide by chance, so require ≥2 distinct here; the
