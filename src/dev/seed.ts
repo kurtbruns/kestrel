@@ -104,11 +104,11 @@ To see what Kestrel can do, open the dashboard and try editing one of the drafts
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "workflow",
-    subject: "Workflow",
+    slug: "publishing",
+    subject: "Publishing",
     kind: "sent",
     sentIndex: 1,
-    markdown: `# Workflow
+    markdown: `# Publishing
 
 Every issue follows the same path, from a draft to a permanent page on the web.
 
