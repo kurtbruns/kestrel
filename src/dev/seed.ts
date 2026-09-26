@@ -2,7 +2,7 @@
  * The local demo dataset: "Field Notes", a demo publication whose issues walk through what
  * Kestrel does, seeded as a publication that has been running for a few months — not a thin
  * static snapshot. Between them the posts use what the render path handles (a cover image,
- * headings, emphasis, both kinds of list, a quote, links, a rule).
+ * headings, emphasis, both kinds of list, links).
  *
  * It models a chronological lifecycle so the app's states are actually exercised:
  * an initial import of already-confirmed subscribers backdated before the first post,
@@ -151,22 +151,20 @@ The next issue for this demo publication is already scheduled. You can find it i
   },
   {
     id: "5eed0005-0000-4000-8000-000000000005",
-    slug: "the-review-window",
-    subject: "The review window",
+    slug: "publishing-workflow",
+    subject: "Publishing workflow",
     kind: "scheduled",
-    markdown: `# The review window
+    markdown: `# Publishing workflow
 
-This issue is **scheduled**: it has a fire time, and until that moment it's only a plan.
+Every issue follows the same path, from a draft to a permanent page on the web.
 
-## Before it fires
+1. **Write** the post in Markdown, in the editor or with Claude, and preview the exact email your subscribers will get.
+2. **Send yourself a test**, and read it where it counts: in a real inbox.
+3. **Schedule it.** The send waits in a review window until its fire time. Until then, you can cancel it, move it, or send another test.
+4. **It goes out.** When the window closes, Kestrel sends to your confirmed subscribers, skips anyone who bounced or complained, mails each address once, and records every delivery.
+5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
 
-- **Cancel** the send, and the post is an editable draft again.
-- **Reschedule** it to a different time, without touching what was reviewed.
-- **Send a test** to check the email one more time.
-
-When the fire time arrives, the window closes. Kestrel takes the list as it stands (confirmed subscribers, minus anyone who bounced or complained), mails each address once, and records every delivery. After that, this issue gets its permanent page in the archive.
-
-To watch that happen locally, run \`npm run simulate-send\`: it moves this issue a minute or two out and prints the address of its send view.`,
+The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
   },
   {
     id: "5eed0006-0000-4000-8000-000000000006",
@@ -201,7 +199,7 @@ Nothing you do to a draft reaches the list until you schedule it and its window 
 TODO:
 - reading a send's record: accepted, bounced, complained
 - the plain-text version every email carries
-- putting the archive on your own domain`,
+- why double opt-in is worth the smaller list`,
   },
 ];
 

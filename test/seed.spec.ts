@@ -168,7 +168,7 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("keeps drafts and the scheduled post out of the public archive", async () => {
     await seedDatabase(env, config());
-    for (const slug of ["try-editing-this-draft", "the-review-window"]) {
+    for (const slug of ["try-editing-this-draft", "publishing-workflow"]) {
       const res = await SELF.fetch(`${base}/archive/${slug}`);
       expect(res.status).toBe(404);
     }
