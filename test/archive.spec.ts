@@ -16,7 +16,13 @@ import {
 } from "../src/render/render";
 import type { RequestContext } from "../src/router";
 import { archiveIndex, archivePage, landing } from "../src/routes/archive";
-import { confirmLanding, subscribeForm, unsubscribeLanding } from "../src/routes/public";
+import {
+  confirmLanding,
+  subscribe,
+  subscribeForm,
+  unsubscribe,
+  unsubscribeLanding,
+} from "../src/routes/public";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -323,7 +329,8 @@ describe("reader surface — no admin link once deployed (§11)", () => {
     // The tooltip spells out the dev-only scope for anyone who wonders if it ships.
     expect(withLink).toContain("Shown only on your local dev server");
     expect(deployed).not.toContain("/dashboard");
-    expect(deployed).not.toContain('class="r-dev"');
+    expect(deployed).not.toContain("r-dev");
+    expect(deployed).not.toContain("--k-accent");
   });
 
   it("archive index omits the dashboard link when devDashboardUrl is unset", async () => {
@@ -334,7 +341,8 @@ describe("reader surface — no admin link once deployed (§11)", () => {
       posts: [],
     }).text();
     expect(deployed).not.toContain("/dashboard");
-    expect(deployed).not.toContain('class="r-dev"');
+    expect(deployed).not.toContain("r-dev");
+    expect(deployed).not.toContain("--k-accent");
   });
 });
 
@@ -349,9 +357,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     devMode: boolean,
     path = "/",
     params: Record<string, string> = {},
+    init?: RequestInit,
   ): RequestContext {
     return {
-      req: new Request(`${base}${path}`),
+      req: new Request(`${base}${path}`, init),
       env,
       ctx: createExecutionContext(),
       url: new URL(`${base}${path}`),
@@ -365,7 +374,8 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     const on = await (await landing(ctxFor(true))).text();
     const off = await (await landing(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');
-    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
     expect(off).not.toContain("/dashboard");
   });
 
@@ -374,7 +384,8 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     const on = await (await archiveIndex(ctxFor(true))).text();
     const off = await (await archiveIndex(ctxFor(false))).text();
     expect(on).toContain('class="r-dev"');
-    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
     expect(off).not.toContain("/dashboard");
   });
 
@@ -393,7 +404,8 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     const on = await (await subscribeForm(ctxFor(true, "/subscribe"))).text();
     const off = await (await subscribeForm(ctxFor(false, "/subscribe"))).text();
     expect(on).toContain('class="r-dev"');
-    expect(off).not.toContain('class="r-dev"');
+    expect(off).not.toContain("r-dev");
+    expect(off).not.toContain("--k-accent");
     expect(off).not.toContain("/dashboard");
   });
 
@@ -402,16 +414,77 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
   // brings its own.
   it("the card pages render the pill and its styles only when devMode is true", async () => {
     await ensureSubscriber();
-    const cards: [string, (c: RequestContext) => Promise<Response>, string][] = [
-      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope"],
-      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a"],
-      ["unsubscribe (invalid link)", unsubscribeLanding, "/unsubscribe?token=nope"],
-      ["post not found", archivePage, "/archive/missing"],
+    const now = Date.now();
+    // A pending subscriber with a live link (the confirm page's "ready" state), one
+    // whose link lapsed long ago ("expired"), and one already unsubscribed.
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('p','p@example.com','pending','cfm-p','uns-p',?,?)",
+      ).bind(now, now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('x','x@example.com','pending','cfm-x','uns-x',?,1)",
+      ).bind(now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?)",
+      ).bind(now, now),
+    ]);
+    const html = { method: "POST", headers: { accept: "text/html" } };
+    const badForm = {
+      method: "POST",
+      headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
+      body: "email=not-an-email",
+    };
+    // Each row: the case, its handler and path, a phrase only that state's page shows
+    // (so the row provably reached it), and the request's method, headers, and body.
+    const cards: [
+      string,
+      (c: RequestContext) => Promise<Response>,
+      string,
+      string,
+      RequestInit?,
+    ][] = [
+      ["confirm (ready)", confirmLanding, "/confirm?token=cfm-p", "Confirm your subscription"],
+      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", "You're subscribed"],
+      ["confirm (expired)", confirmLanding, "/confirm?token=cfm-x", "This link has expired"],
+      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope", "This link is invalid"],
+      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a", "Unsubscribe?"],
+      [
+        "unsubscribe (already)",
+        unsubscribeLanding,
+        "/unsubscribe?token=uns-u",
+        "You're unsubscribed",
+      ],
+      [
+        "unsubscribe (invalid link)",
+        unsubscribeLanding,
+        "/unsubscribe?token=nope",
+        "This link is invalid",
+      ],
+      // The POST's page for a person. It unsubscribes `uns-p`, so it runs after the
+      // pages that read that subscriber, and repeating it answers the same page.
+      [
+        "unsubscribe POST (invalid link)",
+        unsubscribe,
+        "/unsubscribe?token=nope",
+        "This link is invalid",
+        html,
+      ],
+      [
+        "unsubscribe POST (done)",
+        unsubscribe,
+        "/unsubscribe?token=uns-p",
+        "You've been unsubscribed",
+        html,
+      ],
+      ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
+      ["post not found", archivePage, "/archive/missing", "Not found"],
     ];
-    for (const [name, handler, path] of cards) {
+    for (const [name, handler, path, shows, init] of cards) {
       const params = { slug: "missing" };
-      const on = await (await handler(ctxFor(true, path, params))).text();
-      const off = await (await handler(ctxFor(false, path, params))).text();
+      // A fresh Request per call, since a form body can be read only once.
+      const on = await (await handler(ctxFor(true, path, params, init))).text();
+      const off = await (await handler(ctxFor(false, path, params, init))).text();
+      expect(on, name).toContain(shows);
       expect(on, name).toContain('class="r-dev"');
       expect(on, name).toContain("--k-accent:#3355cc");
       expect(off, name).not.toContain("r-dev");

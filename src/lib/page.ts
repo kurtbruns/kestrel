@@ -51,14 +51,13 @@ export function htmlPage(
   status = 200,
   devDashboardUrl?: string,
 ): Response {
-  const devStyle = devDashboardUrl ? `<style>${DEV_BADGE_STYLE}</style>` : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(title)}</title>
-<style>${CARD_STYLE}</style>${devStyle}
+<style>${CARD_STYLE}</style>${devDashboardStyle(devDashboardUrl)}
 </head>
 <body><div class="wrap">${bodyHtml}</div>${devDashboardBadge(devDashboardUrl)}</body>
 </html>`;
@@ -190,7 +189,6 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
-${DEV_BADGE_STYLE}
 a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
 @media (max-width:560px) {
@@ -242,6 +240,12 @@ export interface ReaderIdentity {
   logoUrl?: string;
 }
 
+/** The pill's stylesheet, emitted beside it and only when it is, so a deployed page
+ *  carries neither the link nor its styles. */
+function devDashboardStyle(url?: string): string {
+  return url ? `<style>${DEV_BADGE_STYLE}</style>` : "";
+}
+
 /** The dev-only editor shortcut (SPEC §5/§11): a fixed corner pill linking a local
  *  developer straight into `/dashboard`. Rendered only when `url` is set — the
  *  callers pass it solely on a dev-shaped instance (`config.devMode`), where
@@ -261,9 +265,7 @@ function devDashboardBadge(url?: string): string {
  *  the frozen render or a sent email (I3). Both empty when `url` is unset, as it is on
  *  every deployed instance. */
 export function archiveDevDashboardChrome(url?: string): { head: string; masthead: string } {
-  return url
-    ? { head: `<style>${DEV_BADGE_STYLE}</style>`, masthead: devDashboardBadge(url) }
-    : { head: "", masthead: "" };
+  return { head: devDashboardStyle(url), masthead: devDashboardBadge(url) };
 }
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
@@ -298,7 +300,7 @@ export function readerPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
 ${FRAUNCES_FONT_LINKS}
-<style>${READER_STYLE}</style>
+<style>${READER_STYLE}</style>${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
 <header class="r-mast"><div class="r-mast-in">
