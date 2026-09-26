@@ -103,11 +103,31 @@ The app is named after a small falcon called a [kestrel](https://en.wikipedia.or
 To see what Kestrel can do, open the dashboard and try editing one of the drafts.`,
   },
   {
+    id: "5eed0004-0000-4000-8000-000000000004",
+    slug: "an-old-fashioned-list",
+    subject: "An old-fashioned list",
+    kind: "sent",
+    sentIndex: 1,
+    markdown: `# An old-fashioned list
+
+The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
+
+So what sets Kestrel apart from the countless other platforms and services?
+
+- **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
+- **Ownership.** You own the application, so you decide how the newsletter fits into the way you already publish. It can be a quick note when there's something new to share, or a longer piece of writing every weekend.
+- **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in a coming email.
+
+Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
+
+*P.S.* Speaking of lists and in keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
+  },
+  {
     id: "5eed0005-0000-4000-8000-000000000005",
     slug: "publishing",
     subject: "Publishing",
     kind: "sent",
-    sentIndex: 1,
+    sentIndex: 2,
     markdown: `# Publishing
 
 Every issue follows the same path, from a draft to a permanent page on the web.
@@ -119,26 +139,6 @@ Every issue follows the same path, from a draft to a permanent page on the web.
 5. **It gets a permanent home.** The issue gets its own page in the archive, the email as it went out, so a link you share keeps working for years.
 
 The review window is what makes this safe. Nothing leaves the moment you click, so there's always time to catch a mistake.`,
-  },
-  {
-    id: "5eed0004-0000-4000-8000-000000000004",
-    slug: "an-old-fashioned-list",
-    subject: "An old-fashioned list",
-    kind: "sent",
-    sentIndex: 2,
-    markdown: `# An old-fashioned list
-
-The idea behind Kestrel is simple, old-fashioned even. There's a list of subscribers, and you write and schedule emails that go out to the list. People join the list by entering their email address in a form and confirming it.
-
-So what sets Kestrel apart from the countless other platforms and services?
-
-- **Cost.** You pay Cloudflare and your email provider directly, at their rates, with no platform fee on top.
-- **Ownership.** You own the application, so you decide how the newsletter fits into the way you already publish. It can be a quick note when there's something new to share, or a longer piece of writing every weekend.
-- **Working with robots.** Claude can draft, proofread, and schedule issues through the same API as the editor. More on this in the next email.
-
-Publishing a newsletter comes down to one thing: a direct line to the people who want to hear from you. Kestrel is the application that connects you to them, and you own it.
-
-*P.S.* Speaking of lists and in keeping with the bird theme, check out [*Listers*](https://www.youtube.com/watch?v=zl-wAqplQAo) on YouTube.`,
   },
   {
     id: "5eed0002-0000-4000-8000-000000000002",
@@ -230,14 +230,17 @@ interface Timeline {
 }
 
 export function buildTimeline(now: number): Timeline {
-  const send2At = now - 7 * WEEK;
+  // A weekly newsletter: four sends a week apart, the last five days ago, and the scheduled
+  // issue two days out, a week after it. The list was imported just before the first.
+  const first = now - 26 * DAY;
+  const send2At = first + WEEK;
   return {
     now,
-    importAt: now - 14 * WEEK,
+    importAt: first - 12 * DAY,
     bounceAt: send2At + DAY,
     complaintAt: send2At + 2 * DAY,
     scheduledFireAt: onTheMinute(now + 2 * DAY), // on the minute, as the API stores a fire time
-    sentAt: [now - 12 * WEEK, send2At, now - 3 * WEEK, now - WEEK],
+    sentAt: [first, send2At, first + 2 * WEEK, first + 3 * WEEK],
   };
 }
 

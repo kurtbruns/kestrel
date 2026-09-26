@@ -13,7 +13,7 @@ const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
 // stream to today, and churns across four completed sends, so the mailable audience
-// fluctuates 140 → 147 → 151 → 152 and settles at 155 today (157 confirmed − 2 suppressed). These
+// fluctuates 140 → 141 → 142 → 148 and settles at 155 today (157 confirmed − 2 suppressed). These
 // are the numbers the lifecycle produces; they lock the "frozen at send time" behavior, so a
 // regression is obvious.
 const CONFIRMED = 157;
@@ -21,8 +21,8 @@ const PENDING = 3;
 const UNSUBSCRIBED = 15;
 const SUPPRESSED = 2;
 const AUDIENCE_NOW = CONFIRMED - SUPPRESSED; // 155
-const SENT_RECIPIENTS = [140, 147, 151, 152]; // oldest → newest
-const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 590
+const SENT_RECIPIENTS = [140, 141, 142, 148]; // oldest → newest
+const TOTAL_DELIVERIES = SENT_RECIPIENTS.reduce((a, b) => a + b, 0); // 571
 
 /** Delivery rows for one send (email + any post-send event) — proves the record is real
  *  rows, not a summary count. */
