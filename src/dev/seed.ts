@@ -137,7 +137,7 @@ Publishing a newsletter comes down to one thing: a direct line to the people who
     sentIndex: 2, // the most recent send
     markdown: `# Working with robots
 
-Give Claude a piece of writing and ask for it to go out to the list on Friday morning, and it does the thing you asked for.
+Give Claude a piece of writing and ask it to schedule an email to the list for Friday morning, and it does the thing you asked for.
 
 Kestrel is a full-fledged application built for publishers, and it's designed with this in mind:
 
@@ -145,7 +145,7 @@ Kestrel is a full-fledged application built for publishers, and it's designed wi
 2. Everything is built on an API.
 3. The app's interface and Claude both use that API, so anything you can do in the editor, you can ask Claude to do.
 
-Publishing and scheduling can be stressful, especially when you want to make last-minute edits. Kestrel is built to make that easier. Ask Claude for the change, check that it's done, and sleep easy knowing the issue is set to go out.
+Publishing and scheduling can be stressful, especially when it comes to last-minute edits. Kestrel is built on the idea that a robot that proofreads and schedules things correctly gives you, the publisher, peace of mind that everything will work as expected.
 
 The next issue for this demo publication is already scheduled. You can find it in the dashboard.`,
   },
