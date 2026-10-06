@@ -17,7 +17,7 @@
   --fg: #18181b;
   --muted: #52525b;
   --line: #e4e4e7;
-  --bg: #f8f8f8;
+  --bg: #fbfbfa;
   --card: #fff;
   --hover: #efefef;
   /* Neutral ink — the strong near-black/near-white neutral (DESIGN §3). A text token
@@ -427,8 +427,8 @@ body.nav-resizing .sidebar {
   padding-left: 0;
 }
 
-/* The docs index (#/docs): an intro over a numbered list of every doc. Single reading
-   column, the same measure as a doc page and the API reference. */
+/* The docs index (#/docs): an intro over the guide's sections, the main path numbered as
+   steps. Single reading column, the same measure as a doc page and the API reference. */
 .docs-index {
   max-width: 720px;
 }
@@ -452,7 +452,29 @@ body.nav-resizing .sidebar {
   margin: 0 0 24px;
   max-width: 62ch;
 }
-/* One row per doc: a zero-padded number, the title with a → that nudges on hover, and the
+/* A section: its title over its rows. The first sits right under the intro; the rest get
+   room above, so each reads as its own group. */
+.doc-section + .doc-section {
+  margin-top: 36px;
+}
+.doc-section-t {
+  font-size: 17px;
+  line-height: 1.3;
+  margin: 0 0 6px;
+}
+/* The README's paragraph under a section heading, and its intro under the title: Markdown
+   rendered to paragraphs, so their own margins are reset to the block's. */
+.doc-section-blurb {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 12px;
+}
+.doc-section-blurb p,
+.docs-index-intro p {
+  margin: 0;
+}
+/* One row per doc: a zero-padded number (main path only), the title with a → that nudges on hover, and the
    doc's own first-paragraph blurb. Hairline rules, no cards. */
 .doc-cards {
   list-style: none;

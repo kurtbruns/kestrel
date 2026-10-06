@@ -25,7 +25,7 @@ let mountedHash = "";
 export function route(): Promise<void> {
   const hash = location.hash || "#/dashboard";
   mountedHash = hash;
-  const [, view, arg] = hash.split("/");
+  const [, view, arg, sub] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
@@ -67,7 +67,7 @@ export function route(): Promise<void> {
     return mount(renderReference);
   }
   if (view === "docs") {
-    return mount((root, signal) => renderDocs(arg, root, signal));
+    return mount((root, signal) => renderDocs(arg, root, signal, sub));
   }
   return mount(renderDashboard);
 }

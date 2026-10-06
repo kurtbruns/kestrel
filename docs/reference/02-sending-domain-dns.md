@@ -2,6 +2,8 @@
 
 Bulk mail lands in spam or is rejected outright without SPF, DKIM, and DMARC on the sending domain. Publish all three for **`send.example.com`**, the dedicated sending subdomain, kept off the apex so the newsletter's sending reputation can never affect your regular mail (`docs/SPEC.md` §11).
 
+**Connect Resend** (or **Use Amazon SES instead of Resend**) lists the records to publish; this page explains what each one does, and how to check and tighten them.
+
 ## Two hard rules
 
 - **Never send bulk mail from the apex** (`example.com`). This is the one item here that is not a preference. The apex carries your primary mail reputation; a newsletter must not put it at risk. Send from `send.example.com`.

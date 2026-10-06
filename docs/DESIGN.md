@@ -160,6 +160,8 @@ The admin UI gets opened on mobile, often just to check that a post went out, so
 
 The reference room (Docs, API) follows the same rule with its own shape. Its top bar stays one row at every width, so the in-page anchors and the pinned contents rail always clear it: on mobile the back link is a square arrow, the close ✕ drops, and the rail stops being a column. Each rail then takes the shape its role wants: a doc's "On this page" folds to one tappable row that closes again once a section is picked, and the API tiers and the docs index's out-links each become a chip row. The API rail drops its resources there, and a route's row puts its summary under its path instead of beside it. The build stamp, pinned to the rail's bottom-left corner on desktop, moves to the foot of the page, so it is the last thing on mobile rather than the first.
 
+The docs index lists the setup guide by section: the main path first, numbered because its pages are steps taken in order, then the further guides and the reference, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step instead of running on into the guides after it.
+
 ---
 
 ## 7. Send surfaces — one question per view

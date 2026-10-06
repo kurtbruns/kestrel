@@ -6,7 +6,7 @@
 # via the same "verify token -> principal" contract Cloudflare Access uses in prod).
 # The editor mints its own token from this on load — no other setup. It ships here
 # rather than in wrangler.jsonc on purpose: a deployed env never gets this value, so
-# the dev auth path stays fail-closed. In staging/production leave it unset; Access
+# the dev auth path stays fail-closed. In a deployed environment leave it unset; Access
 # is the only gate.
 DEV_AUTH_SECRET="dev-insecure-do-not-deploy"
 

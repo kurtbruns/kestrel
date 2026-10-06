@@ -4,11 +4,20 @@ All notable changes to Kestrel are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). A version is `MAJOR.RELEASE.PATCH`, which looks like [Semantic Versioning](https://semver.org/spec/v2.0.0.html) but is not: the major changes rarely, at the maintainer's call; the release counts releases and goes up with each one, whether or not it breaks anything; and a patch is fixes only, never a feature or a break. So a release can carry breaking changes without a new major: they are listed under *Breaking*, with what to do in its *Upgrading* paragraph, and moving from `1.1` to `1.2` means reading them. How an entry is written, and how a release is cut, lives in [`.claude/rules/changelog.md`](.claude/rules/changelog.md).
 
-To move a running instance from one version to another, follow [Upgrade to a new release](docs/setup/09-upgrade.md), which is also served in the editor's Docs tab. Read every entry between your version and the target first.
+To move a running instance from one version to another, follow [Upgrade to a new release](docs/guides/07-upgrade.md), which is also served in the editor's Docs tab. Read every entry between your version and the target first.
 
 ## [Unreleased]
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
+
+**Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`.
+
+### Changed
+
+- The setup guide leads with one main path, **Get started**: six steps from a fresh clone to a live newsletter on one production environment, each ending in a check that it worked, proven with test sends to your own address before anyone subscribes (SPEC §11). It uses Resend; Amazon SES, notifications through Cloudflare's email, the archive on your website, rate-limiting the subscribe form, a staging environment, and upgrading are guides beside it, and the detail behind each step (every setting, the DNS records, how the admin gate works) is a new Reference section. The guide now lives in `docs/get-started/`, `docs/guides/`, and `docs/reference/`, with `docs/README.md` as its landing page, which the editor's Docs tab shows by section.
+- Links between guide pages now open the page in the editor's Docs tab, at the section they name, and a section's address can be shared.
+- The production template in `wrangler.jsonc` now attaches your hostname to the Worker on deploy (`routes` with `custom_domain`), keeps it off `workers.dev` and its preview URLs, starts on the `fake` provider until yours is connected, and no longer declares a staging environment.
+- Upgrading now starts by noting a D1 Time Travel bookmark, so a bad upgrade can put the database back.
 
 ## [1.2.0] - 2026-10-06
 

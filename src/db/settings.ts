@@ -4,7 +4,7 @@
  * This is the ONLY mutable, in-app configuration. It holds runtime preferences
  * the operator sets from the editor — never secrets or deploy-time infrastructure
  * (the provider, credentials, Access, origins), which live in env/secrets and are
- * documented in docs/setup/. Keeping that line bright is a safety property: a
+ * documented in the setup guide (docs/reference/01-configuration.md). Keeping that line bright is a safety property: a
  * compromised admin session can read/write settings but can never reach a secret.
  *
  * The typed shape lives here (not in the schema) so adding a preference is a code
