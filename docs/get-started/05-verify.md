@@ -1,63 +1,101 @@
 # Verify it works
 
-Email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only show up once deployed (`docs/SPEC.md` §11). Run this checklist before you share the subscribe link. The list is still empty, so every email here goes only to addresses you own.
+Some things only show up with real email: whether inboxes trust your mail, how it looks in a real mail client, and whether bounces and unsubscribes come back to the app. Check them now, while your list is empty and every email goes only to you.
 
-These checks need your live Cloudflare account, real DNS, your provider, and real inboxes, so they can't be run from inside the app or from a development session: they are the acceptance test you run by hand.
+In this guide, you send yourself a test email and check that it passes authentication. Then you set up your notifications, send a real post to yourself as a subscriber, and unsubscribe. Finally, you check that bounces and complaints reach the app, and read the app's logs.
 
-## 1. Send yourself a test
+## Before you begin
 
-In the editor (`/dashboard/`), write a short draft and use **Send test email** to send it to an address you own. A test goes through the same render path as a real send (I5), so a clean test is a real guarantee, not a lookalike.
+- Two email addresses you own, such as a personal address and a work address. Some steps use both.
+- A Gmail address, or another mail client that shows a message's original source and an **Unsubscribe** button.
 
-- [ ] The test arrives in the inbox, not in spam.
-- [ ] It renders correctly: images load, the layout holds, links work.
-- [ ] The subject and preheader read as intended.
+## 1. Send yourself a test email
 
-## 2. Check DKIM alignment
+A test email goes through the same code as a real send. If the test looks right, the real send looks the same.
 
-Open the test's raw source (in Gmail, **Show original**) and read the `Authentication-Results` header.
+1. In the editor at `https://newsletter.example.com/dashboard/`, create a post with a subject, a short body, and an image.
 
-- [ ] `dkim=pass` and `dmarc=pass`, both for `send.example.com`.
-- [ ] `spf=pass`. With Resend, its domain is under `send.example.com`. With SES it is `amazonses.com` unless you set up a custom MAIL FROM domain, which is expected and still passes DMARC through DKIM.
+1. Select **Send test email**, enter your address, and send it.
 
-If any fail, recheck the records from **Connect Resend** (or the SES guide), and see **Sending-domain DNS** in the reference. Alignment is the best single predictor of landing in the inbox.
+1. Open the email. It should arrive in your inbox, not in spam. The image loads, the links work, and the subject reads as you wrote it.
 
-## 3. Set your notification address
+## 2. Check that it passes authentication
 
-Kestrel emails you when a send goes out, and right away if one runs into a problem (`docs/SPEC.md` §8). They go through your provider unless you set up **Notifications through Cloudflare's email**, one of the guides after this path.
+Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing both is the best single sign that your mail reaches the inbox.
 
-- [ ] Under **Settings → Notifications**, enter your address and **Save**.
-- [ ] **Send a test notification** arrives at that address.
+1. Open the test email's original source. In Gmail, open the message's menu and select **Show original**.
 
-## 4. Subscribe yourself and send a real post
+1. Find the `Authentication-Results` header. It shows:
 
-- [ ] Open `https://newsletter.example.com/subscribe`, subscribe with an address you own, and click the link in the confirmation email. The address shows as confirmed in the editor's **Subscribers** view.
-- [ ] Schedule the draft, or use **Send now**. A send appears that you can still cancel before any mail leaves, and nothing goes out the instant you ask (I6). Cancel it once to see that canceling stops it, then schedule it again.
-- [ ] Once it fires, the post arrives, and a **Sent:** notification follows with its numbers and a link to the send's record.
+    - `dkim=pass` for `send.example.com`
+    - `dmarc=pass` for `send.example.com`
+    - `spf=pass`, for a hostname under `send.example.com`
 
-## 5. Unsubscribe from a real client
+    With Amazon SES and no custom MAIL FROM domain, SPF passes for `amazonses.com` instead. That's expected, and DMARC still passes.
 
-Every email carries a one-click `List-Unsubscribe` header (RFC 8058) and an unsubscribe link in the body. Both work with no login and no confirmation step (`docs/SPEC.md` §7).
+If a check fails, compare your DNS records with the ones in [Connect Resend](04-resend.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
-- [ ] Your mail client shows its own **Unsubscribe** button on the post from step 4.
-- [ ] Using it (or the link in the body) records the unsubscribe at once: the address shows as **unsubscribed** in **Subscribers**, and the next send leaves it out (I2).
+## 3. Set up your notifications
 
-## 6. Prove bounces and complaints come back
+Kestrel emails you when a send finishes, and right away when one runs into a problem. Notifications go through your email provider. To send them through Cloudflare instead, see [Notifications through Cloudflare's email](../guides/03-notifications.md).
 
-The provider reports bounces and complaints to the app's webhook, which stops mailing those addresses on its own. Send a test email to the provider's simulator addresses, which never reach a real person:
+1. In the editor, open **Settings → Notifications**.
 
-- **Resend:** `bounced@resend.dev` and `complained@resend.dev`. These count toward your Resend sending quota.
-- **SES:** `bounce@simulator.amazonses.com` and `complaint@simulator.amazonses.com`.
+1. Enter your address, and select **Save**.
 
-- [ ] Each simulator address appears as **suppressed** in the editor, whatever its consent state, and every later send leaves it out (I1).
+1. Select **Send a test notification**. It arrives at that address.
 
-If they don't, open the Worker's logs (below) and look for a `webhook.received` event followed by `receipt.applied`. With SES, also check that the SNS subscription shows **Confirmed**.
+## 4. Send a real post to yourself
+
+This is a real send, to a list of one. It proves the whole path: subscribing, confirming, scheduling, and sending.
+
+1. Open `https://newsletter.example.com/subscribe`, and subscribe with your second address.
+
+1. Open the confirmation email, follow its link, and select **Confirm**. In the editor, **Subscribers** shows the address as **Confirmed**.
+
+1. Open your post, select **Schedule**, and then **Send now**. Every send waits at least five minutes before it goes out, so you can cancel a mistake.
+
+1. Cancel the send, to see that canceling stops it. Then select **Send now** again, and let it go.
+
+1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
+
+## 5. Unsubscribe
+
+Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.
+
+1. Open the post from section 4 in your mail client. It shows an **Unsubscribe** button next to the sender.
+
+1. Select it. In the editor, **Subscribers** shows the address as **Unsubscribed**, and later sends leave it out.
+
+## 6. Check that bounces and complaints come back
+
+When an address bounces or marks your mail as spam, your provider tells the app through the webhook. The app then stops mailing that address. Your provider has test addresses that act out each case without reaching a real person.
+
+1. Open `https://newsletter.example.com/subscribe`, and subscribe each test address for your provider:
+
+    | Provider | Bounces | Marks as spam |
+    | --- | --- | --- |
+    | Resend | `bounced@resend.dev` | `complained@resend.dev` |
+    | Amazon SES | `bounce@simulator.amazonses.com` | `complaint@simulator.amazonses.com` |
+
+    Each one gets a confirmation email, which bounces or is marked as spam.
+
+1. In the editor, **Subscribers** lists both addresses as **Pending**, each with a **Suppressed** flag. The app never mails a suppressed address again.
+
+If an address has no flag, the webhook isn't reaching the app. Check its URL and signing secret in [Connect Resend](04-resend.md#4-add-the-webhook).
 
 ## 7. Read the logs
 
-The Worker writes one JSON line per event (the catalog is in `docs/SPEC.md` §12), and Workers Logs indexes each line's fields. In the Cloudflare dashboard, open the Worker's **Observability → Logs** view.
+The app writes a log line for each thing it does, and Cloudflare keeps them for a few days. Nothing else tells you if the once-a-minute schedule that sends your posts stops, so it's worth knowing where to look.
 
-- [ ] Filter on `event` equal to `sweep.tick`: a line arrives every minute, which is the cron at work. If the cron ever stops, nothing else will tell you.
-- [ ] Filter on `sendId` equal to the id of the send from step 4 (the last part of its URL in the editor): its lines read as its timeline, `send.fired`, then `send.batch`, then `send.completed`, then its receipts.
-- [ ] Filter on `level` equal to `error`: nothing, on a healthy instance. Anything here is worth a look.
+1. In the Cloudflare dashboard, go to **Workers & Pages**, select `kestrel-production`, and select **Observability**.
 
-When every box is checked, the instance is ready for subscribers.
+1. Filter on `event` equal to `sweep.tick`. A line arrives every minute.
+
+1. Filter on `event` equal to `send.completed`. Your send from section 4 is there.
+
+1. Filter on `level` equal to `error`. A healthy instance shows nothing.
+
+When every section gives the result it describes, your instance is ready for subscribers.
+
+Next, [go live](06-go-live.md).

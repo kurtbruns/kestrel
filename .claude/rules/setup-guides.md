@@ -47,7 +47,7 @@ After Linode's guides:
 2. **Intro:** what this page does, then "In this guide, you…". One or two short paragraphs.
 3. `## Before you begin`: only where a page has prerequisites of its own. List what the reader needs as noun phrases.
 4. `## 1. Verb phrase` sections: one or two sentences of why, then numbered steps.
-5. `## Check it`: a checklist the reader, or Claude, can verify. Prefer a check with a concrete result (a URL that answers, a command's output) over "it looks right".
+5. `## Check it`: a checklist the reader, or Claude, can verify. Prefer a check with a concrete result (a URL that answers, a command's output) over "it looks right". A page whose sections are themselves the checks, such as Verify it works, ends with one line instead, rather than restating them.
 6. **End** by pointing to the next page.
 
 ## Voice
