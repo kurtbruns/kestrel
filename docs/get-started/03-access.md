@@ -1,37 +1,112 @@
 # Lock the dashboard with Access
 
-Cloudflare Access puts a login in front of the editor and the authoring API, and the app checks every request against it as well. There is no auth code to write: you create one Access application and give the app two of its values. The public pages stay public. **How the admin gate works** in the reference explains the design.
+Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-## 1. Create one Access application
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works. [How the admin gate works](../reference/03-admin-gate.md) explains the design.
 
-In the Cloudflare **Zero Trust** dashboard, go to **Access → Applications → Add an application → Self-hosted**:
+## 1. Set up Zero Trust
 
-- **Application domain:** `newsletter.example.com`.
-- **Paths:** add these six to the one application: `dashboard`, `posts`, `sends`, `subscribers`, `suppressions`, `api`. One application with six paths, not six applications, so they share one login and one audience tag.
+Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organization before it can create an Access application. Skip this section if your account already has one.
 
-Leave every other path out. The landing page, the archive, subscribe, confirm, unsubscribe, images, and the provider webhooks must stay public, or readers and your provider would hit a login wall.
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), select **Zero Trust**.
 
-## 2. Add an Allow policy for yourself
+1. Choose a team name. It becomes your team domain, `YOUR_TEAM.cloudflareaccess.com`, where your login page lives.
 
-On that application, add an **Allow** policy with your identity provider: Google, GitHub, or a one-time PIN sent to your email. This is the login you will use.
+1. Choose a plan. The Free plan covers a newsletter's editors. Cloudflare asks for payment details even on the Free plan, and doesn't charge them.
 
-Then open the application's settings and copy its **Application Audience (AUD) tag**.
+## 2. Create the Access application
 
-## 3. Give the app the two values
+The editor and the API live under six paths. One application covers all six, so they share one login.
 
-```bash
-npx wrangler secret put ACCESS_TEAM_DOMAIN --env production    # e.g. your-team.cloudflareaccess.com
-npx wrangler secret put ACCESS_AUD --env production            # the AUD tag from step 2
-```
+1. In **Zero Trust**, go to **Access controls → Applications**, and select **Create new application**.
 
-Both must be set: with either missing, the app cannot verify any login, so it lets no one in. Secrets take effect at once; there is no redeploy.
+1. Select **Self-hosted and private**.
 
-To limit the login to named people beyond what the Allow policy already does, also set `ACCESS_ALLOWED_EMAILS` to a comma-separated list of addresses. Unset, any login the policy admits is let in.
+1. Select **Add public hostname**, and enter your app's hostname with the first path:
+
+    - **Subdomain:** `newsletter`
+    - **Domain:** `example.com`
+    - **Path:** `dashboard`
+
+1. Add a public hostname for each of the other five paths, with the same subdomain and domain:
+
+    | Path | What it covers |
+    | --- | --- |
+    | `dashboard` | the editor |
+    | `posts` | posts, images, previews, and sends |
+    | `sends` | the progress of each send |
+    | `subscribers` | your subscriber list |
+    | `suppressions` | addresses that bounced or complained |
+    | `api` | who's signed in, and the in-app docs |
+
+    Each path covers everything under it. Leave every other path out. The landing page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
+
+## 3. Allow yourself in
+
+Every Access application denies everyone until a policy allows them.
+
+1. Under **Access policies**, create a new policy:
+
+    - **Policy name:** `Publishers`
+    - **Action:** Allow
+    - **Include:** the **Emails** selector, with your email address
+
+1. Keep the login method a new Zero Trust organization starts with: you sign in with your Cloudflare account. To sign in another way, such as a one-time code by email, add it under **Zero Trust → Integrations → Identity providers** first.
+
+1. Select **Create**.
+
+## 4. Give the app its two values
+
+The app verifies each login against your team domain, and checks that it was issued for this application.
+
+1. Find your team domain under **Zero Trust → Settings**. It looks like `YOUR_TEAM.cloudflareaccess.com`.
+
+1. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
+
+1. Store the team domain as a secret. The command prompts you for the value. Enter it without `https://`:
+
+    ```bash
+    npx wrangler secret put ACCESS_TEAM_DOMAIN --env production
+    ```
+
+1. Store the audience tag the same way:
+
+    ```bash
+    npx wrangler secret put ACCESS_AUD --env production
+    ```
+
+    A secret takes effect as soon as you store it, with no redeploy. The app needs both values. With either one missing, it can't verify any login, so it lets no one in.
+
+1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Enter a comma-separated list of email addresses at the prompt:
+
+    ```bash
+    npx wrangler secret put ACCESS_ALLOWED_EMAILS --env production
+    ```
+
+    Without it, the app lets in anyone your Access policy allows.
 
 ## Check it
 
-- [ ] Opening `https://newsletter.example.com/dashboard/` asks you to log in through Access.
-- [ ] After logging in, the editor loads your dashboard and shows who you are signed in as.
-- [ ] `https://newsletter.example.com/` still opens with no login.
+1. In a private browser window, open `https://newsletter.example.com/dashboard/`. Cloudflare asks you to sign in.
 
-A `401` after logging in usually means one of the two secrets is missing or misspelled, or that `ACCESS_ALLOWED_EMAILS` is set and does not list your address.
+1. Sign in. The editor loads, and its sidebar shows the email address you signed in with.
+
+1. In the same window, open `https://newsletter.example.com/api/whoami`. It shows you as a signed-in person, verified through Access:
+
+    ```
+    {"principal":{"kind":"human","email":"you@example.com"},"auth":{"mode":"access"}}
+    ```
+
+1. The public pages still need no login:
+
+    ```bash
+    curl https://newsletter.example.com/health
+    ```
+
+    ```
+    {"status":"ok","service":"kestrel"}
+    ```
+
+If Cloudflare lets you in but the editor answers `401`, check the two secrets. One may be missing or mistyped, or `ACCESS_ALLOWED_EMAILS` may leave out your address.
+
+Next, [connect Resend](04-resend.md).
