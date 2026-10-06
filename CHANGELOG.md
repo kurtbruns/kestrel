@@ -10,11 +10,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.1.0.** A publisher who saved a custom email template renames its placeholders (see *Breaking*) before the next schedule; a blank template uses the built-in default, which is already renamed.
+## [1.2.0] - 2026-10-06
+
+**Upgrading from 1.1.0.** No migration this time. A publisher who saved a custom email template renames its placeholders (see *Breaking*) after upgrading: until then, every new email, preview, and test uses the built-in template instead, and preview and test say so. A blank template uses the built-in default, which is already renamed. Sends scheduled before the upgrade keep the email they were made with, and their unsubscribe links still work.
 
 ### Breaking
 
-- Email template placeholders take Hugo-style names: `{{ .Post.Body }}`, `{{ .Publication.Name }}`, `{{ .Email.UnsubscribeURL }}`, and so on (SPEC §9). An old name is an unknown variable, so a template still on the old names is refused for want of the body and unsubscribe placeholders.
+- Email template placeholders take Hugo-style names: `{{ .Post.Body }}`, `{{ .Publication.Name }}`, `{{ .Email.UnsubscribeURL }}`, and so on (SPEC §9). An old name is an unknown variable, so a template still on the old names is refused when saved, for want of the body and unsubscribe placeholders, and an email made from one already saved falls back to the built-in template.
 
 ### Added
 
@@ -24,7 +26,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - On a local dev server, the "Open dashboard" shortcut now shows on every public page, including each archived post and the subscribe, confirm, and unsubscribe pages, not only the landing page and archive index; a deployed instance still never shows it (SPEC §5).
 - Version numbers count releases rather than follow semver: every release bumps the middle number, even one with breaking changes, which are listed under *Breaking* with any steps under *Upgrading*; a patch release is fixes only.
-- The demo loaded by `npm run seed` is now **Field Notes**, a demo publication whose issues walk through what Kestrel does while using the cover image, headings, lists, and links the email render supports, in place of the Windbreak birding newsletter.
+- The demo loaded by `npm run seed` is now **Field Notes**, a weekly demo publication whose issues say what Kestrel does and why someone would choose it, in place of the Windbreak birding newsletter.
 
 ### Fixed
 
@@ -193,7 +195,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.1.0
 [1.0.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.0.0
 [0.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v0.2.0
