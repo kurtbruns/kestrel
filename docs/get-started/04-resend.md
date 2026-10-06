@@ -1,57 +1,134 @@
 # Connect Resend
 
-Kestrel sends through an email provider but keeps the list, the consent, and the delivery record itself, so the provider is only the transport (`docs/SPEC.md` §10). This step connects Resend: your sending domain, its DNS, an API key, and the webhook that reports bounces and complaints back to the app. To use Amazon SES instead, follow **Use Amazon SES instead of Resend** and skip to the next step.
+Kestrel sends your posts through an email provider. The provider only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. These guides use Resend. To use Amazon SES instead, follow [Use Amazon SES instead of Resend](../guides/02-ses.md) in place of this page.
 
-## 1. Add your sending domain and its DNS
+In this guide, you verify your sending hostname with Resend and add a DMARC record. Then you give the app an API key and a webhook for bounces and complaints, switch it to Resend, and deploy.
 
-In the Resend dashboard, add **`send.example.com`** as a domain. Resend lists the DNS records it needs: an MX and an SPF TXT record for its return path, and a DKIM TXT record at `resend._domainkey`. Because your DNS is on Cloudflare, Resend's **Sign in to Cloudflare** button can add them for you. Otherwise, add each one to your zone exactly as listed. Skip the optional inbound MX record: Kestrel receives no mail.
+## 1. Verify your sending hostname
 
-Then add a DMARC record yourself, on the same zone. It starts in monitor mode, which reports without blocking anything:
+Resend sends only from a domain whose DNS proves you own it. These records also let inboxes trust your mail.
 
-```
-_dmarc.send.example.com.  TXT  "v=DMARC1; p=none; rua=mailto:dmarc@example.com; fo=1"
-```
+1. In Resend, go to [Domains](https://resend.com/domains), select **Add Domain**, and enter `send.example.com`.
 
-Wait until Resend shows the domain as **Verified**. DNS can take a few minutes to an hour. **Sending-domain DNS** in the reference explains each record and when to tighten DMARC.
+1. Select **Sign in to Cloudflare**, and allow Resend to edit your DNS. Resend adds its records to your zone for you.
 
-## 2. Create an API key
+    To add them by hand instead, copy each record from Resend into your zone's DNS records in Cloudflare. Because your sending hostname is itself a subdomain, some names look doubled, such as `send.send`. That's expected.
 
-In Resend, create an **API key** with **Sending access**, limited to `send.example.com`, and give it to the app:
+1. Leave receiving turned off. Kestrel doesn't receive mail.
 
-```bash
-npx wrangler secret put RESEND_API_KEY --env production
-```
+1. Wait until Resend shows the domain as **Verified**.
 
-## 3. Add the webhook
+## 2. Add a DMARC record
 
-The webhook is how a bounce or a complaint reaches the app, which then stops mailing that address on its own. Without it you keep mailing addresses that bounce, and your mail starts landing in spam.
+DMARC tells inboxes what to do with mail that fails its checks, and sends you reports about it. Resend doesn't add this record, so you add it yourself. It starts in monitor mode, which reports without blocking anything.
 
-In Resend, add a **webhook** pointing at:
+1. In the Cloudflare dashboard, open your domain's DNS records, and add a record:
 
-```
-https://newsletter.example.com/webhooks/resend
-```
+    - **Type:** `TXT`
+    - **Name:** `_dmarc.send`
+    - **Content:** `v=DMARC1; p=none; rua=mailto:dmarc@example.com; fo=1`
 
-Subscribe it to the `email.delivered`, `email.bounced`, and `email.complained` events. Copy the webhook's **signing secret** and give it to the app, which checks every event against it:
+1. Replace `dmarc@example.com` with an address that receives mail. Reports arrive there as attachments.
 
-```bash
-npx wrangler secret put RESEND_WEBHOOK_SECRET --env production
-```
+[Sending-domain DNS](../reference/02-sending-domain-dns.md#dmarc-publish-a-policy-and-collect-reports) explains each record, and when to tighten DMARC.
 
-## 4. Switch the provider and deploy
+## 3. Create an API key
 
-With both secrets set, change `PROVIDER` in the `production` vars of `wrangler.jsonc` from `fake` to `resend`, commit, and deploy:
+The app sends through this key. A key that can only send, from only your sending hostname, limits the harm if it ever leaks.
 
-```bash
-npm run deploy -- --env production
-```
+1. In Resend, go to [API Keys](https://resend.com/api-keys), and select **Create API Key**.
 
-Set the secrets before switching: with `PROVIDER` on `resend` and a secret missing, the app answers every request with a `500` naming it.
+1. Fill in the key:
+
+    - **Name:** `kestrel-production`
+    - **Permission:** Sending access
+    - **Domain:** `send.example.com`
+
+1. Copy the key. Resend shows it only once.
+
+1. Store it as a secret, and paste the key at the prompt:
+
+    ```bash
+    npx wrangler secret put RESEND_API_KEY --env production
+    ```
+
+## 4. Add the webhook
+
+The webhook tells the app when an address bounces or complains, and the app stops mailing it. Without it, you keep mailing those addresses, and your mail starts landing in spam.
+
+1. In Resend, go to [Webhooks](https://resend.com/webhooks), and select **Add Webhook**.
+
+1. Enter the endpoint URL:
+
+    ```
+    https://newsletter.example.com/webhooks/resend
+    ```
+
+1. Select these three events, and create the webhook:
+
+    - `email.delivered`
+    - `email.bounced`
+    - `email.complained`
+
+1. On the webhook's page, copy its signing secret. It starts with `whsec_`.
+
+1. Store it as a secret. The app checks every event against it:
+
+    ```bash
+    npx wrangler secret put RESEND_WEBHOOK_SECRET --env production
+    ```
+
+## 5. Switch the provider and deploy
+
+Store both secrets before you switch. With `PROVIDER` set to `resend` and a secret missing, every request answers `500` and names the missing secret.
+
+1. In `wrangler.jsonc`, in the `production` block's `vars`, change `PROVIDER` from `fake` to `resend`:
+
+    ```jsonc
+    "PROVIDER": "resend",
+    ```
+
+1. Commit the change, and push it:
+
+    ```bash
+    git commit -am "Send through Resend"
+    git push
+    ```
+
+1. Deploy:
+
+    ```bash
+    npm run deploy -- --env production
+    ```
 
 ## Check it
 
-- [ ] The editor loads, and **Settings → Email sender** shows Resend as the email provider, and your From address.
+1. The app answers on your hostname:
 
-The test send in the next step proves the rest.
+    ```bash
+    curl https://newsletter.example.com/health
+    ```
 
-Resend's free plan sends at most 100 emails a day and 3,000 a month, test emails included, so a list past about a hundred subscribers needs a paid Resend plan. Kestrel sends up to 100 recipients a request, which comes to about 400 recipients a minute on the Workers Free plan; **Configuration** in the reference says how to go faster on Workers Paid.
+    ```
+    {"status":"ok","service":"kestrel"}
+    ```
+
+1. The webhook is public, and refuses a request without Resend's signature:
+
+    ```bash
+    curl -s -o /dev/null -w "%{http_code}\n" -X POST https://newsletter.example.com/webhooks/resend
+    ```
+
+    ```
+    400
+    ```
+
+    Any other answer, such as a redirect to your Cloudflare login, means Access covers the webhook. Remove that path from your Access application.
+
+1. In the editor, **Settings → Email sender** shows Resend as the email provider, and your From address.
+
+The test sends in the next step prove the rest.
+
+Resend's free plan sends up to 100 emails a day and 3,000 a month, test emails included. A list of more than about a hundred subscribers needs a paid plan, listed on [Resend's pricing](https://resend.com/pricing) page. For a large list, [Amazon SES](../guides/02-ses.md) may cost less.
+
+Next, [verify it works](05-verify.md).
