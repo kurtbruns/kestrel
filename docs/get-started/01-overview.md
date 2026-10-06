@@ -12,7 +12,7 @@ You need:
 
 1. A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 
-1. An account with an email provider: [Resend](https://resend.com/signup) or [Amazon SES](https://aws.amazon.com/ses/). These guides use Resend. To use SES, follow [Use Amazon SES instead of Resend](../guides/02-ses.md) in place of step 4.
+1. An account with an email provider: [Resend](https://resend.com/signup) or [Amazon SES](https://aws.amazon.com/ses/). These guides use Resend, the quicker to set up. Amazon SES costs less for a large list. It needs AWS to approve your account before it sends to subscribers, and Cloudflare's Workers Paid plan. To use SES, follow [Use Amazon SES instead of Resend](../guides/02-ses.md) in place of step 4.
 
 1. [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 
