@@ -18,6 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Links between guide pages now open the page in the editor's Docs tab, at the section they name, and a section's address can be shared.
 - The production template in `wrangler.jsonc` now attaches your hostname to the Worker on deploy (`routes` with `custom_domain`), keeps it off `workers.dev` and its preview URLs, starts on the `fake` provider until yours is connected, and no longer declares a staging environment.
 - Upgrading now starts by noting a D1 Time Travel bookmark, so a bad upgrade can put the database back.
+- The public pages' footer now reads only "Powered by Kestrel"; the unsubscribe and double opt-in note stays beside the subscribe form, where a reader is deciding whether to join (SPEC §5).
 
 ## [1.2.0] - 2026-10-06
 

@@ -309,7 +309,7 @@ ${FRAUNCES_FONT_LINKS}
 ${cta}
 </div></header>
 <main class="r-body">${opts.mainHtml}</main>
-<footer class="r-foot"><div class="r-foot-in">Powered by Kestrel &middot; Unsubscribe anytime &middot; Consent is double opt-in.</div></footer>
+<footer class="r-foot"><div class="r-foot-in">Powered by Kestrel</div></footer>
 ${devDashboardBadge(opts.devDashboardUrl)}
 </body>
 </html>`;
