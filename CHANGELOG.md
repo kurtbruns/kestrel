@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.3.0] - 2026-10-06
+
 **Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it. The authoring API has moved under `/api` (see *Breaking*). Your Access application already covers `/api`, so the moved routes stay gated the moment the instance upgrades; afterwards you can remove the four old paths, `posts`, `sends`, `subscribers`, and `suppressions`, from it, leaving `dashboard` and `api`. Any script or Claude setup that calls the old paths must switch to `/api/…`.
 
 ### Breaking
@@ -209,7 +211,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.3.0
 [1.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.1.0
 [1.0.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.0.0
