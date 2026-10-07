@@ -158,14 +158,14 @@ describe("send counters (sends.c_*)", () => {
   });
 });
 
-describe("a send's view on GET /sends/:id", () => {
+describe("a send's view on GET /api/sends/:id", () => {
   it("reports the counters and a derived phase", async () => {
     await seedConfirmed("p1@example.com");
     await seedConfirmed("p2@example.com");
     const send = await scheduledSend(Date.now() - 1000);
     await runSend(env, send.id);
 
-    const res = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = ((await res.json()) as any).send;
     expect(body.status).toBe("sent");
@@ -186,7 +186,7 @@ describe("a send's view on GET /sends/:id", () => {
     await runSend(env, send.id); // requeues, leaves it sending with pending rows
 
     const body = (
-      (await (await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })).json()) as any
+      (await (await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })).json()) as any
     ).send;
     expect(body.status).toBe("sending");
     expect(body.phase).toBe("backing-off"); // work remains, nothing in flight
@@ -200,10 +200,10 @@ describe("a send's view on GET /sends/:id", () => {
     await runSend(env, send.id); // left sending, with the recipient back in the queue
     const read = async () => {
       const list = (await (
-        await SELF.fetch(`${base}/sends?status=sending`, { headers: AUTH })
+        await SELF.fetch(`${base}/api/sends?status=sending`, { headers: AUTH })
       ).json()) as any;
       const progress = (
-        (await (await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })).json()) as any
+        (await (await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })).json()) as any
       ).send;
       return [
         has(
@@ -222,8 +222,8 @@ describe("a send's view on GET /sends/:id", () => {
   });
 
   it("404s an unknown send and 401s without auth", async () => {
-    expect((await SELF.fetch(`${base}/sends/nope`, { headers: AUTH })).status).toBe(404);
-    expect((await SELF.fetch(`${base}/sends/nope`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/api/sends/nope`, { headers: AUTH })).status).toBe(404);
+    expect((await SELF.fetch(`${base}/api/sends/nope`)).status).toBe(401);
   });
 });
 

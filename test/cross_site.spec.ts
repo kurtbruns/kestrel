@@ -30,14 +30,14 @@ function post(path: string, init: { headers?: Record<string, string>; body?: Bod
 }
 
 function addSubscriber(email: string, headers: Record<string, string> = {}) {
-  return post("/subscribers", {
+  return post("/api/subscribers", {
     headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({ email }),
   });
 }
 
 async function newDraft(): Promise<string> {
-  const res = await post("/posts", {
+  const res = await post("/api/posts", {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ subject: "Cross-site" }),
   });
@@ -47,11 +47,11 @@ async function newDraft(): Promise<string> {
 function uploadImage(id: string, headers: Record<string, string> = {}) {
   const fd = new FormData();
   fd.append("file", new File([PNG_1x1], "dot.png", { type: "image/png" }));
-  return post(`/posts/${id}/images`, { headers, body: fd });
+  return post(`/api/posts/${id}/images`, { headers, body: fd });
 }
 
 async function subscriberCount(): Promise<number> {
-  const res = await SELF.fetch(`${base}/subscribers`, { headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/subscribers`, { headers: AUTH });
   return (await readJson(res)).total;
 }
 
@@ -72,7 +72,9 @@ describe("Sec-Fetch-Site on an admin write", () => {
       const res = await uploadImage(id, { "sec-fetch-site": site });
       expect(res.status, site).toBe(403);
     }
-    const list = await readJson(await SELF.fetch(`${base}/posts/${id}/images`, { headers: AUTH }));
+    const list = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
     expect(list.images).toEqual([]);
   });
 
@@ -84,7 +86,7 @@ describe("Sec-Fetch-Site on an admin write", () => {
       expect(added.status, String(site)).toBe(201);
       const fd = new FormData();
       fd.append("file", new File([PNG_1x1], `dot-${site}.png`, { type: "image/png" }));
-      const up = await post(`/posts/${id}/images`, { headers, body: fd });
+      const up = await post(`/api/posts/${id}/images`, { headers, body: fd });
       expect(up.status, String(site)).toBe(201);
     }
   });
@@ -93,7 +95,7 @@ describe("Sec-Fetch-Site on an admin write", () => {
     const before = await subscriberCount();
     // An older browser's no-cors POST from a sibling subdomain: no body, no type, but an Origin.
     for (const origin of ["https://blog.kestrel.test", "https://evil.example", "null"]) {
-      const send = await post("/posts/p_missing/send", { headers: { origin } });
+      const send = await post("/api/posts/p_missing/send", { headers: { origin } });
       expect(send.status, origin).toBe(403);
       expect((await readJson(send)).error).toBe("cross_site_request");
       const added = await addSubscriber("origin@example.com", { origin });
@@ -119,14 +121,14 @@ describe("Sec-Fetch-Site on an admin write", () => {
   });
 
   it("leaves reads alone: a cross-site GET is answered", async () => {
-    const res = await SELF.fetch(`${base}/posts`, {
+    const res = await SELF.fetch(`${base}/api/posts`, {
       headers: { ...AUTH, "sec-fetch-site": "cross-site" },
     });
     expect(res.status).toBe(200);
   });
 
   it("answers an unauthenticated cross-site write with the gate's 401", async () => {
-    const res = await SELF.fetch(`${base}/subscribers`, {
+    const res = await SELF.fetch(`${base}/api/subscribers`, {
       method: "POST",
       headers: { "content-type": "application/json", "sec-fetch-site": "cross-site" },
       body: JSON.stringify({ email: "anon@example.com" }),
@@ -153,36 +155,36 @@ describe("each admin route takes only the body types it declares", () => {
   it("refuses a text/plain form's JSON-shaped body and a form-encoded body to a JSON route", async () => {
     const before = await subscriberCount();
     // What `<form enctype="text/plain">` with a field named `{"email":"` makes of its value.
-    const plain = await post("/subscribers", {
+    const plain = await post("/api/subscribers", {
       headers: { "content-type": "text/plain" },
       body: '{"email":"=plain@example.com"}',
     });
     expect(plain.status).toBe(415);
     expect((await readJson(plain)).error).toBe("unsupported_media_type");
-    const form = await post("/subscribers", {
+    const form = await post("/api/subscribers", {
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ email: "form@example.com" }).toString(),
     });
     expect(form.status).toBe(415);
     // A client that declares no type can't have its body read as JSON either.
-    const untyped = await post("/subscribers", { body: '{"email":"untyped@example.com"}' });
+    const untyped = await post("/api/subscribers", { body: '{"email":"untyped@example.com"}' });
     expect(untyped.status).toBe(415);
     expect(await subscriberCount()).toBe(before);
   });
 
   it("refuses a form body on a route that takes none", async () => {
-    const res = await post("/sends/s_missing/cancel", {
+    const res = await post("/api/sends/s_missing/cancel", {
       headers: { "content-type": "text/plain" },
       body: "",
     });
     expect(res.status).toBe(415);
     // With no body type it reaches the route, which answers for the missing send.
-    expect((await post("/sends/s_missing/cancel", {})).status).toBe(404);
+    expect((await post("/api/sends/s_missing/cancel", {})).status).toBe(404);
   });
 
   it("refuses an upload whose type the route doesn't take", async () => {
     const id = await newDraft();
-    const text = await post(`/posts/${id}/images?filename=a.png`, {
+    const text = await post(`/api/posts/${id}/images?filename=a.png`, {
       headers: { "content-type": "text/plain" },
       body: PNG_1x1,
     });
@@ -196,11 +198,11 @@ describe("each admin route takes only the body types it declares", () => {
     // A multipart form to a JSON route is refused the same way.
     const fd = new FormData();
     fd.append("email", "multi@example.com");
-    expect((await post("/subscribers", { body: fd })).status).toBe(415);
+    expect((await post("/api/subscribers", { body: fd })).status).toBe(415);
   });
 
   it("takes an empty body with no type on the routes whose body is optional", async () => {
-    expect((await post("/posts", {})).status).toBe(201);
+    expect((await post("/api/posts", {})).status).toBe(201);
   });
 
   it("shows each route's accepted types in the API reference", async () => {
@@ -208,10 +210,10 @@ describe("each admin route takes only the body types it declares", () => {
     const routes = ref.groups.flatMap((g: any) => g.routes);
     const find = (method: string, path: string) =>
       routes.find((r: any) => r.method === method && r.path === path);
-    expect(find("POST", "/subscribers").accepts).toEqual(["application/json"]);
-    expect(find("POST", "/posts/:id/images").accepts).toContain("multipart/form-data");
-    expect(find("POST", "/posts/:id/images").accepts).toContain("image/png");
-    expect(find("POST", "/sends/:id/cancel").accepts).toBeUndefined();
+    expect(find("POST", "/api/subscribers").accepts).toEqual(["application/json"]);
+    expect(find("POST", "/api/posts/:id/images").accepts).toContain("multipart/form-data");
+    expect(find("POST", "/api/posts/:id/images").accepts).toContain("image/png");
+    expect(find("POST", "/api/sends/:id/cancel").accepts).toBeUndefined();
   });
 });
 

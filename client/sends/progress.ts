@@ -35,7 +35,7 @@ export function fmtDuration(ms: number | null | undefined): string {
 }
 
 /**
- * A scheduled card's countdown cell, from its `GET /sends` row: the fire time, whether the
+ * A scheduled card's countdown cell, from its `GET /api/sends` row: the fire time, whether the
  * server reads the send due, and whether it is past the missed tolerance. Empty until
  * `countdowns` words it.
  */

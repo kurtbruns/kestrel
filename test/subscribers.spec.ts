@@ -50,7 +50,7 @@ async function formSubscribe(email: string): Promise<Response> {
 }
 
 async function adminAdd(email: string): Promise<Response> {
-  return SELF.fetch(`${base}/subscribers`, {
+  return SELF.fetch(`${base}/api/subscribers`, {
     method: "POST",
     headers: JSON_AUTH,
     body: JSON.stringify({ email }),
@@ -589,8 +589,8 @@ describe("a confirmation the provider does not take is not treated as sent", () 
 });
 
 describe("subscribers: admin + suppressions", () => {
-  it("authed POST /subscribers requires auth", async () => {
-    const res = await SELF.fetch(`${base}/subscribers`, {
+  it("authed POST /api/subscribers requires auth", async () => {
+    const res = await SELF.fetch(`${base}/api/subscribers`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ email: uniqueEmail() }),
@@ -598,8 +598,8 @@ describe("subscribers: admin + suppressions", () => {
     expect(res.status).toBe(401);
   });
 
-  it("GET /subscribers returns counts", async () => {
-    const res = await SELF.fetch(`${base}/subscribers`, { headers: AUTH });
+  it("GET /api/subscribers returns counts", async () => {
+    const res = await SELF.fetch(`${base}/api/subscribers`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.counts).toHaveProperty("confirmed");
@@ -612,7 +612,7 @@ describe("subscribers: admin + suppressions", () => {
     await confirmEmail(email);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
 
-    const add = await SELF.fetch(`${base}/suppressions`, {
+    const add = await SELF.fetch(`${base}/api/suppressions`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ email, reason: "manual" }),
@@ -620,7 +620,7 @@ describe("subscribers: admin + suppressions", () => {
     expect(add.status).toBe(201);
     expect(await subs.audienceEmails(env.DB)).not.toContain(email);
 
-    const del = await SELF.fetch(`${base}/suppressions/${encodeURIComponent(email)}`, {
+    const del = await SELF.fetch(`${base}/api/suppressions/${encodeURIComponent(email)}`, {
       method: "DELETE",
       headers: AUTH,
     });
@@ -677,7 +677,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(hide.map((r) => r.email)).toEqual([plain]);
   });
 
-  it("GET /subscribers?suppressed=only returns only suppressed rows (still badged), with a page envelope", async () => {
+  it("GET /api/subscribers?suppressed=only returns only suppressed rows (still badged), with a page envelope", async () => {
     const marker = `supq-${Date.now()}-${seq++}`;
     const plain = `${marker}-a@example.com`;
     const suppressed = `${marker}-b@example.com`;
@@ -685,7 +685,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     await addPending(suppressed);
     await subs.addSuppression(env.DB, suppressed, "complaint");
 
-    const res = await SELF.fetch(`${base}/subscribers?suppressed=only&search=${marker}`, {
+    const res = await SELF.fetch(`${base}/api/subscribers?suppressed=only&search=${marker}`, {
       headers: AUTH,
     });
     expect(res.status).toBe(200);
@@ -698,7 +698,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(body.page).toMatchObject({ total: 1, offset: 0 });
   });
 
-  it("GET /subscribers paginates (offset/limit) and sorts by a whitelisted column", async () => {
+  it("GET /api/subscribers paginates (offset/limit) and sorts by a whitelisted column", async () => {
     const marker = `pg-${Date.now()}-${seq++}`;
     // Three subscribers whose emails sort a < b < c.
     for (const s of ["a", "b", "c"]) {
@@ -707,7 +707,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     const q = `search=${marker}&sort=email&dir=asc`;
 
     const page1 = await readJson(
-      await SELF.fetch(`${base}/subscribers?${q}&limit=2&offset=0`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/subscribers?${q}&limit=2&offset=0`, { headers: AUTH }),
     );
     expect(page1.subscribers.map((s: any) => s.email)).toEqual([
       `${marker}-a@example.com`,
@@ -716,7 +716,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     expect(page1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "email", dir: "asc" });
 
     const page2 = await readJson(
-      await SELF.fetch(`${base}/subscribers?${q}&limit=2&offset=2`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/subscribers?${q}&limit=2&offset=2`, { headers: AUTH }),
     );
     expect(page2.subscribers.map((s: any) => s.email)).toEqual([`${marker}-c@example.com`]);
   });
@@ -727,7 +727,7 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     // `constructor`/`toString`/`hasOwnProperty` are inherited Object keys: the whitelist
     // must reject them by ownership, not `in`, or they'd reach the ORDER BY as SQL.
     for (const bogus of ["bogus", "constructor", "toString", "hasOwnProperty"]) {
-      const res = await SELF.fetch(`${base}/subscribers?sort=${bogus}&search=${marker}`, {
+      const res = await SELF.fetch(`${base}/api/subscribers?sort=${bogus}&search=${marker}`, {
         headers: AUTH,
       });
       expect(res.status).toBe(400);
@@ -735,27 +735,29 @@ describe("subscribers: admin list filter/search and unsubscribe-by-id", () => {
     }
   });
 
-  it("POST /subscribers/:id/unsubscribe requires auth (401)", async () => {
-    const res = await SELF.fetch(`${base}/subscribers/anything/unsubscribe`, { method: "POST" });
+  it("POST /api/subscribers/:id/unsubscribe requires auth (401)", async () => {
+    const res = await SELF.fetch(`${base}/api/subscribers/anything/unsubscribe`, {
+      method: "POST",
+    });
     expect(res.status).toBe(401);
   });
 
-  it("POST /subscribers/:id/unsubscribe is 404 for an unknown id", async () => {
-    const res = await SELF.fetch(`${base}/subscribers/no-such-id/unsubscribe`, {
+  it("POST /api/subscribers/:id/unsubscribe is 404 for an unknown id", async () => {
+    const res = await SELF.fetch(`${base}/api/subscribers/no-such-id/unsubscribe`, {
       method: "POST",
       headers: AUTH,
     });
     expect(res.status).toBe(404);
   });
 
-  it("POST /subscribers/:id/unsubscribe flips status and drops them from the audience", async () => {
+  it("POST /api/subscribers/:id/unsubscribe flips status and drops them from the audience", async () => {
     const email = uniqueEmail();
     await publicSubscribe(email);
     await confirmEmail(email);
     expect(await subs.audienceEmails(env.DB)).toContain(email);
 
     const id = (await subs.getByEmail(env.DB, email))!.id;
-    const res = await SELF.fetch(`${base}/subscribers/${id}/unsubscribe`, {
+    const res = await SELF.fetch(`${base}/api/subscribers/${id}/unsubscribe`, {
       method: "POST",
       headers: AUTH,
     });

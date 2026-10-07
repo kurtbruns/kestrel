@@ -4,6 +4,8 @@ The shape of Kestrel's authoring API: the rules every route follows, so a client
 
 **Who this is for.** Whoever adds to the API or builds a client for it, human or Claude.
 
+**Where it lives.** Every route of the API sits under `/api`, which is also the admin line: the editor at `/dashboard` and the API at `/api` are the publisher's, behind the access layer, and everything else is the public reader surface (SPEC §11). A new route goes under `/api` too, so it is gated with nothing for an instance to add. Before 1.3.0 the posts, sends, subscribers, and suppressions routes sat at the top level (`/posts`, and so on); those paths now answer `404`.
+
 **Status.** Draft. It describes the API as the principles below would have it. Where `main` differs today (the send's ETag, preconditions on acts, the feed's cursor, tombstones, and pace), the gap is tracked on GitHub as simplification deferred until real use shows which parts matter; this note goes once `main` matches.
 
 ---

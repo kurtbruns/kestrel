@@ -1,8 +1,8 @@
 /**
  * Preview, test-send, and the fake outbox. All authed.
- *   POST /posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
- *   GET  /posts/:id/preview        → the rendered HTML (generic unsubscribe link)
- *   POST /posts/:id/test           → send the post's email to one address via the provider
+ *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
+ *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
+ *   POST /api/posts/:id/test           → send the post's email to one address via the provider
  *                                    (a scheduled post's frozen copy; a draft's live render)
  *   POST /api/settings/template/test → send a SAMPLE post through the saved template
  *   GET  /api/dev/outbox           → fake transport's outbox (fake provider only)
@@ -95,7 +95,7 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
 export async function preview(c: RequestContext): Promise<Response> {
   const { input, email, warnings, frozen } = await loadPostEmail(c);
   const body: PreviewResponse = {
-    url: `${c.config.appOrigin}/posts/${input.post.id}/preview`,
+    url: `${c.config.appOrigin}/api/posts/${input.post.id}/preview`,
     subject: email.subject,
     warnings,
     frozen: frozen !== null,

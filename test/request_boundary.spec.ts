@@ -40,7 +40,7 @@ async function expect400(res: Response, field?: string): Promise<any> {
 }
 
 async function newDraft(markdown = "v1"): Promise<{ id: string; revision_id: string }> {
-  const res = await send("POST", "/posts", JSON.stringify({ subject: "Boundary", markdown }));
+  const res = await send("POST", "/api/posts", JSON.stringify({ subject: "Boundary", markdown }));
   const body = await readJson(res);
   return { id: body.post.id, revision_id: body.revision_id };
 }
@@ -138,12 +138,12 @@ describe("a body that is not a JSON object is a 400 on every JSON route", () => 
   it("null and an array are refused, not a 500", async () => {
     const { id } = await newDraft();
     const routes: [string, string][] = [
-      ["PUT", `/posts/${id}`],
-      ["POST", `/posts/${id}/schedule`],
-      ["POST", "/subscribers"],
-      ["POST", "/suppressions"],
-      ["POST", "/sends/s_missing/reschedule"],
-      ["POST", "/sends/s_missing/resolve"],
+      ["PUT", `/api/posts/${id}`],
+      ["POST", `/api/posts/${id}/schedule`],
+      ["POST", "/api/subscribers"],
+      ["POST", "/api/suppressions"],
+      ["POST", "/api/sends/s_missing/reschedule"],
+      ["POST", "/api/sends/s_missing/resolve"],
       ["PUT", "/api/settings"],
     ];
     for (const [method, path] of routes) {
@@ -155,11 +155,14 @@ describe("a body that is not a JSON object is a 400 on every JSON route", () => 
   });
 });
 
-describe("PUT /posts/:id refuses a wrong shape instead of dropping it", () => {
+describe("PUT /api/posts/:id refuses a wrong shape instead of dropping it", () => {
   it("a wrongly typed field is a 400 naming it, and the post is unchanged", async () => {
     const { id, revision_id } = await newDraft();
-    await expect400(await send("PUT", `/posts/${id}`, JSON.stringify({ subject: 123 })), "subject");
-    const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    await expect400(
+      await send("PUT", `/api/posts/${id}`, JSON.stringify({ subject: 123 })),
+      "subject",
+    );
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     expect(got.post.subject).toBe("Boundary");
     expect(got.post.current_revision).toBe(revision_id);
   });
@@ -167,17 +170,17 @@ describe("PUT /posts/:id refuses a wrong shape instead of dropping it", () => {
   it("a malformed base_revision is a 400, never a save that skips the concurrency check", async () => {
     const { id } = await newDraft();
     // Another writer saves first, so a checked save from the stale base would 409.
-    const other = await send("PUT", `/posts/${id}`, JSON.stringify({ markdown: "theirs" }));
+    const other = await send("PUT", `/api/posts/${id}`, JSON.stringify({ markdown: "theirs" }));
     const { revision_id: theirs } = await readJson(other);
     for (const bad of [1, true, {}, ["r"]]) {
       const res = await send(
         "PUT",
-        `/posts/${id}`,
+        `/api/posts/${id}`,
         JSON.stringify({ markdown: "mine", base_revision: bad }),
       );
       await expect400(res, "base_revision");
     }
-    const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     expect(got.markdown).toBe("theirs");
     expect(got.post.current_revision).toBe(theirs);
   });
@@ -186,7 +189,7 @@ describe("PUT /posts/:id refuses a wrong shape instead of dropping it", () => {
     const { id } = await newDraft();
     const res = await send(
       "PUT",
-      `/posts/${id}`,
+      `/api/posts/${id}`,
       JSON.stringify({ markdown: "v2", base_revision: null }),
     );
     expect(res.status).toBe(200);
@@ -194,27 +197,31 @@ describe("PUT /posts/:id refuses a wrong shape instead of dropping it", () => {
 
   it("a body that is not JSON is refused, not a 200 no-op", async () => {
     const { id, revision_id } = await newDraft();
-    await expect400(await send("PUT", `/posts/${id}`, "markdown=v2"));
-    expect((await send("PUT", `/posts/${id}`, "markdown=v2", "text/plain")).status).toBe(415);
-    const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    await expect400(await send("PUT", `/api/posts/${id}`, "markdown=v2"));
+    expect((await send("PUT", `/api/posts/${id}`, "markdown=v2", "text/plain")).status).toBe(415);
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     expect(got.post.current_revision).toBe(revision_id);
   });
 
-  it("POST /posts with no JSON body still creates a blank draft", async () => {
-    const res = await SELF.fetch(`${base}/posts`, { method: "POST", headers: AUTH });
+  it("POST /api/posts with no JSON body still creates a blank draft", async () => {
+    const res = await SELF.fetch(`${base}/api/posts`, { method: "POST", headers: AUTH });
     expect(res.status).toBe(201);
   });
 });
 
 describe("other routes name the field they refuse", () => {
   it("subscribers, suppressions, resolve, settings", async () => {
-    await expect400(await send("POST", "/subscribers", JSON.stringify({ email: 1 })), "email");
+    await expect400(await send("POST", "/api/subscribers", JSON.stringify({ email: 1 })), "email");
     await expect400(
-      await send("POST", "/suppressions", JSON.stringify({ email: "a@example.com", reason: 5 })),
+      await send(
+        "POST",
+        "/api/suppressions",
+        JSON.stringify({ email: "a@example.com", reason: 5 }),
+      ),
       "reason",
     );
     await expect400(
-      await send("POST", "/sends/s_missing/resolve", JSON.stringify({ resolution: "maybe" })),
+      await send("POST", "/api/sends/s_missing/resolve", JSON.stringify({ resolution: "maybe" })),
       "resolution",
     );
     await expect400(
@@ -264,12 +271,12 @@ describe("a malformed percent-escape in a path is a 400", () => {
   });
 
   it("on an admin route", async () => {
-    const res = await SELF.fetch(`${base}/posts/%E0%A4`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts/%E0%A4`, { headers: AUTH });
     await expect400(res);
   });
 
   it("only after the gate: an unauthenticated admin request is still a 401", async () => {
-    const res = await SELF.fetch(`${base}/posts/%E0%A4`);
+    const res = await SELF.fetch(`${base}/api/posts/%E0%A4`);
     expect(res.status).toBe(401);
   });
 });

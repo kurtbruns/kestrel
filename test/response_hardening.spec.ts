@@ -67,7 +67,7 @@ describe("reader and preview pages", () => {
 
   it("serve the publisher's preview the same way, and never let it be stored", async () => {
     const { post } = await posts.createPost(env.DB, { subject: "Preview", markdown: "# Hi" }, "t");
-    const res = await SELF.fetch(`${base}/posts/${post.id}/preview`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts/${post.id}/preview`, { headers: AUTH });
     expect(res.status).toBe(200);
     expectHardenedPage(res);
     expect(res.headers.get("content-security-policy")).toContain("form-action 'none'");
@@ -80,7 +80,7 @@ describe("admin responses", () => {
     const ok = await SELF.fetch(`${base}/api/settings`, { headers: AUTH });
     expect(ok.status).toBe(200);
     expect(ok.headers.get("cache-control")).toBe("no-store");
-    const missing = await SELF.fetch(`${base}/posts/no-such-post`, { headers: AUTH });
+    const missing = await SELF.fetch(`${base}/api/posts/no-such-post`, { headers: AUTH });
     expect(missing.status).toBe(404);
     expect(missing.headers.get("cache-control")).toBe("no-store");
     const denied = await SELF.fetch(`${base}/api/settings`);

@@ -122,14 +122,14 @@ function scheduledPost(fireAt = Date.now() + 3_600_000, remadeAt: number | null 
   let send = { id: "s1", fire_at: fireAt, remade_at: remadeAt };
   post.scheduled(send);
   let sending: { id: string } | null = null;
-  const postRoute: FakeRoute = { path: "/posts/p1", reply: () => ({ ...post.get(), sending }) };
+  const postRoute: FakeRoute = { path: "/api/posts/p1", reply: () => ({ ...post.get(), sending }) };
   return {
     sends,
     postRoute,
     routes: [
       postRoute,
       // A scheduled post opens on Preview, its frozen email.
-      { path: "/posts/p1/preview", reply: () => new Response("<p>Owls</p>") },
+      { path: "/api/posts/p1/preview", reply: () => new Response("<p>Owls</p>") },
       ...sends.routes,
     ],
     /** The sweep starts it. */
@@ -191,7 +191,7 @@ describe("editor view", () => {
   const body = () => $<HTMLTextAreaElement>("#f-markdown");
 
   it("mounts a draft into its fields and reads as saved", async () => {
-    await open([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
     expect($<HTMLInputElement>("#f-slug").value).toBe("owls");
     expect(body().value).toBe("# Owls\n\nHoot.");
@@ -202,8 +202,8 @@ describe("editor view", () => {
   it("marks an edit dirty, then autosaves it after the idle pause with the base revision", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "# Owls\n\nHoot hoot.");
     expect($("#saveStatus").textContent).toBe("Unsaved changes");
@@ -220,8 +220,8 @@ describe("editor view", () => {
   it("saves at the hard cap while the typing never pauses", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     for (let ms = 0; ms < 30000; ms += 1000) {
       typeInto(body(), `${body().value}.`);
@@ -235,10 +235,10 @@ describe("editor view", () => {
     let release: () => void = () => {};
     let held = false;
     await open([
-      { path: "/posts/p1", reply: server.get },
+      { path: "/api/posts/p1", reply: server.get },
       {
         method: "PUT",
-        path: "/posts/p1",
+        path: "/api/posts/p1",
         reply: (req) =>
           server.put(req, (r) => {
             if (held) {
@@ -270,10 +270,10 @@ describe("editor view", () => {
     const server = draftServer();
     let theirs: string | null = null;
     await open([
-      { path: "/posts/p1", reply: server.get },
+      { path: "/api/posts/p1", reply: server.get },
       {
         method: "PUT",
-        path: "/posts/p1",
+        path: "/api/posts/p1",
         reply: (req) =>
           server.put(req, (r) => {
             // Our first save loses a race: Claude saved first, so the server refuses ours,
@@ -316,7 +316,7 @@ describe("editor view", () => {
 
   it("warns when the freshness poll finds a newer revision, and locks when the post left draft", async () => {
     const server = draftServer();
-    await open([{ path: "/posts/p1", reply: server.get }]);
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
     server.elsewhere("x@y.z");
     await vi.advanceTimersByTimeAsync(10000);
     const banner = $("#freshnessBanner");
@@ -333,8 +333,8 @@ describe("editor view", () => {
   it("makes Save draft unavailable while the out-of-date banner is up, pointing at it instead of pretending to save", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     // happy-dom has no layout, so scrollIntoView is only observable as a call.
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -373,8 +373,8 @@ describe("editor view", () => {
   it("flushes a dirty draft on navigation and marks it saved as sent", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "leaving");
     expect(handle().beforeLeave()).toBe("leave"); // saved in the background, no prompt
@@ -386,8 +386,8 @@ describe("editor view", () => {
   it("cancels a pending autosave when the app tears the editor down", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
     typeInto(body(), "half-typed");
     expect($("#saveStatus").textContent).toBe("Unsaved changes"); // an autosave is armed
@@ -402,21 +402,24 @@ describe("editor view", () => {
     // happy-dom's replace() pushes an entry as assign() does, so the spec asserts the call.
     const replace = vi.spyOn(location, "replace");
     await open([
-      { path: "/posts/p1", reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }) },
+      {
+        path: "/api/posts/p1",
+        reply: () => ({ ...draft({ status: "sent" }), sent: { id: "x9" } }),
+      },
     ]);
     expect(location.hash).toBe("#/sent/x9");
     expect(replace).toHaveBeenLastCalledWith("#/sent/x9"); // so Back skips the editor URL
     location.hash = "#/edit/p1";
     fake.restore();
-    await open([{ path: "/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
+    await open([{ path: "/api/posts/p1", reply: () => ({ ...draft(), sending: { id: "x8" } }) }]);
     expect(location.hash).toBe("#/sent/x8");
     expect(replace).toHaveBeenLastCalledWith("#/sent/x8");
     expect(document.querySelector("#f-markdown")).toBeNull(); // never mounted
   });
 
   const reads = () =>
-    fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/posts/p1");
-  const feedCalls = () => fake.calls.filter((c) => c.url.pathname === "/sends/feed");
+    fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/api/posts/p1");
+  const feedCalls = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
   const setHidden = (hidden: boolean) => {
     Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
     document.dispatchEvent(new Event("visibilitychange"));
@@ -457,7 +460,7 @@ describe("editor view", () => {
 
   it("reads a draft's freshness at once when a hidden tab is shown again", async () => {
     const server = draftServer();
-    await open([{ path: "/posts/p1", reply: server.get }]);
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
     try {
       setHidden(true);
       await vi.advanceTimersByTimeAsync(10000);
@@ -473,7 +476,7 @@ describe("editor view", () => {
   });
 
   it("stops reading on a shown tab once the editor is torn down", async () => {
-    await open([{ path: "/posts/p1", reply: draftServer().get }]);
+    await open([{ path: "/api/posts/p1", reply: draftServer().get }]);
     unmount();
     document.dispatchEvent(new Event("visibilitychange"));
     await vi.advanceTimersByTimeAsync(0);
@@ -541,7 +544,7 @@ describe("editor view", () => {
     let postReads = 0;
     await open([
       {
-        path: "/posts/p1",
+        path: "/api/posts/p1",
         reply: (req) => {
           // The first read still says scheduled; the send was canceled right after it.
           if (++postReads === 1) {
@@ -577,7 +580,7 @@ describe("editor view", () => {
     await open([
       // Tried first: the send's read fails once, then the fake send server answers it.
       {
-        path: "/sends/s1",
+        path: "/api/sends/s1",
         reply: (req) =>
           failures-- > 0 ? jsonResponse({ error: "down" }, 503) : sendRead?.reply(req),
       },
@@ -615,7 +618,7 @@ describe("editor view", () => {
 
   it("goes to Drafts when its post is deleted elsewhere", async () => {
     const linked = scheduledPost();
-    await open([...linked.routes, { path: "/posts", reply: () => ({ posts: [], page: {} }) }]);
+    await open([...linked.routes, { path: "/api/posts", reply: () => ({ posts: [], page: {} }) }]);
     linked.sends.remove("s1");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(location.hash).toBe("#/drafts");
@@ -626,7 +629,7 @@ describe("editor view", () => {
     let failures = 1;
     await open([
       {
-        path: "/posts/p1",
+        path: "/api/posts/p1",
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : draft()),
       },
     ]);
@@ -637,7 +640,7 @@ describe("editor view", () => {
   });
 
   it("derives the slug from the subject until the slug is hand-set, and never leaves it empty", async () => {
-    await open([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     const subject = $<HTMLInputElement>("#f-subject");
     const slug = $<HTMLInputElement>("#f-slug");
     const auto = $<HTMLInputElement>("#f-slug-auto");
@@ -656,7 +659,7 @@ describe("editor view", () => {
 
   it("opens a new post with an empty subject under an Untitled placeholder, tracking the subject from the first keystroke", async () => {
     // What the server makes of a new post: no subject, and its stand-in slug.
-    await open([{ path: "/posts/p1", reply: () => draft({ subject: "", slug: "post-3" }) }]);
+    await open([{ path: "/api/posts/p1", reply: () => draft({ subject: "", slug: "post-3" }) }]);
     const subject = $<HTMLInputElement>("#f-subject");
     const slug = $<HTMLInputElement>("#f-slug");
     expect(subject.value).toBe("");
@@ -668,7 +671,7 @@ describe("editor view", () => {
   });
 
   it("formats the selection from the toolbar and by shortcut, and marks the draft dirty", async () => {
-    await open([{ path: "/posts/p1", reply: () => draft() }]);
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
     const ta = body();
     ta.setSelectionRange(2, 6); // "Owls"
     $(".tb[data-fmt='bold']").click();
@@ -684,10 +687,10 @@ describe("editor view", () => {
   it("opens the preview: a silent save, then the rendered email into the frame", async () => {
     const server = draftServer();
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       {
-        path: "/posts/p1/preview",
+        path: "/api/posts/p1/preview",
         reply: () => new Response("<p>rendered</p>", { headers: { "content-type": "text/html" } }),
       },
     ]);
@@ -703,14 +706,14 @@ describe("editor view", () => {
 
   it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {
     await open([
-      { path: "/posts/p1", reply: () => draft() },
+      { path: "/api/posts/p1", reply: () => draft() },
       {
         path: "/api/settings",
         reply: () => ({ settings: { testRecipients: ["me@b.c", "you@b.c"] } }),
       },
       {
         method: "POST",
-        path: "/posts/p1/test",
+        path: "/api/posts/p1/test",
         reply: () => ({ sent: true, warnings: ["An image has no alt text."] }),
       },
     ]);
@@ -721,7 +724,7 @@ describe("editor view", () => {
     expect($("#testDefaultsHint").hidden).toBe(false);
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    const tests = fake.calls.filter((c) => c.url.pathname === "/posts/p1/test");
+    const tests = fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test");
     expect(tests.map((c) => c.json())).toEqual([{ to: "me@b.c" }, { to: "you@b.c" }]);
     expect($("#toasts").textContent).toMatch(/Test sent to 2 addresses/);
     expect($("#warnings").textContent).toMatch(/Warnings: An image has no alt text\./);
@@ -731,7 +734,7 @@ describe("editor view", () => {
 
   it("names a test recipient that isn't an address and sends nothing, instead of testing fewer people", async () => {
     await open([
-      { path: "/posts/p1", reply: () => draft() },
+      { path: "/api/posts/p1", reply: () => draft() },
       { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
     ]);
     $("#testBtn").click();
@@ -739,7 +742,7 @@ describe("editor view", () => {
     typeInto($<HTMLTextAreaElement>("#testTo"), "me@example.com, typo@gmail");
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fake.calls.filter((c) => c.url.pathname === "/posts/p1/test")).toEqual([]);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toEqual([]);
     expect($("#toasts").textContent).toMatch(/Not an email address: typo@gmail/);
     expect(document.querySelector(".modal")).not.toBeNull(); // left open to fix the typo
     expect(fake.unhandled).toEqual([]);
@@ -753,11 +756,11 @@ describe("editor view", () => {
     const sends = sendServer();
     await open([
       ...sends.routes,
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       {
         method: "POST",
-        path: "/posts/p1/schedule",
+        path: "/api/posts/p1/schedule",
         reply: (req) => {
           const fireAt = (req.json() as { fire_at: string }).fire_at;
           server.apply({ json: () => ({ status: "scheduled" }) } as FakeRequest);
@@ -779,7 +782,7 @@ describe("editor view", () => {
     when.value = "2026-09-25T15:00";
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    const scheduled = fake.calls.find((c) => c.url.pathname === "/posts/p1/schedule");
+    const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
     expect(scheduled?.json()).toEqual({ fire_at: new Date("2026-09-25T15:00").toISOString() });
     expect($("#toasts").textContent).toMatch(/Scheduled for/);
     expect($(".banner-scheduled").textContent).toMatch(/cancelable until then/);
@@ -790,10 +793,10 @@ describe("editor view", () => {
     const server = draftServer();
     let theirs: string | null = null;
     await open([
-      { path: "/posts/p1", reply: server.get },
+      { path: "/api/posts/p1", reply: server.get },
       {
         method: "PUT",
-        path: "/posts/p1",
+        path: "/api/posts/p1",
         // Claude saved first, so every save of ours against the older base is refused.
         reply: (req) =>
           server.put(req, () => {
@@ -809,9 +812,9 @@ describe("editor view", () => {
             );
           }),
       },
-      { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
-      { method: "POST", path: "/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
-      { method: "POST", path: "/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
+      { method: "POST", path: "/api/posts/p1/schedule", reply: () => ({ send: { id: "s1" } }) },
+      { method: "POST", path: "/api/posts/p1/send", reply: () => ({ send: { id: "s2" } }) },
     ]);
     // happy-dom has no layout, so scrollIntoView is only observable as a call.
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
@@ -822,7 +825,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     // The save was refused, so nothing was frozen; the dialog is gone and the
     // out-of-date banner it was covering is the next step.
-    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/schedule")).toBe(false);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
     expect(document.querySelector(".modal")).toBeNull();
     expect($("#freshnessBanner").hidden).toBe(false);
     expect($("#freshnessBanner").textContent).toMatch(/changed elsewhere/);
@@ -833,7 +836,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     $("#snGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(false);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/send")).toBe(false);
     expect(document.querySelector(".modal")).toBeNull();
     // Our edit is still here, unsaved and undisturbed: the banner decides what happens to it.
     expect(body().value).toBe("mine, not theirs");
@@ -845,12 +848,12 @@ describe("editor view", () => {
     // Now plus the lead, rounded up to the minute, as the server answers it.
     const fireAt = Math.ceil((Date.now() + 5 * 60_000) / 60_000) * 60_000;
     await open([
-      { path: "/posts/p1", reply: server.get },
-      { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
-      { path: "/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
       {
         method: "POST",
-        path: "/posts/p1/send",
+        path: "/api/posts/p1/send",
         reply: () => ({ send: { id: "s2", fire_at: fireAt } }),
       },
     ]);
@@ -864,7 +867,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     $("#snGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fake.calls.some((c) => c.url.pathname === "/posts/p1/send")).toBe(true);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/send")).toBe(true);
     // The toast names the fire time the server answered, not the lead.
     expect($("#toasts").textContent).toContain(`Sends at ${fmt(fireAt)}, cancelable until then.`);
     expect(document.querySelector(".modal")).toBeNull();
@@ -878,12 +881,12 @@ describe("editor view", () => {
     try {
       const server = draftServer();
       await open([
-        { path: "/posts/p1", reply: server.get },
-        { method: "PUT", path: "/posts/p1", reply: (req) => server.put(req) },
-        { path: "/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
         {
           method: "POST",
-          path: "/posts/p1/send",
+          path: "/api/posts/p1/send",
           // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
           reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
         },
@@ -910,10 +913,10 @@ describe("editor view", () => {
 
   it("uploads a picked image and inserts it at the caret", async () => {
     await open([
-      { path: "/posts/p1", reply: () => draft() },
+      { path: "/api/posts/p1", reply: () => draft() },
       {
         method: "POST",
-        path: "/posts/p1/images",
+        path: "/api/posts/p1/images",
         reply: () => ({ image: { filename: "owl.png", url: "http://m/owl.png" } }),
       },
     ]);
@@ -976,13 +979,13 @@ describe("editor view", () => {
       {
         phase: "scheduled",
         actions: [
-          { name: "cancel", method: "POST", path: "/sends/s1/cancel" },
-          { name: "reschedule", method: "POST", path: "/sends/s1/reschedule" },
+          { name: "cancel", method: "POST", path: "/api/sends/s1/cancel" },
+          { name: "reschedule", method: "POST", path: "/api/sends/s1/reschedule" },
         ],
       },
     );
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(true);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(true);
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);
@@ -994,7 +997,7 @@ describe("editor view", () => {
       ...scheduledPost(Date.now() + 5_000).routes,
       {
         method: "POST",
-        path: "/sends/s1/cancel",
+        path: "/api/sends/s1/cancel",
         reply: () => new Promise<Response>((resolve) => (answer = resolve)),
       },
     ]);
@@ -1012,7 +1015,7 @@ describe("editor view", () => {
     linked.sends.edit(
       "s1",
       {},
-      { actions: [{ name: "cancel", method: "POST", path: "/sends/s1/cancel" }] },
+      { actions: [{ name: "cancel", method: "POST", path: "/api/sends/s1/cancel" }] },
     );
     await open(linked.routes);
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
@@ -1026,7 +1029,7 @@ describe("editor view", () => {
       ...linked.routes,
       {
         method: "POST",
-        path: "/sends/s1/cancel",
+        path: "/api/sends/s1/cancel",
         reply: () => {
           linked.cancel();
           return { send: { id: "s1", status: "canceled" } };
@@ -1041,7 +1044,7 @@ describe("editor view", () => {
     expect($("#lockFoot").classList.contains("nudge")).toBe(false);
     $("#cancelSchedule").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(fake.calls.some((c) => c.url.pathname === "/sends/s1/cancel")).toBe(true);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/s1/cancel")).toBe(true);
     expect($("#toasts").textContent).toMatch(/Schedule canceled/);
     expect(document.querySelector(".banner-scheduled")).toBeNull();
     expect(body().readOnly).toBe(false);

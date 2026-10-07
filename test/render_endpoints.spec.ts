@@ -17,7 +17,7 @@ const PNG_1x1 = Uint8Array.from(
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject: `Subject: ${title}`, markdown: "# Hi\n\n![A cat](cat.png)" }),
@@ -26,23 +26,26 @@ async function draftWithImage(title: string): Promise<string> {
   const id = created.post.id;
   const fd = new FormData();
   fd.append("file", new File([PNG_1x1], "cat.png", { type: "image/png" }));
-  await SELF.fetch(`${base}/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+  await SELF.fetch(`${base}/api/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
   return id;
 }
 
 describe("preview + test endpoints", () => {
   it("POST /preview returns a hosted view-in-browser URL", async () => {
     const id = await draftWithImage("Preview One");
-    const res = await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts/${id}/preview`, {
+      method: "POST",
+      headers: AUTH,
+    });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.url).toBe(`http://localhost:8787/posts/${id}/preview`);
+    expect(body.url).toBe(`http://localhost:8787/api/posts/${id}/preview`);
     expect(body.subject).toBe("Subject: Preview One");
   });
 
   it("GET /preview serves rendered HTML with the sentinel substituted", async () => {
     const id = await draftWithImage("Preview Two");
-    const res = await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
@@ -53,14 +56,14 @@ describe("preview + test endpoints", () => {
 
   it("GET /preview requires auth", async () => {
     const id = await draftWithImage("Preview Auth");
-    const res = await SELF.fetch(`${base}/posts/${id}/preview`);
+    const res = await SELF.fetch(`${base}/api/posts/${id}/preview`);
     expect(res.status).toBe(401);
   });
 
   it("POST /test sends the real render through the provider (same render path, I5)", async () => {
     const id = await draftWithImage("Test Send");
     const to = `probe-${id}@example.com`;
-    const res = await SELF.fetch(`${base}/posts/${id}/test`, {
+    const res = await SELF.fetch(`${base}/api/posts/${id}/test`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ to }),
@@ -84,7 +87,7 @@ describe("preview + test endpoints", () => {
     const id = await draftWithImage("Test Twice");
     const to = `twice-${id}@example.com`;
     const test = () =>
-      SELF.fetch(`${base}/posts/${id}/test`, {
+      SELF.fetch(`${base}/api/posts/${id}/test`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ to }),
@@ -93,7 +96,7 @@ describe("preview + test endpoints", () => {
     // The same test again: an idempotent provider would fold a reused key into nothing.
     expect((await test()).status).toBe(200);
     // An edited post: a reused key would be refused (Resend's 409 on a changed payload).
-    await SELF.fetch(`${base}/posts/${id}`, {
+    await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject: "Subject: Test Twice, edited" }),
@@ -115,7 +118,7 @@ describe("preview + test endpoints", () => {
     // the instruments must read the send, whatever it holds.
     const id = await draftWithImage("Frozen");
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
@@ -132,7 +135,7 @@ describe("preview + test endpoints", () => {
 
     const to = `frozen-${id}@example.com`;
     const test = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/test`, {
+      await SELF.fetch(`${base}/api/posts/${id}/test`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ to }),
@@ -146,12 +149,14 @@ describe("preview + test endpoints", () => {
     expect(msg.html).toContain("/unsubscribe?test=1"); // the placeholders are filled as at fire
     expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
 
-    const page = await (await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })).text();
+    const page = await (
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
+    ).text();
     expect(page).toContain(sentinel);
     expect(page).toContain("/unsubscribe");
     expect(page).not.toContain("%%UNSUBSCRIBE_URL%%");
     const action = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
     );
     expect(action.frozen).toBe(true);
 
@@ -161,7 +166,7 @@ describe("preview + test endpoints", () => {
       .bind(Date.now(), scheduled.send.id)
       .run();
     const inFlight = await (
-      await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
     expect(inFlight).toContain(sentinel);
 
@@ -174,18 +179,18 @@ describe("preview + test endpoints", () => {
       env.DB.prepare("UPDATE posts SET status = 'sent' WHERE id = ?").bind(id),
     ]);
     const sentPage = await (
-      await SELF.fetch(`${base}/posts/${id}/preview`, { headers: AUTH })
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
     expect(sentPage).toContain(sentinel);
     const sentTest = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/test`, {
+      await SELF.fetch(`${base}/api/posts/${id}/test`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ to: `sent-${to}` }),
       }),
     );
     expect(sentTest.frozen).toBe(true);
-    const post = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const post = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     const slug = post.post.slug;
     const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
     expect(archive).toContain(sentinel);
@@ -194,11 +199,11 @@ describe("preview + test endpoints", () => {
   it("a draft's test and preview are a live render (frozen: false)", async () => {
     const id = await draftWithImage("Live");
     const action = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/preview`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
     );
     expect(action.frozen).toBe(false);
     const test = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/test`, {
+      await SELF.fetch(`${base}/api/posts/${id}/test`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ to: `live-${id}@example.com` }),
@@ -209,7 +214,7 @@ describe("preview + test endpoints", () => {
 
   it("POST /test rejects a missing/invalid address (400)", async () => {
     const id = await draftWithImage("Bad Address");
-    const res = await SELF.fetch(`${base}/posts/${id}/test`, {
+    const res = await SELF.fetch(`${base}/api/posts/${id}/test`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ to: "not-an-email" }),

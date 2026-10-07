@@ -31,18 +31,18 @@ export interface PostListItem extends Post {
   author: string | null;
 }
 
-/** GET /posts */
+/** GET /api/posts */
 export interface PostListResponse {
   posts: PostListItem[];
   page: PageMeta;
   /**
-   * Where this read stood among the changes to sends (`<seq>.<at>`, as on `GET /sends`), to
-   * follow the listed posts' sends from with `GET /sends/feed`.
+   * Where this read stood among the changes to sends (`<seq>.<at>`, as on `GET /api/sends`), to
+   * follow the listed posts' sends from with `GET /api/sends/feed`.
    */
   cursor: string;
 }
 
-/** GET /posts/:id: the post, its current text, and where its send stands. */
+/** GET /api/posts/:id: the post, its current text, and where its send stands. */
 export interface PostResponse {
   post: Post;
   markdown: string;
@@ -57,7 +57,7 @@ export interface PostResponse {
 }
 
 /**
- * What POST /posts and PUT /posts/:id accept: any subset of the fields, and the revision
+ * What POST /api/posts and PUT /api/posts/:id accept: any subset of the fields, and the revision
  * the editor loaded, which the server checks before it writes (optimistic concurrency).
  */
 export interface PostEditBody {
@@ -67,13 +67,13 @@ export interface PostEditBody {
   base_revision?: string | null;
 }
 
-/** POST /posts and PUT /posts/:id: the post as saved, and the revision the save wrote. */
+/** POST /api/posts and PUT /api/posts/:id: the post as saved, and the revision the save wrote. */
 export interface PostSavedResponse {
   post: Post;
   revision_id: string;
 }
 
-/** GET /posts/:id/preview: where the rendered page is, and whether it is a frozen send's copy. */
+/** GET /api/posts/:id/preview: where the rendered page is, and whether it is a frozen send's copy. */
 export interface PreviewResponse {
   url: string;
   subject: string;
@@ -81,7 +81,7 @@ export interface PreviewResponse {
   frozen: boolean;
 }
 
-/** POST /posts/:id/test: one test delivery through the same render as a real send (I5). */
+/** POST /api/posts/:id/test: one test delivery through the same render as a real send (I5). */
 export interface TestSendResponse {
   sent: boolean;
   provider: string;

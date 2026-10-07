@@ -37,7 +37,7 @@ export interface SubscriberCounts {
   suppressed: number;
 }
 
-/** GET /subscribers */
+/** GET /api/subscribers */
 export interface SubscriberListResponse {
   counts: SubscriberCounts;
   subscribers: SubscriberListItem[];
@@ -57,7 +57,7 @@ export type SubscribeAction =
   | "suppressed"
   | "recently_sent";
 
-/** POST /subscribers. `subscriber` is null when the address has no row: a suppressed
+/** POST /api/subscribers. `subscriber` is null when the address has no row: a suppressed
  *  address that was never on the list. */
 export interface SubscribeResponse {
   subscriber: Subscriber | null;
@@ -73,7 +73,7 @@ export interface PublicSubscribeResponse {
   status: "check_inbox";
 }
 
-/** GET /subscribers/:id */
+/** GET /api/subscribers/:id */
 export interface SubscriberResponse {
   subscriber: Subscriber;
   suppressed: boolean;

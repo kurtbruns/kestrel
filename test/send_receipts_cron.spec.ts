@@ -106,12 +106,12 @@ describe("the receipts cron", () => {
   });
 });
 
-describe("GET /sends/:id with the simulation on", () => {
+describe("GET /api/sends/:id with the simulation on", () => {
   it("settles nothing: reading a send never changes it", async () => {
     await settlingSend("s-read", 3);
     const ctx = createExecutionContext();
     const res = await worker.fetch(
-      new Request(`${base}/sends/s-read`, { headers: AUTH }) as Request<
+      new Request(`${base}/api/sends/s-read`, { headers: AUTH }) as Request<
         unknown,
         IncomingRequestCfProperties
       >,

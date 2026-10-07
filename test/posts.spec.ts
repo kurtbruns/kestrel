@@ -8,7 +8,7 @@ const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
 
 async function createPost(body: unknown): Promise<Response> {
-  return SELF.fetch(`${base}/posts`, {
+  return SELF.fetch(`${base}/api/posts`, {
     method: "POST",
     headers: { ...AUTH, "content-type": "application/json" },
     body: JSON.stringify(body),
@@ -17,7 +17,7 @@ async function createPost(body: unknown): Promise<Response> {
 
 describe("posts + revisions", () => {
   it("requires auth", async () => {
-    const res = await SELF.fetch(`${base}/posts`, { method: "POST" });
+    const res = await SELF.fetch(`${base}/api/posts`, { method: "POST" });
     expect(res.status).toBe(401);
   });
 
@@ -30,7 +30,7 @@ describe("posts + revisions", () => {
     expect(post.current_revision).toBe(revision_id);
 
     const revs = await readJson(
-      await SELF.fetch(`${base}/posts/${post.id}/revisions`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${post.id}/revisions`, { headers: AUTH }),
     );
     expect(revs.revisions).toHaveLength(1);
   });
@@ -47,7 +47,7 @@ describe("posts + revisions", () => {
     const created = await readJson(await createPost({ subject: "Versioned", markdown: "v1" }));
     const id = created.post.id;
 
-    const upd = await SELF.fetch(`${base}/posts/${id}`, {
+    const upd = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: { ...AUTH, "content-type": "application/json" },
       body: JSON.stringify({ markdown: "v2" }),
@@ -57,16 +57,16 @@ describe("posts + revisions", () => {
     expect(updated.revision_id).not.toBe(created.revision_id);
     expect(updated.post.current_revision).toBe(updated.revision_id);
 
-    const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     expect(got.markdown).toBe("v2");
 
     const revs = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/revisions`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/revisions`, { headers: AUTH }),
     );
     expect(revs.revisions).toHaveLength(2);
 
     const r1 = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/revisions/1`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/revisions/1`, { headers: AUTH }),
     );
     expect(r1.markdown).toBe("v1");
   });
@@ -83,7 +83,7 @@ describe("posts + revisions", () => {
     const id = created.post.id;
 
     const renamed = await readJson(
-      await SELF.fetch(`${base}/posts/${id}`, {
+      await SELF.fetch(`${base}/api/posts/${id}`, {
         method: "PUT",
         headers: { ...AUTH, "content-type": "application/json" },
         body: JSON.stringify({ subject: "Renamed Completely" }),
@@ -92,7 +92,7 @@ describe("posts + revisions", () => {
     expect(renamed.post.slug).toBe("stable");
 
     const reslugged = await readJson(
-      await SELF.fetch(`${base}/posts/${id}`, {
+      await SELF.fetch(`${base}/api/posts/${id}`, {
         method: "PUT",
         headers: { ...AUTH, "content-type": "application/json" },
         body: JSON.stringify({ slug: "brand-new-slug" }),
@@ -106,23 +106,23 @@ describe("posts + revisions", () => {
     const id = created.post.id;
     await env.DB.prepare("UPDATE posts SET status = 'scheduled' WHERE id = ?").bind(id).run();
 
-    const put = await SELF.fetch(`${base}/posts/${id}`, {
+    const put = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: { ...AUTH, "content-type": "application/json" },
       body: JSON.stringify({ markdown: "nope" }),
     });
     expect(put.status).toBe(409);
 
-    const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });
+    const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(409);
   });
 
   it("deletes a draft and its revisions", async () => {
     const created = await readJson(await createPost({ subject: "Trash", markdown: "x" }));
     const id = created.post.id;
-    const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });
+    const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(200);
-    const got = await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH });
+    const got = await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH });
     expect(got.status).toBe(404);
     const revCount: any = await env.DB.prepare(
       "SELECT COUNT(*) AS n FROM post_revisions WHERE post_id = ?",
@@ -136,7 +136,7 @@ describe("posts + revisions", () => {
   // if another writer (another tab, or Claude) advanced the draft since, the stale
   // save is rejected 409 rather than silently clobbering the newer one.
   const put = (id: string, body: unknown, headers: Record<string, string> = {}) =>
-    SELF.fetch(`${base}/posts/${id}`, {
+    SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: { ...AUTH, "content-type": "application/json", ...headers },
       body: JSON.stringify(body),
@@ -162,7 +162,7 @@ describe("posts + revisions", () => {
     expect(body.author).toBe("service"); // the service principal; the editor maps this to "Claude"
 
     // The draft is untouched — no clobber.
-    const got = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     expect(got.markdown).toBe("v2");
   });
 
@@ -185,7 +185,7 @@ describe("posts + revisions", () => {
     const stale = await put(id, { markdown: "nope", base_revision: rev1 });
     expect(stale.status).toBe(409);
 
-    const current = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+    const current = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     const ok = await put(id, { markdown: "v3", base_revision: current.post.current_revision });
     expect(ok.status).toBe(200);
   });
@@ -198,7 +198,7 @@ describe("posts + revisions", () => {
 
   it("exposes the current revision as an ETag and its author on GET", async () => {
     const created = await readJson(await createPost({ subject: "Tagged", markdown: "x" }));
-    const res = await SELF.fetch(`${base}/posts/${created.post.id}`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts/${created.post.id}`, { headers: AUTH });
     expect(res.headers.get("ETag")).toBe(`"${created.post.current_revision}"`);
     const data = await readJson(res);
     expect(data.author).toBe("tester@example.com"); // the human principal (default AUTH) that created it
@@ -215,14 +215,14 @@ describe("posts + revisions", () => {
     const id = created.post.id;
 
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: { ...AUTH, "content-type": "application/json" },
         body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
       }),
     );
     const sendId = scheduled.send.id;
-    await SELF.fetch(`${base}/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
+    await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
     // A delivery row would exist if the send had begun; insert one so the cascade
     // is exercised even though a cancel-before-fire normally leaves none.
     await env.DB.prepare(
@@ -231,7 +231,7 @@ describe("posts + revisions", () => {
       .bind(sendId, "x@example.com", Date.now())
       .run();
 
-    const del = await SELF.fetch(`${base}/posts/${id}`, { method: "DELETE", headers: AUTH });
+    const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(200);
 
     const counts: any = await env.DB.prepare(
@@ -256,23 +256,23 @@ describe("posts list: filter, sort, paginate", () => {
     const q = `search=${marker}&sort=title&dir=asc`;
 
     const p1 = await readJson(
-      await SELF.fetch(`${base}/posts?${q}&limit=2&offset=0`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?${q}&limit=2&offset=0`, { headers: AUTH }),
     );
     expect(p1.posts.map((p: any) => p.subject)).toEqual([`${marker} A`, `${marker} B`]);
     expect(p1.page).toMatchObject({ total: 3, limit: 2, offset: 0, sort: "title", dir: "asc" });
 
     const p2 = await readJson(
-      await SELF.fetch(`${base}/posts?${q}&limit=2&offset=2`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?${q}&limit=2&offset=2`, { headers: AUTH }),
     );
     expect(p2.posts.map((p: any) => p.subject)).toEqual([`${marker} C`]);
 
     // Status filter: all three are drafts, none are sent.
     const drafts = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}&status=draft`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}&status=draft`, { headers: AUTH }),
     );
     expect(drafts.posts).toHaveLength(3);
     const sent = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}&status=sent`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}&status=sent`, { headers: AUTH }),
     );
     expect(sent.posts).toHaveLength(0);
     expect(sent.page.total).toBe(0);

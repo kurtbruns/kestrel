@@ -234,12 +234,12 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
     actions: [],
     next_change_at: null,
     links: {
-      self: `/sends/${row.id}`,
-      email_html: `/sends/${row.id}/email?format=html`,
-      email_text: `/sends/${row.id}/email?format=text`,
-      deliveries: `/sends/${row.id}/deliveries`,
-      deliveries_csv: `/sends/${row.id}/deliveries.csv`,
-      post: `/posts/${row.post_id}`,
+      self: `/api/sends/${row.id}`,
+      email_html: `/api/sends/${row.id}/email?format=html`,
+      email_text: `/api/sends/${row.id}/email?format=text`,
+      deliveries: `/api/sends/${row.id}/deliveries`,
+      deliveries_csv: `/api/sends/${row.id}/deliveries.csv`,
+      post: `/api/posts/${row.post_id}`,
       archive: row.status === "sent" ? `https://birds.example/${row.post_id}` : null,
     },
     ...over,
@@ -259,7 +259,7 @@ export const condition = {
     severity: "action",
     since: null,
     message: `The provider never answered for ${count} recipient${count === 1 ? "" : "s"}, so whether they were mailed is unknown.`,
-    action: { name: "resolve", method: "POST", path: `/sends/${id}/resolve` },
+    action: { name: "resolve", method: "POST", path: `/api/sends/${id}/resolve` },
     count,
   }),
   stuck: (): SendCondition => ({
@@ -295,8 +295,8 @@ export const condition = {
 const MISSED_MS = 5 * 60_000;
 
 /**
- * A scripted server's sends over one change sequence, answering `GET /sends` and
- * `GET /sends/feed` the way the Worker does, so a page's own reads and the layer's feed see
+ * A scripted server's sends over one change sequence, answering `GET /api/sends` and
+ * `GET /api/sends/feed` the way the Worker does, so a page's own reads and the layer's feed see
  * one world. `put` is any client's (or the sweep's) write: it moves the send past every
  * cursor issued so far. The clock's own changes need no write: a scheduled send reads `due`
  * from its fire time and missed past the tolerance, and the feed reports each crossing
@@ -361,11 +361,11 @@ export function sendServer(rows: SendSummary[] = []) {
       extras.actions ??
       (row.status === "scheduled" && now < row.fire_at
         ? [
-            { name: "cancel", method: "POST", path: `/sends/${row.id}/cancel` },
-            { name: "reschedule", method: "POST", path: `/sends/${row.id}/reschedule` },
+            { name: "cancel", method: "POST", path: `/api/sends/${row.id}/cancel` },
+            { name: "reschedule", method: "POST", path: `/api/sends/${row.id}/reschedule` },
           ]
         : conditions.some((c) => c.kind === "wedged")
-          ? [{ name: "resolve", method: "POST", path: `/sends/${row.id}/resolve` }]
+          ? [{ name: "resolve", method: "POST", path: `/api/sends/${row.id}/resolve` }]
           : []);
     return { phase, conditions, actions };
   };
@@ -402,7 +402,7 @@ export function sendServer(rows: SendSummary[] = []) {
     dir * (a.row.fire_at - b.row.fire_at);
   const routes: FakeRoute[] = [
     {
-      path: "/sends/feed",
+      path: "/api/sends/feed",
       reply: (req): SendFeedResponse | Response => {
         const now = Date.now();
         const raw = req.url.searchParams.get("since");
@@ -448,7 +448,7 @@ export function sendServer(rows: SendSummary[] = []) {
       },
     },
     {
-      path: "/sends",
+      path: "/api/sends",
       reply: (req): SendListResponse => {
         const now = Date.now();
         const q = req.url.searchParams;
@@ -465,10 +465,10 @@ export function sendServer(rows: SendSummary[] = []) {
       },
     },
     {
-      // One send, as `GET /sends/:id` answers it: its view, its outcomes from the
+      // One send, as `GET /api/sends/:id` answers it: its view, its outcomes from the
       // counters (the fake keeps no delivery rows; like the server's, a recipient not yet
       // handed off counts as in flight), and where the read stood.
-      path: /^\/sends\/(?!feed$)[^/]+$/,
+      path: /^\/api\/sends\/(?!feed$)[^/]+$/,
       reply: (req): SendResponse | Response => {
         const id = req.url.pathname.split("/").pop() ?? "";
         const s = sends.get(id);
@@ -512,15 +512,15 @@ export function sendServer(rows: SendSummary[] = []) {
       sends.delete(id);
       removed.set(id, seq);
     },
-    /** Where a read now stands, as a list route would hand it back (`GET /posts` carries one). */
+    /** Where a read now stands, as a list route would hand it back (`GET /api/posts` carries one). */
     cursor,
   };
 }
 
-/** The `GET /sends/feed` reads a spec's fake has seen. */
+/** The `GET /api/sends/feed` reads a spec's fake has seen. */
 export const feedReads = (fake: FakeApi): FakeRequest[] =>
-  fake.calls.filter((c) => c.url.pathname === "/sends/feed");
+  fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
 
-/** The `GET /sends` reads a spec's fake has seen. */
+/** The `GET /api/sends` reads a spec's fake has seen. */
 export const listReads = (fake: FakeApi): FakeRequest[] =>
-  fake.calls.filter((c) => c.url.pathname === "/sends");
+  fake.calls.filter((c) => c.url.pathname === "/api/sends");

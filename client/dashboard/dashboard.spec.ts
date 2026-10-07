@@ -106,8 +106,8 @@ function world(
   return fakeApi([
     ...extra,
     ...srv.routes,
-    { path: "/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
-    { path: "/subscribers", reply: () => ({ counts: subs, subscribers: [], page }) },
+    { path: "/api/posts", reply: () => ({ posts, page: { ...page, total: posts.length } }) },
+    { path: "/api/subscribers", reply: () => ({ counts: subs, subscribers: [], page }) },
   ]);
 }
 
@@ -313,7 +313,7 @@ describe("dashboard", () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 20_000 })]);
     fake = world([post()], srv);
     vi.setSystemTime(NOW + 25_000); // the server's clock, past the fire time
-    const route = srv.routes.find((r) => r.path === "/sends")!;
+    const route = srv.routes.find((r) => r.path === "/api/sends")!;
     const reply = route.reply;
     route.reply = (req) => {
       const out = reply(req);
@@ -390,7 +390,11 @@ describe("dashboard", () => {
 
   it("shows the first-run checklist when nothing is written and no one is on the list, and its New post creates one", async () => {
     fake = world([], sendServer(), none, [
-      { method: "POST", path: "/posts", reply: () => ({ post: { id: "p9" }, revision_id: "r" }) },
+      {
+        method: "POST",
+        path: "/api/posts",
+        reply: () => ({ post: { id: "p9" }, revision_id: "r" }),
+      },
     ]);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
@@ -658,14 +662,16 @@ describe("confirmUnsubscribe", () => {
   };
 
   it("names the address, unsubscribes on confirm, and tells the caller", async () => {
-    fake = fakeApi([{ method: "POST", path: "/subscribers/s1/unsubscribe", reply: () => ({}) }]);
+    fake = fakeApi([
+      { method: "POST", path: "/api/subscribers/s1/unsubscribe", reply: () => ({}) },
+    ]);
     const onDone = vi.fn();
     confirmUnsubscribe(sub, onDone);
     expect($(".modal strong").textContent).toBe("a@b.c");
     $("#uGo").click();
     await vi.advanceTimersByTimeAsync(10);
     expect(fake.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
-      "POST /subscribers/s1/unsubscribe",
+      "POST /api/subscribers/s1/unsubscribe",
     ]);
     expect(onDone).toHaveBeenCalledOnce();
     expect($("#toasts").textContent).toMatch(/Unsubscribed a@b\.c/);

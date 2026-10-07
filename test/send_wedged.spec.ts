@@ -51,7 +51,7 @@ async function scheduledSend(fireAt: number) {
 }
 
 async function progress(id: string): Promise<SendView> {
-  const res = await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH });
   return ((await res.json()) as { send: SendView }).send;
 }
 
@@ -92,7 +92,7 @@ describe("a wedged send", () => {
     await sweep(env); // fires; the one batch's answer is lost, so its fate is unknown
     const wedged = await row(send.id);
     expect(isWedged(wedged)).toBe(true);
-    const list = (await (await SELF.fetch(`${base}/sends`, { headers: AUTH })).json()) as {
+    const list = (await (await SELF.fetch(`${base}/api/sends`, { headers: AUTH })).json()) as {
       cursor: string;
     };
     const requests = provider.requests;
@@ -112,7 +112,7 @@ describe("a wedged send", () => {
     }
     expect(provider.requests).toBe(requests); // nothing re-sent (I4)
     const feed = (await (
-      await SELF.fetch(`${base}/sends/feed?since=${encodeURIComponent(list.cursor)}`, {
+      await SELF.fetch(`${base}/api/sends/feed?since=${encodeURIComponent(list.cursor)}`, {
         headers: AUTH,
       })
     ).json()) as SendFeedResponse;

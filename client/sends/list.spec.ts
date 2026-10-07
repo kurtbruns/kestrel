@@ -266,10 +266,10 @@ describe("sent view", () => {
 
   it("catches a change made between its own reads, following from the earliest of them", async () => {
     const srv = sendServer([scheduled(), send()]);
-    const lists = srv.routes.find((r) => r.path === "/sends")!;
+    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
     fake = world(srv, [
       {
-        path: "/sends",
+        path: "/api/sends",
         reply: (req) => {
           const out = lists.reply(req);
           if (req.url.searchParams.get("status") === "scheduled") {
@@ -328,7 +328,7 @@ describe("sent view", () => {
     fake = world(srv, [
       {
         method: "POST",
-        path: "/sends/sch/cancel",
+        path: "/api/sends/sch/cancel",
         reply: () => {
           srv.edit("sch", { status: "canceled" });
           return {};
@@ -428,12 +428,12 @@ describe("sent view", () => {
 
   it("paints only the latest queue read, so a slow one never puts a started send back", async () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 30_000 }), send()]);
-    const lists = srv.routes.find((r) => r.path === "/sends")!;
+    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
     let hold: Promise<void> | null = null;
     let release = () => {};
     fake = world(srv, [
       {
-        path: "/sends",
+        path: "/api/sends",
         reply: async (req) => {
           const out = lists.reply(req); // the world as it stands when the read arrives
           if (hold && req.url.searchParams.get("status") === "scheduled") {
@@ -503,7 +503,7 @@ describe("sent view", () => {
     fake = world(srv, [
       {
         method: "POST",
-        path: "/sends/wedge/resolve",
+        path: "/api/sends/wedge/resolve",
         reply: () => {
           srv.edit("wedge", {
             status: "sent",
@@ -552,10 +552,10 @@ describe("sent view", () => {
   it("says so in place when the read of the sends in flight fails, and follows from its Retry", async () => {
     let down = true;
     const srv = sendServer([send()]);
-    const lists = srv.routes.find((r) => r.path === "/sends")!;
+    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
     fake = world(srv, [
       {
-        path: "/sends",
+        path: "/api/sends",
         reply: (req) =>
           down && req.url.searchParams.get("status") === "sending"
             ? new Response(JSON.stringify({ error: "internal_error" }), { status: 500 })

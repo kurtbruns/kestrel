@@ -4,8 +4,8 @@ import { describe, expect, it } from "vitest";
 import { recomputeSendCounters } from "../src/db/sends";
 import { adminAuth } from "./support/auth";
 
-// PR1 (#147/#148): the Drafts view scopes /posts to draft+scheduled via a comma status
-// list, and a sent post opens the read-only record view backed by GET /sends/:id
+// PR1 (#147/#148): the Drafts view scopes /api/posts to draft+scheduled via a comma status
+// list, and a sent post opens the read-only record view backed by GET /api/sends/:id
 // (outcome breakdown + published flag) and its CSV export.
 
 const AUTH = await adminAuth();
@@ -16,7 +16,7 @@ const uniq = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 async function createDraft(subject: string): Promise<string> {
   const r = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject, markdown: "# hi\n\nbody" }),
@@ -25,12 +25,12 @@ async function createDraft(subject: string): Promise<string> {
   return r.post.id;
 }
 
-describe("Drafts filter — /posts?status=draft,scheduled", () => {
+describe("Drafts filter — /api/posts?status=draft,scheduled", () => {
   it("matches draft + scheduled together but never sent", async () => {
     const marker = `dfilter-${uniq()}`;
     const draftId = await createDraft(`${marker} draft`);
     const schedId = await createDraft(`${marker} sched`);
-    await SELF.fetch(`${base}/posts/${schedId}/schedule`, {
+    await SELF.fetch(`${base}/api/posts/${schedId}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
@@ -45,19 +45,21 @@ describe("Drafts filter — /posts?status=draft,scheduled", () => {
       .run();
 
     const drafts = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}&status=draft,scheduled`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}&status=draft,scheduled`, {
+        headers: AUTH,
+      }),
     );
     expect(drafts.posts.map((p: any) => p.id).sort()).toEqual([draftId, schedId].sort());
     expect(drafts.page.total).toBe(2);
 
     const sent = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}&status=sent`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}&status=sent`, { headers: AUTH }),
     );
     expect(sent.posts.map((p: any) => p.id)).toEqual([sentId]);
 
     // No status → everything, so the comma list is a real narrowing, not a no-op.
     const all = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}`, { headers: AUTH }),
     );
     expect(all.page.total).toBe(3);
   });
@@ -117,20 +119,20 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   }
   // Seed the denormalized counters from the rows just as the real send path does at
   // completion (the exactness pass in completeSend), so the seeded row carries the same
-  // c_* counters production would — what GET /sends/:id's `progress` now reads (#166).
+  // c_* counters production would — what GET /api/sends/:id's `progress` now reads (#166).
   await recomputeSendCounters(env.DB, sendId);
   return { postId, sendId };
 }
 
 // #162: a post stays `scheduled` while its send is in flight, but it's no longer an
 // editable/cancelable draft — the list carries the active send's id + status so the
-// Drafts page can relabel/route it, and GET /posts points the editor at the live watch.
+// Drafts page can relabel/route it, and GET /api/posts points the editor at the live watch.
 describe("in-flight post routing (#162)", () => {
   it("surfaces a sending post as active and routes it to the watch, not the editor", async () => {
     const marker = `inflight-${uniq()}`;
     const postId = await createDraft(`${marker} post`);
     const sched = await readJson(
-      await SELF.fetch(`${base}/posts/${postId}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${postId}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: new Date(Date.now() + 10 * 60 * 1000).toISOString() }),
@@ -140,14 +142,18 @@ describe("in-flight post routing (#162)", () => {
     // Flip the send in flight, as the sweep would (the post stays `scheduled`).
     await env.DB.prepare("UPDATE sends SET status = 'sending' WHERE id = ?").bind(sendId).run();
 
-    // GET /posts/:id reports `sending` (not `scheduled`) so the editor redirects to the watch.
-    const detail = await readJson(await SELF.fetch(`${base}/posts/${postId}`, { headers: AUTH }));
+    // GET /api/posts/:id reports `sending` (not `scheduled`) so the editor redirects to the watch.
+    const detail = await readJson(
+      await SELF.fetch(`${base}/api/posts/${postId}`, { headers: AUTH }),
+    );
     expect(detail.sending).toEqual({ id: sendId });
     expect(detail.scheduled).toBeNull();
 
     // The list row carries the active send's id + status for the Drafts relabel/route.
     const list = await readJson(
-      await SELF.fetch(`${base}/posts?search=${marker}&status=draft,scheduled`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts?search=${marker}&status=draft,scheduled`, {
+        headers: AUTH,
+      }),
     );
     const row = list.posts.find((p: any) => p.id === postId);
     expect(row.active_send_status).toBe("sending");
@@ -155,7 +161,7 @@ describe("in-flight post routing (#162)", () => {
   });
 });
 
-describe("Sent list — delivery-failures filter (/sends?failures=only)", () => {
+describe("Sent list — delivery-failures filter (/api/sends?failures=only)", () => {
   it("narrows to sends with any bounce, complaint, or unsent recipient", async () => {
     const marker = `posts-${uniq()}`;
     const { sendId: clean } = await seedSentSend(`${marker} clean`, `${marker}-clean`, [
@@ -173,12 +179,12 @@ describe("Sent list — delivery-failures filter (/sends?failures=only)", () => 
     ]);
 
     const all = await readJson(
-      await SELF.fetch(`${base}/sends?search=${marker}`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends?search=${marker}`, { headers: AUTH }),
     );
     expect(all.page.total).toBe(3);
 
     const only = await readJson(
-      await SELF.fetch(`${base}/sends?search=${marker}&failures=only`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends?search=${marker}&failures=only`, { headers: AUTH }),
     );
     expect(only.page.total).toBe(2);
     const ids = only.sends.map((s: any) => s.id).sort();
@@ -186,7 +192,7 @@ describe("Sent list — delivery-failures filter (/sends?failures=only)", () => 
     expect(ids).not.toContain(clean);
 
     // Any other value is refused, naming the field: the flag is `only` or absent.
-    const junk = await SELF.fetch(`${base}/sends?search=${marker}&failures=yes`, {
+    const junk = await SELF.fetch(`${base}/api/sends?search=${marker}&failures=yes`, {
       headers: AUTH,
     });
     expect(junk.status).toBe(400);
@@ -194,7 +200,7 @@ describe("Sent list — delivery-failures filter (/sends?failures=only)", () => 
   });
 });
 
-describe("sent record view — GET /sends/:id", () => {
+describe("sent record view — GET /api/sends/:id", () => {
   it("returns outcome buckets that reconcile to the frozen audience, and the published post's link", async () => {
     const slug = `rec-${uniq()}`;
     const deliveries: SeedDelivery[] = [
@@ -211,7 +217,7 @@ describe("sent record view — GET /sends/:id", () => {
     ];
     const { sendId } = await seedSentSend("Record Test", slug, deliveries);
 
-    const body = await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }));
+    const body = await readJson(await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH }));
     const o = body.outcomes;
     expect(o).toMatchObject({
       recipients: 10,
@@ -257,7 +263,7 @@ describe("sent record view — GET /sends/:id", () => {
       { email: "c@example.com", status: "unsent" },
     ]);
 
-    const res = await SELF.fetch(`${base}/sends/${sendId}/deliveries.csv`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/sends/${sendId}/deliveries.csv`, { headers: AUTH });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("text/csv");
     expect(res.headers.get("content-disposition")).toContain(`${slug}-deliveries.csv`);
@@ -278,7 +284,7 @@ describe("sent record view — GET /sends/:id", () => {
       { email: "@x@example.com", status: "unsent" },
     ]);
     const text = await (
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries.csv`, { headers: AUTH })
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries.csv`, { headers: AUTH })
     ).text();
     expect(text).toContain("'=hyperlink(1)@example.com,accepted,delivered,");
     expect(text).toContain("'+1@example.com,unsent,,");
@@ -288,7 +294,7 @@ describe("sent record view — GET /sends/:id", () => {
   });
 
   it("requires auth", async () => {
-    expect((await SELF.fetch(`${base}/sends/whatever/deliveries.csv`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/api/sends/whatever/deliveries.csv`)).status).toBe(401);
   });
 });
 
@@ -297,7 +303,7 @@ describe("sent record view — GET /sends/:id", () => {
 // truth), not the `c_*` counters. The default view is "failures" (bounced/complained/
 // unsent), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
 // ingest (SPEC §8) — a fact of this send, not a read of the global suppression list.
-describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
+describe("per-recipient record — GET /api/sends/:id/deliveries (#164)", () => {
   // Storage isn't isolated between tests in this file, and `suppressions.email` is a
   // global PK, so each record gets a unique address tag. The `fail/hard/soft/spam`
   // prefixes still sort the same way, so the default email-asc order is deterministic.
@@ -331,7 +337,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   it("defaults to the failures view (bounced/complained/unsent), email-sorted", async () => {
     const { sendId, e } = await seedRecord();
     const body = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
     expect(body.view).toBe("failures");
     // Only the rows that went wrong, and in the default email-asc order (matches the CSV).
@@ -342,7 +348,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   it("splits soft vs hard bounce on the per-send frozen kind", async () => {
     const { sendId, e } = await seedRecord();
     const body = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
     const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
     expect(byEmail[e.hard]).toMatchObject({ event: "bounced", bounce_kind: "hard" });
@@ -361,7 +367,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
       .bind(e.soft, Date.now())
       .run();
     const body = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
     const byEmail = Object.fromEntries(body.deliveries.map((d: any) => [d.email, d]));
     expect(byEmail[e.soft]).toMatchObject({ event: "bounced", bounce_kind: "soft" });
@@ -370,13 +376,13 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   it("filters to delivered, and to a single bucket", async () => {
     const { sendId, e } = await seedRecord();
     const del = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=delivered`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=delivered`, { headers: AUTH }),
     );
     expect(del.deliveries.map((d: any) => d.email)).toEqual([e.d1, e.d2]);
     expect(del.deliveries.every((d: any) => d.event === "delivered")).toBe(true);
 
     const unsent = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=unsent`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=unsent`, { headers: AUTH }),
     );
     expect(unsent.deliveries.map((d: any) => d.email)).toEqual([e.fail]);
   });
@@ -384,12 +390,12 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   it("shows all recipients and paginates", async () => {
     const { sendId } = await seedRecord();
     const all = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=all`, { headers: AUTH }),
     );
     expect(all.page.total).toBe(8);
 
     const p1 = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=0`, {
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=all&limit=3&offset=0`, {
         headers: AUTH,
       }),
     );
@@ -397,7 +403,7 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
     expect(p1.page).toMatchObject({ total: 8, limit: 3, offset: 0 });
 
     const p3 = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&limit=3&offset=6`, {
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=all&limit=3&offset=6`, {
         headers: AUTH,
       }),
     );
@@ -407,25 +413,27 @@ describe("per-recipient record — GET /sends/:id/deliveries (#164)", () => {
   it("searches by address, and refuses an unknown view naming the field", async () => {
     const { sendId, e } = await seedRecord();
     const hit = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=all&search=HARD-`, {
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=all&search=HARD-`, {
         headers: AUTH,
       }),
     );
     expect(hit.deliveries.map((d: any) => d.email)).toEqual([e.hard]);
 
-    const bogus = await SELF.fetch(`${base}/sends/${sendId}/deliveries?view=nonsense`, {
+    const bogus = await SELF.fetch(`${base}/api/sends/${sendId}/deliveries?view=nonsense`, {
       headers: AUTH,
     });
     expect(bogus.status).toBe(400);
     expect(await readJson(bogus)).toMatchObject({ error: "bad_request", field: "view" });
     const byDefault = await readJson(
-      await SELF.fetch(`${base}/sends/${sendId}/deliveries`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${sendId}/deliveries`, { headers: AUTH }),
     );
     expect(byDefault.view).toBe("failures");
   });
 
   it("404s for an unknown send and requires auth", async () => {
-    expect((await SELF.fetch(`${base}/sends/whatever/deliveries`)).status).toBe(401);
-    expect((await SELF.fetch(`${base}/sends/nope/deliveries`, { headers: AUTH })).status).toBe(404);
+    expect((await SELF.fetch(`${base}/api/sends/whatever/deliveries`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/api/sends/nope/deliveries`, { headers: AUTH })).status).toBe(
+      404,
+    );
   });
 });

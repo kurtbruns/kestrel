@@ -56,7 +56,7 @@ export function parseFutureFireAt(
   minLeadMs: number,
   immediateHint = false,
 ): number {
-  const hint = immediateHint ? "; use POST /posts/:id/send for the soonest send" : "";
+  const hint = immediateHint ? "; use POST /api/posts/:id/send for the soonest send" : "";
   return acceptFireAt(parseFireAt(input), minLeadMs, { hint });
 }
 

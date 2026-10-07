@@ -237,7 +237,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   // layer's reports keep them current.
   async function loadLive(): Promise<SendListResponse | null> {
     try {
-      const res = await api<SendListResponse>("/sends?status=sending&limit=200", { signal });
+      const res = await api<SendListResponse>("/api/sends?status=sending&limit=200", { signal });
       sendingRows = res.sends;
       liveRead = true;
       paintLive();
@@ -255,7 +255,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     const mine = ++scheduledReads;
     try {
       const res = await api<SendListResponse>(
-        "/sends?status=scheduled&sort=fire&dir=asc&limit=200",
+        "/api/sends?status=scheduled&sort=fire&dir=asc&limit=200",
         { signal },
       );
       if (mine !== scheduledReads) {
@@ -311,7 +311,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
         b.onclick = () =>
           busy(b, "Canceling…", async () => {
             try {
-              await api(`/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
+              await api(`/api/sends/${b.dataset.cancel}/cancel`, { method: "POST" });
               toast("Canceled");
               // A cancel drops it from the queue, and a due send from the layer's reads.
               afterAct();
@@ -335,7 +335,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   async function loadList(): Promise<SendListResponse | null> {
     const mine = ++listReads;
     try {
-      const data = await api<SendListResponse>(`/sends?${listQuery(state)}`, { signal });
+      const data = await api<SendListResponse>(`/api/sends?${listQuery(state)}`, { signal });
       if (mine !== listReads) {
         return data; // a later read paints
       }

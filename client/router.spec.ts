@@ -24,9 +24,12 @@ describe("router", () => {
     resetShell();
     fake = fakeApi([
       ...sendServer().routes, // Drafts follows its posts' sends
-      { path: "/posts", reply: () => ({ posts: [], page: { total: 0, limit: 50, offset: 0 } }) },
       {
-        path: "/subscribers",
+        path: "/api/posts",
+        reply: () => ({ posts: [], page: { total: 0, limit: 50, offset: 0 } }),
+      },
+      {
+        path: "/api/subscribers",
         reply: () => ({
           subscribers: [],
           counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 },

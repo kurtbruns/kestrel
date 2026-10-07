@@ -11,12 +11,12 @@ export interface PostImage {
   url: string;
 }
 
-/** POST /posts/:id/images */
+/** POST /api/posts/:id/images */
 export interface ImageUploadResponse {
   image: PostImage;
 }
 
-/** GET /posts/:id/images */
+/** GET /api/posts/:id/images */
 export interface ImageListResponse {
   images: PostImage[];
 }

@@ -27,7 +27,7 @@ const groups: ReferenceGroup[] = [
     routes: [
       {
         method: "GET",
-        path: "/posts",
+        path: "/api/posts",
         access: "admin",
         resource: "posts",
         summary: "List posts.",
@@ -37,7 +37,7 @@ const groups: ReferenceGroup[] = [
       },
       {
         method: "POST",
-        path: "/posts",
+        path: "/api/posts",
         access: "admin",
         resource: "posts",
         summary: "Create <a post>.",
@@ -45,14 +45,14 @@ const groups: ReferenceGroup[] = [
       },
       {
         method: "GET",
-        path: "/posts/:id",
+        path: "/api/posts/:id",
         access: "admin",
         resource: "posts",
         summary: "One post.",
       },
       {
         method: "POST",
-        path: "/sends/:id/cancel",
+        path: "/api/sends/:id/cancel",
         access: "admin",
         resource: "sends",
         summary: "Cancel a send.",
@@ -114,11 +114,11 @@ describe("reference room", () => {
     expect(rows).toHaveLength(3);
     expect(rows.every((d) => !d.open)).toBe(true);
     expect($(".api-method", rows[0]).className).toBe("api-method m-GET");
-    expect($(".api-path", rows[0]).textContent).toBe("/posts");
+    expect($(".api-path", rows[0]).textContent).toBe("/api/posts");
     expect($(".api-route-line", rows[0]).textContent).toBe("List posts.");
     expect(document.querySelector(".api-tier")).toBeNull(); // the tier heads the section, not each row
     // A path parameter is marked; the rest of the path is text.
-    expect($(".api-path", rows[2]).textContent).toBe("/posts/:id");
+    expect($(".api-path", rows[2]).textContent).toBe("/api/posts/:id");
     expect($$(".api-param", rows[2]).map((p) => p.textContent)).toEqual([":id"]);
     // The detail: summary, description, query, then the examples that exist.
     expect($(".api-desc", rows[0]).textContent).toBe("Offset-paged.");
@@ -171,7 +171,7 @@ describe("reference room", () => {
     // No session in this harness, so the dev token stands in for Access.
     expect(curlOf(create)?.querySelector("code")?.textContent).toBe(
       [
-        `curl -X POST "${location.origin}/posts"`,
+        `curl -X POST "${location.origin}/api/posts"`,
         '  -H "Authorization: Bearer $TOKEN"',
         '  -H "Content-Type: application/json"',
         `  -d '{"subject":"Owls"}'`,
@@ -223,7 +223,7 @@ describe("reference room", () => {
         routes: [
           {
             method: "POST",
-            path: "/posts/:id/images",
+            path: "/api/posts/:id/images",
             access: "admin",
             resource: "posts",
             summary: "Upload an image.",
@@ -231,7 +231,7 @@ describe("reference room", () => {
           },
           {
             method: "DELETE",
-            path: "/posts/:id",
+            path: "/api/posts/:id",
             access: "admin",
             resource: "posts",
             summary: "Delete a draft.",
@@ -373,7 +373,7 @@ describe("reference room", () => {
     expect($("#apiFilterClear").hidden).toBe(true);
     type("post create");
     expect($("#apiFilterClear").hidden).toBe(false);
-    expect(shown()).toEqual(["POST /posts"]);
+    expect(shown()).toEqual(["POST /api/posts"]);
     expect($("#api-admin-sends").hidden).toBe(true);
     expect($("#api-public").hidden).toBe(true);
     expect($$("#apiNav a").map((a) => (a.hidden ? "hidden" : a.dataset.sec))).toEqual([
