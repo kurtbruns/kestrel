@@ -29,7 +29,7 @@ Kestrel uses two hostnames, because the app and the mail do different jobs:
 
 These guides put the app on a subdomain, which leaves any website you already have on `example.com` untouched. If `example.com` has no website of its own, the app can live there instead. Use `example.com` wherever these guides say `newsletter.example.com`.
 
-It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#two-hard-rules) explains both.
+It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
 
 Throughout these guides, replace `example.com`, `newsletter.example.com`, and `send.example.com` with your own names. Replace any value written as `REPLACE_WITH_…` too.
 

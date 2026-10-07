@@ -85,7 +85,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     expect(start?.html).toContain('href="#/docs/deploy"');
     expect(start?.html).toContain('href="#/docs/ses"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
-    expect(start?.html).toContain('href="#/docs/sending-domain-dns/two-hard-rules"');
+    expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
   });
 
   it("keeps the titles the pages cross-reference each other by", () => {

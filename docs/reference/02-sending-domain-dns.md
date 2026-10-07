@@ -1,13 +1,13 @@
 # Sending-domain DNS
 
-Bulk mail lands in spam or is rejected outright without SPF, DKIM, and DMARC on the sending domain. Publish all three for **`send.example.com`**, the dedicated sending subdomain, kept off the apex so the newsletter's sending reputation can never affect your regular mail (`docs/SPEC.md` §11).
+Bulk mail lands in spam or is rejected outright without SPF, DKIM, and DMARC on the sending domain. Publish all three for `send.example.com`, the hostname your mail comes from.
 
 **Connect Resend** (or **Use Amazon SES instead of Resend**) lists the records to publish; this page explains what each one does, and how to check and tighten them.
 
-## Two hard rules
+## Choose your sending name
 
-- **Never send bulk mail from the apex** (`example.com`). This is the one item here that is not a preference. The apex carries your primary mail reputation; a newsletter must not put it at risk. Send from `send.example.com`.
-- **Keep the app name and the mail name unmistakably different.** `newsletter.example.com` is where the app and reader surface live; `send.example.com` is where mail comes from: two different jobs, two names that can't be confused for each other. Avoid `mail.` as the sending subdomain too: the world treats `mail.example.com` as an inbound MX host, not a sending identity, so it invites the opposite confusion. `send.` is the right role name for outbound.
+- **Send from a subdomain.** It's recommended to send from a subdomain such as `send.example.com`, rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk.
+- **Keep the app's name and the mail's name distinct.** `newsletter.example.com` is where the app and its public pages live, and `send.example.com` is where mail comes from. Avoid `mail.` as the sending name, since mail servers read `mail.example.com` as a host that receives mail.
 
 ## The three records
 

@@ -369,7 +369,7 @@ The app is **self-contained by default**: it serves its own reader surface (the 
 
 One deployed service answers on one hostname, `newsletter.example.com`, and does everything: the admin editor and authoring API, the public reader surface (landing page, archive index, post pages, subscribe, confirm, unsubscribe), previews, and image bytes. The archive origin defaults to the app's own origin, so every "view in browser" link and archive URL points at `newsletter.example.com/archive/{slug}`. A newsletter works end to end no matter where the marketing site lives, or whether there is one.
 
-Two names still earn their own DNS, because they have different jobs and the names should say so. The **app and reader surface** live on `newsletter.example.com`, its own name so its uptime is independent of anything else. The **sending identity** lives on `send.example.com`: the From address and its SPF, DKIM, and DMARC, off the apex so newsletter reputation can't touch regular mail. `newsletter.` names the app and `send.` names the mail, deliberately not near-synonyms, so the two can't be confused or swapped; avoid `mail.`, which the world reads as an inbound host, not a sending identity. **Never send bulk mail from the apex; that is the one rule here that isn't a preference.**
+Two names still earn their own DNS, because they have different jobs and the names should say so. The **app and reader surface** live on `newsletter.example.com`, its own name so its uptime is independent of anything else. The **sending identity** lives on `send.example.com`: the From address and its SPF, DKIM, and DMARC, off the apex so newsletter reputation can't touch regular mail. `newsletter.` names the app and `send.` names the mail, deliberately not near-synonyms, so the two can't be confused or swapped; avoid `mail.`, which the world reads as an inbound host, not a sending identity. Sending from a subdomain rather than the apex is the recommendation, not a rule the app enforces: the app sends from whatever `FROM_ADDRESS` names.
 
 ### Optional: surface the archive on the website's apex
 
@@ -493,7 +493,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Preferences in the app, never secrets**, over one settings surface for both (§9).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11).
-- **`send.` for the sending identity, never the apex**, over `mail.` or the bare domain (§11).
+- **`send.` for the sending identity, recommended over the apex**, `mail.`, or the bare domain (§11).
 - **An edge access layer with a service principal for Claude**, over auth code in the app (§11).
 - **Refusing a cross-site request to the admin surface by what the browser reports and the body types each route declares**, over per-session anti-forgery tokens (§11).
 - **A generated API reference**, over an endpoint table in this document (§11).
