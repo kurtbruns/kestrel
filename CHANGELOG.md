@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`.
+**Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it.
 
 ### Changed
 

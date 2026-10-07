@@ -204,6 +204,15 @@ describe("docs room", () => {
     scroll.mockRestore();
   });
 
+  it("opens a doc at its top when the route's anchor is a malformed escape", async () => {
+    fake = fakeApi([]);
+    const top = vi.spyOn(window, "scrollTo").mockImplementation(() => {});
+    await mount((r, s) => renderDocs("overview", r, s, "check%2"));
+    expect($("#doc-h-what-you-get")).toBeTruthy();
+    expect(top).toHaveBeenCalledWith(0, 0);
+    top.mockRestore();
+  });
+
   it("derives a heading's anchor the way GitHub does", () => {
     expect(headingAnchor("7. Read the logs")).toBe("7-read-the-logs");
     expect(headingAnchor("3. Fill in wrangler.jsonc")).toBe("3-fill-in-wranglerjsonc");

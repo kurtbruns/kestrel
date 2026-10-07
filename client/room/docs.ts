@@ -9,7 +9,7 @@ import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { renderError, toast } from "../ui/widgets";
 import { roomShell } from "./shell";
 
-// The setup guide, authored in docs/setup/*.md and served read-only by the authed
+// The setup guide, authored in docs/README.md and its section folders, and served read-only by the authed
 // GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over the
 // guide's sections, the main path numbered as steps; `#/docs/:slug` is one doc, and
 // `#/docs/:slug/:anchor` one heading on it; its rail a back-link to the index
@@ -66,9 +66,19 @@ export async function renderDocs(
     return;
   }
   if (slug) {
-    renderDocPage(root, landing, docs, slug, anchor ? decodeURIComponent(anchor) : undefined);
+    renderDocPage(root, landing, docs, slug, anchor ? decodeAnchor(anchor) : undefined);
   } else {
     renderDocsIndex(root, landing, docs);
+  }
+}
+
+/** The route's anchor segment as the heading's anchor. A malformed escape in a hand-edited
+ *  link opens the page at its top rather than failing the room. */
+function decodeAnchor(anchor: string): string | undefined {
+  try {
+    return decodeURIComponent(anchor);
+  } catch {
+    return undefined;
   }
 }
 
