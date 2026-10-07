@@ -242,7 +242,7 @@ export interface SendFilter {
   failures?: "only";
 }
 
-/** The sortable columns exposed by `GET /sends` (see `parseListParams`). */
+/** The sortable columns exposed by `GET /api/sends` (see `parseListParams`). */
 export const SEND_LIST_SPEC: ListSpec = {
   columns: {
     fire: "fire_at",
@@ -321,7 +321,7 @@ export async function listSends(
   return results;
 }
 
-/** A `GET /sends` row as read: the list projection plus the retry probe, folded in so a
+/** A `GET /api/sends` row as read: the list projection plus the retry probe, folded in so a
  *  page of rows is one statement rather than a probe per row. */
 export type SendListRow = SendViewSource & { has_retries: 0 | 1 };
 
@@ -334,7 +334,7 @@ export interface SendListPage {
 }
 
 /**
- * One page of sends for `GET /sends`, read in one batch so the page, its total, and the
+ * One page of sends for `GET /api/sends`, read in one batch so the page, its total, and the
  * change sequence are one snapshot: a change either shows in the rows or lands after
  * `seq`, never neither. Only a `sending` send's retry probe can decide its phase, so the
  * CASE skips the probe for every other row (an AND would still run it: SQLite evaluates
@@ -615,7 +615,7 @@ export const DELIVERY_VIEWS = [
 ] as const satisfies readonly DeliveryView[];
 export type { DeliveryView };
 
-/** The sortable columns exposed by `GET /sends/:id/deliveries`. Default `email` asc
+/** The sortable columns exposed by `GET /api/sends/:id/deliveries`. Default `email` asc
  *  matches the CSV order, so the in-app list and the export read the same. */
 export const DELIVERY_LIST_SPEC: ListSpec = {
   columns: {

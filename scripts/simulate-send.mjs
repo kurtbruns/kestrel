@@ -122,8 +122,8 @@ async function main() {
 
   // An empty database gets the demo, as `npm run seed` loads it.
   const [postList, subscriberList] = await Promise.all([
-    api("/posts?limit=1"),
-    api("/subscribers?limit=1"),
+    api("/api/posts?limit=1"),
+    api("/api/subscribers?limit=1"),
   ]);
   const empty = postList.body?.page?.total === 0 && subscriberList.body?.page?.total === 0;
   if (empty) {
@@ -141,10 +141,10 @@ async function main() {
   // call that sets it: read before the scan below, the scan's round trips would eat the
   // slack, and a send asked for exactly one lead out would be refused as inside it.
   const fireAt = () => new Date(Date.now() + inMs + SLACK_MS).toISOString();
-  const scheduled = await api("/sends?status=scheduled&sort=fire&dir=asc&limit=100");
+  const scheduled = await api("/api/sends?status=scheduled&sort=fire&dir=asc&limit=100");
   let demo = null;
   for (const send of scheduled.body?.sends ?? []) {
-    const post = await api(`/posts/${send.post_id}`);
+    const post = await api(`/api/posts/${send.post_id}`);
     if (post.body?.post?.slug === DEMO_SCHEDULED_SLUG) {
       demo = send;
       break;
@@ -152,7 +152,7 @@ async function main() {
   }
   let send;
   if (demo) {
-    const moved = await api(`/sends/${demo.id}/reschedule`, {
+    const moved = await api(`/api/sends/${demo.id}/reschedule`, {
       method: "POST",
       json: { fire_at: fireAt() },
     });
@@ -165,7 +165,7 @@ async function main() {
     send = moved.body.send;
   } else {
     const stamp = new Date().toLocaleString();
-    const created = await api("/posts", {
+    const created = await api("/api/posts", {
       method: "POST",
       json: {
         subject: `A simulated send, ${stamp}`,
@@ -175,7 +175,7 @@ async function main() {
     if (!created.ok) {
       fail(TAG, `could not create a post (${created.status}): ${JSON.stringify(created.body)}`);
     }
-    const frozen = await api(`/posts/${created.body.post.id}/schedule`, {
+    const frozen = await api(`/api/posts/${created.body.post.id}/schedule`, {
       method: "POST",
       json: { fire_at: fireAt() },
     });
@@ -188,7 +188,7 @@ async function main() {
     send = frozen.body.send;
   }
 
-  const confirmed = (await api("/subscribers?limit=1")).body?.counts?.confirmed ?? 0;
+  const confirmed = (await api("/api/subscribers?limit=1")).body?.counts?.confirmed ?? 0;
   const watch = `${base}/dashboard/#/sent/${send.id}`;
   console.log(
     `[${TAG}] "${send.subject}" is scheduled for ${clock(send.fire_at)}, to ${confirmed} confirmed subscriber${confirmed === 1 ? "" : "s"}.`,

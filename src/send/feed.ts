@@ -1,5 +1,5 @@
 /**
- * When a follower of `GET /sends/feed` should read again (SPEC §8): the server owns the
+ * When a follower of `GET /api/sends/feed` should read again (SPEC §8): the server owns the
  * pace, so every client, the editor and Claude alike, keeps up with sends the same way
  * without rebuilding the rule.
  *

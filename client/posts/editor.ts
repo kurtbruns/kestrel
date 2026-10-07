@@ -94,7 +94,7 @@ export async function renderEditor(
   // conditions, and the cursor the editor follows the send from.
   let sendRead: SendResponse | null = null;
   try {
-    data = await api<PostResponse>(`/posts/${id}`, { signal });
+    data = await api<PostResponse>(`/api/posts/${id}`, { signal });
     if (signal.aborted) {
       return; // navigated away while loading: the redirects below must not hijack that
     }
@@ -114,7 +114,7 @@ export async function renderEditor(
   }
   if (data.scheduled) {
     try {
-      sendRead = await api<SendResponse>(`/sends/${data.scheduled.id}`, { signal });
+      sendRead = await api<SendResponse>(`/api/sends/${data.scheduled.id}`, { signal });
     } catch (e) {
       if (signal.aborted) {
         return;
@@ -372,7 +372,7 @@ export async function renderEditor(
       if (!locked) {
         await saveDraft(true);
       }
-      previewFrame.srcdoc = await apiText(`/posts/${id}/preview`);
+      previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
       previewFrame.onload = () => {
         try {
           const doc = previewFrame.contentDocument;
@@ -567,7 +567,7 @@ export async function renderEditor(
     const sent = JSON.stringify(fields);
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
-      const { post: u } = await api<PostSavedResponse>(`/posts/${id}`, {
+      const { post: u } = await api<PostSavedResponse>(`/api/posts/${id}`, {
         method: "PUT",
         json: body,
       });
@@ -641,7 +641,7 @@ export async function renderEditor(
     editorDirty = false;
     saveChain = saveChain
       .catch(() => {})
-      .then(() => api<PostSavedResponse>(`/posts/${id}`, { method: "PUT", json: body }))
+      .then(() => api<PostSavedResponse>(`/api/posts/${id}`, { method: "PUT", json: body }))
       .catch((e) =>
         toast(
           e instanceof ApiError && e.status === 409
@@ -742,7 +742,7 @@ export async function renderEditor(
       }
       const baseAtRequest = revisions.base; // to tell our own save landing mid-poll from another writer's
       try {
-        const fresh = await api<PostResponse>(`/posts/${id}`, { signal });
+        const fresh = await api<PostResponse>(`/api/posts/${id}`, { signal });
         const decision = revisions.decide(
           {
             status: fresh.post.status,
@@ -770,7 +770,7 @@ export async function renderEditor(
         if (!locked) {
           await saveDraft(true);
         }
-        const page = await apiText(`/posts/${id}/preview`);
+        const page = await apiText(`/api/posts/${id}/preview`);
         const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
         window.open(url, "_blank");
         setTimeout(() => URL.revokeObjectURL(url), 10000);
@@ -892,7 +892,7 @@ export async function renderEditor(
       poll(
         5000,
         async () => {
-          const read = await api<SendResponse>(`/sends/${scheduled.id}`, { signal });
+          const read = await api<SendResponse>(`/api/sends/${scheduled.id}`, { signal });
           if (!movedOn(read.send, remount)) {
             current = read.send;
             paintBanner();
@@ -912,7 +912,7 @@ export async function renderEditor(
     cancelBtn.onclick = () =>
       busy(cancelBtn, "Canceling…", async () => {
         try {
-          await api(`/sends/${scheduled.id}/cancel`, { method: "POST" });
+          await api(`/api/sends/${scheduled.id}/cancel`, { method: "POST" });
           toast("Schedule canceled");
           remount();
         } catch (e) {
@@ -931,7 +931,7 @@ export async function renderEditor(
     try {
       const fd = new FormData();
       fd.append("file", file);
-      const { image } = await api<ImageUploadResponse>(`/posts/${id}/images`, {
+      const { image } = await api<ImageUploadResponse>(`/api/posts/${id}/images`, {
         method: "POST",
         body: fd,
       });
@@ -1068,7 +1068,7 @@ export async function renderEditor(
           let sent = 0;
           let lastWarnings: string[] | null = null;
           for (const addr of addrs) {
-            const r = await api<TestSendResponse>(`/posts/${id}/test`, {
+            const r = await api<TestSendResponse>(`/api/posts/${id}/test`, {
               method: "POST",
               json: { to: addr },
             });
@@ -1135,7 +1135,7 @@ export async function renderEditor(
               refused();
               return;
             }
-            await api<ScheduleResponse>(`/posts/${id}/schedule`, {
+            await api<ScheduleResponse>(`/api/posts/${id}/schedule`, {
               method: "POST",
               json: { fire_at: new Date(t).toISOString() },
             });
@@ -1159,7 +1159,9 @@ export async function renderEditor(
             }
             // The toast names the time the server answered, not the lead: the fire time is
             // rounded up to the minute (SPEC §6), so it can be up to a minute past the lead.
-            const { send } = await api<ScheduleResponse>(`/posts/${id}/send`, { method: "POST" });
+            const { send } = await api<ScheduleResponse>(`/api/posts/${id}/send`, {
+              method: "POST",
+            });
             m.close();
             toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
             remount();
@@ -1191,7 +1193,7 @@ export async function renderEditor(
         $("#snGo", box).focus();
         // Fill the real confirmed-subscriber count once known; the copy reads sensibly until then.
         try {
-          const s = await api<SubscriberListResponse>("/subscribers");
+          const s = await api<SubscriberListResponse>("/api/subscribers");
           const n = s.counts.confirmed;
           const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
           if (whoEl) {

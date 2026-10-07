@@ -31,7 +31,7 @@ import { notice } from "../ui/notice";
 import { badge, copyText, renderError } from "../ui/widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
-// from existing authed endpoints — GET /posts, /sends, /subscribers, and the cached
+// from existing authed endpoints — GET /api/posts, /sends, /subscribers, and the cached
 // /api/settings — so it adds no surface and can't touch an invariant. It answers
 // SPEC §8's questions at a glance: is anything wrong, who's on the list, what's
 // scheduled, what went out, and what's still in progress.
@@ -164,9 +164,9 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     // so ask for a full window rather than the list default (50). Subscribers is only
     // read for its (filter-independent) counts, so its row limit doesn't matter.
     const [p, s, subs] = await Promise.all([
-      api<PostListResponse>("/posts?limit=200", { signal }),
-      api<SendListResponse>("/sends?limit=200", { signal }),
-      api<SubscriberListResponse>("/subscribers", { signal }),
+      api<PostListResponse>("/api/posts?limit=200", { signal }),
+      api<SendListResponse>("/api/sends?limit=200", { signal }),
+      api<SubscriberListResponse>("/api/subscribers", { signal }),
     ]);
     posts = p.posts;
     first = s;
@@ -300,7 +300,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const readSends = async () => {
     const mine = ++reading;
     try {
-      const fresh = await api<SendListResponse>("/sends?limit=200", { signal });
+      const fresh = await api<SendListResponse>("/api/sends?limit=200", { signal });
       if (mine !== reading) {
         return; // a later change's read is the one to paint
       }

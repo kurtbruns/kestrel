@@ -37,7 +37,7 @@ function sentence(error: string | null): string {
 const action = (send: Pick<SendSummary, "id">, name: SendAction["name"]): SendAction => ({
   name,
   method: "POST",
-  path: `/sends/${send.id}/${name}`,
+  path: `/api/sends/${send.id}/${name}`,
 });
 
 /** Whether the send is still in its review window: scheduled, its fire time still ahead

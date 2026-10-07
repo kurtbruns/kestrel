@@ -39,12 +39,12 @@ describe("drafts view", () => {
     fake?.restore();
     vi.useRealTimers();
   });
-  const postReads = () => fake.calls.filter((c) => c.url.pathname === "/posts");
+  const postReads = () => fake.calls.filter((c) => c.url.pathname === "/api/posts");
 
   it("lists drafts and scheduled posts within the drafts scope, with subjects shown as text", async () => {
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+      { path: "/api/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
     ]);
     await mount(renderDrafts);
     await settle();
@@ -59,7 +59,7 @@ describe("drafts view", () => {
   it("opens the editor on a row click, and the live watch for a post being sent", async () => {
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+      { path: "/api/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
     ]);
     await mount(renderDrafts);
     await settle();
@@ -73,7 +73,7 @@ describe("drafts view", () => {
     vi.useFakeTimers();
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
+      { path: "/api/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
     ]);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
@@ -88,7 +88,10 @@ describe("drafts view", () => {
     vi.useFakeTimers();
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }) },
+      {
+        path: "/api/posts",
+        reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }),
+      },
     ]);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
@@ -103,7 +106,7 @@ describe("drafts view", () => {
     fake = fakeApi([
       ...sendServer().routes,
       {
-        path: "/posts",
+        path: "/api/posts",
         reply: () =>
           failures-- > 0 ? jsonResponse({ error: "down" }, 500) : { posts, page, cursor: "0.0" },
       },
@@ -119,10 +122,13 @@ describe("drafts view", () => {
   it("creates a new post and opens it", async () => {
     fake = fakeApi([
       ...sendServer().routes,
-      { path: "/posts", reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }) },
+      {
+        path: "/api/posts",
+        reply: () => ({ posts: [], page: { ...page, total: 0 }, cursor: "0.0" }),
+      },
       {
         method: "POST",
-        path: "/posts",
+        path: "/api/posts",
         reply: (req) => ({ post: { id: "p9", ...(req.json() as object) } }),
       },
     ]);
@@ -154,7 +160,7 @@ describe("drafts view", () => {
       routes: [
         ...sends.routes,
         {
-          path: "/posts",
+          path: "/api/posts",
           reply: () =>
             failing
               ? jsonResponse({ error: "down" }, 500)
@@ -204,7 +210,7 @@ describe("drafts view", () => {
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
-    expect(fake.calls.some((c) => c.url.pathname === "/sends")).toBe(false); // no second read
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends")).toBe(false); // no second read
     post.start();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(postReads()).toHaveLength(2); // started: re-read once
@@ -237,12 +243,12 @@ describe("drafts view", () => {
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
     expect($("#list .error").textContent).toMatch(/down/);
-    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(false);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(false);
     post.recover();
     $("[data-retry]").click();
     await vi.advanceTimersByTimeAsync(10);
     expect($$("tr[data-id]")).toHaveLength(2);
-    expect(fake.calls.some((c) => c.url.pathname === "/sends/feed")).toBe(true);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(true);
   });
 
   it("keeps the list when a re-read after a send changed fails", async () => {

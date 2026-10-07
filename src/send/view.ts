@@ -265,12 +265,12 @@ export function buildSendView(
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {
-      self: `/sends/${id}`,
-      email_html: `/sends/${id}/email?format=html`,
-      email_text: `/sends/${id}/email?format=text`,
-      deliveries: `/sends/${id}/deliveries`,
-      deliveries_csv: `/sends/${id}/deliveries.csv`,
-      post: `/posts/${send.post_id}`,
+      self: `/api/sends/${id}`,
+      email_html: `/api/sends/${id}/email?format=html`,
+      email_text: `/api/sends/${id}/email?format=text`,
+      deliveries: `/api/sends/${id}/deliveries`,
+      deliveries_csv: `/api/sends/${id}/deliveries.csv`,
+      post: `/api/posts/${send.post_id}`,
       // The archive serves a post's page only once it is sent: before, the link would 404.
       archive:
         send.status === "sent" && send.post_slug !== null

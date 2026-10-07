@@ -47,7 +47,7 @@ export async function renderSentRecord(
   setHtml(root, html`<p class="muted">Loading…</p>`);
   let data: SendResponse;
   try {
-    data = await api<SendResponse>(`/sends/${id}`, { signal });
+    data = await api<SendResponse>(`/api/sends/${id}`, { signal });
   } catch (e) {
     renderError(root, message(e), remount);
     return;
@@ -557,7 +557,7 @@ function renderFrozenRecord(
     }
     try {
       const d = await api<DeliveryListResponse>(
-        `/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`,
+        `/api/sends/${id}/deliveries?${recordDeliveryQuery(dstate)}`,
         { signal },
       );
       if (mine !== latest) {

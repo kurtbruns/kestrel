@@ -25,7 +25,7 @@ export function addSubscriberModal(onDone?: () => void): void {
         return;
       }
       try {
-        const r = await api<SubscribeResponse>("/subscribers", {
+        const r = await api<SubscribeResponse>("/api/subscribers", {
           method: "POST",
           json: { email: addr },
         });
@@ -62,7 +62,7 @@ export function confirmUnsubscribe(sub: Subscriber, onDone: () => void): void {
   go.onclick = () =>
     busy(go, "Unsubscribing…", async () => {
       try {
-        await api(`/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
+        await api(`/api/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
         m.close();
         toast(`Unsubscribed ${sub.email}`);
         onDone();

@@ -10,7 +10,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it.
+**Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it. The authoring API has moved under `/api` (see *Breaking*). Your Access application already covers `/api`, so the moved routes stay gated the moment the instance upgrades; afterwards you can remove the four old paths, `posts`, `sends`, `subscribers`, and `suppressions`, from it, leaving `dashboard` and `api`. Any script or Claude setup that calls the old paths must switch to `/api/…`.
+
+### Breaking
+
+- Every authoring API route now lives under `/api`: `/posts…` is `/api/posts…`, and likewise `/sends…`, `/subscribers…`, and `/suppressions…`; the old paths answer `404`. The admin surface is now `/dashboard` and `/api`, so an Access application needs those two paths, and a route added in a later release is gated with nothing to add (SPEC §11).
 
 ### Changed
 

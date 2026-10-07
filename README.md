@@ -34,7 +34,7 @@ The editor is one client of Kestrel's HTTP API, and Claude is the other. Locally
 
 ```bash
 TOKEN=$(curl -s http://localhost:8787/api/dev/token?kind=service | jq -r .token)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/posts
+curl -H "Authorization: Bearer $TOKEN" http://localhost:8787/api/posts
 ```
 
 The editor's **API** tab lists every route.

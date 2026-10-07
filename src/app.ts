@@ -83,7 +83,7 @@ export function createRouter({
   // What every send route says of conditions and actions: one server rule, one wording.
   const conditionsText = `\`conditions\` is what is wrong with the send, or worth knowing, now (SPEC §8, §12), derived by the server from the send and the same on every route, most severe first: \`missed\` (still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running), \`stuck\` (still sending ${STUCK_THRESHOLD_MS / 60_000} minutes after it started, whatever the cause), \`wedged\` (\`count\` recipients whose delivery is unknown, settled by Resolve), \`refused\` (the provider refusing the account, with its \`cause\`, its own words as \`error\`, the \`advice\` for the fix, which is outside this API, and \`retry_at\`; the send resumes on its own once the account is fixed, having consumed no one), \`provider_unavailable\` (an outage or a rate limit, retried on its own at \`retry_at\`), \`bounce_spike\` (a send finished within ${BOUNCE_SPIKE_RECENT_MS / 86_400_000} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}; \`bounced\` and \`rate\`), and \`remade\` (a template or identity change re-made the scheduled email after its last test, \`tested_at\`; a test of the post clears it). Each has a \`severity\` (\`action\`: a person must act; \`warn\`: worth a look; \`info\`), \`since\` (null when the record does not say), a \`message\` to show or relay as it stands, and the \`action\` that settles it, if any. \`actions\` is exactly what the server would accept on the send now, each \`{name, method, path}\`: \`cancel\` and \`reschedule\` while it is scheduled and its fire time is still ahead, \`resolve\` while it is wedged.`;
   const actionText =
-    'Send `If-Match: "<rev>"` (the send\'s `rev` as you last read it) to act only on the send you decided about: a send that has changed since is a 412 `precondition_failed` carrying the send as it stands. That includes a change your own earlier attempt made, so a retry after a lost answer that sends `If-Match` gets the 412, with the send showing whether the act landed; a retry without it is answered `changed: false`. Every refusal carries the send as it stands in `send`, in the `GET /sends` row shape.';
+    'Send `If-Match: "<rev>"` (the send\'s `rev` as you last read it) to act only on the send you decided about: a send that has changed since is a 412 `precondition_failed` carrying the send as it stands. That includes a change your own earlier attempt made, so a retry after a lost answer that sends `If-Match` gets the 412, with the send showing whether the act landed; a retry without it is answered `changed: false`. Every refusal carries the send as it stands in `send`, in the `GET /api/sends` row shape.';
   // One send as every send route carries it, for the examples.
   const sendExample = (over: Record<string, unknown> = {}) => ({
     id: "s_xyz789",
@@ -117,12 +117,12 @@ export function createRouter({
     actions: [],
     next_change_at: 1768467610000,
     links: {
-      self: "/sends/s_xyz789",
-      email_html: "/sends/s_xyz789/email?format=html",
-      email_text: "/sends/s_xyz789/email?format=text",
-      deliveries: "/sends/s_xyz789/deliveries",
-      deliveries_csv: "/sends/s_xyz789/deliveries.csv",
-      post: "/posts/p_abc123",
+      self: "/api/sends/s_xyz789",
+      email_html: "/api/sends/s_xyz789/email?format=html",
+      email_text: "/api/sends/s_xyz789/email?format=text",
+      deliveries: "/api/sends/s_xyz789/deliveries",
+      deliveries_csv: "/api/sends/s_xyz789/deliveries.csv",
+      post: "/api/posts/p_abc123",
       archive: null,
     },
     ...over,
@@ -146,8 +146,8 @@ export function createRouter({
     delivery: { confirmed: 0, percent_of_accepted: 0 },
     phase: "scheduled",
     actions: [
-      { name: "cancel", method: "POST", path: "/sends/s_xyz789/cancel" },
-      { name: "reschedule", method: "POST", path: "/sends/s_xyz789/reschedule" },
+      { name: "cancel", method: "POST", path: "/api/sends/s_xyz789/cancel" },
+      { name: "reschedule", method: "POST", path: "/api/sends/s_xyz789/reschedule" },
     ],
     next_change_at: 1768554000000,
   });
@@ -356,7 +356,7 @@ export function createRouter({
     // --- posts + revisions (authed) ---
     {
       method: "POST",
-      path: "/posts",
+      path: "/api/posts",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
@@ -372,11 +372,11 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts",
+      path: "/api/posts",
       access: "admin",
       resource: "posts",
       summary:
-        "List posts. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries its active send's id, status, and fire time; the response's `cursor` marks where the read stood among the changes to sends (`<seq>.<at>`, as on `GET /sends`), so a client can follow the listed posts' sends from it with `GET /sends/feed`.",
+        "List posts. Filter, sort, and paginate via query params; returns a `page` envelope. Each row carries its active send's id, status, and fire time; the response's `cursor` marks where the read stood among the changes to sends (`<seq>.<at>`, as on `GET /api/sends`), so a client can follow the listed posts' sends from it with `GET /api/sends/feed`.",
       query: [
         {
           name: "status",
@@ -404,7 +404,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts/:id",
+      path: "/api/posts/:id",
       access: "admin",
       resource: "posts",
       summary:
@@ -413,7 +413,7 @@ export function createRouter({
     },
     {
       method: "PUT",
-      path: "/posts/:id",
+      path: "/api/posts/:id",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
@@ -434,7 +434,7 @@ export function createRouter({
     },
     {
       method: "DELETE",
-      path: "/posts/:id",
+      path: "/api/posts/:id",
       access: "admin",
       resource: "posts",
       summary: "Delete a draft and its revisions (drafts only).",
@@ -442,7 +442,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts/:id/revisions",
+      path: "/api/posts/:id/revisions",
       access: "admin",
       resource: "posts",
       summary: "The post's revision history.",
@@ -450,7 +450,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts/:id/revisions/:n",
+      path: "/api/posts/:id/revisions/:n",
       access: "admin",
       resource: "posts",
       summary: "One revision by its number.",
@@ -460,7 +460,7 @@ export function createRouter({
     // --- images (authed upload/list/delete) ---
     {
       method: "POST",
-      path: "/posts/:id/images",
+      path: "/api/posts/:id/images",
       access: "admin",
       accepts: [...FORM_UPLOAD, ...RASTER_IMAGE_TYPES],
       resource: "posts",
@@ -469,7 +469,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts/:id/images",
+      path: "/api/posts/:id/images",
       access: "admin",
       resource: "posts",
       summary: "List a post's images.",
@@ -477,7 +477,7 @@ export function createRouter({
     },
     {
       method: "DELETE",
-      path: "/posts/:id/images/:filename",
+      path: "/api/posts/:id/images/:filename",
       access: "admin",
       resource: "posts",
       summary: "Delete one image from a post.",
@@ -487,7 +487,7 @@ export function createRouter({
     // --- render: preview + test (authed); all go through the one render path ---
     {
       method: "POST",
-      path: "/posts/:id/preview",
+      path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
       summary:
@@ -498,7 +498,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/posts/:id/preview",
+      path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
       summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
@@ -508,7 +508,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/posts/:id/test",
+      path: "/api/posts/:id/test",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
@@ -560,7 +560,7 @@ export function createRouter({
     // --- schedule / send / cancel (authed); freeze + soft-lock (M5) ---
     {
       method: "POST",
-      path: "/posts/:id/schedule",
+      path: "/api/posts/:id/schedule",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
@@ -568,7 +568,7 @@ export function createRouter({
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000" },
@@ -577,7 +577,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/posts/:id/send",
+      path: "/api/posts/:id/send",
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
@@ -594,11 +594,11 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/sends",
+      path: "/api/sends",
       access: "admin",
       resource: "sends",
       summary:
-        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row is the send's view, the same shape `GET /sends/:id`, the feed, and every action answer with (see `GET /sends/:id`), read at the same moment, so a list row and the watch never read a send differently. A row's `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /sends/feed` as `since`. `audience.count` is a snapshot of the audience while a send is scheduled; once it fires (`audience.fixed`), it is the audience fixed at fire, which never grows.",
+        "List sends with delivery progress. Filter, sort, and paginate via query params; returns a `page` envelope. Each row is the send's view, the same shape `GET /api/sends/:id`, the feed, and every action answer with (see `GET /api/sends/:id`), read at the same moment, so a list row and the watch never read a send differently. A row's `rev` rises with every change a reader could see (a cancel, a move, a re-make, dispatch progress, a receipt), ordered across all sends. The response's `cursor` marks where this read stood among those changes: `<seq>.<at>`, the change sequence at the read and the server's time of it (epoch milliseconds), both decimal; pass it to `GET /api/sends/feed` as `since`. `audience.count` is a snapshot of the audience while a send is scheduled; once it fires (`audience.fixed`), it is the audience fixed at fire, which never grows.",
       description:
         "`provider.halt` describes a `sending` send whose provider refused its last batch as a whole (SPEC §12), and is null otherwise: its `reason`, `cause`, the provider's own words as `error`, and `since`. The send retries on its own, spaced out the longer the halt lasts: `retries` counts the halted attempts in a row and `retry_at` is when the next is due, up to an hour apart, and both reset the moment a batch is answered. `unavailable` is an outage or a rate limit, retried " +
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
@@ -637,14 +637,14 @@ export function createRouter({
       handler: sendRoutes.list,
     },
     {
-      // Before /sends/:id, which would otherwise take "feed" as an id.
+      // Before /api/sends/:id, which would otherwise take "feed" as an id.
       method: "GET",
-      path: "/sends/feed",
+      path: "/api/sends/feed",
       access: "admin",
       resource: "sends",
       summary:
         "What changed among sends since a cursor, each send with its phase, counters, conditions, and actions, every open condition across the sends, and when to read again: what a client follows to keep up with sends, whichever client changed them, without polling each one.",
-      description: `With \`since\` (the \`cursor\` from \`GET /sends\`, \`GET /sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /sends\` or \`GET /sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry, the stuck threshold). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /sends\` and \`GET /sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
+      description: `With \`since\` (the \`cursor\` from \`GET /api/sends\`, \`GET /api/sends/:id\`, or this route's last read), \`sends\` is every send that changed after that read, whatever its state: a cancel, a move, a re-make, a new schedule, dispatch progress, a receipt, a completion. It also holds each send the clock changed with no write since then: one whose fire time passed (\`due\`), one past the ${MISSED_THRESHOLD_MS / 60_000}-minute missed tolerance (the \`missed\` condition), and one in flight past the ${STUCK_THRESHOLD_MS / 60_000}-minute stuck threshold (\`stuck\`). A send turns wedged (\`wedged\`) by a write, when the run that left recipients with an unknown fate hands it back, so it is reported like any other change. \`removed\` is every send removed after the cursor (a canceled send deleted with its post), each \`{id, rev}\`, so a client drops it rather than keeping a row for a send that is gone. Without \`since\`, \`sends\` is every send that can change on its own: due, \`sending\`, or settling (\`sent\` within the last ${SETTLE_FOLLOW_MS / 60_000} minutes with a recipient still awaiting a receipt), and \`removed\` is empty. Either way each send is its view, the shape \`GET /api/sends/:id\` describes, read off the send's counters, never its delivery rows, so a send reads the same here as on its page; soonest fire first. \`cursor\` is where this read stood, to pass as \`since\` next time: \`<seq>.<at>\`, the change sequence at the read and the server's time of it (\`now\`), both decimal. The format is part of this contract, so a client holding cursors from several reads (a list, and one send's page) may compare them and follow everything from one read: the cursor with the smaller of each number answers for both. A read reports at most \`limit\` changes after the cursor, in the order they were made, and never splits the changes one write made; the sends the clock changed are always all reported. When more are waiting, \`more\` is true, \`cursor\` stands where the read stopped, and \`read_again_at\` is \`now\`: read again at once from it. A cursor ahead of this database (a sequence above the current one, or a read time more than a minute after \`now\`, as after a reset or a restore of the database) is a 409 \`cursor_ahead\` naming \`since\`: nothing after it would ever be reported, so read the sends again (\`GET /api/sends\` or \`GET /api/sends/:id\`) and follow from that read's cursor. \`read_again_at\` is when to read again, by the server's clock (\`now\`), from each unfinished send's \`next_change_at\`, the earliest it can change with no one acting: about 3 seconds while any send can move now (due, short of the missed tolerance, or sending with a run in hand or work queued for the next tick); while sends are only settling, 3 seconds, then 15, then 60, by how long ago the youngest finished dispatch; otherwise about once a minute (one sweep tick); and never later than just past the next change the clock or the sweep will make (a fire time, a halted send's next retry, the stuck threshold). A send waiting on a person (the provider refusing the account, a wedged send awaiting Resolve, a missed fire time) does not quicken it. A client that reads again then is never more than a few seconds behind a send that is moving, behind a settling send's receipts by at most that pace, and behind any other change (the other client's cancel or move, a Resolve, a late receipt) by about a minute. \`read_again_at\` is advisory: reading sooner, such as right after acting on a send, is always fine, and reading late or skipping a read loses nothing, since the next read from the last cursor reports every send that changed in between. \`GET /api/sends\` and \`GET /api/sends/:id\` carry no pace of their own: a client following from one of them reads this route at once, then keeps to its \`read_again_at\`. \`conditions\` repeats every open condition across the sends that can have one (scheduled, sending, and sent within the bounce-spike window), each with its \`send_id\` and \`subject\`, whether or not the send changed, so one read shows every open problem; most severe first. ${conditionsText} Reading it changes nothing.`,
       query: [
         {
           name: "since",
@@ -691,7 +691,7 @@ export function createRouter({
               since: null,
               message:
                 "The provider never answered for 2 recipients, so whether they were mailed is unknown, and sending again could mail them twice. The send cannot finish until they are resolved.",
-              action: { name: "resolve", method: "POST", path: "/sends/s_abc111/resolve" },
+              action: { name: "resolve", method: "POST", path: "/api/sends/s_abc111/resolve" },
               count: 2,
             },
           ],
@@ -702,13 +702,13 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/sends/:id",
+      path: "/api/sends/:id",
       access: "admin",
       resource: "sends",
       summary:
-        "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /sends/feed` (it carries no pace, so read the feed at once from it).",
+        "One send: its view, the delivery-outcome breakdown of its record, and the `cursor` marking where this read stood among the changes to sends, to follow it from with `GET /api/sends/feed` (it carries no pace, so read the feed at once from it).",
       description:
-        "`send` is the send's view, the one shape every send route carries (the list, the feed, every action's answer and refusal), so a client keeps one copy current from any of them and tells two apart by `rev`, the higher the newer. It holds the stored facts: `status` (`scheduled`, `sending`, `sent`, `canceled`), the times, `remade_at` (a template or identity change re-made it while scheduled) and `tested_at`, and `audience` (`count`, an estimate until the send fires and the audience at fire once `fixed`, from `fixed_at`). Beside them, what the server derives as of `as_of`, the server's clock at the read: `counts` (every recipient in one bucket), `dispatch` (hand-off progress; `rate_per_min` is what a sweep tick carries, one tick a minute, and `eta_ms` counts the ticks the rest needs, the wait between them included, given only while it is handing off and once a tick has finished, never while paused), `delivery` (receipts over accepted), `provider` (its `name`, and `halt` while the provider refuses its batches), `phase` (`scheduled`, `due`, `progressing`, `retrying`, `backing-off`, `needs-attention`, `settling`, `complete`, `canceled`), `conditions`, `actions`, and `next_change_at` (see `GET /sends/feed`). `links` names the send's other resources: the frozen email (`email_html`, `email_text`), the recipient rows and their CSV, the post, and `archive`, the published page, absolute, once the send is sent. " +
+        "`send` is the send's view, the one shape every send route carries (the list, the feed, every action's answer and refusal), so a client keeps one copy current from any of them and tells two apart by `rev`, the higher the newer. It holds the stored facts: `status` (`scheduled`, `sending`, `sent`, `canceled`), the times, `remade_at` (a template or identity change re-made it while scheduled) and `tested_at`, and `audience` (`count`, an estimate until the send fires and the audience at fire once `fixed`, from `fixed_at`). Beside them, what the server derives as of `as_of`, the server's clock at the read: `counts` (every recipient in one bucket), `dispatch` (hand-off progress; `rate_per_min` is what a sweep tick carries, one tick a minute, and `eta_ms` counts the ticks the rest needs, the wait between them included, given only while it is handing off and once a tick has finished, never while paused), `delivery` (receipts over accepted), `provider` (its `name`, and `halt` while the provider refuses its batches), `phase` (`scheduled`, `due`, `progressing`, `retrying`, `backing-off`, `needs-attention`, `settling`, `complete`, `canceled`), `conditions`, `actions`, and `next_change_at` (see `GET /api/sends/feed`). `links` names the send's other resources: the frozen email (`email_html`, `email_text`), the recipient rows and their CSV, the post, and `archive`, the published page, absolute, once the send is sent. " +
         conditionsText +
         " `outcomes` counts the record's recipients by outcome from its rows, summing to the audience at fire. The answer carries `ETag`: the send's `rev` and a tag of what the clock derives from it, so a request with `If-None-Match` answers 304 while nothing about the send has changed, written or derived. An action's `If-Match` takes this `ETag` or the bare `rev`.",
       example: {
@@ -731,7 +731,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/sends/:id/email",
+      path: "/api/sends/:id/email",
       access: "admin",
       resource: "sends",
       summary:
@@ -748,7 +748,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/sends/:id/deliveries",
+      path: "/api/sends/:id/deliveries",
       access: "admin",
       resource: "sends",
       summary:
@@ -794,7 +794,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/sends/:id/deliveries.csv",
+      path: "/api/sends/:id/deliveries.csv",
       access: "admin",
       resource: "sends",
       summary: "The send's per-recipient delivery record as CSV (email, status, event, error).",
@@ -802,7 +802,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/sends/:id/cancel",
+      path: "/api/sends/:id/cancel",
       access: "admin",
       resource: "sends",
       summary: "Cancel a scheduled send during its review window; unlocks the post.",
@@ -820,7 +820,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/sends/:id/reschedule",
+      path: "/api/sends/:id/reschedule",
       access: "admin",
       accepts: JSON_BODY,
       resource: "sends",
@@ -838,7 +838,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/sends/:id/resolve",
+      path: "/api/sends/:id/resolve",
       access: "admin",
       accepts: JSON_BODY,
       resource: "sends",
@@ -862,7 +862,7 @@ export function createRouter({
     // --- subscribers (authed admin) ---
     {
       method: "POST",
-      path: "/subscribers",
+      path: "/api/subscribers",
       access: "admin",
       accepts: JSON_BODY,
       resource: "subscribers",
@@ -872,7 +872,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/subscribers",
+      path: "/api/subscribers",
       access: "admin",
       resource: "subscribers",
       summary:
@@ -909,7 +909,7 @@ export function createRouter({
     },
     {
       method: "GET",
-      path: "/subscribers/:id",
+      path: "/api/subscribers/:id",
       access: "admin",
       resource: "subscribers",
       summary: "One subscriber.",
@@ -917,7 +917,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/subscribers/:id/unsubscribe",
+      path: "/api/subscribers/:id/unsubscribe",
       access: "admin",
       resource: "subscribers",
       summary: "Unsubscribe a subscriber (admin-initiated).",
@@ -927,7 +927,7 @@ export function createRouter({
     // --- suppressions (authed admin) ---
     {
       method: "GET",
-      path: "/suppressions",
+      path: "/api/suppressions",
       access: "admin",
       resource: "suppressions",
       summary: "List suppressed addresses (bounced or complained, never mailed).",
@@ -935,7 +935,7 @@ export function createRouter({
     },
     {
       method: "POST",
-      path: "/suppressions",
+      path: "/api/suppressions",
       access: "admin",
       accepts: JSON_BODY,
       resource: "suppressions",
@@ -948,7 +948,7 @@ export function createRouter({
     },
     {
       method: "DELETE",
-      path: "/suppressions/:email",
+      path: "/api/suppressions/:email",
       access: "admin",
       resource: "suppressions",
       summary: "Clear a suppression for an address.",
@@ -993,7 +993,7 @@ export function createRouter({
       resource: "subscriptions",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /subscribers` reports the refusal.",
+        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal.",
       example: {
         request: { email: "you@example.com" },
         response: { status: "check_inbox" },

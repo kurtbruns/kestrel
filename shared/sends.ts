@@ -163,7 +163,7 @@ export function formatLead(ms: number): string {
   return `${seconds} seconds`;
 }
 
-/** GET /sends */
+/** GET /api/sends */
 export interface SendListResponse {
   sends: SendView[];
   page: PageMeta;
@@ -194,7 +194,7 @@ export type SendPhase =
   | "canceled";
 
 /**
- * One send, as every route carries it (SPEC §8): `GET /sends` rows, `GET /sends/:id`, the
+ * One send, as every route carries it (SPEC §8): `GET /api/sends` rows, `GET /api/sends/:id`, the
  * feed, and every action's answer, so a client keeps one shape current from any of them and
  * tells two apart by `rev`. The stored facts, less the frozen bodies (at their own route,
  * `links.email_html` and `links.email_text`), with what the server derives from them at
@@ -332,7 +332,7 @@ export const BOUNCE_SPIKE_RATE = 0.05;
 export const BOUNCE_SPIKE_MIN = 3;
 export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** GET /sends/feed: what a client follows to keep up with sends without polling each one. */
+/** GET /api/sends/feed: what a client follows to keep up with sends without polling each one. */
 export interface SendFeedResponse {
   /** The server's clock at the read, so a client times its next read by the server's clock, not its own. */
   now: number;
@@ -344,7 +344,7 @@ export interface SendFeedResponse {
   sends: SendView[];
   /** With `since`, every send removed after that cursor (deleted with its post), in sequence order; empty without it. */
   removed: RemovedSend[];
-  /** Where this read stands (`<seq>.<at>`, as on `GET /sends`), to hand back as `since` on the next. */
+  /** Where this read stands (`<seq>.<at>`, as on `GET /api/sends`), to hand back as `since` on the next. */
   cursor: string;
   /** Whether the read stopped at `limit` changes with more after `cursor`: read again at once from it. */
   more: boolean;
@@ -379,15 +379,15 @@ export interface DeliveryOutcomes {
   in_flight: number;
 }
 
-/** GET /sends/:id: the send, and its record's outcome breakdown. */
+/** GET /api/sends/:id: the send, and its record's outcome breakdown. */
 export interface SendResponse {
   send: SendView;
   outcomes: DeliveryOutcomes;
-  /** Where this read stands among the changes to sends (`<seq>.<at>`), to follow the send from with `GET /sends/feed`. */
+  /** Where this read stands among the changes to sends (`<seq>.<at>`), to follow the send from with `GET /api/sends/feed`. */
   cursor: string;
 }
 
-/** The buckets GET /sends/:id/deliveries filters by, exactly as the outcomes count them, plus "all" and "failures" (bounced, complained, or unsent). */
+/** The buckets GET /api/sends/:id/deliveries filters by, exactly as the outcomes count them, plus "all" and "failures" (bounced, complained, or unsent). */
 export type DeliveryView =
   | "all"
   | "failures"
@@ -415,7 +415,7 @@ export interface DeliveryRecord {
   bounce_kind: string | null;
 }
 
-/** GET /sends/:id/deliveries */
+/** GET /api/sends/:id/deliveries */
 export interface DeliveryListResponse {
   deliveries: DeliveryRecord[];
   view: DeliveryView;
@@ -425,7 +425,7 @@ export interface DeliveryListResponse {
 /** The publisher's answer for a wedged send's ambiguous recipients (SPEC §12). */
 export type StuckResolution = "unsent" | "accepted";
 
-/** POST /sends/:id/resolve */
+/** POST /api/sends/:id/resolve */
 export interface ResolveResponse {
   send: SendView;
   /** Where the answer stands among the changes to sends, to follow the send from. */
@@ -436,7 +436,7 @@ export interface ResolveResponse {
   completed: boolean;
 }
 
-/** POST /sends/:id/cancel and /reschedule */
+/** POST /api/sends/:id/cancel and /reschedule */
 export interface SendActionResponse {
   send: SendView;
   /** Where the answer stands among the changes to sends, to follow the send from. */
@@ -446,7 +446,7 @@ export interface SendActionResponse {
 }
 
 /**
- * POST /posts/:id/schedule and /send: the send that was frozen (SPEC §6). A second
+ * POST /api/posts/:id/schedule and /send: the send that was frozen (SPEC §6). A second
  * send-now for a post already in its window answers with that send and `idempotent`.
  */
 export interface ScheduleResponse {

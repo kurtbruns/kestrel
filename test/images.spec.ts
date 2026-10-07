@@ -17,7 +17,7 @@ const PNG_1x1 = Uint8Array.from(
 
 async function newDraft(title: string): Promise<string> {
   const created = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: { ...AUTH, "content-type": "application/json" },
       body: JSON.stringify({ subject: title }),
@@ -29,7 +29,7 @@ async function newDraft(title: string): Promise<string> {
 function upload(id: string, name: string, extraHeaders: Record<string, string> = {}) {
   const fd = new FormData();
   fd.append("file", new File([PNG_1x1], name, { type: "image/png" }));
-  return SELF.fetch(`${base}/posts/${id}/images`, {
+  return SELF.fetch(`${base}/api/posts/${id}/images`, {
     method: "POST",
     headers: { ...extraHeaders },
     body: fd,
@@ -61,7 +61,11 @@ describe("images", () => {
     const send = (file: File) => {
       const fd = new FormData();
       fd.append("file", file);
-      return SELF.fetch(`${base}/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+      return SELF.fetch(`${base}/api/posts/${id}/images`, {
+        method: "POST",
+        headers: AUTH,
+        body: fd,
+      });
     };
     // An SVG or HTML file would run as a page on a public media domain.
     for (const [name, type] of [
@@ -79,19 +83,21 @@ describe("images", () => {
     expect(tooBig.status).toBe(400);
     expect((await readJson(tooBig)).message).toMatch(/5 MB or smaller/);
     // A raw-body upload declares its type, so one the route doesn't take is refused as such.
-    const raw = await SELF.fetch(`${base}/posts/${id}/images?filename=x.svg`, {
+    const raw = await SELF.fetch(`${base}/api/posts/${id}/images?filename=x.svg`, {
       method: "POST",
       headers: { ...AUTH, "content-type": "image/svg+xml" },
       body: "<svg/>",
     });
     expect(raw.status).toBe(415);
-    const list = await readJson(await SELF.fetch(`${base}/posts/${id}/images`, { headers: AUTH }));
+    const list = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
     expect(list.images).toEqual([]);
   });
 
   it("reads a declared type by its media type, ignoring case and parameters", async () => {
     const id = await newDraft("Declared Types");
-    const res = await SELF.fetch(`${base}/posts/${id}/images?filename=raw.png`, {
+    const res = await SELF.fetch(`${base}/api/posts/${id}/images?filename=raw.png`, {
       method: "POST",
       headers: { ...AUTH, "content-type": "Image/PNG; charset=binary" },
       body: PNG_1x1,
@@ -104,10 +110,12 @@ describe("images", () => {
     const id = await newDraft("Gallery");
     await upload(id, "a.png", AUTH);
 
-    const list = await readJson(await SELF.fetch(`${base}/posts/${id}/images`, { headers: AUTH }));
+    const list = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
+    );
     expect(list.images.map((i: any) => i.filename)).toContain("a.png");
 
-    const del = await SELF.fetch(`${base}/posts/${id}/images/a.png`, {
+    const del = await SELF.fetch(`${base}/api/posts/${id}/images/a.png`, {
       method: "DELETE",
       headers: AUTH,
     });

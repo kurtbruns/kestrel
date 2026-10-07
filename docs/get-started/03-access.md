@@ -16,7 +16,7 @@ Access is part of Cloudflare Zero Trust. Your account needs a Zero Trust organiz
 
 ## 2. Create the Access application
 
-The editor and the API live under six paths. One application covers all six, so they share one login.
+The editor lives under `/dashboard`, and the API under `/api`. One application covers both, so they share one login.
 
 1. In **Zero Trust**, go to **Access controls → Applications**, and select **Create new application**.
 
@@ -28,16 +28,12 @@ The editor and the API live under six paths. One application covers all six, so 
     - **Domain:** `example.com`
     - **Path:** `dashboard`
 
-1. Add a public hostname for each of the other five paths, with the same subdomain and domain:
+1. Add a second public hostname with the same subdomain and domain, and the path `api`:
 
     | Path | What it covers |
     | --- | --- |
     | `dashboard` | the editor |
-    | `posts` | posts, images, previews, and sends |
-    | `sends` | the progress of each send |
-    | `subscribers` | your subscriber list |
-    | `suppressions` | addresses that bounced or complained |
-    | `api` | who's signed in, and the in-app docs |
+    | `api` | everything the editor and Claude read and change: posts, sends, subscribers, settings, and the in-app docs |
 
     Each path covers everything under it. Leave every other path out. The landing page, the archive, subscribing, unsubscribing, images, and your email provider's webhooks must stay public.
 
