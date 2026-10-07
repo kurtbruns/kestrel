@@ -10,13 +10,13 @@ Local development uses a dev-signed token instead of Access; see the README's *A
 
 ## 1. Create a service token
 
-You already configured one Cloudflare Access application to gate the admin surface during **Access — the admin gate**. Add a **Service Auth** policy to that same application, then create a **service token** under **Access → Service Auth**. It yields a `CF-Access-Client-Id` and a `CF-Access-Client-Secret`. Service tokens need no browser handshake and don't consume Zero Trust seats.
+You already configured one Cloudflare Access application to gate the admin surface during **Lock the dashboard with Access**. Add a **Service Auth** policy to that same application, then create a **service token** under **Access → Service Auth**. It yields a `CF-Access-Client-Id` and a `CF-Access-Client-Secret`. Service tokens need no browser handshake and don't consume Zero Trust seats.
 
 Do not create a second Access application — the service token must share the AUD your Worker already verifies.
 
 ### Prefer infrastructure-as-code?
 
-Create the token from the Cloudflare API instead of the dashboard — reproducible across staging and production, and scriptable into a provisioning step:
+Create the token from the Cloudflare API instead of the dashboard — reproducible across environments, and scriptable into a provisioning step:
 
 ```bash
 curl -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/access/service_tokens" \

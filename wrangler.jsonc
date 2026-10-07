@@ -12,7 +12,7 @@
   // and a newsletter's volume is nowhere near needing it.
   "observability": { "enabled": true },
 
-  // Bundle the setup guide (docs/setup/*.md) into the Worker as Text
+  // Bundle the setup guide (docs/README.md and its section folders) into the Worker as Text
   // modules, so the in-app Docs surface serves the repo markdown verbatim
   // (source of truth) without a separate build step. Applies to bundling under
   // wrangler dev/deploy AND the Vitest pool.
@@ -21,8 +21,9 @@
   // ---------------------------------------------------------------------------
   // Top-level config == the DEVELOPMENT environment (used by `wrangler dev` and
   // the Vitest pool). Its mail transport is the in-memory `fake` adapter, so dev
-  // can never reach a real inbox. Named environments below (staging/production)
-  // must REDECLARE bindings and vars — wrangler does not inherit them.
+  // can never reach a real inbox. The named `production` environment below (and any
+  // other you add, such as a staging) must REDECLARE bindings and vars — wrangler
+  // does not inherit them.
   // Placeholder ids/domains are filled per-deployment; this is a generic template. A
   // real provider refuses to start while any origin or FROM_ADDRESS is still on
   // example.com (getConfig), so the placeholders can't ship by accident.
@@ -43,7 +44,20 @@
   // edits are handled by the watch that scripts/dev.mjs runs beside it — the two must not
   // both react to the same change. demo/ is watched too: its Markdown is bundled into the
   // Worker (src/dev/demo.ts), so an edit there has to rebuild it before the next seed.
-  "build": { "command": "node scripts/build-client.mjs", "watch_dir": ["./src", "./demo"] },
+  // The guide's folders and its landing page are watched for the same reason: the in-app
+  // Docs tab serves their Markdown from the bundle (src/docs/). Not all of docs/, so a SPEC
+  // edit restarts nothing.
+  "build": {
+    "command": "node scripts/build-client.mjs",
+    "watch_dir": [
+      "./src",
+      "./demo",
+      "./docs/README.md",
+      "./docs/get-started",
+      "./docs/guides",
+      "./docs/reference"
+    ]
+  },
 
   "d1_databases": [
     {
@@ -59,7 +73,7 @@
   // Self-contained by default: ARCHIVE_ORIGIN defaults to APP_ORIGIN and
   // MEDIA_PUBLIC_BASE to `${APP_ORIGIN}/media`, both resolved in getConfig, so
   // they're omitted here. Set them only to opt into an apex archive or a media
-  // custom domain (docs/setup/06-archive-website.md). ARCHIVE_BASE_PATH drives both
+  // custom domain (docs/guides/04-archive-website.md). ARCHIVE_BASE_PATH drives both
   // the archive URL and the route that serves it.
   "vars": {
     "PROVIDER": "fake",
@@ -71,35 +85,15 @@
   },
 
   "env": {
-    "staging": {
-      "name": "kestrel-staging",
-      "triggers": { "crons": ["* * * * *"] },
-      // head_sampling_rate left at 1, as at the top level: a sampled-out tick could drop a
-      // send.stuck line.
-      "observability": { "enabled": true },
-      "d1_databases": [
-        {
-          "binding": "DB",
-          "database_name": "kestrel-staging",
-          "database_id": "REPLACE_WITH_STAGING_D1_ID",
-          "migrations_dir": "migrations"
-        }
-      ],
-      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-staging" }],
-      // Fully self-contained: archives and media serve on the app's own origin
-      // (ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE default to it), no extra domains.
-      "vars": {
-        "PROVIDER": "ses",
-        "APP_ORIGIN": "https://newsletter-staging.example.com",
-        "ARCHIVE_BASE_PATH": "/archive",
-        "SENDING_DOMAIN": "send.example.com",
-        "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
-        "AWS_REGION": "us-east-1"
-      }
-    },
-
     "production": {
       "name": "kestrel-production",
+      // The app's own hostname, attached on deploy (Cloudflare creates its DNS record and
+      // certificate; the zone must be in the same account). workers.dev and its preview
+      // URLs stay off (each is its own switch), so the app answers only on the hostname
+      // Access and the rate-limit rule are set up for.
+      "routes": [{ "pattern": "newsletter.example.com", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false,
       "triggers": { "crons": ["* * * * *"] },
       // head_sampling_rate left at 1, as at the top level: a sampled-out tick could drop a
       // send.stuck line.
@@ -113,11 +107,15 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
-      // Self-contained, like staging. ARCHIVE_ORIGIN (the archive on a website apex) and
-      // MEDIA_PUBLIC_BASE (images from a media custom domain) are opt-in enhancements
-      // (SPEC §11); docs/setup/06-archive-website.md shows how to add them here.
+      // Fully self-contained: archives and media serve on the app's own origin
+      // (ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE default to it), no extra domains. Setting
+      // ARCHIVE_ORIGIN (the archive on a website apex) or MEDIA_PUBLIC_BASE (images from
+      // a media custom domain) is an opt-in enhancement (SPEC §11);
+      // docs/guides/04-archive-website.md shows how to add them here.
+      // PROVIDER starts on `fake`: a real provider refuses to run until its secrets are set,
+      // and the setup guide's provider step switches it (docs/get-started/).
       "vars": {
-        "PROVIDER": "ses",
+        "PROVIDER": "fake",
         "APP_ORIGIN": "https://newsletter.example.com",
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",

@@ -1,6 +1,8 @@
-# Notifications
+# Notifications through Cloudflare's email
 
-Kestrel emails you when a send goes out, and right away if a send runs into a problem, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12). The first carries the numbers from the send's record and a link to it; the second says what went wrong, with the provider's own words when the provider is the problem, and links to the send.
+Kestrel emails you when a send goes out, and right away if a send runs into a problem, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12). Out of the box these go through your newsletter's provider, once you set your address in **Verify it works**. This guide moves them to Cloudflare's own email, so the one about your provider refusing your account can still reach you.
+
+The first carries the numbers from the send's record and a link to it; the second says what went wrong, with the provider's own words when the provider is the problem, and links to the send.
 
 Each problem is one email per send. One that lasts is not repeated; the dashboard keeps showing it until it clears. The exception is the provider refusing your account: a refusal that clears and later returns is a new one, and gets a new email. A problem that clears before its email could be delivered (while the channel was failing, say) is dropped rather than sent late.
 
@@ -23,7 +25,7 @@ Development never reaches a real inbox: locally, notifications go to an in-memor
 
 ## Set up Cloudflare's email
 
-Do this per deployed environment, in the Cloudflare account the Worker runs in. The domain must use Cloudflare DNS.
+Do this in the Cloudflare account the Worker runs in, and again for any other deployed environment you add. The domain must use Cloudflare DNS.
 
 ### 1. Turn on email for a domain that receives no mail
 
@@ -43,7 +45,7 @@ Cloudflare only delivers from the binding to verified destinations (unless you o
 
 ### 3. Declare the binding
 
-In each deployed environment of `wrangler.jsonc` (`env.staging`, `env.production`; never the top-level development config):
+In each deployed environment of `wrangler.jsonc` (`env.production`, and any other you added; never the top-level development config):
 
 ```jsonc
 "send_email": [
@@ -55,16 +57,16 @@ In each deployed environment of `wrangler.jsonc` (`env.staging`, `env.production
 
 ```bash
 npm run typecheck
-npm run deploy -- --env staging
+npm run deploy -- --env production
 ```
 
-## Set the address and send a test
+## Check it
 
-Open **Settings → Notifications**, enter your address, and **Save**. Then **Send a test notification**: it goes to the saved address through the live channel. Settings shows which channel is in use and its sender, and **Last notification** shows whether the latest one, a test included, was delivered or, if not, the channel's own words (an unverified destination, say). A test that gets through after a failure clears it.
+Open **Settings → Notifications**, enter your address if it isn't there yet, and **Save**. Then **Send a test notification**: it goes to the saved address through the live channel. Settings shows which channel is in use and its sender, and **Last notification** shows whether the latest one, a test included, was delivered or, if not, the channel's own words (an unverified destination, say). A test that gets through after a failure clears it.
 
 Leave the address blank for no notifications. Events that happen while it is blank are not saved up, so setting an address later never delivers a backlog.
 
 ## What a notification can't do
 
-- **Tell you the sweep has stopped.** A missed fire time is noticed by the same minute-by-minute sweep that fires sends, so if the Cron Trigger stops running altogether, nothing notices. The notification arrives once the sweep runs again. Confirm the trigger under the Worker's **Triggers** tab (see **Provision the instance**).
+- **Tell you the sweep has stopped.** A missed fire time is noticed by the same minute-by-minute sweep that fires sends, so if the Cron Trigger stops running altogether, nothing notices. The notification arrives once the sweep runs again. Confirm the trigger under the Worker's **Triggers** tab (see **Deploy the app**).
 - **Change a send.** A notification only reads the send's record. One that fails never delays, pauses, or changes a send.

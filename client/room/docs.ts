@@ -1,6 +1,6 @@
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
-import type { DocFragment, DocsResponse } from "../../shared/docs";
+import type { DocFragment, DocsLanding, DocsResponse } from "../../shared/docs";
 import { api } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -9,13 +9,14 @@ import { type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { renderError, toast } from "../ui/widgets";
 import { roomShell } from "./shell";
 
-// The setup guide, authored in docs/setup/*.md and served read-only by the authed
-// GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over a
-// numbered list of every doc; `#/docs/:slug` is one doc, its rail a back-link to the index
+// The setup guide, authored in docs/README.md and its section folders, and served read-only by the authed
+// GET /api/docs route as sanitized HTML fragments. `#/docs` is the index — an intro over the
+// guide's sections, the main path numbered as steps; `#/docs/:slug` is one doc, and
+// `#/docs/:slug/:anchor` one heading on it; its rail a back-link to the index
 // plus that doc's "On this page" (never a tree of all docs). No iframe: the content is
 // trusted (repo markdown, hygiene-passed), so injecting the fragments is safe. Fetched once
 // and cached (the bundle never changes at runtime), so paging is instant.
-let docsCache: DocFragment[] | null = null;
+let docsCache: DocsResponse | null = null;
 
 // A doc card's blurb on the index: the doc's own first paragraph, condensed. Derived here
 // (docs carry no front-matter description) so it stays in sync with the doc itself.
@@ -39,6 +40,7 @@ export async function renderDocs(
   slug: string | undefined,
   root: HTMLElement,
   signal: AbortSignal,
+  anchor?: string,
 ): Promise<void> {
   setHtml(
     root,
@@ -48,38 +50,63 @@ export async function renderDocs(
     // The first visit fetches (with the mount's signal, so a tap on API or a different
     // doc while it is in flight cuts it off rather than let it paint a stale room).
     try {
-      docsCache = (await api<DocsResponse>("/api/docs", { signal })).docs;
+      docsCache = await api<DocsResponse>("/api/docs", { signal });
     } catch (e) {
       if (!signal.aborted) {
         renderError($(".room-main", root), e instanceof Error ? e.message : String(e), () =>
-          mount((r, s) => renderDocs(slug, r, s)),
+          mount((r, s) => renderDocs(slug, r, s, anchor)),
         );
       }
       return;
     }
   }
-  const docs = docsCache;
+  const { landing, docs } = docsCache;
   if (!docs.length) {
     setHtml($(".room-main"), html`<p class="muted">No documentation.</p>`);
     return;
   }
   if (slug) {
-    renderDocPage(root, docs, slug);
+    renderDocPage(root, landing, docs, slug, anchor ? decodeAnchor(anchor) : undefined);
   } else {
-    renderDocsIndex(root, docs);
+    renderDocsIndex(root, landing, docs);
   }
 }
 
-// The index: an intro over a numbered list of every doc, in reading order. It keeps the
+/** The route's anchor segment as the heading's anchor. A malformed escape in a hand-edited
+ *  link opens the page at its top rather than failing the room. */
+function decodeAnchor(anchor: string): string | undefined {
+  try {
+    return decodeURIComponent(anchor);
+  } catch {
+    return undefined;
+  }
+}
+
+// The index: the landing page `docs/README.md` lays out (its title, intro, and sections),
+// with a card per doc. A section the README lists as numbered shows numbers, since its pages
+// are steps taken in order; the others are picked from. The cards' titles and blurbs come
+// from the docs themselves. It keeps the
 // room's two-column shape (a doc page's rail is that doc's "On this page"); here the rail
 // holds the project's external links — the reference room is about Kestrel itself, so this
 // is where getkestrel.dev and the source live.
-function renderDocsIndex(root: HTMLElement, docs: DocFragment[]): void {
-  const cards = docs.map((d, i) => {
+function renderDocsIndex(root: HTMLElement, landing: DocsLanding, docs: DocFragment[]): void {
+  const card = (d: DocFragment, n: number | null): Html => {
     const desc = docDescription(d);
-    return html`<li><a class="doc-card" href="#/docs/${d.slug}"><span class="doc-card-n">${String(i + 1).padStart(2, "0")}</span><span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
+    return html`<li><a class="doc-card" href="#/docs/${d.slug}">${n === null ? null : html`<span class="doc-card-n">${String(n).padStart(2, "0")}</span>`}<span class="doc-card-main"><span class="doc-card-t">${d.title} <span class="doc-card-go" aria-hidden="true">→</span></span>${desc ? html`<span class="doc-card-d">${desc}</span>` : null}</span></a></li>`;
+  };
+  const sections = landing.sections.map((sec) => {
+    const inSection = docs.filter((d) => d.section === sec.id);
+    if (!inSection.length) {
+      return null;
+    }
+    const cards = inSection.map((d, i) => card(d, sec.numbered ? i + 1 : null));
+    // The API's rendered HTML: the README's own blurb, hygiene-passed by the Worker.
+    const blurb = sec.blurb
+      ? html`<div class="doc-section-blurb">${unsafeHtml(sec.blurb)}</div>`
+      : null;
+    return html`<section class="doc-section"><h2 class="doc-section-t">${sec.title}</h2>${blurb}${sec.numbered ? html`<ol class="doc-cards">${cards}</ol>` : html`<ul class="doc-cards">${cards}</ul>`}</section>`;
   });
-  const main = html`<div class="docs-index"><p class="eyebrow">Documentation</p><h1>Set up &amp; operate Kestrel</h1><p class="docs-index-intro">How to take a fresh instance to a live newsletter — the run-once, out-of-band steps against your own Cloudflare account, DNS, and email provider.</p><ol class="doc-cards">${cards}</ol></div>`;
+  const main = html`<div class="docs-index"><p class="eyebrow">Documentation</p><h1>${landing.title}</h1><div class="docs-index-intro">${unsafeHtml(landing.intro)}</div>${sections}</div>`;
   // Three uniform out-links under a "Kestrel" label — the same shape as the API rail's
   // label + tiers, so mobile can give both the same chip row. getkestrel.dev is the
   // project's home, the same for every instance, so it's a constant; the source and
@@ -134,21 +161,47 @@ function followLayout(): void {
 
 interface DocSection {
   id: string;
+  /** The heading's anchor, the last segment of its route; empty for the title. */
+  anchor: string;
   title: string;
 }
 
-function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): void {
+/** A heading's anchor as GitHub derives it from the heading's text: lowercased, with
+ *  punctuation dropped and each space a hyphen. The guide is read on GitHub too, so a link
+ *  written against GitHub's anchors (`05-verify.md#7-read-the-logs`) works here unchanged. */
+export function headingAnchor(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+    .replace(/\s/g, "-");
+}
+
+// Element ids carry a prefix, so a heading can never take an id the shell already uses.
+const headingId = (anchor: string): string => `doc-h-${anchor}`;
+
+function renderDocPage(
+  root: HTMLElement,
+  landing: DocsLanding,
+  docs: DocFragment[],
+  slug: string,
+  anchor?: string,
+): void {
   const at = docs.findIndex((d) => d.slug === slug);
   const cur = docs[at];
   if (!cur) {
     // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
     toast(`No doc named “${slug}” — showing the index.`);
     history.replaceState(history.state, "", "#/docs");
-    renderDocsIndex(root, docs);
+    renderDocsIndex(root, landing, docs);
     return;
   }
-  const prev = docs[at - 1];
-  const next = docs[at + 1];
+  // Prev/Next stay within the doc's section: the main path ends at its last step rather than
+  // running on into the guides after it, which are picked from, not read in order.
+  const siblings = docs.filter((d) => d.section === cur.section);
+  const pos = siblings.indexOf(cur);
+  const prev = siblings[pos - 1];
+  const next = siblings[pos + 1];
   // Compact Prev/Next on the title line, right of the H1 — no titles (the foot pager
   // carries those; each link's aria-label names its target). On mobile the words drop
   // and the arrows alone remain, so the row still fits beside a wrapping title.
@@ -180,14 +233,22 @@ function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): vo
     html`<section class="doc-part" id="doc-${cur.slug}">${unsafeHtml(cur.html)}</section>`,
   );
 
-  // The fragment carries no ids — assign them to the current part's H1 and its H2s, and
-  // collect the sections for "On this page". The H1 leads so there's a way back to the top.
+  // The fragment carries no ids — give every heading GitHub's anchor for it (a repeat gets
+  // GitHub's -1, -2), and collect the H1 and H2s for "On this page". The H1 leads so
+  // there's a way back to the top.
   const sec = $("section.doc-part", mainEl);
+  const seen = new Map<string, number>();
+  for (const h of $$<HTMLHeadingElement>("h1, h2, h3, h4", sec)) {
+    const base = headingAnchor(h.textContent || "");
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    h.dataset.anchor = n ? `${base}-${n}` : base;
+    h.id = headingId(h.dataset.anchor);
+  }
   const h1 = sec.querySelector("h1");
   const sections: DocSection[] = [];
   if (h1) {
-    h1.id = `part-${cur.slug}`;
-    sections.push({ id: h1.id, title: h1.textContent || cur.title });
+    sections.push({ id: h1.id, anchor: "", title: h1.textContent || cur.title });
   }
   // Put the H1 and the compact pager on one line: wrap the fragment's own H1 in a title
   // row and set the pager beside it (the H1 stays the doc's H1 — same node, same id).
@@ -202,10 +263,8 @@ function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): vo
       sec.prepend(head);
     }
   }
-  for (const [i, h2] of $$<HTMLHeadingElement>("h2", sec).entries()) {
-    const id = `sec-${cur.slug}-${i + 1}`;
-    h2.id = id;
-    sections.push({ id, title: h2.textContent || "" });
+  for (const h2 of $$<HTMLHeadingElement>("h2", sec)) {
+    sections.push({ id: h2.id, anchor: h2.dataset.anchor || "", title: h2.textContent || "" });
   }
 
   // Previous / Next at the foot — with titles, the sequential path through the guide.
@@ -229,7 +288,8 @@ function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): vo
   // returns to the index) and no rail pager (Prev/Next is the title line + the article
   // foot). A <details>, open unless this is mobile (the header comment says why).
   const onPage = sections.map(
-    (s) => html`<a class="toc-sub" href="#${s.id}" data-target="${s.id}">${s.title}</a>`,
+    (s) =>
+      html`<a class="toc-sub" href="#/docs/${cur.slug}${s.anchor ? `/${s.anchor}` : ""}" data-target="${s.id}">${s.title}</a>`,
   );
   setHtml(
     navEl,
@@ -264,8 +324,18 @@ function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): vo
     if (onPageEl && mobileMq.matches) {
       onPageEl.open = false;
     }
+    // The address names the section, so it can be shared, without a hashchange that would
+    // render the page again.
+    history.replaceState(history.state, "", a?.getAttribute("href") ?? location.hash);
     document.getElementById(target)?.scrollIntoView({ block: "start" });
   });
+
+  // A link out of the guide (a provider's sign-up page, say) opens beside the app rather
+  // than replacing it, so the reader keeps their place in the step they're on.
+  for (const a of $$<HTMLAnchorElement>("a[href^='http']", mainEl)) {
+    a.target = "_blank";
+    a.rel = "noopener";
+  }
 
   // Copy buttons on the guide's shell / DNS code blocks.
   for (const pre of $$<HTMLPreElement>("pre", mainEl)) {
@@ -326,6 +396,11 @@ function renderDocPage(root: HTMLElement, docs: DocFragment[], slug: string): vo
     spy();
   }
 
-  // Each doc is its own page — start at the top.
-  window.scrollTo(0, 0);
+  // Each doc is its own page — start at the top, or at the heading the route names.
+  const heading = anchor ? document.getElementById(headingId(anchor)) : null;
+  if (heading) {
+    heading.scrollIntoView({ block: "start" });
+  } else {
+    window.scrollTo(0, 0);
+  }
 }

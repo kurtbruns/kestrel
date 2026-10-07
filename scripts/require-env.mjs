@@ -39,7 +39,7 @@ function namedEnv(argv) {
 if (!namedEnv(args) && !process.env.CLOUDFLARE_ENV?.trim()) {
   const script = process.env.npm_lifecycle_event ?? "deploy";
   console.error(
-    `[${script}] refused: name the environment, for example \`npm run ${script} -- --env staging\`.\n` +
+    `[${script}] refused: name the environment, for example \`npm run ${script} -- --env production\`.\n` +
       "Without one, wrangler targets the top-level development config (the fake transport, a localhost origin).",
   );
   process.exit(1);

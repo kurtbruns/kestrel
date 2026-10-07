@@ -369,7 +369,7 @@ The app is **self-contained by default**: it serves its own reader surface (the 
 
 One deployed service answers on one hostname, `newsletter.example.com`, and does everything: the admin editor and authoring API, the public reader surface (landing page, archive index, post pages, subscribe, confirm, unsubscribe), previews, and image bytes. The archive origin defaults to the app's own origin, so every "view in browser" link and archive URL points at `newsletter.example.com/archive/{slug}`. A newsletter works end to end no matter where the marketing site lives, or whether there is one.
 
-Two names still earn their own DNS, because they have different jobs and the names should say so. The **app and reader surface** live on `newsletter.example.com`, its own name so its uptime is independent of anything else. The **sending identity** lives on `send.example.com`: the From address and its SPF, DKIM, and DMARC, off the apex so newsletter reputation can't touch regular mail. `newsletter.` names the app and `send.` names the mail, deliberately not near-synonyms, so the two can't be confused or swapped; avoid `mail.`, which the world reads as an inbound host, not a sending identity. **Never send bulk mail from the apex; that is the one rule here that isn't a preference.**
+Two names still earn their own DNS, because they have different jobs and the names should say so. The **app and reader surface** live on `newsletter.example.com`, its own name so its uptime is independent of anything else. The **sending identity** lives on `send.example.com`: the From address and its SPF, DKIM, and DMARC, off the apex so newsletter reputation can't touch regular mail. `newsletter.` names the app and `send.` names the mail, deliberately not near-synonyms, so the two can't be confused or swapped; avoid `mail.`, which the world reads as an inbound host, not a sending identity. Sending from a subdomain rather than the apex is the recommendation, not a rule the app enforces: the app sends from whatever `FROM_ADDRESS` names.
 
 ### Optional: surface the archive on the website's apex
 
@@ -393,19 +393,20 @@ There is **one identity contract**: the app verifies a signed token and resolves
 
 ### Environments
 
-Three environments, each with its own database, its own storage, and, the load-bearing rule, its own mail transport, so development can never reach a real inbox.
+Two environments, each with its own database, its own storage, and, the load-bearing rule, its own mail transport, so development can never reach a real inbox.
 
 | | Database | Email transport | Access |
 | --- | --- | --- | --- |
 | Development (local) | Local, disposable | Dead-end: the fake in-memory adapter, which can simulate a real provider (§10) | localhost only |
-| Staging (deployed) | Separate | Provider sandbox or test domain: only addresses the developer owns | Behind access control |
 | Production (deployed) | Real | Real provider, real sending domain | Behind access control |
 
 Notifications to the publisher (§8) follow the same rule: in development they reach the same dead end, whatever else is configured.
 
-Staging exists because email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only appear once deployed, and a real test send to the developer's own address is the only way to prove them before a real send to subscribers.
+A new instance proves itself on production, before it has a reader. Email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only appear once deployed, and a real test send to the developer's own address is the only way to prove them. A new instance's list is empty, so that proof reaches no one else, and subscribers come after it passes. For someone running their own newsletter, a second deployed environment would only repeat that proof, so it is not part of the default shape.
 
-The platform these roles run on, and the concrete deploy-and-operate steps (provisioning, the access application, connecting a provider and its webhook, sending-domain DNS, wiring the archive to a website, the verify checklist), are the setup guide under `docs/setup/`, which the admin surface also serves. This spec holds the *why*; that guide holds the *how*.
+A developer who wants a rehearsal space for later changes, such as a feature they are building or a new release, may add a **staging** environment beside production, with its own database, storage, and access. Its provider is kept to a sandbox or a test domain, so it can mail only addresses the developer owns.
+
+The platform these roles run on, and the concrete deploy-and-operate steps, are the setup guide under `docs/` (its landing page, `docs/README.md`, lists the sections), which the admin surface also serves. It leads with one main path, a short run of steps from a fresh clone to a working instance (deploy, the access application, a provider and its webhook, the verify checklist, going live), so the shortest way to a working newsletter is never buried among choices only some deployments make. Those (another provider, notifications through the platform's own email, an archive on a website, rate limiting, a staging environment) are guides beside it, with upgrading to a new release, and the detail behind each step is a reference. This spec holds the *why*; that guide holds the *how*.
 
 ---
 
@@ -492,7 +493,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Preferences in the app, never secrets**, over one settings surface for both (§9).
 - **Two providers out of the box behind one seam**, over a single hard-wired transport (§10).
 - **Self-contained by default, apex-optional**, over requiring the website's domain (§11).
-- **`send.` for the sending identity, never the apex**, over `mail.` or the bare domain (§11).
+- **`send.` for the sending identity, recommended over the apex**, `mail.`, or the bare domain (§11).
 - **An edge access layer with a service principal for Claude**, over auth code in the app (§11).
 - **Refusing a cross-site request to the admin surface by what the browser reports and the body types each route declares**, over per-session anti-forgery tokens (§11).
 - **A generated API reference**, over an endpoint table in this document (§11).
@@ -509,7 +510,7 @@ What the app relies on the people who run it to do, rather than enforcing in cod
 - **Keeping the platform's scheduler running.** The sweep reports a missed fire time, but a sweep that has stopped cannot report itself (§12). The setup guide's verify step shows the developer how to check it.
 - **Applying migrations before deploying new code.** An upgrade that deploys first serves requests against a schema that is behind it. The setup guide's upgrade page gives the order.
 - **Limiting how often one client may submit the subscribe form.** It is set at the edge when the app is deployed (§7), because the edge sees clients the app cannot tell apart.
-- **Sending from staging only to addresses the developer owns.** Staging runs a real provider, and only the provider's sandbox or a test domain keeps it from reaching a stranger (§11). The setup guide's staging rule says so.
+- **Proving a new instance before inviting subscribers, and keeping any staging to addresses the developer owns.** Until the checks pass, a new instance mails only the developer, because its list is empty; a staging environment runs a real provider, and only the provider's sandbox or a test domain keeps it from reaching a stranger (§11). The setup guide's provider and verify steps say so.
 
 ## Deferred
 

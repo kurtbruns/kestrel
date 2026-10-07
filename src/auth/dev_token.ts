@@ -7,7 +7,7 @@
  * SAME contract (verify a signed token → `Principal`), a different key. This is
  * only ever active when `config.devAuthSecret` is set, which `getConfig` resolves
  * solely in a dev-shaped environment (see `env.ts`); it is structurally absent
- * from staging/production.
+ * from every deployed environment.
  *
  * A token with an `email` claim is an interactive human (the editor); one without
  * is a service principal (Claude / automation), mirroring the Access split.
