@@ -208,9 +208,16 @@ export function createRouter({
       path: "/api/dev/token",
       access: "public",
       resource: "dev",
-      summary: "Mint a local admin token (local dev only).",
+      summary: "Mint an admin token (local dev only).",
       description:
-        "Public because it is where a local client gets the token every admin route asks for, so it can't ask for one itself. It exists only on a local instance: a deployed instance never registers it, so there it answers 404 and its reference leaves it out. `?kind=service` mints a token with no email, a service principal like Claude's; without it, the token is a human's, as the editor uses.",
+        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance.",
+      query: [
+        {
+          name: "kind",
+          description:
+            "`service` for a service token (no email, like Claude's); anything else, or none, for a human token, as the editor uses.",
+        },
+      ],
       handler: devRoutes.token,
     }),
 
