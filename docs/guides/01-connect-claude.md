@@ -1,8 +1,8 @@
 # Connect Claude to the API
 
-Claude can draft, edit, proofread, and schedule your posts through the same API the editor uses. Claude Code gets its own Cloudflare Access credential to make calls to the API. Every send still waits out its review window, so you can cancel anything Claude schedules.
+Claude Code can draft, edit, proofread, and schedule your posts through the same API the editor uses. It has its own Cloudflare Access credential, so its changes show as Claude's, not yours. Anything it schedules waits out the review window, where you can still cancel it.
 
-In this guide, you create a service token, and add a policy for it to your Access application. Then you store it where Claude Code reads it, check that the app sees it as Claude, and point Claude at the API reference.
+In this guide, you create a service token for Claude Code, and add a policy for it to your Access application. Then you store the token where Claude Code reads it, check that it works, and point Claude at the API reference.
 
 ## Before you begin
 
@@ -22,6 +22,8 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 1. Select **Generate token**.
 
 1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
+
+1. **(Optional, recommended)** Get a warning before the token expires. Once it does, Claude can't reach the API. In the Cloudflare dashboard, go to **Notifications**, select **Add**, and choose **Expiring Access Service Token**. It emails you a week before the token expires.
 
 ## 2. Add a policy for the token
 
@@ -89,10 +91,4 @@ Claude reads the reference, and from there can list your posts, write a draft, a
 
 1. Open a draft in the editor, and ask Claude to change a word in it. The editor shows that the draft was changed elsewhere, last edited by **Claude**.
 
-If Claude gets a `401`, a `403`, or a login page, check the policy from section 2, and the two values in `.claude/settings.local.json`.
-
-## Keep the token healthy
-
-- **Get a warning before it expires.** In the Cloudflare dashboard, go to **Notifications**, select **Add**, and choose **Expiring Access Service Token**. It emails you a week before any token expires.
-- **Rotate the secret** if it may have leaked, or as a routine. On the token, select **Rotate secret**, and keep the old secret valid for an hour or so. Paste the new secret into `.claude/settings.local.json`. The Client ID stays the same.
-- **Revoke the token** by deleting it under **Service Tokens**. Claude loses access at once.
+If Claude gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values in `.claude/settings.local.json`. Check that the token hasn't expired, too.
