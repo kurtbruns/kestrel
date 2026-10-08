@@ -1,99 +1,135 @@
 # Upgrade to a new release
 
-How to move a running instance to a newer release. If you keep a staging environment, upgrade it first and prove it, then repeat for production.
+A new release of Kestrel arrives as a tag in Kestrel's repository, your `upstream` remote. Upgrading merges that tag into your copy, applies any new database changes, and deploys. The app can't undo a database change, so you note a restore point first.
 
-Nothing here runs from inside the app, and the app cannot undo it for you: a deploy is yours to repeat, but a schema change is not something the app can roll back. Step 3 notes a restore point first, so **Going back** has somewhere to return to.
+In this guide, you read what changed, merge the release, and note where your database stands. Then you apply the database changes, deploy, and check the new version. If you run a [staging environment](06-staging.md), upgrade it first, and repeat each step for production once it checks out.
 
-## 1. Read the changelog
+## 1. Read what changed
 
-Find the version you are running: the editor shows it at the foot of the Docs and API tabs' contents rail (version, then commit), and `GET /api/version` returns it with the release tag and build time.
+A release can ask you to change a setting or a record before it runs. The changelog says so, release by release.
 
-Then read `CHANGELOG.md` for every version between yours and the one you are moving to. Take any **Breaking** entry seriously before starting: it names something you have to change (a variable, a binding, a DNS record) for the new release to run. Note too any entry that says it **touches the database baseline**; step 3 depends on it.
+1. Find the version you run. In the editor, open the **Docs** or **API** tab. The foot of its contents list shows the version, then the commit.
 
-## 2. Bring in the release
+1. Read `CHANGELOG.md` for every version after yours, up to the one you're moving to. Each release opens with an **Upgrading from…** paragraph that says what to do. Its **Breaking** entries say what changed underneath you.
 
-Releases are tagged `vX.Y.Z`. Your branch carries your own commits (the database id and hostname you set in `wrangler.jsonc` during [Deploy the app](../get-started/02-deploy.md)), so merge the release tag into it rather than checking the tag out, which would leave those behind. Kestrel's repository is your `upstream` remote:
+To move from a 0.x release, read the 1.0.0 entry first. Moving to 1.0.0 or later means rebuilding the database, which starts it empty.
 
-```bash
-git fetch upstream --tags
-git merge vX.Y.Z
-```
+## 2. Merge the release
 
-Resolve any conflict in `wrangler.jsonc` by keeping your ids and values alongside whatever the release added. Then install exactly the versions the release pins, and run the gate:
+Your copy carries your own settings, such as your hostname and database id in `wrangler.jsonc`. So you merge the release into your branch, rather than check out the tag.
 
-```bash
-npm ci
-npm test
-npm run typecheck
-```
+1. Fetch the release, and merge it. Replace `vX.Y.Z` with the release's tag:
 
-**(Optional)** To try the release on your computer first, run `npm run dev`. Your local database takes the release's migrations, so you see the new version with your local content. It can't tell you how the migrations treat your real data: that's what the bookmark in the next step, or a [staging environment](06-staging.md), is for.
+    ```bash
+    git fetch upstream --tags
+    git merge vX.Y.Z
+    ```
 
-Push the merge to your repository:
+1. If `wrangler.jsonc` conflicts, keep your own values, and add whatever the release added. The release's **Upgrading from…** paragraph names any new setting.
 
-```bash
-git push
-```
+1. Install the exact versions the release uses:
 
-## 3. Apply the schema
+    ```bash
+    npm ci
+    ```
 
-Upgrade at a moment with no send in progress. Before applying anything, note where the database is now:
+1. Run the tests:
 
-```bash
-npx wrangler d1 time-travel info kestrel-production
-```
+    ```bash
+    npm test
+    ```
 
-It prints a bookmark for the database's current state; keep it. D1 keeps this history on its own (Time Travel), for 30 days on Workers Paid and 7 on Workers Free, so the bookmark is all **Going back** needs. Use whatever you named the database in **Deploy the app**.
+1. Check the configuration and the types:
 
-From 1.0.0 the database schema only ever changes by adding a new migration, which this step applies to the database you already have, keeping everything in it. Run it on every upgrade; it is harmless when there is nothing new:
+    ```bash
+    npm run typecheck
+    ```
+
+1. **(Optional)** Try the release on your computer with `npm run dev`. Your local database takes the release's changes, so you see the new version with your local content. It can't show how they treat your real data. A staging environment can.
+
+1. Push the merge to your repository:
+
+    ```bash
+    git push
+    ```
+
+## 3. Note a restore point
+
+D1 keeps a history of your database, called Time Travel, for 30 days on Workers Paid and 7 on Workers Free. A bookmark marks one moment in it, so you can put the database back if the upgrade goes wrong.
+
+1. In the editor, check that no send is in progress. The dashboard lists any that are. Upgrade between sends.
+
+1. Note where the database stands now:
+
+    ```bash
+    npx wrangler d1 time-travel info kestrel-production
+    ```
+
+    It prints a bookmark for the database's current state. Copy it, and keep it until the upgrade checks out.
+
+## 4. Apply the database changes
+
+Since 1.0.0, a release changes the database only by adding a migration. Applying it keeps everything already in the database.
 
 ```bash
 npm run migrate:remote -- --env production
 ```
 
-### Coming from a 0.x release
+It lists the migrations it's about to apply, and asks you to confirm. When a release has none, it says there's nothing to apply. Run it on every upgrade.
 
-Before 1.0.0, Kestrel changed its schema by editing the baseline migration in place rather than adding a new one. A database that ran a 0.x baseline has no way to take the 1.0.0 one, so moving from any 0.x release to 1.0.0 or later needs the database **rebuilt**, not migrated. This happens once: after it, every upgrade is the command above.
-
-Rebuild the environment's database. A rebuild starts the database empty: posts, subscribers, consent, the send record, and your settings are all gone. Links in emails you already sent stop working too: archive links find no post, and unsubscribe links find no subscriber. Images stay in R2, but nothing refers to them any more. Pick a moment with no send scheduled or in progress, and keep an export as a record:
-
-```bash
-npx wrangler d1 export kestrel-production --remote --output kestrel-production-backup.sql
-npx wrangler d1 delete kestrel-production
-npx wrangler d1 create kestrel-production
-```
-
-Paste the new `database_id` into that environment in `wrangler.jsonc` (as in **Deploy the app**) and commit it, then:
-
-```bash
-npm run typecheck
-npm run migrate:remote -- --env production
-```
-
-The export is a record of what was there, not something to load back: it matches the old schema, not the new one. Run the deploy in the next step right away, since the Worker still running is the old release.
-
-## 4. Deploy
+## 5. Deploy
 
 ```bash
 npm run deploy -- --env production
 ```
 
-Then run the checks in **Verify it works** that the changelog entries touch.
+The output ends with your app's hostname.
 
-## 5. Confirm the version
+## Check it
 
-Reload the editor and check the version at the foot of the Docs tab's contents rail, or call `GET /api/version`. The version should be the release's, and the commit the one you deployed.
+1. The app answers:
 
-The version links to its release page only when the deployed commit is the tagged commit itself. A build from a merge on your own branch is a different commit, so it shows the version and commit without that link; that is expected, not a sign that something went wrong.
+    ```bash
+    curl https://newsletter.example.com/health
+    ```
 
-## Going back
+    ```
+    {"status":"ok","service":"kestrel"}
+    ```
 
-To back out, deploy your branch as it was before the merge. The app cannot roll back its schema, but D1 can: once the previous release is deployed, put the database back to the bookmark from step 3:
+1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, and the commit you deployed.
 
-```bash
-npx wrangler d1 time-travel restore kestrel-production --bookmark=<bookmark>
-```
+    The version links to its release page only when you deploy the tagged commit itself. Your merge is a commit of its own, so the version shows without a link. That's expected.
 
-A restore returns the whole database to that moment, so everything written since is gone: posts edited, subscribers who signed up, and the record of anything sent. Restore only soon after the upgrade, and never past a send that went out or an unsubscribe recorded since the bookmark: the restored database would not know of them, so it could mail those recipients again or mail someone who left. If either happened, stay on the new release instead.
+1. Send yourself a test email, as in [Verify it works](../get-started/05-verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.
 
-If the upgrade rebuilt the database, the previous release expects the old baseline, so going back means rebuilding again, with the same loss.
+1. In the logs, `sweep.tick` still arrives every minute, as in [Verify it works](../get-started/05-verify.md#7-read-the-logs).
+
+## Go back
+
+If the new release misbehaves, deploy the previous one, and put the database back to your bookmark.
+
+1. Check out your branch as it was before the merge. This leaves the branch itself as it is:
+
+    ```bash
+    git checkout HEAD^1
+    ```
+
+1. Install that release's versions, and deploy it:
+
+    ```bash
+    npm ci
+    npm run deploy -- --env production
+    ```
+
+1. Restore the database to the bookmark from section 3:
+
+    ```bash
+    npx wrangler d1 time-travel restore kestrel-production --bookmark=REPLACE_WITH_BOOKMARK
+    ```
+
+A restore returns the whole database to that moment. Everything written since is gone: edits to posts, new subscribers, and the record of anything sent. Restore only soon after the upgrade.
+
+Never restore past a send that went out, or an unsubscribe recorded since the bookmark. The restored database wouldn't know of them, so it could mail those readers again, or mail someone who left. If either happened, stay on the new release, and fix forward.
+
+When you're done, return to your branch with `git checkout -`.

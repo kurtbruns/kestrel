@@ -23,7 +23,6 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
 
-
 ## 2. Add a policy for the token
 
 Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
