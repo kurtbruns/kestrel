@@ -14,8 +14,7 @@ Create `CLAUDE.local.md` at the repository root, holding this one line:
 
 ## What's here
 
-- **`frame.md`** says "you are maintaining Kestrel" and imports the rest.
-- **`process.md`** holds how a change lands: keeping the documents in sync, merging pull requests, and editing GitHub issues.
-- **`rules/`** holds the document contract (`maintainer.md`), the changelog (`changelog.md`), and the setup guide's writing rules (`docs.md`).
+- **`frame.md`** loads with every maintainer session: how a change lands (documents in sync, pull requests, GitHub issues), the contract for Kestrel's documents, and the changelog, from writing a line to cutting a release.
+- **`guide.md`** holds the setup guide's writing rules. The frame points to it rather than loading it, since it matters only when a guide page changes.
 
-The rules live here rather than in `.claude/rules/` because a path-scoped rule loads whenever Claude reads a matching file, and operators read the setup guide and `CHANGELOG.md` while running their instance. So `frame.md` imports the two that apply to most changes and points to `docs.md`. For the same reason the changelog `Stop` hook (`.claude/hooks/changelog-reminder.mjs`) stays quiet unless `CLAUDE.local.md` imports the frame.
+None of this lives in `.claude/rules/`, because a path-scoped rule loads whenever Claude reads a matching file, and operators read the setup guide and `CHANGELOG.md` while running their instance. For the same reason the changelog `Stop` hook (`.claude/hooks/changelog-reminder.mjs`) stays quiet unless `CLAUDE.local.md` imports the frame.

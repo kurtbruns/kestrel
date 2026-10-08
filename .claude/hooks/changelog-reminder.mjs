@@ -3,7 +3,7 @@
  * Stop hook: remind, don't gate.
  *
  * Kestrel keeps its CHANGELOG.md current as part of the workflow (see
- * .claude/maintainer/rules/changelog.md). This hook is the reliability net for that: at the end of
+ * .claude/maintainer/frame.md). This hook is the reliability net for that: at the end of
  * a turn it looks at what the branch changed and, if code shipped without a CHANGELOG.md
  * entry, surfaces a one-line reminder to add one. A Stop hook's `systemMessage` is shown
  * to the person in the transcript, not fed back to the model (only a blocking decision
@@ -38,7 +38,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 // Prefixes whose change means "consider a changelog entry". Kept in sync with
-// .claude/maintainer/rules/changelog.md. Tests (test/) and tooling (scripts/) are deliberately absent.
+// .claude/maintainer/frame.md. Tests (test/) and tooling (scripts/) are deliberately absent.
 const CODE_PREFIXES = ["src/", "client/", "shared/", "public/dashboard/", "migrations/"];
 
 // The line in CLAUDE.local.md that turns the maintainer frame on.
@@ -180,7 +180,7 @@ try {
     const message =
       "CHANGELOG reminder: this branch changes code (src/, client/, shared/, public/dashboard/, or migrations/) " +
       "but CHANGELOG.md is untouched. If the change is user-facing or operator-visible, add a line " +
-      "under [Unreleased] (see .claude/maintainer/rules/changelog.md). Internal-only changes need no entry.";
+      "under [Unreleased] (see .claude/maintainer/frame.md). Internal-only changes need no entry.";
     // Synchronous write to fd 1: a plain process.stdout.write() can be dropped when
     // process.exit() follows before the async pipe flush, silently losing the reminder.
     writeSync(1, `${JSON.stringify({ systemMessage: message })}\n`);
