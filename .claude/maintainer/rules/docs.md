@@ -1,15 +1,6 @@
----
-paths:
-  - "docs/README.md"
-  - "docs/get-started/**"
-  - "docs/guides/**"
-  - "docs/reference/**"
-  - "src/docs/**"
----
-
 # Writing the setup guide
 
-The setup guide is the documentation for deploying and running your own instance of Kestrel. This file holds the decisions every page follows. The style rules in `.claude/rules/maintainer.md` apply here too.
+The setup guide is the documentation for deploying and running your own instance of Kestrel. This file holds the decisions every page follows. The style rules in `.claude/maintainer/rules/maintainer.md` apply here too. `.claude/CLAUDE.md` mirrors what the guide teaches, so a page that changes what the operator does checks it in the same commit.
 
 ## What the guide is
 

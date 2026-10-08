@@ -67,15 +67,9 @@ Never put the secret in `.claude/settings.json`. That file is committed.
 
 Kestrel has no plugin or connector for Claude. Claude calls the HTTP API directly, and the API reference describes every route: its method and path, the body it takes, and an example. The editor's **API** tab shows the same reference.
 
-Start a session with a prompt like this one:
+Your copy's `.claude/CLAUDE.md` already tells Claude how to reach the API. Once the three values from section 3 are set, Claude reads `GET /api/reference` before its first call, and from there can list your posts, write a draft, and schedule it. You don't need a special prompt. Ask for what you want, such as "Draft a post about our spring schedule."
 
-```
-Kestrel's API is at $KESTREL_URL. Send the CF-Access-Client-Id and
-CF-Access-Client-Secret headers from your environment with every request.
-Read GET /api/reference first, and use it for every call.
-```
-
-Claude reads the reference, and from there can list your posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
+The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
 ## Check it
 

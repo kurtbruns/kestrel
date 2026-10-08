@@ -2,25 +2,33 @@
 paths:
   - ".claude/CLAUDE.md"
   - ".claude/rules/**/*.md"
+  - ".claude/maintainer/**"
 ---
 
 # Writing Claude's context
 
-`.claude/CLAUDE.md` and the rules under `.claude/rules/` are read by Claude Code, not by a person looking for documentation. CLAUDE.md loads at the start of every session. A rule with `paths` loads when Claude reads a matching file; a rule without `paths` loads at launch like CLAUDE.md. They are context, not configuration: Claude follows them more reliably when they are specific, short, and consistent, and anything that must hold every time belongs in a hook or a test.
+Kestrel's Claude context is read by Claude Code, not by a person looking for documentation. It comes in three layers, each loading only for the people who need it:
 
-## What belongs in CLAUDE.md
+- **Running the instance: `.claude/CLAUDE.md`.** Loads at the start of every session, for everyone. Most people who clone Kestrel deploy and publish with their own copy, so this is their context: following the setup guide, deploying and upgrading, reaching the API, and the safety lines.
+- **Changing the code: `.claude/rules/`.** `code.md` and `client.md` are scoped by `paths` to the code, so they load once Claude reads it: for an operator adding a feature to their copy, a contributor, or the maintainer. A rule loads when Claude reads a matching file, not only when it edits one, so no rule here may match a file the setup guide sends an operator to (a guide page, `CHANGELOG.md`, `README.md`, `wrangler.jsonc`, `package.json`).
+- **Maintaining Kestrel: `.claude/maintainer/`.** How a change to the upstream project lands. It loads only through a gitignored `CLAUDE.local.md` (`.claude/maintainer/README.md`), so a fresh clone never sees it. Its rules match files operators read, which is why they live there and not in `.claude/rules/`; `frame.md` imports or points to them.
 
-Facts Claude needs in every session: the commands, the conventions, the module boundaries, the rules that are not obvious from the code. Add a line when Claude makes the same mistake twice, when a review catches something it should have known, or when you type the same correction into chat that you typed last session. Leave out what Claude can read from the code itself, such as directory listings and dependency lists, and keep what it cannot: pitfalls, rationale, and conventions that differ from the tool defaults.
+A committed hook runs for everyone, so one that serves the maintainer stays quiet without the frame. Skills load only when invoked or when their description matches the task, so a skill costs the other audiences nothing.
 
-Something that matters for one part of the codebase goes in a path-scoped rule. A multi-step procedure goes in a skill. A check that must run every time goes in a hook.
+## What belongs where
+
+- **`.claude/CLAUDE.md`:** what Claude needs to help someone run an instance that the setup guide and the API reference don't say. It mirrors what the guide (`docs/README.md` and its section folders) teaches. It also loads in the maintainer's sessions, so it must stay true there. Mention a skill only once it exists.
+- **`.claude/rules/code.md`:** the commands, conventions, and module boundaries, the facts anyone changing the code needs. Upstream process (pull requests, the changelog, document sync) goes in `.claude/maintainer/`, since an operator's own copy follows none of it.
+- In any layer, add a line when Claude makes the same mistake twice, when a review catches something it should have known, or when you type the same correction into chat that you typed last session. Leave out what Claude can read from the code or the guide itself, and keep what it cannot: pitfalls, rationale, and conventions that differ from the tool defaults.
+- Something that matters for one part of the codebase goes in a path-scoped rule. A multi-step procedure goes in a skill. A check that must run every time goes in a hook.
 
 ## How to write it
 
 - Concrete enough to verify: "run `npm test` before finishing", not "test your changes".
-- Under 200 lines per file. Every line costs context in every session it loads.
+- Under 200 lines for what loads together: `.claude/CLAUDE.md` alone, and the frame with everything it imports. Every line costs context in every session it loads.
 - Headers and bullets over dense paragraphs.
 - One topic per rule file, named for the topic, with `paths` when it applies to part of the tree.
-- No contradictions between CLAUDE.md and the rules. When a fact changes, replace the old line rather than adding a correction beside it.
-- Style as in `.claude/rules/maintainer.md`.
+- No contradictions between the files. When a fact changes, replace the old line rather than adding a correction beside it.
+- Style as in `.claude/maintainer/rules/maintainer.md`.
 
-This distills Anthropic's guidance at https://code.claude.com/docs/en/memory as of September 2026. The page is the current word when the two differ; re-read it when this rule stops matching what Claude Code does.
+This distills Anthropic's guidance at https://code.claude.com/docs/en/memory and https://code.claude.com/docs/en/best-practices as of October 2026. Those pages are the current word when the two differ; re-read them when this rule stops matching what Claude Code does.

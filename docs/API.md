@@ -86,7 +86,7 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 
 ## Adding to the API
 
-1. Start from the spec. If the change alters what a client can rely on, the spec changes first (`.claude/rules/maintainer.md`).
+1. Start from the spec. If the change alters what a client can rely on, the spec changes first (`.claude/maintainer/rules/maintainer.md`).
 2. Put it on an existing resource and an existing way of reading or acting if it fits (principles 2 and 3).
 3. Pass principle 9's questions, and write the one sentence the reference will carry.
 4. Register it in `src/app.ts` with its summary, body types, query parameters, and example, so the reference and the gate come from the same entry.

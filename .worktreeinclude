@@ -1,0 +1,5 @@
+# Gitignored files Claude Code copies into each worktree it creates (.gitignore syntax).
+# settings.local.json carries Claude's API token (docs/guides/01-connect-claude.md).
+# CLAUDE.local.md is left out on purpose: a worktree inside the checkout already loads the
+# root's, and a second copy would load it twice.
+.claude/settings.local.json

@@ -3,7 +3,7 @@
  * Stop hook: remind, don't gate.
  *
  * Kestrel keeps its CHANGELOG.md current as part of the workflow (see
- * .claude/rules/changelog.md). This hook is the reliability net for that: at the end of
+ * .claude/maintainer/rules/changelog.md). This hook is the reliability net for that: at the end of
  * a turn it looks at what the branch changed and, if code shipped without a CHANGELOG.md
  * entry, surfaces a one-line reminder to add one. A Stop hook's `systemMessage` is shown
  * to the person in the transcript, not fed back to the model (only a blocking decision
@@ -18,6 +18,16 @@
  * so a test- or script-only turn stays quiet. Once an entry exists, CHANGELOG.md is itself
  * in the diff and the hook goes silent.
  *
+ * Maintainers only. This file is committed, so it runs in every copy of the repository,
+ * including an operator's, whose own changes to their copy owe Kestrel's changelog nothing.
+ * It stays silent unless a CLAUDE.local.md imports the maintainer frame
+ * (.claude/maintainer/README.md); the import line, not the file, is the switch, since anyone
+ * may keep notes of their own in a CLAUDE.local.md. Claude Code loads CLAUDE.local.md from
+ * the session's directory and every one above it, so a worktree inside the maintainer's
+ * checkout has the frame through the root's file, and the check walks up the same way. The
+ * diff is the checkout the session works in, found from the hook input's `cwd`: in a
+ * worktree CLAUDE_PROJECT_DIR names the main checkout, whose diff is not this branch's.
+ *
  * Fails safe: any git error, a detached HEAD, or a missing CHANGELOG.md all end in a
  * silent exit 0. Reminds at most once per session (a marker in the temp dir keyed on the
  * session id), so a long session isn't nagged every turn. Pure Node, no dependencies.
@@ -25,13 +35,26 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync, writeSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 // Prefixes whose change means "consider a changelog entry". Kept in sync with
-// .claude/rules/changelog.md. Tests (test/) and tooling (scripts/) are deliberately absent.
+// .claude/maintainer/rules/changelog.md. Tests (test/) and tooling (scripts/) are deliberately absent.
 const CODE_PREFIXES = ["src/", "client/", "shared/", "public/dashboard/", "migrations/"];
 
-const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+// The line in CLAUDE.local.md that turns the maintainer frame on.
+const FRAME_IMPORT = /^@\.claude\/maintainer\/frame\.md\s*$/m;
+
+/** The hook's stdin JSON (session_id, cwd), or {} when it can't be read. */
+function hookInput() {
+  try {
+    return JSON.parse(readFileSync(0, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const input = hookInput();
+let projectDir = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 /**
  * Run git in the project dir; return stdout with only the trailing newline removed, or
@@ -92,13 +115,19 @@ function isCode(path) {
   return CODE_PREFIXES.some((p) => path.startsWith(p)) && !path.endsWith(".spec.ts");
 }
 
-/** Read the session id from the hook's stdin JSON, for the once-per-session marker. */
-function sessionId() {
-  try {
-    const raw = readFileSync(0, "utf8");
-    return JSON.parse(raw).session_id ?? null;
-  } catch {
-    return null;
+/** True when a CLAUDE.local.md in the session's directory, or one above it, imports the maintainer frame. */
+function frameOn() {
+  for (let dir = input.cwd || projectDir; ; dir = dirname(dir)) {
+    try {
+      if (FRAME_IMPORT.test(readFileSync(join(dir, "CLAUDE.local.md"), "utf8"))) {
+        return true;
+      }
+    } catch {
+      // no CLAUDE.local.md at this level — keep walking up
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
   }
 }
 
@@ -122,7 +151,17 @@ function alreadyReminded(id) {
 }
 
 try {
-  const id = sessionId();
+  const id = input.session_id ?? null;
+
+  if (!frameOn()) {
+    process.exit(0); // not a maintainer session — stay quiet
+  }
+
+  // The session may sit in a subdirectory; the checkout's root holds CHANGELOG.md.
+  const root = git(["rev-parse", "--show-toplevel"]);
+  if (root) {
+    projectDir = root;
+  }
 
   if (!existsSync(join(projectDir, "CHANGELOG.md"))) {
     process.exit(0); // no changelog to update — stay quiet
@@ -139,9 +178,9 @@ try {
 
   if (codeTouched && !changelogTouched && !alreadyReminded(id)) {
     const message =
-      "CHANGELOG reminder: this branch changes code (src/, public/dashboard/, or migrations/) " +
+      "CHANGELOG reminder: this branch changes code (src/, client/, shared/, public/dashboard/, or migrations/) " +
       "but CHANGELOG.md is untouched. If the change is user-facing or operator-visible, add a line " +
-      "under [Unreleased] (see .claude/rules/changelog.md). Internal-only changes need no entry.";
+      "under [Unreleased] (see .claude/maintainer/rules/changelog.md). Internal-only changes need no entry.";
     // Synchronous write to fd 1: a plain process.stdout.write() can be dropped when
     // process.exit() follows before the async pipe flush, silently losing the reminder.
     writeSync(1, `${JSON.stringify({ systemMessage: message })}\n`);

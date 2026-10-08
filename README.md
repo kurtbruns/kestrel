@@ -43,7 +43,7 @@ The editor's **API** tab lists every route.
 
 - **Deploy your own instance:** [Get started](docs/get-started/01-overview.md), the steps from a fresh clone to a live newsletter. The same guide is in the editor's **Docs** tab.
 - **What Kestrel guarantees:** [`docs/SPEC.md`](docs/SPEC.md). How the admin UI is built: [`docs/DESIGN.md`](docs/DESIGN.md).
-- **Working on the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md) has the commands, conventions, and module boundaries.
+- **Working on the code:** [`.claude/rules/code.md`](.claude/rules/code.md) has the commands, conventions, and module boundaries. To contribute, turn on the [maintainer context](.claude/maintainer/README.md) first.
 - **Releases:** [`CHANGELOG.md`](CHANGELOG.md), and [Upgrade to a new release](docs/guides/07-upgrade.md) to move an instance to one.
 
 ## License

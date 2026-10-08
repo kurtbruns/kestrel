@@ -4,7 +4,7 @@ The high-level, abstract description of Kestrel, the newsletter app. It describe
 
 **Who this is for.** The implementer and the maintainer, human or Claude, and anyone deciding whether Kestrel's guarantees fit their newsletter. It is written for a cold reader: a term defined elsewhere carries a pointer to where.
 
-**Status.** A living document that tracks `main`. The rule for keeping it in step with the code is `.claude/rules/maintainer.md`.
+**Status.** A living document that tracks `main`. The rule for keeping it in step with the code is `.claude/maintainer/rules/maintainer.md`.
 
 **How to read it.** §1 to §3 are the contract: what the app is, the kind of application it is and the principles that follow from that, the six nouns, and the six invariants. §4 to §12 walk each area of the system. The appendix records what was decided, with the alternative each choice was made over, what the app trusts to the people who run it rather than guarding in code, and what was deliberately deferred. The shape of the API itself, the rules every route follows, is `docs/API.md`.
 

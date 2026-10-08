@@ -5,7 +5,7 @@
 ## What it enforces (on the default branch)
 
 - No branch deletion, no force-push.
-- Changes land via pull request. All three merge methods stay allowed so the exceptions need no JSON edit; the policy (squash by default) lives in `.claude/CLAUDE.md`, where the method is chosen.
+- Changes land via pull request. All three merge methods stay allowed so the exceptions need no JSON edit; the policy (squash by default) lives in `.claude/maintainer/process.md`, where the method is chosen.
 - All PR review threads must be resolved before merge.
 - The `gate` status check must pass: the quality gate workflow (`.github/workflows/gate.yml`) runs `npm run typecheck`, `npm test`, and `npm run ci` on every pull request. `integration_id` 15368 is GitHub Actions, so only the workflow can satisfy it. The branch need not be up to date with `main` first (`strict_required_status_checks_policy` is off).
 - No bypass actors.

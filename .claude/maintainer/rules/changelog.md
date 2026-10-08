@@ -1,23 +1,13 @@
----
-paths:
-  - "CHANGELOG.md"
-  - "package.json"
-  - "docs/SPEC.md"
-  - "docs/DESIGN.md"
-  - "README.md"
----
-
 # Keeping Kestrel's changelog
 
 `CHANGELOG.md` is the human-readable record of what changed between releases. It exists so an operator can upgrade their own instance safely, and so getkestrel.dev can pin its docs to a tagged version and see the delta on each bump. It follows [Keep a Changelog](https://keepachangelog.com/), and its versions are `MAJOR.RELEASE.PATCH` (below), not semver: the running instance reports its `package.json` version (see the build stamp), so the version people see is the one this file describes.
-
 ## Add an entry in the same commit as the change
 
 A user-facing or operator-visible change earns one line under `## [Unreleased]`, written in the same commit that makes the change, by the same in-sync discipline that ties a behavior change to `docs/SPEC.md`. If a change is worth a SPEC or DESIGN edit, it is worth a changelog line.
 
 What earns a line: a change to behavior, the admin UI, the HTTP API surface, configuration, or a bug an operator would notice. What does not: an internal refactor, a test, a build-tooling tweak, a comment, or a formatting pass. When in doubt, ask whether someone running Kestrel would want to know before they upgrade.
 
-A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.claude/settings.json`, the repo's only hook) shows the maintainer a reminder in the transcript when a turn ends with code changed and no changelog line. A Stop hook's message reaches the person, not the model. It is a nudge, never a gate: it cannot block a turn, and an internal-only change correctly gets no entry.
+A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.claude/settings.json`, the repo's only hook) shows the maintainer a reminder in the transcript when a turn ends with code changed and no changelog line. A Stop hook's message reaches the person, not the model. It is a nudge, never a gate: it cannot block a turn, and an internal-only change correctly gets no entry. It runs only with the maintainer frame on (`.claude/maintainer/README.md`), so an operator changing their own copy is never nudged.
 
 ## How to write the line
 

@@ -19,12 +19,12 @@ Never restate these in a review; `npm run check` and `npm run typecheck` decide 
 
 ## The shape of a module
 
-1. The header comment: one responsibility, in the style CLAUDE.md sets under Comment & doc style.
+1. The header comment: one responsibility, in the style `.claude/rules/code.md` sets under Comment & doc style.
 2. Every `import`, and nothing else above the last one. Not a type, not a constant, not an interface: a reader who has seen code stops looking for imports. This is the one rule the tree doesn't enforce by habit — it's edit-time drift, not a fresh-file mistake, so it's worth a second look on any module you're touching rather than writing from scratch.
 3. The code.
 
 - Static imports only. `import()` appears in specs that need a fresh module instance; a module never lazy-loads another.
-- Relative paths, no aliases: `../shared/…` from a flat client module, `../../shared/…` from a feature folder. Which tree may import which is in CLAUDE.md and `.claude/rules/client.md`, not here.
+- Relative paths, no aliases: `../shared/…` from a flat client module, `../../shared/…` from a feature folder. Which tree may import which is in `.claude/rules/code.md` and `.claude/rules/client.md`, not here.
 - Named exports. The one `export default` is `src/index.ts`, because the Workers runtime looks for it there.
 - A top-level function is a `function` declaration. A `const` arrow only when the whole body is one expression (`now`, `newId`, the `HttpError` constructors in `src/lib/errors.ts`, `badge`).
 
