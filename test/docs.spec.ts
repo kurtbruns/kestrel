@@ -35,7 +35,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
   it("reads the landing page from the README: its title, intro, and sections", () => {
     const { landing } = renderDocs();
     expect(landing.title).toBe("Set up and run Kestrel");
-    expect(landing.intro).toContain('href="#/docs/overview"'); // the intro's link, rewritten
+    expect(landing.intro).toMatch(/^<p>.+<\/p>/s);
     expect(landing.sections.map((s) => [s.id, s.title, s.numbered])).toEqual([
       ["get-started", "Get started", true],
       ["guides", "Guides", false],
@@ -54,8 +54,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     const listed = [...readme.matchAll(/\]\(([a-z0-9-]+\/\d{2}-[a-z0-9-]+\.md)\)/g)].map(
       ([, path]) => path,
     );
-    // The Overview is linked twice: once in the intro, once as the first step.
-    expect(listed.slice(1).sort()).toEqual(bundledPages().sort());
+    expect(listed.sort()).toEqual(bundledPages().sort());
     expect(new Set(docs.map((d) => d.slug)).size).toBe(docs.length);
     const ids = landing.sections.map((s) => s.id);
     for (const d of docs) {

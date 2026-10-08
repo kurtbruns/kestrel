@@ -1,6 +1,6 @@
 # Set up and run Kestrel
 
-These guides deploy and run your own instance of Kestrel, from a fresh clone of the repository to a newsletter on your own Cloudflare account. Start with the [Overview](get-started/01-overview.md).
+These guides deploy and run your own instance of Kestrel, from a fresh clone of the repository to a newsletter on your own Cloudflare account.
 
 ## Get started
 
