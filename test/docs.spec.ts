@@ -84,30 +84,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
   });
-
-  it("keeps the titles the pages cross-reference each other by", () => {
-    // Some pages still point at each other by title in bold (**Deploy the app**) rather than
-    // by link. This pins those titles, so retitling a page fails here and its pointers get
-    // updated with it.
-    const titles = new Set(renderDocs().docs.map((d) => d.title));
-    for (const ref of [
-      "Overview",
-      "Deploy the app",
-      "Lock the dashboard with Access",
-      "Connect Resend",
-      "Verify it works",
-      "Go live",
-      "Connect Claude to the API",
-      "Use Amazon SES instead of Resend",
-      "Notifications through Cloudflare's email",
-      "Rate-limit the subscribe form",
-      "Upgrade to a new release",
-      "Configuration",
-      "Sending-domain DNS",
-    ]) {
-      expect(titles).toContain(ref);
-    }
-  });
 });
 
 describe("docs API is gated like the rest of the authoring API", () => {

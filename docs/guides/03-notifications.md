@@ -1,72 +1,89 @@
 # Notifications through Cloudflare's email
 
-Kestrel emails you when a send goes out, and right away if a send runs into a problem, so you are told without having to open the dashboard (`docs/SPEC.md` §8, §12). Out of the box these go through your newsletter's provider, once you set your address in **Verify it works**. This guide moves them to Cloudflare's own email, so the one about your provider refusing your account can still reach you.
+Kestrel emails you when a send goes out, and right away when one runs into a problem. By default, these notifications go through your email provider. The one you need most, about your provider refusing your account, is the one your provider would refuse too. Cloudflare's email doesn't depend on your provider, so that notification still reaches you.
 
-The first carries the numbers from the send's record and a link to it; the second says what went wrong, with the provider's own words when the provider is the problem, and links to the send.
+In this guide, you turn on Cloudflare's email for your app's hostname, and verify your own address with it. Then you add the binding that sends notifications through it, deploy, and send yourself a test.
 
-Each problem is one email per send. One that lasts is not repeated; the dashboard keeps showing it until it clears. The exception is the provider refusing your account: a refusal that clears and later returns is a new one, and gets a new email. A problem that clears before its email could be delivered (while the channel was failing, say) is dropped rather than sent late.
+## Before you begin
 
-Two things decide where the email goes and how it gets there, and they sit on opposite sides of the line between preferences and deploy config (`docs/SPEC.md` §9):
+You need:
 
-| | What it is | Where it is set |
-| --- | --- | --- |
-| **Where** | Your address | In the app: **Settings → Notifications**. An address holds no secret, so it is a preference. |
-| **How** | The channel and its sender | Here, at deploy: the `NOTIFY` binding and the optional `NOTIFY_FROM` var. |
+- Your notification address saved, from [Verify it works](../get-started/05-verify.md#3-set-up-your-notifications).
+- Your domain's DNS on Cloudflare, as for the rest of the app.
 
-## Pick a channel
+## 1. Turn on Email Routing for your app's hostname
 
-**Cloudflare's own email (recommended).** With a `send_email` binding named `NOTIFY` declared, notifications go through Cloudflare, not through your newsletter's provider. That independence is the point: the notification you most need, the provider refusing your account, is exactly the one the provider would refuse too. The cost is a one-time setup on Cloudflare: email turned on for one domain, and your address verified as a destination. Both are free on any plan.
+Cloudflare's email sends only from a domain set up with Email Routing. Use your app's hostname, `newsletter.example.com`. It receives no mail today, so turning Email Routing on there changes nothing else.
 
-**Your newsletter's provider (the fallback).** Without the binding, notifications go through SES or Resend, from your `FROM_ADDRESS`, like a test email. There is nothing to set up, and every notification works except one: when the provider refuses your account, the email about it is refused as well. The refusal still shows on the dashboard, the Sent page, and the send's page, and the failed notification shows under **Settings → Notifications**. On SES in the sandbox, your address must be verified in SES too.
+1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**.
 
-The channel is fixed at deploy; Kestrel never falls back from one to the other mid-send. A notification that fails is retried once a minute, up to five tries, and the failure is shown in Settings and logged as a `notify.failed` event.
+1. Add `newsletter.example.com` to Email Routing. Cloudflare adds subdomains from your domain's own settings: select `example.com`, then **Settings**, and add `newsletter` under **Subdomains**.
 
-Development never reaches a real inbox: locally, notifications go to an in-memory stand-in whatever you declare, show in the `wrangler dev` log as a `notify.sent` event on the `fake` channel, and are listed by `GET /api/dev/outbox`.
+1. Cloudflare adds MX, SPF, and DKIM records for `newsletter.example.com`, and locks them. Wait until they show as added.
 
-## Set up Cloudflare's email
+Avoid turning on Email Routing for a domain that already receives mail elsewhere, such as `example.com` with Google Workspace. Email Routing takes over that domain's MX records. Avoid `send.example.com` too, since your email provider sends from it.
 
-Do this in the Cloudflare account the Worker runs in, and again for any other deployed environment you add. The domain must use Cloudflare DNS.
+## 2. Verify your address
 
-### 1. Turn on email for a domain that receives no mail
+Cloudflare's email delivers only to addresses you've verified with it. Sending to a verified address is free on any plan.
 
-The sender must be an address on a domain onboarded to Cloudflare's email (**Email** in the dashboard: Email Routing, or Email Sending). Use the app's own hostname, `newsletter.example.com`: it receives no mail today, so turning email on there changes nothing else. Avoid a domain that already receives mail elsewhere, such as `example.com`, whose MX records Cloudflare would take over, and avoid `send.example.com`, which is your newsletter provider's sending identity.
+1. Under **Email Routing**, go to **Destination Addresses**, and add the address you saved for notifications.
 
-By default the sender is `Kestrel <kestrel@newsletter.example.com>`, built from `APP_ORIGIN`. To use another address on an onboarded domain, set `NOTIFY_FROM` in that environment's `vars`:
+1. Open the email Cloudflare sends to that address, and select **Verify email address**.
 
-```jsonc
-"NOTIFY_FROM": "Kestrel <alerts@newsletter.example.com>"
-```
+A verified address belongs to your Cloudflare account, so every environment in it can use it.
 
-### 2. Verify your address as a destination
+## 3. Add the binding and deploy
 
-Under **Email → Email Routing → Destination addresses**, add the address you want notifications at. Cloudflare emails it a link; open it and select **Verify email address**. Destination addresses belong to the account, so one verification serves every environment in it. Sending to a verified destination is free and does not count toward any sending quota.
+A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email. Without it, they go through your provider.
 
-Cloudflare only delivers from the binding to verified destinations (unless you onboard a sending domain to Email Sending, which lets it mail anyone and needs Workers Paid; notifications don't need that).
+1. In `wrangler.jsonc`, add the binding to the `production` block:
 
-### 3. Declare the binding
+    ```jsonc
+    "send_email": [
+      { "name": "NOTIFY", "allowed_destination_addresses": ["you@example.com"] } // ← your address
+    ],
+    ```
 
-In each deployed environment of `wrangler.jsonc` (`env.production`, and any other you added; never the top-level development config):
+    `allowed_destination_addresses` is optional. It limits the binding to the addresses you list, so a changed setting in the editor can't send notifications anywhere else. Leave it out to allow any address you've verified.
 
-```jsonc
-"send_email": [
-  { "name": "NOTIFY", "allowed_destination_addresses": ["you@example.com"] }
-],
-```
+1. **(Optional)** Notifications come from `Kestrel <kestrel@newsletter.example.com>`. To use another address on that hostname, set `NOTIFY_FROM` in the block's `vars`:
 
-`allowed_destination_addresses` is optional. It pins the binding to the addresses you list, so even an admin session that changed the preference could not point notifications anywhere else. Leave it out to allow any verified destination. Then regenerate types and deploy:
+    ```jsonc
+    "NOTIFY_FROM": "Kestrel <alerts@newsletter.example.com>",
+    ```
 
-```bash
-npm run typecheck
-npm run deploy -- --env production
-```
+1. Check the file. This regenerates the binding types:
+
+    ```bash
+    npm run typecheck
+    ```
+
+1. Commit the change, and push it:
+
+    ```bash
+    git commit -am "Send notifications through Cloudflare's email"
+    git push
+    ```
+
+1. Deploy:
+
+    ```bash
+    npm run deploy -- --env production
+    ```
 
 ## Check it
 
-Open **Settings → Notifications**, enter your address if it isn't there yet, and **Save**. Then **Send a test notification**: it goes to the saved address through the live channel. Settings shows which channel is in use and its sender, and **Last notification** shows whether the latest one, a test included, was delivered or, if not, the channel's own words (an unverified destination, say). A test that gets through after a failure clears it.
+1. In the editor, open **Settings → Notifications**. **Sent through** reads "Cloudflare Email, separate from your newsletter's provider", and **From address** shows `kestrel@newsletter.example.com`.
 
-Leave the address blank for no notifications. Events that happen while it is blank are not saved up, so setting an address later never delivers a backlog.
+1. Select **Send a test notification**. It arrives at your address, and **Last notification** shows it as delivered.
 
-## What a notification can't do
+If the test isn't delivered, **Last notification** shows Cloudflare's reason, such as an address that isn't verified. Cloudflare's Email Routing summary lists notifications as dropped even when they're delivered, so check your inbox rather than the summary.
 
-- **Tell you the sweep has stopped.** A missed fire time is noticed by the same minute-by-minute sweep that fires sends, so if the Cron Trigger stops running altogether, nothing notices. The notification arrives once the sweep runs again. Confirm the trigger under the Worker's **Triggers** tab (see **Deploy the app**).
-- **Change a send.** A notification only reads the send's record. One that fails never delays, pauses, or changes a send.
+## What notifications don't cover
+
+- **The schedule stopping.** The same once-a-minute schedule that sends your posts also notices problems. If the schedule itself stops, nothing tells you. [Read the logs](../get-started/05-verify.md#7-read-the-logs) to check that `sweep.tick` still arrives every minute.
+- **A notification that can't get through.** The app tries each one up to five times, a minute apart. A failure shows under **Settings → Notifications**, and in the logs as `notify.failed`.
+- **Problems while no address is set.** With the address blank, the app sends nothing, and saves nothing up for later.
+
+A notification never changes a send. One that fails never delays, pauses, or stops it.
