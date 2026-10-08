@@ -215,7 +215,7 @@ export function createRouter({
         {
           name: "kind",
           description:
-            "`service` for a service token (no email, like Claude's); anything else, or none, for a human token, as the editor uses.",
+            "`human` (default, as the editor uses) or `service` (no email, as Claude uses).",
         },
       ],
       handler: devRoutes.token,
