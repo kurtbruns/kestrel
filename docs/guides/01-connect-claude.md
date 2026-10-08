@@ -1,99 +1,92 @@
 # Connect Claude to the API
 
-This page covers connecting Claude Code to a deployed Kestrel instance. Once connected, Claude can draft, edit, and proofread your posts, and schedule them to send. It works the same way you would in the editor, through the same API: the editor and Claude are the **two clients** of that one door, and neither reaches past it — so there is nothing new to secure or keep in sync. A scheduled post waits in a cancelable window before it goes out, so you can review it or call it off before it reaches anyone.
+Claude Code can draft, edit, proofread, and schedule your posts through the same API the editor uses. It has its own Cloudflare Access credential, so its changes show as Claude's, not yours. Anything it schedules waits out the review window, where you can still cancel it.
 
-## Claude is a `service` principal
+In this guide, you create a service token for Claude Code, and add a policy for it to your Access application. Then you store the token where Claude Code reads it, check that it works, and point Claude at the API reference.
 
-The app resolves every request to a `Principal`: a **human** (carries an email — your interactive login) or a **service** (Claude / automation — no email). Claude authenticates with an Access **service token**, which carries no email, so it arrives as `service`. Its edits are attributed as "Claude" — distinct from your human login — in the revision trail and the editor's concurrency notices. Nothing else changes: same routes, same gate.
+## Before you begin
 
-Local development uses a dev-signed token instead of Access; see the README's *Auth* section for that path. Everything below is the deployed instance.
+You need:
+
+- The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
+- [Claude Code](https://code.claude.com/docs/en/overview), run from your copy of the repository.
 
 ## 1. Create a service token
 
-You already configured one Cloudflare Access application to gate the admin surface during **Lock the dashboard with Access**. Add a **Service Auth** policy to that same application, then create a **service token** under **Access → Service Auth**. It yields a `CF-Access-Client-Id` and a `CF-Access-Client-Secret`. Service tokens need no browser handshake and don't consume Zero Trust seats.
+A service token is a Client ID and a Client Secret that a program sends with each request. It carries no email, so the app tells it apart from your own login.
 
-Do not create a second Access application — the service token must share the AUD your Worker already verifies.
+1. In **Zero Trust**, go to **Access controls → Service credentials → Service Tokens**, and select **Create Service Token**.
 
-### Prefer infrastructure-as-code?
+1. Name it `kestrel-claude`, and choose a **Service Token Duration**. A year is a good default.
 
-Create the token from the Cloudflare API instead of the dashboard — reproducible across environments, and scriptable into a provisioning step:
+1. Select **Generate token**.
 
-```bash
-curl -X POST "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT_ID/access/service_tokens" \
-  -H "Authorization: Bearer $CF_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{"name":"claude-code"}'
+1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
+
+## 2. Add a policy for the token
+
+Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
+
+1. Under **Access controls → Applications**, select **Configure** on the application from [Lock the dashboard with Access](../get-started/03-access.md#2-create-the-access-application).
+
+1. Add a policy:
+
+    - **Policy name:** `Claude`
+    - **Action:** Service Auth
+    - **Include:** the **Service Token** selector, with `kestrel-claude`
+
+1. Save the application.
+
+`ACCESS_ALLOWED_EMAILS` doesn't apply to the token, since it has no email. This policy is the only thing that lets it in.
+
+## 3. Store the token for Claude Code
+
+Claude Code loads the `env` block of `.claude/settings.local.json` into every session. That file stays on your computer: your repository's `.gitignore` keeps it out of git.
+
+1. Open `.claude/settings.local.json` in your copy of the repository. Create it if it doesn't exist.
+
+1. Add an `env` block, beside anything already in the file:
+
+    ```json
+    {
+      "env": {
+        "KESTREL_URL": "https://newsletter.example.com",
+        "CF_ACCESS_CLIENT_ID": "REPLACE_WITH_CLIENT_ID",
+        "CF_ACCESS_CLIENT_SECRET": "REPLACE_WITH_CLIENT_SECRET"
+      }
+    }
+    ```
+
+    `KESTREL_URL` is your app's address. The other two are the Client ID and Client Secret from section 1.
+
+1. Start a new Claude Code session, so it loads the values.
+
+Never put the secret in `.claude/settings.json`. That file is committed.
+
+## 4. Point Claude at the API
+
+Kestrel has no plugin or connector for Claude. Claude calls the HTTP API directly, and the API reference describes every route: its method and path, the body it takes, and an example. The editor's **API** tab shows the same reference.
+
+Start a session with a prompt like this one:
+
+```
+Kestrel's API is at $KESTREL_URL. Send the CF-Access-Client-Id and
+CF-Access-Client-Secret headers from your environment with every request.
+Read GET /api/reference first, and use it for every call.
 ```
 
-`$CF_API_TOKEN` is a one-off Cloudflare API token with the **Access: Service Tokens Write** permission (not a runtime credential — it only creates the service token). The response returns `client_id` and `client_secret`; the secret is shown **once**. Terraform users can express the same thing as a `cloudflare_zero_trust_access_service_token` resource. Either way you still add the Service Auth policy above, so the token is accepted.
+Claude reads the reference, and from there can list your posts, write a draft, and schedule it. A request that sends a body needs `Content-Type: application/json`, and the reference says so for each route.
 
-## 2. Store the credentials
+## Check it
 
-Claude Code reads the base URL and the token from its shell environment. Keep them in a gitignored file, never in the repo. Copy the committed template and fill it in:
+1. Ask Claude to call `GET /api/whoami`. The app answers with a program's identity, not yours:
 
-```bash
-cp .kestrel.env.example .kestrel.env
-```
+    ```
+    {"principal":{"kind":"service"},"auth":{"mode":"access"}}
+    ```
 
-```bash
-# .kestrel.env  (gitignored)
-KESTREL_URL="https://newsletter.example.com"
-CF_ACCESS_CLIENT_ID="<client-id>"
-CF_ACCESS_CLIENT_SECRET="<client-secret>"
-```
+1. Ask Claude to list your posts. It answers with the posts the editor shows.
 
-The file lives on your machine but points at your **deployed** instance — it isn't local-dev config (that's `.dev.vars`, which the Worker itself reads). The values here are presented by the client to Cloudflare Access; the Worker never reads them. Load it into your shell before driving the API:
+1. Open a draft in the editor, and ask Claude to change a word in it. The editor shows that the draft was changed elsewhere, last edited by **Claude**.
 
-```bash
-set -a; source .kestrel.env; set +a
-```
-
-**Using Claude Code?** You can instead put the same three keys in your gitignored `.claude/settings.local.json` under an `env` block, and Claude Code injects them into every session automatically — no file to source:
-
-```json
-{
-  "env": {
-    "KESTREL_URL": "https://newsletter.example.com",
-    "CF_ACCESS_CLIENT_ID": "<client-id>",
-    "CF_ACCESS_CLIENT_SECRET": "<client-secret>"
-  }
-}
-```
-
-Never use the shared `.claude/settings.json` for the secret — it's committed. `.claude/settings.local.json` is kept out of git.
-
-## 3. Verify the credential resolves to `service`
-
-With the values loaded, check the identity the app resolves:
-
-```bash
-curl -s "$KESTREL_URL/api/whoami" \
-  -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" \
-  -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET"
-```
-
-Expect `{"principal":{"kind":"service"},"auth":{"mode":"access"}}`. The `"kind":"service"` (not `"human"`) confirms Claude will be attributed as Claude, not as you. A `401` from a plain request with no headers confirms the surface is closed.
-
-## 4. Point Claude Code at the API
-
-Kestrel ships no separate MCP server — Claude Code is a client of the HTTP API itself. Give it a one-line wrapper that carries the headers on every call:
-
-```bash
-kctl() { curl -s -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Client-Secret: $CF_ACCESS_CLIENT_SECRET" "$KESTREL_URL$1" "${@:2}"; }
-```
-
-A call that sends a body names its type, and each route takes only the types the reference lists for it; a JSON body sent without `Content-Type: application/json` is refused. For example, to add a subscriber:
-
-```bash
-kctl /api/subscribers -X POST -H "Content-Type: application/json" -d '{"email":"reader@example.com"}'
-```
-
-Then tell Claude the base URL and that `GET /api/reference` lists every route — method, path, access tier, the body types it accepts, and worked examples, generated from the route registration so it can't drift. Claude discovers and drives the whole app from there.
-
-## 5. Keep the credential healthy
-
-- Set an **expiration** and the one-week-before **alert** on the token.
-- **Rotate** with a grace period: the Client ID stays, a new secret is issued, and both work for the overlap you choose — do it routinely and on any suspected exposure.
-- Never commit the secret. If one leaks, revoke it in the dashboard.
-
-> Connecting **Claude Desktop** with a one-click MCP connector — instead of a hand-pasted service token — is a deferred enhancement tracked separately. This page covers Claude Code today.
+If Claude gets a `401`, a `403`, or a login page, check the policy from section 2, and the token's two values in `.claude/settings.local.json`. Check that the token hasn't expired, too.

@@ -10,6 +10,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- Connecting Claude now keeps the Access service token in `.claude/settings.local.json`, which Claude Code loads into every session and the repository's `.gitignore` now covers. The `.kestrel.env.example` template is gone; an existing `.kestrel.env` stays ignored. The guide also notes that `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, so its Access policy is its only gate.
+- The upgrade guide's check after deploying no longer points at all of Verify it works, whose real send would go to your whole list on a live instance; it sends a test email and reads the logs instead. Going back now gives the commands to deploy the previous release before restoring the database.
+- The Amazon SES guide now has you let SES publish to the SNS topic, without which no bounce or complaint reaches the app. It also sets the configuration set as your sending hostname's default, and covers the sandbox, production access, and a custom MAIL FROM domain step by step.
+- The guides to putting the archive on your website and adding a staging environment are out of the setup guide until they've been run end to end. The configuration reference now says what `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE` need, including the headers a media custom domain has to send. The More guides section is now Guides.
+
 ## [1.3.0] - 2026-10-06
 
 **Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it. The authoring API has moved under `/api` (see *Breaking*). Your Access application already covers `/api`, so the moved routes stay gated the moment the instance upgrades; afterwards you can remove the four old paths, `posts`, `sends`, `subscribers`, and `suppressions`, from it, leaving `dashboard` and `api`. Any script or Claude setup that calls the old paths must switch to `/api/…`.

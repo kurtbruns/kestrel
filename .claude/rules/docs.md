@@ -17,7 +17,7 @@ The setup guide is the documentation for deploying and running your own instance
 - **Followed by humans and robots alike.** Every page is a complete by-hand procedure that Claude can also follow step by step. Claude is the recommended way through, and any skill that automates a step follows the page rather than replacing it.
 - **Run from the reader's own copy of the repository.** It holds the instance's configuration: `origin` is the reader's repository, `upstream` is Kestrel's. Deploys and upgrades happen from it.
 - **Local development is optional.** The README owns running Kestrel locally. The guide offers it once as an optional checkpoint after cloning, and once as an optional dry run when upgrading.
-- **One environment on the main path: production.** A new instance proves itself with test sends while its list is empty. Staging is an optional guide.
+- **One environment on the main path: production.** A new instance proves itself with test sends while its list is empty. Staging is a possible guide, not yet in the guide.
 
 ## Where it lives
 
@@ -29,8 +29,8 @@ The setup guide is the documentation for deploying and running your own instance
 ## Structure
 
 - **Get started:** the main path, numbered: Overview, Deploy the app, Lock the dashboard with Access, Connect Resend, Verify it works, Go live.
-- **More guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, the archive on your website, rate limiting, staging, upgrading.
-- **Reference:** the detail and the why: configuration, sending-domain DNS, how the admin gate works.
+- **Guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, rate limiting, upgrading. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
+- **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
 
 ## Main path defaults

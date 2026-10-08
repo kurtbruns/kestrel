@@ -73,7 +73,7 @@
   // Self-contained by default: ARCHIVE_ORIGIN defaults to APP_ORIGIN and
   // MEDIA_PUBLIC_BASE to `${APP_ORIGIN}/media`, both resolved in getConfig, so
   // they're omitted here. Set them only to opt into an apex archive or a media
-  // custom domain (docs/guides/04-archive-website.md). ARCHIVE_BASE_PATH drives both
+  // custom domain (docs/reference/01-configuration.md). ARCHIVE_BASE_PATH drives both
   // the archive URL and the route that serves it.
   "vars": {
     "PROVIDER": "fake",
@@ -111,7 +111,7 @@
       // (ARCHIVE_ORIGIN / MEDIA_PUBLIC_BASE default to it), no extra domains. Setting
       // ARCHIVE_ORIGIN (the archive on a website apex) or MEDIA_PUBLIC_BASE (images from
       // a media custom domain) is an opt-in enhancement (SPEC §11);
-      // docs/guides/04-archive-website.md shows how to add them here.
+      // docs/reference/01-configuration.md says what each needs.
       // PROVIDER starts on `fake`: a real provider refuses to run until its secrets are set,
       // and the setup guide's provider step switches it (docs/get-started/).
       "vars": {

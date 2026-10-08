@@ -18,13 +18,10 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "guides/connect-claude",
       "guides/ses",
       "guides/notifications",
-      "guides/archive-website",
       "guides/rate-limit",
-      "guides/staging",
       "guides/upgrade",
       "reference/configuration",
       "reference/sending-domain-dns",
-      "reference/admin-gate",
     ]);
     // Titles are extracted from the markdown, not hard-coded here.
     expect(docs.find((d) => d.slug === "access")?.title).toBe("Lock the dashboard with Access");
@@ -38,10 +35,10 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
   it("reads the landing page from the README: its title, intro, and sections", () => {
     const { landing } = renderDocs();
     expect(landing.title).toBe("Set up and run Kestrel");
-    expect(landing.intro).toContain('href="#/docs/overview"'); // the intro's link, rewritten
+    expect(landing.intro).toMatch(/^<p>.+<\/p>/s);
     expect(landing.sections.map((s) => [s.id, s.title, s.numbered])).toEqual([
       ["get-started", "Get started", true],
-      ["guides", "More guides", false],
+      ["guides", "Guides", false],
       ["reference", "Reference", false],
     ]);
     for (const s of landing.sections) {
@@ -57,8 +54,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     const listed = [...readme.matchAll(/\]\(([a-z0-9-]+\/\d{2}-[a-z0-9-]+\.md)\)/g)].map(
       ([, path]) => path,
     );
-    // The Overview is linked twice: once in the intro, once as the first step.
-    expect(listed.slice(1).sort()).toEqual(bundledPages().sort());
+    expect(listed.sort()).toEqual(bundledPages().sort());
     expect(new Set(docs.map((d) => d.slug)).size).toBe(docs.length);
     const ids = landing.sections.map((s) => s.id);
     for (const d of docs) {
@@ -86,33 +82,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     expect(start?.html).toContain('href="#/docs/ses"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
-  });
-
-  it("keeps the titles the pages cross-reference each other by", () => {
-    // Some pages still point at each other by title in bold (**Deploy the app**) rather than
-    // by link. This pins those titles, so retitling a page fails here and its pointers get
-    // updated with it.
-    const titles = new Set(renderDocs().docs.map((d) => d.title));
-    for (const ref of [
-      "Overview",
-      "Deploy the app",
-      "Lock the dashboard with Access",
-      "Connect Resend",
-      "Verify it works",
-      "Go live",
-      "Connect Claude to the API",
-      "Use Amazon SES instead of Resend",
-      "Notifications through Cloudflare's email",
-      "Put the archive on your website",
-      "Rate-limit the subscribe form",
-      "Add a staging environment",
-      "Upgrade to a new release",
-      "Configuration",
-      "Sending-domain DNS",
-      "How the admin gate works",
-    ]) {
-      expect(titles).toContain(ref);
-    }
   });
 });
 

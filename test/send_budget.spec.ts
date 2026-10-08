@@ -724,7 +724,7 @@ describe("SES_MAX_SEND_RATE", () => {
   const rateFor = (v: string | undefined) =>
     getConfig({ ...env, SES_MAX_SEND_RATE: v } as AppEnv).sesMaxSendRate;
 
-  it("defaults to a new production account's rate, takes the account's own, and refuses a typo", () => {
+  it("defaults to a common starting rate, takes the account's own, and refuses a typo", () => {
     expect(rateFor(undefined)).toBe(DEFAULT_SES_MAX_SEND_RATE);
     expect(rateFor("1")).toBe(1);
     expect(rateFor("200")).toBe(200);

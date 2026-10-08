@@ -3,15 +3,16 @@
  *
  * Cloudflare caps one Worker invocation twice over: every D1 statement and every outbound
  * `fetch` is a subrequest (50 on Workers Free; 10,000 by default on Workers Paid, more if
- * configured), and D1 statements have their own cap besides (1,000 on any plan, each
- * statement of a batch counted). A run that hits either cap throws partway through,
+ * configured), and D1 statements have their own cap besides (1,000 on Workers Paid and 50 on
+ * Free, where the subrequest cap binds first; each statement of a batch counted). A run that hits either cap throws partway through,
  * usually while recording what the provider just accepted, so the send loop spends
  * against both meters here instead and stops starting new batches while it can still
  * close cleanly. `metered` counts the D1 side for real; the loop charges each provider
  * request itself with `request`.
  */
 
-/** Cloudflare's cap on D1 statements in one invocation, on every plan. */
+/** Cloudflare's cap on D1 statements in one invocation on Workers Paid. Free caps them at 50,
+ *  which never binds: Free's subrequest limit is 50 too, and `limit` already holds to it. */
 export const D1_QUERY_LIMIT = 1000;
 
 export class Budget {

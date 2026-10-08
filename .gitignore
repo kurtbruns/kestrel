@@ -7,7 +7,7 @@ node_modules/
 !.dev.vars.example
 .kestrel.env
 .kestrel.env.*
-!.kestrel.env.example
+.claude/settings.local.json
 
 # wrangler / miniflare local state
 .wrangler/

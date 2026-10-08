@@ -31,7 +31,7 @@ Readers subscribe on a page the app hosts. Every signup confirms by email before
 A new instance runs on free plans. As your list grows, two limits come into play.
 
 - **Your email provider's limits.** Resend's free plan sends up to 100 emails a day. A send that hits the limit waits, and the app emails you. It resumes on its own once the limit lifts, or after you upgrade your Resend plan, and mails no one twice. For a large list, [Amazon SES](../guides/02-ses.md) may cost less.
-- **How fast a send goes out.** On Cloudflare's free Workers plan, Resend sends about 400 recipients a minute. On the $5 Workers Paid plan, set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#vars) to send far more each minute.
+- **How fast a send goes out.** On Cloudflare's free Workers plan, Resend sends about 400 recipients a minute. On the $5 Workers Paid plan, set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) to send far more each minute.
 
 ## Check it
 
@@ -45,7 +45,5 @@ Each of these guides stands on its own. Pick the ones you want.
 
 - [Connect Claude to the API](../guides/01-connect-claude.md), so Claude can draft, proofread, and schedule posts through the same API the editor uses.
 - [Notifications through Cloudflare's email](../guides/03-notifications.md), so you hear about problems even when your email provider has stopped sending.
-- [Put the archive on your website](../guides/04-archive-website.md), at `example.com/archive`.
-- [Add a staging environment](../guides/06-staging.md), to try a change before it reaches production.
 
 When a new release comes out, [Upgrade to a new release](../guides/07-upgrade.md) shows how to move to it.

@@ -29,14 +29,11 @@ import goLive from "../../docs/get-started/06-go-live.md";
 import connectClaude from "../../docs/guides/01-connect-claude.md";
 import ses from "../../docs/guides/02-ses.md";
 import notifications from "../../docs/guides/03-notifications.md";
-import archiveWebsite from "../../docs/guides/04-archive-website.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
-import staging from "../../docs/guides/06-staging.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
 import readme from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
-import adminGate from "../../docs/reference/03-admin-gate.md";
 import type { DocFragment, DocSection, DocsLanding, DocsResponse } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
@@ -52,13 +49,10 @@ const PAGES: Record<string, string> = {
   "guides/01-connect-claude.md": connectClaude,
   "guides/02-ses.md": ses,
   "guides/03-notifications.md": notifications,
-  "guides/04-archive-website.md": archiveWebsite,
   "guides/05-rate-limit.md": rateLimit,
-  "guides/06-staging.md": staging,
   "guides/07-upgrade.md": upgrade,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
-  "reference/03-admin-gate.md": adminGate,
 };
 
 // A page's path under docs/: its section's folder, then the file. The slug is the file's
