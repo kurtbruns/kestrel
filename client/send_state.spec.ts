@@ -59,7 +59,7 @@ function live(
 
 /**
  * A stateful server. `write(send)` is any client's (or the sweep's) change to a send: it
- * takes the next number in the change sequence. It answers /sends/feed the way the Worker
+ * takes the next number in the change sequence. It answers /api/sends/feed the way the Worker
  * does: every send changed after the cursor, a new cursor, and when to read again by its
  * own clock (`pace` after its `now`, which runs `skew` ahead of the page's).
  */
@@ -93,7 +93,7 @@ function server() {
   };
   const fake = fakeApi([
     {
-      path: "/sends/feed",
+      path: "/api/sends/feed",
       reply: async (req) => {
         await state.hold;
         if (state.fail) {
@@ -129,8 +129,8 @@ function server() {
       },
     },
   ]);
-  const reads = () => fake.calls.filter((c) => c.url.pathname === "/sends/feed");
-  /** What a page's own GET /sends would have read: every send, and the cursor. */
+  const reads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
+  /** What a page's own GET /api/sends would have read: every send, and the cursor. */
   const list = (): ListRead => ({
     cursor: cursorNow(),
     sends: [...state.sends.values()].map(({ send }) => ({

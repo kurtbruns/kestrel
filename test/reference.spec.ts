@@ -35,7 +35,7 @@ describe("API reference is generated from the route registration", () => {
   });
 
   it("states a halted send's retry schedule as the sweep keeps it (SPEC §12)", () => {
-    const list = defs.find((d) => d.method === "GET" && d.path === "/sends")!;
+    const list = defs.find((d) => d.method === "GET" && d.path === "/api/sends")!;
     expect(list.description).toContain(
       "retried after 1, 2, 5, 15, and 30 minutes and then every 60 minutes",
     );
@@ -61,9 +61,9 @@ describe("API reference is generated from the route registration", () => {
     expect(byKey.get("GET /api/settings")?.summary ?? "").toMatch(/inUse/);
     // SPEC §5: once scheduled, the test and preview are the frozen copy.
     for (const key of [
-      "POST /posts/:id/preview",
-      "GET /posts/:id/preview",
-      "POST /posts/:id/test",
+      "POST /api/posts/:id/preview",
+      "GET /api/posts/:id/preview",
+      "POST /api/posts/:id/test",
     ]) {
       expect(byKey.get(key)?.description ?? "").toMatch(/frozen copy/);
     }
@@ -114,7 +114,7 @@ describe("API reference is generated from the route registration", () => {
     const groups = buildReference(defs);
     const listRoute = groups
       .flatMap((g) => g.routes)
-      .find((r) => r.method === "GET" && r.path === "/subscribers");
+      .find((r) => r.method === "GET" && r.path === "/api/subscribers");
     const names = listRoute?.query?.map((q) => q.name) ?? [];
     // The list contract — filter + sort + pagination — is documented from the registration.
     expect(names).toEqual(
@@ -169,7 +169,7 @@ describe("/api/reference is served like the rest of the authed admin surface", (
     };
     const routes = body.groups.flatMap((g) => g.routes);
     // Real routes + methods + tiers survive to the payload.
-    expect(routes.some((r) => r.path === "/posts")).toBe(true);
+    expect(routes.some((r) => r.path === "/api/posts")).toBe(true);
     expect(routes.some((r) => r.path === "/webhooks/ses" && r.access === "webhook")).toBe(true);
     expect(routes.some((r) => r.method === "POST")).toBe(true);
     // A hand-authored example made it through (the create-post request body).

@@ -15,7 +15,7 @@ import { adminAuth } from "./support/auth";
 // and a list read hands back a cursor at that sequence (SPEC §8), so a client can later
 // ask what changed since and miss nothing, whichever client made the change. A lease
 // renewal is not such a change. List rows carry the same phase, conditions, and actions as the
-// send's `GET /sends/:id`.
+// send's `GET /api/sends/:id`.
 
 const config = () => getConfig(env);
 const AUTH = await adminAuth();
@@ -59,7 +59,7 @@ async function seq(): Promise<number> {
 }
 
 async function listSends(query = ""): Promise<any> {
-  const res = await SELF.fetch(`${base}/sends${query}`, { headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/sends${query}`, { headers: AUTH });
   expect(res.status).toBe(200);
   return readJson(res);
 }
@@ -94,7 +94,7 @@ describe("a send's rev", () => {
     const b = await frozenSend(Date.now() + 3_600_000, "B");
     const bBefore = await rev(b.id);
 
-    const moved = await SELF.fetch(`${base}/sends/${a.id}/reschedule`, {
+    const moved = await SELF.fetch(`${base}/api/sends/${a.id}/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: new Date(Date.now() + 7_200_000).toISOString() }),
@@ -105,7 +105,7 @@ describe("a send's rev", () => {
     // The response carries the stamped row, so the client that acted knows the rev too.
     expect((await readJson(moved)).send.rev).toBe(afterMove);
 
-    const canceled = await SELF.fetch(`${base}/sends/${b.id}/cancel`, {
+    const canceled = await SELF.fetch(`${base}/api/sends/${b.id}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
@@ -275,7 +275,7 @@ describe("migration 0002", () => {
   });
 });
 
-describe("GET /sends", () => {
+describe("GET /api/sends", () => {
   it("returns a cursor, `<seq>.<at>` in decimal, at the sequence it read, which a later change passes", async () => {
     const a = await frozenSend(Date.now() + 3_600_000);
     const body = await listSends();
@@ -296,7 +296,7 @@ describe("GET /sends", () => {
     expect(decodeSendCursor(body.cursor)?.seq).toBe(await seq());
   });
 
-  it("rows are the view GET /sends/:id reports, and carry nothing internal", async () => {
+  it("rows are the view GET /api/sends/:id reports, and carry nothing internal", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     // scheduled, due, canceled, settling, and a send retrying a recipient
@@ -334,8 +334,9 @@ describe("GET /sends", () => {
     };
     for (const [id, phase] of Object.entries(expected)) {
       const row: any = byId.get(id);
-      const progress = (await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH })))
-        .send;
+      const progress = (
+        await readJson(await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH }))
+      ).send;
       expect(row.phase).toBe(phase);
       expect(row.phase).toBe(progress.phase);
       expect(row.conditions).toEqual(progress.conditions);

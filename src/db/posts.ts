@@ -63,7 +63,7 @@ export interface PostFilter {
   search?: string;
 }
 
-/** The sortable columns exposed by `GET /posts` (see `parseListParams`). */
+/** The sortable columns exposed by `GET /api/posts` (see `parseListParams`). */
 export const POST_LIST_SPEC: ListSpec = {
   columns: {
     updated: "p.updated_at",

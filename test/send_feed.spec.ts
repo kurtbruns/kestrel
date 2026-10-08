@@ -21,7 +21,7 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 
-// GET /sends/feed is what the admin pages, and any other client, follow instead of each
+// GET /api/sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever
 // client changed it and whether a write or the clock did, each as its view, with when
 // to read again. These pin what it reports after a cursor, what it lists without one, and
@@ -61,13 +61,13 @@ async function setRow(id: string, fields: Record<string, number | string | null>
 
 async function feed(since?: string): Promise<SendFeedResponse> {
   const q = since === undefined ? "" : `?since=${encodeURIComponent(since)}`;
-  const res = await SELF.fetch(`${base}/sends/feed${q}`, { headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/sends/feed${q}`, { headers: AUTH });
   expect(res.status).toBe(200);
   return (await res.json()) as SendFeedResponse;
 }
 
 async function listCursor(): Promise<string> {
-  const res = await SELF.fetch(`${base}/sends`, { headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/sends`, { headers: AUTH });
   return ((await res.json()) as SendListResponse).cursor;
 }
 
@@ -100,7 +100,7 @@ beforeEach(async () => {
   clearFakeOutbox();
 });
 
-describe("GET /posts's cursor", () => {
+describe("GET /api/posts's cursor", () => {
   it("follows the listed posts' sends: a schedule and a cancel after the list read are reported", async () => {
     const far = Date.now() + 24 * 3_600_000;
     const listed = await scheduledSend("Listed", far);
@@ -109,15 +109,16 @@ describe("GET /posts's cursor", () => {
       { subject: "Draft", markdown: "# Hi\n\nbody" },
       "test",
     );
-    const res = await SELF.fetch(`${base}/posts?status=draft,scheduled`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/posts?status=draft,scheduled`, { headers: AUTH });
     expect(res.status).toBe(200);
     const { cursor } = (await res.json()) as PostListResponse;
     expect(decodeSendCursor(cursor)).not.toBeNull();
     expect((await feed(cursor)).sends).toEqual([]); // nothing since the list read
 
-    expect((await post(`/sends/${listed.id}/cancel`)).status).toBe(200);
+    expect((await post(`/api/sends/${listed.id}/cancel`)).status).toBe(200);
     expect(
-      (await post(`/posts/${draft.id}/schedule`, { fire_at: new Date(far).toISOString() })).status,
+      (await post(`/api/posts/${draft.id}/schedule`, { fire_at: new Date(far).toISOString() }))
+        .status,
     ).toBe(201);
     const got = (await feed(cursor)).sends.map((s) => [s.post_id, s.status]);
     expect(got).toEqual(
@@ -130,7 +131,7 @@ describe("GET /posts's cursor", () => {
   });
 });
 
-describe("GET /sends/feed after a cursor", () => {
+describe("GET /api/sends/feed after a cursor", () => {
   it("reports a cancel, a move, and a new schedule of far-scheduled sends, whichever client made them, and nothing else", async () => {
     const far = Date.now() + 24 * 3_600_000;
     const dropped = await scheduledSend("Dropped", far);
@@ -144,10 +145,10 @@ describe("GET /sends/feed after a cursor", () => {
     const since = await listCursor();
     expect((await feed(since)).sends).toEqual([]); // nothing yet
 
-    expect((await post(`/sends/${dropped.id}/cancel`)).status).toBe(200);
+    expect((await post(`/api/sends/${dropped.id}/cancel`)).status).toBe(200);
     const to = new Date(far + 3_600_000).toISOString();
-    expect((await post(`/sends/${moved.id}/reschedule`, { fire_at: to })).status).toBe(200);
-    const scheduled = await post(`/posts/${fresh.id}/schedule`, {
+    expect((await post(`/api/sends/${moved.id}/reschedule`, { fire_at: to })).status).toBe(200);
+    const scheduled = await post(`/api/posts/${fresh.id}/schedule`, {
       fire_at: new Date(far).toISOString(),
     });
     expect(scheduled.status).toBe(201);
@@ -187,7 +188,7 @@ describe("GET /sends/feed after a cursor", () => {
 
   it("follows one send from its own read's cursor", async () => {
     const send = await scheduledSend("Mine", Date.now() + 3_600_000);
-    const res = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const { cursor } = (await res.json()) as SendResponse;
     expect((await feed(cursor)).sends).toEqual([]);
     await cancel(env, send.id);
@@ -263,13 +264,13 @@ describe("GET /sends/feed after a cursor", () => {
   });
 
   it("refuses a cursor it did not issue, naming the field", async () => {
-    const res = await SELF.fetch(`${base}/sends/feed?since=not-a-cursor`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/sends/feed?since=not-a-cursor`, { headers: AUTH });
     expect(res.status).toBe(400);
     expect(await res.json()).toMatchObject({ error: "bad_request", field: "since" });
   });
 });
 
-describe("GET /sends/feed without a cursor", () => {
+describe("GET /api/sends/feed without a cursor", () => {
   it("lists the due, sending, and settling sends, soonest fire first, with a cursor to follow from", async () => {
     const now = Date.now();
     await scheduledSend("Ahead", now + 3_600_000);
@@ -323,7 +324,7 @@ describe("GET /sends/feed without a cursor", () => {
     expect(s?.delivery.confirmed).toBe(6);
   });
 
-  it("reads a send the same as GET /sends/:id and the list do, as one view", async () => {
+  it("reads a send the same as GET /api/sends/:id and the list do, as one view", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     const send = await scheduledSend("Live", Date.now() - 1000);
@@ -332,11 +333,11 @@ describe("GET /sends/feed without a cursor", () => {
     const [row] = (await feed()).sends;
     const one = (
       (await (
-        await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+        await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })
       ).json()) as SendResponse
     ).send;
     const listed = (
-      (await (await SELF.fetch(`${base}/sends`, { headers: AUTH })).json()) as SendListResponse
+      (await (await SELF.fetch(`${base}/api/sends`, { headers: AUTH })).json()) as SendListResponse
     ).sends[0];
     // The same view on every route, but for the moment each was read at.
     const at = (v: typeof row) => ({
@@ -366,7 +367,7 @@ describe("GET /sends/feed without a cursor", () => {
   });
 
   it("401s without auth", async () => {
-    expect((await SELF.fetch(`${base}/sends/feed`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/api/sends/feed`)).status).toBe(401);
   });
 });
 
@@ -417,9 +418,9 @@ describe("read_again_at", () => {
 });
 
 const feedStatus = async (query: string) =>
-  SELF.fetch(`${base}/sends/feed${query}`, { headers: AUTH });
+  SELF.fetch(`${base}/api/sends/feed${query}`, { headers: AUTH });
 
-describe("GET /sends/feed refuses a cursor ahead of the database", () => {
+describe("GET /api/sends/feed refuses a cursor ahead of the database", () => {
   it("answers a sequence above the current one with cursor_ahead, naming the field", async () => {
     const now = Date.now();
     await scheduledSend("Far", now + 3_600_000);
@@ -439,12 +440,12 @@ describe("GET /sends/feed refuses a cursor ahead of the database", () => {
   });
 });
 
-describe("GET /sends/feed reports removed sends", () => {
+describe("GET /api/sends/feed reports removed sends", () => {
   it("reports a canceled send deleted with its post as removed, after the cursor only", async () => {
     const send = await scheduledSend("Dropped", Date.now() + 3_600_000);
     await cancel(env, send.id);
     const before = await listCursor();
-    const del = await SELF.fetch(`${base}/posts/${send.post_id}`, {
+    const del = await SELF.fetch(`${base}/api/posts/${send.post_id}`, {
       method: "DELETE",
       headers: AUTH,
     });
@@ -460,7 +461,7 @@ describe("GET /sends/feed reports removed sends", () => {
   });
 });
 
-describe("GET /sends/feed limit", () => {
+describe("GET /api/sends/feed limit", () => {
   it("stops at the limit with more, and the next read from its cursor reports the rest once each", async () => {
     const since = await listCursor();
     const far = Date.now() + 24 * 3_600_000;
@@ -510,7 +511,7 @@ describe("GET /sends/feed limit", () => {
   });
 });
 
-describe("GET /sends/feed paces from each send's next change", () => {
+describe("GET /api/sends/feed paces from each send's next change", () => {
   it("does not hurry for a send the provider refuses: it reads at the retry", async () => {
     const now = Date.now();
     const send = await scheduledSend("Refused", now - 120_000);
@@ -591,12 +592,12 @@ describe("GET /sends/feed paces from each send's next change", () => {
   });
 });
 
-describe("GET /sends/:id shape fixes", () => {
+describe("GET /api/sends/:id shape fixes", () => {
   it("links the archive only once the send is sent, and leaves a halt's times null rather than now", async () => {
     const now = Date.now();
     const send = await scheduledSend("Unpublished", now + 3_600_000);
     let body = (await (
-      await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+      await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;
     expect(body.send.links.archive).toBeNull();
 
@@ -608,7 +609,7 @@ describe("GET /sends/:id shape fixes", () => {
       halt_error: "503",
     });
     body = (await (
-      await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH })
+      await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;
     expect(body.send.provider.halt).toMatchObject({ since: null, retry_at: null });
   });

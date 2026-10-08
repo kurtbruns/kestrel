@@ -277,13 +277,13 @@ describe("list sends only", () => {
   it("puts a test send and a confirmation in the outbox with the simulation on", async () => {
     const vars = { SIMULATE_SENDS: "ses" };
     const created = await readJson(
-      await fetchWith(vars, "/posts", {
+      await fetchWith(vars, "/api/posts", {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ subject: "Owls", markdown: "# Owls\n\nHoot." }),
       }),
     );
-    const test = await fetchWith(vars, `/posts/${created.post.id}/test`, {
+    const test = await fetchWith(vars, `/api/posts/${created.post.id}/test`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ to: "me@birds.example" }),
@@ -353,7 +353,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     const emails = await seedConfirmed(30);
     const sendId = await dueSend(e, "Kestrels");
     const progress = async () =>
-      (await readJson(await fetchWith(vars, `/sends/${sendId}`, { headers: AUTH }))).send;
+      (await readJson(await fetchWith(vars, `/api/sends/${sendId}`, { headers: AUTH }))).send;
     const addresses = async (status: string) =>
       (
         await env.DB.prepare("SELECT email FROM deliveries WHERE send_id = ? AND status = ?")
@@ -422,7 +422,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     const refused = await addresses("unsent");
     expect(sentTo()).toEqual(new Set(emails.filter((m) => !refused.includes(m))));
 
-    const resolved = await fetchWith(vars, `/sends/${sendId}/resolve`, {
+    const resolved = await fetchWith(vars, `/api/sends/${sendId}/resolve`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ resolution: "accepted" }),

@@ -10,22 +10,20 @@ The app resolves every request to a principal. A login with an `email` claim is 
 
 ## What must be gated, and what must not
 
-The authoring API is **not** a single path prefix but is spread across several. The Access application must cover the editor **and** every authoring path, so the editor's same-origin `fetch` calls carry the Access JWT. It must **not** cover the reader routes, or readers would hit a login wall.
+The admin surface is two path prefixes: the editor under `/dashboard`, and the authoring API, every route of it, under `/api`. The Access application must cover both, so the editor's same-origin `fetch` calls carry the Access JWT. It must **not** cover the reader routes, or readers would hit a login wall.
 
 Gate exactly these path prefixes (each match includes all subpaths):
 
 | Prefix | What it is |
 | --- | --- |
 | `/dashboard` | the editor SPA (static assets) |
-| `/posts` | posts, revisions, images, preview, test, schedule, send |
-| `/sends` | the send status surface |
-| `/subscribers` | the subscriber roster |
-| `/suppressions` | the suppression list |
-| `/api` | `whoami`, the in-app docs (`/api/docs`) |
+| `/api` | the authoring API: posts, revisions, images, preview, test, schedule, send, the send record, subscribers, suppressions, settings, `whoami`, the in-app docs, and the API reference |
 
 Leave everything else public, the reader surface and the webhooks: `/` (landing page), `/subscribe`, `/confirm`, `/unsubscribe`, `ARCHIVE_BASE_PATH` (e.g. `/archive/*`, the archive index and post pages), `/media/*`, `/webhooks/*`, `/health`.
 
-> `/dashboard` is load-bearing: the editor SPA lives there, so if it isn't in this application the editor ships ungated. Every authenticated route lives under one of the six prefixes above, so a new authoring endpoint added under `/api` (as the in-app docs are) is gated by the same application automatically. The one public `/api` route, `/api/dev/token`, exists only in a dev-shaped env and 404s once deployed, so gating `/api` wholesale is safe in production. Verify this against `src/app.ts` if the routes ever change.
+> `/dashboard` is load-bearing: the editor SPA lives there, so if it isn't in this application the editor ships ungated. Every authenticated route lives under `/api`, and a test holds that rule, so a new authoring route is gated by the same application automatically, with nothing to add on upgrade. The only public routes under `/api` are the dev routes (`/api/dev/token` hands out the local token), which exist only in a dev-shaped env and 404 once deployed, so gating `/api` wholesale is safe in production.
+>
+> Before 1.3.0, the authoring API also lived under `/posts`, `/sends`, `/subscribers`, and `/suppressions`, and the application listed those four paths too. Those paths now answer `404`, so an application that still lists them is harmless, and the paths can be removed.
 
 ## There is no backdoor to close
 

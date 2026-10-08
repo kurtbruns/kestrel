@@ -67,7 +67,7 @@ export async function renderSubscribers(
 
   async function load() {
     try {
-      const data = await api<SubscriberListResponse>(`/subscribers?${listQuery(state)}`, {
+      const data = await api<SubscriberListResponse>(`/api/subscribers?${listQuery(state)}`, {
         signal,
       });
       const c = data.counts;

@@ -21,7 +21,7 @@ import { viewOf } from "./support/view";
 
 // One `SendView` on every route (SPEC §8): the list, the send, the feed, and every action's
 // answer carry the same shape, with `rev` to tell two apart and a cursor to follow from; the
-// frozen bodies at their own route; `GET /sends/:id` tagged so an unchanged send is a 304.
+// frozen bodies at their own route; `GET /api/sends/:id` tagged so an unchanged send is a 304.
 
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
@@ -86,37 +86,37 @@ describe("one SendView on every route", () => {
     const fireAt = Date.now() + 3_600_000;
     const { post: draft } = await posts.createPost(env.DB, { subject: "Owls", markdown: "x" }, "t");
     const scheduled = (await readJson(
-      await post(`/posts/${draft.id}/schedule`, { fire_at: fireAt }),
+      await post(`/api/posts/${draft.id}/schedule`, { fire_at: fireAt }),
     )) as ScheduleResponse;
     expectView(scheduled.send);
     expect(decodeSendCursor(scheduled.cursor)).not.toBeNull();
     const id = scheduled.send.id;
 
     const moved = (await readJson(
-      await post(`/sends/${id}/reschedule`, { fire_at: fireAt + 60_000 }),
+      await post(`/api/sends/${id}/reschedule`, { fire_at: fireAt + 60_000 }),
     )) as SendActionResponse;
     expectView(moved.send);
     expect(moved.send.rev).toBeGreaterThan(scheduled.send.rev); // the newer answer, by rev
     expect(decodeSendCursor(moved.cursor)?.seq).toBeGreaterThanOrEqual(moved.send.rev);
 
-    const list = await readJson(await SELF.fetch(`${base}/sends`, { headers: AUTH }));
+    const list = await readJson(await SELF.fetch(`${base}/api/sends`, { headers: AUTH }));
     expectView(list.sends[0]);
     const one = (await readJson(
-      await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH }),
     )) as SendResponse;
     expectView(one.send);
     const feed = await readJson(
-      await SELF.fetch(`${base}/sends/feed?since=${encodeURIComponent(scheduled.cursor)}`, {
+      await SELF.fetch(`${base}/api/sends/feed?since=${encodeURIComponent(scheduled.cursor)}`, {
         headers: AUTH,
       }),
     );
     expectView(feed.sends[0]);
 
-    const canceled = (await readJson(await post(`/sends/${id}/cancel`))) as SendActionResponse;
+    const canceled = (await readJson(await post(`/api/sends/${id}/cancel`))) as SendActionResponse;
     expectView(canceled.send);
     expect([canceled.send.status, canceled.send.phase]).toEqual(["canceled", "canceled"]);
     for (const view of [scheduled.send, moved.send, list.sends[0], one.send, canceled.send]) {
-      expect(view.links.email_html).toBe(`/sends/${id}/email?format=html`);
+      expect(view.links.email_html).toBe(`/api/sends/${id}/email?format=html`);
       expect(view.links.archive).toBeNull(); // not sent: nothing published to link
     }
   });
@@ -125,7 +125,7 @@ describe("one SendView on every route", () => {
     const send = await frozenSend(Date.now() + 3_600_000);
     const before = (
       (await readJson(
-        await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }),
+        await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
       )) as SendResponse
     ).send;
     expect(before.audience).toEqual({ count: 0, fixed: false, fixed_at: null });
@@ -138,7 +138,7 @@ describe("one SendView on every route", () => {
     ]);
     const after = (
       (await readJson(
-        await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }),
+        await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
       )) as SendResponse
     ).send;
     expect(after.audience).toEqual({ count: 3, fixed: true, fixed_at: now });
@@ -160,7 +160,7 @@ describe("one SendView on every route", () => {
       .run();
     await sends.recomputeSendCounters(env.DB, send.id);
     const res = (await readJson(
-      await post(`/sends/${send.id}/resolve`, { resolution: "unsent" }),
+      await post(`/api/sends/${send.id}/resolve`, { resolution: "unsent" }),
     )) as ResolveResponse;
     expectView(res.send);
     expect([res.resolved, res.completed, res.send.status]).toEqual([1, true, "sent"]);
@@ -177,7 +177,7 @@ describe("one SendView on every route", () => {
     const read = async () =>
       (
         (await readJson(
-          await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }),
+          await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
         )) as SendResponse
       ).send;
     // Paused only by the tick's budget: still handing off, at the pace since the start.
@@ -316,25 +316,25 @@ describe("the time to finish, in ticks", () => {
   });
 });
 
-describe("GET /sends/:id is tagged", () => {
+describe("GET /api/sends/:id is tagged", () => {
   it("answers 304 while nothing about the send has changed, and 200 once a write or the clock changes it", async () => {
     const send = await frozenSend(Date.now() + 2_000);
-    const first = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
+    const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const etag = first.headers.get("etag");
     expect(etag).toMatch(/^"\d+-[0-9a-z]+"$/);
-    const again = await SELF.fetch(`${base}/sends/${send.id}`, {
+    const again = await SELF.fetch(`${base}/api/sends/${send.id}`, {
       headers: { ...AUTH, "if-none-match": etag ?? "" },
     });
     expect(again.status).toBe(304);
     // The clock alone: the fire time passes and the send reads due, with no write.
     await new Promise((r) => setTimeout(r, 2_100));
-    const due = await SELF.fetch(`${base}/sends/${send.id}`, {
+    const due = await SELF.fetch(`${base}/api/sends/${send.id}`, {
       headers: { ...AUTH, "if-none-match": etag ?? "" },
     });
     expect(due.status).toBe(200);
     expect(((await due.json()) as SendResponse).send.phase).toBe("due");
     // An action's If-Match takes the ETag as well as the bare rev.
-    const moved = await SELF.fetch(`${base}/sends/${send.id}/reschedule`, {
+    const moved = await SELF.fetch(`${base}/api/sends/${send.id}/reschedule`, {
       method: "POST",
       headers: { ...JSON_AUTH, "if-match": etag ?? "" },
       body: JSON.stringify({ fire_at: Date.now() + 3_600_000 }),
@@ -347,13 +347,13 @@ describe("GET /sends/:id is tagged", () => {
 describe("the ETag follows the words the clock changes", () => {
   it("changes as a missed send's minutes late do, with no write", async () => {
     const send = await frozenSend(Date.now() - 20 * 60_000);
-    const first = await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH });
+    const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const etag = first.headers.get("etag") ?? "";
     // A minute later by the send's own clock: the fire time a minute further back, with no rev.
     await env.DB.prepare("UPDATE sends SET fire_at = fire_at - 60000 WHERE id = ?")
       .bind(send.id)
       .run();
-    const later = await SELF.fetch(`${base}/sends/${send.id}`, {
+    const later = await SELF.fetch(`${base}/api/sends/${send.id}`, {
       headers: { ...AUTH, "if-none-match": etag },
     });
     expect(later.status).toBe(200);
@@ -365,22 +365,26 @@ describe("the frozen email at its own route", () => {
   it("serves the html and text a send froze, and refuses another format", async () => {
     const send = await frozenSend(Date.now() + 3_600_000, "Owls", "# Owls\n\nhoot");
     const row = await sends.getSend(env.DB, send.id);
-    const htmlRes = await SELF.fetch(`${base}/sends/${send.id}/email`, { headers: AUTH });
+    const htmlRes = await SELF.fetch(`${base}/api/sends/${send.id}/email`, { headers: AUTH });
     expect(htmlRes.headers.get("content-type")).toMatch(/^text\/html/);
     expect(await htmlRes.text()).toBe(row?.rendered_html);
-    const text = await SELF.fetch(`${base}/sends/${send.id}/email?format=text`, { headers: AUTH });
+    const text = await SELF.fetch(`${base}/api/sends/${send.id}/email?format=text`, {
+      headers: AUTH,
+    });
     expect(text.headers.get("content-type")).toMatch(/^text\/plain/);
     expect(await text.text()).toBe(row?.rendered_text);
-    const bad = await SELF.fetch(`${base}/sends/${send.id}/email?format=pdf`, { headers: AUTH });
+    const bad = await SELF.fetch(`${base}/api/sends/${send.id}/email?format=pdf`, {
+      headers: AUTH,
+    });
     expect(bad.status).toBe(400);
     expect(await readJson(bad)).toMatchObject({ field: "format" });
-    expect((await SELF.fetch(`${base}/sends/nope/email`, { headers: AUTH })).status).toBe(404);
+    expect((await SELF.fetch(`${base}/api/sends/nope/email`, { headers: AUTH })).status).toBe(404);
   });
 
   it("no longer serves /progress: the send's view and the feed carry it", async () => {
     const send = await frozenSend(Date.now() + 3_600_000);
-    expect((await SELF.fetch(`${base}/sends/${send.id}/progress`, { headers: AUTH })).status).toBe(
-      404,
-    );
+    expect(
+      (await SELF.fetch(`${base}/api/sends/${send.id}/progress`, { headers: AUTH })).status,
+    ).toBe(404);
   });
 });

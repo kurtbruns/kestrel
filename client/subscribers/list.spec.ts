@@ -47,7 +47,9 @@ describe("subscribers view", () => {
   });
 
   it("shows the counts, the roster with the suppression flag and its reason, and actions only for the confirmed", async () => {
-    fake = fakeApi([{ path: "/subscribers", reply: () => ({ counts, subscribers: subs, page }) }]);
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
     await mount((r, s) => renderSubscribers(undefined, r, s));
     await settle();
     expect($("#subCounts").textContent).toMatch(
@@ -66,7 +68,7 @@ describe("subscribers view", () => {
   it("seeds the filter from the dashboard's deep link", async () => {
     fake = fakeApi([
       {
-        path: "/subscribers",
+        path: "/api/subscribers",
         reply: () => ({ counts, subscribers: [], page: { ...page, total: 0 } }),
       },
     ]);
@@ -79,10 +81,10 @@ describe("subscribers view", () => {
 
   it("adds a subscriber through the double opt-in and says what happened", async () => {
     fake = fakeApi([
-      { path: "/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
       {
         method: "POST",
-        path: "/subscribers",
+        path: "/api/subscribers",
         reply: (req) => ({
           subscriber: { id: "s9", email: (req.json() as { email: string }).email },
           action: "already_confirmed",
@@ -107,8 +109,8 @@ describe("subscribers view", () => {
   ] as const) {
     it(`says what the Add did when the API answers ${action}`, async () => {
       fake = fakeApi([
-        { path: "/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
-        { method: "POST", path: "/subscribers", reply: () => ({ subscriber: null, action }) },
+        { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+        { method: "POST", path: "/api/subscribers", reply: () => ({ subscriber: null, action }) },
       ]);
       await mount((r, s) => renderSubscribers(undefined, r, s));
       await settle();

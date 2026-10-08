@@ -85,7 +85,7 @@ kctl() { curl -s -H "CF-Access-Client-Id: $CF_ACCESS_CLIENT_ID" -H "CF-Access-Cl
 A call that sends a body names its type, and each route takes only the types the reference lists for it; a JSON body sent without `Content-Type: application/json` is refused. For example, to add a subscriber:
 
 ```bash
-kctl /subscribers -X POST -H "Content-Type: application/json" -d '{"email":"reader@example.com"}'
+kctl /api/subscribers -X POST -H "Content-Type: application/json" -d '{"email":"reader@example.com"}'
 ```
 
 Then tell Claude the base URL and that `GET /api/reference` lists every route — method, path, access tier, the body types it accepts, and worked examples, generated from the route registration so it can't drift. Claude discovers and drives the whole app from there.

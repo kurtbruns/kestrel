@@ -34,7 +34,7 @@ export function openResolveModal(
     busy(btn, "Resolving…", async () => {
       try {
         // The count the reader decided on: the server refuses if it has moved since.
-        const res = await api<ResolveResponse>(`/sends/${send.id}/resolve`, {
+        const res = await api<ResolveResponse>(`/api/sends/${send.id}/resolve`, {
           method: "POST",
           json: { resolution, expected_count: n },
         });
@@ -54,7 +54,7 @@ export function openResolveModal(
 /**
  * Move a scheduled send's fire time without canceling or re-editing: the content stays
  * frozen (I3) and the cancelable review window is preserved (I6); only fire_at moves,
- * via POST /sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule
+ * via POST /api/sends/:id/reschedule (SPEC §6). The same datetime picker as the Schedule
  * modal, prefilled with the current fire time and floored at the minimum lead. Shared
  * by the editor's scheduled banner and the Sent page's scheduled card (SPEC §8), so
  * `onDone` re-renders whichever surface opened it.
@@ -86,7 +86,7 @@ export function openRescheduleModal(
         return;
       }
       try {
-        await api(`/sends/${sendId}/reschedule`, {
+        await api(`/api/sends/${sendId}/reschedule`, {
           method: "POST",
           json: { fire_at: new Date(t).toISOString() },
         });

@@ -13,17 +13,19 @@ describe("api", () => {
   });
 
   it("attaches the dev token as a bearer, and sends none without one", async () => {
-    fake = fakeApi([{ path: "/posts", reply: () => ({ posts: [] }) }]);
-    await api("/posts");
+    fake = fakeApi([{ path: "/api/posts", reply: () => ({ posts: [] }) }]);
+    await api("/api/posts");
     expect(fake.calls[0]?.headers.get("authorization")).toBeNull();
     setToken("t0k");
-    await api("/posts");
+    await api("/api/posts");
     expect(fake.calls[1]?.headers.get("authorization")).toBe("Bearer t0k");
   });
 
   it("sends json with its content type, and parses the answer", async () => {
-    fake = fakeApi([{ method: "POST", path: "/posts", reply: (req) => ({ echo: req.json() }) }]);
-    const out = await api<{ echo: { subject: string } }>("/posts", {
+    fake = fakeApi([
+      { method: "POST", path: "/api/posts", reply: (req) => ({ echo: req.json() }) },
+    ]);
+    const out = await api<{ echo: { subject: string } }>("/api/posts", {
       method: "POST",
       json: { subject: "Owls" },
     });
@@ -34,21 +36,21 @@ describe("api", () => {
 
   it("returns null for an empty body", async () => {
     fake = fakeApi([
-      { method: "DELETE", path: "/posts/1", reply: () => new Response(null, { status: 204 }) },
+      { method: "DELETE", path: "/api/posts/1", reply: () => new Response(null, { status: 204 }) },
     ]);
-    expect(await api("/posts/1", { method: "DELETE" })).toBeNull();
+    expect(await api("/api/posts/1", { method: "DELETE" })).toBeNull();
   });
 
   it("throws an ApiError carrying the status, the body, and its message", async () => {
     fake = fakeApi([
       {
         method: "PUT",
-        path: "/posts/1",
+        path: "/api/posts/1",
         reply: () => jsonResponse({ error: "conflict", message: "Draft changed elsewhere" }, 409),
       },
       { path: "/x", reply: () => new Response("", { status: 500, statusText: "Boom" }) },
     ]);
-    const err = await api("/posts/1", { method: "PUT" }).catch((e: unknown) => e);
+    const err = await api("/api/posts/1", { method: "PUT" }).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ApiError);
     expect(err).toMatchObject({
       status: 409,
@@ -60,8 +62,11 @@ describe("api", () => {
   });
 
   it("routes a 401 to re-auth and throws", async () => {
-    fake = fakeApi([{ path: "/posts", reply: () => new Response("", { status: 401 }) }]);
-    await expect(api("/posts")).rejects.toMatchObject({ status: 401, message: /sign in again/ });
+    fake = fakeApi([{ path: "/api/posts", reply: () => new Response("", { status: 401 }) }]);
+    await expect(api("/api/posts")).rejects.toMatchObject({
+      status: 401,
+      message: /sign in again/,
+    });
     // The real wall, not a mock: the chrome hides and the page offers the one recovery.
     expect(document.body.classList.contains("signed-out")).toBe(true);
     expect($("#app .auth-wall #reauth").textContent).toBe("Sign in");

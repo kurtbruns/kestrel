@@ -244,7 +244,7 @@ export interface SubscriberFilter {
   suppressed?: "only" | "hide";
 }
 
-/** The sortable columns exposed by `GET /subscribers` (see `parseListParams`). */
+/** The sortable columns exposed by `GET /api/subscribers` (see `parseListParams`). */
 export const SUBSCRIBER_LIST_SPEC: ListSpec = {
   columns: { joined: "created_at", confirmed: "confirmed_at", email: "email", status: "status" },
   defaultSort: "joined",

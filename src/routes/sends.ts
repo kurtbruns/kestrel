@@ -29,7 +29,7 @@ import { cancel as cancelSend, reschedule as rescheduleSend } from "../send/sche
 import { buildSendView } from "../send/view";
 import { parseFireAt } from "./schedule";
 
-/** The `GET /sends` filters: each a value from its set, or absent; anything else is a 400
+/** The `GET /api/sends` filters: each a value from its set, or absent; anything else is a 400
  *  naming the field. */
 function parseSendFilter(url: URL): sends.SendFilter {
   const q = url.searchParams;
@@ -92,7 +92,7 @@ function sendEtag(view: SendView): string {
 
 /**
  * One send: its view, the delivery-outcome breakdown of its record (SPEC §8), and the
- * cursor to follow it from with `GET /sends/feed`. Tagged with `ETag` (`sendEtag`); a
+ * cursor to follow it from with `GET /api/sends/feed`. Tagged with `ETag` (`sendEtag`); a
  * request whose `If-None-Match` still matches is answered 304 before the outcomes are
  * counted, so a client re-reading the send pays for the aggregate only when it changed.
  */
@@ -336,14 +336,14 @@ async function answerWith(c: RequestContext, id: string) {
 
 /**
  * The `If-Match` header of an action: the `rev` the caller last read, as `"<rev>"`, bare,
- * or `GET /sends/:id`'s `ETag`, or undefined when absent. Anything else is a 400 naming it.
+ * or `GET /api/sends/:id`'s `ETag`, or undefined when absent. Anything else is a 400 naming it.
  */
 function parseIfMatch(c: RequestContext): number | undefined {
   const raw = c.req.headers.get("if-match");
   if (raw === null) {
     return undefined;
   }
-  // The bare rev, or `GET /sends/:id`'s ETag (the rev, then a tag of what the clock
+  // The bare rev, or `GET /api/sends/:id`'s ETag (the rev, then a tag of what the clock
   // derives), whose rev is what an action compares.
   const match = /^\s*(?:W\/)?"?(\d+)(?:-[0-9a-z]+)?"?\s*$/.exec(raw);
   const rev = match?.[1] === undefined ? Number.NaN : Number(match[1]);

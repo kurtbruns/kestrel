@@ -35,7 +35,7 @@ export function createNewPost(btn: HTMLButtonElement): Promise<void> {
     try {
       // An empty subject: the editor shows "Untitled" as the field's placeholder, so the
       // first thing typed is the whole subject, not an addition to a stand-in.
-      const { post } = await api<PostSavedResponse>("/posts", { method: "POST", json: {} });
+      const { post } = await api<PostSavedResponse>("/api/posts", { method: "POST", json: {} });
       location.hash = `#/edit/${post.id}`;
     } catch (err) {
       toast(err instanceof Error ? err.message : String(err));
@@ -78,7 +78,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   async function load(background: boolean): Promise<PostListResponse | null> {
     const mine = ++latest;
     try {
-      const data = await api<PostListResponse>(`/posts?${listQuery(state)}`, { signal });
+      const data = await api<PostListResponse>(`/api/posts?${listQuery(state)}`, { signal });
       if (mine !== latest) {
         return null;
       }
@@ -221,7 +221,7 @@ function confirmDelete(pid: string, reload: () => unknown): void {
   go.onclick = () =>
     busy(go, "Deleting…", async () => {
       try {
-        await api(`/posts/${pid}`, { method: "DELETE" });
+        await api(`/api/posts/${pid}`, { method: "DELETE" });
         m.close();
         toast("Draft deleted");
         reload();

@@ -43,7 +43,7 @@ async function getSettings(): Promise<any> {
 
 async function makeDraft(subject: string): Promise<string> {
   const created = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject, markdown: `# ${subject}\n\nbody of ${subject}` }),
@@ -53,7 +53,7 @@ async function makeDraft(subject: string): Promise<string> {
 }
 
 async function schedule(postId: string, msFromNow = 10 * 60 * 1000): Promise<any> {
-  const res = await SELF.fetch(`${base}/posts/${postId}/schedule`, {
+  const res = await SELF.fetch(`${base}/api/posts/${postId}/schedule`, {
     method: "POST",
     headers: JSON_AUTH,
     body: JSON.stringify({ fire_at: new Date(Date.now() + msFromNow).toISOString() }),
@@ -68,7 +68,10 @@ async function schedule(postId: string, msFromNow = 10 * 60 * 1000): Promise<any
  * outside the lead; a minute later it is inside for the rest of its window.
  */
 async function sendNow(postId: string): Promise<any> {
-  const res = await SELF.fetch(`${base}/posts/${postId}/send`, { method: "POST", headers: AUTH });
+  const res = await SELF.fetch(`${base}/api/posts/${postId}/send`, {
+    method: "POST",
+    headers: AUTH,
+  });
   expect(res.status).toBe(201);
   const { send } = await readJson(res);
   const fire_at = send.fire_at - 60_000;
@@ -78,14 +81,14 @@ async function sendNow(postId: string): Promise<any> {
 
 /** The send's view, with its frozen email beside it (read at its own route). */
 async function getSend(id: string): Promise<any> {
-  const { send } = await readJson(await SELF.fetch(`${base}/sends/${id}`, { headers: AUTH }));
-  const html = await (await SELF.fetch(`${base}/sends/${id}/email`, { headers: AUTH })).text();
+  const { send } = await readJson(await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH }));
+  const html = await (await SELF.fetch(`${base}/api/sends/${id}/email`, { headers: AUTH })).text();
   return { ...send, rendered_html: html };
 }
 
 async function cancel(id: string): Promise<void> {
   expect(
-    (await SELF.fetch(`${base}/sends/${id}/cancel`, { method: "POST", headers: AUTH })).status,
+    (await SELF.fetch(`${base}/api/sends/${id}/cancel`, { method: "POST", headers: AUTH })).status,
   ).toBe(200);
 }
 
@@ -156,10 +159,12 @@ describe("a template or identity change re-makes the scheduled emails", () => {
       expect(after.remade_at).toBe(body.remade[0].remade_at);
     }
     // The post read and the send list carry the mark.
-    const post = await readJson(await SELF.fetch(`${base}/posts/${a.post_id}`, { headers: AUTH }));
+    const post = await readJson(
+      await SELF.fetch(`${base}/api/posts/${a.post_id}`, { headers: AUTH }),
+    );
     expect(post.scheduled).toMatchObject({ id: a.id, remade_at: body.remade[0].remade_at });
     const list = await readJson(
-      await SELF.fetch(`${base}/sends?status=scheduled`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends?status=scheduled`, { headers: AUTH }),
     );
     expect(list.sends.find((s: any) => s.id === a.id).remade_at).toBe(body.remade[0].remade_at);
   });
@@ -266,7 +271,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
 
   it("a scheduled send's frozen text part carries the address exactly when its frozen HTML does, and follows a re-make (SPEC §9)", async () => {
     const text = async (id: string) =>
-      (await SELF.fetch(`${base}/sends/${id}/email?format=text`, { headers: AUTH })).text();
+      (await SELF.fetch(`${base}/api/sends/${id}/email?format=text`, { headers: AUTH })).text();
     const a = await schedule(await makeDraft("Post A"));
     // tpl() does not render the address, so neither part carries it.
     expect((await putSettings({ publication: { address: "12 Marsh Lane" } })).status).toBe(200);
@@ -342,7 +347,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
   it("moving the fire time leaves the re-made copy and its mark alone (SPEC §6)", async () => {
     const a = await schedule(await makeDraft("Post A"));
     const body = await readJson(await putSettings({ emailTemplate: tpl("v2"), remake: [a.id] }));
-    const moved = await SELF.fetch(`${base}/sends/${a.id}/reschedule`, {
+    const moved = await SELF.fetch(`${base}/api/sends/${a.id}/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: new Date(Date.now() + 40 * 60 * 1000).toISOString() }),
@@ -375,7 +380,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     // never happen is a scheduled send on v1 under a saved v2.
     const postId = await makeDraft("Racer");
     const [sched, save] = await Promise.all([
-      SELF.fetch(`${base}/posts/${postId}/schedule`, {
+      SELF.fetch(`${base}/api/posts/${postId}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),

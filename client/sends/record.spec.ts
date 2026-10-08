@@ -126,7 +126,7 @@ describe("sent record", () => {
     fake = fakeApi([
       ...sentSend().routes,
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: (req) => ({
           deliveries: req.url.searchParams.get("view") === "failures" ? rows : [],
           view: req.url.searchParams.get("view"),
@@ -150,18 +150,18 @@ describe("sent record", () => {
     expect($("#recPill").textContent).toBe("Complete");
     // Nothing moves: the record follows its send at the idle pace, reading the feed and
     // nothing else, never the send's whole record again.
-    const others = () => fake.calls.filter((c) => c.url.pathname !== "/sends/feed").length;
+    const others = () => fake.calls.filter((c) => c.url.pathname !== "/api/sends/feed").length;
     const reads = others();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(others()).toBe(reads);
-    expect(fake.calls.filter((c) => c.url.pathname === "/sends/feed").length).toBeLessThanOrEqual(
-      4,
-    );
+    expect(
+      fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length,
+    ).toBeLessThanOrEqual(4);
     expect(fake.unhandled).toHaveLength(0);
   });
 
   const noRows = {
-    path: "/sends/x1/deliveries",
+    path: "/api/sends/x1/deliveries",
     reply: () => ({ deliveries: [], view: "failures", page: { ...page, total: 0 } }),
   };
 
@@ -239,7 +239,7 @@ describe("sent record", () => {
     sent.receipt({ c_accepted: 4, c_complained: 1 }); // a late complaint
     await vi.advanceTimersByTimeAsync(3000);
     expect($(".rec-n.danger").textContent).toBe("1");
-    expect(fake.calls.filter((c) => c.url.pathname === "/sends/x1")).toHaveLength(1);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/sends/x1")).toHaveLength(1);
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -264,18 +264,18 @@ describe("sent record", () => {
     sent.remove(); // deleted with its post
     await vi.advanceTimersByTimeAsync(3000);
     expect($("#app .error")).toBeTruthy(); // the re-read finds no send
-    const feeds = fake.calls.filter((c) => c.url.pathname === "/sends/feed").length;
+    const feeds = fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length;
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(fake.calls.filter((c) => c.url.pathname === "/sends/feed")).toHaveLength(feeds);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/sends/feed")).toHaveLength(feeds);
   });
 
   it("re-reads the page and follows again when its cursor is ahead of the database", async () => {
     const sent = sentSend(SETTLING);
     let ahead = true;
-    const feed = sent.routes.find((r) => r.path === "/sends/feed");
+    const feed = sent.routes.find((r) => r.path === "/api/sends/feed");
     fake = fakeApi([
       {
-        path: "/sends/feed",
+        path: "/api/sends/feed",
         reply: (req) => {
           if (ahead) {
             ahead = false; // a local reset, once
@@ -289,7 +289,7 @@ describe("sent record", () => {
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
     await vi.advanceTimersByTimeAsync(10);
-    const reads = () => fake.calls.filter((c) => c.url.pathname === "/sends/x1").length;
+    const reads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/x1").length;
     expect(reads()).toBe(2); // its own read, then again after the refused cursor
     sent.receipt({ c_delivered: 6, c_accepted: 4 });
     await vi.advanceTimersByTimeAsync(3000);
@@ -300,7 +300,7 @@ describe("sent record", () => {
     fake = fakeApi([
       ...sentSend().routes,
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: () => ({ deliveries: [], view: "all", page: { ...page, total: 0 } }),
       },
     ]);
@@ -320,7 +320,7 @@ describe("sent record", () => {
     fake = fakeApi([
       ...sent.routes,
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: (req) => {
           const failures = bounced && req.url.searchParams.get("view") === "failures";
           return {
@@ -355,7 +355,7 @@ describe("sent record", () => {
     fake = fakeApi([
       ...sent.routes,
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: (req) => ({
           deliveries: rows,
           view: req.url.searchParams.get("view"),
@@ -404,7 +404,7 @@ describe("sent record", () => {
     fake = fakeApi([
       ...sent.routes,
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: (req) => {
           const view = req.url.searchParams.get("view");
           const answer = { deliveries: view === "failures" ? rows : [], view, page };
@@ -437,7 +437,7 @@ describe("sent record", () => {
   ): { moveCounts: () => void; lists: () => { url: URL }[] } => {
     const sent = sentSend(SETTLING);
     let delivered = SETTLING.c_delivered;
-    fake = fakeApi([...sent.routes, { path: "/sends/x1/deliveries", reply: deliveries }]);
+    fake = fakeApi([...sent.routes, { path: "/api/sends/x1/deliveries", reply: deliveries }]);
     return {
       moveCounts: () => {
         delivered += 1;
@@ -543,7 +543,7 @@ describe("sent record", () => {
   it("hands a scheduled send's page to its editor, in place of its history entry", async () => {
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({
           send: sendView(send({ status: "scheduled", started_at: null, completed_at: null }), {
             phase: "scheduled",
@@ -567,7 +567,7 @@ describe("sent record", () => {
   const feedOf = (current: () => SendView) => {
     let seq = 1;
     return {
-      path: "/sends/feed",
+      path: "/api/sends/feed",
       reply: () => {
         seq += 1;
         return {
@@ -582,7 +582,7 @@ describe("sent record", () => {
       },
     };
   };
-  const feedReads = () => fake.calls.filter((c) => c.url.pathname === "/sends/feed").length;
+  const feedReads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length;
 
   it("opens the live watch for a send in flight, follows it through the feed, and flips to the record when it finishes", async () => {
     let status: "sending" | "sent" = "sending";
@@ -604,12 +604,12 @@ describe("sent record", () => {
       );
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: current(), outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
       feedOf(current),
       {
-        path: "/sends/x1/deliveries",
+        path: "/api/sends/x1/deliveries",
         reply: () => ({ deliveries: [], view: "failures", page: { ...page, total: 0 } }),
       },
     ]);
@@ -622,7 +622,7 @@ describe("sent record", () => {
     // The watch keeps no poll of its own: the layer reads the feed from the page's cursor.
     expect(feedReads()).toBe(1);
     expect(
-      fake.calls.find((c) => c.url.pathname === "/sends/feed")?.url.searchParams.get("since"),
+      fake.calls.find((c) => c.url.pathname === "/api/sends/feed")?.url.searchParams.get("since"),
     ).toBe("1.1");
     await vi.advanceTimersByTimeAsync(3000);
     expect(feedReads()).toBe(2);
@@ -653,7 +653,7 @@ describe("sent record", () => {
     });
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: refused, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
       feedOf(() => refused),
@@ -689,12 +689,12 @@ describe("sent record", () => {
     });
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: refused, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
       {
         // Nothing about the send changes: every read reports no send.
-        path: "/sends/feed",
+        path: "/api/sends/feed",
         reply: () => ({
           now: Date.now(),
           sends: [],
@@ -717,7 +717,7 @@ describe("sent record", () => {
   const watching = (current: () => SendView) =>
     fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: current(), outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
       feedOf(current),
@@ -794,11 +794,11 @@ describe("sent record", () => {
     const wedged = sendView(send({ status: "sending", c_in_flight: 2, completed_at: null }), {
       phase: "needs-attention",
       conditions: [condition.wedged(2, "x1")],
-      actions: [{ name: "resolve", method: "POST", path: "/sends/x1/resolve" }],
+      actions: [{ name: "resolve", method: "POST", path: "/api/sends/x1/resolve" }],
     });
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: wedged, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
       },
       feedOf(() => wedged),
@@ -819,11 +819,11 @@ describe("sent record", () => {
     const feed = feedOf(() => view);
     fake = fakeApi([
       {
-        path: "/sends/x1",
+        path: "/api/sends/x1",
         reply: () => ({ send: view, outcomes: outcomes(), cursor: "1.1" }),
       },
       {
-        path: "/sends/feed",
+        path: "/api/sends/feed",
         // The first read answers at once; the next is held open.
         reply: () =>
           ++reads === 1 ? feed.reply() : new Promise((r) => (held = r)).then(() => feed.reply()),

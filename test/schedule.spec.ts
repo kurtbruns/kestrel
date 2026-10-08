@@ -21,7 +21,7 @@ const PNG_1x1 = Uint8Array.from(
 
 async function makeDraft(markdown = "# Hi\n\nbody"): Promise<string> {
   const created = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject: "The Subject", markdown }),
@@ -32,7 +32,7 @@ async function makeDraft(markdown = "# Hi\n\nbody"): Promise<string> {
 
 async function makeDraftWithSubject(subject: string): Promise<string> {
   const created = await readJson(
-    await SELF.fetch(`${base}/posts`, {
+    await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ subject, markdown: "# Hi\n\nbody" }),
@@ -47,18 +47,18 @@ function future(msFromNow: number): string {
 
 /** A send's frozen email, read at its own route. */
 async function emailOf(id: string): Promise<string> {
-  return (await SELF.fetch(`${base}/sends/${id}/email`, { headers: AUTH })).text();
+  return (await SELF.fetch(`${base}/api/sends/${id}/email`, { headers: AUTH })).text();
 }
 
 async function postStatus(id: string): Promise<string> {
-  const body = await readJson(await SELF.fetch(`${base}/posts/${id}`, { headers: AUTH }));
+  const body = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
   return body.post.status;
 }
 
 describe("schedule / send / cancel + soft-lock", () => {
   it("schedules a future send, freezes the render, and locks the post (I3, I6)", async () => {
     const id = await makeDraft();
-    const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
@@ -72,13 +72,13 @@ describe("schedule / send / cancel + soft-lock", () => {
 
   it("soft-locks edits and image changes while scheduled (409)", async () => {
     const id = await makeDraft();
-    await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
     });
 
-    const put = await SELF.fetch(`${base}/posts/${id}`, {
+    const put = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: JSON_AUTH,
       body: JSON.stringify({ markdown: "changed" }),
@@ -87,7 +87,7 @@ describe("schedule / send / cancel + soft-lock", () => {
 
     const fd = new FormData();
     fd.append("file", new File([PNG_1x1], "x.png", { type: "image/png" }));
-    const img = await SELF.fetch(`${base}/posts/${id}/images`, {
+    const img = await SELF.fetch(`${base}/api/posts/${id}/images`, {
       method: "POST",
       headers: AUTH,
       body: fd,
@@ -95,7 +95,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(img.status).toBe(409);
 
     // second schedule while active → 409
-    const again = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    const again = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(20 * 60 * 1000) }),
@@ -106,7 +106,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("rejects fire_at that isn't at least the buffer in the future (400)", async () => {
     const id = await makeDraft();
     for (const fire_at of [future(-1000), future(60 * 1000)]) {
-      const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at }),
@@ -121,14 +121,17 @@ describe("schedule / send / cancel + soft-lock", () => {
     for (const subject of ["", "   "]) {
       const id = await makeDraftWithSubject(subject);
 
-      const sched = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      const sched = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       });
       expect(sched.status).toBe(400);
 
-      const now = await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH });
+      const now = await SELF.fetch(`${base}/api/posts/${id}/send`, {
+        method: "POST",
+        headers: AUTH,
+      });
       expect(now.status).toBe(400);
 
       // neither attempt froze a send or locked the post
@@ -139,7 +142,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("cancel unlocks the post; the frozen render is unchanged by later edits (I3)", async () => {
     const id = await makeDraft("original body");
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
@@ -148,7 +151,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     const sendId = scheduled.send.id;
     const frozenHtml = await emailOf(sendId);
 
-    const cancel = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
+    const cancel = await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
@@ -156,7 +159,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(await postStatus(id)).toBe("draft");
 
     // edit is allowed again
-    const put = await SELF.fetch(`${base}/posts/${id}`, {
+    const put = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: JSON_AUTH,
       body: JSON.stringify({ markdown: "totally different body" }),
@@ -169,7 +172,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(still).toContain("original body");
 
     // cancel again → nothing to do: 200, unchanged, so a retried cancel is safe
-    const twice = await SELF.fetch(`${base}/sends/${sendId}/cancel`, {
+    const twice = await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
@@ -180,14 +183,15 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("cancel changes the send and the post together, or neither", async () => {
     const schedule = async (id: string) =>
       readJson(
-        await SELF.fetch(`${base}/posts/${id}/schedule`, {
+        await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
           method: "POST",
           headers: JSON_AUTH,
           body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
         }),
       );
     const sendStatus = async (sendId: string) =>
-      (await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }))).send.status;
+      (await readJson(await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH }))).send
+        .status;
 
     // Both: the send is canceled and the post unlocked.
     const both = await makeDraft();
@@ -229,7 +233,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     const offsetless = at.toISOString().replace(/Z$/, "");
     for (const fire_at of [offsetless, offsetless.slice(0, 16), at.toISOString().slice(0, 10)]) {
       const id = await makeDraft();
-      const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at }),
@@ -256,7 +260,7 @@ describe("schedule / send / cancel + soft-lock", () => {
       String(at.getTime()),
     ]) {
       const id = await makeDraft();
-      const res = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      const res = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at }),
@@ -268,13 +272,13 @@ describe("schedule / send / cancel + soft-lock", () => {
     // Reschedule reads fire_at the same way.
     const id = await makeDraft();
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       }),
     );
-    const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+    const res = await SELF.fetch(`${base}/api/sends/${scheduled.send.id}/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: offsetless }),
@@ -286,7 +290,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("reschedules a scheduled send: moves fire_at, keeps the frozen render and the lock (I3, I6)", async () => {
     const id = await makeDraft("frozen body");
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
@@ -296,7 +300,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     const frozenHtml = await emailOf(sendId);
 
     const newFire = future(60 * 60 * 1000);
-    const res = await SELF.fetch(`${base}/sends/${sendId}/reschedule`, {
+    const res = await SELF.fetch(`${base}/api/sends/${sendId}/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: newFire }),
@@ -316,21 +320,23 @@ describe("schedule / send / cancel + soft-lock", () => {
     // the post stays soft-locked (still scheduled) — reschedule never unlocks (I6)
     expect(await postStatus(id)).toBe("scheduled");
     // still the post's one active send, now at the new time
-    const still = await readJson(await SELF.fetch(`${base}/sends/${sendId}`, { headers: AUTH }));
+    const still = await readJson(
+      await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH }),
+    );
     expect(still.send.fire_at).toBe(onTheMinute(Date.parse(newFire)));
   });
 
   it("rejects a reschedule fire_at that isn't at least the buffer out (400), leaving the time unchanged", async () => {
     const id = await makeDraft();
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       }),
     );
     for (const fire_at of [future(-1000), future(60 * 1000)]) {
-      const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+      const res = await SELF.fetch(`${base}/api/sends/${scheduled.send.id}/reschedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at }),
@@ -338,7 +344,7 @@ describe("schedule / send / cancel + soft-lock", () => {
       expect(res.status).toBe(400);
     }
     const still = await readJson(
-      await SELF.fetch(`${base}/sends/${scheduled.send.id}`, { headers: AUTH }),
+      await SELF.fetch(`${base}/api/sends/${scheduled.send.id}`, { headers: AUTH }),
     );
     expect(still.send.fire_at).toBe(scheduled.send.fire_at);
   });
@@ -346,18 +352,18 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("won't reschedule a send that's no longer scheduled (409)", async () => {
     const id = await makeDraft();
     const scheduled = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       }),
     );
-    await SELF.fetch(`${base}/sends/${scheduled.send.id}/cancel`, {
+    await SELF.fetch(`${base}/api/sends/${scheduled.send.id}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
 
-    const res = await SELF.fetch(`${base}/sends/${scheduled.send.id}/reschedule`, {
+    const res = await SELF.fetch(`${base}/api/sends/${scheduled.send.id}/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(30 * 60 * 1000) }),
@@ -367,14 +373,14 @@ describe("schedule / send / cancel + soft-lock", () => {
 
   it("404s rescheduling an unknown send, and requires auth", async () => {
     const known = future(30 * 60 * 1000);
-    const missing = await SELF.fetch(`${base}/sends/does-not-exist/reschedule`, {
+    const missing = await SELF.fetch(`${base}/api/sends/does-not-exist/reschedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: known }),
     });
     expect(missing.status).toBe(404);
 
-    const noauth = await SELF.fetch(`${base}/sends/does-not-exist/reschedule`, {
+    const noauth = await SELF.fetch(`${base}/api/sends/does-not-exist/reschedule`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ fire_at: known }),
@@ -393,7 +399,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     }
     const id = await makeDraft();
     const { send } = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
@@ -405,7 +411,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("send-now schedules at now + buffer and is idempotent", async () => {
     const id = await makeDraft();
     const first = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/send`, { method: "POST", headers: AUTH }),
     );
     expect(first.send.status).toBe("scheduled");
     // One lead out, on the minute at or after it: never less than the lead, under a minute more.
@@ -415,7 +421,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(lead).toBeLessThan(DEFAULT_MIN_LEAD_MS + 60_000);
 
     const second = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/send`, { method: "POST", headers: AUTH }),
+      await SELF.fetch(`${base}/api/posts/${id}/send`, { method: "POST", headers: AUTH }),
     );
     expect(second.idempotent).toBe(true);
     expect(second.send.id).toBe(first.send.id);
@@ -423,13 +429,13 @@ describe("schedule / send / cancel + soft-lock", () => {
 
   it("refuses a stray template_revision on schedule and send-now (400): a send is made with the template as it stands", async () => {
     const id = await makeDraft();
-    const sched = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    const sched = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(10 * 60 * 1000), template_revision: "tr_1" }),
     });
     expect(sched.status).toBe(400);
-    const now = await SELF.fetch(`${base}/posts/${id}/send`, {
+    const now = await SELF.fetch(`${base}/api/posts/${id}/send`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ template_revision: "tr_1" }),
@@ -442,7 +448,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     const id = await makeDraft();
     const fire = JSON.stringify({ fire_at: future(10 * 60 * 1000) });
     const call = () =>
-      SELF.fetch(`${base}/posts/${id}/schedule`, {
+      SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: fire,
@@ -466,16 +472,19 @@ describe("schedule / send / cancel + soft-lock", () => {
   it("re-schedules a post after its prior send is canceled (predicate excludes terminal states)", async () => {
     const id = await makeDraft();
     const first = await readJson(
-      await SELF.fetch(`${base}/posts/${id}/schedule`, {
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
       }),
     );
-    await SELF.fetch(`${base}/sends/${first.send.id}/cancel`, { method: "POST", headers: AUTH });
+    await SELF.fetch(`${base}/api/sends/${first.send.id}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
 
     // The canceled send is out of the active set, so a fresh schedule succeeds.
-    const again = await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    const again = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(20 * 60 * 1000) }),
@@ -486,12 +495,12 @@ describe("schedule / send / cancel + soft-lock", () => {
 
   it("lists sends and requires auth", async () => {
     const id = await makeDraft();
-    await SELF.fetch(`${base}/posts/${id}/schedule`, {
+    await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
     });
-    const list = await readJson(await SELF.fetch(`${base}/sends`, { headers: AUTH }));
+    const list = await readJson(await SELF.fetch(`${base}/api/sends`, { headers: AUTH }));
     expect(list.sends.length).toBeGreaterThanOrEqual(1);
     // The list row is the send's view: its counts read off the denormalized counters
     // (`sends.c_*`), never a per-row aggregate over the delivery record.
@@ -499,27 +508,27 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(list.sends[0].counts).toHaveProperty("pending");
     expect(list.sends[0]).not.toHaveProperty("c_delivered");
 
-    const noauth = await SELF.fetch(`${base}/sends`);
+    const noauth = await SELF.fetch(`${base}/api/sends`);
     expect(noauth.status).toBe(401);
   });
 
   it("sends list carries a page envelope and honors the status filter + sort", async () => {
     // Two scheduled sends with different fire times.
     const idA = await makeDraft();
-    await SELF.fetch(`${base}/posts/${idA}/schedule`, {
+    await SELF.fetch(`${base}/api/posts/${idA}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
     });
     const idB = await makeDraft();
-    await SELF.fetch(`${base}/posts/${idB}/schedule`, {
+    await SELF.fetch(`${base}/api/posts/${idB}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at: future(20 * 60 * 1000) }),
     });
 
     const list = await readJson(
-      await SELF.fetch(`${base}/sends?status=scheduled&sort=fire&dir=asc&limit=100`, {
+      await SELF.fetch(`${base}/api/sends?status=scheduled&sort=fire&dir=asc&limit=100`, {
         headers: AUTH,
       }),
     );
@@ -555,7 +564,7 @@ describe("the minimum lead is the deployment's own", () => {
   }
 
   const scheduleAt = (vars: Record<string, string>, id: string, fire_at: string) =>
-    fetchWith(vars, `/posts/${id}/schedule`, {
+    fetchWith(vars, `/api/posts/${id}/schedule`, {
       method: "POST",
       headers: JSON_AUTH,
       body: JSON.stringify({ fire_at }),
@@ -578,7 +587,7 @@ describe("the minimum lead is the deployment's own", () => {
 
   it("sends now at one configured lead out", async () => {
     const id = await makeDraft();
-    const res = await fetchWith(MINUTE_LEAD, `/posts/${id}/send`, {
+    const res = await fetchWith(MINUTE_LEAD, `/api/posts/${id}/send`, {
       method: "POST",
       headers: AUTH,
     });
@@ -593,7 +602,7 @@ describe("the minimum lead is the deployment's own", () => {
     const id = await makeDraft();
     const { send } = await readJson(await scheduleAt({}, id, future(10 * 60 * 1000)));
     const move = (vars: Record<string, string>, fire_at: string) =>
-      fetchWith(vars, `/sends/${send.id}/reschedule`, {
+      fetchWith(vars, `/api/sends/${send.id}/reschedule`, {
         method: "POST",
         headers: JSON_AUTH,
         body: JSON.stringify({ fire_at }),
@@ -615,7 +624,11 @@ describe("the minimum lead is the deployment's own", () => {
   it("states the lead and its floor on every route that enforces it in the API reference", async () => {
     const ref = await readJson(await fetchWith(MINUTE_LEAD, "/api/reference", { headers: AUTH }));
     const routes = ref.groups.flatMap((g: any) => g.routes);
-    for (const path of ["/posts/:id/schedule", "/posts/:id/send", "/sends/:id/reschedule"]) {
+    for (const path of [
+      "/api/posts/:id/schedule",
+      "/api/posts/:id/send",
+      "/api/sends/:id/reschedule",
+    ]) {
       const route = routes.find((r: any) => r.path === path && r.method === "POST");
       expect(route?.description, path).toMatch(/1 minute on this deployment/);
       expect(route?.description, path).toMatch(/MIN_LEAD_SECONDS/);
@@ -649,7 +662,7 @@ describe("fire times fall on the minute", () => {
 
   it("stores schedule, Send now, and reschedule on the minute, and answers and reads back that time", async () => {
     const withSeconds = onTheMinute(Date.now() + 20 * 60_000) + 17_000;
-    const scheduled = await post(`/posts/${await makeDraft()}/schedule`, {
+    const scheduled = await post(`/api/posts/${await makeDraft()}/schedule`, {
       fire_at: new Date(withSeconds).toISOString(),
     });
     expect(scheduled.status).toBe(201);
@@ -657,12 +670,16 @@ describe("fire times fall on the minute", () => {
     expect(send.fire_at).toBe(withSeconds + 43_000);
 
     const moveTo = withSeconds + 30 * 60_000;
-    const moved = await readJson(await post(`/sends/${send.id}/reschedule`, { fire_at: moveTo }));
+    const moved = await readJson(
+      await post(`/api/sends/${send.id}/reschedule`, { fire_at: moveTo }),
+    );
     expect(moved).toMatchObject({ changed: true, send: { fire_at: moveTo + 43_000 } });
-    const read = await readJson(await SELF.fetch(`${base}/sends/${send.id}`, { headers: AUTH }));
+    const read = await readJson(
+      await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
+    );
     expect(read.send.fire_at).toBe(moveTo + 43_000);
 
-    const now = await readJson(await post(`/posts/${await makeDraft()}/send`));
+    const now = await readJson(await post(`/api/posts/${await makeDraft()}/send`));
     expect(now.send.fire_at % 60_000).toBe(0);
     expect(now.send.fire_at).toBeGreaterThanOrEqual(
       now.send.scheduled_at + DEFAULT_MIN_LEAD_MS - 2000,
@@ -672,26 +689,26 @@ describe("fire times fall on the minute", () => {
   it("keeps a time already on the minute exactly, on schedule and on reschedule", async () => {
     const onMinute = onTheMinute(Date.now() + 20 * 60_000);
     const { send } = await readJson(
-      await post(`/posts/${await makeDraft()}/schedule`, { fire_at: onMinute }),
+      await post(`/api/posts/${await makeDraft()}/schedule`, { fire_at: onMinute }),
     );
     expect(send.fire_at).toBe(onMinute);
     const moved = await readJson(
-      await post(`/sends/${send.id}/reschedule`, { fire_at: onMinute + 60 * 60_000 }),
+      await post(`/api/sends/${send.id}/reschedule`, { fire_at: onMinute + 60 * 60_000 }),
     );
     expect(moved.send.fire_at).toBe(onMinute + 60 * 60_000);
   });
 
   it("refuses a schedule and a reschedule inside the lead, whatever minute they would round to", async () => {
     const id = await makeDraft();
-    const refused = await post(`/posts/${id}/schedule`, {
+    const refused = await post(`/api/posts/${id}/schedule`, {
       fire_at: Date.now() + DEFAULT_MIN_LEAD_MS - 1_000,
     });
     expect(refused.status).toBe(400);
     expect((await readJson(refused)).error).toBe("fire_at_too_soon");
     const { send } = await readJson(
-      await post(`/posts/${id}/schedule`, { fire_at: Date.now() + 20 * 60_000 }),
+      await post(`/api/posts/${id}/schedule`, { fire_at: Date.now() + 20 * 60_000 }),
     );
-    const move = await post(`/sends/${send.id}/reschedule`, {
+    const move = await post(`/api/sends/${send.id}/reschedule`, {
       fire_at: Date.now() + DEFAULT_MIN_LEAD_MS - 1_000,
     });
     expect(move.status).toBe(400);
@@ -701,7 +718,11 @@ describe("fire times fall on the minute", () => {
   it("says in the API reference that the fire time is rounded up to the minute", async () => {
     const ref = await readJson(await SELF.fetch(`${base}/api/reference`, { headers: AUTH }));
     const routes = ref.groups.flatMap((g: any) => g.routes);
-    for (const path of ["/posts/:id/schedule", "/posts/:id/send", "/sends/:id/reschedule"]) {
+    for (const path of [
+      "/api/posts/:id/schedule",
+      "/api/posts/:id/send",
+      "/api/sends/:id/reschedule",
+    ]) {
       const route = routes.find((r: any) => r.path === path && r.method === "POST");
       expect(route?.description, path).toMatch(/rounded up to the next whole minute/);
     }

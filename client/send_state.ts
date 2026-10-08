@@ -1,4 +1,4 @@
-// The send-state layer: one shared read of the send feed (GET /sends/feed), which pages
+// The send-state layer: one shared read of the send feed (GET /api/sends/feed), which pages
 // follow instead of polling, so every page tells the same story about a send and keeps up
 // with it, whichever client changed it (docs/DESIGN.md §9). The server says when to read
 // again; the layer keeps to it.
@@ -65,13 +65,13 @@ export interface SendFollower {
   stale(): void;
 }
 
-/** Where a page's own read of sends (`GET /sends`) stood: its cursor, and the rows it painted. */
+/** Where a page's own read of sends (`GET /api/sends`) stood: its cursor, and the rows it painted. */
 export interface ListRead {
   cursor: string;
   sends: readonly { id: string; status: SendStatus; phase: SendPhase }[];
 }
 
-/** Where a page's own read of one send (`GET /sends/:id`, or an action's answer) stood. */
+/** Where a page's own read of one send (`GET /api/sends/:id`, or an action's answer) stood. */
 export interface SendRead {
   cursor: string;
   send: Pick<SendView, "id" | "status" | "phase">;
@@ -145,7 +145,7 @@ function read(): void {
   reading = c;
   const cutOff = setTimeout(() => c.abort(), READ_TIMEOUT_MS);
   const query = since ? `?since=${encodeURIComponent(since)}` : "";
-  api<SendFeedResponse>(`/sends/feed${query}`, { signal: c.signal }).then(
+  api<SendFeedResponse>(`/api/sends/feed${query}`, { signal: c.signal }).then(
     (res) => {
       clearTimeout(cutOff);
       if (reading !== c) {
