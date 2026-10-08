@@ -34,7 +34,6 @@ import upgrade from "../../docs/guides/07-upgrade.md";
 import readme from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
-import adminGate from "../../docs/reference/03-admin-gate.md";
 import type { DocFragment, DocSection, DocsLanding, DocsResponse } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
@@ -54,7 +53,6 @@ const PAGES: Record<string, string> = {
   "guides/07-upgrade.md": upgrade,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
-  "reference/03-admin-gate.md": adminGate,
 };
 
 // A page's path under docs/: its section's folder, then the file. The slug is the file's

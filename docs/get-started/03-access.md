@@ -2,7 +2,7 @@
 
 Cloudflare Access puts a login in front of the editor and the API. Kestrel checks every request against that login as well, so a path left out of Access stays locked. The public pages readers see stay public.
 
-In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works. [How the admin gate works](../reference/03-admin-gate.md) explains the design.
+In this guide, you set up Cloudflare Zero Trust, create one Access application that covers the editor and the API, and allow yourself in. Then you give the app two values from that application, and check that the login works.
 
 ## 1. Set up Zero Trust
 

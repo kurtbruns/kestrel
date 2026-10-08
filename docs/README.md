@@ -29,4 +29,3 @@ The detail behind the steps, for when you need it.
 
 - [Configuration](reference/01-configuration.md)
 - [Sending-domain DNS](reference/02-sending-domain-dns.md)
-- [How the admin gate works](reference/03-admin-gate.md)

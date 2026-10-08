@@ -22,7 +22,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "guides/upgrade",
       "reference/configuration",
       "reference/sending-domain-dns",
-      "reference/admin-gate",
     ]);
     // Titles are extracted from the markdown, not hard-coded here.
     expect(docs.find((d) => d.slug === "access")?.title).toBe("Lock the dashboard with Access");
@@ -105,7 +104,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "Upgrade to a new release",
       "Configuration",
       "Sending-domain DNS",
-      "How the admin gate works",
     ]) {
       expect(titles).toContain(ref);
     }

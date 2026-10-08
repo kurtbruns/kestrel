@@ -92,7 +92,7 @@ Used only with the `NOTIFY` binding. It must be an address on a domain set up fo
 
 `ACCESS_ALLOWED_EMAILS` applies to people only. A service token, such as the one Claude uses, carries no email, so the Access policy alone decides whether it gets in.
 
-Never set `DEV_AUTH_SECRET` on a deployed environment. It's local development's stand-in for Access, and a deployed instance ignores it anyway. [How the admin gate works](03-admin-gate.md) explains why.
+Never set `DEV_AUTH_SECRET` on a deployed environment. It's local development's stand-in for Access, and a deployed instance ignores it anyway. The app honors it only when the environment looks like local development: `PROVIDER` is `fake`, Access isn't set up, and `APP_ORIGIN` is on `localhost` or `127.0.0.1`. A real provider, Access, or a real hostname each turns it off, and Access becomes the only way in.
 
 ## Bindings and triggers
 
