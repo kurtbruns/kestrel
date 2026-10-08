@@ -31,7 +31,7 @@ Readers subscribe on a page the app hosts. Every signup confirms by email before
 A new instance runs on free plans. As your list grows, two limits come into play.
 
 - **Your email provider's limits.** Resend's free plan sends up to 100 emails a day. A send that hits the limit waits, and the app emails you. It resumes on its own once the limit lifts, or after you upgrade your Resend plan, and mails no one twice. For a large list, [Amazon SES](../guides/02-ses.md) may cost less.
-- **How fast a send goes out.** On Cloudflare's free Workers plan, Resend sends about 400 recipients a minute. On the $5 Workers Paid plan, set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#vars) to send far more each minute.
+- **How fast a send goes out.** On Cloudflare's free Workers plan, Resend sends about 400 recipients a minute. On the $5 Workers Paid plan, set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) to send far more each minute.
 
 ## Check it
 

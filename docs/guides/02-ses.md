@@ -16,7 +16,7 @@ To move an instance that already sends through Resend, read [Switch an instance 
 
 ## How fast SES sends
 
-A send goes out a slice at a time, one slice a minute. Each slice stays inside the subrequests Cloudflare allows one run of the Worker, which [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#vars) sets. Resend takes up to 100 recipients a request. SES takes one, so each recipient costs far more of that allowance.
+A send goes out a slice at a time, one slice a minute. Each slice stays inside the subrequests Cloudflare allows one run of the Worker, which [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) sets. Resend takes up to 100 recipients a request. SES takes one, so each recipient costs far more of that allowance.
 
 - **Workers Free:** about 18 recipients a minute. A send to 1,000 subscribers takes about an hour, so use Resend on this plan.
 - **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** up to about 1,900 recipients a minute, within your SES account's sending rate. At 14 messages a second, that's about 700 a minute, and 10,000 subscribers take about fifteen minutes.

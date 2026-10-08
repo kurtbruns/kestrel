@@ -145,7 +145,8 @@ export interface Config {
   /**
    * The SES account's maximum send rate, in messages a second, which the send loop paces
    * to: going over it is a throttle, which halts the send for at least a minute. Defaults
-   * to 14, a new production account's rate; the SES sandbox allows 1.
+   * to 14, a common starting rate that AWS does not promise any account; the SES sandbox
+   * allows 1, and the account dashboard shows the account's own.
    */
   sesMaxSendRate: number;
   /** Cloudflare Access (optional; enables JWT validation when both are set). */
@@ -200,7 +201,8 @@ export interface Config {
   notifyFrom: string;
 }
 
-/** A new SES production account's maximum send rate, in messages a second. */
+/** The SES send rate assumed when `SES_MAX_SEND_RATE` is unset, in messages a second: a
+ *  common starting rate for a production account, though AWS sets each account's own. */
 export const DEFAULT_SES_MAX_SEND_RATE = 14;
 /** The Workers Free plan's per-invocation subrequest limit, the default budget. */
 export const DEFAULT_SUBREQUEST_BUDGET = 50;
