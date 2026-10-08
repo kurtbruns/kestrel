@@ -1,6 +1,6 @@
 # Connect Claude to the API
 
-Claude can draft, edit, proofread, and schedule your posts through the same API the editor uses. Claude Code reaches it with a Cloudflare Access service token, a login made for programs rather than people. Every send still waits out its review window, so you can cancel anything Claude schedules.
+Claude can draft, edit, proofread, and schedule your posts through the same API the editor uses. Claude Code gets its own Cloudflare Access credential to make calls to the API. Every send still waits out its review window, so you can cancel anything Claude schedules.
 
 In this guide, you create a service token and let it into your Access application. Then you store it where Claude Code reads it, check that the app sees it as Claude, and point Claude at the API reference.
 
@@ -23,7 +23,7 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
 
-## 2. Let the token into your Access application
+## 2. Add a policy for the token
 
 Your application lets in only the people its `Publishers` policy names. A token needs a policy of its own, on the same application, because the app accepts only logins issued for that application.
 
@@ -56,6 +56,8 @@ Claude Code loads the `env` block of `.claude/settings.local.json` into every se
       }
     }
     ```
+
+    `KESTREL_URL` is your app's address. The other two are the Client ID and Client Secret from section 1.
 
 1. Start a new Claude Code session, so it loads the values.
 
