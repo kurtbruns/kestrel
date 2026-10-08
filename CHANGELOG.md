@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The Amazon SES guide now has you let SES publish to the SNS topic, without which no bounce or complaint reaches the app. It also sets the configuration set as your sending hostname's default, and covers the sandbox, production access, and a custom MAIL FROM domain step by step.
+- The guide to putting the archive on your website now adds its Worker route in `wrangler.jsonc`, since each deploy removes a route added in the dashboard. Its pattern, `example.com/archive*`, now also covers the archive index at `/archive`, which `example.com/archive/*` missed.
+- The staging guide now locks the whole staging hostname behind Access, with only the provider's webhook left open, so a stranger can't subscribe to staging. Staging gets its own provider key, and on SES its own configuration set and topic.
+
 ## [1.3.0] - 2026-10-06
 
 **Upgrading from 1.2.0.** No migration. When you merge the release, keep your own values in the `production` block of `wrangler.jsonc`. To have the deploy attach your hostname, add the template's new `routes`, `workers_dev`, and `preview_urls` lines to that block, with your hostname in `routes`. The template no longer declares a staging environment: if you run one, keep your `staging` block when the merge asks, since your deploys to it still need it. The authoring API has moved under `/api` (see *Breaking*). Your Access application already covers `/api`, so the moved routes stay gated the moment the instance upgrades; afterwards you can remove the four old paths, `posts`, `sends`, `subscribers`, and `suppressions`, from it, leaving `dashboard` and `api`. Any script or Claude setup that calls the old paths must switch to `/api/…`.
@@ -21,9 +27,6 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Changed
 
 - The setup guide leads with one main path, **Get started**: six steps from a fresh clone to a live newsletter on one production environment, each ending in a check that it worked, proven with test sends to your own address before anyone subscribes (SPEC §11). It uses Resend; Amazon SES, notifications through Cloudflare's email, the archive on your website, rate-limiting the subscribe form, a staging environment, and upgrading are guides beside it, and the detail behind each step (every setting, the DNS records, how the admin gate works) is a new Reference section. The guide now lives in `docs/get-started/`, `docs/guides/`, and `docs/reference/`, with `docs/README.md` as its landing page, which the editor's Docs tab shows by section.
-- The Amazon SES guide now has you let SES publish to the SNS topic, without which no bounce or complaint reaches the app. It also sets the configuration set as your sending hostname's default, and covers the sandbox, production access, and a custom MAIL FROM domain step by step.
-- The guide to putting the archive on your website now adds its Worker route in `wrangler.jsonc`, since each deploy removes a route added in the dashboard. Its pattern, `example.com/archive*`, now also covers the archive index at `/archive`, which `example.com/archive/*` missed.
-- The staging guide now locks the whole staging hostname behind Access, with only the provider's webhook left open, so a stranger can't subscribe to staging. Staging gets its own provider key, and on SES its own configuration set and topic.
 - Links between guide pages now open the page in the editor's Docs tab, at the section they name, and a section's address can be shared.
 - The production template in `wrangler.jsonc` now attaches your hostname to the Worker on deploy (`routes` with `custom_domain`), keeps it off `workers.dev` and its preview URLs, starts on the `fake` provider until yours is connected, and no longer declares a staging environment.
 - Upgrading now starts by noting a D1 Time Travel bookmark, so a bad upgrade can put the database back.
