@@ -17,7 +17,7 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. In **Zero Trust**, go to **Access controls → Service credentials → Service Tokens**, and select **Create Service Token**.
 
-1. Name it `claude-code`, and choose a **Service Token Duration**. A year is a good default.
+1. Name it `kestrel-claude`, and choose a **Service Token Duration**. A year is a good default.
 
 1. Select **Generate token**.
 
@@ -35,7 +35,7 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
     - **Policy name:** `Claude`
     - **Action:** Service Auth
-    - **Include:** the **Service Token** selector, with `claude-code`
+    - **Include:** the **Service Token** selector, with `kestrel-claude`
 
 1. Save the application.
 
