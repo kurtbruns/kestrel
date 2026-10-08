@@ -2,7 +2,7 @@
 
 Claude can draft, edit, proofread, and schedule your posts through the same API the editor uses. Claude Code gets its own Cloudflare Access credential to make calls to the API. Every send still waits out its review window, so you can cancel anything Claude schedules.
 
-In this guide, you create a service token and let it into your Access application. Then you store it where Claude Code reads it, check that the app sees it as Claude, and point Claude at the API reference.
+In this guide, you create a service token, and add a policy for it to your Access application. Then you store it where Claude Code reads it, check that the app sees it as Claude, and point Claude at the API reference.
 
 ## Before you begin
 
