@@ -9,8 +9,10 @@ node_modules/
 .kestrel.env.*
 .claude/settings.local.json
 
-# Claude Code's maintainer frame switch (see .claude/maintainer/README.md)
+# Claude Code's maintainer frame switch (see .claude/maintainer/README.md), and the
+# worktrees it creates inside the checkout
 CLAUDE.local.md
+.claude/worktrees/
 
 # wrangler / miniflare local state
 .wrangler/

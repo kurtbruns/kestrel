@@ -37,8 +37,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-// Prefixes whose change means "consider a changelog entry". Kept in sync with
-// .claude/maintainer/frame.md. Tests (test/) and tooling (scripts/) are deliberately absent.
+// Prefixes whose change means "consider a changelog entry", named again in the reminder's
+// message below. Tests (test/) and tooling (scripts/) are deliberately absent.
 const CODE_PREFIXES = ["src/", "client/", "shared/", "public/dashboard/", "migrations/"];
 
 // The line in CLAUDE.local.md that turns the maintainer frame on.

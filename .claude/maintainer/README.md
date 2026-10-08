@@ -10,7 +10,16 @@ Create `CLAUDE.local.md` at the repository root, holding this one line:
 @.claude/maintainer/frame.md
 ```
 
-`CLAUDE.local.md` is gitignored, and Claude Code loads it at the start of every session, after `.claude/CLAUDE.md`. A fresh clone doesn't have it. Contributors add it before opening a pull request. A worktree Claude Code makes inside the repository (under `.claude/worktrees/`) loads the root's file too, since Claude Code reads `CLAUDE.local.md` in every directory above the session's.
+The line must be exactly that, on its own and outside a code block: the changelog hook looks for it as written. `CLAUDE.local.md` is gitignored, and Claude Code loads it at the start of every session, after `.claude/CLAUDE.md`. A fresh clone doesn't have it. Contributors add it before opening a pull request.
+
+## Worktrees
+
+A worktree Claude Code makes inside the repository (under `.claude/worktrees/`) loads the root's `CLAUDE.local.md` too, since Claude Code reads one in every directory above the session's. Two things follow from the main checkout, not the worktree:
+
+- **The frame is the main checkout's copy.** The import resolves next to the root's `CLAUDE.local.md`, so a worktree session gets `frame.md` as the main checkout has it checked out.
+- **The hook is the main checkout's copy.** `.claude/settings.json` runs it from `$CLAUDE_PROJECT_DIR`, which names the main checkout inside a worktree.
+
+So keep the main checkout on an up-to-date `main`, and do the work in worktrees. A worktree session may ask once to approve the import, since `frame.md` resolves outside its directory.
 
 ## What's here
 

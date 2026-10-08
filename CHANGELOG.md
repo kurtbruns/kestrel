@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- Claude Code in your copy of the repository now starts as help for running your instance: it follows the setup guide, reaches your instance through the API reference once Claude is connected, and keeps to the review window, with no prompt to paste. Kestrel's code conventions load only once Claude reads the code, such as when you add a feature to your copy, and the project's own process (its changelog, releases, and pull requests) is opt-in for maintainers, so it no longer reaches you.
+- Claude Code in your copy now starts as help for running your instance: it follows the setup guide, uses your API without a prompt to paste, and asks before it deploys, sends, or changes your list. Kestrel's maintainer instructions no longer reach you.
 
 ## [1.4.0] - 2026-10-08
 

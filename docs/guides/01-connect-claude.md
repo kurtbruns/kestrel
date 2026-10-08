@@ -2,7 +2,7 @@
 
 Claude Code can draft, edit, proofread, and schedule your posts through the same API the editor uses. It has its own Cloudflare Access credential, so its changes show as Claude's, not yours. Anything it schedules waits out the review window, where you can still cancel it.
 
-In this guide, you create a service token for Claude Code, and add a policy for it to your Access application. Then you store the token where Claude Code reads it, check that it works, and point Claude at the API reference.
+In this guide, you create a service token for Claude Code, and add a policy for it to your Access application. Then you store the token where Claude Code reads it, and check that it works.
 
 ## Before you begin
 
@@ -63,7 +63,7 @@ Claude Code loads the `env` block of `.claude/settings.local.json` into every se
 
 Never put the secret in `.claude/settings.json`. That file is committed.
 
-## 4. Point Claude at the API
+## 4. Ask Claude for something
 
 Kestrel has no plugin or connector for Claude. Claude calls the HTTP API directly, and the API reference describes every route: its method and path, the body it takes, and an example. The editor's **API** tab shows the same reference.
 
