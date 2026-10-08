@@ -26,7 +26,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
     - **Type:** `TXT`
     - **Name:** `_dmarc.send`
-    - **Content:** `v=DMARC1; p=none; rua=mailto:dmarc@example.com; fo=1`
+    - **Content:** `v=DMARC1; p=none; rua=mailto:dmarc@example.com`
 
 1. Replace `dmarc@example.com` with an address that receives mail. Reports arrive there as attachments.
 
