@@ -12,9 +12,10 @@
  * stop, so it can't halt a turn or reject a change. Whoever reads it judges whether the
  * change is actually user-facing.
  *
- * "Code" is src/, public/dashboard/ (the admin UI, which sits outside src/), and
- * migrations/ (schema). Tests and build tooling live outside those prefixes, so a
- * test- or script-only turn stays quiet. Once an entry exists, CHANGELOG.md is itself
+ * "Code" is src/, client/ and public/dashboard/ (the admin UI, which sits outside src/),
+ * shared/ (code both runtimes ship), and migrations/ (schema). Tests and build tooling
+ * live outside those prefixes, and specs kept beside the code (`*.spec.ts`) are skipped,
+ * so a test- or script-only turn stays quiet. Once an entry exists, CHANGELOG.md is itself
  * in the diff and the hook goes silent.
  *
  * Fails safe: any git error, a detached HEAD, or a missing CHANGELOG.md all end in a
@@ -28,7 +29,7 @@ import { join } from "node:path";
 
 // Prefixes whose change means "consider a changelog entry". Kept in sync with
 // .claude/rules/changelog.md. Tests (test/) and tooling (scripts/) are deliberately absent.
-const CODE_PREFIXES = ["src/", "public/dashboard/", "migrations/"];
+const CODE_PREFIXES = ["src/", "client/", "shared/", "public/dashboard/", "migrations/"];
 
 const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
@@ -87,7 +88,8 @@ function committedFiles() {
 }
 
 function isCode(path) {
-  return CODE_PREFIXES.some((p) => path.startsWith(p));
+  // client/ and shared/ keep their specs beside the code; a spec is a test, not a change.
+  return CODE_PREFIXES.some((p) => path.startsWith(p)) && !path.endsWith(".spec.ts");
 }
 
 /** Read the session id from the hook's stdin JSON, for the once-per-session marker. */

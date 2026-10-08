@@ -75,7 +75,7 @@ CF-Access-Client-Secret headers from your environment with every request.
 Read GET /api/reference first, and use it for every call.
 ```
 
-Claude reads the reference, and from there can list your posts, write a draft, and schedule it. A request that sends a body needs `Content-Type: application/json`, and the reference says so for each route.
+Claude reads the reference, and from there can list your posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
 ## Check it
 
