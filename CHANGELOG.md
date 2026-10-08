@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.4.0] - 2026-10-08
+
+**Upgrading from 1.3.0.** No migration. If Claude connects through a `.kestrel.env` file, move its three values into `.claude/settings.local.json`, as Connect Claude to the API describes. `.kestrel.env` stays ignored by git. On SES, if bounces and complaints never reach the app, add the SNS topic access policy from the SES guide.
+
 ### Changed
 
 - Connecting Claude now keeps the Access service token in `.claude/settings.local.json`, which Claude Code loads into every session and the repository's `.gitignore` now covers. The `.kestrel.env.example` template is gone; an existing `.kestrel.env` stays ignored. The guide also notes that `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, so its Access policy is its only gate.
@@ -218,7 +222,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.3.0
 [1.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.2.0
 [1.1.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.1.0
