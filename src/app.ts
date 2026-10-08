@@ -208,7 +208,16 @@ export function createRouter({
       path: "/api/dev/token",
       access: "public",
       resource: "dev",
-      summary: "Mint a local dev admin token (local dev only).",
+      summary: "Mint an admin token (local dev only).",
+      description:
+        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance.",
+      query: [
+        {
+          name: "kind",
+          description:
+            "`human` (default, as the editor uses) or `service` (no email, as Claude uses).",
+        },
+      ],
       handler: devRoutes.token,
     }),
 
