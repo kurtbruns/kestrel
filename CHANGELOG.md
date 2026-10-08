@@ -12,6 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Connecting Claude now keeps the Access service token in `.claude/settings.local.json`, which Claude Code loads into every session and the repository's `.gitignore` now covers. The `.kestrel.env.example` template is gone; an existing `.kestrel.env` stays ignored. The guide also notes that `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, so its Access policy is its only gate.
 - The Amazon SES guide now has you let SES publish to the SNS topic, without which no bounce or complaint reaches the app. It also sets the configuration set as your sending hostname's default, and covers the sandbox, production access, and a custom MAIL FROM domain step by step.
 - The guide to putting the archive on your website now adds its Worker route in `wrangler.jsonc`, since each deploy removes a route added in the dashboard. Its pattern, `example.com/archive*`, now also covers the archive index at `/archive`, which `example.com/archive/*` missed.
 - The staging guide now locks the whole staging hostname behind Access, with only the provider's webhook left open, so a stranger can't subscribe to staging. Staging gets its own provider key, and on SES its own configuration set and topic.
