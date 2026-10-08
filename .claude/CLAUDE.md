@@ -22,7 +22,7 @@ Work in this checkout (commits, pushes to the copy's own repository) and against
 
 - **Follow the guide page, step by step.** Each page is a complete procedure. Do what a step says, ask the person for what only they can do (a dashboard click, a DNS record at their registrar), and end with the page's **Check it** list, reporting each check's result.
 - **Deploy only with `npm run deploy -- --env production`,** and apply database changes only with `npm run migrate:remote -- --env production`. Never a bare `wrangler deploy`.
-- **Upgrade by following `docs/guides/07-upgrade.md`.** It is the procedure, including what to read first and what to check before migrating.
+- **Upgrade by following `docs/guides/07-upgrade.md`,** with the `/upgrade` skill. The page is the procedure, including what to read first, the steps for a copy with code changes of its own, and what to check before migrating.
 - **Secrets never pass through you.** The person enters each one themselves with `npx wrangler secret put NAME --env production`, which prompts for the value; never ask for a secret in chat. Claude's own token goes in `.claude/settings.local.json`. Never write a secret into `wrangler.jsonc`, `.claude/settings.json`, or a commit.
 
 ## Publishing through the API
@@ -51,6 +51,7 @@ Some people add features to their own copy. The code's commands, conventions, an
 - **Never weaken the invariants** (SPEC §3): recorded consent, immediate unsubscribe, the record kept exactly, each person mailed at most once per send, the real test, and the window to stop a send.
 - **A schema change is a new migration file,** never an edit to an existing one. Kestrel's releases add their own, so expect one beside yours at the next upgrade.
 - **Keep the change small and separate** from Kestrel's files where you can, so merging a release stays easy.
+- **On an upgrade, the release's side is the base.** Resolve a conflict by taking Kestrel's version and adding the change back on top, with the invariants first.
 - **Run `npm test`, `npm run typecheck`, and `npm run check`** before calling it done, then deploy as above.
 - **If the feature would help others,** offer to propose it to Kestrel's repository.
 

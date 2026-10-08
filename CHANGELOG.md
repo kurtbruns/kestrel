@@ -10,9 +10,17 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/maintainer/frame.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- The upgrade guide covers a copy you've changed, from checking your changes against the release to resolving conflicts on a branch. In Claude Code, `/upgrade` follows it and asks before each migration and deploy.
+
 ### Changed
 
 - Claude Code in your copy now starts as help for running your instance: it follows the setup guide, uses your API without a prompt to paste, and asks before it deploys, sends, or changes your list. Kestrel's maintainer instructions no longer reach you.
+
+### Fixed
+
+- The upgrade guide's local try now applies the release's database changes first, since `npm run dev` migrates only a fresh local database. It also says to mark a resolved `wrangler.jsonc` and commit a merge that stopped on conflicts, and going back finds the previous release even when you committed after the merge.
 
 ## [1.4.0] - 2026-10-08
 
