@@ -18,9 +18,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "guides/connect-claude",
       "guides/ses",
       "guides/notifications",
-      "guides/archive-website",
       "guides/rate-limit",
-      "guides/staging",
       "guides/upgrade",
       "reference/configuration",
       "reference/sending-domain-dns",
@@ -41,7 +39,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     expect(landing.intro).toContain('href="#/docs/overview"'); // the intro's link, rewritten
     expect(landing.sections.map((s) => [s.id, s.title, s.numbered])).toEqual([
       ["get-started", "Get started", true],
-      ["guides", "More guides", false],
+      ["guides", "Guides", false],
       ["reference", "Reference", false],
     ]);
     for (const s of landing.sections) {
@@ -103,9 +101,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "Connect Claude to the API",
       "Use Amazon SES instead of Resend",
       "Notifications through Cloudflare's email",
-      "Put the archive on your website",
       "Rate-limit the subscribe form",
-      "Add a staging environment",
       "Upgrade to a new release",
       "Configuration",
       "Sending-domain DNS",

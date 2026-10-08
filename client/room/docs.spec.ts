@@ -52,7 +52,7 @@ const guide: DocsResponse = {
     intro: '<p>Start with the <a href="#/docs/overview">Overview</a>.</p>',
     sections: [
       { id: "get-started", title: "Get started", blurb: "<p>In order.</p>", numbered: true },
-      { id: "guides", title: "More guides", blurb: "<p>Pick one.</p>", numbered: false },
+      { id: "guides", title: "Guides", blurb: "<p>Pick one.</p>", numbered: false },
       { id: "reference", title: "Reference", blurb: "", numbered: false },
     ],
   },
@@ -111,7 +111,7 @@ describe("docs room", () => {
       "#/docs/verify",
       "#/docs/configuration",
     ]);
-    // A heading per section that has docs; one with none (More guides here) shows nothing.
+    // A heading per section that has docs; one with none (Guides here) shows nothing.
     expect($$(".doc-section-t").map((h) => h.textContent)).toEqual(["Get started", "Reference"]);
     // Only the main path's steps carry numbers, and they sit in an ordered list.
     expect($$(".doc-card-n").map((n) => n.textContent)).toEqual(["01", "02", "03"]);

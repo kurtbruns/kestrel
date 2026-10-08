@@ -4,7 +4,7 @@ These guides deploy and run your own instance of Kestrel, from a fresh clone of 
 
 ## Get started
 
-Six steps from a fresh clone to a live newsletter, in order.
+Follow these steps, from a fresh clone to a live newsletter.
 
 1. [Overview](get-started/01-overview.md)
 1. [Deploy the app](get-started/02-deploy.md)
@@ -13,16 +13,14 @@ Six steps from a fresh clone to a live newsletter, in order.
 1. [Verify it works](get-started/05-verify.md)
 1. [Go live](get-started/06-go-live.md)
 
-## More guides
+## Guides
 
 Each one stands on its own. Pick the ones you need.
 
 - [Connect Claude to the API](guides/01-connect-claude.md)
 - [Use Amazon SES instead of Resend](guides/02-ses.md)
 - [Notifications through Cloudflare's email](guides/03-notifications.md)
-- [Put the archive on your website](guides/04-archive-website.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
-- [Add a staging environment](guides/06-staging.md)
 - [Upgrade to a new release](guides/07-upgrade.md)
 
 ## Reference

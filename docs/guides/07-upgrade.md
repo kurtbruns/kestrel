@@ -2,7 +2,7 @@
 
 A new release of Kestrel arrives as a tag in Kestrel's repository, your `upstream` remote. Upgrading merges that tag into your copy, applies any new database changes, and deploys. The app can't undo a database change, so you note a restore point first.
 
-In this guide, you read what changed, merge the release, and note where your database stands. Then you apply the database changes, deploy, and check the new version. If you run a [staging environment](06-staging.md), upgrade it first, and repeat each step for production once it checks out.
+In this guide, you read what changed, merge the release, and note where your database stands. Then you apply the database changes, deploy, and check the new version. If you run a staging environment, upgrade it first, and repeat each step for production once it checks out.
 
 ## 1. Read what changed
 

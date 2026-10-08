@@ -67,7 +67,11 @@ The floor is 60, since sends go out from a once-a-minute schedule. The ceiling i
 
 ### `ARCHIVE_ORIGIN` and `MEDIA_PUBLIC_BASE`
 
-Leave them unset to keep everything on the app's own hostname. [Put the archive on your website](../guides/04-archive-website.md) says when and how to set them.
+Leave them unset to keep everything on the app's own hostname.
+
+`ARCHIVE_ORIGIN` points archive links at another origin, such as your website, `https://example.com`. The app doesn't answer there on its own. A Worker route on that domain, such as `example.com/archive*` in the environment's `routes`, sends the archive path to the app. Links already mailed keep working, since the app still answers on its own hostname.
+
+`MEDIA_PUBLIC_BASE` serves images from another base URL, such as a custom domain on the image bucket. The app's own `/media` path sends `Content-Security-Policy: sandbox` and `X-Content-Type-Options: nosniff` with every file, so a file in the bucket never runs as a page. A bucket's custom domain sends neither, so add both with a Response Header Transform Rule on that hostname.
 
 ### `NOTIFY_FROM`
 

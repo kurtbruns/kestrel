@@ -45,7 +45,5 @@ Each of these guides stands on its own. Pick the ones you want.
 
 - [Connect Claude to the API](../guides/01-connect-claude.md), so Claude can draft, proofread, and schedule posts through the same API the editor uses.
 - [Notifications through Cloudflare's email](../guides/03-notifications.md), so you hear about problems even when your email provider has stopped sending.
-- [Put the archive on your website](../guides/04-archive-website.md), at `example.com/archive`.
-- [Add a staging environment](../guides/06-staging.md), to try a change before it reaches production.
 
 When a new release comes out, [Upgrade to a new release](../guides/07-upgrade.md) shows how to move to it.
