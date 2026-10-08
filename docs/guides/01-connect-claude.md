@@ -23,7 +23,6 @@ A service token is a Client ID and a Client Secret that a program sends with eac
 
 1. Copy the **Client ID** and the **Client Secret**. Cloudflare shows the secret only once.
 
-1. **(Optional, recommended)** Get a warning before the token expires. Once it does, Claude can't reach the API. In the Cloudflare dashboard, go to **Notifications**, select **Add**, and choose **Expiring Access Service Token**. It emails you a week before the token expires.
 
 ## 2. Add a policy for the token
 
