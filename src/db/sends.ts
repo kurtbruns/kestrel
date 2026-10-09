@@ -777,24 +777,20 @@ export function insertScheduledSendStmt(
 
 /** The review window as a CAS (SPEC §6): still scheduled, and its fire time still ahead of
  *  `now`. The window closes at the fire time, whether or not the sweep has started the
- *  send. With `rev`, also that the send is as the caller last read it (`If-Match`). */
-function inWindowAt(now: number, rev: number | null): { sql: string; binds: unknown[] } {
-  return {
-    sql: "status = 'scheduled' AND fire_at > ? AND (? IS NULL OR rev = ?)",
-    binds: [now, rev, rev],
-  };
+ *  send. */
+function inWindowAt(now: number): { sql: string; binds: unknown[] } {
+  return { sql: "status = 'scheduled' AND fire_at > ?", binds: [now] };
 }
 
 /** Move a scheduled send's fire time, nothing else, inside its review window (`inWindowAt`):
- *  `meta.changes === 0` means the window has closed, or the send changed from `rev`. */
+ *  `meta.changes === 0` means the window has closed. */
 export function rescheduleStmt(
   db: D1Database,
   sendId: string,
   fireAt: number,
   now: number,
-  rev: number | null = null,
 ): D1PreparedStatement {
-  const guard = inWindowAt(now, rev);
+  const guard = inWindowAt(now);
   return db
     .prepare(`UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`)
     .bind(fireAt, sendId, ...guard.binds);
@@ -802,13 +798,8 @@ export function rescheduleStmt(
 
 /** Cancel a scheduled send inside its review window, the same CAS as `rescheduleStmt`: a
  *  send due, sending, sent, or canceled changes zero rows. */
-export function cancelStmt(
-  db: D1Database,
-  sendId: string,
-  now: number,
-  rev: number | null = null,
-): D1PreparedStatement {
-  const guard = inWindowAt(now, rev);
+export function cancelStmt(db: D1Database, sendId: string, now: number): D1PreparedStatement {
+  const guard = inWindowAt(now);
   return db
     .prepare(
       `UPDATE sends SET status = 'canceled', completed_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`,

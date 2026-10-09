@@ -10,9 +10,21 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Breaking
+
+- Cancel, reschedule, and Resolve no longer take a precondition: an `If-Match` header on them, and Resolve's `expected_count`, are now ignored, and the `precondition_failed` and `count_changed` refusals are gone. Each act applies to the send as it stands and answers with the result, so a retry after a lost answer is answered `changed: false` instead of a 412, and two acts made moments apart both land, each shown at once and reversible before the fire time (SPEC §1, §8).
+
+### Changed
+
+- The operator's Claude context no longer tells Claude to send `If-Match` when it acts on a send, or to handle `precondition_failed`, since neither applies any more. It now says an act is safe to repeat and that every answer carries the send as it now stands. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
+
 ### Fixed
 
 - A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
+- On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.
+- `kestrel init` on Windows no longer leaves an extra `claude` folder beside `.claude`, and `npm run check-context -- --merged` accepts a Windows path.
+- `npm run check-context` now prints commands that run as written (`npm run check-context -- --update`, `-- --merged`), where it printed a bare `kestrel` that isn't on the path.
+- `kestrel init` refuses before writing anything when a migration of the release's is already there, where it wrote the other files first.
 
 ## [1.5.0] - 2026-10-09
 

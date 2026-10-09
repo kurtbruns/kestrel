@@ -199,23 +199,17 @@ describe("resolve a wedged send", () => {
     });
   });
 
-  it("refuses when the ambiguous count is not the one the caller saw, or the send moved on from its rev", async () => {
+  it("refuses a second Resolve once the first has settled the send", async () => {
     const send = await sendingSend();
     await insertDelivery(send.id, "a1@example.com", "dispatched");
     await insertDelivery(send.id, "a2@example.com", "dispatched");
-    const row = (await sends.getSend(env.DB, send.id))!;
 
-    await expect(
-      resolveStuckSend(env, send.id, "unsent", "t", { expectedCount: 1 }),
-    ).rejects.toMatchObject({ status: 409, code: "count_changed" });
-    await expect(
-      resolveStuckSend(env, send.id, "unsent", "t", { ifMatch: row.rev - 1 }),
-    ).rejects.toMatchObject({ status: 412, code: "precondition_failed" });
-    const res = await resolveStuckSend(env, send.id, "unsent", "t", {
-      ifMatch: row.rev,
-      expectedCount: 2,
+    const first = await resolveStuckSend(env, send.id, "unsent", "t");
+    expect(first.resolved).toBe(2);
+    await expect(resolveStuckSend(env, send.id, "accepted", "t")).rejects.toMatchObject({
+      status: 409,
+      code: "not_wedged",
     });
-    expect(res.resolved).toBe(2);
   });
 
   it("answers not_wedged, not run_in_progress, when another Resolve finished the send while this one checked", async () => {

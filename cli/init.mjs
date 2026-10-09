@@ -40,8 +40,9 @@ function scaffoldFiles(dir = TEMPLATE, out = []) {
       scaffoldFiles(from, out);
       continue;
     }
+    // Split on either separator, so the names match on Windows too.
     const to = relative(TEMPLATE, from)
-      .split("/")
+      .split(/[\\/]/)
       .map((part) => RENAMED[part] ?? part)
       .join("/");
     if (!CONTEXT_FILES.includes(to)) {
@@ -67,7 +68,12 @@ export function initCommand(argv) {
     ...scaffoldFiles(),
     [join(PACKAGE_ROOT, ".dev.vars.example"), ".dev.vars.example"],
   ];
-  const writes = [...files.map(([, to]) => to), ...CONTEXT_FILES];
+  // A migration of this release's already there counts too, since sync-migrations refuses
+  // to overwrite one, and by then everything else would have been written.
+  const migrations = readdirSync(join(PACKAGE_ROOT, "migrations"))
+    .filter((f) => f.endsWith(".sql"))
+    .map((f) => `migrations/${f}`);
+  const writes = [...files.map(([, to]) => to), ...CONTEXT_FILES, ...migrations];
   const taken = writes.filter((to) => existsSync(join(root, to)));
   if (taken.length > 0) {
     console.error(
