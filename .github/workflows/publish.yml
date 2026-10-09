@@ -56,13 +56,22 @@ jobs:
       - run: npm run ci
       - run: npm run check:package
       # A version already on npm (the first, which is published by hand, or a re-run) is left
-      # alone: npm never lets a version be published twice.
+      # alone: npm never lets a version be published twice. The registry can take a while to
+      # show a version just published by hand, so npm's own refusal to publish over it counts
+      # the same as finding it.
       - name: Publish
         run: |
           name="$(node -p 'require("./package.json").name')"
           version="$(node -p 'require("./package.json").version')"
-          if npm view "$name@$version" version >/dev/null 2>&1; then
+          if npm view "$name@$version" version --prefer-online >/dev/null 2>&1; then
             echo "::notice::$name@$version is already on npm; nothing to publish"
-          else
-            npm publish
+            exit 0
           fi
+          status=0
+          npm publish > publish.log 2>&1 || status=$?
+          cat publish.log
+          if [ "$status" -ne 0 ] && grep -q "cannot publish over the previously published versions" publish.log; then
+            echo "::notice::$name@$version is already on npm; nothing to publish"
+            exit 0
+          fi
+          exit "$status"
