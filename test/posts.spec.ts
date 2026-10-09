@@ -209,6 +209,7 @@ describe("posts + revisions", () => {
       expect(res.headers.get("ETag")).toBe(`"${rev1}"`);
       const refused = await readJson(res);
       expect(refused.error).toBe("base_required");
+      expect(refused.field).toBe("base_revision");
       expect(refused.post).toMatchObject({ id, current_revision: rev1, status: "draft" });
     }
     // Nothing landed, and the refusal's revision is enough to save in one more step.

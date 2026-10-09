@@ -173,6 +173,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
       error: "base_required",
       message:
         "a save must name the revision it was based on: read the post, then save with its current_revision as base_revision or If-Match",
+      field: "base_revision",
       post,
     };
     return json(required, 428, revisionHeaders(post));

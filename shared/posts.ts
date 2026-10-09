@@ -96,6 +96,8 @@ export interface TestSendResponse {
 export interface BaseRequiredError {
   error: "base_required";
   message: string;
+  /** The request field to add, as every refusal about the request names it (docs/API.md). */
+  field: "base_revision";
   post: Post;
 }
 
