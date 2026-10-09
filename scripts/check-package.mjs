@@ -2,9 +2,9 @@
 /*
  * Prove the npm package works from an instance repository, the way an operator consumes it.
  *
- * Builds and packs this repository as `npm publish` would, checks the tarball holds
- * what an instance needs and none of Kestrel's source, then installs it into a scratch instance
- * holding only a package.json, the one-line `src/index.ts`, a wrangler config whose assets
+ * Packs this repository as `npm publish` would (the `prepare` build included), checks the
+ * tarball holds what an instance needs and none of Kestrel's source, then installs it into a
+ * scratch instance holding only a package.json, the one-line `src/index.ts`, a wrangler config whose assets
  * point into node_modules, and a strict tsconfig. In that instance it runs `wrangler types`,
  * `tsc` (Kestrel's declaration included, with no skipLibCheck), and a `wrangler deploy
  * --dry-run` that bundles the Worker from node_modules. The instance installs the wrangler and
@@ -58,16 +58,15 @@ function fail(message) {
 }
 
 // --- Pack, and check what the tarball holds -----------------------------------------------
-// The build runs on its own first, so its log stays out of the JSON `npm pack` prints.
-step(process.execPath, [join(ROOT, "scripts", "build-package.mjs")], ROOT);
-// npm 10 prints a list of packages, npm 11 and later an object keyed by name.
-const packOutput = JSON.parse(
-  execFileSync("npm", ["pack", "--json", "--ignore-scripts", "--pack-destination", work], {
-    cwd: ROOT,
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "inherit"],
-  }),
-);
+// `npm pack` runs the `prepare` build first, as `npm publish` does, and the build's log lands
+// on stdout ahead of the JSON (npm 10 even with --ignore-scripts), so the JSON is read from
+// its opening line. npm 10 prints a list of packages, npm 11 and later an object keyed by name.
+const packText = execFileSync("npm", ["pack", "--json", "--pack-destination", work], {
+  cwd: ROOT,
+  encoding: "utf8",
+  stdio: ["ignore", "pipe", "inherit"],
+});
+const packOutput = JSON.parse(packText.slice(packText.search(/^[[{]$/m)));
 const packed = Array.isArray(packOutput) ? packOutput[0] : Object.values(packOutput)[0];
 const files = packed.files.map((f) => f.path);
 const missing = REQUIRED.filter((f) => !files.includes(f));
