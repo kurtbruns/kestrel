@@ -1,0 +1,68 @@
+# Publish @kurtbruns/kestrel to npm when a GitHub release is published. Cutting a release
+# (.claude/rules/changelog.md) ends with `gh release create`, which triggers this: the
+# package that instances install is built from that release's tag, and nothing else publishes.
+#
+# It authenticates through npm's trusted publishing: npm trusts this workflow file in this
+# repository (configured on the package's settings on npmjs.com), GitHub issues a short-lived
+# OIDC token for the run, and no npm token is stored anywhere. Publishing from a public
+# repository this way also attaches provenance, so npmjs.com shows the commit and workflow
+# run each version was built by.
+name: Publish to npm
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # the OIDC token npm's trusted publishing exchanges for a publish
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: publish
+    # Kestrel's versions have no prereleases; a release marked as one is not published.
+    if: ${{ !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      # Trusted publishing needs npm 11.5.1 or later, newer than some Node 24 releases bundle.
+      - run: npm install -g npm@11
+      # The tag names the version package.json carries, so the release page, the build stamp,
+      # and the version on npm are one number.
+      - name: Check the tag matches package.json
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="v$(node -p 'require("./package.json").version')"
+          if [ "$TAG" != "$version" ]; then
+            echo "::error::release tag $TAG does not match package.json $version"
+            exit 1
+          fi
+      # The `prepare` script builds the package (the stamp, the Worker bundle, the editor).
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run ci
+      - run: npm run check:package
+      # A version already on npm (the first, which is published by hand, or a re-run) is left
+      # alone: npm never lets a version be published twice.
+      - name: Publish
+        run: |
+          name="$(node -p 'require("./package.json").name')"
+          version="$(node -p 'require("./package.json").version')"
+          if npm view "$name@$version" version >/dev/null 2>&1; then
+            echo "::notice::$name@$version is already on npm; nothing to publish"
+          else
+            npm publish
+          fi
