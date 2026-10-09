@@ -5,7 +5,7 @@ import {
 } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import tickerSource from "../scripts/sweep-ticker.mjs?raw";
+import tickerSource from "../cli/sweep-ticker.mjs?raw";
 import type { SendView } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";

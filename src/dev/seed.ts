@@ -58,7 +58,7 @@ const DAY = 24 * 60 * 60 * 1000;
 const WEEK = 7 * DAY;
 const HOUR = 60 * 60 * 1000;
 
-/** An image file `scripts/seed.mjs` uploads from a post's bundle, named `<bundle>/<file>`. */
+/** An image file `cli/seed.mjs` uploads from a post's bundle, named `<bundle>/<file>`. */
 export interface DemoImageFile {
   bytes: ArrayBuffer;
   contentType: string;
@@ -835,7 +835,7 @@ export interface SeedSummary {
  * Reset the database and load the demo publication: its identity and posts come from the
  * Markdown under `demo/` (see `loadDemo`), its subscribers and send history from the
  * timeline here. `imageFiles` and `logoFile`, when provided, are written to R2 (the images
- * the posts show, and the publication logo) — both are supplied by `scripts/seed.mjs` from
+ * the posts show, and the publication logo) — both are supplied by `cli/seed.mjs` from
  * `demo/`, so the seed carries no bundled bytes. The cover is referenced by the post either
  * way (dropping the file in and re-seeding fills it), so it 404s until present; the
  * logo just falls back to the initial-letter tile when absent.
@@ -904,7 +904,7 @@ export async function seedDatabase(
 
   // Post images: each post's Markdown shows its images by filename, and each file sits beside
   // the post's `index.md` in its bundle. The row is recorded either way so the render
-  // resolves the reference; the bytes land in R2 when `scripts/seed.mjs` supplied the file
+  // resolves the reference; the bytes land in R2 when `cli/seed.mjs` supplied the file
   // (missing, that one image 404s until it's back).
   const uploaded = new Map(imageFiles.map((f) => [f.filename, f]));
   const imagesByPost = new Map<number, ImageRow[]>();

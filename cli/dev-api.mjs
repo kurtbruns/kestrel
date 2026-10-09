@@ -1,6 +1,7 @@
 /*
- * What the dev scripts (seed, reset, simulate-send) share: finding this worktree's dev
- * server, minting a local admin token from it, and calling its API the way any client does.
+ * What the dev commands (seed, reset, and this repository's simulate-send) share: finding
+ * this directory's dev server, minting a local admin token from it, and calling its API the
+ * way any client does.
  *
  * They work only through the running server's HTTP API, never D1 or R2 directly, so what
  * they do is what the editor or Claude could do, and it lands in the database the server
@@ -34,8 +35,8 @@ export function parseArgs(argv, booleans = []) {
   return { flags, positional };
 }
 
-/** The dev server's base URL: a URL or port argument, else `PORT`, else the port
- *  `npm run dev` recorded for this worktree (scripts/dev-port.mjs), else 8787. */
+/** The dev server's base URL: a URL or port argument, else `PORT`, else the port the
+ *  dev server recorded in this directory (cli/dev-port.mjs), else 8787. */
 export function baseUrl(arg) {
   if (arg) {
     return /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`;
@@ -62,7 +63,7 @@ export async function devToken(base, tag) {
   } catch (err) {
     fail(
       tag,
-      `could not reach ${base}. Is the dev server running? (npm run dev)`,
+      `could not reach ${base}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );
   }
@@ -95,7 +96,7 @@ export async function callApi(base, token, path, { method = "GET", json, tag = "
   } catch (err) {
     fail(
       tag,
-      `could not reach ${base}. Is the dev server running? (npm run dev)`,
+      `could not reach ${base}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );
   }

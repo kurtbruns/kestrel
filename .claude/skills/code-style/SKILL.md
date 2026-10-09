@@ -30,7 +30,7 @@ Never restate these in a review; `npm run check` and `npm run typecheck` decide 
 
 ## Names
 
-- Files: `snake_case.ts` (`dev_reload.ts`, `list_controls.ts`, `archive_url.ts`). `scripts/` and `.claude/hooks/` are the exception — kebab-case, matching how the rest of the repo names shell-adjacent tooling.
+- Files: `snake_case.ts` (`dev_reload.ts`, `list_controls.ts`, `archive_url.ts`). `scripts/`, `cli/`, `bin/`, and `.claude/hooks/` are the exception — kebab-case, matching how the rest of the repo names shell-adjacent tooling.
 - Functions and values `camelCase`; types and interfaces `PascalCase`; a module-level tuning knob or sentinel `UPPER_SNAKE` (`FREEZE_RETRIES`, `MAX_BATCH`, `UNSUB_SENTINEL`).
 - A name says what the thing is, not its type: `post`, not `postObj`; `sends`, not `sendList`.
 
@@ -76,7 +76,7 @@ for d in src client shared; do
     $(grep -rhE "^(export )?const [a-zA-Z_]+ = (async )?\(" "$d" --include='*.ts' --exclude='*.spec.ts' | wc -l)
 done
 
-# 5. Non-snake_case file names outside scripts/ and .claude/hooks/
+# 5. Non-snake_case file names outside scripts/, cli/, bin/, and .claude/hooks/
 find src client shared test -name '*.ts' | xargs -n1 basename | grep -E '[A-Z]|-'
 
 # 6. client/shared importing src/ (boundary violation)
