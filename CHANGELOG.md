@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.4.0.** No migration. Any script or API client that saves posts must send the revision it read, as `base_revision` or `If-Match`; the editor already does.
+
+### Breaking
+
+- Saving a post through the API now requires the revision the save was based on. A save without one is refused with a 428 `base_required` carrying the post as it stands, instead of overwriting whatever was saved last, so Claude can no longer clobber the publisher's edit by leaving the revision out (SPEC §4).
+
 ### Fixed
 
 - The upgrade guide now migrates before the local try, finishes a merge that stopped on conflicts, and goes back to the right release after later commits or merges.
