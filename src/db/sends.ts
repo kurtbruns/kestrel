@@ -1547,8 +1547,9 @@ export async function settleDeliveries(
 
 /** How many of a send's recipients are still open (`pending` or `dispatched`): the
  *  completion gate, zero when every recipient is accepted or terminal. No receipt lands on
- *  an open row (`markDeliveryEvent`), so an open row is always in `c_pending` or
- *  `c_in_flight`, and the gate and `WEDGED_SEND` agree on what is left. */
+ *  an open row (`markDeliveryEvent`), so an open row counts in `c_pending` or
+ *  `c_in_flight`, and the gate and `WEDGED_SEND` agree on what is left, unless a record
+ *  already holds an open row a receipt reached before that rule. */
 export async function openDeliveryCount(db: D1Database, sendId: string): Promise<number> {
   const row = await db
     .prepare(
