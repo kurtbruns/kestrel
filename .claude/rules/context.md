@@ -2,11 +2,12 @@
 paths:
   - ".claude/CLAUDE.md"
   - ".claude/rules/**/*.md"
+  - "template/claude/**"
 ---
 
 # Writing Claude's context
 
-`.claude/CLAUDE.md` and the rules under `.claude/rules/` are read by Claude Code, not by a person looking for documentation. CLAUDE.md loads at the start of every session. A rule with `paths` loads when Claude reads a matching file; a rule without `paths` loads at launch like CLAUDE.md. They are context, not configuration: Claude follows them more reliably when they are specific, short, and consistent, and anything that must hold every time belongs in a hook or a test.
+`.claude/CLAUDE.md`, the rules under `.claude/rules/`, and the operator context an instance starts with (`template/claude/`, which `kestrel init` writes to the instance's `.claude/`) are read by Claude Code, not by a person looking for documentation. CLAUDE.md loads at the start of every session. A rule with `paths` loads when Claude reads a matching file; a rule without `paths` loads at launch like CLAUDE.md. They are context, not configuration: Claude follows them more reliably when they are specific, short, and consistent, and anything that must hold every time belongs in a hook or a test.
 
 ## What belongs in CLAUDE.md
 

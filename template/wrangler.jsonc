@@ -1,0 +1,86 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "kestrel",
+  // The Worker is Kestrel's: src/index.ts re-exports it from the release this repository pins.
+  "main": "src/index.ts",
+  // Matches the release's own config. An upgrade's changelog says when to change it.
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": ["nodejs_compat"],
+  // Workers Logs, which index the fields of each JSON line Kestrel logs. Leave the sampling
+  // rate at its default of 1: a sampled-out minute could drop the one line that says a send
+  // is stuck.
+  "observability": { "enabled": true },
+
+  // ---------------------------------------------------------------------------
+  // The top level is the DEVELOPMENT environment, which `npm run dev` runs. Its mail
+  // transport is an in-memory stand-in, so local dev can never reach a real inbox. The
+  // `production` environment below must REDECLARE every binding and var, because wrangler
+  // does not inherit them. Fill in its values as the setup guide says; a real provider
+  // refuses to start while an origin or FROM_ADDRESS is still on example.com.
+  // ---------------------------------------------------------------------------
+
+  // The send sweep, once a minute. `npm run dev` runs it locally, where wrangler never
+  // fires a cron.
+  "triggers": { "crons": ["* * * * *"] },
+
+  // The editor, built by the release. Requests with no file fall through to the Worker.
+  "assets": {
+    "directory": "./node_modules/@kurtbruns/kestrel/dist/public",
+    "not_found_handling": "none"
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kestrel-dev",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-dev" }],
+
+  // ARCHIVE_ORIGIN and MEDIA_PUBLIC_BASE default to the app's own origin; set them only to
+  // put the archive on a website's apex or serve images from their own domain (the guide's
+  // configuration reference says what each needs).
+  "vars": {
+    "PROVIDER": "fake",
+    "APP_ORIGIN": "http://localhost:8787",
+    "ARCHIVE_BASE_PATH": "/archive",
+    "SENDING_DOMAIN": "send.example.com",
+    "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
+    "AWS_REGION": "us-east-1"
+  },
+
+  "env": {
+    "production": {
+      "name": "kestrel-production",
+      // The app's own hostname, attached on deploy. workers.dev and preview URLs stay off,
+      // so the app answers only on the hostname Access protects.
+      "routes": [{ "pattern": "newsletter.example.com", "custom_domain": true }],
+      "workers_dev": false,
+      "preview_urls": false,
+      "triggers": { "crons": ["* * * * *"] },
+      "observability": { "enabled": true },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "kestrel-production",
+          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID",
+          "migrations_dir": "migrations"
+        }
+      ],
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
+      // PROVIDER starts on `fake`: the setup guide's provider step switches it once the
+      // provider's secrets are set.
+      "vars": {
+        "PROVIDER": "fake",
+        "APP_ORIGIN": "https://newsletter.example.com",
+        "ARCHIVE_BASE_PATH": "/archive",
+        "SENDING_DOMAIN": "send.example.com",
+        "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
+        "AWS_REGION": "us-east-1"
+      }
+    }
+  }
+}

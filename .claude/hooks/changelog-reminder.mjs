@@ -13,8 +13,8 @@
  * change is actually user-facing.
  *
  * "Code" is src/, client/ and public/dashboard/ (the admin UI, which sits outside src/),
- * shared/ (code both runtimes ship), migrations/ (schema), and cli/ and bin/ (the `kestrel`
- * command an instance runs). Tests and build tooling
+ * shared/ (code both runtimes ship), migrations/ (schema), cli/ and bin/ (the `kestrel`
+ * command an instance runs), and template/ (the scaffold and Claude context it starts with). Tests and build tooling
  * live outside those prefixes, and specs kept beside the code (`*.spec.ts`) are skipped,
  * so a test- or script-only turn stays quiet. Once an entry exists, CHANGELOG.md is itself
  * in the diff and the hook goes silent.
@@ -42,6 +42,7 @@ const CODE_PREFIXES = [
   "migrations/",
   "cli/",
   "bin/",
+  "template/",
 ];
 
 /** The hook's stdin JSON (session_id, cwd), or {} when it can't be read. */
@@ -158,7 +159,7 @@ try {
 
   if (codeTouched && !changelogTouched && !alreadyReminded(id)) {
     const message =
-      "CHANGELOG reminder: this branch changes code (src/, client/, shared/, public/dashboard/, migrations/, cli/, or bin/) " +
+      "CHANGELOG reminder: this branch changes code (src/, client/, shared/, public/dashboard/, migrations/, cli/, bin/, or template/) " +
       "but CHANGELOG.md is untouched. If the change is user-facing or operator-visible, add a line " +
       "under [Unreleased] (see .claude/rules/changelog.md). Internal-only changes need no entry.";
     // Synchronous write to fd 1: a plain process.stdout.write() can be dropped when

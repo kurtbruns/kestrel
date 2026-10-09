@@ -2,8 +2,8 @@
 /*
  * The `kestrel` command: the few things an instance repository needs that wrangler doesn't
  * do. Deploying, migrating, and secrets are plain wrangler, which Cloudflare documents and
- * Claude already knows; this covers local dev with the send sweep, bringing a release's
- * migrations in, and the demo. This repository's npm scripts run the same commands, so both
+ * Claude already knows; this covers writing a new instance, local dev with the send sweep,
+ * bringing a release's migrations and Claude context in, and the demo. This repository's npm scripts run the same commands, so both
  * use one implementation.
  *
  * Every command acts on the directory it runs in. Seed and reset work only against a local
@@ -21,8 +21,11 @@ const HELP = `kestrel ${PACKAGE.version}
 
 Usage: kestrel <command> [options]
 
+  init [dir]                    write a new instance repository here (or in dir)
   dev [wrangler dev args]       run locally, with the send sweep once a minute (PORT picks the port)
   sync-migrations               copy this release's migrations into migrations/
+  check-context [--update]      compare the Claude files in .claude/ with this release's
+  check-context --merged <file> record that you merged this release's changes into one
   seed [--size <n>] [port|url]  load the demo publication into the local dev server
   reset [port|url]              return the local dev server to a fresh install
 
@@ -32,6 +35,12 @@ Usage: kestrel <command> [options]
 const [command, ...argv] = process.argv.slice(2);
 
 switch (command) {
+  case "init":
+    (await import("../cli/init.mjs")).initCommand(argv);
+    break;
+  case "check-context":
+    (await import("../cli/context.mjs")).checkContextCommand(argv);
+    break;
   case "dev":
     await (await import("../cli/dev.mjs")).devCommand(argv);
     break;

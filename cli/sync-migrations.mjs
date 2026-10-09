@@ -23,9 +23,9 @@ import { fileURLToPath } from "node:url";
 
 const SHIPPED = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
-/** `kestrel sync-migrations`. */
-export function syncMigrationsCommand() {
-  const target = join(process.cwd(), "migrations");
+/** `kestrel sync-migrations`, into the `migrations/` of `root` (the current directory). */
+export function syncMigrationsCommand(root = process.cwd()) {
+  const target = join(root, "migrations");
   if (existsSync(target) && realpathSync(target) === realpathSync(SHIPPED)) {
     console.log("[sync-migrations] this is Kestrel's own repository: nothing to copy.");
     return;
