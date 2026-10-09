@@ -8,15 +8,26 @@
  * instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
  * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
  * from node_modules; applies the migrations init copied to a local database; and checks that
- * `kestrel check-context` finds every context file current. The instance installs the
+ * `kestrel check-context` finds every context file current. Last it runs the instance: `npm
+ * run dev` must answer its health check and serve the editor, and `kestrel seed` must load the
+ * demo through it. The instance installs the
  * wrangler and TypeScript versions this repository uses, so a failure here is the package's,
  * not a newer tool's.
  *
  * The CI gate runs it after the quality gate. `--keep` leaves the scratch directory in place
  * to look at; it is printed either way.
  */
-import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync, spawn, spawnSync } from "node:child_process";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+} from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -58,6 +69,18 @@ function step(cmd, args, cwd = join(work, "instance")) {
   }
 }
 
+/** A port free on loopback right now, for the instance's dev server. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
 function fail(message) {
   console.error(`[check-package] FAILED: ${message} (scratch kept at ${work})`);
   process.exit(1);
@@ -97,6 +120,27 @@ mkdirSync(unpacked);
 step("tar", ["-xzf", join(work, packed.filename), "-C", unpacked], work);
 const instance = join(work, "instance");
 step(process.execPath, [join(unpacked, "package", "bin", "kestrel.mjs"), "init", instance], work);
+
+// init wrote every file an instance starts with, under its instance name, and nothing under a
+// shipped name.
+const INSTANCE_FILES = [
+  "package.json",
+  ".npmrc",
+  ".gitignore",
+  ".dev.vars.example",
+  "wrangler.jsonc",
+  "tsconfig.json",
+  "src/index.ts",
+  ".claude/CLAUDE.md",
+  ".claude/skills/upgrade/SKILL.md",
+];
+const absent = INSTANCE_FILES.filter((f) => !existsSync(join(instance, f)));
+const stray = ["claude", "gitignore", "npmrc"].filter((f) => existsSync(join(instance, f)));
+if (absent.length > 0 || stray.length > 0) {
+  fail(
+    `init wrote ${stray.length ? `${stray.join(", ")} under shipped names` : ""}${absent.length ? ` and no ${absent.join(", ")}` : ""}`,
+  );
+}
 
 // The scaffold's config tracks this repository's: the same runtime date and flags.
 const setting = (file, key) =>
@@ -143,8 +187,52 @@ if (context.status !== 0 || lines.some((l) => !/: current$/.test(l))) {
   fail(`check-context on a fresh instance:\n${context.stdout}${context.stderr}`);
 }
 
+// The instance runs: `npm run dev` serves the Worker from node_modules (the health check and
+// the editor answer), and seed loads the demo through it. A bundle that only fails once it
+// runs gets this far and no further.
+copyFileSync(join(instance, ".dev.vars.example"), join(instance, ".dev.vars"));
+const port = String(await freePort());
+const dev = spawn("npm", ["run", "dev"], {
+  cwd: instance,
+  env: { ...process.env, PORT: port },
+  stdio: ["ignore", "pipe", "pipe"],
+  detached: true,
+});
+let devLog = "";
+dev.stdout.on("data", (d) => {
+  devLog += d;
+});
+dev.stderr.on("data", (d) => {
+  devLog += d;
+});
+const stopDev = () => {
+  try {
+    process.kill(-dev.pid, "SIGTERM");
+  } catch {
+    /* already gone */
+  }
+};
+const base = `http://localhost:${port}`;
+let health = null;
+for (let i = 0; i < 90 && !health; i++) {
+  await new Promise((r) => setTimeout(r, 1000));
+  health = await fetch(`${base}/health`)
+    .then((r) => (r.ok ? r.json() : null))
+    .catch(() => null);
+}
+const dashboard = health ? (await fetch(`${base}/dashboard/`).catch(() => null))?.status : null;
+const seeded = health
+  ? spawnSync("npx", ["--no", "--", "kestrel", "seed", port], { cwd: instance, encoding: "utf8" })
+  : null;
+stopDev();
+if (health?.status !== "ok" || dashboard !== 200 || seeded?.status !== 0) {
+  fail(
+    `the instance's dev server: health ${JSON.stringify(health)}, /dashboard/ ${dashboard}, seed ${seeded?.status}\n${seeded?.stderr ?? ""}${devLog.slice(-2000)}`,
+  );
+}
+
 console.log(
-  "[check-package] ok: the packed package scaffolds an instance that typechecks, bundles, migrates, and checks its context",
+  "[check-package] ok: the packed package scaffolds an instance that typechecks, bundles, migrates, runs, and checks its context",
 );
 if (!keep) {
   rmSync(work, { recursive: true, force: true });

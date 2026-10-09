@@ -41,7 +41,14 @@ export function shippedPath(file) {
 // The header line, as a Markdown comment or, inside a skill's front matter, a YAML one.
 const HEADER = /^.*@kurtbruns\/kestrel (\S+), sha256:([0-9a-f]{64}).*\n/m;
 
+// Files are compared and hashed with LF line endings, so a checkout that turns them into CRLF
+// (git's autocrlf on Windows) reads as the same file, not as an edit.
+const lf = (text) => text.replace(/\r\n/g, "\n");
+const read = (path) => lf(readFileSync(path, "utf8"));
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+// How an operator runs this command: `kestrel` is on the PATH only inside an npm script.
+const RUN = "npm run check-context --";
 
 /** A context file's header (`version`, `hash`, or null when it has none) and its body. */
 function parse(text) {
@@ -72,17 +79,17 @@ export function stamp(body, hash = sha256(body)) {
 export function writeShipped(root, file) {
   const to = join(root, file);
   mkdirSync(dirname(to), { recursive: true });
-  writeFileSync(to, stamp(readFileSync(shippedPath(file), "utf8")));
+  writeFileSync(to, stamp(read(shippedPath(file))));
 }
 
 /** Where a context file stands against the installed release. */
 function status(root, file) {
   const path = join(root, file);
-  const release = readFileSync(shippedPath(file), "utf8");
+  const release = read(shippedPath(file));
   if (!existsSync(path)) {
     return { state: "missing" };
   }
-  const { header, body } = parse(readFileSync(path, "utf8"));
+  const { header, body } = parse(read(path));
   const releaseHash = sha256(release);
   if (sha256(body) === releaseHash) {
     return { state: "current", header, restamp: header?.hash !== releaseHash };
@@ -104,8 +111,8 @@ function diff(root, file) {
   const dir = mkdtempSync(join(tmpdir(), "kestrel-context-"));
   const name = basename(file);
   for (const [side, text] of [
-    ["yours", parse(readFileSync(join(root, file), "utf8")).body],
-    ["release", readFileSync(shippedPath(file), "utf8")],
+    ["yours", parse(read(join(root, file))).body],
+    ["release", read(shippedPath(file))],
   ]) {
     mkdirSync(join(dir, side));
     writeFileSync(join(dir, side, name), text);
@@ -129,7 +136,7 @@ function diff(root, file) {
 export function checkContextCommand(argv, root = process.cwd()) {
   const mergedAt = argv.indexOf("--merged");
   if (mergedAt !== -1) {
-    const file = relative(root, resolve(root, argv[mergedAt + 1] ?? ""));
+    const file = relative(root, resolve(root, argv[mergedAt + 1] ?? "")).replaceAll("\\", "/");
     if (!CONTEXT_FILES.includes(file) || !existsSync(join(root, file))) {
       console.error(
         `[check-context] --merged takes one of: ${CONTEXT_FILES.join(", ")} (and it must exist).`,
@@ -137,8 +144,8 @@ export function checkContextCommand(argv, root = process.cwd()) {
       process.exit(1);
     }
     // The body stays the operator's; the header now says it has this release's changes.
-    const { body } = parse(readFileSync(join(root, file), "utf8"));
-    const release = readFileSync(shippedPath(file), "utf8");
+    const { body } = parse(read(join(root, file)));
+    const release = read(shippedPath(file));
     writeFileSync(join(root, file), stamp(body, sha256(release)));
     console.log(`[check-context] ${file}: recorded as merged with ${PACKAGE.version}`);
     return;
@@ -162,7 +169,9 @@ export function checkContextCommand(argv, root = process.cwd()) {
           console.log(`[check-context] ${file}: restored from ${PACKAGE.version}`);
         } else {
           pending++;
-          console.log(`[check-context] ${file}: missing; --update writes ${PACKAGE.version}'s`);
+          console.log(
+            `[check-context] ${file}: missing; \`${RUN} --update\` writes ${PACKAGE.version}'s`,
+          );
         }
         break;
       case "outdated":
@@ -172,7 +181,7 @@ export function checkContextCommand(argv, root = process.cwd()) {
         } else {
           pending++;
           console.log(
-            `[check-context] ${file}: Kestrel ${PACKAGE.version} changed it${had}, and you haven't edited it; --update takes the new one`,
+            `[check-context] ${file}: Kestrel ${PACKAGE.version} changed it${had}, and you haven't edited it; \`${RUN} --update\` takes the new one`,
           );
         }
         break;
@@ -191,7 +200,7 @@ export function checkContextCommand(argv, root = process.cwd()) {
             : `  From yours to ${PACKAGE.version}'s, header aside (lines starting + are the release's):\n${d}`,
         );
         console.log(
-          `  Merge what you want of it into yours, then record that: kestrel check-context --merged ${file}`,
+          `  Merge what you want of it into yours, then record that: ${RUN} --merged ${file}`,
         );
         break;
       }
