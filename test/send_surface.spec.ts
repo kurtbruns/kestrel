@@ -21,8 +21,8 @@ import { has } from "./support/conditions";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it
-// stands, actions safe to retry and carrying no precondition, the review window closing at the fire time,
-// and query values refused rather than dropped.
+// stands, actions safe to retry and carrying no precondition, the review window closing at
+// the fire time, and query values refused rather than dropped.
 
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
