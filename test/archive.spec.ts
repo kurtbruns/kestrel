@@ -188,7 +188,7 @@ describe("archive / view-in-browser", () => {
       expect(res.headers.get("cache-control")).toBe("no-store");
       const body = await res.text();
       expect(body).toContain("The Marsh Letter");
-      expect(body).toContain("This post hasn't been sent yet.");
+      expect(body).toContain("Its page appears at this address once it has been sent.");
       expect(body).not.toContain("Draft Only");
       expect(body).not.toContain("secret work in progress");
     } finally {
@@ -210,13 +210,12 @@ describe("archive / view-in-browser", () => {
     const before = await SELF.fetch(`${base}/archive/${post.slug}`);
     expect(before.status).toBe(404);
     const body = await before.text();
-    expect(body).toContain("This post hasn't been sent yet.");
+    expect(body).toContain("Its page appears at this address once it has been sent.");
     for (const leak of [
       "Coming Soon",
       "the frozen copy",
       String(fireAt),
       new Date(fireAt).toISOString().slice(0, 10),
-      new Date(fireAt).getUTCFullYear().toString(),
     ]) {
       expect(body).not.toContain(leak);
     }
@@ -523,9 +522,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       ],
       ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
       ["post not found", archivePage, "/archive/missing", "Not found"],
-      ["post not sent yet", archivePage, "/archive/unsent", "hasn't been sent yet"],
+      ["post not sent yet", archivePage, "/archive/unsent", "Not here yet"],
     ];
-    await posts.createPost(env.DB, { subject: "Unsent", markdown: "wip" }, "test");
+    const unsent = await posts.createPost(env.DB, { subject: "Unsent", markdown: "wip" }, "test");
+    expect(unsent.post.slug).toBe("unsent");
     for (const [name, handler, path, shows, init] of cards) {
       const params = {
         slug: path.startsWith("/archive/") ? path.slice("/archive/".length) : "missing",

@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- The "View in browser" link in a test email of a draft or scheduled post now opens a plain page saying the post hasn't been sent yet, instead of a bare "Not found". It shows only the publication's name, and the post's page appears at the same address once it is sent (SPEC §5).
+- The "View in browser" link in a test email of a draft or scheduled post now opens a plain page saying the post appears there once it has been sent, instead of a bare "Not found". It shows only the publication's name, and the post's page replaces it at the same address once the send completes (SPEC §5).
 
 ## [1.5.0] - 2026-10-09
 

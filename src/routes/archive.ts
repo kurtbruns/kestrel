@@ -7,7 +7,7 @@
  * manage-subscription link (a public page has no single recipient), the inert
  * anchors become browser-only chrome (masthead + the display font and reader ground)
  * that never ships in an email, and the template's email-only regions are left out.
- * Until a post is sent, its page says only that it hasn't gone out yet.
+ * Until a post's send completes, its page says only that the post will appear there.
  */
 
 import { getBySlug } from "../db/posts";
@@ -124,7 +124,8 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
 
 /** The page for a slug that names a post with no sent send yet, the address a test
  *  email's "view in browser" link carries before the real send (§5). It says only the
- *  publication's name and that the post hasn't gone out: nothing of the post's content
+ *  publication's name and that the post's page comes once it is sent, which holds
+ *  for a draft, a scheduled post, and a send still going out alike: nothing of the post's content
  *  or fire time, since the page is public, and no link toward the admin surface (§11).
  *  A 404, as there is no record at this address yet, so a crawler never indexes it;
  *  `no-store`, so the record replaces it the moment the send completes. */
@@ -132,7 +133,7 @@ async function notSentYetPage(c: RequestContext): Promise<Response> {
   const identity = await readerIdentity(c, c.config);
   const res = htmlPage(
     identity.name,
-    `<p class="muted" style="margin-top:0;">${escapeHtml(identity.name)}</p><h1>Not sent yet</h1><p>This post hasn't been sent yet.</p>`,
+    `<p class="muted" style="margin-top:0;">${escapeHtml(identity.name)}</p><h1>Not here yet</h1><p>Its page appears at this address once it has been sent.</p>`,
     404,
     devDashboardUrl(c.config),
   );
