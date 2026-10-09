@@ -18,6 +18,10 @@
  * so a test- or script-only turn stays quiet. Once an entry exists, CHANGELOG.md is itself
  * in the diff and the hook goes silent.
  *
+ * The diff is the checkout the session works in, found from the hook input's `cwd`:
+ * CLAUDE_PROJECT_DIR is where the session started, which for a worktree Claude Code made
+ * from the main checkout is that checkout, whose diff is not this branch's.
+ *
  * Fails safe: any git error, a detached HEAD, or a missing CHANGELOG.md all end in a
  * silent exit 0. Reminds at most once per session (a marker in the temp dir keyed on the
  * session id), so a long session isn't nagged every turn. Pure Node, no dependencies.
@@ -27,11 +31,21 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync, writeSync } from "n
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Prefixes whose change means "consider a changelog entry". Kept in sync with
-// .claude/rules/changelog.md. Tests (test/) and tooling (scripts/) are deliberately absent.
+// Prefixes whose change means "consider a changelog entry", named again in the reminder's
+// message below. Tests (test/) and tooling (scripts/) are deliberately absent.
 const CODE_PREFIXES = ["src/", "client/", "shared/", "public/dashboard/", "migrations/"];
 
-const projectDir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
+/** The hook's stdin JSON (session_id, cwd), or {} when it can't be read. */
+function hookInput() {
+  try {
+    return JSON.parse(readFileSync(0, "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+const input = hookInput();
+let projectDir = input.cwd || process.env.CLAUDE_PROJECT_DIR || process.cwd();
 
 /**
  * Run git in the project dir; return stdout with only the trailing newline removed, or
@@ -92,16 +106,6 @@ function isCode(path) {
   return CODE_PREFIXES.some((p) => path.startsWith(p)) && !path.endsWith(".spec.ts");
 }
 
-/** Read the session id from the hook's stdin JSON, for the once-per-session marker. */
-function sessionId() {
-  try {
-    const raw = readFileSync(0, "utf8");
-    return JSON.parse(raw).session_id ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /** True if we've already reminded this session (and records that we have now). */
 function alreadyReminded(id) {
   if (!id) {
@@ -122,7 +126,13 @@ function alreadyReminded(id) {
 }
 
 try {
-  const id = sessionId();
+  const id = input.session_id ?? null;
+
+  // The session may sit in a subdirectory; the checkout's root holds CHANGELOG.md.
+  const root = git(["rev-parse", "--show-toplevel"]);
+  if (root) {
+    projectDir = root;
+  }
 
   if (!existsSync(join(projectDir, "CHANGELOG.md"))) {
     process.exit(0); // no changelog to update — stay quiet
@@ -139,7 +149,7 @@ try {
 
   if (codeTouched && !changelogTouched && !alreadyReminded(id)) {
     const message =
-      "CHANGELOG reminder: this branch changes code (src/, public/dashboard/, or migrations/) " +
+      "CHANGELOG reminder: this branch changes code (src/, client/, shared/, public/dashboard/, or migrations/) " +
       "but CHANGELOG.md is untouched. If the change is user-facing or operator-visible, add a line " +
       "under [Unreleased] (see .claude/rules/changelog.md). Internal-only changes need no entry.";
     // Synchronous write to fd 1: a plain process.stdout.write() can be dropped when
