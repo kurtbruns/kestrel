@@ -1,7 +1,6 @@
 {
-  "name": "kestrel",
+  "name": "@kurtbruns/kestrel",
   "version": "1.4.0",
-  "private": true,
   "type": "module",
   "description": "Newsletter app: write in Markdown, preview, schedule with a review window, and send to a double opt-in list. Cloudflare Worker + D1 + R2 + SES/Resend.",
   "license": "MIT",
@@ -12,8 +11,29 @@
     "type": "git",
     "url": "git+https://github.com/kurtbruns/kestrel.git"
   },
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/worker/index.d.ts",
+      "default": "./dist/worker/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "types": "./dist/worker/index.d.ts",
+  "files": [
+    "dist/worker/",
+    "dist/public/",
+    "migrations/",
+    "docs/README.md",
+    "docs/get-started/",
+    "docs/guides/",
+    "docs/reference/",
+    "CHANGELOG.md"
+  ],
   "scripts": {
-    "postinstall": "node scripts/stamp-version.mjs",
+    "prepare": "node scripts/build-package.mjs",
     "dev": "node scripts/dev.mjs",
     "seed": "node scripts/seed.mjs",
     "reset": "node scripts/reset.mjs",
@@ -24,6 +44,7 @@
     "typecheck": "node scripts/stamp-version.mjs --if-changed && wrangler types && tsc --noEmit && tsc --noEmit -p client",
     "client:build": "node scripts/build-client.mjs",
     "client:watch": "node scripts/build-client.mjs --dev --watch",
+    "package:build": "node scripts/build-package.mjs",
     "version:build": "node scripts/stamp-version.mjs",
     "check:tokens": "node scripts/check-css-tokens.mjs",
     "pretest": "node scripts/stamp-version.mjs --if-changed && node scripts/build-client.mjs --check && node scripts/check-css-tokens.mjs",
@@ -34,7 +55,8 @@
     "check": "biome check --write .",
     "ci": "biome ci .",
     "migrate:local": "wrangler d1 migrations apply DB --local",
-    "migrate:remote": "node scripts/require-env.mjs d1 migrations apply DB --remote"
+    "migrate:remote": "node scripts/require-env.mjs d1 migrations apply DB --remote",
+    "check:package": "node scripts/check-package.mjs"
   },
   "dependencies": {
     "@css-inline/css-inline-wasm": "^0.21.2",
