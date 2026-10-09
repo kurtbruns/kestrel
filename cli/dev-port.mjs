@@ -1,6 +1,6 @@
 /*
- * The dev server's bound port, shared between the launcher (`scripts/dev.mjs`) and
- * the seed/reset wrappers.
+ * The dev server's bound port, shared between `kestrel dev` (cli/dev.mjs) and the
+ * seed and reset commands.
  *
  * Why this exists: `npm run dev` can bind a port other than 8787 — Claude Code's
  * preview autoPort picks a free one when 8787 is busy (e.g. a second worktree already
@@ -21,10 +21,9 @@
  */
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const PORT_FILE = join(ROOT, ".wrangler", "dev-port");
+// Under the directory the command runs in: this repository, or an instance repository.
+const PORT_FILE = join(process.cwd(), ".wrangler", "dev-port");
 
 /** Record the port the dev server bound. Best-effort: on failure seed/reset just
  *  fall back to PORT/8787, no worse than before this file existed. */

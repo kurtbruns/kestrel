@@ -6,7 +6,7 @@ Everything `npm run seed` loads into a local dev server, apart from the subscrib
 - **`posts/`**: one folder per post, a page bundle: the post is `index.md`, and any image it shows sits beside it (`1-the-hovering-hunter/kestrel.webp`). The post refers to the image by its filename, as in `![…](kestrel.webp)`, so the link resolves when you preview the Markdown, and the seed attaches the file to that post. The number in a folder's name sets its place: sent posts go out oldest first in that order, and a post's id (and so its editor URL) follows its position.
 - **`field-notes-logo.png`**: the publication logo, named by `publication.md`.
 
-The worker bundles the Markdown files (the `rules` entry in `wrangler.jsonc`) and parses them in `src/dev/demo.ts`, which lists each post's folder; add a post by adding its folder and one line there. `npm run dev` watches this folder, so an edit here is in the next seed. `scripts/seed.mjs` uploads the images through the running dev server, which stores them in local R2. The subscribers, the four completed sends, and the scheduled send's fire time come from the timeline in `src/dev/seed.ts`.
+The worker bundles the Markdown files (the `rules` entry in `wrangler.jsonc`) and parses them in `src/dev/demo.ts`, which lists each post's folder; add a post by adding its folder and one line there. `npm run dev` watches this folder, so an edit here is in the next seed. `cli/seed.mjs` uploads the images through the running dev server, which stores them in local R2. The subscribers, the four completed sends, and the scheduled send's fire time come from the timeline in `src/dev/seed.ts`.
 
 ## Front matter
 

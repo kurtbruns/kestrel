@@ -141,7 +141,7 @@ export function parseDemoPost(bundle: string, text: string): DemoPost {
 /** Parse the publication identity file. */
 export function parseDemoPublication(file: string, text: string): DemoPublication {
   const { fields } = parseFrontMatter(file, text);
-  // `logo` names the image `scripts/seed.mjs` uploads; the worker only needs to accept it.
+  // `logo` names the image `cli/seed.mjs` uploads; the worker only needs to accept it.
   const f = readFields(file, fields, ["name", "tagline", "test_recipients"], ["address", "logo"]);
   return {
     name: f.name ?? "",

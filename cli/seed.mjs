@@ -1,30 +1,26 @@
-#!/usr/bin/env node
 /*
- * Load the local demo publication into the running dev server.
+ * `kestrel seed`: load the demo publication into the running local dev server.
  *
- * This is a thin wrapper around the dev-only `POST /api/dev/seed` route (fake
- * transport only): it mints a local admin token from `/api/dev/token`, attaches the
- * images the demo refers to (each image a post shows, from beside it in its bundle, and
- * the logo `publication.md` names), and POSTs. The posts themselves are bundled into the worker. The
- * worker itself does the reset, the render, and the R2 write — so this needs the
- * dev server up (`npm run dev`), and it never talks to D1/R2 directly.
+ * A thin wrapper around the dev-only `POST /api/dev/seed` route, which exists only on a local
+ * dev server: it mints a local admin token from `/api/dev/token`, attaches the images the demo
+ * refers to (each image a post shows, from beside it in its bundle under `demo/`, and the
+ * logo `publication.md` names), and POSTs. The posts themselves are bundled into the Worker,
+ * which does the reset, the render, and the R2 write, so this needs the dev server up and
+ * never talks to D1 or R2 directly. The images travel through the running Worker so they land
+ * in the same R2 the dev server serves.
  *
- * The image travels through the running worker (not an out-of-band `wrangler r2
- * object put`) so it lands in the same R2 the dev server serves, with no stale
- * read. The target defaults to the port `npm run dev` recorded for this worktree
- * (scripts/dev-port.mjs), so a worktree on a non-8787 port just works; override it
- * with `PORT` or a URL argument: `npm run seed -- 8788`.
- *
- * Scale the demo list with `--size` (100 / 1k / 10k / 100k, an approximate target)
- * and pin the seeded PRNG with `--seed`: `npm run seed -- --size 10k`. Without
- * `--size`, the curated story-shaped list (~155 subscribers) loads unchanged.
+ * The target defaults to the port the dev server recorded in this directory
+ * (cli/dev-port.mjs); override it with `PORT` or a URL or port argument. Scale the demo list
+ * with `--size` (100 / 1k / 10k / 100k, an approximate target) and pin the seeded PRNG with
+ * `--seed`. Without `--size`, the curated story-shaped list (~155 subscribers) loads.
  */
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { baseUrl, devToken, fail, parseArgs } from "./dev-api.mjs";
 
+// The demo ships beside the CLI, in this repository and in the package.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 /**
@@ -108,7 +104,7 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
   } catch (err) {
     fail(
       tag,
-      `could not reach ${url}. Is the dev server running? (npm run dev)`,
+      `could not reach ${url}. Is the dev server running?`,
       err instanceof Error ? err.message : String(err),
     );
   }
@@ -118,8 +114,9 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
   return res.json();
 }
 
-async function main() {
-  const { flags, positional } = parseArgs(process.argv.slice(2));
+/** `kestrel seed [--size n] [--seed s] [port|url]`. */
+export async function seedCommand(argv) {
+  const { flags, positional } = parseArgs(argv);
   const base = baseUrl(positional[0]);
   const token = await devToken(base, "seed");
   const summary = await seedDemo(base, token, { size: flags.size, seed: flags.seed });
@@ -143,20 +140,4 @@ async function main() {
   for (const a of summary.urls.archive) {
     console.log(`    archived post: ${a}`);
   }
-}
-
-/** Whether this file is the script node was asked to run. Compared as real paths: node
- *  resolves symlinks for the module's own URL but keeps argv as typed, so a script run
- *  through a symlinked path (`/tmp` on macOS) would otherwise never match. */
-function invokedDirectly() {
-  try {
-    return realpathSync(process.argv[1] ?? "") === realpathSync(fileURLToPath(import.meta.url));
-  } catch {
-    return false; // no script path (a REPL, `node -e`): imported, not run
-  }
-}
-
-// Run when invoked (`npm run seed`); `simulate-send` imports `seedDemo` instead.
-if (invokedDirectly()) {
-  main();
 }

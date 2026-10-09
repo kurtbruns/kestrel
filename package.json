@@ -22,9 +22,15 @@
     "./package.json": "./package.json"
   },
   "types": "./dist/worker/index.d.ts",
+  "bin": {
+    "kestrel": "bin/kestrel.mjs"
+  },
   "files": [
     "dist/worker/",
     "dist/public/",
+    "bin/",
+    "cli/",
+    "demo/",
     "migrations/",
     "docs/README.md",
     "docs/get-started/",
@@ -35,8 +41,8 @@
   "scripts": {
     "prepare": "node scripts/build-package.mjs",
     "dev": "node scripts/dev.mjs",
-    "seed": "node scripts/seed.mjs",
-    "reset": "node scripts/reset.mjs",
+    "seed": "node bin/kestrel.mjs seed",
+    "reset": "node bin/kestrel.mjs reset",
     "simulate-send": "node scripts/simulate-send.mjs",
     "predeploy": "node scripts/stamp-version.mjs",
     "deploy": "node scripts/require-env.mjs deploy",
@@ -63,6 +69,9 @@
     "aws4fetch": "^1.0.20",
     "jose": "^6.2.12",
     "marked": "^18.0.12"
+  },
+  "peerDependencies": {
+    "wrangler": "^4.129.1"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.6",

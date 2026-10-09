@@ -25,9 +25,9 @@
  * The target is this worktree's dev server, as for the seed; override it with `PORT` or a
  * URL or port argument.
  */
-import { baseUrl, callApi, devToken, fail, parseArgs } from "./dev-api.mjs";
-import { seedDemo } from "./seed.mjs";
-import { triggerSweep } from "./sweep-ticker.mjs";
+import { baseUrl, callApi, devToken, fail, parseArgs } from "../cli/dev-api.mjs";
+import { seedDemo } from "../cli/seed.mjs";
+import { triggerSweep } from "../cli/sweep-ticker.mjs";
 
 const TAG = "simulate-send";
 /** The demo's scheduled post (`demo/posts/5-a-quick-note.md`): the one a demo send moves when it can. */

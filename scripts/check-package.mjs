@@ -7,7 +7,8 @@
  * scratch instance holding only a package.json, the one-line `src/index.ts`, a wrangler config whose assets
  * point into node_modules, and a strict tsconfig. In that instance it runs `wrangler types`,
  * `tsc` (Kestrel's declaration included, with no skipLibCheck), and a `wrangler deploy
- * --dry-run` that bundles the Worker from node_modules. The instance installs the wrangler and
+ * --dry-run` that bundles the Worker from node_modules, then the `kestrel` command: copying
+ * the release's migrations in, then applying them locally with wrangler. The instance installs the wrangler and
  * TypeScript versions this repository uses, so a failure here is the package's, not a newer
  * tool's.
  *
@@ -15,7 +16,7 @@
  * to look at; it is printed either way.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +35,9 @@ const REQUIRED = [
   "dist/worker/index.d.ts",
   "dist/public/dashboard/index.html",
   "dist/public/dashboard/app.js",
+  "bin/kestrel.mjs",
+  "cli/dev.mjs",
+  "demo/publication.md",
   "migrations/0001_init.sql",
   "docs/README.md",
   "CHANGELOG.md",
@@ -149,7 +153,20 @@ step("npx", ["--no", "--", "wrangler", "types"]);
 step("npx", ["--no", "--", "tsc", "--project", "."]);
 step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundle"]);
 
-console.log("[check-package] ok: the packed package installs, typechecks, and bundles");
+// The kestrel command, as the instance's scripts run it: the release's migrations copied in,
+// then applied to a local database by wrangler.
+step("npx", ["--no", "--", "kestrel", "--version"]);
+step("npx", ["--no", "--", "kestrel", "sync-migrations"]);
+const shipped = readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql"));
+const synced = readdirSync(join(instance, "migrations"));
+if (shipped.some((f) => !synced.includes(f))) {
+  fail(`sync-migrations copied ${synced.join(", ")}, not every one of ${shipped.join(", ")}`);
+}
+step("npx", ["--no", "--", "wrangler", "d1", "migrations", "apply", "DB", "--local"]);
+
+console.log(
+  "[check-package] ok: the packed package installs, typechecks, bundles, and runs its command",
+);
 if (!keep) {
   rmSync(work, { recursive: true, force: true });
 }
