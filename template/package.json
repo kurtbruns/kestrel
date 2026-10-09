@@ -1,0 +1,20 @@
+{
+  "name": "newsletter",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "kestrel dev",
+    "seed": "kestrel seed",
+    "reset": "kestrel reset",
+    "sync-migrations": "kestrel sync-migrations",
+    "check-context": "kestrel check-context",
+    "typecheck": "wrangler types && tsc"
+  },
+  "dependencies": {
+    "@kurtbruns/kestrel": "0.0.0"
+  },
+  "devDependencies": {
+    "typescript": "0.0.0",
+    "wrangler": "0.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+# Kestrel's versions are MAJOR.RELEASE.PATCH, not semver: a release can carry breaking
+# changes. So `npm install @kurtbruns/kestrel@X.Y.Z` pins the exact version, and an upgrade is
+# always a choice you make after reading the changelog.
+save-exact=true

@@ -3,27 +3,26 @@
  * Prove the npm package works from an instance repository, the way an operator consumes it.
  *
  * Packs this repository as `npm publish` would (the `prepare` build included), checks the
- * tarball holds what an instance needs and none of Kestrel's source, then installs it into a
- * scratch instance holding only a package.json, the one-line `src/index.ts`, a wrangler config whose assets
- * point into node_modules, and a strict tsconfig. In that instance it runs `wrangler types`,
- * `tsc` (Kestrel's declaration included, with no skipLibCheck), and a `wrangler deploy
- * --dry-run` that bundles the Worker from node_modules, then the `kestrel` command: copying
- * the release's migrations in, then applying them locally with wrangler. The instance installs the wrangler and
- * TypeScript versions this repository uses, so a failure here is the package's, not a newer
- * tool's.
+ * tarball holds what an instance needs and none of Kestrel's source, then scaffolds a scratch
+ * instance with the package's own `kestrel init` and installs the tarball into it. In that
+ * instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
+ * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
+ * from node_modules; applies the migrations init copied to a local database; and checks that
+ * `kestrel check-context` finds every context file current. The instance installs the
+ * wrangler and TypeScript versions this repository uses, so a failure here is the package's,
+ * not a newer tool's.
  *
  * The CI gate runs it after the quality gate. `--keep` leaves the scratch directory in place
  * to look at; it is printed either way.
  */
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const keep = process.argv.includes("--keep");
-const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
 const versionOf = (name) =>
   JSON.parse(readFileSync(join(ROOT, "node_modules", name, "package.json"), "utf8")).version;
 
@@ -37,6 +36,9 @@ const REQUIRED = [
   "dist/public/dashboard/app.js",
   "bin/kestrel.mjs",
   "cli/dev.mjs",
+  "template/wrangler.jsonc",
+  "template/claude/CLAUDE.md",
+  ".dev.vars.example",
   "demo/publication.md",
   "migrations/0001_init.sql",
   "docs/README.md",
@@ -87,60 +89,28 @@ if (missing.length > 0 || leaked.length > 0) {
 }
 console.log(`[check-package] ${packed.filename}: ${files.length} files, ${packed.size} bytes`);
 
-// --- A scratch instance ---------------------------------------------------------------------
+// --- A scratch instance, scaffolded by the package's own init ------------------------------
+// init runs from the tarball unpacked beside the instance, as `npx @kurtbruns/kestrel init`
+// runs it from npm's cache.
+const unpacked = join(work, "unpacked");
+mkdirSync(unpacked);
+step("tar", ["-xzf", join(work, packed.filename), "-C", unpacked], work);
 const instance = join(work, "instance");
-mkdirSync(join(instance, "src"), { recursive: true });
-mkdirSync(join(instance, "migrations"));
-const compatibilityDate = readFileSync(join(ROOT, "wrangler.jsonc"), "utf8").match(
-  /"compatibility_date":\s*"([^"]+)"/,
-)?.[1];
-const write = (path, value) =>
-  writeFileSync(
-    join(instance, path),
-    typeof value === "string" ? value : `${JSON.stringify(value, null, 2)}\n`,
-  );
+step(process.execPath, [join(unpacked, "package", "bin", "kestrel.mjs"), "init", instance], work);
 
-write("package.json", { name: "kestrel-instance-check", private: true, type: "module" });
-write("src/index.ts", `export { default } from "${pkg.name}";\n`);
-write("wrangler.jsonc", {
-  name: "kestrel-instance-check",
-  main: "src/index.ts",
-  compatibility_date: compatibilityDate,
-  compatibility_flags: ["nodejs_compat"],
-  triggers: { crons: ["* * * * *"] },
-  assets: { directory: `./node_modules/${pkg.name}/dist/public`, not_found_handling: "none" },
-  d1_databases: [
-    {
-      binding: "DB",
-      database_name: "kestrel-dev",
-      database_id: "00000000-0000-0000-0000-000000000000",
-      migrations_dir: "migrations",
-    },
-  ],
-  r2_buckets: [{ binding: "MEDIA", bucket_name: "kestrel-media-dev" }],
-  vars: {
-    PROVIDER: "fake",
-    APP_ORIGIN: "http://localhost:8787",
-    ARCHIVE_BASE_PATH: "/archive",
-    SENDING_DOMAIN: "send.example.com",
-    FROM_ADDRESS: "Newsletter <newsletter@send.example.com>",
-  },
-});
-write("tsconfig.json", {
-  compilerOptions: {
-    target: "es2022",
-    module: "es2022",
-    moduleResolution: "bundler",
-    lib: ["es2022"],
-    types: [],
-    strict: true,
-    noEmit: true,
-    isolatedModules: true,
-    verbatimModuleSyntax: true,
-  },
-  include: ["src", "worker-configuration.d.ts"],
-});
+// The scaffold's config tracks this repository's: the same runtime date and flags.
+const setting = (file, key) =>
+  readFileSync(file, "utf8").match(new RegExp(`"${key}":\\s*("[^"]+"|\\[[^\\]]*\\])`))?.[1];
+for (const key of ["compatibility_date", "compatibility_flags"]) {
+  const ours = setting(join(ROOT, "wrangler.jsonc"), key);
+  const theirs = setting(join(instance, "wrangler.jsonc"), key);
+  if (ours !== theirs) {
+    fail(`template/wrangler.jsonc has ${key} ${theirs}, wrangler.jsonc has ${ours}`);
+  }
+}
 
+// The instance pins a release npm doesn't have yet, so the tarball stands in for it, and the
+// tools install at the versions this repository uses.
 step("npm", [
   "install",
   "--no-audit",
@@ -149,23 +119,32 @@ step("npm", [
   `wrangler@${versionOf("wrangler")}`,
   `typescript@${versionOf("typescript")}`,
 ]);
-step("npx", ["--no", "--", "wrangler", "types"]);
-step("npx", ["--no", "--", "tsc", "--project", "."]);
+step("npm", ["run", "typecheck"]);
+// Again without skipLibCheck, so Kestrel's own declaration is checked too.
+step("npx", ["--no", "--", "tsc", "--skipLibCheck", "false"]);
 step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundle"]);
 
-// The kestrel command, as the instance's scripts run it: the release's migrations copied in,
-// then applied to a local database by wrangler.
-step("npx", ["--no", "--", "kestrel", "--version"]);
-step("npx", ["--no", "--", "kestrel", "sync-migrations"]);
+// init copied every migration the release ships, and they apply to a local database.
 const shipped = readdirSync(join(ROOT, "migrations")).filter((f) => f.endsWith(".sql"));
 const synced = readdirSync(join(instance, "migrations"));
 if (shipped.some((f) => !synced.includes(f))) {
-  fail(`sync-migrations copied ${synced.join(", ")}, not every one of ${shipped.join(", ")}`);
+  fail(`init copied ${synced.join(", ")}, not every one of ${shipped.join(", ")}`);
 }
 step("npx", ["--no", "--", "wrangler", "d1", "migrations", "apply", "DB", "--local"]);
+step("npm", ["run", "sync-migrations"]);
+
+// Each context file's header matches its content: a fresh instance has nothing to update.
+const context = spawnSync("npx", ["--no", "--", "kestrel", "check-context"], {
+  cwd: instance,
+  encoding: "utf8",
+});
+const lines = context.stdout.trim().split("\n");
+if (context.status !== 0 || lines.some((l) => !/: current$/.test(l))) {
+  fail(`check-context on a fresh instance:\n${context.stdout}${context.stderr}`);
+}
 
 console.log(
-  "[check-package] ok: the packed package installs, typechecks, bundles, and runs its command",
+  "[check-package] ok: the packed package scaffolds an instance that typechecks, bundles, migrates, and checks its context",
 );
 if (!keep) {
   rmSync(work, { recursive: true, force: true });
