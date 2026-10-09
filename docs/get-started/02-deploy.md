@@ -2,43 +2,36 @@
 
 Kestrel runs as one Cloudflare Worker, with a D1 database for posts and subscribers and an R2 bucket for images.
 
-In this guide, you make your own copy of the repository, create the database and the bucket, and point Kestrel's production settings at them and at your hostname. Then you deploy, and check that the app answers on your hostname. You need what the [Overview](01-overview.md#before-you-begin) lists.
+In this guide, you create your instance's repository, create the database and the bucket, and point Kestrel's production settings at them and at your hostname. Then you deploy, and check that the app answers on your hostname. You need what the [Overview](01-overview.md#before-you-begin) lists.
 
-## 1. Get your own copy of the repository
+## 1. Create your instance's repository
 
-Your copy holds your instance's configuration, so it needs a repository of its own. Kestrel's repository stays connected as `upstream`, where new releases come from.
+Your instance's repository holds its configuration, its database migrations, and the release of Kestrel it runs. Kestrel itself installs from npm as `@kurtbruns/kestrel`, so the repository stays small, and an upgrade changes the version it names.
 
-1. On GitHub, [create a new repository](https://github.com/new) named `kestrel`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
+1. On GitHub, [create a new repository](https://github.com/new) named `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
-1. Clone Kestrel, point it at your new repository, and push:
-
-    ```bash
-    git clone https://github.com/kurtbruns/kestrel.git
-    cd kestrel
-    git remote rename origin upstream
-    git remote add origin https://github.com/YOUR_USERNAME/kestrel.git
-    git push -u origin main
-    ```
-
-    Replace `YOUR_USERNAME` with your GitHub username.
-
-1. Confirm the two remotes:
+1. Clone it, and write a new instance into it. Replace `YOUR_USERNAME` with your GitHub username:
 
     ```bash
-    git remote -v
+    git clone https://github.com/YOUR_USERNAME/newsletter.git
+    cd newsletter
+    npx @kurtbruns/kestrel init
     ```
 
-    ```
-    origin    https://github.com/YOUR_USERNAME/kestrel.git (fetch)
-    origin    https://github.com/YOUR_USERNAME/kestrel.git (push)
-    upstream  https://github.com/kurtbruns/kestrel.git (fetch)
-    upstream  https://github.com/kurtbruns/kestrel.git (push)
-    ```
+    This writes the instance's files: `wrangler.jsonc` for its settings, `package.json` with the release it runs, the release's database migrations, and a starting point for Claude Code in `.claude/`. The instance's `README.md` lists its commands.
 
-1. Install the dependencies:
+1. Install the release and its tools:
 
     ```bash
     npm install
+    ```
+
+1. Commit the new instance, and push it:
+
+    ```bash
+    git add -A
+    git commit -m "Start a Kestrel instance"
+    git push -u origin HEAD
     ```
 
 1. **(Optional)** Try Kestrel on your computer before you deploy it. Local development sends email to a stand-in, so nothing reaches a real inbox:
@@ -48,9 +41,7 @@ Your copy holds your instance's configuration, so it needs a repository of its o
     npm run dev
     ```
 
-    Open http://localhost:8787/dashboard/ to see the editor. To fill it with demo content, run `npm run seed` in a second terminal. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server. The [README](https://github.com/kurtbruns/kestrel#local-setup) covers local development in full.
-
-1. **(Optional)** In `package.json`, set `repository.url` to your repository. The editor links the running build to its commit through that field. Without the change, those links open Kestrel's repository instead of yours.
+    Open http://localhost:8787/dashboard/ to see the editor. To fill it with demo content, run `npm run seed` in a second terminal, and `npm run reset` to empty it again. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.
 
 ## 2. Sign in to Cloudflare
 
@@ -128,7 +119,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     npm run typecheck
     ```
 
-1. Commit your settings and push them to your repository. Upgrades merge new releases into this branch, so your settings stay with it:
+1. Commit your settings and push them to your repository. An upgrade changes only the release your instance runs, so your settings stay as they are:
 
     ```bash
     git commit -am "Configure production"
@@ -140,7 +131,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 Create Kestrel's tables in the production database:
 
 ```bash
-npm run migrate:remote -- --env production
+npx wrangler d1 migrations apply DB --remote --env production
 ```
 
 It lists the migrations it's about to apply and asks you to confirm. It applies only the ones the database hasn't seen, so running it again is harmless.
@@ -148,10 +139,10 @@ It lists the migrations it's about to apply and asks you to confirm. It applies 
 ## 6. Deploy
 
 ```bash
-npm run deploy -- --env production
+npx wrangler deploy --env production
 ```
 
-This builds the editor, stamps the build with its version, and deploys it. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
+This deploys the release your instance runs, with your settings. The output ends with the hostname the app now answers on. Deploying also registers the once-a-minute schedule that sends posts, which you can see under the Worker's **Triggers** tab in the Cloudflare dashboard.
 
 ## Check it
 

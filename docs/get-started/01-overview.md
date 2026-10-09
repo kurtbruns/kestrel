@@ -2,9 +2,9 @@
 
 Kestrel is a newsletter app you run yourself. You write a post in Markdown, preview it exactly as the email, and send it to a list you own. It runs on Cloudflare Workers, and an email provider delivers the mail.
 
-In this guide, you deploy your own instance of Kestrel to your Cloudflare account and connect it to an email provider. You go from a fresh clone of the repository to a newsletter that's ready for its first subscriber. Each step ends with a check, so you know it worked before you move on.
+In this guide, you deploy your own instance of Kestrel to your Cloudflare account and connect it to an email provider. You go from an empty repository to a newsletter that's ready for its first subscriber. Each step ends with a check, so you know it worked before you move on.
 
-You run every step from your own copy of the repository. It holds your instance's configuration, and you return to it to deploy changes and upgrade to new releases. You don't need to run Kestrel on your computer to deploy it, but you can: the [README](https://github.com/kurtbruns/kestrel#local-setup) covers running it locally with demo content.
+You run every step from your instance's repository, a small repository of your own. It holds your instance's configuration and names the release of Kestrel it runs, which installs from npm as `@kurtbruns/kestrel`. You return to it to deploy changes and upgrade to new releases. You don't need to run Kestrel on your computer to deploy it, but you can try it there first, with demo content.
 
 ## Before you begin
 
@@ -16,7 +16,7 @@ You need:
 
 1. [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 
-1. A GitHub account, or another Git host, for your own copy of the repository.
+1. A GitHub account, or another Git host, for your instance's repository.
 
 ## Choose your hostnames
 
@@ -36,7 +36,7 @@ Throughout these guides, replace `example.com`, `newsletter.example.com`, and `s
 ## The steps
 
 1. **Overview**: what you need, and the hostnames you use.
-1. [Deploy the app](02-deploy.md): get your own copy of the repository, and put the app on your hostname.
+1. [Deploy the app](02-deploy.md): create your instance's repository, and put the app on your hostname.
 1. [Lock the dashboard with Access](03-access.md): add the login that keeps the editor and the API to you.
 1. [Connect Resend](04-resend.md): verify your sending domain, and connect Resend to the app.
 1. [Verify it works](05-verify.md): send real email to yourself, and test unsubscribing and bounces.

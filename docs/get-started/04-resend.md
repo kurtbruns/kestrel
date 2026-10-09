@@ -98,7 +98,7 @@ Store both secrets before you switch. With `PROVIDER` set to `resend` and a secr
 1. Deploy:
 
     ```bash
-    npm run deploy -- --env production
+    npx wrangler deploy --env production
     ```
 
 ## Check it

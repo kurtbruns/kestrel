@@ -69,7 +69,7 @@ A `send_email` binding named `NOTIFY` moves notifications to Cloudflare's email.
 1. Deploy:
 
     ```bash
-    npm run deploy -- --env production
+    npx wrangler deploy --env production
     ```
 
 ## Check it
