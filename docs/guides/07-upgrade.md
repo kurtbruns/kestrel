@@ -122,13 +122,13 @@ The output ends with your app's hostname.
 
 If the new release misbehaves, deploy the previous one, and put the database back to your bookmark.
 
-1. Find the release's merge. Its id comes first on the line:
+1. Find the release's merge. Replace `vX.Y.Z` with the release you're backing out. Its id comes first on the line:
 
     ```bash
-    git log --merges -1 --oneline
+    git log --merges -1 --oneline --grep="Merge tag 'vX.Y.Z'"
     ```
 
-1. Check out your branch as it was before that merge. This leaves the branch itself as it is, and works even if you committed a fix after the merge:
+1. Check out your branch as it was before that merge. This leaves the branch itself as it is, and works even if you committed or merged after it:
 
     ```bash
     git checkout REPLACE_WITH_MERGE_ID^1
