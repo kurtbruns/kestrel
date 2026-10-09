@@ -4,11 +4,14 @@
  * declaration, and the admin UI, each stamped with this build.
  *
  * An instance repository depends on `@kurtbruns/kestrel` and re-exports its Worker in one
- * line (`export { default } from "@kurtbruns/kestrel";`). Shipping Kestrel's TypeScript
- * source instead would make the instance's own typecheck check Kestrel's source under the
- * instance's compiler settings, which fails, so the Worker ships as one ES module bundle
- * with a hand-written declaration of its two handlers (`src/worker.d.ts`, which the
- * typecheck holds against the real entry in `test/worker_types.ts`).
+ * line (`export { default } from "@kurtbruns/kestrel";`). Kestrel's TypeScript source builds
+ * only under this repository's settings: the Markdown Text rule, the `.wasm` declaration, and
+ * this tsconfig (an instance's typecheck fails on the source under its own). Shipping the
+ * source would make each of those part of every instance's setup, so the Worker ships as one
+ * ES module bundle that needs only its declared dependencies, with a hand-written declaration
+ * of its two handlers (`src/worker.d.ts`, which the typecheck holds against the real entry in
+ * `test/worker_types.ts`). A bundle rather than a file-by-file compile, because a compile
+ * would keep the Markdown imports, and with them the rule and the files at matching paths.
  *
  * What the bundle carries and what it leaves out:
  *   - The setup guide and the demo publication's Markdown are inlined as text, as
