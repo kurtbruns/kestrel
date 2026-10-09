@@ -84,7 +84,8 @@ process.env.KESTREL_CLIENT_DEV = "1";
 // — deliberately NOT a wrangler `build.command`: wrangler dev watches src/, and the
 // stamp's build time changes on every run, so a build command would rebuild-loop forever.
 // `wrangler deploy` gets the stamp via the predeploy npm hook; the Vitest pool via
-// pretest; a fresh checkout via postinstall. Best-effort — a stale stamp is harmless.
+// pretest; a fresh checkout and a
+// published package via the package build (`prepare`). Best-effort — a stale stamp is harmless.
 const version = spawnSync(process.execPath, [join(ROOT, "scripts", "stamp-version.mjs")], {
   stdio: "inherit",
 });

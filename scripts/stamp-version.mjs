@@ -19,9 +19,10 @@
  * A generated module (not wrangler `define`) so the same stamp works uniformly under
  * `wrangler dev`, `wrangler deploy`, and the Vitest pool, and git runs here at build —
  * never in the client. The output is gitignored and regenerated at every entry point so it
- * is always present and current without being committed: `postinstall` (fresh checkout),
- * dev startup (scripts/dev.mjs), the `predeploy` hook (before `wrangler deploy`), and
- * `pretest` / `typecheck`. Deliberately NOT wired as a wrangler `build.command`: wrangler
+ * is always present and current without being committed: the package build
+ * (scripts/build-package.mjs, the `prepare` script, so a fresh checkout and a publish), dev
+ * startup (scripts/dev.mjs), the `predeploy` hook (before `wrangler deploy`), and `pretest` /
+ * `typecheck`. Deliberately NOT wired as a wrangler `build.command`: wrangler
  * dev watches src/, and this file's build time changes every run, so a build command would
  * rebuild-loop forever. This is build metadata, not deploy config or a runtime preference,
  * so it never touches getConfig/settings (SPEC §9).
@@ -29,8 +30,8 @@
  * `--if-changed` (pretest, typecheck): leave the file alone when it already names this
  * version and sha. Those two run beside a live `wrangler dev`, which watches src/ — a fresh
  * build time on every test run would reload the dev server each time for nothing. The
- * entry points that ARE a build (postinstall, dev startup, predeploy) always write, so a
- * deployed build time is that deploy's.
+ * entry points that ARE a build (the package build, dev startup, predeploy) always write, so
+ * a deployed build time is that deploy's.
  *
  * Pure Node, no dependencies — runs anywhere `npm ci` does.
  */
