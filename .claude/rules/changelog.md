@@ -5,6 +5,7 @@ paths:
   - "docs/SPEC.md"
   - "docs/DESIGN.md"
   - "README.md"
+  - ".github/workflows/publish.yml"
 ---
 
 # Keeping Kestrel's changelog
@@ -46,8 +47,21 @@ A non-blocking `Stop` hook (`.claude/hooks/changelog-reminder.mjs`, wired in `.c
 
    A tag and a release are separate objects: pushing the tag alone leaves the Releases page empty. The notes are the changelog section verbatim, so the two never say different things, and `--verify-tag` refuses to run before the tag is on the remote, so a release can never mint its own tag at the wrong commit.
 
+6. Publishing the release runs `.github/workflows/publish.yml`, which builds the package from the tag and publishes it to npm as `@kurtbruns/kestrel`, the version instances install. Watch the run go green, then confirm with `npm view @kurtbruns/kestrel version`. It refuses a tag that doesn't match `package.json`, so a release cut by the steps above publishes the version it names.
+
 Pick the number against the last tag. Versions are `MAJOR.RELEASE.PATCH`, not semver: Kestrel is an app its operators upgrade, so the changelog, not the number, says what breaks.
 
 - **Major:** only when the maintainer decides (a rewrite, or an upgrade that can't be made in one step), never because of a `Breaking` entry. It resets the other two: `1.4.2` → `2.0.0`.
 - **Release:** any release with more than fixes, breaking changes included: `1.1.0` → `1.2.0`.
 - **Patch:** fixes only: `1.2.0` → `1.2.1`. Never a feature or a `Breaking` entry.
+
+## Publishing to npm
+
+Releases publish through npm's trusted publishing: npmjs.com trusts `publish.yml` in this repository, each run gets a short-lived OIDC token, and no npm token is stored anywhere. Provenance comes with it, so each version on npmjs.com links to the commit and run that built it. Nothing else publishes; a publish by hand is only for the setup below.
+
+Set up once, by the maintainer, since npm configures a trusted publisher only for a package that already exists:
+
+1. Publish the first version by hand from its release tag, after step 4 of cutting it and before step 5: `npm login`, then `npm publish` in a clean checkout of the tag (`npm ci` first; `prepare` builds the package). The workflow that step 5 then runs finds the version on npm and leaves it alone.
+2. Make the workflow the publisher, on npmjs.com under the package's **Settings → Trusted Publisher** (GitHub Actions; user `kurtbruns`, repository `kestrel`, workflow `publish.yml`), or with `npm trust github @kurtbruns/kestrel --file publish.yml --repo kurtbruns/kestrel --allow-publish` (npm 11.15 or later, two-factor authentication on).
+3. Under **Settings → Publishing access**, choose **Require two-factor authentication and disallow tokens**, so only the workflow (or the maintainer with two-factor) can publish.
+
