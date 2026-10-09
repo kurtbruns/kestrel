@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
-- The upgrade guide's local try now applies the release's database changes first, since `npm run dev` migrates only a fresh local database. It also says to mark a resolved `wrangler.jsonc` and commit a merge that stopped on conflicts, and going back finds the previous release even when you committed after the merge.
+- The upgrade guide now migrates before the local try, finishes a merge that stopped on conflicts, and goes back to the right release after later commits or merges.
 
 ## [1.4.0] - 2026-10-08
 
