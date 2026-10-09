@@ -25,7 +25,13 @@ Your copy carries your own settings, such as your hostname and database id in `w
     git merge vX.Y.Z
     ```
 
-1. If `wrangler.jsonc` conflicts, keep your own values, and add whatever the release added. The release's **Upgrading from…** paragraph names any new setting.
+1. If `wrangler.jsonc` conflicts, keep your own values, and add whatever the release added. The release's **Upgrading from…** paragraph names any new setting. Then mark it resolved with `git add wrangler.jsonc`.
+
+1. If the merge stopped on conflicts, check that `git status` lists no unmerged files, then commit it:
+
+    ```bash
+    git commit --no-edit
+    ```
 
 1. Install the exact versions the release uses:
 
@@ -45,7 +51,14 @@ Your copy carries your own settings, such as your hostname and database id in `w
     npm run typecheck
     ```
 
-1. **(Optional)** Try the release on your computer with `npm run dev`. Your local database takes the release's changes, so you see the new version with your local content. It can't show how they treat your real data. A staging environment can.
+1. **(Optional)** Try the release on your computer. Apply its database changes to your local database, then start the app:
+
+    ```bash
+    npm run migrate:local
+    npm run dev
+    ```
+
+    You see the new version with your local content. It can't show how the changes treat your real data. A staging environment can.
 
 1. Push the merge to your repository:
 
@@ -109,10 +122,16 @@ The output ends with your app's hostname.
 
 If the new release misbehaves, deploy the previous one, and put the database back to your bookmark.
 
-1. Check out your branch as it was before the merge. This leaves the branch itself as it is:
+1. Find the release's merge. Its id comes first on the line:
 
     ```bash
-    git checkout HEAD^1
+    git log --merges -1 --oneline
+    ```
+
+1. Check out your branch as it was before that merge. This leaves the branch itself as it is, and works even if you committed a fix after the merge:
+
+    ```bash
+    git checkout REPLACE_WITH_MERGE_ID^1
     ```
 
 1. Install that release's versions, and deploy it:
@@ -132,4 +151,4 @@ A restore returns the whole database to that moment. Everything written since is
 
 Never restore past a send that went out, or an unsubscribe recorded since the bookmark. The restored database wouldn't know of them, so it could mail those readers again, or mail someone who left. If either happened, stay on the new release, and fix forward.
 
-When you're done, return to your branch with `git checkout -`.
+When you're done, return to your branch with `git checkout -`, and run `npm ci` to install its versions again.

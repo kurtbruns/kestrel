@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Fixed
+
+- The upgrade guide's local try now applies the release's database changes first, since `npm run dev` migrates only a fresh local database. It also says to mark a resolved `wrangler.jsonc` and commit a merge that stopped on conflicts, and going back finds the previous release even when you committed after the merge.
+
 ## [1.4.0] - 2026-10-08
 
 **Upgrading from 1.3.0.** No migration. If Claude connects through a `.kestrel.env` file, move its three values into `.claude/settings.local.json`, as Connect Claude to the API describes. `.kestrel.env` stays ignored by git. On SES, if bounces and complaints never reach the app, add the SNS topic access policy from the SES guide.

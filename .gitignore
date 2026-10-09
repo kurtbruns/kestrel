@@ -9,6 +9,9 @@ node_modules/
 .kestrel.env.*
 .claude/settings.local.json
 
+# worktrees Claude Code creates inside the checkout
+.claude/worktrees/
+
 # wrangler / miniflare local state
 .wrangler/
 worker-configuration.d.ts
