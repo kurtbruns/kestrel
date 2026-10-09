@@ -173,14 +173,59 @@ describe("archive / view-in-browser", () => {
     expect(res.status).toBe(404);
   });
 
-  it("404s for a post that hasn't been sent yet", async () => {
+  it("answers a draft's slug with a plain not-sent-yet page that reveals nothing of the post (§5)", async () => {
+    await updateSettings(env.DB, { publication: { name: "The Marsh Letter" } });
+    try {
+      const { post } = await posts.createPost(
+        env.DB,
+        { subject: "Draft Only", markdown: "secret work in progress" },
+        "test",
+      );
+      const res = await SELF.fetch(`${base}/archive/${post.slug}`);
+      // A 404: there is no record at this address yet, so nothing indexes or caches it.
+      expect(res.status).toBe(404);
+      expect(res.headers.get("x-robots-tag")).toBe("noindex");
+      expect(res.headers.get("cache-control")).toBe("no-store");
+      const body = await res.text();
+      expect(body).toContain("The Marsh Letter");
+      expect(body).toContain("This post hasn't been sent yet.");
+      expect(body).not.toContain("Draft Only");
+      expect(body).not.toContain("secret work in progress");
+    } finally {
+      await updateSettings(env.DB, { publication: { name: "" } });
+    }
+  });
+
+  it("answers a scheduled post's slug with the not-sent-yet page, then the record once sent (§5, I3)", async () => {
+    await ensureSubscriber();
     const { post } = await posts.createPost(
       env.DB,
-      { subject: "Draft Only", markdown: "wip" },
+      { subject: "Coming Soon", markdown: "the frozen copy" },
       "test",
     );
-    const res = await SELF.fetch(`${base}/archive/${post.slug}`);
-    expect(res.status).toBe(404);
+    const fireAt = Date.now() - 1000;
+    await freeze(env, getConfig(env), post, fireAt);
+
+    // Scheduled (frozen, not yet swept): neither the frozen copy nor the fire time shows.
+    const before = await SELF.fetch(`${base}/archive/${post.slug}`);
+    expect(before.status).toBe(404);
+    const body = await before.text();
+    expect(body).toContain("This post hasn't been sent yet.");
+    for (const leak of [
+      "Coming Soon",
+      "the frozen copy",
+      String(fireAt),
+      new Date(fireAt).toISOString().slice(0, 10),
+      new Date(fireAt).getUTCFullYear().toString(),
+    ]) {
+      expect(body).not.toContain(leak);
+    }
+
+    // Once the send completes, the same URL serves the record.
+    await sweep(env);
+    const after = await SELF.fetch(`${base}/archive/${post.slug}`);
+    expect(after.status).toBe(200);
+    expect(await after.text()).toContain("the frozen copy");
   });
 });
 
@@ -478,9 +523,13 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       ],
       ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
       ["post not found", archivePage, "/archive/missing", "Not found"],
+      ["post not sent yet", archivePage, "/archive/unsent", "hasn't been sent yet"],
     ];
+    await posts.createPost(env.DB, { subject: "Unsent", markdown: "wip" }, "test");
     for (const [name, handler, path, shows, init] of cards) {
-      const params = { slug: "missing" };
+      const params = {
+        slug: path.startsWith("/archive/") ? path.slice("/archive/".length) : "missing",
+      };
       // A fresh Request per call, since a form body can be read only once.
       const on = await (await handler(ctxFor(true, path, params, init))).text();
       const off = await (await handler(ctxFor(false, path, params, init))).text();

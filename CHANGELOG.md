@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Fixed
+
+- The "View in browser" link in a test email of a draft or scheduled post now opens a plain page saying the post hasn't been sent yet, instead of a bare "Not found". It shows only the publication's name, and the post's page appears at the same address once it is sent (SPEC §5).
+
 ## [1.5.0] - 2026-10-09
 
 **Upgrading from 1.4.0.** No migration. Any script or API client that saves posts must send the revision it read, as `base_revision` or `If-Match`; the editor already does.

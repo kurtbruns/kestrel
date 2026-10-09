@@ -7,12 +7,14 @@
  * manage-subscription link (a public page has no single recipient), the inert
  * anchors become browser-only chrome (masthead + the display font and reader ground)
  * that never ships in an email, and the template's email-only regions are left out.
+ * Until a post is sent, its page says only that it hasn't gone out yet.
  */
 
 import { getBySlug } from "../db/posts";
 import { latestSentSendForPost, listPublishedPosts } from "../db/sends";
 import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
+import { escapeHtml } from "../lib/html";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
@@ -120,17 +122,38 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
   });
 }
 
+/** The page for a slug that names a post with no sent send yet, the address a test
+ *  email's "view in browser" link carries before the real send (§5). It says only the
+ *  publication's name and that the post hasn't gone out: nothing of the post's content
+ *  or fire time, since the page is public, and no link toward the admin surface (§11).
+ *  A 404, as there is no record at this address yet, so a crawler never indexes it;
+ *  `no-store`, so the record replaces it the moment the send completes. */
+async function notSentYetPage(c: RequestContext): Promise<Response> {
+  const identity = await readerIdentity(c, c.config);
+  const res = htmlPage(
+    identity.name,
+    `<p class="muted" style="margin-top:0;">${escapeHtml(identity.name)}</p><h1>Not sent yet</h1><p>This post hasn't been sent yet.</p>`,
+    404,
+    devDashboardUrl(c.config),
+  );
+  res.headers.set("cache-control", "no-store");
+  return res;
+}
+
 export async function archivePage(c: RequestContext): Promise<Response> {
   const slug = param(c, "slug");
   const post = await getBySlug(c.env.DB, slug);
-  const send = post ? await latestSentSendForPost(c.env.DB, post.id) : null;
-  if (!post || !send) {
+  if (!post) {
     return htmlPage(
       "Not found",
       `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
       404,
       devDashboardUrl(c.config),
     );
+  }
+  const send = await latestSentSendForPost(c.env.DB, post.id);
+  if (!send) {
+    return notSentYetPage(c);
   }
   // Four edits to the frozen record on the way to the browser (I3), all at reserved
   // markers — none touches the reviewed content: the generic unsubscribe link (no single

@@ -1095,7 +1095,8 @@ export function createRouter({
       path: `${archiveBasePath}/:slug`,
       access: "public",
       resource: "archive",
-      summary: "A frozen post's archive page / view-in-browser (I3).",
+      summary:
+        'A frozen post\'s archive page / view-in-browser (I3); a plain "not sent yet" page (404) until the post is sent.',
       handler: archiveRoutes.archivePage,
     },
 
