@@ -2,13 +2,21 @@
 
 Kestrel is a newsletter app you run yourself on Cloudflare. You write a post in Markdown, preview it exactly as the email, and send it to a double-opt-in list. The list, the consent, the record of every send, and a permanent archive of every post stay with you. Write in the editor by hand, or with Claude through the same API.
 
-See [getkestrel.dev](https://getkestrel.dev) to learn more about Kestrel. This README gets a copy running on your computer. To deploy your own instance, follow [Get started](docs/get-started/01-overview.md).
+See [getkestrel.dev](https://getkestrel.dev) to learn more about Kestrel.
 
-## Prerequisites
+## Run your own
 
-- [Node.js](https://nodejs.org/) 22 or later.
+Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/package/@kurtbruns/kestrel). Your instance lives in a small repository of your own, which holds its settings and names the release it runs:
 
-## Local setup
+```bash
+npx @kurtbruns/kestrel init
+```
+
+[Get started](docs/get-started/01-overview.md) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one. The same guide is in the editor's **Docs** tab.
+
+## Work on Kestrel
+
+This repository is Kestrel's source. To run it on your computer, with [Node.js](https://nodejs.org/) 22 or later:
 
 ```bash
 npm install
@@ -41,10 +49,9 @@ The editor's **API** tab lists every route.
 
 ## Going further
 
-- **Deploy your own instance:** [Get started](docs/get-started/01-overview.md), the steps from a fresh clone to a live newsletter. The same guide is in the editor's **Docs** tab.
 - **What Kestrel guarantees:** [`docs/SPEC.md`](docs/SPEC.md). How the admin UI is built: [`docs/DESIGN.md`](docs/DESIGN.md).
 - **Working on the code:** [`.claude/CLAUDE.md`](.claude/CLAUDE.md) has the commands, conventions, and module boundaries.
-- **Releases:** [`CHANGELOG.md`](CHANGELOG.md), and [Upgrade to a new release](docs/guides/07-upgrade.md) to move an instance to one.
+- **Releases:** [`CHANGELOG.md`](CHANGELOG.md).
 
 ## License
 

@@ -14,11 +14,13 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
+- Kestrel now ships as the npm package `@kurtbruns/kestrel`, and the setup guide runs your instance from a small repository of your own that names the release it runs (`npx @kurtbruns/kestrel init`), instead of a copy of Kestrel's repository. An upgrade installs a newer version instead of merging Kestrel's code, and deploying and migrating are plain wrangler commands. A copy of the repository still deploys as before, but the guide no longer covers it (SPEC §11).
 - Saving a post through the API now requires the revision the save was based on. A save without one is refused with a 428 `base_required` carrying the post as it stands, instead of overwriting whatever was saved last, so Claude can no longer clobber the publisher's edit by leaving the revision out (SPEC §4).
 
-### Fixed
+### Added
 
-- The upgrade guide now migrates before the local try, finishes a merge that stopped on conflicts, and goes back to the right release after later commits or merges.
+- A new instance comes with the `kestrel` command for the instance's scripts: `npm run dev` runs the app locally with the once-a-minute send sweep, `npm run sync-migrations` brings a release's migrations in, `npm run seed` and `npm run reset` load and clear the demo, and `npm run check-context` says when a release changed the Claude Code files the instance started with.
+- A new instance starts with Claude Code context for running it (`.claude/CLAUDE.md` and an `/upgrade` skill). It's yours to edit, and an upgrade never overwrites your edits.
 
 ## [1.4.0] - 2026-10-08
 

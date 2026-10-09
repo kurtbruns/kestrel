@@ -9,7 +9,7 @@ In this guide, you create a service token for Claude Code, and add a policy for 
 You need:
 
 - The dashboard locked with Access, from [Lock the dashboard with Access](../get-started/03-access.md).
-- [Claude Code](https://code.claude.com/docs/en/overview), run from your copy of the repository.
+- [Claude Code](https://code.claude.com/docs/en/overview), run from your instance's repository.
 
 ## 1. Create a service token
 
@@ -43,7 +43,7 @@ Your application lets in only the people its `Publishers` policy names. A token 
 
 Claude Code loads the `env` block of `.claude/settings.local.json` into every session. That file stays on your computer: your repository's `.gitignore` keeps it out of git.
 
-1. Open `.claude/settings.local.json` in your copy of the repository. Create it if it doesn't exist.
+1. Open `.claude/settings.local.json` in your instance's repository. Create it if it doesn't exist.
 
 1. Add an `env` block, beside anything already in the file:
 
@@ -67,7 +67,7 @@ Never put the secret in `.claude/settings.json`. That file is committed.
 
 Kestrel has no plugin or connector for Claude. Claude calls the HTTP API directly, and the API reference describes every route: its method and path, the body it takes, and an example. The editor's **API** tab shows the same reference.
 
-Start a session with a prompt like this one:
+Your instance's `.claude/CLAUDE.md` already tells Claude Code how to call the API, so a session in your instance's repository reads the reference before its first call. If it doesn't, a prompt like this one points it there:
 
 ```
 Kestrel's API is at $KESTREL_URL. Send the CF-Access-Client-Id and

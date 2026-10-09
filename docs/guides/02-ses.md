@@ -198,7 +198,7 @@ Store every secret before you switch. With `PROVIDER` set to `ses` and a secret 
 1. Deploy:
 
     ```bash
-    npm run deploy -- --env production
+    npx wrangler deploy --env production
     ```
 
 ## 8. Subscribe the app to the topic
