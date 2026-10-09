@@ -21,8 +21,8 @@ import { has } from "./support/conditions";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it
-// stands, actions safe to retry, `If-Match`, the review window closing at the fire time,
-// and query values refused rather than dropped.
+// stands, actions safe to retry and carrying no precondition, the review window closing at
+// the fire time, and query values refused rather than dropped.
 
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
@@ -277,7 +277,7 @@ describe("the review window closes at the fire time", () => {
   });
 });
 
-describe("actions safe to retry, and If-Match", () => {
+describe("actions safe to retry, with no precondition", () => {
   it("answers a second cancel, and a move to the time the send already has, with 200 and changed false", async () => {
     const fireAt = onTheMinute(Date.now() + 3_600_000);
     const send = await frozenSend(fireAt);
@@ -299,24 +299,24 @@ describe("actions safe to retry, and If-Match", () => {
     expect(await readJson(moved)).toMatchObject({ error: "send_canceled" });
   });
 
-  it("refuses an action whose If-Match names a rev the send has moved past, with 412 and the send", async () => {
+  it("applies an action to the send as it stands, ignoring an If-Match", async () => {
     const send = await frozenSend(Date.now() + 3_600_000);
     const rev = (await sends.getSend(env.DB, send.id))?.rev ?? 0;
     const moved = await post(
       `/api/sends/${send.id}/reschedule`,
       { fire_at: Date.now() + 7_200_000 },
-      { "if-match": `"${rev}"` },
+      { "if-match": "yesterday" },
     );
     expect(moved.status).toBe(200);
-    const stale = await post(`/api/sends/${send.id}/cancel`, undefined, { "if-match": `"${rev}"` });
-    expect(stale.status).toBe(412);
-    expect(await readJson(stale)).toMatchObject({
-      error: "precondition_failed",
-      send: { id: send.id, status: "scheduled" },
+    // The rev the caller read is behind the send now; the cancel lands all the same.
+    const canceled = await post(`/api/sends/${send.id}/cancel`, undefined, {
+      "if-match": `"${rev}"`,
     });
-    const bad = await post(`/api/sends/${send.id}/cancel`, undefined, { "if-match": "yesterday" });
-    expect(bad.status).toBe(400);
-    expect(await readJson(bad)).toMatchObject({ field: "If-Match" });
+    expect(canceled.status).toBe(200);
+    expect(await readJson(canceled)).toMatchObject({
+      changed: true,
+      send: { id: send.id, status: "canceled" },
+    });
   });
 });
 

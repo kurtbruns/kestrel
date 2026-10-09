@@ -46,62 +46,39 @@ export interface ResolveResult {
   completed: boolean;
 }
 
-/** What a Resolve may carry: the `rev` the caller last read (`If-Match`), and how many
- *  ambiguous recipients it saw, so it never settles a different set than the one it meant. */
-export interface ResolveGuard {
-  ifMatch?: number;
-  expectedCount?: number;
-}
-
 /**
  * Adjudicate the ambiguous (`dispatched`) rows of a wedged send. Refused, each with its
- * own code and the send as it stands: `precondition_failed` when the send has changed
- * since the `rev` the caller read, `run_in_progress` while a run holds it, `not_wedged`
- * when it is not wedged (`isWedged`: nothing to resolve, or a run still to look at it),
- * and `count_changed` when the ambiguous count is not the one the caller saw.
+ * own code and the send as it stands: `run_in_progress` while a run holds it, and
+ * `not_wedged` when it is not wedged (`isWedged`: nothing to resolve, or a run still to
+ * look at it). It names no count or `rev` the caller read: once a send is wedged no run
+ * touches it, so its ambiguous set holds until a Resolve settles it, and a second Resolve
+ * finds it no longer wedged.
  */
 export async function resolveStuckSend(
   env: AppEnv,
   sendId: string,
   outcome: StuckResolution,
   actor: string,
-  guard: ResolveGuard = {},
 ): Promise<ResolveResult> {
   const send = await sends.getSend(env.DB, sendId);
   if (!send) {
     throw notFound("send");
   }
-  const refuse = async (status: 409 | 412, code: string, message: string) =>
-    refusal(status, code, message, { send: await viewSend(env, send.id) });
-  if (guard.ifMatch !== undefined && send.rev !== guard.ifMatch) {
-    throw await refuse(
-      412,
-      "precondition_failed",
-      `the send has changed since rev ${guard.ifMatch} (it is at rev ${send.rev}); read it again before resolving`,
-    );
-  }
+  const refuse = async (code: string, message: string) =>
+    refusal(409, code, message, { send: await viewSend(env, send.id) });
   const now = Date.now();
   if (send.status === "sending" && send.locked_until !== null && send.locked_until > now) {
     throw await refuse(
-      409,
       "run_in_progress",
       "this send is being worked on right now; try Resolve again in a moment",
     );
   }
   if (!isWedged(send)) {
     throw await refuse(
-      409,
       "not_wedged",
       send.status === "sending"
         ? "send is not wedged: it still has recipients to hand off, or a run has yet to look at those in flight"
         : `send is ${send.status}, with no ambiguous deliveries to resolve`,
-    );
-  }
-  if (guard.expectedCount !== undefined && guard.expectedCount !== send.c_in_flight) {
-    throw await refuse(
-      409,
-      "count_changed",
-      `the send has ${send.c_in_flight} ambiguous recipients, not the ${guard.expectedCount} expected; read it again before resolving`,
     );
   }
 
@@ -110,18 +87,10 @@ export async function resolveStuckSend(
     // It changed between the checks and the lease: answer for what it is now (another
     // Resolve may have finished it), carrying the send as it now stands.
     const current = await sends.getSend(env.DB, sendId);
-    if (current && guard.ifMatch !== undefined && current.rev !== guard.ifMatch) {
-      throw await refuse(
-        412,
-        "precondition_failed",
-        `the send has changed since rev ${guard.ifMatch} (it is at rev ${current.rev}); read it again before resolving`,
-      );
-    }
     if (!current || !isWedged(current)) {
-      throw await refuse(409, "not_wedged", "send is no longer wedged");
+      throw await refuse("not_wedged", "send is no longer wedged");
     }
     throw await refuse(
-      409,
       "run_in_progress",
       "this send is being worked on right now; try Resolve again in a moment",
     );
