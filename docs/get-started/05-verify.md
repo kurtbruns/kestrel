@@ -19,6 +19,8 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It should arrive in your inbox, not in spam. The image loads, the links work, and the subject reads as you wrote it.
 
+1. Select **View in browser** at the bottom of the email. In a test, it opens the post's web version in your dashboard, behind your Access login. Emails to your list link to the post's public page instead.
+
 ## 2. Check that it passes authentication
 
 Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing both is the best single sign that your mail reaches the inbox.

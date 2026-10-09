@@ -2,17 +2,22 @@
  * Preview, test-send, and the fake outbox. All authed.
  *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
  *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
+ *   GET  /api/posts/:id/web            → the post as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider
  *                                    (a scheduled post's frozen copy; a draft's live render)
+ *   GET  /api/settings/template/web  → the template's SAMPLE post as an archive page
  *   POST /api/settings/template/test → send a SAMPLE post through the saved template
  *   GET  /api/dev/outbox           → fake transport's outbox (fake provider only)
  *
- * Every path runs the one render() (I5), or serves what it froze.
+ * Every path runs the one render() (I5), or serves what it froze. A test's one difference
+ * from the list send is its view-in-browser link, which opens the web-version preview in
+ * the editor rather than the public page that exists only once the post is sent (SPEC §5).
  */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { PreviewResponse, TestSendResponse } from "../../shared/posts";
 import type { TemplateTestResponse } from "../../shared/settings";
+import { webPreviewUrl } from "../../shared/web_preview";
 import * as images from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import * as posts from "../db/posts";
@@ -25,14 +30,17 @@ import { fakeNotifications } from "../notify/fake";
 import { getProvider, perRecipient } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
+  publicViewInBrowserUrl,
   type RenderedEmail,
   type RenderInput,
   render,
   substituteRecipient,
+  withViewInBrowserUrl,
 } from "../render/render";
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { readerIdentity, webVersion } from "./archive";
 
 async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
@@ -70,6 +78,9 @@ interface PostEmail {
   warnings: string[];
   /** The send whose frozen copy this is; null for a draft's live render. */
   frozen: { id: string } | null;
+  /** When the post went out, or will: the sent record's completion, the scheduled send's
+   *  fire time, or now for a draft. The date the web version's masthead carries. */
+  dateMs: number;
 }
 
 async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
@@ -86,10 +97,23 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
       email: { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
       warnings: [],
       frozen: { id: send.id },
+      dateMs: send.completed_at ?? send.fire_at,
     };
   }
   const result = await render(input, c.config, await loadBranding(c));
-  return { input, email: result, warnings: result.warnings, frozen: null };
+  return { input, email: result, warnings: result.warnings, frozen: null, dateMs: Date.now() };
+}
+
+/** An authed page carrying a post's HTML: the preview's headers (no script, no form, never
+ *  framed by another site, never indexed). */
+function postPage(html: string): Response {
+  return new Response(html, {
+    headers: {
+      ...POST_PAGE_SECURITY_HEADERS,
+      "content-type": "text/html; charset=utf-8",
+      "x-robots-tag": "noindex",
+    },
+  });
 }
 
 export async function preview(c: RequestContext): Promise<Response> {
@@ -104,18 +128,33 @@ export async function preview(c: RequestContext): Promise<Response> {
 }
 
 export async function previewPage(c: RequestContext): Promise<Response> {
-  const { email } = await loadPostEmail(c);
-  const html = substituteRecipient(email, {
+  const { input, email } = await loadPostEmail(c);
+  // The email as a reader gets it: its view-in-browser link is the public page.
+  const listEmail = withViewInBrowserUrl(email, publicViewInBrowserUrl(c.config, input.post.slug));
+  const html = substituteRecipient(listEmail, {
     ".Email.UnsubscribeURL": genericUnsubscribeUrl(c),
     ".Email.SentTo": "",
   }).html;
-  return new Response(html, {
-    headers: {
-      ...POST_PAGE_SECURITY_HEADERS,
-      "content-type": "text/html; charset=utf-8",
-      "x-robots-tag": "noindex",
-    },
-  });
+  return postPage(html);
+}
+
+/**
+ * The post's web version: what its public archive page will show once it is sent, built
+ * by the archive page's own code from the same copy the preview shows (a draft's live
+ * render, or the frozen copy once scheduled), so the publisher can proof the page before
+ * it is permanent (SPEC §5). Where a test email's view-in-browser link leads, by way of
+ * the editor.
+ */
+export async function webPage(c: RequestContext): Promise<Response> {
+  const { input, email, dateMs } = await loadPostEmail(c);
+  return postPage(
+    webVersion(email.html, {
+      config: c.config,
+      identity: await readerIdentity(c, c.config),
+      dateMs,
+      viewInBrowserUrl: publicViewInBrowserUrl(c.config, input.post.slug),
+    }),
+  );
 }
 
 /**
@@ -137,6 +176,12 @@ export async function test(c: RequestContext): Promise<Response> {
   const readAt = Date.now();
   const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
+  // The one edit the list send doesn't make: the view-in-browser link opens the post's
+  // web version in the editor, since its public page exists only once it is sent.
+  const testEmail = withViewInBrowserUrl(
+    email,
+    webPreviewUrl(c.config.appOrigin, { post: input.post.id }),
+  );
   // A test uses the same per-recipient substitution path as a real send.
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
   const recipients = [{ email: to, unsubscribeUrl }];
@@ -145,7 +190,7 @@ export async function test(c: RequestContext): Promise<Response> {
   // test within the provider's memory of it (Resend: a day), so a second test would be
   // deduped into nothing, or refused outright once the post had changed.
   const [res] = perRecipient(
-    await provider.sendBatch(email, recipients, {
+    await provider.sendBatch(testEmail, recipients, {
       purpose: "test",
       idempotencyKeyPrefix: `test-${input.post.id}`,
       idempotencyKey: `test-${input.post.id}-${crypto.randomUUID()}`,
@@ -276,6 +321,8 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   }
 
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
+  // The sample has no public page, so its view-in-browser link opens its web version.
+  const testEmail = withViewInBrowserUrl(result, webPreviewUrl(c.config.appOrigin, "template"));
   const provider = getProvider(c.config, c.env);
   const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
@@ -286,7 +333,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const testId = `template-test-${crypto.randomUUID()}`;
   const batch = recipients.map((email) => ({ email, unsubscribeUrl }));
   const results = perRecipient(
-    await provider.sendBatch(result, batch, {
+    await provider.sendBatch(testEmail, batch, {
       purpose: "test",
       idempotencyKeyPrefix: testId,
       idempotencyKey: testId,
@@ -304,6 +351,22 @@ export async function templateTest(c: RequestContext): Promise<Response> {
     warnings: result.warnings,
   };
   return json(report);
+}
+
+/** The template's sample post as its archive page would show it: the saved template and
+ *  identity, through the one render path and the archive page's own code (SPEC §5, §9).
+ *  Where a template test's view-in-browser link leads, by way of the editor. */
+export async function templateWebPage(c: RequestContext): Promise<Response> {
+  const settings = await getSettings(c.env.DB);
+  const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
+  return postPage(
+    webVersion(result.html, {
+      config: c.config,
+      identity: await readerIdentity(c, c.config),
+      dateMs: Date.now(),
+      viewInBrowserUrl: webPreviewUrl(c.config.appOrigin, "template"),
+    }),
+  );
 }
 
 export async function devOutbox(c: RequestContext): Promise<Response> {

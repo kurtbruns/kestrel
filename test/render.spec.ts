@@ -8,6 +8,8 @@ import {
   SENTTO_SENTINEL,
   substituteRecipient,
   UNSUB_SENTINEL,
+  VIEW_IN_BROWSER_SENTINEL,
+  withViewInBrowserUrl,
 } from "../src/render/render";
 import { emailOnlyRegionsWhole } from "../src/render/template";
 import { DEFAULT_EMAIL_TEMPLATE, defaultBranding } from "../src/render/template_engine";
@@ -154,7 +156,11 @@ describe("render (the single render path)", async () => {
     );
     expect(result.text).toContain("here (https://x.com)");
     expect(result.text).toContain(`Unsubscribe: ${UNSUB_SENTINEL}`);
-    expect(result.text).toContain("View in browser: https://arc.example/archive/weekly-news");
+    // The link is frozen as its send-phase sentinel; the hand-off fills it.
+    expect(result.text).toContain(`View in browser: ${VIEW_IN_BROWSER_SENTINEL}`);
+    expect(withViewInBrowserUrl(result, "https://arc.example/archive/weekly-news").text).toContain(
+      "View in browser: https://arc.example/archive/weekly-news",
+    );
   });
 
   it("ends the text part's footer with the mailing address only when one is set (SPEC §9)", async () => {
@@ -164,7 +170,7 @@ describe("render (the single render path)", async () => {
       "",
       "—",
       "Powered by Kestrel",
-      "View in browser: https://arc.example/archive/weekly-news",
+      `View in browser: ${VIEW_IN_BROWSER_SENTINEL}`,
       `Unsubscribe: ${UNSUB_SENTINEL}`,
     ];
     const blank = await render(input, config);
@@ -287,8 +293,11 @@ describe("render (the single render path)", async () => {
     );
     expect(result.html).toContain("Field Notes");
     expect(result.html).toContain(UNSUB_SENTINEL);
-    // The view-in-browser variable is filled with the archive URL.
-    expect(result.html).toContain("https://arc.example/archive/weekly-news");
+    // The view-in-browser variable is frozen as its sentinel, and the hand-off fills it.
+    expect(result.html).toContain(VIEW_IN_BROWSER_SENTINEL);
+    const listEmail = withViewInBrowserUrl(result, "https://arc.example/archive/weekly-news");
+    expect(listEmail.html).toContain('href="https://arc.example/archive/weekly-news"');
+    expect(listEmail.html).not.toContain(VIEW_IN_BROWSER_SENTINEL);
     expect(result.warnings).toEqual([]);
   });
 

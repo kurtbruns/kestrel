@@ -319,3 +319,194 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+// A test's one difference from the list send: its view-in-browser link opens the
+// web-version preview in the editor, since the public page exists only once the post is
+// sent (SPEC §5, I5).
+describe("view in browser: a test's link opens the web version, the list send's the archive", () => {
+  const VIEW = "%%VIEW_IN_BROWSER_URL%%";
+  const viewLink = (html: string): string | undefined =>
+    /<a [^>]*href="([^"]+)"[^>]*>View in browser<\/a>/.exec(html)?.[1];
+  const outboxTo = async (to: string): Promise<any> =>
+    (await readJson(await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH }))).messages.find(
+      (m: any) => m.to === to,
+    );
+
+  it("a draft's test links to its web version in the editor, in both parts", async () => {
+    const id = await draftWithImage("Draft Link");
+    const to = `draft-link-${id}@example.com`;
+    await SELF.fetch(`${base}/api/posts/${id}/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    const msg = await outboxTo(to);
+    const web = `http://localhost:8787/dashboard/#/web/post/${id}`;
+    expect(viewLink(msg.html)).toBe(web);
+    expect(msg.text).toContain(`View in browser: ${web}`);
+    expect(msg.html).not.toContain(VIEW);
+    expect(msg.html).not.toContain("/archive/");
+  });
+
+  it("a scheduled post's test sends the frozen copy with the web-version link, and the list send the archive's", async () => {
+    const id = await draftWithImage("Scheduled Link");
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('vib','vib@example.com','confirmed','cfm-vib','uns-vib',?,?)",
+    )
+      .bind(Date.now(), Date.now())
+      .run();
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+      }),
+    );
+    const frozen = await env.DB.prepare("SELECT rendered_html FROM sends WHERE id = ?")
+      .bind(scheduled.send.id)
+      .first<{ rendered_html: string }>();
+    expect(frozen!.rendered_html).toContain(VIEW);
+
+    const to = `scheduled-link-${id}@example.com`;
+    const test = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/test`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ to }),
+      }),
+    );
+    expect(test.frozen).toBe(true);
+    const testMsg = await outboxTo(to);
+    expect(viewLink(testMsg.html)).toBe(`http://localhost:8787/dashboard/#/web/post/${id}`);
+
+    // The same frozen copy, fired: every subscriber's link is the post's public page, and
+    // the test's copy differs from it only in that link and the per-recipient values.
+    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+      .post.slug;
+    await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+      .bind(Date.now() - 1000, scheduled.send.id)
+      .run();
+    const { sweep } = await import("../src/send/sweep");
+    await sweep(env);
+    const listMsg = await outboxTo("vib@example.com");
+    const archive = `http://localhost:8787/archive/${slug}`;
+    expect(viewLink(listMsg.html)).toBe(archive);
+    expect(listMsg.text).toContain(`View in browser: ${archive}`);
+    const normalize = (html: string, link: string, unsub: string) =>
+      html.split(link).join("LINK").split(unsub).join("UNSUB");
+    expect(
+      normalize(
+        testMsg.html,
+        `http://localhost:8787/dashboard/#/web/post/${id}`,
+        "http://localhost:8787/unsubscribe?test=1",
+      ),
+    ).toBe(normalize(listMsg.html, archive, "http://localhost:8787/unsubscribe?token=uns-vib"));
+    await env.DB.prepare("DELETE FROM deliveries WHERE send_id = ?").bind(scheduled.send.id).run();
+    await env.DB.prepare("DELETE FROM subscribers WHERE id = 'vib'").run();
+  });
+
+  it("a template test links to the sample's web version in the editor", async () => {
+    const to = "template-link@example.com";
+    await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    const msg = await outboxTo(to);
+    expect(viewLink(msg.html)).toBe("http://localhost:8787/dashboard/#/web/template");
+    expect(msg.text).toContain("View in browser: http://localhost:8787/dashboard/#/web/template");
+  });
+
+  it("the email preview shows the link a reader gets: the post's public page", async () => {
+    const id = await draftWithImage("Preview Link");
+    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+      .post.slug;
+    const page = await (
+      await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
+    ).text();
+    expect(viewLink(page)).toBe(`http://localhost:8787/archive/${slug}`);
+  });
+});
+
+describe("web version (GET /api/posts/:id/web, GET /api/settings/template/web)", () => {
+  it("requires auth", async () => {
+    const id = await draftWithImage("Web Auth");
+    expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
+    expect((await SELF.fetch(`${base}/api/settings/template/web`)).status).toBe(401);
+  });
+
+  it("shows a draft the way its archive page will: masthead and web font in, email-only parts out", async () => {
+    const id = await draftWithImage("Web Draft");
+    const res = await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    expect(res.headers.get("content-security-policy")).toContain("form-action 'none'");
+    const html = await res.text();
+    expect(html).toContain(">Hi</h1>");
+    expect(html).toContain(`/media/posts/${id}/cat.png`);
+    expect(html).toContain('class="k-mast"');
+    expect(html).toContain("fonts.googleapis.com/css2?family=Fraunces");
+    // The template's email-only footer is left out, as on the archive page.
+    expect(html).not.toContain(">Unsubscribe</a>");
+    expect(html).not.toContain(">View in browser</a>");
+    expect(html).toContain("Powered by Kestrel");
+    for (const s of ["%%VIEW_IN_BROWSER_URL%%", "%%UNSUBSCRIBE_URL%%", "%%SENT_TO%%"]) {
+      expect(html).not.toContain(s);
+    }
+    // A publisher's preview, not a reader page: no dev-only dashboard pill.
+    expect(html).not.toContain('class="r-dev"');
+  });
+
+  it("matches the archive page once the post is sent", async () => {
+    const id = await draftWithImage("Web Sent");
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('web','web@example.com','confirmed','cfm-web','uns-web',?,?)",
+    )
+      .bind(Date.now(), Date.now())
+      .run();
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+      }),
+    );
+    // Scheduled: the frozen copy, its masthead dated for the fire time.
+    const before = await (
+      await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })
+    ).text();
+    expect(before).toContain('class="k-mast"');
+
+    await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+      .bind(Date.now() - 1000, scheduled.send.id)
+      .run();
+    const { sweep } = await import("../src/send/sweep");
+    await sweep(env);
+    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+      .post.slug;
+    const web = await (await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })).text();
+    const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
+    // The archive page adds only the dev-only pill (the test env is dev-shaped).
+    const withoutPill = (html: string) =>
+      html
+        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+    expect(withoutPill(archive)).toBe(web);
+    await env.DB.prepare("DELETE FROM deliveries WHERE send_id = ?").bind(scheduled.send.id).run();
+    await env.DB.prepare("DELETE FROM subscribers WHERE id = 'web'").run();
+  });
+
+  it("shows the template's sample post as an archive page", async () => {
+    const res = await SELF.fetch(`${base}/api/settings/template/web`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain("The starlings are back");
+    expect(html).toContain('class="k-mast"');
+    expect(html).not.toContain(">Unsubscribe</a>");
+  });
+
+  it("404s for an unknown post", async () => {
+    expect((await SELF.fetch(`${base}/api/posts/nope/web`, { headers: AUTH })).status).toBe(404);
+  });
+});

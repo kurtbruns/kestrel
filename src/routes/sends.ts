@@ -19,6 +19,7 @@ import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../lib/time";
+import { publicViewInBrowserUrl, withViewInBrowserUrl } from "../render/render";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { bySeverity, sendConditions } from "../send/conditions";
@@ -119,8 +120,9 @@ export async function get(c: RequestContext): Promise<Response> {
 
 /**
  * The frozen email a send holds (I3), as it will fire or went out: `format=html` (the
- * default) or `format=text`, with the per-recipient placeholders left unfilled. Its own
- * route, so a view of the send never carries the bodies.
+ * default) or `format=text`, with its view-in-browser link pointed at the post's public
+ * archive page, as the list send fills it, and the per-recipient placeholders left
+ * unfilled. Its own route, so a view of the send never carries the bodies.
  */
 export async function email(c: RequestContext): Promise<Response> {
   const format = c.url.searchParams.get("format") ?? "html";
@@ -131,11 +133,16 @@ export async function email(c: RequestContext): Promise<Response> {
   if (!send) {
     throw notFound("send");
   }
+  const post = await getPost(c.env.DB, send.post_id);
+  const frozen = withViewInBrowserUrl(
+    { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
+    publicViewInBrowserUrl(c.config, post?.slug ?? null),
+  );
   return format === "html"
-    ? new Response(send.rendered_html, {
+    ? new Response(frozen.html, {
         headers: { ...POST_PAGE_SECURITY_HEADERS, "content-type": "text/html; charset=utf-8" },
       })
-    : new Response(send.rendered_text, {
+    : new Response(frozen.text, {
         headers: {
           "content-type": "text/plain; charset=utf-8",
           "x-content-type-options": "nosniff",

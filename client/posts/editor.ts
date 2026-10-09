@@ -13,6 +13,7 @@ import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../..
 import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
+import { webPreviewHash } from "../../shared/web_preview";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
@@ -164,6 +165,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
+        <button type="button" class="ghost" id="webBtn">Web version ↗</button>
         <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
@@ -774,6 +776,20 @@ export async function renderEditor(
         const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
         window.open(url, "_blank");
         setTimeout(() => URL.revokeObjectURL(url), 10000);
+      } catch (e) {
+        toast(message(e));
+      }
+    });
+
+  // --- web version: the archive page as it will look once sent (SPEC §5) ---
+  const webBtn = $<HTMLButtonElement>("#webBtn");
+  webBtn.onclick = () =>
+    busy(webBtn, "Opening…", async () => {
+      try {
+        if (!locked) {
+          await saveDraft(true);
+        }
+        window.open(`${location.pathname}${webPreviewHash({ post: id })}`, "_blank");
       } catch (e) {
         toast(message(e));
       }

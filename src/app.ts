@@ -350,6 +350,17 @@ export function createRouter({
       handler: renderRoutes.templateTest,
     },
     {
+      method: "GET",
+      path: "/api/settings/template/web",
+      access: "admin",
+      resource: "settings",
+      summary:
+        "The template's sample post as a standalone HTML page, the way an archive page shows it.",
+      description:
+        "Renders the stored template and identity, as a template test does, then makes the archive page's edits: the email-only regions left out, the masthead and display font added (SPEC §5). A template test's view-in-browser link opens this, by way of the editor.",
+      handler: renderRoutes.templateWebPage,
+    },
+    {
       method: "POST",
       path: "/api/settings/notifications/test",
       access: "admin",
@@ -514,6 +525,17 @@ export function createRouter({
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
       handler: renderRoutes.previewPage,
+    },
+    {
+      method: "GET",
+      path: "/api/posts/:id/web",
+      access: "admin",
+      resource: "posts",
+      summary:
+        "The post's web version as a standalone HTML page: what its archive page will show once it is sent.",
+      description:
+        "Built from the same copy as the preview (a draft's live render, the frozen copy once scheduled, the record once sent) by the archive page's own code: the email-only regions left out, the masthead and display font added (SPEC §5). A test email's view-in-browser link opens this, by way of the editor.",
+      handler: renderRoutes.webPage,
     },
     {
       method: "POST",
@@ -744,7 +766,7 @@ export function createRouter({
       access: "admin",
       resource: "sends",
       summary:
-        "The send's frozen email (I3), exactly as it will fire or went out, with the per-recipient placeholders unfilled: HTML, or its plain-text part.",
+        "The send's frozen email (I3), exactly as it will fire or went out, with its view-in-browser link the post's public page, as the list send fills it, and the per-recipient placeholders unfilled: HTML, or its plain-text part.",
       description:
         "Its own route so the send's view never carries the bodies. The HTML is served under the same no-script, no-framing headers as a post page.",
       query: [

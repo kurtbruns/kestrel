@@ -6,6 +6,7 @@ import { renderDashboard } from "./dashboard/dashboard";
 import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
 import { renderEditor } from "./posts/editor";
+import { renderWebVersion, webTarget } from "./posts/web";
 import { renderDocs } from "./room/docs";
 import { renderReference } from "./room/reference";
 import { renderSent } from "./sends/list";
@@ -27,8 +28,9 @@ export function route(): Promise<void> {
   mountedHash = hash;
   const [, view, arg, sub] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
-  // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
-  document.body.classList.toggle("editor-mode", view === "edit");
+  // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome). So
+  // does the web-version preview, which a test email's link may open on its own.
+  document.body.classList.toggle("editor-mode", view === "edit" || view === "web");
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
   // drops the publication sidebar for a slim tool bar.
   const toolMode = view === "docs" || view === "reference";
@@ -47,6 +49,12 @@ export function route(): Promise<void> {
   setNavOpen(false);
   if (view === "edit" && arg) {
     return mount((root, signal) => renderEditor(arg, root, signal));
+  }
+  if (view === "web") {
+    const target = webTarget(arg, sub);
+    if (target) {
+      return mount((root, signal) => renderWebVersion(target, root, signal));
+    }
   }
   if (view === "drafts") {
     return mount(renderDrafts);

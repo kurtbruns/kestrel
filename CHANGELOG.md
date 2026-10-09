@@ -10,6 +10,14 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens from **Web version** beside **Open in browser** (SPEC §5).
+
+### Changed
+
+- The "View in browser" link in a test email now opens that post's web version in the editor, instead of its public archive page, which doesn't exist until the post is sent. A template test's link opens the sample post's web version. Emails to your list still link to the public page. A post scheduled before you upgrade keeps the public link in its tests too (SPEC §5, I5).
+
 ### Fixed
 
 - On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.

@@ -1699,6 +1699,19 @@ th.num .th-sort {
   align-items: center;
   gap: 10px;
 }
+/* The web-version preview (#/web/…): the archive page as it will look, framed whole. The
+   frame grows to its page, so the page scrolls rather than the frame. */
+.web-note {
+  font-size: 14px;
+}
+.web-frame {
+  display: block;
+  width: 100%;
+  min-height: 70vh;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
 /* Sent record view (#148): a read-only delivery record. The outcome tiles reuse the
    semantic feedback scales (--ok / --warn / --danger, DESIGN §3); a status badge, not
    a feedback color, still labels the send's lifecycle. */
