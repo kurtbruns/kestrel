@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.5.0] - 2026-10-09
+
 **Upgrading from 1.4.0.** No migration. Any script or API client that saves posts must send the revision it read, as `base_revision` or `If-Match`; the editor already does.
 
 ### Breaking
@@ -234,7 +236,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.3.0
 [1.2.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.2.0
