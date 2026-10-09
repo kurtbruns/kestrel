@@ -17,7 +17,7 @@ The line must be exactly that, on its own and outside a code block: the changelo
 A worktree Claude Code makes inside the repository (under `.claude/worktrees/`) loads the root's `CLAUDE.local.md` too, since Claude Code reads one in every directory above the session's. Two things follow from the main checkout, not the worktree:
 
 - **The frame is the main checkout's copy.** The import resolves next to the root's `CLAUDE.local.md`, so a worktree session gets `frame.md` as the main checkout has it checked out.
-- **The hook is the main checkout's copy.** `.claude/settings.json` runs it from `$CLAUDE_PROJECT_DIR`, which names the main checkout inside a worktree.
+- **The hook is the main checkout's copy.** `.claude/settings.json` runs it from `$CLAUDE_PROJECT_DIR`, the directory the session started in, which is the main checkout for a worktree Claude Code made from it.
 
 So keep the main checkout on an up-to-date `main`, and do the work in worktrees. A worktree session may ask once to approve the import, since `frame.md` resolves outside its directory.
 

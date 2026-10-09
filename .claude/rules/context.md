@@ -1,6 +1,5 @@
 ---
 paths:
-  - ".claude/rules/**/*.md"
   - ".claude/maintainer/**"
 ---
 
@@ -12,7 +11,7 @@ Kestrel's Claude context is read by Claude Code, not by a person looking for doc
 - **Changing the code: `.claude/rules/`.** `code.md` and `client.md` are scoped by `paths` to the code, so they load once Claude reads it: for an operator adding a feature to their copy, a contributor, or the maintainer. A rule loads when Claude reads a matching file, not only when it edits one, so no rule here may match a file the setup guide sends an operator to (a guide page, `CHANGELOG.md`, `README.md`, `wrangler.jsonc`, `package.json`).
 - **Maintaining Kestrel: `.claude/maintainer/`.** How a change to the upstream project lands. `frame.md` loads only through a gitignored `CLAUDE.local.md` (`.claude/maintainer/README.md`), so a fresh clone never sees it, and points to `guide.md` for guide pages. Their content concerns files operators read (guide pages, `CHANGELOG.md`, `README.md`), which is why it isn't a path-scoped rule in `.claude/rules/`.
 
-This rule's own `paths` leave out `.claude/CLAUDE.md`, since the Connect Claude guide names that file to operators; `frame.md` points here before it changes instead.
+This rule's own `paths` leave out `.claude/CLAUDE.md` and `.claude/rules/`, since operators read both (the Connect Claude guide names the first, and `.claude/CLAUDE.md` sends them to `code.md`); `frame.md` points here before either changes instead.
 
 A committed hook runs for everyone, so one that serves the maintainer stays quiet without the frame. Skills load only when invoked or when their description matches the task, so a skill costs the other audiences nothing.
 

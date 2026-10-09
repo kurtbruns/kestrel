@@ -25,8 +25,9 @@
  * may keep notes of their own in a CLAUDE.local.md. Claude Code loads CLAUDE.local.md from
  * the session's directory and every one above it, so a worktree inside the maintainer's
  * checkout has the frame through the root's file, and the check walks up the same way. The
- * diff is the checkout the session works in, found from the hook input's `cwd`: in a
- * worktree CLAUDE_PROJECT_DIR names the main checkout, whose diff is not this branch's.
+ * diff is the checkout the session works in, found from the hook input's `cwd`:
+ * CLAUDE_PROJECT_DIR is where the session started, which for a worktree Claude Code made
+ * from the main checkout is that checkout, whose diff is not this branch's.
  *
  * Fails safe: any git error, a detached HEAD, or a missing CHANGELOG.md all end in a
  * silent exit 0. Reminds at most once per session (a marker in the temp dir keyed on the
