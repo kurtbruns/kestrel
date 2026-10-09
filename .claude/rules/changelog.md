@@ -65,3 +65,5 @@ Set up once, by the maintainer, since npm configures a trusted publisher only fo
 2. Make the workflow the publisher, on npmjs.com under the package's **Settings → Trusted Publisher** (GitHub Actions; user `kurtbruns`, repository `kestrel`, workflow `publish.yml`), or with `npm trust github @kurtbruns/kestrel --file publish.yml --repo kurtbruns/kestrel --allow-publish` (npm 11.15 or later, two-factor authentication on).
 3. Under **Settings → Publishing access**, choose **Require two-factor authentication and disallow tokens**, so only the workflow (or the maintainer with two-factor) can publish.
 
+npm validates a trusted publisher only when the workflow publishes through it, and drops one that hasn't within two days of being set up. The first version's workflow run finds that version already on npm and publishes nothing, so the configuration made for it lapses. Add it again on npmjs.com (step 2) just before creating the next release's GitHub release; that run's publish validates it, and from then on it stays.
+
