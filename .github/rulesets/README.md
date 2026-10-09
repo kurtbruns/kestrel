@@ -24,8 +24,11 @@ If you edit the ruleset in the GitHub UI, re-export it here so this file stays t
 
 ## Repository settings
 
-A squash lands the pull request's title as the commit subject and its description as the body, so the reasoning reaches `main`'s history in the one commit that represents the change. Set once, recorded here so it is reproducible:
+Set once, recorded here so they are reproducible:
+
+- **A squash lands the pull request's title as the commit subject and its description as the body,** so the reasoning reaches `main`'s history in the one commit that represents the change.
+- **Auto-merge is allowed.** It is opt-in per pull request: enabling it on one queues the merge, with the method chosen then, until the ruleset above is satisfied (the `gate` check passes and every review thread is resolved). It relaxes nothing the ruleset enforces; it only saves waiting on CI before merging.
 
 ```bash
-gh api --method PATCH repos/kurtbruns/kestrel -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY
+gh api --method PATCH repos/kurtbruns/kestrel -f squash_merge_commit_title=PR_TITLE -f squash_merge_commit_message=PR_BODY -F allow_auto_merge=true
 ```
