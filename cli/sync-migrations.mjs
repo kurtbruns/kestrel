@@ -23,6 +23,10 @@ import { fileURLToPath } from "node:url";
 
 const SHIPPED = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 
+// A file's text with LF line endings, so a checkout that turned them into CRLF (git's autocrlf
+// on Windows) isn't taken for an edited migration.
+const sameText = (path) => readFileSync(path, "utf8").replace(/\r\n/g, "\n");
+
 /** `kestrel sync-migrations`, into the `migrations/` of `root` (the current directory). */
 export function syncMigrationsCommand(root = process.cwd()) {
   const target = join(root, "migrations");
@@ -41,7 +45,7 @@ export function syncMigrationsCommand(root = process.cwd()) {
     if (!existsSync(to)) {
       copyFileSync(from, to);
       copied.push(name);
-    } else if (!readFileSync(to).equals(readFileSync(from))) {
+    } else if (sameText(to) !== sameText(from)) {
       differ.push(name);
     }
   }

@@ -69,7 +69,8 @@ function findFreePort() {
 
 // Migrate the local database when its `posts` table is genuinely missing. Wrangler's "no such
 // table" text is matched rather than any failure, so a transient probe failure (the file still
-// locked by a server just stopped) doesn't trigger a needless migrate. Best-effort: a failed
+// locked by a server just stopped) doesn't trigger a needless migrate. In a terminal, wrangler
+// asks to confirm the migrations first, as it does for any apply. Best-effort: a failed
 // bootstrap leaves things no worse than an unmigrated database would be on its own.
 function bootstrapDatabase() {
   const probe = captureWrangler([
@@ -189,14 +190,24 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
 
   // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave
   // wrangler serving, the ticker calling a server that is gone, or the caller's companions
-  // running. Pass it to wrangler and stop the rest, then re-raise: `once` means the re-raised
-  // signal meets the default disposition and ends us. (A terminal Ctrl-C reaches the whole
-  // group, wrangler included, and ends the same way.)
+  // running. Stop the rest at once and pass the signal to wrangler, then end once wrangler has
+  // (the exit handler below re-raises it), or after a few seconds if it doesn't. A terminal's
+  // Ctrl-C already reaches wrangler with the whole group, so SIGINT is passed on only if
+  // wrangler is still running a moment later: a second SIGINT would cut its shutdown short.
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
     process.once(signal, () => {
-      child.kill(signal);
       stop();
-      process.kill(process.pid, signal);
+      const forward = () => {
+        if (child.exitCode === null && child.signalCode === null) {
+          child.kill(signal);
+        }
+      };
+      if (signal === "SIGINT") {
+        setTimeout(forward, 500).unref();
+      } else {
+        forward();
+      }
+      setTimeout(() => process.kill(process.pid, signal), 5000).unref();
     });
   }
 
