@@ -58,7 +58,8 @@ export interface PostResponse {
 
 /**
  * What POST /api/posts and PUT /api/posts/:id accept: any subset of the fields, and the revision
- * the editor loaded, which the server checks before it writes (optimistic concurrency).
+ * the client loaded, which the server checks before it writes (optimistic concurrency). A PUT
+ * must name it, here or as `If-Match`; a create has nothing to be based on.
  */
 export interface PostEditBody {
   subject?: string;
@@ -89,6 +90,13 @@ export interface TestSendResponse {
   subject: string;
   warnings: string[];
   frozen: boolean;
+}
+
+/** The 428 a save gets when it names no base revision: the post as it stands, to read and save against. */
+export interface BaseRequiredError {
+  error: "base_required";
+  message: string;
+  post: Post;
 }
 
 /** The 409 a save gets when its base revision is no longer the newest. */

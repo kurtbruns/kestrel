@@ -159,10 +159,14 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(await postStatus(id)).toBe("draft");
 
     // edit is allowed again
+    const { post } = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
     const put = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: JSON_AUTH,
-      body: JSON.stringify({ markdown: "totally different body" }),
+      body: JSON.stringify({
+        markdown: "totally different body",
+        base_revision: post.current_revision,
+      }),
     });
     expect(put.status).toBe(200);
 

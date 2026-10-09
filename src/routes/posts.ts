@@ -2,6 +2,7 @@
 
 import { encodeSendCursor } from "../../shared/cursor";
 import type {
+  BaseRequiredError,
   PostListResponse,
   PostResponse,
   PostSavedResponse,
@@ -29,9 +30,9 @@ interface EditBody {
 /**
  * Read an edit body. Every field is optional, and one that is present must be a
  * string: a wrong type is a 400 naming it, never dropped, so a save can't report
- * success for a field it ignored. `base_revision` also takes `null` ("no base"), and
- * nothing else, so a malformed one can't turn into a save that skips the concurrency
- * check.
+ * success for a field it ignored. `base_revision` also takes `null` ("no base", which
+ * `updatePost` refuses), and nothing else, so a malformed one is named as the field at
+ * fault rather than answered as a missing base.
  */
 async function readBody(c: RequestContext, opts: { optional?: boolean } = {}): Promise<EditBody> {
   const raw = await readJsonObject(c, opts);
@@ -49,7 +50,8 @@ async function readBody(c: RequestContext, opts: { optional?: boolean } = {}): P
  * The revision the client believes it is editing, for optimistic concurrency
  * (see `updatePost`). Accepted as an `If-Match` header (idiomatic, matches the
  * `ETag` we emit) or a `base_revision` body field; the header wins. `*` and a
- * missing value both mean "no base" — the save then proceeds unchecked.
+ * missing value both mean "no base", which `updatePost` refuses: `*` would be an
+ * explicit last-write-wins, and no client gets to overwrite another writer's edit.
  */
 function baseRevision(c: RequestContext, body: EditBody): string | null {
   const header = c.req.headers.get("If-Match");
@@ -155,18 +157,27 @@ export async function getPost(c: RequestContext): Promise<Response> {
 }
 
 /**
- * Optimistic concurrency (SPEC §4): if the client sends the revision it loaded
- * (via `If-Match`/`base_revision`) and another save has advanced the post since,
- * reject with 409 and name the newer revision instead of clobbering it — so a
- * stale tab, or a stale Claude edit, learns its view is out of date rather than
- * silently overwriting the other writer. A save with no base is unchecked
- * (last-write-wins), which keeps older API clients working.
+ * Optimistic concurrency (SPEC §4): the client sends the revision it loaded (via
+ * `If-Match`/`base_revision`), and if another save has advanced the post since, the
+ * save is rejected with 409 naming the newer revision instead of clobbering it — so
+ * a stale tab, or a stale Claude edit, learns its view is out of date rather than
+ * silently overwriting the other writer. A save with no base is refused with 428 and
+ * the post as it stands, so leaving the base out can't be a way around the check.
  */
 export async function updatePost(c: RequestContext): Promise<Response> {
   const post = await requireDraft(c);
   const body = await readBody(c);
   const base = baseRevision(c, body);
-  if (base && post.current_revision && base !== post.current_revision) {
+  if (!base) {
+    const required: BaseRequiredError = {
+      error: "base_required",
+      message:
+        "a save must name the revision it was based on: read the post, then save with its current_revision as base_revision or If-Match",
+      post,
+    };
+    return json(required, 428, revisionHeaders(post));
+  }
+  if (post.current_revision && base !== post.current_revision) {
     const current = await posts.getCurrentRevision(c.env.DB, post);
     const stale: StaleRevisionError = {
       error: "stale_revision",

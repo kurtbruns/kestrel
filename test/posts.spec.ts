@@ -50,7 +50,7 @@ describe("posts + revisions", () => {
     const upd = await SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
       headers: { ...AUTH, "content-type": "application/json" },
-      body: JSON.stringify({ markdown: "v2" }),
+      body: JSON.stringify({ markdown: "v2", base_revision: created.revision_id }),
     });
     expect(upd.status).toBe(200);
     const updated = await readJson(upd);
@@ -86,7 +86,7 @@ describe("posts + revisions", () => {
       await SELF.fetch(`${base}/api/posts/${id}`, {
         method: "PUT",
         headers: { ...AUTH, "content-type": "application/json" },
-        body: JSON.stringify({ subject: "Renamed Completely" }),
+        body: JSON.stringify({ subject: "Renamed Completely", base_revision: created.revision_id }),
       }),
     );
     expect(renamed.post.slug).toBe("stable");
@@ -95,7 +95,7 @@ describe("posts + revisions", () => {
       await SELF.fetch(`${base}/api/posts/${id}`, {
         method: "PUT",
         headers: { ...AUTH, "content-type": "application/json" },
-        body: JSON.stringify({ slug: "brand-new-slug" }),
+        body: JSON.stringify({ slug: "brand-new-slug", base_revision: renamed.revision_id }),
       }),
     );
     expect(reslugged.post.slug).toBe("brand-new-slug");
@@ -134,7 +134,8 @@ describe("posts + revisions", () => {
 
   // Optimistic concurrency (SPEC §4): a save carries the base revision it loaded;
   // if another writer (another tab, or Claude) advanced the draft since, the stale
-  // save is rejected 409 rather than silently clobbering the newer one.
+  // save is rejected 409 rather than silently clobbering the newer one, and a save
+  // that names no base is refused 428 rather than landed unchecked.
   const put = (id: string, body: unknown, headers: Record<string, string> = {}) =>
     SELF.fetch(`${base}/api/posts/${id}`, {
       method: "PUT",
@@ -149,7 +150,7 @@ describe("posts + revisions", () => {
 
     // A concurrent writer — Claude, a service principal (no email) — advances to v2.
     const claudeAuth = await adminAuth({});
-    const v2 = await readJson(await put(id, { markdown: "v2" }, claudeAuth));
+    const v2 = await readJson(await put(id, { markdown: "v2", base_revision: rev1 }, claudeAuth));
     const rev2 = v2.post.current_revision;
     expect(rev2).not.toBe(rev1);
 
@@ -181,7 +182,7 @@ describe("posts + revisions", () => {
     const id = created.post.id;
     const rev1 = created.post.current_revision;
 
-    await put(id, { markdown: "v2" }); // advance so rev1 is stale
+    await put(id, { markdown: "v2", base_revision: rev1 }); // advance so rev1 is stale
     const stale = await put(id, { markdown: "nope", base_revision: rev1 });
     expect(stale.status).toBe(409);
 
@@ -190,10 +191,31 @@ describe("posts + revisions", () => {
     expect(ok.status).toBe(200);
   });
 
-  it("still writes when no base revision is supplied (backward compatible)", async () => {
+  it("refuses a save with no base revision (428), carrying the post as it stands", async () => {
     const created = await readJson(await createPost({ subject: "NoBase", markdown: "v1" }));
-    const ok = await put(created.post.id, { markdown: "v2" });
-    expect(ok.status).toBe(200);
+    const id = created.post.id;
+    const rev1 = created.post.current_revision;
+    // Every way of naming no base, from a person and from Claude (a service principal) alike.
+    const claudeAuth = await adminAuth({});
+    const attempts: [unknown, Record<string, string>][] = [
+      [{ markdown: "v2" }, {}],
+      [{ markdown: "v2", base_revision: null }, {}],
+      [{ markdown: "v2" }, { "If-Match": "*" }],
+      [{ markdown: "v2" }, claudeAuth],
+    ];
+    for (const [body, headers] of attempts) {
+      const res = await put(id, body, headers);
+      expect(res.status).toBe(428);
+      expect(res.headers.get("ETag")).toBe(`"${rev1}"`);
+      const refused = await readJson(res);
+      expect(refused.error).toBe("base_required");
+      expect(refused.post).toMatchObject({ id, current_revision: rev1, status: "draft" });
+    }
+    // Nothing landed, and the refusal's revision is enough to save in one more step.
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    expect(got.markdown).toBe("v1");
+    expect(got.post.current_revision).toBe(rev1);
+    expect((await put(id, { markdown: "v2" }, { "If-Match": `"${rev1}"` })).status).toBe(200);
   });
 
   it("exposes the current revision as an ETag and its author on GET", async () => {

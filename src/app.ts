@@ -427,7 +427,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "posts",
       summary:
-        "Update a draft. Send `base_revision` (or If-Match) for optimistic concurrency (409 on conflict).",
+        "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
       description:
         "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
       example: {

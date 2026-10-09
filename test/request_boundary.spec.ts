@@ -168,9 +168,13 @@ describe("PUT /api/posts/:id refuses a wrong shape instead of dropping it", () =
   });
 
   it("a malformed base_revision is a 400, never a save that skips the concurrency check", async () => {
-    const { id } = await newDraft();
+    const { id, revision_id } = await newDraft();
     // Another writer saves first, so a checked save from the stale base would 409.
-    const other = await send("PUT", `/api/posts/${id}`, JSON.stringify({ markdown: "theirs" }));
+    const other = await send(
+      "PUT",
+      `/api/posts/${id}`,
+      JSON.stringify({ markdown: "theirs", base_revision: revision_id }),
+    );
     const { revision_id: theirs } = await readJson(other);
     for (const bad of [1, true, {}, ["r"]]) {
       const res = await send(
@@ -185,14 +189,16 @@ describe("PUT /api/posts/:id refuses a wrong shape instead of dropping it", () =
     expect(got.post.current_revision).toBe(theirs);
   });
 
-  it("base_revision: null still means no base", async () => {
-    const { id } = await newDraft();
+  it("base_revision: null means no base, which is refused, never landed unchecked", async () => {
+    const { id, revision_id } = await newDraft();
     const res = await send(
       "PUT",
       `/api/posts/${id}`,
       JSON.stringify({ markdown: "v2", base_revision: null }),
     );
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(428);
+    const got = await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH }));
+    expect(got.post.current_revision).toBe(revision_id);
   });
 
   it("a body that is not JSON is refused, not a 200 no-op", async () => {
