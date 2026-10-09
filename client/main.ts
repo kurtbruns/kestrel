@@ -7,6 +7,7 @@
 // the failure handling follow from that.
 
 import type { SettingsResponse } from "../shared/settings";
+import { webPreviewHashFromSearch } from "../shared/web_preview";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
@@ -77,6 +78,13 @@ async function boot(): Promise<unknown> {
     // refresh. The production flavor compiles this out (see scripts/build-client.mjs).
     if (__DEV__) {
       startDevReload();
+    }
+    // A test email's view-in-browser link names its web-version preview in the query,
+    // which survives an Access login where a hash would not (shared/web_preview.ts):
+    // turn it into the route, without adding a history entry.
+    const web = webPreviewHashFromSearch(location.search);
+    if (web) {
+      history.replaceState(null, "", `${location.pathname}${web}`);
     }
     return route();
   }

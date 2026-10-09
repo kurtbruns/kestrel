@@ -28,9 +28,11 @@ export function route(): Promise<void> {
   mountedHash = hash;
   const [, view, arg, sub] = hash.split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
-  // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome). So
-  // does the web-version preview, which a test email's link may open on its own.
-  document.body.classList.toggle("editor-mode", view === "edit" || view === "web");
+  // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
+  document.body.classList.toggle("editor-mode", view === "edit");
+  // The web-version preview is a page of its own, in a tab of its own: the whole window,
+  // with no app chrome around it.
+  document.body.classList.toggle("web-mode", view === "web");
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
   // drops the publication sidebar for a slim tool bar.
   const toolMode = view === "docs" || view === "reference";

@@ -1699,18 +1699,27 @@ th.num .th-sort {
   align-items: center;
   gap: 10px;
 }
-/* The web-version preview (#/web/…): the archive page as it will look, framed whole. The
-   frame grows to its page, so the page scrolls rather than the frame. */
-.web-note {
-  font-size: 14px;
+/* The web-version preview (#/web/…): the archive page as it will look, filling the window
+   with no app chrome, since it opens in a tab of its own. The frame scrolls the page. */
+body.web-mode .sidebar,
+body.web-mode .nav-toggle {
+  display: none;
+}
+body.web-mode .content {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 .web-frame {
   display: block;
   width: 100%;
-  min-height: 70vh;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #fff;
+  height: 100dvh;
+  border: 0;
+}
+.web-error {
+  max-width: 640px;
+  margin: 48px auto;
+  padding: 0 16px;
 }
 /* Sent record view (#148): a read-only delivery record. The outcome tiles reuse the
    semantic feedback scales (--ok / --warn / --danger, DESIGN §3); a status badge, not

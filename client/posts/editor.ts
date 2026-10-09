@@ -166,7 +166,6 @@ export async function renderEditor(
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
         <button type="button" class="ghost" id="webBtn">Web version ↗</button>
-        <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -763,23 +762,6 @@ export async function renderEditor(
     every(10000, pollFreshness, signal);
     readWhenShown(pollFreshness, signal);
   }
-
-  // --- open in browser ---
-  const openBtn = $<HTMLButtonElement>("#openBtn");
-  openBtn.onclick = () =>
-    busy(openBtn, "Opening…", async () => {
-      try {
-        if (!locked) {
-          await saveDraft(true);
-        }
-        const page = await apiText(`/api/posts/${id}/preview`);
-        const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
-      } catch (e) {
-        toast(message(e));
-      }
-    });
 
   // --- web version: the archive page as it will look once sent (SPEC §5) ---
   const webBtn = $<HTMLButtonElement>("#webBtn");

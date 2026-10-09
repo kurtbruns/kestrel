@@ -10,9 +10,11 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.5.0.** No migration. If you go back to 1.5 after upgrading, first cancel any post scheduled since the upgrade (or restore the database before deploying the older release): its saved copy holds a "View in browser" placeholder that 1.5 doesn't fill in.
+
 ### Added
 
-- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens from **Web version** beside **Open in browser** (SPEC §5).
+- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **Web version** in the editor, which replaces **Open in browser**: the Preview tab already shows the email (SPEC §5).
 
 ### Changed
 
