@@ -54,4 +54,4 @@ Some people add features to their own copy. The code's commands, conventions, an
 - **Run `npm test`, `npm run typecheck`, and `npm run check`** before calling it done, then deploy as above.
 - **If the feature would help others,** offer to propose it to Kestrel's repository.
 
-Maintaining Kestrel itself takes more context, which `.claude/maintainer/README.md` says how to turn on.
+See `.claude/maintainer/README.md` before contributing a change upstream.
