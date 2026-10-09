@@ -333,14 +333,6 @@ describe("GET /api/sends/:id is tagged", () => {
     });
     expect(due.status).toBe(200);
     expect(((await due.json()) as SendResponse).send.phase).toBe("due");
-    // An action's If-Match takes the ETag as well as the bare rev.
-    const moved = await SELF.fetch(`${base}/api/sends/${send.id}/reschedule`, {
-      method: "POST",
-      headers: { ...JSON_AUTH, "if-match": etag ?? "" },
-      body: JSON.stringify({ fire_at: Date.now() + 3_600_000 }),
-    });
-    expect(moved.status).toBe(409); // due: the window has closed, but the tag was accepted
-    expect(((await moved.json()) as { error: string }).error).toBe("window_closed");
   });
 });
 

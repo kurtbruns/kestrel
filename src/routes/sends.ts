@@ -14,7 +14,7 @@ import {
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
-import { oneOf, optCount, readJsonObject } from "../lib/body";
+import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
@@ -74,7 +74,7 @@ export async function list(c: RequestContext): Promise<Response> {
  * phase, each condition and its words, the actions, the next change), so a 304 means
  * nothing about the send has changed since, written or derived: a fire time passing turns
  * a `scheduled` view `due` with no write, and a missed or stuck send's words count its
- * minutes. Only `as_of` is left out. `If-Match` reads the `rev`.
+ * minutes. Only `as_of` is left out.
  */
 function sendEtag(view: SendView): string {
   const derived = [
@@ -334,28 +334,9 @@ async function answerWith(c: RequestContext, id: string) {
   return read;
 }
 
-/**
- * The `If-Match` header of an action: the `rev` the caller last read, as `"<rev>"`, bare,
- * or `GET /api/sends/:id`'s `ETag`, or undefined when absent. Anything else is a 400 naming it.
- */
-function parseIfMatch(c: RequestContext): number | undefined {
-  const raw = c.req.headers.get("if-match");
-  if (raw === null) {
-    return undefined;
-  }
-  // The bare rev, or `GET /api/sends/:id`'s ETag (the rev, then a tag of what the clock
-  // derives), whose rev is what an action compares.
-  const match = /^\s*(?:W\/)?"?(\d+)(?:-[0-9a-z]+)?"?\s*$/.exec(raw);
-  const rev = match?.[1] === undefined ? Number.NaN : Number(match[1]);
-  if (!Number.isSafeInteger(rev)) {
-    throw badRequest('If-Match must be a send\'s rev, as "<rev>"', { field: "If-Match" });
-  }
-  return rev;
-}
-
 export async function cancel(c: RequestContext): Promise<Response> {
   const id = param(c, "id");
-  const { changed } = await cancelSend(c.env, id, { ifMatch: parseIfMatch(c) });
+  const { changed } = await cancelSend(c.env, id);
   const body: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(body);
 }
@@ -371,9 +352,7 @@ export async function reschedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   const fireAt = parseFireAt(body.fire_at);
   const id = param(c, "id");
-  const { changed } = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs, {
-    ifMatch: parseIfMatch(c),
-  });
+  const { changed } = await rescheduleSend(c.env, id, fireAt, c.config.minLeadMs);
   const response: SendActionResponse = { ...(await answerWith(c, id)), changed };
   return json(response);
 }
@@ -385,13 +364,9 @@ export async function reschedule(c: RequestContext): Promise<Response> {
 export async function resolve(c: RequestContext): Promise<Response> {
   const request = await readJsonObject(c);
   const outcome = oneOf(request, "resolution", ["unsent", "accepted"]);
-  const expectedCount = optCount(request, "expected_count");
   const actor = c.principal?.email ?? "service";
   const id = param(c, "id");
-  const { resolved, completed } = await resolveStuckSend(c.env, id, outcome, actor, {
-    ifMatch: parseIfMatch(c),
-    expectedCount,
-  });
+  const { resolved, completed } = await resolveStuckSend(c.env, id, outcome, actor);
   const body: ResolveResponse = { ...(await answerWith(c, id)), resolved, completed };
   return json(body);
 }

@@ -9,9 +9,9 @@
  * Each refusal has a code of its own and carries the send as it stands where there is one
  * (`window_closed`, `send_canceled`, `post_not_draft`, `active_send_exists`, and the rest).
  * An action that finds the send already as asked (canceled already, or already at that
- * time) answers `changed: false` rather than refusing, so a retried request is safe; one
- * that names the `rev` it last read (`If-Match`) is refused with `precondition_failed` if
- * the send has changed since.
+ * time) answers `changed: false` rather than refusing, so a retried request is safe. An
+ * action carries no precondition on the send the caller read: it lands inside the window,
+ * can be undone before the fire time, and its answer shows the send as it now stands (SPEC §1).
  */
 
 import { formatLead } from "../../shared/sends";
@@ -191,31 +191,17 @@ function isActiveSendConflict(err: unknown): boolean {
   return /UNIQUE constraint failed:\s*sends\.post_id/i.test(message);
 }
 
-/** What an action on a send may carry: the `rev` the caller last read (`If-Match`). */
-export interface ActionGuard {
-  ifMatch?: number;
-}
-
 /** An action's answer: the send as it now stands, and whether the action wrote anything. */
 export interface ActionResult {
   send: SendRow;
   changed: boolean;
 }
 
-/** Read the send, 404 if it is gone, and refuse with `precondition_failed` if the caller
- *  named a `rev` it no longer holds. */
-async function readForAction(env: AppEnv, sendId: string, guard: ActionGuard): Promise<SendRow> {
+/** Read the send, 404 if it is gone. */
+async function readForAction(env: AppEnv, sendId: string): Promise<SendRow> {
   const send = await getSend(env.DB, sendId);
   if (!send) {
     throw notFound("send");
-  }
-  if (guard.ifMatch !== undefined && send.rev !== guard.ifMatch) {
-    throw refusal(
-      412,
-      "precondition_failed",
-      `the send has changed since rev ${guard.ifMatch} (it is at rev ${send.rev}); read it again and decide on what it is now`,
-      { send: await viewSend(env, send.id) },
-    );
   }
   return send;
 }
@@ -251,9 +237,8 @@ export async function reschedule(
   sendId: string,
   fireAt: number,
   minLeadMs: number,
-  guard: ActionGuard = {},
 ): Promise<ActionResult> {
-  const send = await readForAction(env, sendId, guard);
+  const send = await readForAction(env, sendId);
   const now = Date.now();
   if (send.status === "canceled") {
     throw refusal(409, "send_canceled", "send is canceled; schedule the post again instead", {
@@ -269,10 +254,10 @@ export async function reschedule(
     return { send, changed: false };
   }
   const target = acceptFireAt(fireAt, minLeadMs, { now });
-  const res = await rescheduleStmt(env.DB, sendId, target, now, guard.ifMatch ?? null).run();
+  const res = await rescheduleStmt(env.DB, sendId, target, now).run();
   if ((res.meta.changes ?? 0) === 0) {
     // It changed between the read and the write: answer for what it is now.
-    return reschedule(env, sendId, fireAt, minLeadMs, guard);
+    return reschedule(env, sendId, fireAt, minLeadMs);
   }
   log.info("send.rescheduled", {
     sendId,
@@ -286,12 +271,8 @@ export async function reschedule(
 /** Cancel a pending Send and unlock its post, in one batch so the two land together:
  *  a post left `scheduled` with no active send would be locked out of the editor.
  *  Only inside the review window; a send canceled already answers `changed: false`. */
-export async function cancel(
-  env: AppEnv,
-  sendId: string,
-  guard: ActionGuard = {},
-): Promise<ActionResult> {
-  const send = await readForAction(env, sendId, guard);
+export async function cancel(env: AppEnv, sendId: string): Promise<ActionResult> {
+  const send = await readForAction(env, sendId);
   if (send.status === "canceled") {
     return { send, changed: false };
   }
@@ -300,7 +281,7 @@ export async function cancel(
     throw await windowClosed(env, send, "canceled");
   }
   const [res] = await env.DB.batch([
-    cancelStmt(env.DB, sendId, now, guard.ifMatch ?? null),
+    cancelStmt(env.DB, sendId, now),
     setPostStatusStmt(
       env.DB,
       send.post_id,
@@ -312,7 +293,7 @@ export async function cancel(
   ]);
   if ((res?.meta.changes ?? 0) === 0) {
     // It changed between the read and the write: answer for what it is now.
-    return cancel(env, sendId, guard);
+    return cancel(env, sendId);
   }
   log.info("send.canceled", { sendId, postId: send.post_id });
   return { send: unwrap(await getSend(env.DB, sendId), "send"), changed: true };
