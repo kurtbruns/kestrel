@@ -165,6 +165,28 @@ describe("applyDeliveryEvents: matching the right delivery", () => {
 
     expect(await deliveryEvent("msg-noid")).toBe("delivered");
   });
+
+  it("never lands an id-less receipt on a recipient the send loop has not settled, yet still suppresses", async () => {
+    await seedDelivery("open@example.com", null);
+    for (const status of ["pending", "dispatched"]) {
+      await env.DB.prepare("UPDATE deliveries SET status = ? WHERE email = 'open@example.com'")
+        .bind(status)
+        .run();
+      const before = await sendCounters();
+
+      const applied = await applyDeliveryEvents(env.DB, [
+        { type: "complained", email: "open@example.com" },
+      ]);
+
+      const row = await env.DB.prepare(
+        "SELECT status, event FROM deliveries WHERE email = 'open@example.com'",
+      ).first<{ status: string; event: string | null }>();
+      expect(row).toEqual({ status, event: null });
+      expect(await sendCounters()).toEqual(before);
+      expect(applied.suppressed).toBe(1); // from the event's own address (I1)
+      expect(await isSuppressed(env.DB, "open@example.com")).toBe(true);
+    }
+  });
 });
 
 describe("applyDeliveryEvents: a worse outcome is never replaced by a better one", () => {

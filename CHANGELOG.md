@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Fixed
+
+- A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
+
 ## [1.5.0] - 2026-10-09
 
 **Upgrading from 1.4.0.** No migration. Any script or API client that saves posts must send the revision it read, as `base_revision` or `If-Match`; the editor already does.
