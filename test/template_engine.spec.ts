@@ -5,17 +5,20 @@ import {
   type DeliveryContext,
   fillDeliveryTokens,
   fillEmailTemplate,
+  fillSendTokens,
   identityFieldsInUse,
   inlineEmailCss,
   onceUntilRejected,
   type RenderContext,
   SENTTO_SENTINEL,
   UNSUB_SENTINEL,
+  VIEW_IN_BROWSER_SENTINEL,
   validateEmailTemplate,
 } from "../src/render/template_engine";
 
-// Render-phase context only — the delivery-phase tokens (unsubscribe URL, sent-to) carry
-// no value here; fillEmailTemplate freezes them to their sentinels for the delivery pass.
+// Render-phase context only — the send-phase view-in-browser link and the delivery-phase
+// tokens (unsubscribe URL, sent-to) carry no value here; fillEmailTemplate freezes them to
+// their sentinels for the later passes.
 const ctx: RenderContext = {
   ".Post.Body": "<h1>Hi</h1><p>body & more</p>",
   ".Post.Subject": "Subject",
@@ -24,13 +27,12 @@ const ctx: RenderContext = {
   ".Publication.LogoURL": "https://media.example/logo?v=1",
   ".Publication.Logo": '<img class="logo" src="https://media.example/logo?v=1" alt="" />',
   ".Publication.Address": "1 Main St",
-  ".Email.ViewInBrowserURL": "https://arc.example/archive/x",
 };
 
 describe("fillEmailTemplate (render pass)", () => {
   it("inserts post.body raw and escapes every other render-phase value", () => {
     const out = fillEmailTemplate(
-      '<a href="{{ .Email.ViewInBrowserURL }}">{{ .Publication.Name }}</a>{{ .Post.Body }}',
+      '<a href="{{ .Publication.LogoURL }}">{{ .Publication.Name }}</a>{{ .Post.Body }}',
       ctx,
     );
     // Body HTML is inserted verbatim…
@@ -38,7 +40,12 @@ describe("fillEmailTemplate (render pass)", () => {
     // …but a name with quotes/ampersand is attribute-safe-escaped…
     expect(out).toContain("Ben &amp; &quot;Co&quot;");
     // …and a render-phase URL is filled with its resolved value.
-    expect(out).toContain('href="https://arc.example/archive/x"');
+    expect(out).toContain('href="https://media.example/logo?v=1"');
+  });
+
+  it("freezes the view-in-browser link to its send-phase sentinel", () => {
+    const out = fillEmailTemplate('<a href="{{ .Email.ViewInBrowserURL }}">v</a>', ctx);
+    expect(out).toBe(`<a href="${VIEW_IN_BROWSER_SENTINEL}">v</a>`);
   });
 
   it("freezes a delivery-phase token to its sentinel, not to a render value", () => {
@@ -54,6 +61,25 @@ describe("fillEmailTemplate (render pass)", () => {
 
   it("renders an unknown token as empty", () => {
     expect(fillEmailTemplate("[{{ nope.here }}]", ctx)).toBe("[]");
+  });
+});
+
+describe("fillSendTokens (send pass)", () => {
+  const link = { ".Email.ViewInBrowserURL": "https://app.example/dashboard/?to=/web/post/a&b" };
+
+  it("fills the view-in-browser link attribute-safe in HTML and raw in text", () => {
+    const frozen = `<a href="${VIEW_IN_BROWSER_SENTINEL}">v</a> ${UNSUB_SENTINEL}`;
+    expect(fillSendTokens(frozen, link, "html")).toBe(
+      `<a href="https://app.example/dashboard/?to=/web/post/a&amp;b">v</a> ${UNSUB_SENTINEL}`,
+    );
+    expect(fillSendTokens(`View in browser: ${VIEW_IN_BROWSER_SENTINEL}`, link, "text")).toBe(
+      "View in browser: https://app.example/dashboard/?to=/web/post/a&b",
+    );
+  });
+
+  it("leaves a copy frozen with the link already in it as it is", () => {
+    const old = '<a href="https://arc.example/archive/x">v</a>';
+    expect(fillSendTokens(old, link, "html")).toBe(old);
   });
 });
 

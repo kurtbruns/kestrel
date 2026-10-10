@@ -1,10 +1,12 @@
 /**
  * THE single render path. preview, test, schedule and send all call this (I5),
  * so a clean test proves the real send. Deterministic: same input → same bytes.
- * The output carries the delivery-phase sentinels verbatim (the frozen placeholders
- * for the per-recipient unsubscribe URL and sent-to address); consumers fill them at
- * delivery via `substituteRecipient` (send/test) or with generic/empty values
- * (preview/archive). Both go through the one token engine (render/template_engine.ts).
+ * The output carries the send- and delivery-phase sentinels verbatim (the frozen
+ * placeholders for the view-in-browser link, and for the per-recipient unsubscribe URL
+ * and sent-to address). Consumers fill the link with `withViewInBrowserUrl` (the public
+ * archive page, or a test's web-version preview), then the recipient's values at delivery
+ * via `substituteRecipient` (send/test) or generic/empty ones (preview/archive). All of
+ * it goes through the one token engine (render/template_engine.ts).
  */
 
 import { archivePostUrl } from "../../shared/archive_url";
@@ -23,11 +25,13 @@ import {
   type EmailBranding,
   fillDeliveryTokens,
   fillEmailTemplate,
+  fillSendTokens,
   identityFieldsInUse,
   inlineEmailCss,
   type RenderContext,
   SENTTO_SENTINEL,
   UNSUB_SENTINEL,
+  VIEW_IN_BROWSER_SENTINEL,
   validateEmailTemplate,
 } from "./template_engine";
 import { htmlToText } from "./text";
@@ -40,7 +44,7 @@ export {
   EMAIL_ONLY_OPEN,
   omitEmailOnly,
 } from "./template";
-export { SENTTO_SENTINEL, UNSUB_SENTINEL };
+export { SENTTO_SENTINEL, UNSUB_SENTINEL, VIEW_IN_BROWSER_SENTINEL };
 
 /** Widest image column an email client will show for our 600px content column. */
 const EMAIL_MAX_WIDTH = 600;
@@ -63,15 +67,14 @@ export interface RenderResult extends RenderedEmail {
 
 interface RevisionMeta {
   subject: string;
-  slug: string;
 }
 
 function readMeta(revision: RevisionRow, post: PostRow): RevisionMeta {
   try {
     const m = JSON.parse(revision.metadata) as Partial<RevisionMeta>;
-    return { subject: m.subject ?? post.subject, slug: m.slug ?? post.slug };
+    return { subject: m.subject ?? post.subject };
   } catch {
-    return { subject: post.subject, slug: post.slug };
+    return { subject: post.subject };
   }
 }
 
@@ -86,6 +89,18 @@ export function archiveUrl(
   slug: string,
 ): string {
   return archivePostUrl(config.archiveOrigin, config.archiveBasePath, slug);
+}
+
+/** The public view-in-browser link a list send and the archive carry: the post's archive
+ *  page, or the archive index when the post is somehow gone, so the link never points at
+ *  nothing. A test points it at the publisher's web-version preview instead (SPEC §5). */
+export function publicViewInBrowserUrl(
+  config: Pick<Config, "archiveOrigin" | "archiveBasePath">,
+  slug: string | null,
+): string {
+  return slug === null
+    ? `${config.archiveOrigin}${config.archiveBasePath}`
+    : archiveUrl(config, slug);
 }
 
 export async function render(
@@ -111,7 +126,6 @@ export async function render(
     warnings.push('no subject — the email will show "(no subject)"');
   }
   const subject = hasSubject ? meta.subject : "(no subject)";
-  const viewInBrowserUrl = archiveUrl(config, meta.slug);
 
   // The publisher's template is the email's presentation (SPEC §9). It's validated
   // when it's set; here we surface its warnings on preview/test and, as defense in
@@ -134,11 +148,12 @@ export async function render(
     ".Publication.LogoURL": branding.logoUrl,
     ".Publication.Logo": emailLogoHtml(branding.logoUrl, branding.name),
     ".Publication.Address": branding.address,
-    ".Email.ViewInBrowserURL": viewInBrowserUrl,
   };
-  // fillEmailTemplate freezes the delivery-phase tokens (the unsubscribe URL and sent-to
-  // address) to their sentinels here; substituteRecipient fills them per recipient. Those
-  // sentinels are the only per-recipient edits — everything else is identical bytes (I3).
+  // fillEmailTemplate freezes the send-phase token (the view-in-browser link) and the
+  // delivery-phase tokens (the unsubscribe URL and sent-to address) to their sentinels
+  // here; withViewInBrowserUrl fills the link for a hand-off and substituteRecipient the
+  // rest per recipient. Those sentinels are the only edits after the freeze — everything
+  // else is identical bytes (I3).
   const preheader = derivePreheader(contentText);
   // Inline the template's <style> onto elements (mail clients strip <style>); this is
   // the last step, so the frozen bytes are exactly what ships and what the archive
@@ -173,13 +188,26 @@ export async function render(
     "",
     "—",
     "Powered by Kestrel",
-    `View in browser: ${viewInBrowserUrl}`,
+    `View in browser: ${VIEW_IN_BROWSER_SENTINEL}`,
     `Unsubscribe: ${UNSUB_SENTINEL}`,
     ...address,
     "",
   ].join("\n");
 
   return { subject, html, text, warnings };
+}
+
+/** The SEND pass over a rendered email: point its view-in-browser link at `url`, the
+ *  public archive page for the list send and the archive, or the publisher's web-version
+ *  preview for a test (SPEC §5). The one edit a test makes to the frozen copy that the
+ *  list send doesn't, so a test still carries exactly what will go out (I5). */
+export function withViewInBrowserUrl(r: RenderedEmail, url: string): RenderedEmail {
+  const ctx = { ".Email.ViewInBrowserURL": url };
+  return {
+    subject: r.subject,
+    html: fillSendTokens(r.html, ctx, "html"),
+    text: fillSendTokens(r.text, ctx, "text"),
+  };
 }
 
 /** The DELIVERY pass over a rendered email: fill the per-recipient (delivery-phase)

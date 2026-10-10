@@ -28,8 +28,9 @@ import {
   archiveMasthead,
   archiveUrl,
   omitEmailOnly,
+  publicViewInBrowserUrl,
 } from "../render/render";
-import { fillDeliveryTokens } from "../render/template_engine";
+import { fillDeliveryTokens, fillSendTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 
@@ -120,6 +121,51 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
   });
 }
 
+/** The web version of a frozen email, as its archive page shows it (SPEC §5, I3): every
+ *  edit made at a reserved marker, none touching the reviewed content. The view-in-browser
+ *  link points at the post's public page, the per-recipient slots are filled for no one
+ *  (the generic unsubscribe link, and an empty sent-to address so none leaks), the
+ *  template's email-only regions are left out, and the browser-only chrome fills its
+ *  anchors: the masthead (plus, in local dev only, the "Open dashboard" pill) and the
+ *  hosted-page <head> (display-serif links and the reader ground). The archive page and
+ *  the publisher's web-version preview both build from this, so the preview is the page. */
+export function webVersion(
+  html: string,
+  opts: {
+    config: Config;
+    identity: ReaderIdentity;
+    /** The date the masthead carries: when the post went out, or will. */
+    dateMs: number;
+    /** The post's public archive page (`publicViewInBrowserUrl`). */
+    viewInBrowserUrl: string;
+    devDashboardUrl?: string;
+  },
+): string {
+  const masthead = archiveMasthead({
+    name: opts.identity.name,
+    dateLabel: formatSentDate(opts.dateMs),
+    // Back to the archive index the post belongs to, on the same (archive) origin —
+    // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
+    indexUrl: archiveHomeUrl(opts.config),
+  });
+  const dev = archiveDevDashboardChrome(opts.devDashboardUrl);
+  const page = fillSendTokens(
+    omitEmailOnly(html),
+    { ".Email.ViewInBrowserURL": opts.viewInBrowserUrl },
+    "html",
+  );
+  // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
+  return fillDeliveryTokens(
+    page,
+    { ".Email.UnsubscribeURL": `${opts.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
+    "html",
+  )
+    .split(ARCHIVE_MASTHEAD_ANCHOR)
+    .join(masthead + dev.masthead)
+    .split(ARCHIVE_HEAD_ANCHOR)
+    .join(ARCHIVE_POST_HEAD + dev.head);
+}
+
 export async function archivePage(c: RequestContext): Promise<Response> {
   const slug = param(c, "slug");
   const post = await getBySlug(c.env.DB, slug);
@@ -132,33 +178,13 @@ export async function archivePage(c: RequestContext): Promise<Response> {
       devDashboardUrl(c.config),
     );
   }
-  // Four edits to the frozen record on the way to the browser (I3), all at reserved
-  // markers — none touches the reviewed content: the generic unsubscribe link (no single
-  // recipient here), the browser-only masthead (plus, in local dev only, the "Open
-  // dashboard" pill), the hosted-page <head> chrome (display-serif links + the
-  // reader-ground background) — web-only, never in a sent email — and the template's
-  // email-only regions, which the page leaves out.
-  const identity = await readerIdentity(c, c.config);
-  const masthead = archiveMasthead({
-    name: identity.name,
-    dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
-    // Back to the archive index the post belongs to, on the same (archive) origin —
-    // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
-    indexUrl: archiveHomeUrl(c.config),
+  const html = webVersion(send.rendered_html, {
+    config: c.config,
+    identity: await readerIdentity(c, c.config),
+    dateMs: send.completed_at ?? send.fire_at,
+    viewInBrowserUrl: publicViewInBrowserUrl(c.config, post.slug),
+    devDashboardUrl: devDashboardUrl(c.config),
   });
-  const dev = archiveDevDashboardChrome(devDashboardUrl(c.config));
-  // Fill the delivery-phase tokens for a recipient-agnostic page: a generic unsubscribe
-  // link (no single recipient here) and an empty sent-to address (redacted so none leaks).
-  // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
-  const html = fillDeliveryTokens(
-    omitEmailOnly(send.rendered_html),
-    { ".Email.UnsubscribeURL": `${c.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
-    "html",
-  )
-    .split(ARCHIVE_MASTHEAD_ANCHOR)
-    .join(masthead + dev.masthead)
-    .split(ARCHIVE_HEAD_ANCHOR)
-    .join(ARCHIVE_POST_HEAD + dev.head);
   return new Response(html, {
     headers: {
       ...POST_PAGE_SECURITY_HEADERS,

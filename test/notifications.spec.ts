@@ -114,7 +114,8 @@ describe("a send finishing", () => {
     expect(sent[0]!.to).toBe(PUBLISHER);
     expect(sent[0]!.subject).toBe("Sent: Owls in winter");
     expect(sent[0]!.text).toContain("Accepted by the provider: 3 of 3. Unsent: 0. Skipped");
-    expect(sent[0]!.text).toContain(`/dashboard/#/sent/${send.id}`);
+    // In the query, not the hash, so an Access login in between keeps it.
+    expect(sent[0]!.text).toContain(`/dashboard/?to=/sent/${send.id}`);
     expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "sent", attempts: 1 }]);
     // Nothing about it reached the list: the subscribers were mailed once each, the
     // publisher not at all through the newsletter's provider.
@@ -562,6 +563,8 @@ describe("the settings surface", () => {
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ to: PUBLISHER, channel: "fake" });
     expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER]);
+    // Its link opens Settings, carried in the query so an Access login keeps it.
+    expect(JSON.stringify(fakeNotifications()[0])).toContain("/dashboard/?to=/settings");
 
     failFakeNotify(1);
     const refused = await test();

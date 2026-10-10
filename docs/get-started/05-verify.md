@@ -19,6 +19,8 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It should arrive in your inbox, not in spam. The image loads, the links work, and the subject reads as you wrote it.
 
+1. Select **View in browser** at the bottom of the email. In a test, it opens the post's web version in your dashboard, behind your Access login. Emails to your list link to the post's public page instead.
+
 ## 2. Check that it passes authentication
 
 Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing both is the best single sign that your mail reaches the inbox.
@@ -58,6 +60,10 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 1. Cancel the send, to see that canceling stops it. Then select **Send now** again, and let it go.
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
+
+1. In the post at your second address, select **View in browser**. It opens the post's public page at `https://newsletter.example.com/archive/` and the post's slug, with no login. Every email to your list carries this link, so check it once now.
+
+1. Select the link in the notification. It opens the send's page in your dashboard, after your Access login if you're signed out.
 
 ## 5. Unsubscribe
 

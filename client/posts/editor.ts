@@ -13,6 +13,7 @@ import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../..
 import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
+import { webPreviewHash } from "../../shared/web_preview";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
@@ -37,6 +38,7 @@ import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { framedCopy } from "./web";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -164,7 +166,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
+        <button type="button" class="ghost" id="webBtn" aria-label="Web version (opens in a new tab)">Web version ↗</button>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -195,7 +197,7 @@ export async function renderEditor(
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
-          <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
+          <iframe id="previewFrame" class="preview" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email preview" hidden></iframe>
         </div>
         ${
           locked
@@ -375,7 +377,9 @@ export async function renderEditor(
       if (!locked) {
         await saveDraft(true);
       }
-      previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
+      // Its links open in a new tab: a page they lead to may refuse to be framed, which
+      // would blank the preview (`framedCopy`).
+      previewFrame.srcdoc = framedCopy(await apiText(`/api/posts/${id}/preview`));
       previewFrame.onload = () => {
         try {
           const doc = previewFrame.contentDocument;
@@ -765,22 +769,30 @@ export async function renderEditor(
     readWhenShown(pollFreshness, signal);
   }
 
-  // --- open in browser ---
-  const openBtn = $<HTMLButtonElement>("#openBtn");
-  openBtn.onclick = () =>
-    busy(openBtn, "Opening…", async () => {
+  // --- web version: the archive page as it will look once sent (SPEC §5) ---
+  // The tab opens in the click itself, then goes to the page once the draft is saved:
+  // a browser that blocks a tab opened after an await (Safari, iOS) would otherwise
+  // drop it silently.
+  const webBtn = $<HTMLButtonElement>("#webBtn");
+  webBtn.onclick = () => {
+    const tab = window.open("", "_blank");
+    const url = `${location.origin}${location.pathname}${webPreviewHash({ post: id })}`;
+    return busy(webBtn, "Opening…", async () => {
       try {
         if (!locked) {
           await saveDraft(true);
         }
-        const page = await apiText(`/api/posts/${id}/preview`);
-        const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        if (tab) {
+          tab.location.href = url;
+        } else {
+          window.open(url, "_blank");
+        }
       } catch (e) {
+        tab?.close();
         toast(message(e));
       }
     });
+  };
 
   if (locked && scheduled) {
     // The send as last reported: this page's read of it (or, until that succeeds, what the

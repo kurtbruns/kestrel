@@ -5,12 +5,16 @@
  * email-only, which the render keeps between inert markers and the archive page omits.
  *
  * One token registry (`TOKENS`) is the single source of truth for every variable — the
- * pass that fills it (`render` vs `delivery`) and how its value is escaped. Two resolvers
- * read that registry, so "which token resolves when, and how" lives in exactly one place:
+ * pass that fills it (`render`, `send`, or `delivery`) and how its value is escaped. The
+ * resolvers read that registry, so "which token resolves when, and how" lives in exactly
+ * one place:
  *  - `fillEmailTemplate` — the RENDER pass. Substitutes `{{ }}` render-phase tokens from
  *    a fixed context (logic-less: a token is only ever replaced by a value, so nothing
- *    executes) and freezes each delivery-phase token to an internal sentinel.
- *  - `fillDeliveryTokens` — the DELIVERY pass. Fills those frozen sentinels per recipient
+ *    executes) and freezes each send- and delivery-phase token to an internal sentinel.
+ *  - `fillSendTokens` — the SEND pass. Fills the sentinels that take one value for a
+ *    whole send: the view-in-browser link, which is the public archive page for the list
+ *    and the archive, and the publisher's web-version preview for a test (SPEC §5).
+ *  - `fillDeliveryTokens` — the DELIVERY pass. Fills the per-recipient sentinels
  *    (send/test) or with generic/empty values (archive/preview): the same registry, a
  *    later phase, instead of a separate side-channel.
  *  - `validateEmailTemplate` reports errors (which the route rejects) and warnings —
@@ -45,8 +49,12 @@ import { EMAIL_ONLY_CLOSE, EMAIL_ONLY_OPEN } from "./template";
 type Escaping = "raw" | "attr";
 
 /** One variable's contract. `phase` is when it's filled:
- *  - `render`: at freeze time, from values known then (post / publication / view-in-
- *    browser); `fillEmailTemplate` writes these into the frozen bytes.
+ *  - `render`: at freeze time, from values known then (post / publication);
+ *    `fillEmailTemplate` writes these into the frozen bytes.
+ *  - `send`: after freezing, once for everything one hand-off carries. The frozen bytes
+ *    hold an internal `sentinel`, as for a delivery token. It exists for the view-in-
+ *    browser link, which a test points somewhere other than the list send does, while
+ *    the test still carries the frozen copy itself (SPEC §5, I5).
  *  - `delivery`: per recipient, after freezing. The frozen bytes hold an internal
  *    `sentinel`; the send fills it with the recipient's value, and the recipient-agnostic
  *    archive/preview surfaces fill it with a generic/empty one. Keeping these OUT of the
@@ -56,7 +64,7 @@ type Escaping = "raw" | "attr";
  *    content can never collide with it. */
 type TokenSpec =
   | { phase: "render"; escaping: Escaping }
-  | { phase: "delivery"; escaping: Escaping; sentinel: string };
+  | { phase: "send" | "delivery"; escaping: Escaping; sentinel: string };
 
 /** Internal delivery sentinels. Not `{{ }}` (an author can't produce them) and escape-
  *  inert, so they survive `fillEmailTemplate`'s escaping and CSS inlining untouched,
@@ -68,6 +76,7 @@ type TokenSpec =
  *  sentinel must meet are the two above. */
 export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
 export const SENTTO_SENTINEL = "%%SENT_TO%%";
+export const VIEW_IN_BROWSER_SENTINEL = "%%VIEW_IN_BROWSER_URL%%";
 
 /** THE token registry — the one place each variable's phase + escaping is declared.
  *  Order is cosmetic (it drives `EMAIL_TEMPLATE_VARIABLES`); resolution is keyed. */
@@ -81,7 +90,14 @@ const TOKENS = {
   // it, escaping its attributes), so a template never ships `<img src="">`.
   ".Publication.Logo": { phase: "render", escaping: "raw" },
   ".Publication.Address": { phase: "render", escaping: "attr" },
-  ".Email.ViewInBrowserURL": { phase: "render", escaping: "attr" },
+  // Send-phase: the public archive page for the list send and the archive, the
+  // publisher's web-version preview for a test. Attribute-escaped, as it was when it
+  // was filled at render.
+  ".Email.ViewInBrowserURL": {
+    phase: "send",
+    escaping: "attr",
+    sentinel: VIEW_IN_BROWSER_SENTINEL,
+  },
   // Delivery-phase (per recipient). Unsubscribe stays `raw` so the delivered bytes are
   // byte-for-byte the pre-unification output (I5); the URL is app-generated (origin +
   // token), not user content, so raw is safe. Routing it through `attr` would &-escape a
@@ -95,6 +111,9 @@ type TokenKey = keyof typeof TOKENS;
 type RenderKey = {
   [K in TokenKey]: (typeof TOKENS)[K]["phase"] extends "render" ? K : never;
 }[TokenKey];
+type SendKey = {
+  [K in TokenKey]: (typeof TOKENS)[K]["phase"] extends "send" ? K : never;
+}[TokenKey];
 type DeliveryKey = {
   [K in TokenKey]: (typeof TOKENS)[K]["phase"] extends "delivery" ? K : never;
 }[TokenKey];
@@ -104,20 +123,51 @@ export const EMAIL_TEMPLATE_VARIABLES = Object.keys(TOKENS) as TokenKey[];
 
 const KNOWN_VARS = new Set<string>(EMAIL_TEMPLATE_VARIABLES);
 
-/** Values the RENDER pass binds — render-phase tokens only. Delivery-phase tokens carry
- *  no value here; `fillEmailTemplate` freezes them to their sentinels for the later pass. */
+/** Values the RENDER pass binds — render-phase tokens only. Send- and delivery-phase
+ *  tokens carry no value here; `fillEmailTemplate` freezes them to their sentinels for
+ *  the later passes. */
 export type RenderContext = Record<RenderKey, string>;
+
+/** The values the SEND pass binds — one per send-phase token, for a whole hand-off. */
+export type SendContext = Record<SendKey, string>;
 
 /** Per-recipient values the DELIVERY pass binds — the delivery-phase tokens, by key. */
 export type DeliveryContext = Record<DeliveryKey, string>;
 
-/** The delivery-phase tokens, precomputed from the registry (drives `fillDeliveryTokens`). */
-const DELIVERY_TOKENS: { key: DeliveryKey; escaping: Escaping; sentinel: string }[] =
-  Object.entries(TOKENS).flatMap(([key, spec]) =>
-    spec.phase === "delivery"
-      ? [{ key: key as DeliveryKey, escaping: spec.escaping, sentinel: spec.sentinel }]
+interface SentinelToken<K> {
+  key: K;
+  escaping: Escaping;
+  sentinel: string;
+}
+
+/** The registry's tokens of one sentinel phase, precomputed (drives the fill passes). */
+function sentinelTokens<K>(phase: "send" | "delivery"): SentinelToken<K>[] {
+  return Object.entries(TOKENS).flatMap(([key, spec]) =>
+    spec.phase === phase
+      ? [{ key: key as K, escaping: spec.escaping, sentinel: spec.sentinel }]
       : [],
   );
+}
+
+const SEND_TOKENS = sentinelTokens<SendKey>("send");
+const DELIVERY_TOKENS = sentinelTokens<DeliveryKey>("delivery");
+
+/** Replace each token's sentinel with its value, escaped for the surface: the HTML
+ *  surface per the token's rule, the plain-text surface raw (no markup to protect). */
+function fillSentinels<K extends string>(
+  input: string,
+  tokens: SentinelToken<K>[],
+  ctx: Record<K, string>,
+  surface: "html" | "text",
+): string {
+  let out = input;
+  for (const t of tokens) {
+    const value = ctx[t.key];
+    const filled = surface === "html" && t.escaping === "attr" ? escapeHtmlAttr(value) : value;
+    out = out.split(t.sentinel).join(filled);
+  }
+  return out;
+}
 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
 
@@ -141,7 +191,7 @@ function markEmailOnlyRegions(html: string): string {
 
 /** RENDER pass. Mark the email-only regions, then substitute `{{ token }}` for each
  *  render-phase token (escaped per the registry; `.Post.Body` raw) and freeze each
- *  delivery-phase token to its sentinel, so the per-recipient pass can fill it later.
+ *  send- and delivery-phase token to its sentinel, so a later pass can fill it.
  *  Logic-less: a token is only ever replaced by a value, and a region is kept whole in
  *  the frozen bytes, not decided here. An unknown token renders empty (validation warns). */
 export function fillEmailTemplate(html: string, ctx: RenderContext): string {
@@ -150,7 +200,7 @@ export function fillEmailTemplate(html: string, ctx: RenderContext): string {
     if (!spec) {
       return "";
     }
-    if (spec.phase === "delivery") {
+    if (spec.phase !== "render") {
       return spec.sentinel;
     }
     const value = (ctx as Record<string, string | undefined>)[key];
@@ -173,13 +223,17 @@ export function fillDeliveryTokens(
   ctx: DeliveryContext,
   surface: "html" | "text",
 ): string {
-  let out = input;
-  for (const t of DELIVERY_TOKENS) {
-    const value = ctx[t.key];
-    const filled = surface === "html" && t.escaping === "attr" ? escapeHtmlAttr(value) : value;
-    out = out.split(t.sentinel).join(filled);
-  }
-  return out;
+  return fillSentinels(input, DELIVERY_TOKENS, ctx, surface);
+}
+
+/** SEND pass. Fill the frozen render's send-phase sentinels for one surface, with one
+ *  value for everything a hand-off carries: the list send and the archive give the
+ *  public archive page, a test the publisher's web-version preview (SPEC §5). A frozen
+ *  copy made before the link became send-phase carries the archive URL itself and no
+ *  sentinel, so this leaves it as it is. Like the delivery pass, a pure function of
+ *  (frozen bytes, context), so a retry hands off the same bytes (I4). */
+export function fillSendTokens(input: string, ctx: SendContext, surface: "html" | "text"): string {
+  return fillSentinels(input, SEND_TOKENS, ctx, surface);
 }
 
 /** Every `{{ token }}` name a template references, known or not. */

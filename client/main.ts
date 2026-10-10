@@ -12,7 +12,7 @@ import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { startDevReload } from "./dev_reload";
 import { installRoomBar } from "./room/shell";
-import { installRouter, route } from "./router";
+import { adoptLinkedRoute, installRouter, route } from "./router";
 import { installShell } from "./shell";
 import { appState, type Session } from "./state";
 import { installTooltips } from "./ui/widgets";
@@ -78,6 +78,9 @@ async function boot(): Promise<unknown> {
     if (__DEV__) {
       startDevReload();
     }
+    // A link from an email (a test's view-in-browser, a notification's send) names its
+    // page in the query, which survives an Access login where a hash would not.
+    adoptLinkedRoute();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

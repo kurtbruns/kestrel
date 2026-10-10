@@ -31,6 +31,7 @@
  * and reads only what the run already holds, so logging costs no query and no decision.
  */
 
+import { getPost } from "../db/posts";
 import type { DeliveryOutcome, DeliveryWork } from "../db/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
@@ -40,6 +41,7 @@ import { HALT_BACKOFF_MS, LEASE_TTL_MS, MAX_DELIVERY_ATTEMPTS } from "../lib/tim
 import { getProvider } from "../providers";
 import { drainSimulatedWebhooks } from "../providers/simulate";
 import type { BatchHalt, HaltReason } from "../providers/types";
+import { publicViewInBrowserUrl, withViewInBrowserUrl } from "../render/render";
 import { Budget, metered } from "./budget";
 import { SendWindow } from "./pace";
 
@@ -70,9 +72,9 @@ const GROUP_RECIPIENTS = 10;
 // What a run can cost, in D1 statements (and, where noted, provider requests), so it
 // only starts what it can finish. Each is an upper bound; the budget counts what is
 // actually spent.
-/** Opening: read the send, take the lease, resolve the audience (2), list the
- *  unanswered batches and the fresh rows. */
-const OPEN_COST = 6;
+/** Opening: read the send, take the lease, read the post (for its archive link), resolve
+ *  the audience (2), list the unanswered batches and the fresh rows. */
+const OPEN_COST = 7;
 /** One group, besides a request for each of its batches: read its rows, close any no
  *  longer to be mailed (2), renew the lease, hand off (2), record the outcomes (2). A
  *  group with a halted batch also records the hold (3), but then the run only releases
@@ -177,7 +179,14 @@ export async function runSend(
     log.warn("send.lease_lost", tags);
     return result;
   };
-  const rendered = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
+  // The frozen copy with its view-in-browser link pointed at the post's public archive
+  // page, once for the whole send (SPEC §5): every recipient gets these same bytes, with
+  // only their own unsubscribe link and address filled at delivery (I3, I4).
+  const post = await getPost(db, send.post_id);
+  const rendered = withViewInBrowserUrl(
+    { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
+    publicViewInBrowserUrl(config, post?.slug ?? null),
+  );
 
   /** One batch of a group: its rows, the key it goes out under, and whether this is its
    *  first request under that key. */

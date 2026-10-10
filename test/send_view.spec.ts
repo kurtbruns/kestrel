@@ -14,6 +14,12 @@ import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
+import {
+  archiveUrl,
+  UNSUB_SENTINEL,
+  VIEW_IN_BROWSER_SENTINEL,
+  withViewInBrowserUrl,
+} from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { tickEstimate } from "../src/send/view";
 import { adminAuth } from "./support/auth";
@@ -355,17 +361,28 @@ describe("the ETag follows the words the clock changes", () => {
 });
 
 describe("the frozen email at its own route", () => {
-  it("serves the html and text a send froze, and refuses another format", async () => {
+  it("serves the html and text a send froze, its view-in-browser link the public page, and refuses another format", async () => {
     const send = await frozenSend(Date.now() + 3_600_000, "Owls", "# Owls\n\nhoot");
     const row = await sends.getSend(env.DB, send.id);
+    const post = await posts.getPost(env.DB, row!.post_id);
+    // The frozen copy as the list send hands it off: the link filled, nothing else.
+    const listEmail = withViewInBrowserUrl(
+      { subject: row!.subject, html: row!.rendered_html, text: row!.rendered_text },
+      archiveUrl(getConfig(env), post!.slug),
+    );
+    expect(row!.rendered_html).toContain(VIEW_IN_BROWSER_SENTINEL);
     const htmlRes = await SELF.fetch(`${base}/api/sends/${send.id}/email`, { headers: AUTH });
     expect(htmlRes.headers.get("content-type")).toMatch(/^text\/html/);
-    expect(await htmlRes.text()).toBe(row?.rendered_html);
+    const html = await htmlRes.text();
+    expect(html).toBe(listEmail.html);
+    expect(html).toContain(`/archive/${post!.slug}`);
+    // The per-recipient placeholders stay unfilled.
+    expect(html).toContain(UNSUB_SENTINEL);
     const text = await SELF.fetch(`${base}/api/sends/${send.id}/email?format=text`, {
       headers: AUTH,
     });
     expect(text.headers.get("content-type")).toMatch(/^text\/plain/);
-    expect(await text.text()).toBe(row?.rendered_text);
+    expect(await text.text()).toBe(listEmail.text);
     const bad = await SELF.fetch(`${base}/api/sends/${send.id}/email?format=pdf`, {
       headers: AUTH,
     });
