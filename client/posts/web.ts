@@ -9,9 +9,10 @@ import { mount, onAbort } from "../lifecycle";
 import { html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 
-/** The page with every link opening a new tab: a link here leads to a public page (the
- *  archive index, the post's own links), which refuses to be framed, so it must leave
- *  the frame rather than blank it. Only the framed copy changes, never the page served. */
+/** The page with every link opening a new tab: a link in a framed page (the archive index,
+ *  the web version, a post's own links) may lead to a page that refuses to be framed, so
+ *  it must leave the frame rather than blank it. Only the framed copy changes, never the
+ *  page served. */
 export function linksInNewTab(doc: string): string {
   return intoHead(doc, '<base target="_blank">');
 }
@@ -23,8 +24,9 @@ export function linksInNewTab(doc: string): string {
 const FRAMED_POLICY =
   "default-src 'none'; img-src * data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; form-action 'none'; frame-src 'none'";
 
-/** The framed copy of a web-version page: its links open in a new tab, under the policy
- *  the page carries when served. Only the framed copy changes, never the page served. */
+/** The framed copy of a post's page (the web version, or the editor's email preview): its
+ *  links open in a new tab, under the policy the page carries when served. Only the
+ *  framed copy changes, never the page served. */
 export function framedCopy(doc: string): string {
   return intoHead(
     linksInNewTab(doc),

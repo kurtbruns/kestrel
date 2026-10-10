@@ -6,8 +6,8 @@
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
 
+import { dashboardRouteFromSearch } from "../shared/dashboard_link";
 import type { SettingsResponse } from "../shared/settings";
-import { webPreviewHashFromSearch } from "../shared/web_preview";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
@@ -79,12 +79,12 @@ async function boot(): Promise<unknown> {
     if (__DEV__) {
       startDevReload();
     }
-    // A test email's view-in-browser link names its web-version preview in the query,
-    // which survives an Access login where a hash would not (shared/web_preview.ts):
-    // turn it into the route, without adding a history entry.
-    const web = webPreviewHashFromSearch(location.search);
-    if (web) {
-      history.replaceState(null, "", `${location.pathname}${web}`);
+    // A link from an email (a test's view-in-browser, a notification's send) names its
+    // page in the query, which survives an Access login where a hash would not
+    // (shared/dashboard_link.ts): turn it into the route, without adding a history entry.
+    const linked = dashboardRouteFromSearch(location.search);
+    if (linked) {
+      history.replaceState(null, "", `${location.pathname}${linked}`);
     }
     return route();
   }

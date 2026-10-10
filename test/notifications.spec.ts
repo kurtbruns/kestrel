@@ -114,7 +114,8 @@ describe("a send finishing", () => {
     expect(sent[0]!.to).toBe(PUBLISHER);
     expect(sent[0]!.subject).toBe("Sent: Owls in winter");
     expect(sent[0]!.text).toContain("Accepted by the provider: 3 of 3. Unsent: 0. Skipped");
-    expect(sent[0]!.text).toContain(`/dashboard/#/sent/${send.id}`);
+    // In the query, not the hash, so an Access login in between keeps it.
+    expect(sent[0]!.text).toContain(`/dashboard/?to=/sent/${send.id}`);
     expect(await rows(send.id)).toMatchObject([{ kind: "finished", status: "sent", attempts: 1 }]);
     // Nothing about it reached the list: the subscribers were mailed once each, the
     // publisher not at all through the newsletter's provider.

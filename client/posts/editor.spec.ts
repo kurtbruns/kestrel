@@ -19,6 +19,7 @@ import {
 } from "../test/support";
 import { fmt, toLocalInput } from "../ui/format";
 import { renderEditor } from "./editor";
+import { framedCopy } from "./web";
 
 type Draft = {
   post: Record<string, unknown>;
@@ -700,7 +701,11 @@ describe("editor view", () => {
     expect(puts()).toHaveLength(1); // the preview is of what is saved
     const frame = $<HTMLIFrameElement>("#previewFrame");
     expect(frame.hidden).toBe(false);
-    expect(frame.srcdoc).toBe("<p>rendered</p>");
+    // The rendered email, its links opening in a new tab so following one never blanks it.
+    expect(frame.srcdoc).toBe(framedCopy("<p>rendered</p>"));
+    expect(frame.srcdoc).toContain('<base target="_blank">');
+    expect(frame.getAttribute("sandbox")).toContain("allow-popups");
+    expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
     expect(body().hidden).toBe(true);
   });
 

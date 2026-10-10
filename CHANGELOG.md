@@ -18,14 +18,16 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **Web version** in the editor, which replaces **Open in browser**: the Preview tab already shows the email (SPEC §5).
+- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **View in browser** in the editor, which now opens this page rather than the email, since the Preview tab already shows the email (SPEC §5).
 
 ### Changed
 
 - The operator's Claude context no longer tells Claude to send `If-Match` when it acts on a send, or to handle `precondition_failed`, since neither applies any more. It now says an act is safe to repeat and that every answer carries the send as it now stands. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
-- The "View in browser" link in a test email now opens that post's web version in the editor, instead of its public archive page, which doesn't exist until the post is sent. A template test's link opens the sample post's web version. Emails to your list still link to the public page. A post scheduled before you upgrade keeps the public link in its tests too (SPEC §5, I5).
+- The "View in browser" link in a test email, and in the editor's Preview tab, now opens that post's web version in the editor, instead of its public archive page, which doesn't exist until the post is sent. A template test's link opens the sample post's web version. Emails to your list still link to the public page. A post scheduled before you upgrade keeps the public link in its tests too (SPEC §5, I5).
 
 ### Fixed
+
+- A link in a notification email now opens the send it names even when you have to sign in to the dashboard first, where it could land on the dashboard home after the login. Links in the Preview tab open in a new tab, where following one left the preview blank (SPEC §8).
 
 - A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
 - On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.

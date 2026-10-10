@@ -38,6 +38,7 @@ import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { framedCopy } from "./web";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -165,7 +166,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost" id="webBtn">Web version ↗</button>
+        <button type="button" class="ghost" id="webBtn">View in browser ↗</button>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -196,7 +197,7 @@ export async function renderEditor(
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
-          <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
+          <iframe id="previewFrame" class="preview" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Email preview" hidden></iframe>
         </div>
         ${
           locked
@@ -373,7 +374,9 @@ export async function renderEditor(
       if (!locked) {
         await saveDraft(true);
       }
-      previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
+      // Its links open in a new tab: a page they lead to may refuse to be framed, which
+      // would blank the preview (`framedCopy`).
+      previewFrame.srcdoc = framedCopy(await apiText(`/api/posts/${id}/preview`));
       previewFrame.onload = () => {
         try {
           const doc = previewFrame.contentDocument;

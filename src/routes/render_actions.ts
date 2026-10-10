@@ -129,9 +129,13 @@ export async function preview(c: RequestContext): Promise<Response> {
 
 export async function previewPage(c: RequestContext): Promise<Response> {
   const { input, email } = await loadPostEmail(c);
-  // The email as a reader gets it: its view-in-browser link is the public page.
-  const listEmail = withViewInBrowserUrl(email, publicViewInBrowserUrl(c.config, input.post.slug));
-  const html = substituteRecipient(listEmail, {
+  // The publisher's look at the email, like a test: its view-in-browser link opens the
+  // web version, since the public page exists only once the post is sent.
+  const previewEmail = withViewInBrowserUrl(
+    email,
+    webPreviewUrl(c.config.appOrigin, { post: input.post.id }),
+  );
+  const html = substituteRecipient(previewEmail, {
     ".Email.UnsubscribeURL": genericUnsubscribeUrl(c),
     ".Email.SentTo": "",
   }).html;

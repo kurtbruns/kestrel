@@ -341,7 +341,7 @@ describe("view in browser: a test's link opens the web version, the list send's 
       body: JSON.stringify({ to }),
     });
     const msg = await outboxTo(to);
-    const web = `http://localhost:8787/dashboard/?web=post%2F${id}`;
+    const web = `http://localhost:8787/dashboard/?to=/web/post/${id}`;
     expect(viewLink(msg.html)).toBe(web);
     expect(msg.text).toContain(`View in browser: ${web}`);
     expect(msg.html).not.toContain(VIEW);
@@ -379,7 +379,7 @@ describe("view in browser: a test's link opens the web version, the list send's 
       );
       expect(test.frozen).toBe(true);
       const testMsg = await outboxTo(to);
-      expect(viewLink(testMsg.html)).toBe(`http://localhost:8787/dashboard/?web=post%2F${id}`);
+      expect(viewLink(testMsg.html)).toBe(`http://localhost:8787/dashboard/?to=/web/post/${id}`);
 
       // The same frozen copy, fired: every subscriber's link is the post's public page, and
       // the test's copy differs from it only in that link and the per-recipient values.
@@ -399,7 +399,7 @@ describe("view in browser: a test's link opens the web version, the list send's 
       expect(
         normalize(
           testMsg.html,
-          `http://localhost:8787/dashboard/?web=post%2F${id}`,
+          `http://localhost:8787/dashboard/?to=/web/post/${id}`,
           "http://localhost:8787/unsubscribe?test=1",
         ),
       ).toBe(normalize(listMsg.html, archive, "http://localhost:8787/unsubscribe?token=uns-vib"));
@@ -417,18 +417,18 @@ describe("view in browser: a test's link opens the web version, the list send's 
       body: JSON.stringify({ to }),
     });
     const msg = await outboxTo(to);
-    expect(viewLink(msg.html)).toBe("http://localhost:8787/dashboard/?web=template");
-    expect(msg.text).toContain("View in browser: http://localhost:8787/dashboard/?web=template");
+    expect(viewLink(msg.html)).toBe("http://localhost:8787/dashboard/?to=/web/template");
+    expect(msg.text).toContain(
+      "View in browser: http://localhost:8787/dashboard/?to=/web/template",
+    );
   });
 
-  it("the email preview shows the link a reader gets: the post's public page", async () => {
+  it("the email preview's link opens the web version too, as a test's does", async () => {
     const id = await draftWithImage("Preview Link");
-    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
-      .post.slug;
     const page = await (
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
-    expect(viewLink(page)).toBe(`http://localhost:8787/archive/${slug}`);
+    expect(viewLink(page)).toBe(`http://localhost:8787/dashboard/?to=/web/post/${id}`);
   });
 });
 
