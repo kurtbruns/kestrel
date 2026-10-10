@@ -12,16 +12,22 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 **Upgrading from 1.5.0.** No migration. If you go back to 1.5 after upgrading, first cancel any post scheduled since the upgrade (or restore the database before deploying the older release): its saved copy holds a "View in browser" placeholder that 1.5 doesn't fill in.
 
+### Breaking
+
+- Cancel, reschedule, and Resolve no longer take a precondition: an `If-Match` header on them, and Resolve's `expected_count`, are now ignored, and the `precondition_failed` and `count_changed` refusals are gone. Each act applies to the send as it stands and answers with the result, so a retry after a lost answer is answered `changed: false` instead of a 412, and two acts made moments apart both land, each shown at once and reversible before the fire time (SPEC §1, §8).
+
 ### Added
 
 - The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **Web version** in the editor, which replaces **Open in browser**: the Preview tab already shows the email (SPEC §5).
 
 ### Changed
 
+- The operator's Claude context no longer tells Claude to send `If-Match` when it acts on a send, or to handle `precondition_failed`, since neither applies any more. It now says an act is safe to repeat and that every answer carries the send as it now stands. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
 - The "View in browser" link in a test email now opens that post's web version in the editor, instead of its public archive page, which doesn't exist until the post is sent. A template test's link opens the sample post's web version. Emails to your list still link to the public page. A post scheduled before you upgrade keeps the public link in its tests too (SPEC §5, I5).
 
 ### Fixed
 
+- A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
 - On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.
 - `kestrel init` on Windows no longer leaves an extra `claude` folder beside `.claude`, and `npm run check-context -- --merged` accepts a Windows path.
 - `npm run check-context` now prints commands that run as written (`npm run check-context -- --update`, `-- --merged`), where it printed a bare `kestrel` that isn't on the path.

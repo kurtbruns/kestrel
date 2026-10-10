@@ -88,9 +88,10 @@ export function tombstoneSendsStmt(
 // can never partially diverge from the source of truth. A receipt's move and Resolve's
 // count only the rows their write changes: they run under the same predicate as the
 // write, or count the rows in the same batch, never from a read taken earlier, which a
-// concurrent write could have made stale. (The send loop's own moves count its outcomes;
-// a receipt that reached one of its in-flight rows first is healed by the rebuild at
-// completion.) `recomputeSendCounters` rebuilds them from the aggregate (backfill,
+// concurrent write could have made stale. (The send loop's own moves count its outcomes:
+// no receipt lands on a row the loop has not settled (`markDeliveryEvent`), so none moves
+// one out from under it, and the rebuild at completion heals a record that drifted
+// anyway.) `recomputeSendCounters` rebuilds them from the aggregate (backfill,
 // the exactness pass at completion, and when a receipt turns a sent send complete).
 
 const COUNTER_COLS = [
@@ -776,24 +777,20 @@ export function insertScheduledSendStmt(
 
 /** The review window as a CAS (SPEC §6): still scheduled, and its fire time still ahead of
  *  `now`. The window closes at the fire time, whether or not the sweep has started the
- *  send. With `rev`, also that the send is as the caller last read it (`If-Match`). */
-function inWindowAt(now: number, rev: number | null): { sql: string; binds: unknown[] } {
-  return {
-    sql: "status = 'scheduled' AND fire_at > ? AND (? IS NULL OR rev = ?)",
-    binds: [now, rev, rev],
-  };
+ *  send. */
+function inWindowAt(now: number): { sql: string; binds: unknown[] } {
+  return { sql: "status = 'scheduled' AND fire_at > ?", binds: [now] };
 }
 
 /** Move a scheduled send's fire time, nothing else, inside its review window (`inWindowAt`):
- *  `meta.changes === 0` means the window has closed, or the send changed from `rev`. */
+ *  `meta.changes === 0` means the window has closed. */
 export function rescheduleStmt(
   db: D1Database,
   sendId: string,
   fireAt: number,
   now: number,
-  rev: number | null = null,
 ): D1PreparedStatement {
-  const guard = inWindowAt(now, rev);
+  const guard = inWindowAt(now);
   return db
     .prepare(`UPDATE sends SET fire_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`)
     .bind(fireAt, sendId, ...guard.binds);
@@ -801,13 +798,8 @@ export function rescheduleStmt(
 
 /** Cancel a scheduled send inside its review window, the same CAS as `rescheduleStmt`: a
  *  send due, sending, sent, or canceled changes zero rows. */
-export function cancelStmt(
-  db: D1Database,
-  sendId: string,
-  now: number,
-  rev: number | null = null,
-): D1PreparedStatement {
-  const guard = inWindowAt(now, rev);
+export function cancelStmt(db: D1Database, sendId: string, now: number): D1PreparedStatement {
+  const guard = inWindowAt(now);
   return db
     .prepare(
       `UPDATE sends SET status = 'canceled', completed_at = ?, rev = ${NEXT_REV} WHERE id = ? AND ${guard.sql}`,
@@ -1545,7 +1537,10 @@ export async function settleDeliveries(
 }
 
 /** How many of a send's recipients are still open (`pending` or `dispatched`): the
- *  completion gate, zero when every recipient is accepted or terminal. */
+ *  completion gate, zero when every recipient is accepted or terminal. No receipt lands on
+ *  an open row (`markDeliveryEvent`), so an open row counts in `c_pending` or
+ *  `c_in_flight`, and the gate and `WEDGED_SEND` agree on what is left, unless a record
+ *  already holds an open row a receipt reached before that rule. */
 export async function openDeliveryCount(db: D1Database, sendId: string): Promise<number> {
   const row = await db
     .prepare(
@@ -1672,8 +1667,12 @@ const RECEIPT_RETRIES = 3;
  * the publisher resolved as sent (SPEC §12), whose receipt still has to land; otherwise
  * it is dropped, since test sends and confirmation emails have no delivery row and their
  * events must never land on a real send's record (SPEC §8). An event carrying no provider
- * id at all falls back to the address's most recent delivery. Never touches the
- * send-loop `status`, which is a separate, earlier signal.
+ * id at all falls back to the address's most recent delivery, unless the send loop has
+ * not settled that row yet (`pending` or `dispatched`): then it is dropped from the record,
+ * since it cannot say it is this send's message, and an in-flight recipient's fate is
+ * Resolve's to decide (SPEC §12). A dropped receipt still suppresses from its own address
+ * (`applyDeliveryEvents`). Never touches the send-loop `status`, which is a separate,
+ * earlier signal.
  *
  * The row write is a compare-and-swap on what was read (`status`, `event`, `bounce_kind`),
  * and the counter move rides in the same batch under the same predicate, so the two land
@@ -1782,10 +1781,16 @@ async function findReceiptTarget(
       .first<ReceiptTarget>();
   }
   if (u.email) {
-    return db
+    const row = await db
       .prepare(`SELECT ${cols} FROM deliveries WHERE email = ? ORDER BY updated_at DESC LIMIT 1`)
       .bind(normalizeEmail(u.email))
       .first<ReceiptTarget>();
+    // An open row is the send loop's to settle, and an in-flight one Resolve's: a receipt
+    // that cannot name its message may be the address's last post arriving late, so it
+    // never decides whether this one went out. Landing on an open row would also take it
+    // out of the count the completion gate shares with wedged (`openDeliveryCount`,
+    // `WEDGED_SEND`), leaving a send that can neither finish nor be resolved.
+    return row && row.status !== "pending" && row.status !== "dispatched" ? row : null;
   }
   return null;
 }

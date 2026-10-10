@@ -165,8 +165,9 @@ describe("one SendView on every route", () => {
       .bind(Date.now(), Date.now(), send.id)
       .run();
     await sends.recomputeSendCounters(env.DB, send.id);
+    // A retired `expected_count`, even one that names a different count, is ignored.
     const res = (await readJson(
-      await post(`/api/sends/${send.id}/resolve`, { resolution: "unsent" }),
+      await post(`/api/sends/${send.id}/resolve`, { resolution: "unsent", expected_count: 5 }),
     )) as ResolveResponse;
     expectView(res.send);
     expect([res.resolved, res.completed, res.send.status]).toEqual([1, true, "sent"]);
@@ -339,14 +340,6 @@ describe("GET /api/sends/:id is tagged", () => {
     });
     expect(due.status).toBe(200);
     expect(((await due.json()) as SendResponse).send.phase).toBe("due");
-    // An action's If-Match takes the ETag as well as the bare rev.
-    const moved = await SELF.fetch(`${base}/api/sends/${send.id}/reschedule`, {
-      method: "POST",
-      headers: { ...JSON_AUTH, "if-match": etag ?? "" },
-      body: JSON.stringify({ fire_at: Date.now() + 3_600_000 }),
-    });
-    expect(moved.status).toBe(409); // due: the window has closed, but the tag was accepted
-    expect(((await moved.json()) as { error: string }).error).toBe("window_closed");
   });
 });
 
