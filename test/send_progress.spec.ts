@@ -526,13 +526,15 @@ describe("resolve counts only the rows it moves", () => {
         "UPDATE deliveries SET status = 'pending', provider_id = NULL, event = NULL WHERE send_id = ? AND email = 'r3@example.com'",
       ).bind(send.id),
     ]);
+    // One in-flight row carries a receipt. No receipt lands on an open row now
+    // (`markDeliveryEvent`), but a record may already hold one, and Resolve must count it
+    // in its event's bucket.
+    await env.DB.prepare(
+      "UPDATE deliveries SET event = 'delivered', event_at = ? WHERE send_id = ? AND email = 'r1@example.com'",
+    )
+      .bind(Date.now(), send.id)
+      .run();
     await sends.recomputeSendCounters(env.DB, send.id);
-    // A receipt carrying only the address lands on one of the in-flight rows.
-    await sends.markDeliveryEvent(env.DB, {
-      email: "r1@example.com",
-      event: "delivered",
-      at: Date.now(),
-    });
     await expectCountersMatchAggregate(send.id);
 
     const lease = await sends.acquireLease(env.DB, send.id, Date.now(), 60_000);

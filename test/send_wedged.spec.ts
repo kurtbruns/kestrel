@@ -15,6 +15,7 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
+import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
@@ -117,6 +118,53 @@ describe("a wedged send", () => {
       })
     ).json()) as SendFeedResponse;
     expect(feed.sends).toEqual([]); // nothing changed, so nothing is reported
+
+    await resolveStuckSend(env, send.id, "accepted", "tester");
+    expect((await row(send.id)).status).toBe("sent");
+  });
+});
+
+describe("a wedged send a receipt with no provider id reaches", () => {
+  it("keeps every unknown recipient, its count, and Resolve: a receipt that cannot name its message never settles one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const provider = new NoKeyProvider();
+    provider.loseAnswers = 1;
+    vi.spyOn(providers, "getProvider").mockReturnValue(provider);
+    await seedConfirmed(AUDIENCE);
+    const send = await scheduledSend(Date.now() - 1000);
+    await sweep(env); // the one batch's answer is lost: three recipients of unknown fate
+    const wedged = await row(send.id);
+    expect(isWedged(wedged)).toBe(true);
+
+    // A receipt for each address, carrying the address but no provider id. The address's
+    // most recent delivery is the unknown one, but nothing says the receipt is for it.
+    await applyDeliveryEvents(
+      env.DB,
+      AUDIENCE.map((email) => ({ type: "delivered" as const, email })),
+    );
+
+    const after = await row(send.id);
+    expect(after.c_in_flight).toBe(3);
+    expect(after.rev).toBe(wedged.rev); // the record did not move
+    const events = await env.DB.prepare(
+      "SELECT COUNT(*) AS n FROM deliveries WHERE send_id = ? AND event IS NOT NULL",
+    )
+      .bind(send.id)
+      .first<number>("n");
+    expect(events).toBe(0);
+
+    // Past the stuck threshold the send still reads wedged, with its count and the control
+    // that settles it beside the stuck flag, and the sweep still leaves it alone.
+    vi.setSystemTime(Date.now() + STUCK_THRESHOLD_MS + 60_000);
+    await sweep(env);
+    expect((await row(send.id)).rev).toBe(wedged.rev);
+    const p = await progress(send.id);
+    expect([p.phase, has(p, "stuck"), condition(p, "wedged")?.count]).toEqual([
+      "needs-attention",
+      true,
+      3,
+    ]);
+    expect(p.actions.map((a) => a.name)).toEqual(["resolve"]);
 
     await resolveStuckSend(env, send.id, "accepted", "tester");
     expect((await row(send.id)).status).toBe("sent");

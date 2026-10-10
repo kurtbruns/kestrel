@@ -20,6 +20,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
 - On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.
 - `kestrel init` on Windows no longer leaves an extra `claude` folder beside `.claude`, and `npm run check-context -- --merged` accepts a Windows path.
 - `npm run check-context` now prints commands that run as written (`npm run check-context -- --update`, `-- --merged`), where it printed a bare `kestrel` that isn't on the path.
