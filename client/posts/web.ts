@@ -1,8 +1,9 @@
 // The web-version preview: a post, or the template's sample post, as its public archive
 // page will show it once sent (SPEC §5). Where a test email's view-in-browser link leads.
 // It opens in a tab of its own, so it carries no app chrome: one thin bar above the page
-// says what it is and where the post's public page is, or will be, so the copy is never
-// mistaken for the live page, and the frame below holds the page exactly as it will be.
+// says what it is, where the post stands, and where its public page will be, so the copy
+// is never mistaken for the live page, and the frame below holds the page exactly as it
+// will be. Once the post is sent, the public page itself is the web version.
 
 import { pagePolicy } from "../../shared/page_policy";
 import type { PostResponse } from "../../shared/posts";
@@ -10,6 +11,7 @@ import type { WebPreviewTarget } from "../../shared/web_preview";
 import { api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
+import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 
@@ -68,52 +70,79 @@ export function webTarget(
   }
 }
 
-/** Where the previewed page stands, for the bar: the template's sample, or a post by its
- *  status and public address (null while unknown, so the bar names no address). */
+/** Where the previewed page stands, for the bar: the template's sample, or a post by
+ *  where its send is and its public address (null while unknown, so the bar names none). */
 export type WebBarState =
   | { kind: "template" }
-  | { kind: "post"; status: "draft" | "scheduled" | "sent"; url: string | null };
+  | {
+      kind: "post";
+      stage: "draft" | "scheduled" | "sending" | "sent";
+      /** The scheduled send's fire time, for a scheduled post. */
+      fireAt: number | null;
+      url: string | null;
+    };
 
-/** The bar's words: what the page is, and where the post's public page is or will be. A
- *  sent post's address is a link (it answers); an unsent one's is text, since it doesn't. */
-export function webBar(state: WebBarState | null): Html {
-  const label = html`<strong>Web version</strong>`;
-  if (state === null) {
-    return label;
-  }
-  if (state.kind === "template") {
-    return html`${label}<span>The sample post, with the saved template, as an archive page shows it</span>`;
-  }
-  const { status, url } = state;
-  if (status === "sent") {
-    const at =
-      url && /^https?:\/\//.test(url)
-        ? html` at <a href="${url}" target="_blank" rel="noopener">${url}</a>`
-        : null;
-    return html`${label}<span>Sent. Published${at}</span>`;
-  }
-  const when = status === "scheduled" ? "Scheduled, not sent yet." : "Not sent yet.";
-  const where = url ? html` Its page will be at <span class="web-url">${url}</span>` : null;
-  return html`${label}<span>${when}${where}</span>`;
+/** An address as the bar shows it: without its scheme, which says nothing to a reader. */
+function shortUrl(url: string): string {
+  return url.replace(/^https?:\/\//, "");
 }
 
-/** The bar's state for a target: the post's status and address from its read, or null
- *  when the read fails (the bar then says only what the page is). */
-async function barState(
-  target: WebPreviewTarget,
-  signal: AbortSignal,
-): Promise<WebBarState | null> {
-  if (target === "template") {
-    return { kind: "template" };
+/** The bar's words: what the page is, where the post stands, and where its public page
+ *  will be (as text, since it doesn't answer yet), with the way to the editor at its end. */
+export function webBar(state: WebBarState | null, editHref: string): Html {
+  const label = html`<strong>Web version</strong>`;
+  const edit = html`<a class="web-edit" href="${editHref}">${state?.kind === "template" ? "Edit template" : "Edit post"}</a>`;
+  if (state === null) {
+    return html`${label}${edit}`;
   }
+  if (state.kind === "template") {
+    return html`${label}<span>The sample post, with your saved template</span>${edit}`;
+  }
+  const at = state.url ? html`<span class="web-url">${shortUrl(state.url)}</span>` : null;
+  const where = (lead: string, tail = ".") => (at ? html` ${lead} ${at}${tail}` : null);
+  let words: Html;
+  switch (state.stage) {
+    case "scheduled":
+      words = html`Sends ${fmt(state.fireAt)}.${where("It will be at")}`;
+      break;
+    case "sending":
+      words = html`Sending now.${where("It will be at", " once the send finishes.")}`;
+      break;
+    case "sent":
+      words = html`Published.`;
+      break;
+    default:
+      words = html`Not published yet.${where("It will be at")}`;
+  }
+  return html`${label}<span>${words}</span>${edit}`;
+}
+
+/** The bar's state for a post: where its send is, from its read, or null when the read
+ *  fails (the bar then says only what the page is). */
+async function postState(post: string, signal: AbortSignal): Promise<WebBarState | null> {
   try {
-    const { post } = await api<PostResponse>(`/api/posts/${encodeURIComponent(target.post)}`, {
-      signal,
-    });
-    return { kind: "post", status: post.status, url: postArchiveUrl(post.slug) };
+    const data = await api<PostResponse>(`/api/posts/${encodeURIComponent(post)}`, { signal });
+    const stage = data.sending
+      ? "sending"
+      : data.post.status === "sent"
+        ? "sent"
+        : data.scheduled
+          ? "scheduled"
+          : "draft";
+    return {
+      kind: "post",
+      stage,
+      fireAt: data.scheduled?.fire_at ?? null,
+      url: postArchiveUrl(data.post.slug),
+    };
   } catch {
     return null;
   }
+}
+
+/** Leave for another page, replacing this one in the history (so Back skips it). */
+export function leaveFor(url: string): void {
+  location.replace(url);
 }
 
 export async function renderWebVersion(
@@ -131,13 +160,24 @@ export async function renderWebVersion(
     document.title = appTitle;
   });
   try {
-    const [doc, state] = await Promise.all([apiText(page, { signal }), barState(target, signal)]);
+    const [doc, state] = await Promise.all([
+      apiText(page, { signal }),
+      target === "template" ? ({ kind: "template" } as const) : postState(target.post, signal),
+    ]);
+    // A sent post's page is public now: its web version is that page, so go there. An old
+    // test email's link then lands on exactly what readers see.
+    if (state?.kind === "post" && state.stage === "sent" && state.url && !signal.aborted) {
+      leaveFor(state.url);
+      return;
+    }
+    const editHref =
+      target === "template" ? "#/template" : `#/edit/${encodeURIComponent(target.post)}`;
     // No script and no form, as the page itself forbids when served (SPEC §5); a link
     // opens in a new tab, under the page's own policy (`framedCopy`).
     setHtml(
       root,
       html`<div class="web-page">
-        <div class="web-bar" role="note">${webBar(state)}</div>
+        <div class="web-bar" role="note">${webBar(state, editHref)}</div>
         <iframe class="web-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Web version"></iframe>
       </div>`,
     );

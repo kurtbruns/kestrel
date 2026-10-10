@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "../state";
 import {
   $,
@@ -10,18 +10,33 @@ import {
   settle,
   unmount,
 } from "../test/support";
+import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import { framedCopy, linksInNewTab, renderWebVersion, webBar, webTarget } from "./web";
 
 const page =
   '<!doctype html><html><head><title>Herons</title></head><body><div class="k-mast">The Marsh Letter</div><p>hello</p></body></html>';
 const htmlReply = () => new Response(page, { headers: { "content-type": "text/html" } });
-const postReply = (status: string) => () =>
-  jsonResponse({ post: { id: "p1", slug: "herons", status } });
+/** A post's read: a draft, a scheduled post, one whose send is going out, or a sent one. */
+const postReply = (stage: "draft" | "scheduled" | "sending" | "sent") => () =>
+  jsonResponse({
+    post: { id: "p1", slug: "herons", status: stage === "sending" ? "scheduled" : stage },
+    scheduled:
+      stage === "scheduled"
+        ? { id: "s1", fire_at: Date.UTC(2026, 9, 12, 16), remade_at: null }
+        : null,
+    sending: stage === "sending" ? { id: "s1" } : null,
+    sent: stage === "sent" ? { id: "s1" } : null,
+  });
+const deployment = () => {
+  appState.appConfig = {
+    deployment: { archiveOrigin: "https://newsletter.example.com", archiveBasePath: "/archive" },
+  } as unknown as typeof appState.appConfig;
+};
 /** The bar's words, as text. */
-const barText = (state: Parameters<typeof webBar>[0]) => {
+const barText = (state: Parameters<typeof webBar>[0], editHref = "#/edit/p1") => {
   const el = document.createElement("div");
-  setHtml(el, html`${webBar(state)}`);
+  setHtml(el, html`${webBar(state, editHref)}`);
   return el;
 };
 
@@ -70,37 +85,39 @@ describe("web-version preview", () => {
     expect(webTarget("post", "%E0")).toBeNull(); // malformed: no preview, never a throw
   });
 
-  it("says in its bar what the page is and where the public page is, or will be", () => {
+  it("says in its bar where the post stands and where its public page will be, then the way to the editor", () => {
     const url = "https://newsletter.example.com/archive/herons";
-    const draft = barText({ kind: "post", status: "draft", url });
-    expect(draft.textContent).toBe(`Web versionNot sent yet. Its page will be at ${url}`);
-    // An unsent address doesn't answer yet, so it is text, not a link.
-    expect(draft.querySelector("a")).toBeNull();
-    expect(barText({ kind: "post", status: "scheduled", url }).textContent).toContain(
-      "Scheduled, not sent yet. Its page will be at",
+    const short = "newsletter.example.com/archive/herons";
+    const draft = barText({ kind: "post", stage: "draft", fireAt: null, url });
+    expect(draft.textContent).toBe(
+      `Web versionNot published yet. It will be at ${short}.Edit post`,
     );
-    const sent = barText({ kind: "post", status: "sent", url });
-    expect(sent.textContent).toBe(`Web versionSent. Published at ${url}`);
-    expect(sent.querySelector("a")?.getAttribute("href")).toBe(url);
-    expect(sent.querySelector("a")?.getAttribute("target")).toBe("_blank");
-    expect(barText({ kind: "template" }).textContent).toContain(
-      "The sample post, with the saved template",
+    // The address doesn't answer yet, so it is text; the one link is the way to the editor.
+    expect([...draft.querySelectorAll("a")].map((a) => a.getAttribute("href"))).toEqual([
+      "#/edit/p1",
+    ]);
+    const fireAt = Date.UTC(2026, 9, 12, 16);
+    expect(barText({ kind: "post", stage: "scheduled", fireAt, url }).textContent).toBe(
+      `Web versionSends ${fmt(fireAt)}. It will be at ${short}.Edit post`,
     );
-    // Unknown status or address: the bar names no address rather than a wrong one.
-    expect(barText(null).textContent).toBe("Web version");
-    expect(barText({ kind: "post", status: "draft", url: null }).textContent).toBe(
-      "Web versionNot sent yet.",
+    expect(barText({ kind: "post", stage: "sending", fireAt: null, url }).textContent).toBe(
+      `Web versionSending now. It will be at ${short} once the send finishes.Edit post`,
     );
-    expect(
-      barText({ kind: "post", status: "sent", url: "javascript:x" }).querySelector("a"),
-    ).toBeNull();
+    const sample = barText({ kind: "template" }, "#/template");
+    expect(sample.textContent).toBe(
+      "Web versionThe sample post, with your saved templateEdit template",
+    );
+    expect(sample.querySelector("a")?.getAttribute("href")).toBe("#/template");
+    // Unknown stage or address: the bar names no address rather than a wrong one.
+    expect(barText(null).textContent).toBe("Web versionEdit post");
+    expect(barText({ kind: "post", stage: "draft", fireAt: null, url: null }).textContent).toBe(
+      "Web versionNot published yet.Edit post",
+    );
   });
 
   it("fills the window under its bar with a post's web version, sandboxed with no script or form", async () => {
     location.hash = "#/web/post/p1";
-    appState.appConfig = {
-      deployment: { archiveOrigin: "https://newsletter.example.com", archiveBasePath: "/archive" },
-    } as unknown as typeof appState.appConfig;
+    deployment();
     fake = fakeApi([
       { path: "/api/posts/p1/web", reply: htmlReply },
       { path: "/api/posts/p1", reply: postReply("scheduled") },
@@ -112,8 +129,9 @@ describe("web-version preview", () => {
     expect(frame.getAttribute("sandbox")).not.toContain("allow-scripts");
     expect(frame.getAttribute("sandbox")).not.toContain("allow-forms");
     expect($(".web-bar").textContent).toContain(
-      "Scheduled, not sent yet. Its page will be at https://newsletter.example.com/archive/herons",
+      "It will be at newsletter.example.com/archive/herons.",
     );
+    expect($<HTMLAnchorElement>(".web-edit").getAttribute("href")).toBe("#/edit/p1");
     // The bar and the page, nothing else: no back link or app chrome.
     expect($(".web-page").children).toHaveLength(2);
     expect(fake.unhandled).toEqual([]);
@@ -128,7 +146,22 @@ describe("web-version preview", () => {
     await mount((r, s) => renderWebVersion({ post: "p1" }, r, s));
     await settle();
     expect($<HTMLIFrameElement>(".web-frame").srcdoc).toBe(framedCopy(page));
-    expect($(".web-bar").textContent).toBe("Web version");
+    expect($(".web-bar").textContent).toBe("Web versionEdit post");
+  });
+
+  it("goes to the public page itself once the post is sent", async () => {
+    location.hash = "#/web/post/p1";
+    deployment();
+    fake = fakeApi([
+      { path: "/api/posts/p1/web", reply: htmlReply },
+      { path: "/api/posts/p1", reply: postReply("sent") },
+    ]);
+    const replace = vi.spyOn(location, "replace").mockImplementation(() => {});
+    await mount((r, s) => renderWebVersion({ post: "p1" }, r, s));
+    await settle();
+    expect(replace).toHaveBeenCalledWith("https://newsletter.example.com/archive/herons");
+    expect(document.querySelector(".web-frame")).toBeNull();
+    replace.mockRestore();
   });
 
   it("names the tab for the page, and gives the app's title back when it leaves", async () => {

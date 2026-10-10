@@ -18,7 +18,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **Web version** in the editor, which replaces **Open in browser** (the email, which the Preview tab already shows), under a bar that says where the post's public page is or will be (SPEC §5).
+- The editor shows a post's **web version**: the post as its public archive page will look once it's sent, with the email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. It opens in a new tab from **Web version** in the editor, which replaces **Open in browser** (the email, which the Preview tab already shows), under a bar that says where the post stands and where its public page will be. Once the post is sent, the web version opens the public page itself (SPEC §5).
 
 ### Changed
 

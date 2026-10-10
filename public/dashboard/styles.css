@@ -1735,6 +1735,10 @@ body.web-mode .content {
 .web-bar .web-url {
   overflow-wrap: anywhere;
 }
+.web-bar .web-edit {
+  margin-left: auto;
+  color: var(--fg);
+}
 .web-frame {
   display: block;
   flex: 1 1 auto;
