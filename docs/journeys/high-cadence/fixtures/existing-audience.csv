@@ -1,0 +1,37 @@
+email,name,status,subscribed_at
+ada.lovelace@example.com,Ada Lovelace,active,2023-01-14
+grace.hopper@example.com,"Hopper, Grace",active,2023-02-02
+alan.turing@example.org,Alan Turing,active,2023-02-19
+katherine.johnson@example.net,Katherine Johnson,active,2023-03-05
+margaret.hamilton@example.com,Margaret Hamilton,active,2023-03-21
+edsger.dijkstra@example.org,,active,2023-04-08
+barbara.liskov@example.com,Barbara Liskov,active,2023-04-30
+donald.knuth@example.net,Donald Knuth,active,2023-05-17
+radia.perlman@example.com,Radia Perlman,active,2023-06-01
+zoe.angstrom@example.org,Zoë Ångström,active,2023-06-22
+hedy.lamarr@example.com,Hedy Lamarr,active,2023-07-09
+john.backus@example.net,John Backus,active,2023-07-28
+frances.allen@example.com,Frances Allen,active,2023-08-15
+ken.thompson@example.org,Ken Thompson,active,2023-09-03
+dennis.ritchie@example.org,Dennis Ritchie,active,2023-09-03
+adele.goldberg@example.com,Adele Goldberg,active,2023-10-11
+leslie.lamport@example.net,Leslie Lamport,active,2023-11-02
+shafi.goldwasser@example.com,Shafi Goldwasser,active,2023-11-25
+tim.bernerslee@example.org,Tim Berners-Lee,active,2024-01-06
+annie.easley@example.com,Annie Easley,active,2024-01-30
+whitfield.diffie@example.net,Whitfield Diffie,active,2024-02-14
+mary.jackson@example.com,Mary Jackson,active,2024-03-09
+niklaus.wirth@example.org,Niklaus Wirth,active,2024-04-01
+evelyn.berezin@example.com,Evelyn Berezin,active,2024-04-26
+vint.cerf@example.net,Vint Cerf,active,2024-05-20
+Ada.Lovelace@Example.com,Ada Lovelace,active,2024-06-11
+"  sophie.wilson@example.com  ",Sophie Wilson,active,2024-07-04
+not-an-email,Unknown,active,2024-07-19
+grace.hopper@example.com,Grace Hopper,active,2024-08-02
+charles.babbage@example.com,Charles Babbage,unsubscribed,2023-01-20
+ivan.sutherland@example.org,Ivan Sutherland,unsubscribed,2023-05-05
+jean.sammet@example.net,Jean Sammet,unsubscribed,2023-08-30
+marvin.minsky@example.com,Marvin Minsky,unsubscribed,2024-02-01
+old.address@example.com,Former Reader,cleaned,2022-11-11
+typo.readr@example.org,,cleaned,2023-03-03
+vint.cerf@example.net,Vint Cerf,unsubscribed,2024-09-01
