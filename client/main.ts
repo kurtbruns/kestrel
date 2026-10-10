@@ -6,14 +6,13 @@
 // (/api/whoami) tells us who we are and which mode we're in; the identity chip and
 // the failure handling follow from that.
 
-import { dashboardRouteFromSearch } from "../shared/dashboard_link";
 import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
 import { startDevReload } from "./dev_reload";
 import { installRoomBar } from "./room/shell";
-import { installRouter, route } from "./router";
+import { adoptLinkedRoute, installRouter, route } from "./router";
 import { installShell } from "./shell";
 import { appState, type Session } from "./state";
 import { installTooltips } from "./ui/widgets";
@@ -80,12 +79,8 @@ async function boot(): Promise<unknown> {
       startDevReload();
     }
     // A link from an email (a test's view-in-browser, a notification's send) names its
-    // page in the query, which survives an Access login where a hash would not
-    // (shared/dashboard_link.ts): turn it into the route, without adding a history entry.
-    const linked = dashboardRouteFromSearch(location.search);
-    if (linked) {
-      history.replaceState(null, "", `${location.pathname}${linked}`);
-    }
+    // page in the query, which survives an Access login where a hash would not.
+    adoptLinkedRoute();
     return route();
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.

@@ -1,6 +1,6 @@
 /**
  * Preview, test-send, and the fake outbox. All authed.
- *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
+ *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (the hosted preview)
  *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
  *   GET  /api/posts/:id/web            → the post as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider
@@ -166,7 +166,7 @@ export async function webPage(c: RequestContext): Promise<Response> {
  * FROZEN copy (SPEC §5): the send's `rendered_html`/`rendered_text`, handed to the
  * provider exactly as the fire path hands them, with the per-recipient placeholders
  * filled for the test address — so the test can never disagree with what will go out
- * (or with the view-in-browser page). A draft keeps the live render: its content, the
+ * (or with the preview). A draft keeps the live render: its content, the
  * current template, and the current identity, through the one render path (I5).
  */
 export async function test(c: RequestContext): Promise<Response> {

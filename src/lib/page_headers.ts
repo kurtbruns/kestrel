@@ -7,29 +7,13 @@
  * pages, and none of them can be framed by another site.
  */
 
-// What the pages actually load: inline styles (the email's own, the page chrome's
-// <style>), the display font from Google Fonts, and images from anywhere a post may
-// point (the media origin, which may be a separate public bucket domain, or any image
-// the author linked). Nothing else, and no script, frame, plugin, or base rewrite.
-// `formAction` is the one difference between the two kinds of page.
-function csp(formAction: string): string {
-  return [
-    "default-src 'none'",
-    "script-src 'none'",
-    "object-src 'none'",
-    "frame-src 'none'",
-    "base-uri 'none'",
-    `form-action ${formAction}`,
-    "frame-ancestors 'none'",
-    "img-src * data:",
-    "style-src 'unsafe-inline' https://fonts.googleapis.com",
-    "font-src https://fonts.gstatic.com",
-  ].join("; ");
-}
+import { pagePolicy } from "../../shared/page_policy";
 
+// The policy itself (what the pages load, and that no script runs) lives in shared/, so
+// the editor's framed copy of a post page restates exactly this.
 function headers(formAction: string): Readonly<Record<string, string>> {
   return {
-    "content-security-policy": csp(formAction),
+    "content-security-policy": pagePolicy(formAction),
     "x-frame-options": "DENY",
     "x-content-type-options": "nosniff",
   };

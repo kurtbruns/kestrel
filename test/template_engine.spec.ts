@@ -65,15 +65,15 @@ describe("fillEmailTemplate (render pass)", () => {
 });
 
 describe("fillSendTokens (send pass)", () => {
-  const link = { ".Email.ViewInBrowserURL": "https://app.example/dashboard/#/web/post/a&b" };
+  const link = { ".Email.ViewInBrowserURL": "https://app.example/dashboard/?to=/web/post/a&b" };
 
   it("fills the view-in-browser link attribute-safe in HTML and raw in text", () => {
     const frozen = `<a href="${VIEW_IN_BROWSER_SENTINEL}">v</a> ${UNSUB_SENTINEL}`;
     expect(fillSendTokens(frozen, link, "html")).toBe(
-      `<a href="https://app.example/dashboard/#/web/post/a&amp;b">v</a> ${UNSUB_SENTINEL}`,
+      `<a href="https://app.example/dashboard/?to=/web/post/a&amp;b">v</a> ${UNSUB_SENTINEL}`,
     );
     expect(fillSendTokens(`View in browser: ${VIEW_IN_BROWSER_SENTINEL}`, link, "text")).toBe(
-      "View in browser: https://app.example/dashboard/#/web/post/a&b",
+      "View in browser: https://app.example/dashboard/?to=/web/post/a&b",
     );
   });
 

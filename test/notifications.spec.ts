@@ -563,6 +563,8 @@ describe("the settings surface", () => {
     expect(ok.status).toBe(200);
     expect(await ok.json()).toEqual({ to: PUBLISHER, channel: "fake" });
     expect(fakeNotifications().map((n) => n.to)).toEqual([PUBLISHER]);
+    // Its link opens Settings, carried in the query so an Access login keeps it.
+    expect(JSON.stringify(fakeNotifications()[0])).toContain("/dashboard/?to=/settings");
 
     failFakeNotify(1);
     const refused = await test();

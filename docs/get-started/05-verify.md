@@ -61,6 +61,10 @@ This is a real send, to a list of one. It proves the whole path: subscribing, co
 
 1. When the send finishes, the post arrives at your second address. A notification arrives at your first, with the subject `Sent:` and the post's title.
 
+1. In the post at your second address, select **View in browser**. It opens the post's public page at `https://newsletter.example.com/archive/` and the post's slug, with no login. Every email to your list carries this link, so check it once now.
+
+1. Select the link in the notification. It opens the send's page in your dashboard, after your Access login if you're signed out.
+
 ## 5. Unsubscribe
 
 Every email carries an unsubscribe link, and a header that lets mail clients show their own **Unsubscribe** button. Both work in one step, with no login.

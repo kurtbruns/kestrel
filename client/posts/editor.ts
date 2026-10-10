@@ -166,7 +166,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost" id="webBtn">View in browser ↗</button>
+        <button type="button" class="ghost" id="webBtn" aria-label="Web version (opens in a new tab)">Web version ↗</button>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -767,18 +767,29 @@ export async function renderEditor(
   }
 
   // --- web version: the archive page as it will look once sent (SPEC §5) ---
+  // The tab opens in the click itself, then goes to the page once the draft is saved:
+  // a browser that blocks a tab opened after an await (Safari, iOS) would otherwise
+  // drop it silently.
   const webBtn = $<HTMLButtonElement>("#webBtn");
-  webBtn.onclick = () =>
-    busy(webBtn, "Opening…", async () => {
+  webBtn.onclick = () => {
+    const tab = window.open("", "_blank");
+    const url = `${location.origin}${location.pathname}${webPreviewHash({ post: id })}`;
+    return busy(webBtn, "Opening…", async () => {
       try {
         if (!locked) {
           await saveDraft(true);
         }
-        window.open(`${location.pathname}${webPreviewHash({ post: id })}`, "_blank");
+        if (tab) {
+          tab.location.href = url;
+        } else {
+          window.open(url, "_blank");
+        }
       } catch (e) {
+        tab?.close();
         toast(message(e));
       }
     });
+  };
 
   if (locked && scheduled) {
     // The send as last reported: this page's read of it (or, until that succeeds, what the

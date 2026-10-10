@@ -2,6 +2,7 @@
 // previous one down; the leave guards live here, over the mounted view's handle, wired by
 // installRouter() when boot calls it.
 
+import { dashboardRouteFromSearch } from "../shared/dashboard_link";
 import { renderDashboard } from "./dashboard/dashboard";
 import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
@@ -31,8 +32,10 @@ export function route(): Promise<void> {
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
   // The web-version preview is a page of its own, in a tab of its own: the whole window,
-  // with no app chrome around it.
-  document.body.classList.toggle("web-mode", view === "web");
+  // with no app chrome around it. Only for a route that names one, so a mangled address
+  // falls through to the dashboard with its navigation.
+  const webTargetOf = view === "web" ? webTarget(arg, sub) : null;
+  document.body.classList.toggle("web-mode", webTargetOf !== null);
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
   // drops the publication sidebar for a slim tool bar.
   const toolMode = view === "docs" || view === "reference";
@@ -52,11 +55,8 @@ export function route(): Promise<void> {
   if (view === "edit" && arg) {
     return mount((root, signal) => renderEditor(arg, root, signal));
   }
-  if (view === "web") {
-    const target = webTarget(arg, sub);
-    if (target) {
-      return mount((root, signal) => renderWebVersion(target, root, signal));
-    }
+  if (webTargetOf) {
+    return mount((root, signal) => renderWebVersion(webTargetOf, root, signal));
   }
   if (view === "drafts") {
     return mount(renderDrafts);
@@ -81,6 +81,17 @@ export function route(): Promise<void> {
   }
   return mount(renderDashboard);
 }
+/** Adopt the route a link from an email names in its query (`/dashboard/?to=/sent/<id>`,
+ *  shared/dashboard_link.ts), which survives an Access login where a hash would not: it
+ *  becomes the hash, the query goes, and no history entry is added. Boot calls this once,
+ *  signed in, before the first route(). */
+export function adoptLinkedRoute(): void {
+  const linked = dashboardRouteFromSearch(location.search);
+  if (linked) {
+    history.replaceState(null, "", `${location.pathname}${linked}`);
+  }
+}
+
 /** Wire navigation and the mounted view's guards: hashchange, the unload prompt, and ⌘S. Boot calls this once. */
 export function installRouter(): void {
   // hashchange fires after the hash has already moved, so the mounted view is asked

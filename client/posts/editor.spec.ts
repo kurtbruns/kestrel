@@ -709,6 +709,31 @@ describe("editor view", () => {
     expect(body().hidden).toBe(true);
   });
 
+  it("opens the web version in a tab opened by the click itself, then saved and pointed at the page", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const opened = vi.fn(() => tab);
+    vi.stubGlobal("open", opened);
+    typeInto(body(), "changed");
+    const button = $<HTMLButtonElement>("#webBtn");
+    expect(button.textContent).toBe("Web version ↗");
+    expect(button.getAttribute("aria-label")).toContain("opens in a new tab");
+    button.click();
+    // The tab opens before any await, so a browser that blocks a late one keeps it.
+    expect(opened).toHaveBeenCalledWith("", "_blank");
+    expect(tab.location.href).toBe("");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1); // the draft is saved before the tab goes to the page
+    expect(tab.location.href).toBe(`${location.origin}${location.pathname}#/web/post/p1`);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(tab.close).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },

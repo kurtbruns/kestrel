@@ -1,7 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewHandle } from "./lifecycle";
-import { installRouter } from "./router";
-import { $, type FakeApi, fakeApi, mount, resetShell, sendServer, settle } from "./test/support";
+import { adoptLinkedRoute, installRouter } from "./router";
+import {
+  $,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  mount,
+  resetShell,
+  sendServer,
+  settle,
+} from "./test/support";
 
 // The router's listeners are installed once by boot; here once per file, which is what a
 // page gets. hashchange is dispatched by hand so the spec does not depend on whether the
@@ -96,5 +105,41 @@ describe("router", () => {
     expect(leave()).toBe(false);
     await editorLike({ dirty: () => true });
     expect(leave()).toBe(true);
+  });
+
+  it("adopts the route a link from an email names in its query, adding no history entry", () => {
+    history.replaceState(null, "", "/dashboard/?to=/sent/s1");
+    const entries = history.length;
+    adoptLinkedRoute();
+    expect(location.pathname).toBe("/dashboard/");
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("#/sent/s1");
+    expect(history.length).toBe(entries);
+    // No query, or one that names no route: nothing changes.
+    history.replaceState(null, "", "/dashboard/?to=//elsewhere#/drafts");
+    adoptLinkedRoute();
+    expect(location.search).toBe("?to=//elsewhere");
+    expect(location.hash).toBe("#/drafts");
+    history.replaceState(null, "", "/dashboard/");
+  });
+
+  it("gives a web-version route the whole window, and a mangled one keeps the navigation", async () => {
+    fake.restore();
+    fake = fakeApi([
+      ...sendServer().routes,
+      {
+        path: "/api/posts/p1/web",
+        reply: () => new Response("<html><head><title>Herons</title></head></html>"),
+      },
+      {
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ post: { slug: "herons", status: "draft" } }),
+      },
+    ]);
+    await at("#/web/post/p1");
+    expect(document.body.classList.contains("web-mode")).toBe(true);
+    expect(document.querySelector(".web-frame")).not.toBeNull();
+    await at("#/web/post/%E0");
+    expect(document.body.classList.contains("web-mode")).toBe(false);
   });
 });

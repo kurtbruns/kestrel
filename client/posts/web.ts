@@ -1,12 +1,16 @@
 // The web-version preview: a post, or the template's sample post, as its public archive
 // page will show it once sent (SPEC §5). Where a test email's view-in-browser link leads.
-// It fills the window with no chrome of its own, since it opens in a tab of its own; the
-// tab's title says what it is.
+// It opens in a tab of its own, so it carries no app chrome: one thin bar above the page
+// says what it is and where the post's public page is, or will be, so the copy is never
+// mistaken for the live page, and the frame below holds the page exactly as it will be.
 
+import { pagePolicy } from "../../shared/page_policy";
+import type { PostResponse } from "../../shared/posts";
 import type { WebPreviewTarget } from "../../shared/web_preview";
-import { apiText } from "../api";
+import { api, apiText } from "../api";
+import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
-import { html, setHtml } from "../ui/html";
+import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 
 /** The page with every link opening a new tab: a link in a framed page (the archive index,
@@ -17,20 +21,23 @@ export function linksInNewTab(doc: string): string {
   return intoHead(doc, '<base target="_blank">');
 }
 
-/** The policy the page carries when served directly (no script, no form, no frame),
- *  restated inside the framed copy, which otherwise has only the editor's own. The
- *  sandbox already keeps script and forms out; this is the second lock. Fonts and images
- *  load as on the page. */
-const FRAMED_POLICY =
-  "default-src 'none'; img-src * data:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; form-action 'none'; frame-src 'none'";
+/** A link's `rel="opener"` taken out, so a tab a framed link opens never gets a handle on
+ *  the frame, which shares the editor's origin. Every other `rel` token stays. */
+function withoutOpener(doc: string): string {
+  return doc.replace(/\brel\s*=\s*(["'])([^"']*)\1/gi, (_m, q: string, value: string) => {
+    const kept = value.split(/\s+/).filter((t) => t !== "" && t.toLowerCase() !== "opener");
+    return `rel=${q}${kept.join(" ")}${q}`;
+  });
+}
 
 /** The framed copy of a post's page (the web version, or the editor's email preview): its
- *  links open in a new tab, under the policy the page carries when served. Only the
- *  framed copy changes, never the page served. */
+ *  links open in a new tab and never as an opener, under the policy the page carries when
+ *  served (shared/page_policy.ts). The sandbox already keeps script and forms out; the
+ *  policy is the second lock. Only the framed copy changes, never the page served. */
 export function framedCopy(doc: string): string {
   return intoHead(
-    linksInNewTab(doc),
-    `<meta http-equiv="Content-Security-Policy" content="${FRAMED_POLICY}">`,
+    linksInNewTab(withoutOpener(doc)),
+    `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`,
   );
 }
 
@@ -61,6 +68,54 @@ export function webTarget(
   }
 }
 
+/** Where the previewed page stands, for the bar: the template's sample, or a post by its
+ *  status and public address (null while unknown, so the bar names no address). */
+export type WebBarState =
+  | { kind: "template" }
+  | { kind: "post"; status: "draft" | "scheduled" | "sent"; url: string | null };
+
+/** The bar's words: what the page is, and where the post's public page is or will be. A
+ *  sent post's address is a link (it answers); an unsent one's is text, since it doesn't. */
+export function webBar(state: WebBarState | null): Html {
+  const label = html`<strong>Web version</strong>`;
+  if (state === null) {
+    return label;
+  }
+  if (state.kind === "template") {
+    return html`${label}<span>The sample post, with the saved template, as an archive page shows it</span>`;
+  }
+  const { status, url } = state;
+  if (status === "sent") {
+    const at =
+      url && /^https?:\/\//.test(url)
+        ? html` at <a href="${url}" target="_blank" rel="noopener">${url}</a>`
+        : null;
+    return html`${label}<span>Sent. Published${at}</span>`;
+  }
+  const when = status === "scheduled" ? "Scheduled, not sent yet." : "Not sent yet.";
+  const where = url ? html` Its page will be at <span class="web-url">${url}</span>` : null;
+  return html`${label}<span>${when}${where}</span>`;
+}
+
+/** The bar's state for a target: the post's status and address from its read, or null
+ *  when the read fails (the bar then says only what the page is). */
+async function barState(
+  target: WebPreviewTarget,
+  signal: AbortSignal,
+): Promise<WebBarState | null> {
+  if (target === "template") {
+    return { kind: "template" };
+  }
+  try {
+    const { post } = await api<PostResponse>(`/api/posts/${encodeURIComponent(target.post)}`, {
+      signal,
+    });
+    return { kind: "post", status: post.status, url: postArchiveUrl(post.slug) };
+  } catch {
+    return null;
+  }
+}
+
 export async function renderWebVersion(
   target: WebPreviewTarget,
   root: HTMLElement,
@@ -76,12 +131,15 @@ export async function renderWebVersion(
     document.title = appTitle;
   });
   try {
-    const doc = await apiText(page, { signal });
+    const [doc, state] = await Promise.all([apiText(page, { signal }), barState(target, signal)]);
     // No script and no form, as the page itself forbids when served (SPEC §5); a link
     // opens in a new tab, under the page's own policy (`framedCopy`).
     setHtml(
       root,
-      html`<iframe class="web-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Web version"></iframe>`,
+      html`<div class="web-page">
+        <div class="web-bar" role="note">${webBar(state)}</div>
+        <iframe class="web-frame" sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox" title="Web version"></iframe>
+      </div>`,
     );
     const frame = root.querySelector<HTMLIFrameElement>(".web-frame");
     if (!frame) {

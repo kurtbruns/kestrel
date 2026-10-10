@@ -521,9 +521,9 @@ export function createRouter({
       path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
-      summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
-        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
+        "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5). Its view-in-browser link opens the post's web version in the editor, as a test's does, not the post's public address.",
       handler: renderRoutes.previewPage,
     },
     {
