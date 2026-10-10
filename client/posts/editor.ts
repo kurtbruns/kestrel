@@ -364,6 +364,9 @@ export async function renderEditor(
     mdHl.hidden = name !== "edit"; // the highlight layer travels with the textarea
     previewFrame.hidden = name !== "preview";
     toolbarEl.classList.toggle("off", name !== "edit");
+    // The image foot dims with the toolbar: a click on Preview would insert into a hidden
+    // textarea behind a preview that doesn't change. A drop still lands (it switches to Edit).
+    root.querySelector("#dropFoot")?.classList.toggle("off", name !== "edit");
     if (name === "edit") {
       syncMdScroll();
     }

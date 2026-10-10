@@ -29,6 +29,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - A link in a notification email now opens the send it names even when you have to sign in to the dashboard first, where it could land on the dashboard home after the login (SPEC §8).
 - Links in the editor's Preview tab open in a new tab, where following one left the preview blank.
+- On a draft's Preview tab, "Paste, drop, or click to add images" now dims and ignores clicks, like the formatting toolbar. Before, a click there added the image to the hidden Edit text and left the preview unchanged. Dropping an image still works and switches to Edit.
 - A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).
 - On a checkout with Windows line endings, `npm run sync-migrations` no longer refuses every migration as edited, and `npm run check-context` no longer reports the Claude Code files as having no header.
 - `kestrel init` on Windows no longer leaves an extra `claude` folder beside `.claude`, and `npm run check-context -- --merged` accepts a Windows path.

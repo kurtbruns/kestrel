@@ -2384,6 +2384,13 @@ body.web-mode .content {
 .composer-foot:hover {
   color: var(--fg);
 }
+/* On the Preview tab the image foot dims with the toolbar (`.toolbar.off`): a click there
+   would insert into the hidden Edit text. A drop on the composer still works; it switches
+   to Edit first, so the result is seen. */
+.composer-foot.off {
+  opacity: 0.4;
+  pointer-events: none;
+}
 .composer-foot svg {
   width: 16px;
   height: 16px;
