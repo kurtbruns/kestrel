@@ -11,13 +11,12 @@
 
 import { getBySlug } from "../db/posts";
 import { listPublishedPosts, publishedSendForPost } from "../db/sends";
-import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
   archiveIndexPage,
-  htmlPage,
+  archiveLink,
   landingPage,
   type ReaderIdentity,
 } from "../lib/page";
@@ -32,26 +31,7 @@ import {
 import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-
-/** Display name for the publication, from the `From:` header — the fallback when
- *  the operator hasn't set a name in the publication identity. */
-function fromDisplayName(fromAddress: string): string {
-  const lt = fromAddress.indexOf("<");
-  const display = (lt >= 0 ? fromAddress.slice(0, lt) : "").trim().replace(/^"|"$/g, "").trim();
-  return display || "Newsletter";
-}
-
-/** The resolved publication identity for a reader page: the operator's settings,
- *  falling back to the `From:` display name for the name (shape in `lib/page.ts`). A
- *  corrupt settings row reads as the defaults, so a reader page never fails on it. */
-export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
-  const { publication: p } = await getSettingsForDisplay(c.env.DB);
-  return {
-    name: p.name || fromDisplayName(config.fromAddress),
-    tagline: p.tagline,
-    logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
-  };
-}
+import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 function formatPublishedDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", {
@@ -60,19 +40,6 @@ function formatPublishedDate(ms: number): string {
     month: "long",
     day: "numeric",
   });
-}
-
-/** The full archive URL (origin + base path) — the "Browse the full archive" target
- *  and the home of the post list. Built from the same config the route registers at. */
-function archiveHomeUrl(config: Config): string {
-  return `${config.archiveOrigin}${config.archiveBasePath}`;
-}
-
-/** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
- *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
- *  a deployed public page never points at the Access-gated editor (SPEC §5, §11). */
-export function devDashboardUrl(config: Config): string | undefined {
-  return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
 }
 
 /** The public front door (§5): a landing page featuring the latest post over a few
@@ -120,45 +87,66 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
   });
 }
 
-export async function archivePage(c: RequestContext): Promise<Response> {
-  const slug = param(c, "slug");
-  const post = await getBySlug(c.env.DB, slug);
-  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
-  if (!post || !send) {
-    return htmlPage(
-      "Not found",
-      `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
-      404,
-      devDashboardUrl(c.config),
-    );
-  }
-  // Four edits to the frozen record on the way to the browser (I3), all at reserved
-  // markers — none touches the reviewed content: the generic unsubscribe link (no single
-  // recipient here), the browser-only masthead (plus, in local dev only, the "Open
-  // dashboard" pill), the hosted-page <head> chrome (display-serif links + the
-  // reader-ground background) — web-only, never in a sent email — and the template's
-  // email-only regions, which the page leaves out.
-  const identity = await readerIdentity(c, c.config);
+/** A frozen email as its post page shows it (SPEC §5, I3). Four edits, all at reserved
+ *  markers, none touching the reviewed content: the per-recipient slots filled for no one
+ *  (the generic unsubscribe link, and an empty sent-to address so none leaks), the
+ *  template's email-only regions left out, the browser-only masthead (plus, in local dev
+ *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (display-serif links
+ *  and the reader ground), which never ships in an email. The public post page and the
+ *  publisher's web version both build from this, so the web version is the page. */
+export function webVersion(
+  html: string,
+  opts: {
+    config: Config;
+    identity: ReaderIdentity;
+    /** The date the masthead carries: when the post went out, or will. */
+    dateMs: number;
+    devDashboardUrl?: string;
+  },
+): string {
   const masthead = archiveMasthead({
-    name: identity.name,
-    dateLabel: formatPublishedDate(send.started_at ?? send.fire_at),
+    name: opts.identity.name,
+    dateLabel: formatPublishedDate(opts.dateMs),
     // Back to the archive index the post belongs to, on the same (archive) origin —
     // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
-    indexUrl: archiveHomeUrl(c.config),
+    indexUrl: archiveHomeUrl(opts.config),
   });
-  const dev = archiveDevDashboardChrome(devDashboardUrl(c.config));
-  // Fill the delivery-phase tokens for a recipient-agnostic page: a generic unsubscribe
-  // link (no single recipient here) and an empty sent-to address (redacted so none leaks).
+  const dev = archiveDevDashboardChrome(opts.devDashboardUrl);
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
-  const html = fillDeliveryTokens(
-    omitEmailOnly(send.rendered_html),
-    { ".Email.UnsubscribeURL": `${c.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
+  return fillDeliveryTokens(
+    omitEmailOnly(html),
+    { ".Email.UnsubscribeURL": `${opts.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
     "html",
   )
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead + dev.masthead)
     .split(ARCHIVE_HEAD_ANCHOR)
     .join(ARCHIVE_POST_HEAD + dev.head);
+}
+
+export async function archivePage(c: RequestContext): Promise<Response> {
+  const slug = param(c, "slug");
+  const post = await getBySlug(c.env.DB, slug);
+  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
+  if (!post || !send) {
+    // One page for every address with no published post, a draft, a scheduled post, or
+    // none at all, so it never reveals that a post is on its way. A test email's "view
+    // in browser" link lands here until the send starts.
+    return readerMessage(c, {
+      title: "Nothing here yet",
+      eyebrow: "Archive",
+      headline: "Nothing here yet",
+      ledeHtml: "A post appears here as soon as it’s sent.",
+      afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
+      status: 404,
+    });
+  }
+  const html = webVersion(send.rendered_html, {
+    config: c.config,
+    identity: await readerIdentity(c, c.config),
+    dateMs: send.started_at ?? send.fire_at,
+    devDashboardUrl: devDashboardUrl(c.config),
+  });
   return new Response(html, {
     headers: {
       ...POST_PAGE_SECURITY_HEADERS,

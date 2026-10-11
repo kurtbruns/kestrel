@@ -319,3 +319,114 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("web version (GET /api/posts/:id/web)", () => {
+  it("requires auth", async () => {
+    const id = await draftWithImage("Web Auth");
+    expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
+  });
+
+  it("shows a draft the way its post page will: masthead and web font in, email-only parts out", async () => {
+    const id = await draftWithImage("Web Draft");
+    const res = await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toContain("text/html");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    expect(res.headers.get("content-security-policy")).toContain("form-action 'none'");
+    const html = await res.text();
+    expect(html).toContain(">Hi</h1>");
+    expect(html).toContain(`/media/posts/${id}/cat.png`);
+    expect(html).toContain('class="k-mast"');
+    expect(html).toContain("fonts.googleapis.com/css2?family=Fraunces");
+    // The template's email-only footer is left out, as on the post page.
+    expect(html).not.toContain(">Unsubscribe</a>");
+    expect(html).not.toContain(">View in browser</a>");
+    expect(html).toContain("Powered by Kestrel");
+    for (const s of ["%%UNSUBSCRIBE_URL%%", "%%SENT_TO%%"]) {
+      expect(html).not.toContain(s);
+    }
+    // A publisher's look, not a reader page: no dev-only dashboard pill.
+    expect(html).not.toContain('class="r-dev"');
+  });
+
+  it("is the post page itself once the send starts, apart from the dev-only pill", async () => {
+    const id = await draftWithImage("Web Sent");
+    await env.DB.prepare(
+      "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('web','web@example.com','confirmed','cfm-web','uns-web',?,?)",
+    )
+      .bind(Date.now(), Date.now())
+      .run();
+
+    try {
+      const scheduled = await readJson(
+        await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
+          method: "POST",
+          headers: JSON_AUTH,
+          body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+        }),
+      );
+      // Scheduled: the frozen copy, as its page will show it.
+      const before = await (
+        await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })
+      ).text();
+      expect(before).toContain('class="k-mast"');
+
+      await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
+        .bind(Date.now() - 1000, scheduled.send.id)
+        .run();
+      const { sweep } = await import("../src/send/sweep");
+      await sweep(env);
+      const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+        .post.slug;
+      const web = await (await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })).text();
+      const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
+      // The post page adds only the dev-only pill (the test env is dev-shaped).
+      const withoutPill = (html: string) =>
+        html
+          .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+          .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+      expect(archive).toContain('class="r-dev"');
+      expect(withoutPill(archive)).toBe(web);
+    } finally {
+      await env.DB.prepare("DELETE FROM deliveries WHERE email = 'web@example.com'").run();
+      await env.DB.prepare("DELETE FROM subscribers WHERE id = 'web'").run();
+    }
+  });
+
+  it("serves the frozen copy while the send is going out, the same page its readers already reach", async () => {
+    const id = await draftWithImage("Web Sending");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+      }),
+    );
+    // The send has started and is still going out.
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(Date.now() - 1000, scheduled.send.id)
+      .run();
+    // Mark the frozen copy, so a page built from anything else (a fresh render) shows.
+    await env.DB.prepare(
+      "UPDATE sends SET rendered_html = replace(rendered_html, '>Hi</h1>', '>Frozen</h1>') WHERE id = ?",
+    )
+      .bind(scheduled.send.id)
+      .run();
+    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+      .post.slug;
+    const res = await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const web = await res.text();
+    expect(web).toContain(">Frozen</h1>");
+    const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
+    const withoutPill = (html: string) =>
+      html
+        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+    expect(withoutPill(archive)).toBe(web);
+  });
+
+  it("404s for an unknown post", async () => {
+    expect((await SELF.fetch(`${base}/api/posts/nope/web`, { headers: AUTH })).status).toBe(404);
+  });
+});

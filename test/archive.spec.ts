@@ -23,8 +23,10 @@ import {
   unsubscribe,
   unsubscribeLanding,
 } from "../src/routes/public";
-import { freeze } from "../src/send/schedule";
+import { readerIdentity } from "../src/routes/reader";
+import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
+import { adminAuth } from "./support/auth";
 
 const base = "https://kestrel.test";
 
@@ -181,6 +183,49 @@ describe("archive / view-in-browser", () => {
     );
     const res = await SELF.fetch(`${base}/archive/${post.slug}`);
     expect(res.status).toBe(404);
+  });
+
+  // A test email's "view in browser" link lands here before the send starts. The page
+  // must not tell a scheduled post's address from a draft's or a made-up one, or it would
+  // reveal what is on its way.
+  it("answers a draft, a scheduled post, a canceled post, and an unknown slug with the same page", async () => {
+    await ensureSubscriber();
+    const { post: draft } = await posts.createPost(
+      env.DB,
+      { subject: "Still a Draft", markdown: "wip" },
+      "test",
+    );
+    const { post: scheduled } = await posts.createPost(
+      env.DB,
+      { subject: "Coming Soon", markdown: "soon" },
+      "test",
+    );
+    await freeze(env, getConfig(env), scheduled, Date.now() + 3_600_000);
+    const { post: canceled } = await posts.createPost(
+      env.DB,
+      { subject: "Called Off", markdown: "never mind" },
+      "test",
+    );
+    const canceledSend = await freeze(env, getConfig(env), canceled, Date.now() + 3_600_000);
+    await cancel(env, canceledSend.id);
+    const pages = await Promise.all(
+      [draft.slug, scheduled.slug, canceled.slug, "no-such-post"].map(async (slug) => {
+        const res = await SELF.fetch(`${base}/archive/${slug}`);
+        expect(res.status, slug).toBe(404);
+        expect(res.headers.get("cache-control"), slug).toBe("no-store");
+        expect(res.headers.get("x-robots-tag"), slug).toBe("noindex");
+        return res.text();
+      }),
+    );
+    expect(pages[0]).toContain("Nothing here yet");
+    expect(pages[0]).toContain("A post appears here as soon as it’s sent.");
+    expect(pages[0]).toContain("Browse the archive");
+    expect(pages[0]).not.toContain("Still a Draft");
+    expect(pages[1]).not.toContain("Coming Soon");
+    expect(pages[2]).not.toContain("Called Off");
+    expect(pages[1]).toBe(pages[0]);
+    expect(pages[2]).toBe(pages[0]);
+    expect(pages[3]).toBe(pages[0]);
   });
 });
 
@@ -491,10 +536,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     expect(off).not.toContain("/dashboard");
   });
 
-  // The card pages: confirm and unsubscribe, which a local developer reaches from a
-  // link in a test email, and the post 404. Each has its own stylesheet, so the pill
-  // brings its own.
-  it("the card pages render the pill and its styles only when devMode is true", async () => {
+  // The message pages: confirm and unsubscribe, which a reader (or a local developer)
+  // reaches from a link in an email, and the post 404, plus the subscribe form's error
+  // page. All wear the reader shell, so each must carry the pill only in dev.
+  it("the message pages render the pill and its styles only when devMode is true", async () => {
     await ensureSubscriber();
     const now = Date.now();
     // A pending subscriber with a live link (the confirm page's "ready" state), one
@@ -516,31 +561,72 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
       body: "email=not-an-email",
     };
-    // Each row: the case, its handler and path, a phrase only that state's page shows
-    // (so the row provably reached it), and the request's method, headers, and body.
+    const { name: publication } = await readerIdentity(ctxFor(false), getConfig(env));
+    // Each row: the case, its handler and path, what only that state's page shows (so
+    // the row provably reached it: its headline, and its form where it has one), its
+    // status, and the request's method, headers, and body.
     const cards: [
       string,
       (c: RequestContext) => Promise<Response>,
       string,
-      string,
+      string[],
+      number,
       RequestInit?,
     ][] = [
-      ["confirm (ready)", confirmLanding, "/confirm?token=cfm-p", "Confirm your subscription"],
-      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", "You're subscribed"],
-      ["confirm (expired)", confirmLanding, "/confirm?token=cfm-x", "This link has expired"],
-      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope", "This link is invalid"],
-      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a", "Unsubscribe?"],
+      [
+        "confirm (ready)",
+        confirmLanding,
+        "/confirm?token=cfm-p",
+        [
+          `Confirm your subscription to ${publication}`,
+          '<form class="r-form" method="post" action="/confirm">',
+          '<button class="r-btn" type="submit">Confirm subscription</button>',
+        ],
+        200,
+      ],
+      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", ["You’re subscribed"], 200],
+      [
+        "confirm (expired)",
+        confirmLanding,
+        "/confirm?token=cfm-x",
+        [
+          "This link has expired",
+          '<form class="r-form" method="post" action="/subscribe">',
+          '<button class="r-btn" type="submit">Send a new link</button>',
+        ],
+        410,
+      ],
+      [
+        "confirm (invalid link)",
+        confirmLanding,
+        "/confirm?token=nope",
+        ["This link is invalid"],
+        400,
+      ],
+      [
+        "unsubscribe (ready)",
+        unsubscribeLanding,
+        "/unsubscribe?token=uns-a",
+        [
+          `Unsubscribe from ${publication}?`,
+          '<form class="r-form" method="post" action="/unsubscribe?token=uns-a">',
+          '<button class="r-btn" type="submit">Unsubscribe</button>',
+        ],
+        200,
+      ],
       [
         "unsubscribe (already)",
         unsubscribeLanding,
         "/unsubscribe?token=uns-u",
-        "You're unsubscribed",
+        ["You’re unsubscribed"],
+        200,
       ],
       [
         "unsubscribe (invalid link)",
         unsubscribeLanding,
         "/unsubscribe?token=nope",
-        "This link is invalid",
+        ["This link is invalid"],
+        400,
       ],
       // The POST's page for a person. It unsubscribes `uns-p`, so it runs after the
       // pages that read that subscriber, and repeating it answers the same page.
@@ -548,25 +634,68 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         "unsubscribe POST (invalid link)",
         unsubscribe,
         "/unsubscribe?token=nope",
-        "This link is invalid",
+        ["This link is invalid"],
+        400,
         html,
       ],
       [
         "unsubscribe POST (done)",
         unsubscribe,
         "/unsubscribe?token=uns-p",
-        "You've been unsubscribed",
+        ["You’re unsubscribed"],
+        200,
         html,
       ],
-      ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
-      ["post not found", archivePage, "/archive/missing", "Not found"],
+      ["subscribe form", subscribeForm, "/subscribe", [`Subscribe to ${publication}`], 200],
+      [
+        "subscribe (bad address)",
+        subscribe,
+        "/subscribe",
+        ["doesn’t look like an email"],
+        400,
+        badForm,
+      ],
+      ["post not found", archivePage, "/archive/missing", ["Nothing here yet"], 404],
+      [
+        "test unsubscribe",
+        unsubscribeLanding,
+        "/unsubscribe?test=1",
+        ["This was a test email"],
+        200,
+      ],
+      [
+        "test unsubscribe POST",
+        unsubscribe,
+        "/unsubscribe?test=1",
+        ["This was a test email"],
+        200,
+        html,
+      ],
     ];
-    for (const [name, handler, path, shows, init] of cards) {
+    for (const [name, handler, path, shows, status, init] of cards) {
       const params = { slug: "missing" };
       // A fresh Request per call, since a form body can be read only once.
       const on = await (await handler(ctxFor(true, path, params, init))).text();
-      const off = await (await handler(ctxFor(false, path, params, init))).text();
-      expect(on, name).toContain(shows);
+      const offRes = await handler(ctxFor(false, path, params, init));
+      const off = await offRes.text();
+      for (const shown of shows) {
+        expect(on, name).toContain(shown);
+      }
+      expect(offRes.status, name).toBe(status);
+      // The reader shell, with the publication's identity and no subscribe CTA.
+      expect(off, name).toContain('class="r-mast"');
+      expect(off, name).toContain(` · ${publication}</title>`);
+      expect(off, name).not.toContain('class="r-sub"');
+      if (handler === subscribeForm || handler === subscribe) {
+        // The subscribe pages show no one's address, so they stay briefly cacheable
+        // and indexable like the rest of the public surface.
+        expect(offRes.headers.get("cache-control"), name).toBe("public, max-age=300");
+        expect(offRes.headers.get("x-robots-tag"), name).toBeNull();
+      } else {
+        // Some show the reader's address: never cached, never indexed.
+        expect(offRes.headers.get("cache-control"), name).toBe("no-store");
+        expect(offRes.headers.get("x-robots-tag"), name).toBe("noindex");
+      }
       expect(on, name).toContain('class="r-dev"');
       expect(on, name).toContain("--k-accent:#3355cc");
       expect(off, name).not.toContain("r-dev");
@@ -575,10 +704,130 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     }
   });
 
-  it("the one-click unsubscribe POST still answers plain text, with no page chrome", async () => {
+  // A client that sends neither an HTML accept nor a form body gets a word, not a page.
+  // (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
+  // it never shows.)
+  it("a bare unsubscribe POST, asking for no page, answers plain text", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("unsubscribed");
+  });
+});
+
+// A test email carries the list send's links, but it is not a list send, so its
+// unsubscribe link carries no subscriber's token and has no one to unsubscribe.
+describe("a test email's unsubscribe link", () => {
+  const statusOf = async (id: string) =>
+    (
+      await env.DB.prepare("SELECT status FROM subscribers WHERE id = ?")
+        .bind(id)
+        .first<{ status: string }>()
+    )?.status;
+
+  it("opens a page that says it was a test, and unsubscribes no one", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?test=1`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    const body = await res.text();
+    expect(body).toContain("This was a test email");
+    expect(body).toContain("Nobody was unsubscribed.");
+    expect(body).not.toContain("<form");
+    expect(await statusOf("a")).toBe("confirmed");
+  });
+
+  it("answers a mail client's one-click POST with a plain 200 and changes nothing", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?test=1`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "List-Unsubscribe=One-Click",
+    });
+    expect(res.status).toBe(200);
+    // RFC 8058's body is form-encoded, which reads as a person's form; a bare POST
+    // answers plain text.
+    expect(await res.text()).toContain("This was a test email");
+    const bare = await SELF.fetch(`${base}/unsubscribe?test=1`, { method: "POST" });
+    expect(bare.status).toBe(200);
+    expect(await bare.text()).toBe("test email");
+    expect(await statusOf("a")).toBe("confirmed");
+  });
+
+  it("never stands in for a real token", async () => {
+    await ensureSubscriber();
+    const page = await (await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`)).text();
+    expect(page).toContain("Unsubscribe from ");
+    const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`, { method: "POST" });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("unsubscribed");
+    expect(await statusOf("a")).toBe("unsubscribed");
+    // A bad token with the marker is still a bad link, not a test.
+    const badPage = await SELF.fetch(`${base}/unsubscribe?token=nope&test=1`);
+    expect(badPage.status).toBe(400);
+    expect(await badPage.text()).toContain("This link is invalid");
+    const bad = await SELF.fetch(`${base}/unsubscribe?token=nope&test=1`, { method: "POST" });
+    expect(bad.status).toBe(400);
+  });
+
+  it("lets a token in the form body win over the marker", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?test=1`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "token=uns-a",
+    });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("You’re unsubscribed");
+    expect(await statusOf("a")).toBe("unsubscribed");
+  });
+
+  it("treats an empty token beside the marker as a test", async () => {
+    await ensureSubscriber();
+    const page = await SELF.fetch(`${base}/unsubscribe?token=&test=1`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("This was a test email");
+    const post = await SELF.fetch(`${base}/unsubscribe?token=&test=1`, { method: "POST" });
+    expect(post.status).toBe(200);
+    expect(await post.text()).toBe("test email");
+    expect(await statusOf("a")).toBe("confirmed");
+  });
+
+  // The links a test email really carries, not ones written out here, so the link a
+  // test builds and the pages it opens can't drift apart.
+  it("opens the honest pages from the links a sent test carries", async () => {
+    await ensureSubscriber();
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Proof Copy", markdown: "proofing" },
+      "test",
+    );
+    const res = await SELF.fetch(`${base}/api/posts/${post.id}/test`, {
+      method: "POST",
+      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      body: JSON.stringify({ to: "me@example.com" }),
+    });
+    expect(res.status).toBe(200);
+    const sent = fakeOutbox().find((m) => m.to === "me@example.com")!;
+    const hrefs = [...sent.html.matchAll(/href="([^"]+)"/g)].map((m) => new URL(m[1]!));
+    const unsub = hrefs.find((u) => u.pathname === "/unsubscribe");
+    const view = hrefs.find((u) => u.pathname === `/archive/${post.slug}`);
+    expect(unsub).toBeTruthy();
+    expect(view).toBeTruthy();
+    const unsubPath = `${unsub!.pathname}${unsub!.search}`;
+    const unsubPage = await SELF.fetch(`${base}${unsubPath}`);
+    expect(unsubPage.status).toBe(200);
+    expect(await unsubPage.text()).toContain("This was a test email");
+    const oneClick = await SELF.fetch(`${base}${unsubPath}`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "List-Unsubscribe=One-Click",
+    });
+    expect(oneClick.status).toBe(200);
+    const viewPage = await SELF.fetch(`${base}${view!.pathname}`);
+    expect(viewPage.status).toBe(404);
+    expect(await viewPage.text()).toContain("Nothing here yet");
+    expect(await statusOf("a")).toBe("confirmed");
   });
 });

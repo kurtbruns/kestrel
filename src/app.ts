@@ -510,10 +510,21 @@ export function createRouter({
       path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
-      summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
       handler: renderRoutes.previewPage,
+    },
+    {
+      method: "GET",
+      path: "/api/posts/:id/web",
+      access: "admin",
+      resource: "posts",
+      summary:
+        "The post's web version as a standalone HTML page: what its public post page will show.",
+      description:
+        "Built from the same copy as the preview (a draft's live render, the frozen copy once scheduled, the record once sent) by the post page's own code: the email-only regions left out, the masthead and display font added (SPEC §5). Once the send starts it matches the public post page, less the local-dev dashboard link.",
+      handler: renderRoutes.webPage,
     },
     {
       method: "POST",
@@ -1039,12 +1050,16 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
-      summary: "Unsubscribe landing page (`?token=`).",
+      summary: "Unsubscribe landing page (`?token=`, or `?test=1` on a test email).",
       query: [
         {
           name: "token",
           description: "The subscriber's unsubscribe token, from any delivered email's link.",
-          required: true,
+        },
+        {
+          name: "test",
+          description:
+            "`1` on a test email's link, which carries no token: the page says it was a test and unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribeLanding,
@@ -1054,12 +1069,16 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
-      summary: "Process a one-click / form unsubscribe (`?token=`).",
+      summary: "Process a one-click / form unsubscribe (`?token=`, or `?test=1` on a test email).",
       query: [
         {
           name: "token",
           description: "The subscriber's unsubscribe token, from any delivered email's link.",
-          required: true,
+        },
+        {
+          name: "test",
+          description:
+            "`1` on a test email's link, which carries no token: answers 200 and unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribe,

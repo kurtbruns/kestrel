@@ -712,6 +712,117 @@ describe("editor view", () => {
     expect(body().hidden).toBe(true);
   });
 
+  it("opens the web version in a tab opened by the click itself, then saved and pointed at the page", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const tab = { location: { href: "" }, close: vi.fn() };
+    const opened = vi.fn(() => tab);
+    vi.stubGlobal("open", opened);
+    typeInto(body(), "changed");
+    const button = $<HTMLButtonElement>("#webBtn");
+    expect(button.textContent).toBe("Web version ↗");
+    expect(button.classList.contains("ghost")).toBe(true);
+    expect(button.getAttribute("aria-label")).toContain("opens in a new tab");
+    button.click();
+    // The tab opens before any await, so a browser that blocks a late one keeps it.
+    expect(opened).toHaveBeenCalledWith("", "_blank");
+    expect(tab.location.href).toBe("");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1); // the draft is saved before the tab goes to the page
+    expect(tab.location.href).toBe(`${location.origin}${location.pathname}#/web/post/p1`);
+    expect(opened).toHaveBeenCalledTimes(1);
+    expect(tab.close).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
+  it("closes the web version's tab when the save before it is refused, and the out-of-date banner is the next step", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        // Another writer saved first, so the tab would have shown their copy.
+        reply: (req) =>
+          server.put(req, () =>
+            jsonResponse(
+              {
+                error: "stale_revision",
+                message: "changed",
+                current_revision: server.elsewhere("service"),
+                author: "service",
+              },
+              409,
+            ),
+          ),
+      },
+    ]);
+    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
+    const tab = { location: { href: "" }, close: vi.fn() };
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => tab),
+    );
+    typeInto(body(), "mine, not theirs");
+    $("#webBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+    expect($("#freshnessBanner").hidden).toBe(false);
+    // With the banner up, a second click is refused the same way, before any request.
+    tab.close.mockClear();
+    $("#webBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+    vi.unstubAllGlobals();
+  });
+
+  it("closes the web version's tab and says why when the save before it fails", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal", message: "the database is away" }, 500),
+      },
+    ]);
+    const tab = { location: { href: "" }, close: vi.fn() };
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => tab),
+    );
+    typeInto(body(), "changed");
+    $("#webBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(tab.close).toHaveBeenCalledTimes(1);
+    expect(tab.location.href).toBe("");
+    expect($("#toasts").textContent).toMatch(/database is away/);
+    vi.unstubAllGlobals();
+  });
+
+  it("says so when the browser blocks the web version's tab, and saves nothing for it", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => null),
+    );
+    typeInto(body(), "changed");
+    $("#webBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toMatch(/blocked the new tab/);
+    expect(puts()).toHaveLength(0);
+    vi.unstubAllGlobals();
+  });
+
   it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
