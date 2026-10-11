@@ -45,7 +45,7 @@ describe("web version", () => {
   });
   afterEach(() => {
     fake?.restore();
-    appState.appConfig = null;
+    vi.restoreAllMocks();
   });
 
   it("restates the page's own policy inside the framed copy, and changes nothing else", () => {
@@ -189,7 +189,6 @@ describe("web version", () => {
       await settle();
       expect(replace).toHaveBeenCalledWith("https://newsletter.example.com/archive/herons");
       expect(document.querySelector(".web-frame")).toBeNull();
-      replace.mockRestore();
     });
   }
 

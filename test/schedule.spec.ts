@@ -6,13 +6,8 @@ import * as sendsDb from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
-import { adminAuth } from "./support/auth";
 import { resetDatabase } from "./support/fixtures";
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
+import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 // Each test starts from an empty database, so a count or a list read sees only its own rows.
 beforeEach(async () => {
@@ -22,30 +17,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
-
-async function makeDraft(markdown = "# Hi\n\nbody"): Promise<string> {
+/** A draft made through the API, its id. */
+async function makeDraft({
+  markdown = "# Hi\n\nbody",
+  subject = "The Subject",
+}: {
+  markdown?: string;
+  subject?: string;
+} = {}): Promise<string> {
   const created = await readJson(
     await SELF.fetch(`${base}/api/posts`, {
       method: "POST",
       headers: JSON_AUTH,
-      body: JSON.stringify({ subject: "The Subject", markdown }),
-    }),
-  );
-  return created.post.id;
-}
-
-async function makeDraftWithSubject(subject: string): Promise<string> {
-  const created = await readJson(
-    await SELF.fetch(`${base}/api/posts`, {
-      method: "POST",
-      headers: JSON_AUTH,
-      body: JSON.stringify({ subject, markdown: "# Hi\n\nbody" }),
+      body: JSON.stringify({ subject, markdown }),
     }),
   );
   return created.post.id;
@@ -129,7 +113,7 @@ describe("schedule / send / cancel + soft-lock", () => {
     // The subject is the one field the reader sees, and a send is irreversible (I4),
     // so freeze() rejects it before anything is frozen — for both clients, both paths.
     for (const subject of ["", "   "]) {
-      const id = await makeDraftWithSubject(subject);
+      const id = await makeDraft({ subject });
 
       const sched = await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
@@ -150,7 +134,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   });
 
   it("cancel unlocks the post; the frozen render is unchanged by later edits (I3)", async () => {
-    const id = await makeDraft("original body");
+    const id = await makeDraft({ markdown: "original body" });
     const scheduled = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",
@@ -311,7 +295,7 @@ describe("schedule / send / cancel + soft-lock", () => {
   });
 
   it("reschedules a scheduled send: moves fire_at, keeps the frozen render and the lock (I3, I6)", async () => {
-    const id = await makeDraft("frozen body");
+    const id = await makeDraft({ markdown: "frozen body" });
     const scheduled = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
         method: "POST",

@@ -13,13 +13,16 @@ import {
 import { getConfig } from "../src/env";
 import { seedConfirmed } from "./support/fixtures";
 
-// The parametric seed (issue #149): a `size` selects a PRNG-driven list scaled to an
+// The parametric seed: a `size` selects a PRNG-driven list scaled to an
 // approximate target, while the default (no size) keeps the curated Field Notes dataset
 // unchanged (guarded in detail by seed.spec.ts). These tests lock the pieces the scale
 // depends on — a reproducible PRNG, a collision-free email generator that reaches 100k,
 // and a lifecycle that still fluctuates and keeps low outcome rates at scale.
 
 const config = () => getConfig(env);
+
+// A fixed clock for the in-memory builds, so a run on any date builds the same timeline.
+const EPOCH = 1_700_000_000_000;
 
 describe("parseSeedSize", () => {
   it("maps size tokens to counts, capped at 100k", () => {
@@ -93,7 +96,7 @@ describe("scaledEmailFor", () => {
 
 describe("buildScaledAudience", () => {
   it("scales the lifecycle: unique roster, fluctuating sends, low outcome rates", () => {
-    const t = buildTimeline(Date.now());
+    const t = buildTimeline(EPOCH);
     const built = buildScaledAudience(t, 10_000, makePrng(1));
 
     // Every address across the whole roster is unique.
@@ -116,12 +119,12 @@ describe("buildScaledAudience", () => {
     // Suppressions stay a small fraction of the list (a realistic bounce+complaint rate).
     expect(built.suppressions.length).toBeGreaterThanOrEqual(2);
     expect(built.suppressions.length).toBeLessThan(confirmed * 0.02);
-    // The send-#2 events mirror the suppressions that shadow the current audience.
+    // The second send's events mirror the suppressions that shadow the current audience.
     expect(built.sendTwoEvents.size).toBe(built.suppressions.length);
   });
 
-  it("is reproducible for a (size, seed) and varies the churn/suppressions across seeds", () => {
-    const t = buildTimeline(1_700_000_000_000); // a fixed clock so timing is comparable
+  it("is reproducible for a (size, seed) and varies the churn timing across seeds", () => {
+    const t = buildTimeline(EPOCH);
     const unsubTimes = (seed: number) =>
       buildScaledAudience(t, 5_000, makePrng(seed)).subscribers.map((s) => s.unsubscribed_at);
     const victims = (seed: number) =>
@@ -172,7 +175,7 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     // Confirmed-now ≈ the requested 100 (PRNG-jittered so it reads organic, not exactly 100).
     expect(loaded.counts.confirmed).toBeGreaterThan(80);
     expect(loaded.counts.confirmed).toBeLessThan(120);
-    // I1: the current audience is confirmed − suppressed, read from the list itself.
+    // The current audience is confirmed − suppressed (SPEC §7), read from the list itself.
     expect(suppressed).toBeGreaterThanOrEqual(2);
     expect(loaded.audience).toBe(loaded.counts.confirmed - suppressed);
     expect(summary.audience).toBe(loaded.audience);

@@ -20,15 +20,9 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { sweep } from "../src/send/sweep";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
+import { NoKeyProvider, SesLikeProvider } from "./support/keyless";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
-
-/** SES-shaped: one recipient a request and no idempotency key. */
-class SesLikeProvider extends ResendLikeProvider {
-  override readonly maxBatch: number = 1;
-  override readonly idempotentRetry: boolean = false;
-  override readonly idempotencyWindowMs: number | undefined = undefined;
-}
 
 /** The test env with its D1 held to the 100-bind cap and counted. */
 function guarded() {
@@ -211,9 +205,7 @@ describe("a retryable answer to a handed-off batch", () => {
     await tick();
 
     // The operator moves the deployment to a provider that can't dedupe a re-send.
-    const plain = new (class extends ResendLikeProvider {
-      override readonly idempotentRetry: boolean = false;
-    })();
+    const plain = new NoKeyProvider();
     vi.mocked(providers.getProvider).mockReturnValue(plain);
     await tick();
 
@@ -231,10 +223,7 @@ describe("a retryable answer to a handed-off batch", () => {
     const emails = addresses(4);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const ses = new (class extends ResendLikeProvider {
-      override readonly maxBatch: number = 1;
-      override readonly idempotentRetry: boolean = false;
-    })();
+    const ses = new SesLikeProvider();
     vi.mocked(providers.getProvider).mockReturnValue(ses);
 
     ses.loseAnswers = 1;
@@ -467,7 +456,6 @@ describe("a one-recipient provider's groups", () => {
   });
 
   it("starts requests no faster than the provider's rate", async () => {
-    vi.useRealTimers();
     const paced = new (class extends SesLikeProvider {
       readonly maxRequestRate = 50;
       readonly starts: number[] = [];
@@ -629,7 +617,6 @@ describe("the tick's clock", () => {
   });
 
   it("keeps one pace and one deadline across every send in the tick", async () => {
-    vi.useRealTimers();
     await seedConfirmed(addresses(30));
     const a = await dueSend();
     const b = await dueSend();

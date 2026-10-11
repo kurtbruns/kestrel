@@ -15,6 +15,7 @@ import { nextRetry, toNextTick } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { SesLikeProvider } from "./support/keyless";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 import { viewOf } from "./support/view";
@@ -514,11 +515,7 @@ describe("a refused batch and its key", () => {
     await ticks(2);
 
     // The operator moves the deployment to an SES-shaped provider.
-    const ses = new (class extends ResendLikeProvider {
-      override readonly maxBatch: number = 1;
-      override readonly idempotentRetry: boolean = false;
-      override readonly idempotencyWindowMs: number | undefined = undefined;
-    })();
+    const ses = new SesLikeProvider();
     vi.mocked(providers.getProvider).mockReturnValue(ses);
     await untilSent(send.id);
 

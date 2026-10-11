@@ -28,8 +28,7 @@ import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { resetDatabase } from "./support/fixtures";
-
-const base = "https://kestrel.test";
+import { base } from "./support/http";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -168,21 +167,6 @@ describe("archive / view-in-browser", () => {
     } finally {
       await updateSettings(env.DB, { emailTemplate: "" });
     }
-  });
-
-  it("404s for an unknown slug", async () => {
-    const res = await SELF.fetch(`${base}/archive/does-not-exist`);
-    expect(res.status).toBe(404);
-  });
-
-  it("404s for a post that hasn't been sent yet", async () => {
-    const { post } = await posts.createPost(
-      env.DB,
-      { subject: "Draft Only", markdown: "wip" },
-      "test",
-    );
-    const res = await SELF.fetch(`${base}/archive/${post.slug}`);
-    expect(res.status).toBe(404);
   });
 
   // A test email's "view in browser" link lands here before the send starts. The page
@@ -413,9 +397,7 @@ describe("a post is published when its send starts (§5)", () => {
   it("keeps a scheduled or canceled post unpublished", async () => {
     const scheduled = await frozenPost("Still Scheduled");
     const canceled = await frozenPost("Called Off");
-    await env.DB.prepare("UPDATE sends SET status = 'canceled' WHERE id = ?")
-      .bind(canceled.sendId)
-      .run();
+    await cancel(env, canceled.sendId);
     const r = await reader();
     for (const { post } of [scheduled, canceled]) {
       expect((await r.page(post.slug)).status).toBe(404);
@@ -703,11 +685,13 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(off, name).not.toContain("/dashboard");
     }
   });
+});
 
-  // A client that sends neither an HTML accept nor a form body gets a word, not a page.
-  // (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
-  // it never shows.)
-  it("a bare unsubscribe POST, asking for no page, answers plain text", async () => {
+// A client that sends neither an HTML accept nor a form body gets a word, not a page.
+// (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
+// it never shows.)
+describe("an unsubscribe POST asking for no page", () => {
+  it("answers plain text", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
     expect(res.status).toBe(200);

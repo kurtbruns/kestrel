@@ -8,18 +8,16 @@ import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { adminAuth } from "./support/auth";
 import { condition, has } from "./support/conditions";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base } from "./support/http";
 import { viewOf } from "./support/view";
 
-// PR2 (#154, #152): the denormalized counters on `sends` are a rebuildable cache of the
-// `deliveries` bucketing, maintained in the same transactions as each recipient
-// transition. These tests pin that they stay consistent across a full send, a resume, a
-// webhook, and a resolve — and that a send's view and its derived phase read off them.
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
+// The denormalized counters on `sends` are a rebuildable cache of the `deliveries`
+// bucketing, kept so a list or the feed reads a send's progress without aggregating its
+// record, and maintained in the same transactions as each recipient transition. These tests
+// pin that they stay consistent across a full send, a resume, a webhook, and a resolve, and
+// that a send's view and its derived phase read off them.
 
 /** The counters must always equal the `deliveries` aggregate (they are its cache). */
 async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {

@@ -14,9 +14,8 @@ import * as settingsRoutes from "../src/routes/settings";
 import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
+import { base, PNG_1x1 } from "./support/http";
 import { expectErrorLogs, logged } from "./support/log";
-
-const BASE = "https://kestrel.test";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
 beforeEach(async () => {
@@ -24,7 +23,7 @@ beforeEach(async () => {
 });
 
 async function getSettings() {
-  const res = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
+  const res = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
   return {
     res,
     body: (await res.json()) as {
@@ -55,17 +54,10 @@ async function getSettings() {
   };
 }
 
-// A real 1x1 PNG for the logo-upload tests.
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
 async function putLogo(bytes: Uint8Array, type: string) {
   const fd = new FormData();
   fd.append("file", new File([bytes], "logo", { type }));
-  return SELF.fetch(`${BASE}/api/settings/logo`, {
+  return SELF.fetch(`${base}/api/settings/logo`, {
     method: "POST",
     headers: { ...(await adminAuth()) },
     body: fd,
@@ -73,7 +65,7 @@ async function putLogo(bytes: Uint8Array, type: string) {
 }
 
 async function putSettings(patch: unknown) {
-  return SELF.fetch(`${BASE}/api/settings`, {
+  return SELF.fetch(`${base}/api/settings`, {
     method: "PUT",
     headers: { ...(await adminAuth()), "content-type": "application/json" },
     body: JSON.stringify(patch),
@@ -84,25 +76,25 @@ async function putSettings(patch: unknown) {
  *  the fake transport recorded for it. */
 async function subscribeAndGetConfirmation() {
   const email = `ce-${crypto.randomUUID()}@example.com`;
-  const sub = await SELF.fetch(`${BASE}/subscribe`, {
+  const sub = await SELF.fetch(`${base}/subscribe`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email }),
   });
   expect(sub.ok).toBe(true);
   const outbox = (await (
-    await SELF.fetch(`${BASE}/api/dev/outbox`, { headers: await adminAuth() })
+    await SELF.fetch(`${base}/api/dev/outbox`, { headers: await adminAuth() })
   ).json()) as { messages: { to: string; subject: string; html: string; text: string }[] };
   return outbox.messages.find((m) => m.to === email);
 }
 
 describe("settings API is gated like the rest of the authoring API", () => {
   it("401s GET without a token", async () => {
-    const res = await SELF.fetch(`${BASE}/api/settings`);
+    const res = await SELF.fetch(`${base}/api/settings`);
     expect(res.status).toBe(401);
   });
   it("401s PUT without a token", async () => {
-    const res = await SELF.fetch(`${BASE}/api/settings`, {
+    const res = await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ testRecipients: ["x@example.com"] }),
@@ -150,7 +142,7 @@ describe("settings surface", () => {
     const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag-7f3e" };
     for (const deploy of [SES_DEPLOY, RESEND_DEPLOY]) {
       const e = { ...env, ...deploy, ...ACCESS } as unknown as AppEnv;
-      const req = new Request(`${BASE}/api/settings`);
+      const req = new Request(`${base}/api/settings`);
       const res = await settingsRoutes.get({
         req,
         env: e,
@@ -195,7 +187,7 @@ describe("settings surface", () => {
   });
 });
 
-describe("publication identity (issue #81)", () => {
+describe("publication identity", () => {
   it("persists and normalizes name + tagline", async () => {
     const put = await putSettings({
       publication: { name: "  Field Notes  ", tagline: "Birding, weekly" },
@@ -210,14 +202,14 @@ describe("publication identity (issue #81)", () => {
     await putSettings({
       publication: { name: "The Hovering Hunter", tagline: "Notes from the field" },
     });
-    const html = await (await SELF.fetch(`${BASE}/`)).text();
+    const html = await (await SELF.fetch(`${base}/`)).text();
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");
 
     // A name saved blank falls back to the From address's display name (wrangler.jsonc's
     // "Newsletter <newsletter@send.example.com>"), never an empty title.
     expect((await putSettings({ publication: { name: "   " } })).status).toBe(200);
-    const fallback = await (await SELF.fetch(`${BASE}/`)).text();
+    const fallback = await (await SELF.fetch(`${base}/`)).text();
     expect(fallback).not.toContain("The Hovering Hunter");
     expect(fallback).toMatch(/<title>[^<]*Newsletter[^<]*<\/title>/);
   });
@@ -459,11 +451,11 @@ describe("confirmation email masthead (SPEC §7)", () => {
   });
 });
 
-describe("publication logo (issue #81)", () => {
+describe("publication logo", () => {
   it("gates the logo routes like the rest of admin", async () => {
-    const post = await SELF.fetch(`${BASE}/api/settings/logo`, { method: "POST" });
+    const post = await SELF.fetch(`${base}/api/settings/logo`, { method: "POST" });
     expect(post.status).toBe(401);
-    const del = await SELF.fetch(`${BASE}/api/settings/logo`, { method: "DELETE" });
+    const del = await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE" });
     expect(del.status).toBe(401);
   });
 
@@ -474,18 +466,18 @@ describe("publication logo (issue #81)", () => {
     expect(body.settings.publication.logoUrl).toContain("/media/branding/logo?v=");
 
     // Served publicly, and hardened so a hostile SVG can't run script on direct nav.
-    const served = await SELF.fetch(`${BASE}/media/branding/logo`);
+    const served = await SELF.fetch(`${base}/media/branding/logo`);
     expect(served.status).toBe(200);
     expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect(served.headers.get("content-security-policy")).toBe("sandbox");
 
-    const del = await SELF.fetch(`${BASE}/api/settings/logo`, {
+    const del = await SELF.fetch(`${base}/api/settings/logo`, {
       method: "DELETE",
       headers: { ...(await adminAuth()) },
     });
     expect(del.status).toBe(200);
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
+    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
   });
 
   it("refuses anything but a raster image with a 400 naming the formats, SVG included", async () => {
@@ -498,7 +490,7 @@ describe("publication logo (issue #81)", () => {
     }
     // Nothing was stored: no logo is set and none is served.
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
+    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
     // A PNG still uploads, and so does one whose declared type carries case or parameters.
     expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
     expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
@@ -543,7 +535,7 @@ describe("a corrupt settings row", () => {
       const before = await readRow();
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
-        const got = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
+        const got = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
         expect(got.status).toBe(500);
         expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
@@ -552,7 +544,7 @@ describe("a corrupt settings row", () => {
         expect(await env.MEDIA.head(BRANDING_LOGO_KEY)).toBeNull();
         // The reader pages only show the identity, so they stay up on the defaults.
         for (const path of ["/", "/archive", "/subscribe"]) {
-          const page = await SELF.fetch(`${BASE}${path}`, { headers: { accept: "text/html" } });
+          const page = await SELF.fetch(`${base}${path}`, { headers: { accept: "text/html" } });
           expect(page.status, path).toBe(200);
           expect(await page.text(), path).not.toContain("Before");
         }

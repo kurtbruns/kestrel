@@ -1,8 +1,10 @@
-// Support for client specs: a scripted fetch that stands in for the HTTP API, and a few
-// DOM helpers. The seam is fetch itself, so the real api() runs over the script (credential
-// attached, 401 routed, errors shaped) and a view test exercises the same code the browser
-// does, with only the network replaced. Imported by specs only; never part of the bundle.
+// Support for client specs: a scripted fetch that stands in for the HTTP API, a scripted
+// send server over it, the fixtures several specs share, and a few DOM helpers. The seam is
+// fetch itself, so the real api() runs over the script (credential attached, 401 routed,
+// errors shaped) and a view test exercises the same code the browser does, with only the
+// network replaced. Imported by specs only; never part of the bundle.
 
+import { onTestFinished, vi } from "vitest";
 import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
 import {
   refusalAdvice,
@@ -15,7 +17,9 @@ import {
   type SendSummary,
   type SendView,
 } from "../../shared/sends";
-import { unmount } from "../lifecycle";
+import type { DeploymentView, SettingsResponse, SettingsView } from "../../shared/settings";
+import { mount, unmount, type View } from "../lifecycle";
+import { appState } from "../state";
 
 /** One request the script saw. `url` is absolute against a placeholder origin. */
 export interface FakeCall {
@@ -124,9 +128,18 @@ export async function settle(rounds = 4): Promise<void> {
   }
 }
 
+// The sidebar brand as the page ships it, before any spec's settings repaint it.
+const BRAND = ["brandName", "brandTagline", "brandLogo"].map((id) => {
+  const el = document.getElementById(id);
+  return { id, html: el?.innerHTML ?? "", hidden: el?.hidden ?? false, cls: el?.className ?? "" };
+});
+
 /**
- * Tear down whatever is mounted and empty what it left in the shell, without replacing the
- * shell's root elements, which the shell module holds by reference.
+ * Tear down whatever is mounted and put the shell back as the page loads it, without
+ * replacing the shell's root elements, which the shell module holds by reference: the
+ * view and toast roots emptied, any dialog or stray frame a spec left on the body gone,
+ * the sidebar brand as shipped, and no settings payload (a view that saves settings
+ * writes it, and the brand and several views read it).
  */
 export function resetShell(): void {
   unmount();
@@ -136,15 +149,152 @@ export function resetShell(): void {
       el.innerHTML = "";
     }
   }
-  for (const modal of document.querySelectorAll(".modal, .modal-backdrop, dialog")) {
-    modal.remove();
+  for (const el of document.querySelectorAll(".modal, .modal-backdrop, dialog, body > iframe")) {
+    el.remove();
   }
+  for (const b of BRAND) {
+    const el = document.getElementById(b.id);
+    if (el) {
+      el.innerHTML = b.html;
+      el.hidden = b.hidden;
+      el.className = b.cls;
+    }
+  }
+  appState.appConfig = null;
 }
 
 // The same DOM and lifecycle helpers the modules use, re-exported so a spec reads like the
 // code it tests: a view is mounted the way the router mounts it.
 export { mount, mounted, unmount } from "../lifecycle";
 export { $, $$ } from "../ui/dom";
+
+/**
+ * Script the API with `routes`, mount `view` the way the router does, and let its first reads
+ * answer, for a spec on fake timers. The script is put back when the test ends, pass or fail.
+ */
+export async function openView(view: View, routes: FakeRoute[]): Promise<FakeApi> {
+  const fake = fakeApi(routes);
+  onTestFinished(() => fake.restore());
+  await mount(view);
+  await vi.advanceTimersByTimeAsync(0);
+  return fake;
+}
+
+/** Hide or show the tab the way the browser does: `document.hidden`, then the event. */
+export function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+/** Drop what `setHidden` set, quietly (no event), so the document reads as it loaded. */
+export function restoreHidden(): void {
+  delete (document as { hidden?: boolean }).hidden;
+}
+
+/** A clipboard that records what is copied; `vi.unstubAllGlobals()` in afterEach puts it back. */
+export function stubClipboard() {
+  const writeText = vi.fn(async (_text: string) => {});
+  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  return writeText;
+}
+
+/**
+ * What `GET /api/settings` answers, for a view that reads it: a publication on the dev fake
+ * transport, with a template the server would take and nothing scheduled. `settings` and
+ * `deployment` merge field by field over those defaults; the rest replaces.
+ */
+export function settingsResponse(
+  over: {
+    settings?: Partial<SettingsView>;
+    deployment?: Partial<DeploymentView>;
+  } & Partial<Omit<SettingsResponse, "settings" | "deployment">> = {},
+): SettingsResponse {
+  const { settings, deployment, ...rest } = over;
+  return {
+    settings: {
+      testRecipients: [],
+      publication: { name: "Birds Weekly", tagline: "", address: "", logoUrl: "" },
+      emailTemplate: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
+      confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
+      confirmationEmailDefault: {
+        subject: "Confirm your subscription",
+        body: "Click below to confirm.",
+        buttonLabel: "Confirm",
+        reassurance: "If this wasn't you, ignore this email.",
+      },
+      notifications: { to: "" },
+      ...settings,
+    },
+    deployment: {
+      provider: "fake",
+      fromAddress: "Birds <hello@birds.example>",
+      sendingDomain: "birds.example",
+      appOrigin: "https://app.birds.example",
+      archiveOrigin: "https://app.birds.example",
+      archiveBasePath: "/archive",
+      mediaPublicBase: "https://app.birds.example/media",
+      awsRegion: "",
+      accessConfigured: false,
+      authMode: "dev",
+      notifyChannel: "fake",
+      notifyFrom: "Birds <hello@birds.example>",
+      minLeadMs: 5 * 60 * 1000,
+      simulation: null,
+      build: {
+        version: "",
+        sha: "dev",
+        tag: "",
+        buildTime: "",
+        repoUrl: "",
+        commitUrl: "",
+        tagUrl: "",
+      },
+      ...deployment,
+    },
+    notificationStatus: { lastSent: null, lastFailure: null },
+    inUse: { sends: [], retry_after: null, identityFields: ["name"] },
+    ...rest,
+  };
+}
+
+/**
+ * A stored send row (`SendSummary`), for a spec's scripted sends: scheduled an hour from now,
+ * to ten recipients, nothing handed off or counted yet. A spec sets in `over` whatever it
+ * asserts on, so the value reads where the assertion is.
+ */
+export function sendSummary(over: Partial<SendSummary> = {}): SendSummary {
+  return {
+    id: "x1",
+    post_id: "p1",
+    status: "scheduled",
+    fire_at: Date.now() + 3_600_000,
+    subject: "Owls",
+    recipient_count: 10,
+    locked_until: null,
+    scheduled_at: Date.now(),
+    started_at: null,
+    completed_at: null,
+    audience_resolved_at: null,
+    remade_at: null,
+    tested_at: null,
+    halt_reason: null,
+    halt_cause: null,
+    halt_error: null,
+    halted_at: null,
+    halt_retries: 0,
+    halt_retry_at: null,
+    c_pending: 0,
+    c_in_flight: 0,
+    c_accepted: 0,
+    c_delivered: 0,
+    c_bounced: 0,
+    c_complained: 0,
+    c_skipped: 0,
+    c_unsent: 0,
+    rev: 1,
+    ...over,
+  };
+}
 
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */
 export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
@@ -517,6 +667,33 @@ export function sendServer(rows: SendSummary[] = []) {
     },
     /** Where a read now stands, as a list route would hand it back (`GET /api/posts` carries one). */
     cursor,
+    /**
+     * Put `around` in front of one of these routes, by its path: it gets each request and the
+     * route's own reply, to answer through it, beside it, or instead of it. The route keeps
+     * its place, so a fake made from `routes` before the wrap answers through it too.
+     */
+    wrap(
+      path: string,
+      around: (req: FakeRequest, reply: (req: FakeRequest) => unknown) => unknown,
+    ) {
+      const route = routes.find((r) => r.path === path);
+      if (!route) {
+        throw new Error(`no route ${path}`);
+      }
+      const reply = route.reply;
+      route.reply = (req) => around(req, reply);
+    },
+    /** Refuse the next feed read as the server does after a reset or a restore: its cursor is ahead of the database. */
+    aheadOnce() {
+      let ahead = true;
+      this.wrap("/api/sends/feed", (req, reply) => {
+        if (!ahead) {
+          return reply(req);
+        }
+        ahead = false;
+        return jsonResponse({ error: "cursor_ahead", message: "reset" }, 409);
+      });
+    },
   };
 }
 

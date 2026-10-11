@@ -3,42 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audienceEmails, isSuppressed } from "../src/db/subscribers";
 import type { DeliveryEvent } from "../src/providers/types";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { deliveryEvent, SEEDED_SEND_ID, seedDelivery } from "./support/deliveries";
 import { seedConfirmed } from "./support/fixtures";
 import { logged } from "./support/log";
 
-// applyDeliveryEvents() is the ONLY thing that mutates state from provider
-// events, so the suppression rule (I1) is unit-tested here. The SES/Resend
-// adapters both echo the recipient address in every event, so an event keyed by
-// `provider_id` alone can't come through parseWebhook — it's constructed
-// directly to prove the service still recovers the address from the matched
-// delivery row and suppresses.
-
-/** Seed one accepted delivery (with its parent post + send, for the FK). */
-async function seedDelivery(email: string, providerId: string | null): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-we','p-we','sent',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-we','p-we','sent',?, '', '', '', ?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO deliveries (send_id, email, status, provider_id, updated_at) VALUES ('s-we', ?, 'accepted', ?, ?)",
-  )
-    .bind(email, providerId, now)
-    .run();
-}
-
-async function deliveryEvent(providerId: string): Promise<string | null> {
-  const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = ?")
-    .bind(providerId)
-    .first<{ event: string | null }>();
-  return row?.event ?? null;
-}
+// applyDeliveryEvents() is the ONLY thing that mutates state from provider events, so the
+// suppression rule (a deliverability rule apart from consent and unsubscribe, SPEC §7,
+// §10) is unit-tested here. The SES/Resend adapters both echo the recipient address in
+// every event, so an event keyed by `provider_id` alone can't come through parseWebhook;
+// it's constructed directly to prove the service still recovers the address from the
+// matched delivery row and suppresses.
 
 async function deliveryBounceKind(providerId: string): Promise<string | null> {
   const row = await env.DB.prepare("SELECT bounce_kind FROM deliveries WHERE provider_id = ?")
@@ -53,7 +27,7 @@ beforeEach(async () => {
     env.DB.prepare("DELETE FROM suppressions"),
     env.DB.prepare("DELETE FROM subscribers"),
     // A fresh send each test, so its counters start at zero.
-    env.DB.prepare("DELETE FROM sends WHERE id = 's-we'"),
+    env.DB.prepare("DELETE FROM sends WHERE id = ?").bind(SEEDED_SEND_ID),
   ]);
 });
 
@@ -126,8 +100,10 @@ describe("applyDeliveryEvents: suppression address recovery", () => {
 
 async function sendCounters(): Promise<Record<string, number>> {
   const row = await env.DB.prepare(
-    "SELECT c_accepted, c_delivered, c_bounced, c_complained FROM sends WHERE id = 's-we'",
-  ).first<Record<string, number>>();
+    "SELECT c_accepted, c_delivered, c_bounced, c_complained FROM sends WHERE id = ?",
+  )
+    .bind(SEEDED_SEND_ID)
+    .first<Record<string, number>>();
   return row!;
 }
 
@@ -192,7 +168,7 @@ describe("applyDeliveryEvents: matching the right delivery", () => {
       ).first<{ status: string; event: string | null }>();
       expect(row).toEqual({ status, event: null });
       expect(await sendCounters()).toEqual(before);
-      expect(applied.suppressed).toBe(1); // from the event's own address (I1)
+      expect(applied.suppressed).toBe(1); // from the event's own address (SPEC §10)
       expect(await isSuppressed(env.DB, "open@example.com")).toBe(true);
     }
   });
@@ -298,7 +274,7 @@ describe("applyDeliveryEvents: what it logs", () => {
       {
         event: "receipt.applied",
         level: "info",
-        sendId: "s-we",
+        sendId: SEEDED_SEND_ID,
         matched: true,
         delivered: 2,
         bounced: 2,
@@ -322,7 +298,7 @@ describe("applyDeliveryEvents: what it logs", () => {
       {
         event: "suppression.added",
         level: "info",
-        sendId: "s-we",
+        sendId: SEEDED_SEND_ID,
         matched: true,
         source: "webhook",
         count: 2,

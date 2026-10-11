@@ -1,5 +1,5 @@
 /**
- * Operator adjudication of a wedged send (SPEC §12, issue #71).
+ * Operator adjudication of a wedged send (SPEC §12).
  *
  * On a non-idempotent provider a mid-batch transport error leaves recipients
  * `dispatched` — genuinely ambiguous — and the loop refuses to blind-retry them
@@ -28,13 +28,7 @@ const config = () => getConfig(env);
 
 // A non-idempotent provider (SES) — the only kind that can wedge a send. Mirrors
 // the override in integration_delivery.spec.ts; no real network (fetch is mocked).
-const sesEnv = () =>
-  ({
-    ...env,
-    ...SES_DEPLOY,
-    AWS_ACCESS_KEY_ID: "AKIARESOLVETEST",
-    AWS_SECRET_ACCESS_KEY: "resolve-secret-key",
-  }) as unknown as AppEnv;
+const sesEnv = () => ({ ...env, ...SES_DEPLOY }) as unknown as AppEnv;
 
 /** A send moved to `sending` (as the lease does) but with no deliveries yet. */
 async function sendingSend(): Promise<sends.SendRow> {

@@ -14,22 +14,19 @@ import worker from "../src/index";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { RECEIPTS_CRON, resetSimulation } from "../src/providers/simulate";
 import { freeze } from "../src/send/schedule";
-import { adminAuth } from "./support/auth";
 import { resetDatabase } from "./support/fixtures";
+import { AUTH } from "./support/http";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // Locally, simulated receipts arrive on the dev ticker's own clock (SPEC §10), through the
 // scheduled handler with a cron value no deployed trigger can carry, and never because a
 // page read /progress. These pin that the receipts cron drains and never sweeps, that a
 // read settles nothing, and that the ticker sends the value the Worker listens for.
 
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 const HOUR = 60 * 60 * 1000;
 
 /** The simulation on, with no faults, so every due receipt is a delivery. */
 const SIM = { SIMULATE_SENDS: "1:none" };
-const withVars = (vars: Record<string, string>): AppEnv =>
-  ({ ...env, ...vars }) as unknown as AppEnv;
 
 beforeEach(async () => {
   await resetDatabase();
@@ -101,16 +98,7 @@ describe("the receipts cron", () => {
 describe("GET /api/sends/:id with the simulation on", () => {
   it("settles nothing: reading a send never changes it", async () => {
     await settlingSend("s-read", 3);
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request(`${base}/api/sends/s-read`, { headers: AUTH }) as Request<
-        unknown,
-        IncomingRequestCfProperties
-      >,
-      withVars(SIM),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    const res = await fetchWith(SIM, "/api/sends/s-read", { headers: AUTH });
     expect(res.status).toBe(200);
     const body = ((await res.json()) as { send: SendView }).send;
     expect([body.phase, body.delivery.confirmed]).toEqual(["settling", 0]);

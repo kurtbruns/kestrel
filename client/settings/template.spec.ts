@@ -6,10 +6,11 @@ import {
   $$,
   type FakeApi,
   type FakeRoute,
-  fakeApi,
   jsonResponse,
   mount,
+  openView,
   resetShell,
+  settingsResponse,
   typeInto,
 } from "../test/support";
 import {
@@ -22,41 +23,9 @@ import {
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
 const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  settings: {
-    testRecipients: ["me@b.c", "you@b.c"],
-    publication: { name: "Birds Weekly", tagline: "", address: "", logoUrl: "" },
-    emailTemplate: TEMPLATE,
-    confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
-    confirmationEmailDefault: { subject: "s", body: "b", buttonLabel: "c", reassurance: "" },
-    notifications: { to: "" },
-  },
-  deployment: {
-    provider: "fake",
-    fromAddress: "Birds <hello@birds.example>",
-    sendingDomain: "birds.example",
-    appOrigin: "https://app.birds.example",
-    archiveOrigin: "https://app.birds.example",
-    archiveBasePath: "/archive",
-    mediaPublicBase: "https://app.birds.example/media",
-    awsRegion: "",
-    accessConfigured: false,
-    authMode: "dev",
-    notifyChannel: "fake",
-    notifyFrom: "Birds <hello@birds.example>",
-    minLeadMs: 5 * 60 * 1000,
-    simulation: null,
-    build: {
-      version: "",
-      sha: "dev",
-      tag: "",
-      buildTime: "",
-      repoUrl: "",
-      commitUrl: "",
-      tagUrl: "",
-    },
-  },
-  notificationStatus: { lastSent: null, lastFailure: null },
-  inUse: { sends: [], retry_after: null, identityFields: ["name"] },
+  ...settingsResponse({
+    settings: { testRecipients: ["me@b.c", "you@b.c"], emailTemplate: TEMPLATE },
+  }),
   ...over,
 });
 
@@ -102,18 +71,14 @@ describe("template view", () => {
     localStorage.clear();
     vi.useFakeTimers();
     location.hash = "#/template";
-    appState.appConfig = null;
   });
   afterEach(() => {
     fake?.restore();
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = fakeApi(routes);
-    await mount(renderTemplate);
-    await vi.advanceTimersByTimeAsync(0);
+    fake = await openView(renderTemplate, routes);
   }
 
   it("renders the in-use chip, the saved template in the editor with its highlight and gutter, and the required pills", async () => {

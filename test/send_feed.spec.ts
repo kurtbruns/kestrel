@@ -20,28 +20,14 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH } from "./support/http";
+import { setRow, tpl } from "./support/sends";
 
 // GET /api/sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever
 // client changed it and whether a write or the clock did, each as its view, with when
 // to read again. These pin what it reports after a cursor, what it lists without one, and
 // the pace it sets.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-
-const tpl = (marker: string) =>
-  `<div>{{ .Post.Body }}<p>${marker} · {{ .Publication.Name }}</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
-
-/** Put a send's row in the given state, the way the send loop would have left it. It takes
- *  no `rev`, so what it sets is something the clock, not a write, has to surface. */
-async function setRow(id: string, fields: Record<string, number | string | null>): Promise<void> {
-  const cols = Object.keys(fields);
-  await env.DB.prepare(`UPDATE sends SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
-    .bind(...cols.map((c) => fields[c] ?? null), id)
-    .run();
-}
 
 async function feed(since?: string): Promise<SendFeedResponse> {
   const q = since === undefined ? "" : `?since=${encodeURIComponent(since)}`;
@@ -62,10 +48,11 @@ async function cursorReadAt(at: number): Promise<string> {
   return encodeSendCursor({ seq: seq ?? 0, at });
 }
 
-const post = (path: string, body?: unknown) =>
+/** A POST as the editor's signed-in publisher, or as `auth` when given. */
+const post = (path: string, body?: unknown, auth: Record<string, string> = AUTH) =>
   SELF.fetch(`${base}${path}`, {
     method: "POST",
-    headers: body === undefined ? AUTH : JSON_AUTH,
+    headers: body === undefined ? auth : { ...auth, "content-type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
 
@@ -121,10 +108,16 @@ describe("GET /api/sends/feed after a cursor", () => {
 
     expect((await post(`/api/sends/${dropped.id}/cancel`)).status).toBe(200);
     const to = new Date(far + 3_600_000).toISOString();
-    expect((await post(`/api/sends/${moved.id}/reschedule`, { fire_at: to })).status).toBe(200);
-    const scheduled = await post(`/api/posts/${fresh.id}/schedule`, {
-      fire_at: new Date(far).toISOString(),
-    });
+    // The publisher in the editor cancels; Claude, a service principal, moves and schedules.
+    const claude = await adminAuth({});
+    expect((await post(`/api/sends/${moved.id}/reschedule`, { fire_at: to }, claude)).status).toBe(
+      200,
+    );
+    const scheduled = await post(
+      `/api/posts/${fresh.id}/schedule`,
+      { fire_at: new Date(far).toISOString() },
+      claude,
+    );
     expect(scheduled.status).toBe(201);
 
     const body = await feed(since);
@@ -402,7 +395,7 @@ describe("GET /api/sends/feed refuses a cursor ahead of the database", () => {
     await frozenSend(now + 3_600_000, { subject: "Far" });
     const seq = decodeSendCursor(await listCursor())?.seq ?? 0;
     // A cursor from before a local reset or a restore: far past anything this database holds.
-    const res = await feedStatus(`?since=${seq + 5000}.${now}`);
+    const res = await feedStatus(`?since=${encodeSendCursor({ seq: seq + 5000, at: now })}`);
     expect(res.status).toBe(409);
     const body = (await res.json()) as { error: string; field: string; cursor: string };
     expect(body).toMatchObject({ error: "cursor_ahead", field: "since" });
@@ -411,8 +404,13 @@ describe("GET /api/sends/feed refuses a cursor ahead of the database", () => {
 
   it("answers a read time after the server's clock with cursor_ahead, beyond a minute's drift", async () => {
     const seq = decodeSendCursor(await listCursor())?.seq ?? 0;
-    expect((await feedStatus(`?since=${seq}.${Date.now() + 10 * 60_000}`)).status).toBe(409);
-    expect((await feedStatus(`?since=${seq}.${Date.now() + 5_000}`)).status).toBe(200);
+    expect(
+      (await feedStatus(`?since=${encodeSendCursor({ seq, at: Date.now() + 10 * 60_000 })}`))
+        .status,
+    ).toBe(409);
+    expect(
+      (await feedStatus(`?since=${encodeSendCursor({ seq, at: Date.now() + 5_000 })}`)).status,
+    ).toBe(200);
   });
 });
 

@@ -1,10 +1,8 @@
-import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { type AppEnv, type Config, ConfigError, getConfig } from "../src/env";
-import worker from "../src/index";
 import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { ResendProvider } from "../src/providers/resend";
@@ -19,20 +17,16 @@ import type { EmailProvider, RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
+import { AUTH, JSON_AUTH, readJson } from "./support/http";
 import { expectErrorLogs, logged } from "./support/log";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
 // per provider with the adapter's own traits, receipts through the REAL ingest
 // (applyDeliveryEvents), and the plain fake untouched when it is off.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
 
 const HOUR = 60 * 60 * 1000;
 const rendered: RenderedEmail = { subject: "Subj", html: "<p>hi</p>", text: "hi" };
@@ -84,27 +78,15 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers();
+  vi.restoreAllMocks();
 });
 
-/** This suite's env with some vars overridden, as a dev server's own `.dev.vars` would set them. */
-const withVars = (vars: Record<string, string>): AppEnv =>
-  ({ ...env, ...vars }) as unknown as AppEnv;
-
-/** A request to the Worker under `vars`, waiting for its background work. */
-async function fetchWith(
-  vars: Record<string, string>,
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await worker.fetch(
-    new Request(`${base}${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
-    withVars(vars),
-    ctx,
-  );
-  await waitOnExecutionContext(ctx);
-  return res;
-}
+/** `n` recipients of a batch, `${tag}0@birds.example` up, each with its own link. */
+const recipients = (n: number, tag = "r") =>
+  Array.from({ length: n }, (_, i) => ({
+    email: `${tag}${i}@birds.example`,
+    unsubscribeUrl: `https://kestrel.test/unsubscribe?token=${tag}${i}`,
+  }));
 
 /** `n` confirmed subscribers, `reader0@birds.example` up. */
 async function seedConfirmed(n: number): Promise<string[]> {
@@ -228,28 +210,16 @@ describe("a profile per provider, with the real adapter's traits", () => {
     // included. An adapter answer the SES profile can't read fails setting up that profile
     // (a dev server simulating SES), where built at load it would fail a deployed Worker's
     // startup.
-    const classify = vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
-    try {
-      const config = getConfig(env);
-      expect(
-        () => new SimProvider({ profile: "resend", faults: "realistic" }, config),
-      ).not.toThrow();
-      expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
-        "expected a halting error response to exist",
-      );
-    } finally {
-      classify.mockRestore();
-    }
+    vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
+    const config = getConfig(env);
+    expect(() => new SimProvider({ profile: "resend", faults: "realistic" }, config)).not.toThrow();
+    expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
+      "expected a halting error response to exist",
+    );
   });
 });
 
 describe("list sends only", () => {
-  const recipients = (n: number, tag = "r") =>
-    Array.from({ length: n }, (_, i) => ({
-      email: `${tag}${i}@birds.example`,
-      unsubscribeUrl: `https://kestrel.test/unsubscribe?token=${tag}${i}`,
-    }));
-
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
     const sim = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
@@ -320,10 +290,6 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
   });
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
-  });
 
   it("halts on the daily quota, resumes at its retry, wedges on a lost request, and Resolve completes it", async () => {
     expectErrorLogs("send.ambiguous", "send.wedged");
@@ -339,10 +305,11 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     vi.spyOn(crypto, "randomUUID").mockImplementation(
       () => `5e5e5e5e-0000-4000-8000-${(++ids).toString(16).padStart(12, "0")}` as const,
     );
+    // Read back, not silenced: the log's story is asserted at the end.
     const printed = [
-      vi.spyOn(console, "log").mockImplementation(() => {}),
-      vi.spyOn(console, "warn").mockImplementation(() => {}),
-      vi.spyOn(console, "error").mockImplementation(() => {}),
+      vi.spyOn(console, "log"),
+      vi.spyOn(console, "warn"),
+      vi.spyOn(console, "error"),
     ];
     const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
@@ -483,7 +450,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     simulation: { profile: "generic", faults: "realistic" },
   });
 
-  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §10)", async () => {
+  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (SPEC §10)", async () => {
     await seedAccepted("s-drain", 300, 2 * HOUR); // long-past accepts → all lags elapsed (< the drain cap)
 
     const applied = await drainSimulatedWebhooks(env, simConfig());
@@ -600,12 +567,8 @@ describe("the generic profile", () => {
     expect(provider.maxBatch).toBe(8);
     expect(provider.idempotentRetry).toBe(true);
 
-    const recipients = Array.from({ length: 40 }, (_, i) => ({
-      email: `r${i}@example.com`,
-      unsubscribeUrl: `https://x/u?token=t${i}`,
-    }));
     const started = Date.now();
-    const answer = await provider.sendBatch(rendered, recipients, {
+    const answer = await provider.sendBatch(rendered, recipients(40), {
       purpose: "list",
       idempotencyKeyPrefix: "sim-batch",
     });

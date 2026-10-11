@@ -8,14 +8,9 @@ import { type AppEnv, getConfig } from "../src/env";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
-import { adminAuth } from "./support/auth";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { expectErrorLogs } from "./support/log";
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
 
 let seq = 0;
 const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;

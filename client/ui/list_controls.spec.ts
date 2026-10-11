@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { html, setHtml } from "./html";
 import {
   type ListState,
@@ -50,8 +50,14 @@ describe("listToolbar", () => {
 });
 
 describe("wireToolbar", () => {
-  it("seeds the controls from state and reloads from page one on a change", () => {
+  beforeEach(() => {
     vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("seeds the controls from state and reloads from page one on a change", () => {
     const root = document.createElement("div");
     setHtml(
       root,
@@ -73,11 +79,9 @@ describe("wireToolbar", () => {
     sup.checked = true;
     sup.onchange?.(new Event("change"));
     expect(state.suppressed).toBe("only");
-    vi.useRealTimers();
   });
 
   it("coalesces a burst of typing into one reload, and wires status and failures too", () => {
-    vi.useFakeTimers();
     const root = document.createElement("div");
     setHtml(root, listToolbar({ statuses: [{ value: "draft", label: "Draft" }], failures: true }));
     const state = base({ offset: 75 });
@@ -101,7 +105,6 @@ describe("wireToolbar", () => {
     failures.onchange?.(new Event("change"));
     expect(state.failures).toBe("only");
     expect(reload).toHaveBeenCalledTimes(3);
-    vi.useRealTimers();
   });
 });
 

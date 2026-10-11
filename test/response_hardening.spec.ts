@@ -5,13 +5,10 @@ import * as posts from "../src/db/posts";
 import { getConfig } from "../src/env";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
+import { AUTH, base } from "./support/http";
 
 // The response headers that keep post content from running script on the app's own
 // origin, keep the pages from being framed, and keep admin responses out of caches.
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 
 /** The page carries the strict policy: no script, no framing (SPEC §5). */
 function expectHardenedPage(res: Response): void {

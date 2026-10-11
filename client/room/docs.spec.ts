@@ -11,6 +11,7 @@ import {
   mount,
   resetShell,
   settle,
+  stubClipboard,
   unmount,
 } from "../test/support";
 import { headingAnchor, renderDocs } from "./docs";
@@ -233,8 +234,7 @@ describe("docs room", () => {
 
   it("copies a code block", async () => {
     fake = fakeApi([]);
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     await mount((r, s) => renderDocs("overview", r, s));
     $("pre .code-copy").click();
     await settle();

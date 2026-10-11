@@ -8,12 +8,15 @@ import {
   type FakeApi,
   type FakeRequest,
   type FakeRoute,
-  fakeApi,
+  feedReads,
   jsonResponse,
-  mount,
   mounted,
+  openView,
   resetShell,
+  restoreHidden,
   sendServer,
+  sendSummary,
+  setHidden,
   typeInto,
   unmount,
 } from "../test/support";
@@ -78,38 +81,9 @@ function draftServer(initial = draft()) {
   return server;
 }
 
-/** A scheduled send's row, as the send routes store it. */
-const sendRow = (over: Partial<SendSummary> = {}): SendSummary => ({
-  id: "s1",
-  post_id: "p1",
-  status: "scheduled",
-  fire_at: Date.now() + 3_600_000,
-  subject: "Owls",
-  recipient_count: 40,
-  locked_until: null,
-  scheduled_at: Date.now(),
-  started_at: null,
-  completed_at: null,
-  audience_resolved_at: null,
-  remade_at: null,
-  tested_at: null,
-  halt_reason: null,
-  halt_cause: null,
-  halt_error: null,
-  halted_at: null,
-  halt_retries: 0,
-  halt_retry_at: null,
-  c_pending: 0,
-  c_in_flight: 0,
-  c_accepted: 0,
-  c_delivered: 0,
-  c_bounced: 0,
-  c_complained: 0,
-  c_skipped: 0,
-  c_unsent: 0,
-  rev: 1,
-  ...over,
-});
+/** The post's scheduled send, as the send routes store it. */
+const sendRow = (over: Partial<SendSummary> = {}): SendSummary =>
+  sendSummary({ id: "s1", post_id: "p1", subject: "Owls", recipient_count: 40, ...over });
 
 /**
  * A scheduled post and its send on one fake server, so the post's read and the send
@@ -176,15 +150,14 @@ describe("editor view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    restoreHidden();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
   // The editor mounted the way the router mounts it; `handle()` is what the router sees.
   async function open(routes: FakeRoute[]) {
-    fake = fakeApi(routes);
-    await mount((r, s) => renderEditor("p1", r, s));
-    await vi.advanceTimersByTimeAsync(0);
+    fake = await openView((r, s) => renderEditor("p1", r, s), routes);
   }
   const handle = () => unwrapHandle(mounted());
   const puts = () => fake.calls.filter((c) => c.method === "PUT");
@@ -419,11 +392,6 @@ describe("editor view", () => {
 
   const reads = () =>
     fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/api/posts/p1");
-  const feedCalls = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
-  const setHidden = (hidden: boolean) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  };
 
   it("hands a scheduled post off to the live watch within a feed read of its send starting, with a toast, in place of its history entry", async () => {
     const linked = scheduledPost(Date.now() + 5_000);
@@ -445,38 +413,30 @@ describe("editor view", () => {
     // read is handed.
     const cursor = linked.sends.cursor();
     await open(linked.routes);
-    expect(feedCalls()).toHaveLength(1); // the layer's first read, from the send's cursor
-    expect(feedCalls()[0]?.url.searchParams.get("since")).toBe(cursor);
-    try {
-      setHidden(true);
-      await vi.advanceTimersByTimeAsync(120_000); // a hidden tab reads nothing
-      expect(feedCalls()).toHaveLength(1);
-      linked.start();
-      setHidden(false);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(feedCalls()).toHaveLength(2);
-      expect(location.hash).toBe("#/sent/s1");
-    } finally {
-      delete (document as { hidden?: boolean }).hidden;
-    }
+    expect(feedReads(fake)).toHaveLength(1); // the layer's first read, from the send's cursor
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(cursor);
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(120_000); // a hidden tab reads nothing
+    expect(feedReads(fake)).toHaveLength(1);
+    linked.start();
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(location.hash).toBe("#/sent/s1");
     expect(reads()).toHaveLength(1); // no poll of the post of its own
   });
 
   it("reads a draft's freshness at once when a hidden tab is shown again", async () => {
     const server = draftServer();
     await open([{ path: "/api/posts/p1", reply: server.get }]);
-    try {
-      setHidden(true);
-      await vi.advanceTimersByTimeAsync(10000);
-      expect(reads()).toHaveLength(1);
-      server.elsewhere("service");
-      setHidden(false);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(reads()).toHaveLength(2);
-      expect($("#freshnessBanner").hidden).toBe(false);
-    } finally {
-      delete (document as { hidden?: boolean }).hidden;
-    }
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(reads()).toHaveLength(1);
+    server.elsewhere("service");
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads()).toHaveLength(2);
+    expect($("#freshnessBanner").hidden).toBe(false);
   });
 
   it("stops reading on a shown tab once the editor is torn down", async () => {
@@ -592,9 +552,9 @@ describe("editor view", () => {
     ]);
     expect(body().readOnly).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/Sends in 1h/);
-    expect(feedCalls()).toHaveLength(0);
+    expect(feedReads(fake)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(5_000); // the send read is tried again
-    expect(feedCalls()).toHaveLength(1); // and the editor follows from it
+    expect(feedReads(fake)).toHaveLength(1); // and the editor follows from it
     linked.cancel();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(body().readOnly).toBe(false);
@@ -1100,37 +1060,33 @@ describe("editor view", () => {
     appState.appConfig = {
       deployment: { minLeadMs: 60_000 },
     } as unknown as SettingsResponse;
-    try {
-      const server = draftServer();
-      await open([
-        { path: "/api/posts/p1", reply: server.get },
-        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
-        {
-          method: "POST",
-          path: "/api/posts/p1/send",
-          // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
-          reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
-        },
-      ]);
-      $("#scheduleBtn").click();
-      expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
-      // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
-      expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
-      $("#toSendNow").click();
-      await vi.advanceTimersByTimeAsync(0);
-      expect($(".modal .hint").textContent).toMatch(
-        /cancelable window of at least 1 minute, on the minute/,
-      );
-      $("#snGo").click();
-      await vi.advanceTimersByTimeAsync(0);
-      // A minute and a half out, not the lead's one minute: the time as rounded.
-      expect($("#toasts").textContent).toContain(
-        `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
-      );
-    } finally {
-      appState.appConfig = null;
-    }
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/send",
+        // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
+        reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
+      },
+    ]);
+    $("#scheduleBtn").click();
+    expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
+    // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
+    expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".modal .hint").textContent).toMatch(
+      /cancelable window of at least 1 minute, on the minute/,
+    );
+    $("#snGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // A minute and a half out, not the lead's one minute: the time as rounded.
+    expect($("#toasts").textContent).toContain(
+      `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
+    );
   });
 
   it("uploads a picked image and inserts it at the caret", async () => {
@@ -1207,7 +1163,7 @@ describe("editor view", () => {
       },
     );
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(true);
+    expect(feedReads(fake).length).toBeGreaterThan(0);
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);

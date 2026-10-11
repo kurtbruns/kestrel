@@ -15,26 +15,15 @@ import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
 import { onTheMinute } from "../src/send/schedule";
-import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { frozenSend, resetDatabase } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
+import { setRow } from "./support/sends";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it
 // stands, actions safe to retry and carrying no precondition, the review window closing at
 // the fire time, and query values refused rather than dropped.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-async function setRow(id: string, fields: Record<string, number | string | null>): Promise<void> {
-  const cols = Object.keys(fields);
-  await env.DB.prepare(`UPDATE sends SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
-    .bind(...cols.map((c) => fields[c] ?? null), id)
-    .run();
-}
 
 /** A send's view, as `GET /api/sends/:id` answers it. */
 async function readView(id: string): Promise<SendView> {

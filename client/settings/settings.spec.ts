@@ -6,10 +6,11 @@ import {
   $$,
   type FakeApi,
   type FakeRoute,
-  fakeApi,
   jsonResponse,
-  mount,
+  openView,
   resetShell,
+  settingsResponse,
+  stubClipboard,
   typeInto,
   unmount,
 } from "../test/support";
@@ -22,45 +23,30 @@ const DEFAULT_COPY = {
   reassurance: "If this wasn't you, ignore this email.",
 };
 
-const settings = (over: Partial<SettingsView> = {}): SettingsView => ({
-  testRecipients: ["me@b.c"],
-  publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
-  emailTemplate: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
-  confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
-  confirmationEmailDefault: DEFAULT_COPY,
-  notifications: { to: "" },
-  ...over,
-});
-
-const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  settings: settings(),
-  deployment: {
-    provider: "ses",
-    fromAddress: "Birds <hello@send.birds.example>",
-    sendingDomain: "send.birds.example",
-    appOrigin: "https://app.birds.example",
-    archiveOrigin: "https://app.birds.example",
-    archiveBasePath: "/archive",
-    mediaPublicBase: "https://app.birds.example/media",
-    awsRegion: "us-east-1",
-    accessConfigured: false,
-    authMode: "dev",
-    notifyChannel: "provider",
-    notifyFrom: "Birds <hello@send.birds.example>",
-    minLeadMs: 5 * 60 * 1000,
-    simulation: null,
-    build: {
-      version: "",
-      sha: "dev",
-      tag: "",
-      buildTime: "",
-      repoUrl: "",
-      commitUrl: "",
-      tagUrl: "",
+const settings = (over: Partial<SettingsView> = {}): SettingsView =>
+  settingsResponse({
+    settings: {
+      testRecipients: ["me@b.c"],
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
+      confirmationEmailDefault: DEFAULT_COPY,
+      ...over,
     },
-  },
-  notificationStatus: { lastSent: null, lastFailure: null },
-  inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
+  }).settings;
+
+// Deployed on SES, with notifications through it; the template prints the name and logo.
+const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
+  ...settingsResponse({
+    settings: settings(),
+    deployment: {
+      provider: "ses",
+      fromAddress: "Birds <hello@send.birds.example>",
+      sendingDomain: "send.birds.example",
+      awsRegion: "us-east-1",
+      notifyChannel: "provider",
+      notifyFrom: "Birds <hello@send.birds.example>",
+    },
+    inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
+  }),
   ...over,
 });
 
@@ -72,7 +58,6 @@ describe("settings view", () => {
     resetShell();
     vi.useFakeTimers();
     location.hash = "#/settings";
-    appState.appConfig = null;
   });
   afterEach(() => {
     fake?.restore();
@@ -81,9 +66,7 @@ describe("settings view", () => {
   });
 
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = fakeApi(routes);
-    await mount(renderSettings);
-    await vi.advanceTimersByTimeAsync(0);
+    fake = await openView(renderSettings, routes);
   }
 
   it("renders the identity, the sender and instance reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
@@ -449,8 +432,7 @@ describe("settings view", () => {
   });
 
   it("switches the embed snippet and copies it", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     await open();
     $("[data-embed='styled']").click();
     expect($("#embedCode").textContent).toContain('style="max-width:420px');

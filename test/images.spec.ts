@@ -1,19 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-// A real 1x1 PNG so the dimension probe has something to read.
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
+import { AUTH, base, PNG_1x1, readJson } from "./support/http";
 
 async function newDraft(title: string): Promise<string> {
   const created = await readJson(

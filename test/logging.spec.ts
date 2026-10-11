@@ -13,6 +13,7 @@ import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { toNextTick } from "./support/clock";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { NoKeyProvider } from "./support/keyless";
 import { expectErrorLogs, type LoggedLine, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -22,12 +23,6 @@ import { ResendLikeProvider } from "./support/resend_like";
 
 const AUDIENCE = ["ada@example.com", "grace@example.com", "linus@example.org"];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
-/** A provider with no idempotency key, as SES is: a request lost in flight is ambiguous. */
-class NoKeyProvider extends ResendLikeProvider {
-  override readonly idempotentRetry: boolean = false;
-  override readonly idempotencyWindowMs: number | undefined = undefined;
-}
 
 let spies: MockInstance[] = [];
 

@@ -7,8 +7,8 @@ import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
 import { adminAuth } from "./support/auth";
+import { base } from "./support/http";
 
-const base = "https://kestrel.test";
 const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
@@ -68,7 +68,7 @@ describe("dev seed (Field Notes dataset)", () => {
       unsubscribed: UNSUBSCRIBED,
     });
     expect(summary.suppressions).toBe(SUPPRESSED);
-    expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (I1)
+    expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (SPEC §7)
     expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
 
@@ -116,14 +116,14 @@ describe("dev seed (Field Notes dataset)", () => {
 
     const nowMailable = new Set(await audienceEmails(env.DB));
 
-    // Someone who unsubscribed after issue #1 was still mailed by it: the oldest send's
+    // Someone who unsubscribed after the first post was still mailed by it: the oldest send's
     // record retains addresses that are no longer in the current audience (I2 is about
     // future sends, not rewriting the past).
     const firstEmails = (await deliveriesFor(sent[0]!.id)).map((r) => r.email);
     expect(firstEmails.some((e) => !nowMailable.has(e))).toBe(true);
 
-    // The bounce and complaint on issue #2 shadow those two confirmed addresses out of
-    // the current audience — yet they remain in #2's delivery record, carrying the event
+    // The bounce and complaint on the second post shadow those two confirmed addresses out of
+    // the current audience — yet they remain in its delivery record, carrying the event
     // that produced their suppression.
     const secondRows = await deliveriesFor(sent[1]!.id);
     const shadowed = secondRows.filter((r) => r.event === "bounced" || r.event === "complained");

@@ -13,10 +13,11 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base } from "./support/http";
+import { NoKeyProvider } from "./support/keyless";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -26,14 +27,7 @@ import { ResendLikeProvider } from "./support/resend_like";
 // and a run on a provider that dedupes under its key never leaves a batch it could re-send
 // looking wedged.
 
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 const AUDIENCE = ["ada@example.com", "grace@example.com", "linus@example.org"];
-
-class NoKeyProvider extends ResendLikeProvider {
-  override readonly idempotentRetry: boolean = false;
-  override readonly idempotencyWindowMs: number | undefined = undefined;
-}
 
 async function progress(id: string): Promise<SendView> {
   const res = await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH });
@@ -223,7 +217,7 @@ describe("a run on a provider that dedupes under its key", () => {
 
 describe("the pace around a wedge and a cut-off run", () => {
   const NOW = 1_800_000_000_000;
-  const base = {
+  const inFlight = {
     status: "sending" as const,
     fire_at: NOW - 600_000,
     started_at: NOW - 60_000,
@@ -232,18 +226,21 @@ describe("the pace around a wedge and a cut-off run", () => {
   };
 
   it("never hurries for a wedged send, even one still carrying a past halt", () => {
-    expect(nextChangeAt({ ...base, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW)).toBe(
-      NOW - 60_000 + STUCK_THRESHOLD_MS,
-    );
+    expect(
+      nextChangeAt({ ...inFlight, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW),
+    ).toBe(NOW - 60_000 + STUCK_THRESHOLD_MS);
   });
 
   it("waits for the retry of a halted send whose run was cut off, rather than reading it as moving", () => {
     const retry = NOW + 10 * 60_000;
     expect(
-      nextChangeAt({ ...base, c_pending: 3, locked_until: NOW - 1_000, halt_retry_at: retry }, NOW),
+      nextChangeAt(
+        { ...inFlight, c_pending: 3, locked_until: NOW - 1_000, halt_retry_at: retry },
+        NOW,
+      ),
     ).toBe(retry - 30_000);
     // With no halt, a cut-off run's expired lease is taken up at the next tick.
-    expect(nextChangeAt({ ...base, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
+    expect(nextChangeAt({ ...inFlight, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
       NOW,
     );
   });

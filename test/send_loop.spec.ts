@@ -31,6 +31,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -74,7 +75,7 @@ describe("the freeze reads the template it froze with", () => {
     const tpl = `<div>{{ .Post.Body }} <i>{{ .Publication.Tagline }}</i> <a href="{{ .Email.UnsubscribeURL }}">u</a></div>`;
     await updateSettings(env.DB, { emailTemplate: tpl });
     let bumped = false;
-    const spy = vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
+    vi.spyOn(subscribersDb, "audienceCount").mockImplementation(async (db) => {
       // Runs after the render and before the insert, once: the "concurrent" save.
       if (!bumped) {
         bumped = true;
@@ -82,15 +83,11 @@ describe("the freeze reads the template it froze with", () => {
       }
       return 0;
     });
-    try {
-      const send = await freeze(env, config(), post, Date.now() + 600_000);
-      expect(send.status).toBe("scheduled");
-      expect(send.rendered_html).toContain("after");
-      expect(send.rendered_html).not.toContain("before");
-      expect((await posts.getPost(env.DB, post.id))!.status).toBe("scheduled");
-    } finally {
-      spy.mockRestore();
-    }
+    const send = await freeze(env, config(), post, Date.now() + 600_000);
+    expect(send.status).toBe("scheduled");
+    expect(send.rendered_html).toContain("after");
+    expect(send.rendered_html).not.toContain("before");
+    expect((await posts.getPost(env.DB, post.id))!.status).toBe("scheduled");
   });
 });
 
@@ -148,14 +145,10 @@ describe("send loop + sweep", () => {
 
     // The failed request halted the run, so the send waits out its first backoff step.
     vi.useFakeTimers({ toFake: ["Date"] });
-    try {
-      await sweep(env);
-      expect(fakeOutbox().length).toBe(0);
-      await toNextTick(env.DB);
-      await sweep(env); // resume
-    } finally {
-      vi.useRealTimers();
-    }
+    await sweep(env);
+    expect(fakeOutbox().length).toBe(0);
+    await toNextTick(env.DB);
+    await sweep(env); // resume
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 2 });
     expect(countTo("x@example.com")).toBe(1);
@@ -176,12 +169,8 @@ describe("send loop + sweep", () => {
 
     await seedConfirmed("late@example.com"); // confirms while the send is in flight
     vi.useFakeTimers({ toFake: ["Date"] });
-    try {
-      await toNextTick(env.DB);
-      await sweep(env); // resume
-    } finally {
-      vi.useRealTimers();
-    }
+    await toNextTick(env.DB);
+    await sweep(env); // resume
     const done = (await sends.getSend(env.DB, send.id))!;
     expect(done.status).toBe("sent");
     expect(done.recipient_count).toBe(2);
@@ -200,26 +189,18 @@ describe("send loop + sweep", () => {
     await seedConfirmed("y@example.com");
     const send = await frozenSend(Date.now() - 1000);
     const spy = vi.spyOn(sends, "resolveAudience");
-    try {
-      failFakeSendBatch(1);
-      await sweep(env);
-      expect(spy).toHaveBeenCalledTimes(1);
-      const resolvedAt = (await sends.getSend(env.DB, send.id))!.audience_resolved_at;
+    failFakeSendBatch(1);
+    await sweep(env);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const resolvedAt = (await sends.getSend(env.DB, send.id))!.audience_resolved_at;
 
-      vi.useFakeTimers({ toFake: ["Date"] });
-      try {
-        await toNextTick(env.DB);
-        await sweep(env);
-      } finally {
-        vi.useRealTimers();
-      }
-      expect(spy).toHaveBeenCalledTimes(1);
-      const done = (await sends.getSend(env.DB, send.id))!;
-      expect(done.status).toBe("sent");
-      expect(done.audience_resolved_at).toBe(resolvedAt);
-    } finally {
-      spy.mockRestore();
-    }
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await toNextTick(env.DB);
+    await sweep(env);
+    expect(spy).toHaveBeenCalledTimes(1);
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.audience_resolved_at).toBe(resolvedAt);
   });
 
   it("resolveAudience inserts and marks in one guarded write, and never again", async () => {
@@ -263,7 +244,7 @@ describe("send loop + sweep", () => {
 
   it("flags a missed fire time loudly but still delivers (§12)", async () => {
     expectErrorLogs("send.missed");
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi.spyOn(console, "error");
     await seedConfirmed("late@example.com");
     const send = await frozenSend(Date.now() - (MISSED_THRESHOLD_MS + 60_000));
 
@@ -274,7 +255,6 @@ describe("send loop + sweep", () => {
     );
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(countTo("late@example.com")).toBe(1);
-    spy.mockRestore();
   });
 
   it("overlapping runs: exactly one acquires the lease (no double send)", async () => {

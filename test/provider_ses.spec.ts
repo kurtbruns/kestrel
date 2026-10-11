@@ -6,12 +6,14 @@ import { getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { SesProvider } from "../src/providers/ses";
 import { base64Bytes } from "../src/providers/ses_mime";
-import { _clearKeyCache, canonicalString, isSnsHost, type SnsEnvelope } from "../src/providers/sns";
+import { _clearKeyCache, isSnsHost, type SnsEnvelope } from "../src/providers/sns";
 import { PROVIDER_REQUEST_TIMEOUT_MS, type RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { deliveryEvent, seedDelivery } from "./support/deliveries";
 import { SNS_TOPIC_ARN } from "./support/deploy";
 import { neverAnswers } from "./support/provider_timeout";
+import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
 // --- fixtures ---------------------------------------------------------------
 
@@ -57,80 +59,6 @@ function decodeMimePart(mime: string, mediaType: string): string {
   const b64 = mime.slice(bodyStart, bodyEnd).replace(/\r\n/g, "");
   const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
   return new TextDecoder().decode(bytes);
-}
-
-// --- SNS signing helpers (local RSA keypair; no real AWS) --------------------
-
-function derLen(n: number): number[] {
-  if (n < 0x80) {
-    return [n];
-  }
-  const bytes: number[] = [];
-  let x = n;
-  while (x > 0) {
-    bytes.unshift(x & 0xff);
-    x >>>= 8;
-  }
-  return [0x80 | bytes.length, ...bytes];
-}
-
-function derSeq(...items: Uint8Array[]): Uint8Array {
-  const total = items.reduce((n, a) => n + a.length, 0);
-  const content = new Uint8Array(total);
-  let o = 0;
-  for (const a of items) {
-    content.set(a, o);
-    o += a.length;
-  }
-  const header = new Uint8Array([0x30, ...derLen(content.length)]);
-  const out = new Uint8Array(header.length + content.length);
-  out.set(header, 0);
-  out.set(content, header.length);
-  return out;
-}
-
-function wrap64(s: string): string {
-  return (s.match(/.{1,64}/g) ?? []).join("\n");
-}
-
-interface Signer {
-  privateKey: CryptoKey;
-  certPem: string;
-  certUrl: string;
-}
-
-/**
- * Generate an RSA keypair and wrap its public key (SPKI) in a minimal DER
- * certificate — enough structure for the adapter's SPKI extractor to find it —
- * served as PEM. A unique cert URL per signer sidesteps the adapter's key cache.
- */
-async function makeSigner(hash: "SHA-1" | "SHA-256" = "SHA-256"): Promise<Signer> {
-  const pair = (await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
-      hash,
-    },
-    true,
-    ["sign", "verify"],
-  )) as CryptoKeyPair;
-  const spki = new Uint8Array(
-    (await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer,
-  );
-  const certDer = derSeq(derSeq(spki)); // Certificate ::= SEQ { TBS ::= SEQ { SPKI } }
-  const certPem = `-----BEGIN CERTIFICATE-----\n${wrap64(base64Bytes(certDer))}\n-----END CERTIFICATE-----\n`;
-  const certUrl = `https://sns.us-east-1.amazonaws.com/SimpleNotificationService-${crypto.randomUUID()}.pem`;
-  return { privateKey: pair.privateKey, certPem, certUrl };
-}
-
-async function signEnvelope(env0: SnsEnvelope, signer: Signer): Promise<SnsEnvelope> {
-  const sig = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    signer.privateKey,
-    new TextEncoder().encode(canonicalString(env0)),
-  );
-  return { ...env0, Signature: base64Bytes(new Uint8Array(sig)) };
 }
 
 function webhookRequest(envelope: SnsEnvelope): Request {
@@ -433,26 +361,6 @@ describe("getProvider factory", () => {
 
 // ============================================================================
 describe("SesProvider.parseWebhook (SNS)", () => {
-  async function seedDelivery(email: string, providerId: string): Promise<void> {
-    const now = Date.now();
-    // A real parent post + send: the deliveries FK is enforced in the test D1.
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-ses','p-ses','sent',?,?)",
-    )
-      .bind(now, now)
-      .run();
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-ses','p-ses','sent',?, '', '', '', ?)",
-    )
-      .bind(now, now)
-      .run();
-    await env.DB.prepare(
-      "INSERT INTO deliveries (send_id, email, status, provider_id, updated_at) VALUES ('s-ses', ?, 'accepted', ?, ?)",
-    )
-      .bind(email, providerId, now)
-      .run();
-  }
-
   function bounceMessage(email: string, providerId: string, bounceType: string): string {
     return JSON.stringify({
       notificationType: "Bounce",
@@ -529,10 +437,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(applied.suppressed).toBe(1);
     expect(await subscribers.isSuppressed(env.DB, "hardbounce@example.com")).toBe(true);
 
-    const row = await env.DB.prepare(
-      "SELECT event FROM deliveries WHERE provider_id = 'msg-hard-1'",
-    ).first<{ event: string }>();
-    expect(row?.event).toBe("bounced");
+    expect(await deliveryEvent("msg-hard-1")).toBe("bounced");
   });
 
   it("verifies a complaint notification and auto-suppresses the address", async () => {
@@ -588,10 +493,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     ]);
     const applied = await applyDeliveryEvents(env.DB, result.events);
     expect(applied).toEqual({ applied: 1, suppressed: 0 });
-    const row = await env.DB.prepare(
-      "SELECT event FROM deliveries WHERE provider_id = 'msg-dlv-1'",
-    ).first<{ event: string }>();
-    expect(row?.event).toBe("delivered");
+    expect(await deliveryEvent("msg-dlv-1")).toBe("delivered");
     expect(await subscribers.isSuppressed(env.DB, "arrived@example.com")).toBe(false);
   });
 
@@ -802,10 +704,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     // Applied as the route applies them: had the bounce slipped through, this suppresses.
     await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "victim@example.com")).toBe(false);
-    const row = await env.DB.prepare(
-      "SELECT event FROM deliveries WHERE provider_id = 'msg-forged-1'",
-    ).first<{ event: string | null }>();
-    expect(row).toEqual({ event: null });
+    expect(await deliveryEvent("msg-forged-1")).toBeNull();
   });
 
   it("rejects a signing cert served from an untrusted host", async () => {

@@ -2,19 +2,8 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
+import { sweep } from "../src/send/sweep";
+import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(
@@ -329,6 +318,13 @@ describe("template test-send (POST /api/settings/template/test)", () => {
 });
 
 describe("web version (GET /api/posts/:id/web)", () => {
+  // A post page in the dev-shaped test env adds only the dev-only pill and its styles;
+  // strip both and what is left must be the web version, byte for byte.
+  const withoutPill = (html: string) =>
+    html
+      .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+      .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+
   it("requires auth", async () => {
     const id = await draftWithImage("Web Auth");
     expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
@@ -382,17 +378,12 @@ describe("web version (GET /api/posts/:id/web)", () => {
       await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
         .bind(Date.now() - 1000, scheduled.send.id)
         .run();
-      const { sweep } = await import("../src/send/sweep");
       await sweep(env);
       const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
         .post.slug;
       const web = await (await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })).text();
       const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
       // The post page adds only the dev-only pill (the test env is dev-shaped).
-      const withoutPill = (html: string) =>
-        html
-          .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
-          .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
       expect(archive).toContain('class="r-dev"');
       expect(withoutPill(archive)).toBe(web);
     } finally {
@@ -427,10 +418,6 @@ describe("web version (GET /api/posts/:id/web)", () => {
     const web = await res.text();
     expect(web).toContain(">Frozen</h1>");
     const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
-    const withoutPill = (html: string) =>
-      html
-        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
-        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
     expect(withoutPill(archive)).toBe(web);
   });
 

@@ -27,6 +27,7 @@ import {
   seedConfirmed,
   ticks,
 } from "./support/fixtures";
+import { base } from "./support/http";
 import { expectErrorLogs, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -34,7 +35,6 @@ import { ResendLikeProvider } from "./support/resend_like";
 // event, however many ticks the condition lasts, through a channel that is the fake here
 // (the test env is dev-shaped), and never at a cost to any send (I1 to I6).
 
-const BASE = "https://kestrel.test";
 const PUBLISHER = "publisher@example.com";
 
 async function rows(sendId?: string) {
@@ -288,7 +288,7 @@ describe("isolation", () => {
     const surface = async () =>
       (
         (await (
-          await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() })
+          await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
         ).json()) as {
           notificationStatus: Awaited<ReturnType<typeof notifications.notificationStatus>>;
         }
@@ -460,7 +460,7 @@ describe("after the review", () => {
 
     clearFakeNotifications();
     const test = async () =>
-      SELF.fetch(`${BASE}/api/settings/notifications/test`, {
+      SELF.fetch(`${base}/api/settings/notifications/test`, {
         method: "POST",
         headers: await adminAuth(),
       });
@@ -571,17 +571,17 @@ describe("the channel is deploy config", () => {
 
 describe("the settings surface", () => {
   const put = async (patch: unknown) =>
-    SELF.fetch(`${BASE}/api/settings`, {
+    SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: { ...(await adminAuth()), "content-type": "application/json" },
       body: JSON.stringify(patch),
     });
   const get = async () =>
     (await (
-      await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() })
+      await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
     ).json()) as any;
   const test = async () =>
-    SELF.fetch(`${BASE}/api/settings/notifications/test`, {
+    SELF.fetch(`${base}/api/settings/notifications/test`, {
       method: "POST",
       headers: await adminAuth(),
     });

@@ -1,7 +1,8 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
+import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import { createRouter } from "../src/app";
-import { adminAuth } from "./support/auth";
+import { AUTH, base } from "./support/http";
 
 // The admin line is a path prefix (SPEC §11): every admin route sits under /api/, and no
 // public or webhook route does, so an Access application that covers `dashboard` and `api`
@@ -9,13 +10,13 @@ import { adminAuth } from "./support/auth";
 // exception (the public token bootstrap), and a deployed instance never registers them.
 
 const API = "/api/";
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 
 function routes(devMode: boolean) {
-  return createRouter({ archiveBasePath: "/archive", devMode, minLeadMs: 60_000 }).routes.map(
-    (r) => r.def,
-  );
+  return createRouter({
+    archiveBasePath: "/archive",
+    devMode,
+    minLeadMs: DEFAULT_MIN_LEAD_MS,
+  }).routes.map((r) => r.def);
 }
 
 describe("the admin surface is everything under /api/ (SPEC §11)", () => {

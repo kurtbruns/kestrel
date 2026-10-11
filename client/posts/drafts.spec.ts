@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendSummary } from "../../shared/sends";
 import {
   $,
   $$,
@@ -7,9 +6,11 @@ import {
   fakeApi,
   feedReads,
   jsonResponse,
+  listReads,
   mount,
   resetShell,
   sendServer,
+  sendSummary,
   settle,
   typeInto,
 } from "../test/support";
@@ -77,7 +78,7 @@ describe("drafts view", () => {
       { path: "/api/posts", reply: () => ({ posts, page, cursor: "0.0" }) },
     ]);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     typeInto($<HTMLInputElement>(".lt-search"), "wax");
     await vi.advanceTimersByTimeAsync(300);
     expect(postReads()).toHaveLength(2);
@@ -95,7 +96,7 @@ describe("drafts view", () => {
       },
     ]);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#list").textContent).toMatch(/create your first draft/);
     typeInto($<HTMLInputElement>(".lt-search"), "zzz");
     await vi.advanceTimersByTimeAsync(300);
@@ -143,7 +144,8 @@ describe("drafts view", () => {
 
   // A post whose send the spec starts: the posts list and the send routes agree.
   function scheduledPost() {
-    const row = scheduledRow();
+    // The listed post p2's send, an hour out.
+    const row = sendSummary({ id: "s2", post_id: "p2", subject: "Waxwings" });
     const sends = sendServer([row]);
     let sending = false;
     let failing = false;
@@ -201,7 +203,7 @@ describe("drafts view", () => {
     const post = scheduledPost();
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("tr[data-id='p2']").textContent).toMatch(/scheduled/i);
     post.start();
     await vi.advanceTimersByTimeAsync(60_000); // within one idle read of the layer
@@ -216,8 +218,8 @@ describe("drafts view", () => {
     const post = scheduledPost();
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
-    expect(fake.calls.some((c) => c.url.pathname === "/api/sends")).toBe(false); // no second read
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listReads(fake)).toEqual([]); // no second read
     expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(post.cursors[0]);
     post.start();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -235,7 +237,7 @@ describe("drafts view", () => {
     const post = scheduledPost();
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const moved = Date.now() + 2 * 3_600_000;
     post.move(moved);
     await vi.advanceTimersByTimeAsync(60_000);
@@ -249,14 +251,14 @@ describe("drafts view", () => {
     post.fail();
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#list .error").textContent).toMatch(/down/);
-    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(false);
+    expect(feedReads(fake)).toEqual([]);
     post.recover();
     $("[data-retry]").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($$("tr[data-id]")).toHaveLength(2);
-    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(true);
+    expect(feedReads(fake)).toHaveLength(1);
   });
 
   it("keeps the list when a re-read after a send changed fails", async () => {
@@ -264,7 +266,7 @@ describe("drafts view", () => {
     const post = scheduledPost();
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     post.fail();
     post.start();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -273,37 +275,3 @@ describe("drafts view", () => {
     expect(document.querySelector("#list .error")).toBeNull();
   });
 });
-
-/** The scheduled send of the listed post p2. */
-function scheduledRow(): SendSummary {
-  return {
-    id: "s2",
-    post_id: "p2",
-    status: "scheduled",
-    fire_at: Date.now() + 3_600_000,
-    subject: "Waxwings",
-    recipient_count: 40,
-    locked_until: null,
-    scheduled_at: Date.now(),
-    started_at: null,
-    completed_at: null,
-    audience_resolved_at: null,
-    remade_at: null,
-    tested_at: null,
-    halt_reason: null,
-    halt_cause: null,
-    halt_error: null,
-    halted_at: null,
-    halt_retries: 0,
-    halt_retry_at: null,
-    c_pending: 0,
-    c_in_flight: 0,
-    c_accepted: 0,
-    c_delivered: 0,
-    c_bounced: 0,
-    c_complained: 0,
-    c_skipped: 0,
-    c_unsent: 0,
-    rev: 1,
-  };
-}

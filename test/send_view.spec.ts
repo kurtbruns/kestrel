@@ -14,18 +14,13 @@ import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { tickEstimate } from "../src/send/view";
-import { adminAuth } from "./support/auth";
 import { frozenSend, resetDatabase } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { viewOf } from "./support/view";
 
 // One `SendView` on every route (SPEC §8): the list, the send, the feed, and every action's
 // answer carry the same shape, with `rev` to tell two apart and a cursor to follow from; the
 // frozen bodies at their own route; `GET /api/sends/:id` tagged so an unchanged send is a 304.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
 
 const post = (path: string, body?: unknown) =>
   SELF.fetch(`${base}${path}`, {

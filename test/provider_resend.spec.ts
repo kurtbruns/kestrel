@@ -11,6 +11,7 @@ import {
 } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { deliveryEvent, seedDelivery } from "./support/deliveries";
 import { resetDatabase } from "./support/fixtures";
 import { neverAnswers } from "./support/provider_timeout";
 
@@ -401,37 +402,6 @@ async function signedRequest(
   });
 }
 
-async function seedDelivery(providerId: string, email: string): Promise<void> {
-  const now = Date.now();
-  // FKs are enforced in the test runtime, so a delivery needs a send, and a send
-  // needs a post. INSERT OR IGNORE keeps the shared parent rows idempotent.
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-wh','p-wh','sent',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-wh','p-wh','sending',?, '', '', '', ?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO deliveries (send_id, email, status, provider_id, attempts, updated_at) VALUES ('s-wh', ?, 'accepted', ?, 0, ?)",
-  )
-    .bind(email, providerId, now)
-    .run();
-}
-
-// The shared webhook-events applier records the provider outcome in the separate
-// `event` column and leaves the send-loop `status` untouched, so
-// a reconciled delivery reads its outcome from `event`, not `status`.
-async function deliveryEvent(providerId: string): Promise<string | undefined> {
-  const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = ?")
-    .bind(providerId)
-    .first<{ event: string | null }>();
-  return row?.event ?? undefined;
-}
-
 beforeEach(async () => {
   // Delete children before parents (FKs are enforced here).
   await resetDatabase();
@@ -439,7 +409,7 @@ beforeEach(async () => {
 
 describe("ResendProvider.parseWebhook", () => {
   it("verifies a valid signature and reconciles a hard bounce into a suppression", async () => {
-    await seedDelivery("re_bounce", "bad@example.com");
+    await seedDelivery("bad@example.com", "re_bounce");
     const req = await signedRequest({
       type: "email.bounced",
       data: {
@@ -469,7 +439,7 @@ describe("ResendProvider.parseWebhook", () => {
   });
 
   it("reconciles a complaint into a suppression", async () => {
-    await seedDelivery("re_spam", "angry@example.com");
+    await seedDelivery("angry@example.com", "re_spam");
     const req = await signedRequest({
       type: "email.complained",
       data: { email_id: "re_spam", to: ["angry@example.com"] },
@@ -487,7 +457,7 @@ describe("ResendProvider.parseWebhook", () => {
   });
 
   it("marks a delivery delivered without suppressing", async () => {
-    await seedDelivery("re_ok", "good@example.com");
+    await seedDelivery("good@example.com", "re_ok");
     const req = await signedRequest({
       type: "email.delivered",
       data: { email_id: "re_ok", to: ["good@example.com"] },
@@ -584,7 +554,7 @@ describe("ResendProvider.parseWebhook", () => {
   });
 
   it("treats a Transient bounce as soft (no suppression)", async () => {
-    await seedDelivery("re_soft", "temp@example.com");
+    await seedDelivery("temp@example.com", "re_soft");
     const req = await signedRequest({
       type: "email.bounced",
       data: {

@@ -5,28 +5,16 @@ import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 // A template or identity change re-makes every scheduled send at once, after the
 // client acknowledges them (SPEC §6, §9). One test per rule.
 
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
-
-/** A valid template whose footer carries `marker`, renders the name and the logo, and
- *  (optionally) the address, so a test can tell which branding a frozen copy is on. */
+/** A valid template whose footer carries `marker`, renders the name and (optionally) the
+ *  address, but not the logo, so a test can tell which branding a frozen copy is on. */
 const tpl = (marker: string, withAddress = false) =>
-  `<div>{{ .Post.Body }}<p class="foot">${marker} · {{ .Publication.Name }} · <img src="{{ .Email.UnsubscribeURL }}">${
+  `<div>{{ .Post.Body }}<p class="foot">${marker} · {{ .Publication.Name }}${
     withAddress ? " · {{ .Publication.Address }}" : ""
   }</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 

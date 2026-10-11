@@ -2,10 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
+import { AUTH, base, readJson } from "./support/http";
 
 async function createPost(body: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/posts`, {
