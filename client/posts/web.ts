@@ -1,6 +1,6 @@
 // A post's web version: the post as its public post page will show it (SPEC §5), for the
 // publisher to proof before it is permanent. It opens in a tab of its own from the editor's
-// Web version button, so it carries no app chrome: one thin bar above the page says what it
+// Web version link, so it carries no app chrome: one thin bar above the page says what it
 // is, where the post stands, and where its public page will be, so the copy is never
 // mistaken for the live page, and the frame below holds the page exactly as it will be.
 // Once the post's send starts, the public page itself is the web version.
@@ -11,7 +11,6 @@ import { api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
-import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 
@@ -51,10 +50,10 @@ export function framedCopy(doc: string): string {
   );
 }
 
-/** Where a post stands, for the bar: a draft, or scheduled with its fire time, and its
- *  public address (null while unknown, so the bar names none). */
+/** Where a post stands, for the bar: a draft or scheduled, and its public address (null
+ *  while unknown, so the bar names none). */
 export interface WebBarState {
-  fireAt: number | null;
+  scheduled: boolean;
   url: string | null;
 }
 
@@ -64,16 +63,16 @@ function shortUrl(url: string): string {
 }
 
 /** The bar's words: what the page is, where the post stands, and where its public page will
- *  be (as text, since it doesn't answer yet). Null state: the post couldn't be read, so the
- *  bar says only what the page is. */
+ *  be once sent (as text, since it doesn't answer yet), with no date. Null state: the post
+ *  couldn't be read, so the bar says only what the page is. */
 export function webBar(state: WebBarState | null): Html {
   const label = html`<strong>Web version</strong>`;
   if (state === null) {
     return label;
   }
-  const lead = state.fireAt === null ? html`Not published yet.` : html`Sends ${fmt(state.fireAt)}.`;
+  const lead = state.scheduled ? html`Scheduled.` : html`Draft.`;
   const at = state.url
-    ? html` It will be at <span class="web-url">${shortUrl(state.url)}</span>.`
+    ? html` Once sent, it will be at <span class="web-url">${shortUrl(state.url)}</span>.`
     : null;
   return html`${label} <span>${lead}${at}</span>`;
 }
@@ -117,7 +116,7 @@ export async function renderWebVersion(
       leaveFor(url);
       return;
     }
-    const state = data ? { fireAt: data.scheduled?.fire_at ?? null, url } : null;
+    const state = data ? { scheduled: data.scheduled != null, url } : null;
     setHtml(
       root,
       html`<div class="web-page">

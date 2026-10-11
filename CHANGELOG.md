@@ -30,6 +30,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - A link in a notification email now opens the send it is about even when you have to sign in first. Before, the sign-in dropped the page from the link and you landed on the dashboard home (SPEC §8).
+- Leaving a draft while a save was still going (just after leaving the subject or slug field, say) no longer warns "Changed elsewhere — your edits weren't saved" about your own save, and an edit made while that save was going is no longer lost. The editor now waits for the save to land and saves what is left on top of it.
 - A link in a post's Preview tab, or in the sample email on the Template page and in Settings, now opens in a new tab. Before, it loaded in the preview's frame, which went blank when the page refused to be framed, as most do, and the preview was lost until you switched tabs.
 - On a draft's Preview tab, "Paste, drop, or click to add images" now dims and ignores clicks, like the formatting toolbar. Before, a click there added the image to the hidden Edit text and left the preview unchanged. Dropping an image still works and switches to Edit.
 - A send wedged on recipients whose delivery is unknown now keeps its count and its Resolve control until you resolve it. A delivery receipt that named the address but not the message could settle those recipients in its place, so the count you saw shrank, and once the last one was reached the Resolve control vanished and the send sat stuck with nothing in the editor or the API to finish it (SPEC §12).

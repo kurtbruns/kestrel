@@ -10,7 +10,6 @@ import {
   settle,
   unmount,
 } from "../test/support";
-import { fmt } from "../ui/format";
 import { html, setHtml } from "../ui/html";
 import { framedCopy, renderWebVersion, webBar, webPostId, webVersionHash } from "./web";
 
@@ -79,15 +78,15 @@ describe("web version", () => {
   it("says in its bar where the post stands and where its public page will be, as text", () => {
     const url = "https://newsletter.example.com/archive/herons";
     const short = "newsletter.example.com/archive/herons";
-    const draft = bar({ fireAt: null, url });
-    expect(draft.textContent).toBe(`Web version Not published yet. It will be at ${short}.`);
+    const draft = bar({ scheduled: false, url });
+    expect(draft.textContent).toBe(`Web version Draft. Once sent, it will be at ${short}.`);
     // The address doesn't answer yet, so it is text, and the bar has no link at all.
     expect(draft.querySelectorAll("a")).toHaveLength(0);
-    expect(bar({ fireAt: FIRE_AT, url }).textContent).toBe(
-      `Web version Sends ${fmt(FIRE_AT)}. It will be at ${short}.`,
+    expect(bar({ scheduled: true, url }).textContent).toBe(
+      `Web version Scheduled. Once sent, it will be at ${short}.`,
     );
     // Unknown address or post: the bar names no address rather than a wrong one.
-    expect(bar({ fireAt: null, url: null }).textContent).toBe("Web version Not published yet.");
+    expect(bar({ scheduled: false, url: null }).textContent).toBe("Web version Draft.");
     expect(bar(null).textContent).toBe("Web version");
   });
 
@@ -107,7 +106,7 @@ describe("web version", () => {
     expect(sandbox).not.toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-forms");
     expect($(".web-bar").textContent).toBe(
-      `Web version Sends ${fmt(FIRE_AT)}. It will be at newsletter.example.com/archive/herons.`,
+      "Web version Scheduled. Once sent, it will be at newsletter.example.com/archive/herons.",
     );
     // The bar and the page, nothing else: no back link, edit link, or app chrome.
     expect($(".web-page").children).toHaveLength(2);
