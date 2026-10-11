@@ -3,6 +3,7 @@ import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
+import { readSendsNow } from "../send_state";
 import { appState } from "../state";
 import { feedReads, sendServer } from "../test/send_server";
 import {
@@ -642,6 +643,34 @@ describe("editor view", () => {
     expect(reads()).toHaveLength(1); // nor to poll
     expect(handle().dirty()).toBe(true); // closing the tab still asks
     expect(handle().beforeLeave()).toBe("confirm"); // and so does leaving
+    $("#saveBtn").click(); // Save draft saves nothing
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    typeInto(body(), "# Owls\n\nHoot."); // back to the last save, which went with the post
+    expect(handle().dirty()).toBe(true);
+    expect(handle().beforeLeave()).toBe("confirm");
+  });
+
+  it("goes to Drafts, without asking, when Schedule finds a clean draft deleted elsewhere", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { method: "POST", path: "/api/posts/p1/schedule", reply: postGone },
+    ]);
+    $("#scheduleBtn").click();
+    $<HTMLInputElement>("#schWhen").value = "2026-09-25T15:00";
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(location.hash).toBe("#/drafts");
+    expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(handle().beforeLeave()).toBe("leave"); // nothing unsaved to ask about
+  });
+
+  it("goes to Drafts when the post it opens isn't there, rather than offering a Retry that can't work", async () => {
+    await open([{ path: "/api/posts/p1", reply: postGone }]);
+    expect(location.hash).toBe("#/drafts");
+    expect($("#toasts").textContent).toBe("There's no post here. It may have been deleted.");
+    expect(document.querySelector("[data-retry]")).toBeNull();
   });
 
   it("keeps a draft open with its unsaved edits when the freshness poll finds it deleted elsewhere", async () => {
@@ -1017,19 +1046,36 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("says the post was deleted elsewhere when the preview finds it gone", async () => {
-    const server = draftServer();
+  it("goes to Drafts, saying so once, when the preview finds its post deleted elsewhere", async () => {
+    let deleted = false;
     await open([
-      { path: "/api/posts/p1", reply: server.get },
-      {
-        path: "/api/posts/p1/preview",
-        reply: () => jsonResponse({ error: "not_found", message: "post" }, 404),
-      },
+      { path: "/api/posts/p1", reply: () => (deleted ? postGone() : draft()) },
+      { path: "/api/posts/p1/preview", reply: postGone },
     ]);
+    deleted = true;
     $(".ctab[data-tab='preview']").click();
     await vi.advanceTimersByTimeAsync(0);
+    expect(location.hash).toBe("#/drafts");
     expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
+    // The poll finds it gone too, at 10s, after that toast has faded: nothing more is said.
+    await vi.advanceTimersByTimeAsync(10000);
+    expect($("#toasts").textContent).toBe("");
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("keeps unsaved edits in view when the save before a preview finds the post deleted elsewhere", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { method: "PUT", path: "/api/posts/p1", reply: postGone },
+    ]);
+    typeInto(body(), "mine");
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    keptOpen();
+    expect(body().hidden).toBe(false); // back on Edit, where the banner points
+    expect(body().value).toBe("mine");
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/preview")).toBe(false);
+    expect($("#toasts").textContent).toBe("");
   });
 
   describe("the preview's link to the post's own public page", () => {
@@ -1624,6 +1670,9 @@ describe("editor view", () => {
     $("#cancelSchedule").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(location.hash).toBe("#/drafts");
+    expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
+    readSendsNow(); // the follow finds the send gone too, and says nothing more
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
   });
 

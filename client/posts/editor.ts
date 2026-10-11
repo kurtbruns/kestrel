@@ -94,12 +94,14 @@ export async function renderEditor(
   // read or write that answers 404: say so once and go to Drafts. A draft with unsaved
   // edits stays open instead (postGone, below), so they are not thrown away.
   let gone = false;
-  const removed = () => {
+  // Gone, with the editor kept open on text that now exists nowhere else (postGone).
+  let stranded = false;
+  const removed = (msg = "This post was deleted elsewhere.") => {
     if (gone) {
       return;
     }
     gone = true;
-    toast("This post was deleted elsewhere.");
+    toast(msg);
     if (!signal.aborted) {
       handOff("#/drafts");
     }
@@ -125,6 +127,12 @@ export async function renderEditor(
       return;
     }
   } catch (e) {
+    // A Retry can only fail again for a post that isn't there (gone since the last read,
+    // or a link to one that never was), so it goes to Drafts instead.
+    if (isNotFound(e)) {
+      removed("There's no post here. It may have been deleted.");
+      return;
+    }
     renderError(root, message(e), remount);
     return;
   }
@@ -406,8 +414,8 @@ export async function renderEditor(
   async function showPreview() {
     showTab("preview");
     try {
-      if (!locked) {
-        await saveDraft(true);
+      if (!locked && (await saveDraft(true)) === "refused" && gone) {
+        return; // the save found the post gone, and said so
       }
       previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
       previewFrame.onload = () => {
@@ -425,13 +433,10 @@ export async function renderEditor(
         } catch {}
       };
     } catch (e) {
-      if (signal.aborted) {
+      if (signal.aborted || foundGone(e)) {
         return;
       }
-      // The API names only what it didn't find ("post"), which says nothing on its own.
-      toast(
-        e instanceof ApiError && e.status === 404 ? "This post was deleted elsewhere." : message(e),
-      );
+      toast(message(e));
     }
   }
   for (const t of tabs) {
@@ -745,10 +750,16 @@ export async function renderEditor(
     trackSaves(saveChain);
   };
   const handle: ViewHandle = {
-    dirty: () => editorDirty,
+    // Once the editor is kept open on a gone post, "unsaved" no longer measures what would
+    // be lost: the last save went with the post, so whatever is on screen exists nowhere
+    // else, and leaving always asks.
+    dirty: () => editorDirty || stranded,
     beforeLeave() {
+      if (stranded) {
+        return "confirm";
+      }
       if (gone) {
-        return editorDirty ? "confirm" : "leave"; // nothing is left to save the edits to
+        return "leave"; // on its way to Drafts, with nothing unsaved
       }
       if (editorDirty && (saveFailed || conflicted)) {
         return "confirm"; // a silent flush would fail (or clobber): the reader decides
@@ -854,13 +865,29 @@ export async function renderEditor(
       return;
     }
     gone = true;
+    stranded = true;
     mine.cancel();
     paintSaveBtn();
+    showTab("edit"); // the banner points at the text, so the text is what shows
     setHtml(
       freshnessEl,
       html`<span><span aria-hidden="true">⚠️</span> This post was deleted elsewhere, so your unsaved edits can't be saved. They're still here: copy them out before you leave.</span>`,
     );
     freshnessEl.hidden = false;
+  }
+
+  // A read or write that found the post gone (a 404) answers it here, whichever control
+  // made it: the API names only what it didn't find ("post"), which says nothing alone.
+  function foundGone(e: unknown): boolean {
+    if (!isNotFound(e)) {
+      return false;
+    }
+    if (locked) {
+      removed();
+    } else {
+      postGone();
+    }
+    return true;
   }
 
   if (!locked) {
@@ -1081,7 +1108,9 @@ export async function renderEditor(
       markEdited();
       toast("Image added");
     } catch (e) {
-      toast(message(e));
+      if (!foundGone(e)) {
+        toast(message(e));
+      }
     }
   }
   const composerBody = $("#composerBody");
@@ -1226,6 +1255,11 @@ export async function renderEditor(
             ),
           );
         } catch (e) {
+          if (isNotFound(e)) {
+            m.close();
+            foundGone(e);
+            return;
+          }
           toast(message(e));
         }
       });
@@ -1284,6 +1318,11 @@ export async function renderEditor(
             toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
             remount();
           } catch (e) {
+            if (isNotFound(e)) {
+              m.close();
+              foundGone(e);
+              return;
+            }
             toast(message(e));
           }
         });
@@ -1305,6 +1344,11 @@ export async function renderEditor(
             toast(withNoProviderNote(`Sends at ${fmt(send.fire_at)}, cancelable until then.`));
             remount();
           } catch (e) {
+            if (isNotFound(e)) {
+              m.close();
+              foundGone(e);
+              return;
+            }
             toast(message(e));
           }
         });
