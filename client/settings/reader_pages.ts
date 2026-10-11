@@ -6,7 +6,6 @@
 // `GET /api/reader-pages/:journey/:state`, exactly as a reader gets it, framed so nothing
 // on it acts.
 
-import { pagePolicy } from "../../shared/page_policy";
 import {
   READER_JOURNEYS,
   type ReaderJourney,
@@ -19,6 +18,7 @@ import type { DeploymentView } from "../../shared/settings";
 import { apiText } from "../api";
 import { onAbort } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
+import { framedCopy } from "../ui/email_frame";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 
@@ -42,7 +42,7 @@ type PreviewWidth = "desktop" | "phone";
 
 /** One row of the outline: a step's number, a peer's dot, or an off-path page's branch. */
 function outlineRow(j: ReaderJourney, s: ReaderPageState, mark: Html | string): Html {
-  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"><span class="set-rp-mark">${mark}</span>${s.label}</button></li>`;
+  return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
 }
 
 /** The outline: each journey a heading over its main-path pages, then the ones off it.
@@ -54,11 +54,11 @@ function outline(): Html {
     const states: readonly ReaderPageState[] = j.states;
     const steps = j.flow === "steps";
     return html`<div class="set-rp-journey" data-journey="${j.id}">
-      <div class="set-rp-jhead">${icon(JOURNEY_ICONS[j.id])}${j.label}</div>
-      <ul class="set-rp-list${steps ? " steps" : ""}">
+      <h3 class="set-rp-jhead" id="rpJourney-${j.id}">${icon(JOURNEY_ICONS[j.id])}${j.label}</h3>
+      <ul class="set-rp-list${steps ? " steps" : ""}" aria-labelledby="rpJourney-${j.id}">
         ${states.filter((s) => !s.offPath).map((s, i) => outlineRow(j, s, steps ? String(i + 1) : "·"))}
       </ul>
-      <ul class="set-rp-list">
+      <ul class="set-rp-list" aria-label="${j.label}, off the main path">
         ${states.filter((s) => s.offPath).map((s) => outlineRow(j, s, icon("branch")))}
       </ul>
     </div>`;
@@ -101,21 +101,13 @@ export function readerPagesSection(head: Html): Html {
             </span>
           </div>
           <div class="set-rp-at"><span class="mono" id="rpAt"></span><span>Sample · links and forms do nothing</span></div>
+          <p class="set-rp-error" id="rpError" role="alert" hidden></p>
           <div class="set-rp-stage" id="rpStage">
             <iframe class="set-rp-frame" id="rpFrame" sandbox="allow-same-origin" title="Reader page preview" scrolling="no"></iframe>
           </div>
-          <p class="set-rp-error" id="rpError" role="alert" hidden></p>
         </div>
       </div>
     </section>`;
-}
-
-/** A page's HTML as the frame holds it: under the policy a page carrying no form of its
- *  own would serve with (shared/page_policy.ts), so beside the sandbox no form submits. */
-function framed(doc: string): string {
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`;
-  const head = /<head(\s[^>]*)?>/i;
-  return head.test(doc) ? doc.replace(head, (tag) => tag + meta) : meta + doc;
 }
 
 /** Where a reader meets a page on this deployment, as the address line shows it: without
@@ -126,7 +118,7 @@ export function readerPageAddress(at: ReaderPageAddress, d: DeploymentView): str
 }
 
 /** The section's controls, once its markup is in the document. `refresh` re-reads the
- *  page shown, for after a save changes the identity it wears. */
+ *  page shown, for after any save, since one may have changed the identity it wears. */
 export function mountReaderPages(
   root: HTMLElement,
   deployment: DeploymentView,
@@ -150,7 +142,7 @@ export function mountReaderPages(
   const paintChoice = () => {
     for (const b of $$<HTMLButtonElement>(".set-rp-item", nav)) {
       const on = b.dataset.journey === journey.id && b.dataset.state === state.id;
-      b.setAttribute("aria-current", on ? "page" : "false");
+      b.setAttribute("aria-current", on ? "true" : "false");
     }
     for (const g of $$(".set-rp-journey", nav)) {
       g.classList.toggle("current", g.dataset.journey === journey.id);
@@ -177,11 +169,18 @@ export function mountReaderPages(
         return;
       }
       errorEl.hidden = true;
-      frame.srcdoc = framed(doc);
+      stage.hidden = false;
+      // Under the policy a page that submits no form carries, so beside the sandbox no
+      // form on it submits (ui/email_frame.ts).
+      frame.srcdoc = framedCopy(doc);
     } catch (e) {
       if (mine !== seq || signal.aborted) {
         return;
       }
+      // The page named above is not the one the frame last held, so the frame empties
+      // rather than show it under the wrong name, and the error takes its place.
+      frame.srcdoc = "";
+      stage.hidden = true;
       errorEl.textContent = `Couldn’t load this page: ${e instanceof Error ? e.message : String(e)}`;
       errorEl.hidden = false;
     }

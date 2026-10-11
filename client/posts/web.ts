@@ -7,12 +7,11 @@
 // scrolls and the framed page is the public page's bytes.
 // Once the post's send starts, the public page itself is the web version.
 
-import { pagePolicy } from "../../shared/page_policy";
 import type { PostResponse } from "../../shared/posts";
 import { ApiError, api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
-import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
+import { EMAIL_FRAME_SANDBOX, framedCopy, openLinksInNewTab } from "../ui/email_frame";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 import { savesSettled } from "./pending_save";
@@ -34,23 +33,6 @@ export function webPostId(kind: string | undefined, id: string | undefined): str
     // A hand-typed or mangled address: no page, never a throw.
     return null;
   }
-}
-
-/** `markup` placed first in the document's <head> (never a <header>), or first in the
- *  document when it has none. */
-function intoHead(doc: string, markup: string): string {
-  const head = /<head(\s[^>]*)?>/i;
-  return head.test(doc) ? doc.replace(head, (tag) => tag + markup) : markup + doc;
-}
-
-/** The framed copy of a post's page, under the policy the page carries when served
- *  (shared/page_policy.ts). The frame's sandbox already keeps script and forms out; the
- *  policy is the second lock. Only the framed copy changes, never the page served. */
-export function framedCopy(doc: string): string {
-  return intoHead(
-    doc,
-    `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`,
-  );
 }
 
 /** Where a post stands, for the bar: a draft or scheduled, and its public address (null

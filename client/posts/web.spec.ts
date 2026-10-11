@@ -10,9 +10,10 @@ import {
   settle,
   unmount,
 } from "../test/support";
+import { framedCopy } from "../ui/email_frame";
 import { html, setHtml } from "../ui/html";
 import { trackSaves } from "./pending_save";
-import { framedCopy, renderWebVersion, webBar, webPostId, webVersionHash } from "./web";
+import { renderWebVersion, webBar, webPostId, webVersionHash } from "./web";
 
 const page =
   '<!doctype html><html><head><title>Herons</title></head><body><div class="k-mast">The Marsh Letter</div><p>hello</p></body></html>';

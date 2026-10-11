@@ -54,7 +54,7 @@ describe("reader pages section (SPEC §5)", () => {
     return b;
   };
   const current = () =>
-    $$<HTMLButtonElement>('.set-rp-item[aria-current="page"]').map(
+    $$<HTMLButtonElement>('.set-rp-item[aria-current="true"]').map(
       (b) => `${b.dataset.journey}/${b.dataset.state}`,
     );
 
@@ -206,6 +206,38 @@ describe("reader pages section (SPEC §5)", () => {
     ]);
     expect($("#rpError").hidden).toBe(false);
     expect($("#rpError").textContent).toMatch(/Couldn’t load this page/);
+  });
+
+  it("empties the frame when a page can't be read, rather than show the last one under the new name", async () => {
+    await open([
+      {
+        path: "/api/reader-pages/confirm/expired",
+        reply: () => jsonResponse({ error: "boom", message: "down" }, 500),
+      },
+    ]);
+    expect(frame().srcdoc).toContain("/api/reader-pages/subscribe/form");
+    row("confirm", "Expired").click();
+    await settle();
+    expect($("#rpState").textContent).toBe("Expired");
+    expect(frame().srcdoc).toBe("");
+    expect($("#rpStage").hidden).toBe(true);
+    expect($("#rpError").hidden).toBe(false);
+    // The next page that reads comes back in the frame, and the error goes.
+    row("confirm", "Ready").click();
+    await settle();
+    expect(frame().srcdoc).toContain("/api/reader-pages/confirm/ready");
+    expect($("#rpStage").hidden).toBe(false);
+    expect($("#rpError").hidden).toBe(true);
+  });
+
+  it("names each journey's lists by its heading, and keeps the marks out of the rows' names", async () => {
+    await open();
+    const heading = $("#rpJourney-confirm");
+    expect(heading.tagName).toBe("H3");
+    const lists = $$(".set-rp-journey[data-journey='confirm'] ul");
+    expect(lists[0]?.getAttribute("aria-labelledby")).toBe("rpJourney-confirm");
+    expect(lists[1]?.getAttribute("aria-label")).toBe("Confirm, off the main path");
+    expect($$(".set-rp-mark").every((m) => m.getAttribute("aria-hidden") === "true")).toBe(true);
   });
 });
 

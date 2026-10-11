@@ -73,7 +73,9 @@ describe("reader page previews (SPEC §5)", () => {
         expect(body, name).not.toContain('class="r-dev"');
       }
     }
-    // Nothing was subscribed, confirmed, or mailed.
+    // Nothing was subscribed, confirmed, or mailed. A GET that only calls builders can't, so
+    // this is a canary for a builder that one day writes; what keeps a preview from acting
+    // is the form-action header above and the client frame's sandbox.
     const count = await env.DB.prepare("SELECT COUNT(*) AS n FROM subscribers").first<{
       n: number;
     }>();

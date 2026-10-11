@@ -1,5 +1,8 @@
-// Links in a framed email or post page: the post's Preview tab, its web version, and the
-// sample email on the Template page and in Settings.
+// A framed email or page in the editor: the post's Preview tab, its web version, the sample
+// email on the Template page and in Settings, and Settings' reader page previews. Its
+// sandbox, the policy a framed copy carries, and what its links do.
+
+import { pagePolicy } from "../../shared/page_policy";
 
 // A framed preview is a srcdoc document, whose links resolve against the editor's own URL,
 // so a fragment-only link (the sample email's `#unsubscribe` placeholder) names the
@@ -34,4 +37,21 @@ export function openLinksInNewTab(doc: Document): void {
     link.target = "_blank";
     link.rel = "noopener noreferrer";
   }
+}
+
+/** `markup` placed first in the document's <head> (never a <header>), or first in the
+ *  document when it has none. */
+function intoHead(doc: string, markup: string): string {
+  const head = /<head(\s[^>]*)?>/i;
+  return head.test(doc) ? doc.replace(head, (tag) => tag + markup) : markup + doc;
+}
+
+/** The framed copy of a page (a post's page, a reader page's preview) under the policy a
+ *  page that submits no form carries when served (shared/page_policy.ts). The frame's sandbox already keeps script and forms out; the
+ *  policy is the second lock. Only the framed copy changes, never the page served. */
+export function framedCopy(doc: string): string {
+  return intoHead(
+    doc,
+    `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`,
+  );
 }

@@ -220,14 +220,14 @@ const TEMPLATE_TEST_MARKDOWN = [
   "- The maples on Marsh Lane have finally turned.",
   "- Someone left a note in the little free library, addressed to no one.",
   "",
-  "This is a **sample post** sent to preview your email template — [links](https://example.com) render like this. A real post's Markdown fills this space.",
+  "This is a **sample post**: [links](https://example.com) render like this, and a real post's Markdown fills this space.",
 ].join("\n");
 
 /** The sample post as it is headed outside a template test: Settings' preview of a post
  *  page (`routes/reader_pages.ts`). */
 export const SAMPLE_POST_SUBJECT = "The starlings are back";
 
-/** Build the synthetic render input for a sample post — no post, no images. A template
+/** Build the synthetic render input for a sample post, with no post and no images. A template
  *  test's subject says it is one; a preview passes its own. */
 export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput {
   const now = Date.now();

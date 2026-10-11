@@ -5377,7 +5377,7 @@ button.set-field-remove {
 .set-rp-item:hover {
   background: var(--hover);
 }
-.set-rp-item[aria-current="page"] {
+.set-rp-item[aria-current="true"] {
   background: var(--accent-soft);
   color: var(--accent);
   font-weight: 600;
@@ -5385,7 +5385,7 @@ button.set-field-remove {
 .set-rp-item.off {
   color: var(--muted);
 }
-.set-rp-item.off[aria-current="page"] {
+.set-rp-item.off[aria-current="true"] {
   color: var(--accent);
 }
 .set-rp-mark {
@@ -5403,7 +5403,7 @@ button.set-field-remove {
   font-weight: 650;
   color: var(--muted);
 }
-.set-rp-item[aria-current="page"] .set-rp-mark {
+.set-rp-item[aria-current="true"] .set-rp-mark {
   border-color: var(--accent);
   color: var(--accent);
 }
