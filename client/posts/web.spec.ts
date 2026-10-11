@@ -76,21 +76,23 @@ describe("web version", () => {
     expect(webVersionHash("a/b c")).toBe("#/web/post/a%2Fb%20c");
   });
 
-  it("says in its bar where the post stands and where its public page will be, as text", () => {
+  it("names where the post stands as its tag, and where its public page will be as text", () => {
     const url = "https://newsletter.example.com/archive/herons";
     const short = "newsletter.example.com/archive/herons";
     const draft = bar({ scheduled: false, url });
-    expect(draft.textContent).toBe(`Web version Draft. Once sent, it will be at ${short}.`);
+    expect(draft.textContent).toBe(`Draft Once sent, it will be at ${short}.`);
     // The address doesn't answer yet, so it is text, and the bar has no link at all.
     expect(draft.querySelectorAll("a")).toHaveLength(0);
-    // The tag is the dev pill's chip, apart from the sentence.
-    expect(draft.querySelector(".web-bar-tag")?.textContent).toBe("Web version");
-    expect(bar({ scheduled: true, url }).textContent).toBe(
-      `Web version Scheduled. Once sent, it will be at ${short}.`,
-    );
-    // Unknown address or post: the bar names no address rather than a wrong one.
-    expect(bar({ scheduled: false, url: null }).textContent).toBe("Web version Draft.");
-    expect(bar(null).textContent).toBe("Web version");
+    // The tag is the dev pill's chip, and it is the post's stage; the tab's title says
+    // what the page is.
+    expect(draft.querySelector(".web-bar-tag")?.textContent).toBe("Draft");
+    const scheduled = bar({ scheduled: true, url });
+    expect(scheduled.querySelector(".web-bar-tag")?.textContent).toBe("Scheduled");
+    expect(scheduled.textContent).toBe(`Scheduled Once sent, it will be at ${short}.`);
+    // Unknown address: the bar names no address rather than a wrong one. Unknown post:
+    // no stage to name, so no bar.
+    expect(bar({ scheduled: false, url: null }).textContent).toBe("Draft");
+    expect(webBar(null)).toBeNull();
   });
 
   it("fills the window under its bar with a scheduled post's web version, sandboxed with no script or form", async () => {
@@ -109,8 +111,10 @@ describe("web version", () => {
     expect(sandbox).not.toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-forms");
     expect($(".web-bar").textContent).toBe(
-      "Web version Scheduled. Once sent, it will be at newsletter.example.com/archive/herons.",
+      "Scheduled Once sent, it will be at newsletter.example.com/archive/herons.",
     );
+    // The window scrolls the page: the frame has no scrolling of its own.
+    expect(frame.getAttribute("scrolling")).toBe("no");
     // The bar and the page, nothing else: no back link, edit link, or app chrome.
     expect($(".web-page").children).toHaveLength(2);
     expect(document.querySelector(".web-page a")).toBeNull();
@@ -166,7 +170,7 @@ describe("web version", () => {
     expect(document.title).toBe("Web version · Herons");
   });
 
-  it("still shows the page, with a bar that names no stage or address, when the post can't be read", async () => {
+  it("still shows the page, with no bar, when the post can't be read", async () => {
     location.hash = "#/web/post/p1";
     fake = fakeApi([
       { path: "/api/posts/p1/web", reply: htmlReply },
@@ -175,7 +179,7 @@ describe("web version", () => {
     await mount((r, s) => renderWebVersion("p1", r, s));
     await settle();
     expect($<HTMLIFrameElement>(".web-frame").srcdoc).toBe(framedCopy(page));
-    expect($(".web-bar").textContent).toBe("Web version");
+    expect(document.querySelector(".web-bar")).toBeNull();
   });
 
   for (const stage of ["sending", "sent"] as const) {
