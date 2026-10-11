@@ -38,6 +38,7 @@ import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+import { webVersionHash } from "./web";
 
 // The preview frame's sandbox. Same-origin, so the editor can size the frame and set its
 // links to open a new tab (openLinksInNewTab); popups, so that new tab can open at all;
@@ -172,7 +173,7 @@ export async function renderEditor(
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost" id="openBtn">Open in browser ↗</button>
+        <button type="button" class="ghost" id="webBtn" aria-label="Web version (opens in a new tab)">Web version ↗</button>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -774,22 +775,30 @@ export async function renderEditor(
     readWhenShown(pollFreshness, signal);
   }
 
-  // --- open in browser ---
-  const openBtn = $<HTMLButtonElement>("#openBtn");
-  openBtn.onclick = () =>
-    busy(openBtn, "Opening…", async () => {
+  // --- web version: the post as its public page will show it (SPEC §5) ---
+  // The tab opens in the click itself, then goes to the page once the draft is saved: a
+  // browser that blocks a tab opened after an await (Safari, iOS) would otherwise drop it
+  // without a word.
+  const webBtn = $<HTMLButtonElement>("#webBtn");
+  webBtn.onclick = () => {
+    const tab = window.open("", "_blank");
+    const url = `${location.origin}${location.pathname}${webVersionHash(id)}`;
+    return busy(webBtn, "Opening…", async () => {
       try {
         if (!locked) {
           await saveDraft(true);
         }
-        const page = await apiText(`/api/posts/${id}/preview`);
-        const url = URL.createObjectURL(new Blob([page], { type: "text/html" }));
-        window.open(url, "_blank");
-        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        if (tab) {
+          tab.location.href = url;
+        } else {
+          window.open(url, "_blank");
+        }
       } catch (e) {
+        tab?.close();
         toast(message(e));
       }
     });
+  };
 
   if (locked && scheduled) {
     // The send as last reported: this page's read of it (or, until that succeeds, what the

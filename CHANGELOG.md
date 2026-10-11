@@ -14,6 +14,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - Cancel, reschedule, and Resolve no longer take a precondition: an `If-Match` header on them, and Resolve's `expected_count`, are now ignored, and the `precondition_failed` and `count_changed` refusals are gone. Each act applies to the send as it stands and answers with the result, so a retry after a lost answer is answered `changed: false` instead of a 412, and two acts made moments apart both land, each shown at once and reversible before the fire time (SPEC §1, §8).
 
+### Added
+
+- The editor shows a post's **web version**: the post as its public page will look, with the template's email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. **Web version ↗** in the editor opens it in a new tab, under a bar that says where the post stands and where its public page will be, and replaces **Open in browser**, which showed the same email as the Preview tab. Once a post's send starts, the web version opens its public page (SPEC §5).
+
 ### Changed
 
 - A post's page, the archive index, and the landing page show a post as soon as its send starts, dated by when it went out, so a reader who opens "View in browser" while a large send is still going out finds the post instead of "Not found". A send's view links the published post from the start too (SPEC §5).

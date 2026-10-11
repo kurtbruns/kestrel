@@ -1,6 +1,7 @@
 // Reads of the deployment reflection (appState.appConfig.deployment; SPEC §9), fetched once
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
+import { archivePostUrl } from "../shared/archive_url";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../shared/sends";
 import { appState } from "./state";
 import { type Html, html } from "./ui/html";
@@ -77,4 +78,11 @@ export function noEmailProvider(): boolean {
  */
 export function withNoProviderNote(msg: string): string {
   return noEmailProvider() ? `${msg} (no email provider configured — nothing is delivered)` : msg;
+}
+
+/** A post's public archive address under this deployment, by the formula the Worker
+ *  uses (shared/archive_url.ts), or null before the reflection has loaded. */
+export function postArchiveUrl(slug: string): string | null {
+  const d = appState.appConfig?.deployment;
+  return d ? archivePostUrl(d.archiveOrigin, d.archiveBasePath, slug) : null;
 }

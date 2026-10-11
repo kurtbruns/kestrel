@@ -2,6 +2,7 @@
  * Preview, test-send, and the fake outbox. All authed.
  *   POST /api/posts/:id/preview        → { url, subject, warnings, frozen } (hosted view-in-browser)
  *   GET  /api/posts/:id/preview        → the rendered HTML (generic unsubscribe link)
+ *   GET  /api/posts/:id/web            → the same copy as its archive page will show it
  *   POST /api/posts/:id/test           → send the post's email to one address via the provider
  *                                    (a scheduled post's frozen copy; a draft's live render)
  *   POST /api/settings/template/test → send a SAMPLE post through the saved template
@@ -33,6 +34,7 @@ import {
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { readerIdentity, webVersion } from "./archive";
 
 async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
@@ -70,6 +72,9 @@ interface PostEmail {
   warnings: string[];
   /** The send whose frozen copy this is; null for a draft's live render. */
   frozen: { id: string } | null;
+  /** When the post went out, or will: the send's start, else its fire time, or now for a
+   *  draft. The date the web version's masthead carries, as the post page dates it. */
+  dateMs: number;
 }
 
 async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
@@ -86,10 +91,23 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
       email: { subject: send.subject, html: send.rendered_html, text: send.rendered_text },
       warnings: [],
       frozen: { id: send.id },
+      dateMs: send.started_at ?? send.fire_at,
     };
   }
   const result = await render(input, c.config, await loadBranding(c));
-  return { input, email: result, warnings: result.warnings, frozen: null };
+  return { input, email: result, warnings: result.warnings, frozen: null, dateMs: Date.now() };
+}
+
+/** An authed page carrying a post's HTML: no script, no form, never framed by another
+ *  site, never indexed. */
+function postPage(html: string): Response {
+  return new Response(html, {
+    headers: {
+      ...POST_PAGE_SECURITY_HEADERS,
+      "content-type": "text/html; charset=utf-8",
+      "x-robots-tag": "noindex",
+    },
+  });
 }
 
 export async function preview(c: RequestContext): Promise<Response> {
@@ -109,13 +127,23 @@ export async function previewPage(c: RequestContext): Promise<Response> {
     ".Email.UnsubscribeURL": genericUnsubscribeUrl(c),
     ".Email.SentTo": "",
   }).html;
-  return new Response(html, {
-    headers: {
-      ...POST_PAGE_SECURITY_HEADERS,
-      "content-type": "text/html; charset=utf-8",
-      "x-robots-tag": "noindex",
-    },
-  });
+  return postPage(html);
+}
+
+/**
+ * The post's web version: what its public post page will show, built by the post page's
+ * own code from the same copy the preview shows (a draft's live render, or the frozen copy
+ * once scheduled), so the publisher can proof the page before it is permanent (SPEC §5).
+ */
+export async function webPage(c: RequestContext): Promise<Response> {
+  const { email, dateMs } = await loadPostEmail(c);
+  return postPage(
+    webVersion(email.html, {
+      config: c.config,
+      identity: await readerIdentity(c, c.config),
+      dateMs,
+    }),
+  );
 }
 
 /**

@@ -510,10 +510,21 @@ export function createRouter({
       path: "/api/posts/:id/preview",
       access: "admin",
       resource: "posts",
-      summary: "The rendered email as a standalone HTML page (editor preview / open-in-browser).",
+      summary: "The rendered email as a standalone HTML page (the editor's preview).",
       description:
         "Once the post is scheduled this is its frozen copy, exactly as it will fire, and once sent the record's; a draft renders live (SPEC §5).",
       handler: renderRoutes.previewPage,
+    },
+    {
+      method: "GET",
+      path: "/api/posts/:id/web",
+      access: "admin",
+      resource: "posts",
+      summary:
+        "The post's web version as a standalone HTML page: what its public post page will show.",
+      description:
+        "Built from the same copy as the preview (a draft's live render, the frozen copy once scheduled, the record once sent) by the post page's own code: the email-only regions left out, the masthead and display font added (SPEC §5). Once the send starts it matches the public post page, less the local-dev dashboard link.",
+      handler: renderRoutes.webPage,
     },
     {
       method: "POST",

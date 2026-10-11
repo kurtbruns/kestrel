@@ -6,6 +6,7 @@ import { renderDashboard } from "./dashboard/dashboard";
 import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
 import { renderEditor } from "./posts/editor";
+import { renderWebVersion, webPostId } from "./posts/web";
 import { renderDocs } from "./room/docs";
 import { renderReference } from "./room/reference";
 import { renderSent } from "./sends/list";
@@ -29,6 +30,11 @@ export function route(): Promise<void> {
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");
+  // A post's web version is a page of its own, in a tab of its own: the whole window, with
+  // no app chrome around it. Only for a route that names a post, so a mangled address
+  // falls through to the dashboard with its navigation.
+  const webPost = view === "web" ? webPostId(arg, sub) : null;
+  document.body.classList.toggle("web-mode", webPost !== null);
   // The reference room (Docs, API) is about Kestrel itself, not the publication, so it
   // drops the publication sidebar for a slim tool bar.
   const toolMode = view === "docs" || view === "reference";
@@ -47,6 +53,9 @@ export function route(): Promise<void> {
   setNavOpen(false);
   if (view === "edit" && arg) {
     return mount((root, signal) => renderEditor(arg, root, signal));
+  }
+  if (webPost !== null) {
+    return mount((root, signal) => renderWebVersion(webPost, root, signal));
   }
   if (view === "drafts") {
     return mount(renderDrafts);
