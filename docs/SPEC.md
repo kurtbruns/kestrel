@@ -119,6 +119,12 @@ The publisher writes in Markdown, in the web editor or through the API. Both do 
 
 Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug: one field carrying the weight rather than a separate "title" that would have to be kept in sync with it.
 
+### Slugs
+
+A slug is unique across all posts, drafts included, since it is a post's permanent address in the archive. When the slug a post would take is already held, it is numbered (`spring-update-2`, `-3`, and so on), so a subject that recurs, like a yearly "Spring update", never collides with an earlier issue.
+
+A slug either follows the subject or was set by hand, and the post records which. A slug that follows is derived from the subject again, and numbered afresh, on every save of the draft, so it tracks subject edits and drops a number it no longer needs once the slug it stood in for is free (the earlier draft was deleted or renamed). A hand-set slug is kept exactly as written until the publisher changes it, even when it looks like a numbered one (`spring-update-2027`). A new post follows its subject unless it is created with a slug; setting a slug makes it hand-set, and either client can have it follow the subject again. Both modes stop at scheduling, which freezes the slug with the rest of the post (§6), so a draft's slug may move but a sent post's address never does. Whatever the client sends, the server decides the slug and answers with it, so the editor shows the address the post will actually get rather than its own guess.
+
 ### Revisions
 
 Every save writes a new revision holding that version's Markdown and metadata. The post points at its current revision; the history is the list behind it. Markdown is small and diffs cleanly, so each revision stores the whole body rather than a delta: simpler, and there's no reconstruction step to get wrong.

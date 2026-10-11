@@ -11,7 +11,6 @@ import type {
 } from "../../shared/posts";
 import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
-import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import { earliestFireAt, minLeadText, postArchiveUrl, withNoProviderNote } from "../deployment";
@@ -257,19 +256,16 @@ export async function renderEditor(
   ta.addEventListener("scroll", syncMdScroll);
   paintMarkdown(); // paint the initial content (a scheduled post is read-only but still highlighted)
 
-  // The slug field shows only slugs the server answered with, never the editor's own guess,
-  // so it can lag a subject edit until the save but never shows an address the post won't
-  // get. While the slug follows the subject and the subject has been edited (or the box
-  // ticked), a save sends the subject's slug and the server numbers it if it is taken;
-  // otherwise it sends the field as it stands. Re-deriving only after an edit keeps a
-  // hand-set slug that merely looks numbered (`spring-update-2027`) from being replaced by a
-  // save that never touched the subject.
+  // Whether the slug follows the subject is the post's own (`slug_auto`), never guessed from
+  // its shape: a hand-set `spring-update-2027` looks just like a deduplicated `spring-update`.
+  // While it follows, a save sends no slug of its own and the server derives and dedupes it;
+  // once hand-set, the field is what is sent. Either way the field shows only slugs the server
+  // answered with, never the editor's own guess, so it can lag a subject edit until the save
+  // but never shows an address the post won't get.
   const autoEl = locked ? null : $<HTMLInputElement>("#f-slug-auto");
-  let rederive = false;
-  const following = () => autoEl?.checked === true && rederive;
   const collect = () => ({
     subject: subjectEl.value,
-    slug: following() ? slugify(subjectEl.value) : slugEl.value,
+    ...(autoEl?.checked ? { slug_auto: true } : { slug: slugEl.value, slug_auto: false }),
     markdown: ta.value,
   });
   // A save's answer for a slug being typed by hand waits until the field is left (or Enter),
@@ -315,34 +311,21 @@ export async function renderEditor(
   // subject. The slug the subject gives arrives with the save that leaving the
   // subject makes (or Enter, or the autosave).
   if (autoEl) {
-    // Infer the starting mode: auto when the slug is the subject's, or a numbered variant
-    // of it (base-2, base-3, …). An empty subject derives nothing, so the server's stand-in
-    // slug is the base then. A hand-written slug that has diverged starts unchecked.
-    const base = slugify(subjectEl.value) || EMPTY_SUBJECT_SLUG;
-    const v = slugEl.value.trim();
-    autoEl.checked = v === "" || v === base || new RegExp(`^${base}-\\d+$`).test(v);
+    autoEl.checked = post.slug_auto;
 
     // Muted while it tracks the subject; normal color once it's a hand-set slug.
     const reflect = () => slugEl.classList.toggle("slug-auto", autoEl.checked);
     reflect();
 
-    subjectEl.addEventListener("input", () => {
-      rederive = true;
-    });
-    // Typing a slug takes manual control; clearing it re-links to the subject, so a save
-    // made before the field is left (Enter, the autosave) sends the subject's slug, not "".
+    // Typing a slug takes manual control; clearing it re-links to the subject.
     slugEl.addEventListener("input", () => {
       autoEl.checked = slugEl.value.trim() === "";
-      if (autoEl.checked) {
-        rederive = true;
-      }
       reflect();
     });
     // Ticking the box saves at once, so the field shows the subject's slug as soon as the
     // server answers; unticking hands over the field ready to edit.
     autoEl.addEventListener("change", () => {
       reflect();
-      rederive = true;
       markEdited(); // the checkbox changes what a save sends without an input event
       if (autoEl.checked) {
         saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`));
@@ -358,7 +341,6 @@ export async function renderEditor(
       applyHeld();
       if (slugEl.value.trim() === "") {
         autoEl.checked = true;
-        rederive = true;
         reflect();
         markEdited();
         if (!dirty.dirty) {
@@ -615,7 +597,6 @@ export async function renderEditor(
     const fields = collect();
     let sent = JSON.stringify(fields);
     const slugShown = slugEl.value;
-    const followed = following();
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -627,15 +608,15 @@ export async function renderEditor(
       // Focus alone is no reason to drop it, since tabbing through the field changes nothing;
       // a slug being typed by hand only has it wait until the field is left.
       if (u.slug && slugEl.value === slugShown) {
-        if (!followed && document.activeElement === slugEl) {
+        // A slug set by hand is sent as typed; a following one is the server's to derive.
+        const handSet = "slug" in fields;
+        if (handSet && document.activeElement === slugEl) {
           held = { shown: slugShown, slug: u.slug }; // being typed by hand: see applyHeld
         } else {
           slugEl.value = u.slug;
         }
-        // A slug set by hand is saved as the server made it, not as typed. A following one
-        // is compared as the subject's slug, so its numbered answer leaves the snapshot alone.
-        if (!followed && fields.slug === slugShown) {
-          sent = JSON.stringify({ ...fields, slug: u.slug });
+        if (handSet) {
+          sent = JSON.stringify({ ...fields, slug: u.slug }); // what was saved, not what was typed
         }
       }
       if (u.slug) {

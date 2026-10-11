@@ -36,6 +36,7 @@ const draft = (over: Record<string, unknown> = {}): Draft => ({
     id: "p1",
     subject: "Owls",
     slug: "owls",
+    slug_auto: true,
     status: "draft",
     current_revision: "r1",
     updated_at: "2026-09-20T10:00:00Z",
@@ -66,11 +67,10 @@ function draftServer(initial = draft()) {
       const body = req.json() as Record<string, unknown>;
       n += 1;
       const post: Record<string, unknown> = { ...state.post, ...body, current_revision: `r${n}` };
-      if (typeof body.slug === "string") {
-        // The server slugifies what it is sent and numbers it past a slug another post holds.
-        const want = slugify(body.slug) || "post";
-        post.slug = server.taken.has(want) ? `${want}-2` : want;
-      }
+      // The server derives a following slug from the subject, or slugifies the one it is sent,
+      // and numbers it past a slug another post holds (`taken`).
+      const want = post.slug_auto ? slugify(String(post.subject)) : slugify(String(post.slug));
+      post.slug = server.taken.has(want || "post") ? `${want || "post"}-2` : want || "post";
       state = { ...state, post };
       return { post: state.post };
     },
@@ -637,13 +637,13 @@ describe("editor view", () => {
     slug.focus();
     await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("custom"); // hand-set: the subject no longer drives it
-    expect(puts().at(-1)?.json()).toMatchObject({ slug: "custom" });
+    expect(puts().at(-1)?.json()).toMatchObject({ slug: "custom", slug_auto: false });
     typeInto(slug, "");
     expect(auto.checked).toBe(true);
     body().focus(); // leaving it empty hands it back to the subject, and saves
     await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("something-else");
-    expect(puts().at(-1)?.json()).toMatchObject({ slug: "something-else" });
+    expect(puts().at(-1)?.json()).toMatchObject({ slug_auto: true });
   });
 
   it("shows the slug the server gives on leaving the subject, even while tabbing through the slug field", async () => {
@@ -661,7 +661,8 @@ describe("editor view", () => {
     slug.focus(); // Tab: the subject's blur saves
     await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("spring-update-2"); // shown though the field has focus
-    expect(puts()[0]?.json()).toMatchObject({ subject: "Spring update", slug: "spring-update" });
+    expect(puts()[0]?.json()).toMatchObject({ subject: "Spring update", slug_auto: true });
+    expect(puts()[0]?.json()).not.toHaveProperty("slug");
     body().focus(); // Tab on into the body
     typeInto(body(), "This spring…");
     expect(slug.value).toBe("spring-update-2");
@@ -721,7 +722,7 @@ describe("editor view", () => {
   });
 
   it("hands a cleared slug back to the subject even when it saves before the field is left", async () => {
-    const server = draftServer(draft({ subject: "Barn owls", slug: "custom" }));
+    const server = draftServer(draft({ subject: "Barn owls", slug: "custom", slug_auto: false }));
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
@@ -732,13 +733,14 @@ describe("editor view", () => {
     typeInto(slug, "");
     slug.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     await vi.advanceTimersByTimeAsync(0);
-    expect(puts()[0]?.json()).toMatchObject({ slug: "barn-owls" }); // not "", which the server makes post-N
+    expect(puts()[0]?.json()).toMatchObject({ slug_auto: true }); // not slug "", which the server makes post-N
+    expect(puts()[0]?.json()).not.toHaveProperty("slug");
     expect(slug.value).toBe("barn-owls");
     expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(true);
   });
 
   it("saves at once when the box is ticked, taking the subject's slug", async () => {
-    const server = draftServer(draft({ subject: "Barn owls", slug: "custom" }));
+    const server = draftServer(draft({ subject: "Barn owls", slug: "custom", slug_auto: false }));
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
@@ -748,7 +750,7 @@ describe("editor view", () => {
     auto.dispatchEvent(new Event("change", { bubbles: true }));
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()).toHaveLength(1);
-    expect(puts()[0]?.json()).toMatchObject({ slug: "barn-owls" });
+    expect(puts()[0]?.json()).toMatchObject({ slug_auto: true });
     expect($<HTMLInputElement>("#f-slug").value).toBe("barn-owls");
     expect($("#saveStatus").textContent).toBe("Saved");
   });
@@ -817,15 +819,18 @@ describe("editor view", () => {
     expect($("#saveStatus").textContent).toBe("Saved");
   });
 
-  it("keeps a slug that looks numbered as written while the subject is untouched", async () => {
-    const server = draftServer(draft({ subject: "Spring update", slug: "spring-update-2027" }));
+  it("keeps a hand-set slug that looks numbered as written", async () => {
+    const server = draftServer(
+      draft({ subject: "Spring update", slug: "spring-update-2027", slug_auto: false }),
+    );
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
+    expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(false);
     typeInto(body(), "More news");
     await vi.advanceTimersByTimeAsync(5000);
-    expect(puts()[0]?.json()).toMatchObject({ slug: "spring-update-2027" });
+    expect(puts()[0]?.json()).toMatchObject({ slug: "spring-update-2027", slug_auto: false });
     expect($<HTMLInputElement>("#f-slug").value).toBe("spring-update-2027");
   });
 

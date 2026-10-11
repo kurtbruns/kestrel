@@ -34,6 +34,7 @@ function post(over: Partial<PostRow> = {}): PostRow {
   return {
     id: "p1",
     slug: "weekly-news",
+    slug_auto: false,
     subject: "This week in cats",
     status: "draft",
     current_revision: "r1",

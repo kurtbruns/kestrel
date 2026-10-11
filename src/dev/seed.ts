@@ -27,6 +27,7 @@
  * is why the inserts go through the seed-only helpers in `db/seed.ts`.
  */
 
+import { slugify } from "../../shared/slug";
 import type { ImageRow } from "../db/images";
 import type { PostRow, RevisionRow } from "../db/posts";
 import {
@@ -801,6 +802,8 @@ function renderInputFor(
   const post: PostRow = {
     id,
     slug: demoPost.slug,
+    // A demo slug that is just its subject's reads as following it, as a new post's would.
+    slug_auto: demoPost.slug === slugify(demoPost.subject),
     subject: demoPost.subject,
     status: demoPost.status,
     current_revision: `${id}-rev`,

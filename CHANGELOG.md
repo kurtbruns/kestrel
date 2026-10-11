@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.5.0.** One database migration: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. Existing posts keep their slugs and read as hand-set; tick *Auto-generate from subject* on a draft to have its slug follow the subject again.
+
 ### Breaking
 
 - Cancel, reschedule, and Resolve no longer take a precondition: an `If-Match` header on them, and Resolve's `expected_count`, are now ignored, and the `precondition_failed` and `count_changed` refusals are gone. Each act applies to the send as it stands and answers with the result, so a retry after a lost answer is answered `changed: false` instead of a 412, and two acts made moments apart both land, each shown at once and reversible before the fire time (SPEC §1, §8).
@@ -20,6 +22,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- A post now records whether its slug follows the subject (`slug_auto` on the post and on a save). A following slug is derived and numbered afresh on every draft save, so it tracks subject edits through the API too, and a draft whose slug was numbered because another post held it (`spring-update-2`) takes the plain slug back once that post is deleted. A hand-set slug that looks numbered, like `spring-update-2027`, is no longer mistaken for a following one and overwritten by a subject edit (SPEC §4).
 - A post's page, the archive index, and the landing page show a post as soon as its send starts, dated by when it went out, so a reader who opens "View in browser" while a large send is still going out finds the post instead of "Not found". A send's view links the published post from the start too (SPEC §5).
 - The confirm, unsubscribe, and post-not-found pages now wear your publication's reader look (its name, logo, and serif headline), like the subscribe page, instead of a plain grey card, so a reader arriving from an email sees your newsletter, and the pages that ask a reader to confirm or to unsubscribe name it in their headline ("Confirm your subscription to …", "Unsubscribe from …?"). They carry no subscribe call to action in the masthead, and they are never cached or indexed, since some show the reader's address (SPEC §5).
 - A test email's links now land on pages that say what they are. Its "View in browser" link, before the send starts, opens "Nothing here yet" (the same page any archive address without a published post shows, so a scheduled post is never revealed) instead of "Not found", and its unsubscribe link, like the one in the editor's preview, opens the page a subscriber sees instead of "This link is invalid": marked as a test, with a sample address, and walking through it changes no one's subscription (SPEC §5, §7).

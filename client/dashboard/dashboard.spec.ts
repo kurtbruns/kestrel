@@ -25,6 +25,7 @@ const page = { total: 0, limit: 200, offset: 0, sort: "", dir: "desc" };
 const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   id: "p1",
   slug: "owls",
+  slug_auto: true,
   subject: "<b>Owls</b> & co",
   status: "draft",
   current_revision: "r1",

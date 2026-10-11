@@ -44,7 +44,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 
 | Resource | What it is | Notes |
 | --- | --- | --- |
-| Post | A subject and a Markdown body, plus the slug | Editable only as a draft. A save carries its base revision. |
+| Post | A subject and a Markdown body, plus the slug and whether it follows the subject | Editable only as a draft. A save carries its base revision. The slug a save answers with is the one the post has. |
 | Revision | One saved version of a post | Read-only. The post's current revision is its version. |
 | Image | A file belonging to a post, referenced by name | Uploaded to the post. It never hands back a URL to paste. |
 | Send | One dispatch of a post: the frozen email, the fire time, and the record | The one shape is the send's view. Its email and its rows have routes of their own. |
