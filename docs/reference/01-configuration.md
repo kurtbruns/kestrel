@@ -33,7 +33,7 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 `FROM_ADDRESS` is the only address mail is sent from, and the identity your provider authenticates. `SENDING_DOMAIN` is for display: Settings shows it beside the From address. The app never checks that the two match, so set `SENDING_DOMAIN` to the part of `FROM_ADDRESS` after the `@`.
 
-Neither one is your publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name.
+Neither one is your publication's name, tagline, or logo. You set those in the editor, under **Settings → Publication identity**. Until you do, the From address's display name stands in for the name, and with neither, your emails and reader pages show no name at all.
 
 ### `ARCHIVE_BASE_PATH`
 

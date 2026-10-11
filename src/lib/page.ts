@@ -275,19 +275,14 @@ export function readerPage(opts: {
   const nameHtml = name ? `<span class="r-name">${escapeHtml(name)}</span>` : "";
   const tag = tagline ? `<div class="r-tag">${escapeHtml(tagline)}</div>` : "";
   const text = nameHtml || tag ? `<span>${nameHtml}${tag}</span>` : "";
-  // The brand shows only what the publication has: with no name, a logo alone still
-  // needs a link name, and with nothing at all there is no brand to link.
-  const brand =
-    logo || text
-      ? `<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}"${text ? "" : ' aria-label="Home"'}>${logo}${text}</a>`
-      : "";
+  // The brand shows only what the publication has, never a made-up name: a logo alone
+  // still needs a link name, and with nothing at all the way home reads "Archive".
+  const label = text ? "" : logo ? ' aria-label="Home"' : "";
+  const brand = `<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}"${label}>${logo || text ? `${logo}${text}` : "Archive"}</a>`;
   const cta = opts.subscribeUrl
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
-  const masthead =
-    brand || cta
-      ? `<header class="r-mast"><div class="r-mast-in">\n${brand}\n${cta}\n</div></header>\n`
-      : "";
+  const masthead = `<header class="r-mast"><div class="r-mast-in">\n${brand}\n${cta}\n</div></header>\n`;
   const banner = opts.banner
     ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
     : "";

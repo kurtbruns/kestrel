@@ -954,16 +954,19 @@ describe("a publication with no name (SPEC §9)", () => {
     ["post not found", "/archive/missing", {}, "Nothing here yet", "Nothing here yet"],
   ];
 
-  it("words each subscribe, confirm, and unsubscribe page without a name, with no empty masthead", async () => {
+  it("words each subscribe, confirm, and unsubscribe page without a name, keeping a way home", async () => {
     await seedReaders();
     for (const [name, path, init, title, headline] of pages) {
       const page = await (await fetchWith(UNNAMED, path, init)).text();
       expect(titleOf(page), name).toBe(title);
       expect(headlineOf(page), name).toBe(headline);
-      // These pages carry no subscribe call to action, so with no name, logo, or tagline
-      // the masthead has nothing to hold, and none is drawn.
-      expect(page, name).not.toContain('class="r-mast"');
-      expect(page, name).not.toContain('class="r-name"');
+      // With no name, logo, or tagline, the masthead still links home, labeled for where
+      // it leads rather than with a made-up name.
+      expect(mastheadOf(page), name).toBe(
+        '<header class="r-mast"><div class="r-mast-in">\n' +
+          '<a class="r-brand" href="http://localhost:8787/">Archive</a>\n\n' +
+          "</div></header>",
+      );
     }
   });
 
@@ -991,7 +994,7 @@ describe("a publication with no name (SPEC §9)", () => {
     }
   });
 
-  it("titles the landing page and the archive index without a name, the masthead holding only the call to action", async () => {
+  it("titles the landing page and the archive index without a name", async () => {
     await publish("A Post", 1_000);
     for (const [path, title] of [
       ["/", "Home"],
@@ -1000,7 +1003,8 @@ describe("a publication with no name (SPEC §9)", () => {
       const page = await (await fetchWith(UNNAMED, path)).text();
       expect(titleOf(page), path).toBe(title);
       expect(mastheadOf(page), path).toBe(
-        '<header class="r-mast"><div class="r-mast-in">\n\n' +
+        '<header class="r-mast"><div class="r-mast-in">\n' +
+          '<a class="r-brand" href="http://localhost:8787/">Archive</a>\n' +
           '<span class="r-cta"><a class="r-sub" href="http://localhost:8787/subscribe">Subscribe here &rarr;</a></span>\n' +
           "</div></header>",
       );
