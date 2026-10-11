@@ -10,7 +10,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
-**Upgrading from 1.5.0.** One database migration: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. Existing posts keep their slugs and read as set by hand; tick *Auto-generate from subject* on a draft to have its slug follow the subject again.
+**Upgrading from 1.5.0.** One database migration: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. Existing posts keep their slugs and read as set by hand; tick *Auto-generate from subject* on a draft to have its slug follow the subject again. On npm 12, to end `npm install` without the blocked-install-scripts warning, add this to your `package.json` (a new instance has it already): `"allowScripts": { "esbuild": true, "fsevents": true, "workerd": true }`.
 
 ### Breaking
 
@@ -33,6 +33,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - Toasts no longer pile up in a column up the middle of the screen. At most three show at once, a repeated message (clicking Copy five times, or a save failing again while you type) restarts the one already showing instead of adding another, and one leaving lets the rest slide into place. A longer toast on a phone now uses the screen's width instead of wrapping into a narrow column.
+- A new instance's `npm install` on npm 12 no longer ends with a warning that install scripts were blocked for esbuild and workerd (and fsevents on a Mac). The instance's `package.json` now allows them by name, so their scripts run as wrangler expects and the entry doesn't go stale when wrangler moves to a new version.
 - Two send-now requests for the same post that arrive at the same moment (from Claude and the editor, say) now both answer with the one send they made. Before, the one that lost the race was refused with "post already has an active send", though the send was scheduled and no one was mailed twice; a later repeat already answered this way (SPEC §6).
 - A draft deleted elsewhere (in another tab, or by Claude) now says so in the editor, instead of failing each save with "Couldn't save your changes". With nothing unsaved it goes to Drafts; with unsaved edits it stays open, stops saving, and keeps your text on screen to copy out, and leaving asks first. Opening a post that is no longer there goes to Drafts and says so, instead of an error page whose Retry can only fail again. Canceling a scheduled post that was deleted elsewhere says the same, and a Cancel that lands after the send time now says plainly that it's too late and the email is going out, instead of showing the server's refusal (SPEC §4).
 - A link in a notification email now opens the send it is about even when you have to sign in first. Before, the sign-in dropped the page from the link and you landed on the dashboard home (SPEC §8).
