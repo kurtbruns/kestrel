@@ -8,20 +8,22 @@ import { DEFAULT_MIN_LEAD_MS, MIN_LEAD_CEILING_MS, MIN_LEAD_FLOOR_MS } from "../
 import { createRouter } from "../src/app";
 import * as posts from "../src/db/posts";
 import { type AppEnv, ConfigError, getConfig } from "../src/env";
-import worker from "../src/index";
 import { clearFakeOutbox } from "../src/providers/fake";
 import type { RequestContext } from "../src/router";
 import * as devRoutes from "../src/routes/dev";
 import * as renderRoutes from "../src/routes/render_actions";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base } from "./support/http";
 import { allowErrorLogs } from "./support/log";
+import { fetchWith, withVars } from "./support/worker_env";
 
-/** Minimal binding bag for the pure getConfig tests (no D1/R2 needed). */
-function envWith(overrides: Record<string, string | undefined>): AppEnv {
+/** Vars alone, no bindings, for the pure getConfig tests: unlike `withVars` it starts from
+ *  a minimal set of vars, not the suite's env, so any other var left out is unset and one
+ *  can be unset outright with `undefined` (no D1/R2 needed). */
+function varsOnly(overrides: Record<string, string | undefined>): AppEnv {
   return {
     APP_ORIGIN: "https://app.example",
     SENDING_DOMAIN: "send.example",
@@ -33,7 +35,7 @@ function envWith(overrides: Record<string, string | undefined>): AppEnv {
 
 describe("getConfig — self-contained defaults", () => {
   it("defaults the archive origin and media base to the app's own origin", () => {
-    const config = getConfig(envWith({}));
+    const config = getConfig(varsOnly({}));
     expect(config.archiveOrigin).toBe("https://app.example");
     expect(config.mediaPublicBase).toBe("https://app.example/media");
     expect(config.archiveBasePath).toBe("/archive");
@@ -41,7 +43,7 @@ describe("getConfig — self-contained defaults", () => {
 
   it("uses explicit overrides when set (the apex / media-domain opt-in)", () => {
     const config = getConfig(
-      envWith({
+      varsOnly({
         ARCHIVE_ORIGIN: "https://example.com",
         MEDIA_PUBLIC_BASE: "https://media.example.com",
         ARCHIVE_BASE_PATH: "/archive",
@@ -53,9 +55,9 @@ describe("getConfig — self-contained defaults", () => {
   });
 
   it("normalizes the base path (leading slash, no trailing slash) and defaults when empty", () => {
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "issues" })).archiveBasePath).toBe("/issues");
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "/issues/" })).archiveBasePath).toBe("/issues");
-    expect(getConfig(envWith({ ARCHIVE_BASE_PATH: "" })).archiveBasePath).toBe("/archive");
+    expect(getConfig(varsOnly({ ARCHIVE_BASE_PATH: "issues" })).archiveBasePath).toBe("/issues");
+    expect(getConfig(varsOnly({ ARCHIVE_BASE_PATH: "/issues/" })).archiveBasePath).toBe("/issues");
+    expect(getConfig(varsOnly({ ARCHIVE_BASE_PATH: "" })).archiveBasePath).toBe("/archive");
   });
 });
 
@@ -68,21 +70,21 @@ describe("getConfig — the dev-mode reader-surface gate", () => {
 
   it("is on in a dev-shaped env with the dev secret present", () => {
     const config = getConfig(
-      envWith({ PROVIDER: "fake", DEV_AUTH_SECRET: "s", APP_ORIGIN: LOCAL }),
+      varsOnly({ PROVIDER: "fake", DEV_AUTH_SECRET: "s", APP_ORIGIN: LOCAL }),
     );
     expect(config.devMode).toBe(true);
     expect(config.devAuthSecret).toBe("s");
   });
 
   it("is off without a dev secret — the auto-minted token, and so the link, can't work", () => {
-    const config = getConfig(envWith({ PROVIDER: "fake", APP_ORIGIN: LOCAL }));
+    const config = getConfig(varsOnly({ PROVIDER: "fake", APP_ORIGIN: LOCAL }));
     expect(config.devMode).toBe(false);
     expect(config.devAuthSecret).toBeUndefined();
   });
 
   it("is off once Access is configured, even on the fake transport", () => {
     const config = getConfig(
-      envWith({
+      varsOnly({
         PROVIDER: "fake",
         DEV_AUTH_SECRET: "s",
         APP_ORIGIN: LOCAL,
@@ -94,13 +96,13 @@ describe("getConfig — the dev-mode reader-surface gate", () => {
   });
 
   it("is off on a real provider (a deployed env is never dev-shaped)", () => {
-    const config = getConfig(envWith({ ...SES_DEPLOY, DEV_AUTH_SECRET: "s", APP_ORIGIN: LOCAL }));
+    const config = getConfig(varsOnly({ ...SES_DEPLOY, DEV_AUTH_SECRET: "s", APP_ORIGIN: LOCAL }));
     expect(config.devMode).toBe(false);
     expect(config.devAuthSecret).toBeUndefined();
   });
 
   it("is off on the fake transport served from anywhere but this machine", () => {
-    const config = getConfig(envWith({ PROVIDER: "fake", DEV_AUTH_SECRET: "s" }));
+    const config = getConfig(varsOnly({ PROVIDER: "fake", DEV_AUTH_SECRET: "s" }));
     expect(config.devMode).toBe(false);
     expect(config.devAuthSecret).toBeUndefined();
   });
@@ -112,7 +114,7 @@ describe("getConfig — deploy config is validated", () => {
   const refuses = (overrides: Record<string, string | undefined>, variable: string) => {
     let thrown: unknown;
     try {
-      getConfig(envWith(overrides));
+      getConfig(varsOnly(overrides));
     } catch (err) {
       thrown = err;
     }
@@ -127,7 +129,7 @@ describe("getConfig — deploy config is validated", () => {
   });
 
   it("defaults an unset PROVIDER to the fake", () => {
-    expect(getConfig(envWith({ PROVIDER: undefined })).provider).toBe("fake");
+    expect(getConfig(varsOnly({ PROVIDER: undefined })).provider).toBe("fake");
   });
 
   it("refuses a missing or malformed APP_ORIGIN", () => {
@@ -142,7 +144,7 @@ describe("getConfig — deploy config is validated", () => {
 
   it("normalizes away trailing slashes, so emitted URLs never double one", () => {
     const config = getConfig(
-      envWith({
+      varsOnly({
         APP_ORIGIN: "https://app.example/",
         ARCHIVE_ORIGIN: "https://birds.example/",
         MEDIA_PUBLIC_BASE: "https://cdn.birds.example/media/",
@@ -166,8 +168,8 @@ describe("getConfig — deploy config is validated", () => {
     for (const name of ["RESEND_API_KEY", "RESEND_WEBHOOK_SECRET", "FROM_ADDRESS"]) {
       refuses({ ...RESEND_DEPLOY, [name]: "" }, name);
     }
-    expect(getConfig(envWith({ ...SES_DEPLOY })).provider).toBe("ses");
-    expect(getConfig(envWith({ ...RESEND_DEPLOY })).provider).toBe("resend");
+    expect(getConfig(varsOnly({ ...SES_DEPLOY })).provider).toBe("ses");
+    expect(getConfig(varsOnly({ ...RESEND_DEPLOY })).provider).toBe("resend");
   });
 
   it("refuses the template's example.com placeholders with a real provider", () => {
@@ -188,13 +190,13 @@ describe("getConfig — deploy config is validated", () => {
 
   it("takes the From address from the last angle brackets, not a bracketed display name", () => {
     const from = '"Birds <weekly>" <news@send.birds.example>';
-    expect(getConfig(envWith({ ...SES_DEPLOY, FROM_ADDRESS: from })).fromAddress).toBe(from);
+    expect(getConfig(varsOnly({ ...SES_DEPLOY, FROM_ADDRESS: from })).fromAddress).toBe(from);
   });
 
   it("never echoes a URL's credentials in the error, which is a public 500", () => {
     let message = "";
     try {
-      getConfig(envWith({ MEDIA_PUBLIC_BASE: "https://user:s3cret@cdn.birds.example/media" }));
+      getConfig(varsOnly({ MEDIA_PUBLIC_BASE: "https://user:s3cret@cdn.birds.example/media" }));
     } catch (err) {
       message = (err as Error).message;
     }
@@ -205,7 +207,7 @@ describe("getConfig — deploy config is validated", () => {
 
   it("leaves the placeholders alone on the fake transport, which mails no one", () => {
     const config = getConfig(
-      envWith({
+      varsOnly({
         PROVIDER: "fake",
         APP_ORIGIN: "https://newsletter.example.com",
         FROM_ADDRESS: "Newsletter <newsletter@send.example.com>",
@@ -215,12 +217,12 @@ describe("getConfig — deploy config is validated", () => {
   });
 
   it("resolves the minimum lead from MIN_LEAD_SECONDS, five minutes when unset (SPEC §6)", () => {
-    expect(getConfig(envWith({})).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
-    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "" })).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
-    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(MIN_LEAD_FLOOR_MS);
-    expect(getConfig(envWith({ MIN_LEAD_SECONDS: " 900 " })).minLeadMs).toBe(15 * 60 * 1000);
+    expect(getConfig(varsOnly({})).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    expect(getConfig(varsOnly({ MIN_LEAD_SECONDS: "" })).minLeadMs).toBe(DEFAULT_MIN_LEAD_MS);
+    expect(getConfig(varsOnly({ MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(MIN_LEAD_FLOOR_MS);
+    expect(getConfig(varsOnly({ MIN_LEAD_SECONDS: " 900 " })).minLeadMs).toBe(15 * 60 * 1000);
     // The same floor on a real provider: there is no environment where it differs.
-    expect(getConfig(envWith({ ...SES_DEPLOY, MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(60_000);
+    expect(getConfig(varsOnly({ ...SES_DEPLOY, MIN_LEAD_SECONDS: "60" })).minLeadMs).toBe(60_000);
   });
 
   it("refuses a minimum lead under the one-minute floor instead of raising it, in every environment", () => {
@@ -230,7 +232,7 @@ describe("getConfig — deploy config is validated", () => {
     }
     let message = "";
     try {
-      getConfig(envWith({ MIN_LEAD_SECONDS: "30" }));
+      getConfig(varsOnly({ MIN_LEAD_SECONDS: "30" }));
     } catch (err) {
       message = (err as Error).message;
     }
@@ -239,14 +241,14 @@ describe("getConfig — deploy config is validated", () => {
   });
 
   it("refuses a minimum lead over a day, the likeliest a value in milliseconds, instead of clamping it", () => {
-    expect(getConfig(envWith({ MIN_LEAD_SECONDS: "86400" })).minLeadMs).toBe(MIN_LEAD_CEILING_MS);
+    expect(getConfig(varsOnly({ MIN_LEAD_SECONDS: "86400" })).minLeadMs).toBe(MIN_LEAD_CEILING_MS);
     for (const value of ["86401", "300000", "9999999999999", "1e306"]) {
       refuses({ MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
       refuses({ ...RESEND_DEPLOY, MIN_LEAD_SECONDS: value }, "MIN_LEAD_SECONDS");
     }
     let message = "";
     try {
-      getConfig(envWith({ MIN_LEAD_SECONDS: "300000" }));
+      getConfig(varsOnly({ MIN_LEAD_SECONDS: "300000" }));
     } catch (err) {
       message = (err as Error).message;
     }
@@ -256,14 +258,7 @@ describe("getConfig — deploy config is validated", () => {
 
   it("answers every request with a 500 that names the variable", async () => {
     allowErrorLogs("config.invalid");
-    const broken = { ...env, PROVIDER: "SES" } as unknown as AppEnv;
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request("https://k.test/health") as Request<unknown, IncomingRequestCfProperties>,
-      broken,
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    const res = await fetchWith({ PROVIDER: "SES" }, "/health");
     expect(res.status).toBe(500);
     expect(await res.json()).toMatchObject({ error: "invalid_config", variable: "PROVIDER" });
   });
@@ -272,17 +267,6 @@ describe("getConfig — deploy config is validated", () => {
 // The dev routes (token, seed, reset, outbox) exist only where `devMode` holds, so a
 // deployed env has none: a 404 by absence, whoever asks, and no entry in the reference.
 describe("the dev routes exist only in local development", () => {
-  async function fetchWith(e: AppEnv, path: string, init?: RequestInit): Promise<Response> {
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request(`https://k.test${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
-      e,
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
-    return res;
-  }
-
   const DEV_ROUTES: [string, string][] = [
     ["POST", "/api/dev/reset"],
     ["POST", "/api/dev/seed"],
@@ -290,11 +274,11 @@ describe("the dev routes exist only in local development", () => {
     ["GET", "/api/dev/token"],
   ];
 
-  async function expectAbsent(e: AppEnv): Promise<void> {
+  async function expectAbsent(vars: Record<string, string>): Promise<void> {
+    const e = withVars(vars);
     expect(getConfig(e).devMode).toBe(false);
-    const headers = await adminAuth();
     for (const [method, path] of DEV_ROUTES) {
-      const res = await fetchWith(e, path, { method, headers });
+      const res = await fetchWith(vars, path, { method, headers: AUTH });
       expect(res.status, `${method} ${path}`).toBe(404);
     }
     const listed = createRouter(getConfig(e)).routes.map((r) => r.def.path);
@@ -303,23 +287,18 @@ describe("the dev routes exist only in local development", () => {
 
   it("404s with Access configured, even on the fake transport", async () => {
     await expectAbsent({
-      ...env,
       PROVIDER: "fake",
       ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
       ACCESS_AUD: "aud-tag",
-    } as unknown as AppEnv);
+    });
   });
 
   it("404s on the fake transport served from a public origin", async () => {
-    await expectAbsent({
-      ...env,
-      PROVIDER: "fake",
-      APP_ORIGIN: "https://newsletter.birds.example",
-    } as unknown as AppEnv);
+    await expectAbsent({ PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" });
   });
 
   it("404s on a real provider", async () => {
-    await expectAbsent({ ...env, ...SES_DEPLOY } as unknown as AppEnv);
+    await expectAbsent(SES_DEPLOY);
   });
 
   // Defense in depth: a handler reached through a router built for another config (the
@@ -328,13 +307,9 @@ describe("the dev routes exist only in local development", () => {
     // A known reader, so a reset that ran despite the refusal would show as a missing row.
     await resetDatabase();
     await seedConfirmed("kept@example.com");
-    const e = {
-      ...env,
-      PROVIDER: "fake",
-      APP_ORIGIN: "https://newsletter.birds.example",
-    } as unknown as AppEnv;
+    const e = withVars({ PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" });
     const context = (path: string, method: string): RequestContext => {
-      const req = new Request(`https://k.test${path}`, { method });
+      const req = new Request(`${base}${path}`, { method });
       return {
         req,
         env: e,
@@ -361,15 +336,14 @@ describe("the dev routes exist only in local development", () => {
   // The CLI's seed and reset check this ID against the record `kestrel dev` left in their
   // directory before wiping a database (cli/dev-api.mjs).
   it("reports the run ID kestrel dev gave the server beside the token, and none without one", async () => {
-    const run = { ...env, DEV_RUN_ID: "run-1234" } as unknown as AppEnv;
-    const withId = await fetchWith(run, "/api/dev/token?kind=service");
+    const withId = await fetchWith({ DEV_RUN_ID: "run-1234" }, "/api/dev/token?kind=service");
     expect(await withId.json()).toMatchObject({ kind: "service", runId: "run-1234" });
-    const without = await fetchWith(env as AppEnv, "/api/dev/token");
+    const without = await fetchWith({}, "/api/dev/token");
     expect(await without.json()).not.toHaveProperty("runId");
   });
 
   it("never resolves a run ID outside local development", () => {
-    const deployed = { ...env, ...SES_DEPLOY, DEV_RUN_ID: "run-1234" } as unknown as AppEnv;
+    const deployed = withVars({ ...SES_DEPLOY, DEV_RUN_ID: "run-1234" });
     expect(getConfig(deployed).devRunId).toBeUndefined();
   });
 
@@ -412,8 +386,7 @@ describe("createRouter — archive route follows the base path", () => {
       minLeadMs: DEFAULT_MIN_LEAD_MS,
     });
     const ctx = createExecutionContext();
-    const get = (path: string) =>
-      router.handle(new Request(`https://k.test${path}`), env as AppEnv, ctx);
+    const get = (path: string) => router.handle(new Request(`${base}${path}`), env as AppEnv, ctx);
 
     const hit = await get(`/issues/${post.slug}`);
     const index = await get("/issues");

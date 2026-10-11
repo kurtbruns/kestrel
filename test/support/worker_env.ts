@@ -7,6 +7,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import type { AppEnv } from "../../src/env";
 import worker from "../../src/index";
+import { base } from "./http";
 
 /** This suite's env with some vars overridden. */
 export const withVars = (vars: Record<string, string>): AppEnv =>
@@ -21,10 +22,7 @@ export async function fetchWith(
 ): Promise<Response> {
   const ctx = createExecutionContext();
   const res = await worker.fetch(
-    new Request(`https://kestrel.test${path}`, init) as Request<
-      unknown,
-      IncomingRequestCfProperties
-    >,
+    new Request(`${base}${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
     withVars(vars),
     ctx,
   );

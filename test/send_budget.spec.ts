@@ -20,9 +20,8 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { sweep } from "../src/send/sweep";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
-import { NoKeyProvider, SesLikeProvider } from "./support/keyless";
 import { allowErrorLogs } from "./support/log";
-import { ResendLikeProvider } from "./support/resend_like";
+import { NoKeyProvider, ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
 
 /** The test env with its D1 held to the 100-bind cap and counted. */
 function guarded() {

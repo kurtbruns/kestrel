@@ -6,8 +6,7 @@ import { getSettings, updateSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
-import { adminAuth } from "./support/auth";
-import { base } from "./support/http";
+import { AUTH, base } from "./support/http";
 
 const config = () => getConfig(env);
 
@@ -152,7 +151,7 @@ describe("dev seed (Field Notes dataset)", () => {
 
     const res = await SELF.fetch(`${base}/api/dev/reset`, {
       method: "POST",
-      headers: { ...(await adminAuth()) },
+      headers: AUTH,
     });
     expect(res.status).toBe(200);
 
@@ -167,9 +166,9 @@ describe("dev seed (Field Notes dataset)", () => {
     });
     expect(await listSends(env.DB)).toHaveLength(0);
     // Settings are back to defaults, so the identity falls back to the From name.
-    const after = (await (
-      await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
-    ).json()) as { settings: { publication: { name: string } } };
+    const after = (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as {
+      settings: { publication: { name: string } };
+    };
     expect(after.settings.publication.name).toBe("");
   });
 

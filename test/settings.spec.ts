@@ -11,10 +11,9 @@ import { confirmationEmail } from "../src/emails/system";
 import { type AppEnv, getConfig } from "../src/env";
 import type { RequestContext } from "../src/router";
 import * as settingsRoutes from "../src/routes/settings";
-import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
-import { base, PNG_1x1 } from "./support/http";
+import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
@@ -23,7 +22,7 @@ beforeEach(async () => {
 });
 
 async function getSettings() {
-  const res = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
+  const res = await SELF.fetch(`${base}/api/settings`, { headers: AUTH });
   return {
     res,
     body: (await res.json()) as {
@@ -59,7 +58,7 @@ async function putLogo(bytes: Uint8Array, type: string) {
   fd.append("file", new File([bytes], "logo", { type }));
   return SELF.fetch(`${base}/api/settings/logo`, {
     method: "POST",
-    headers: { ...(await adminAuth()) },
+    headers: AUTH,
     body: fd,
   });
 }
@@ -67,7 +66,7 @@ async function putLogo(bytes: Uint8Array, type: string) {
 async function putSettings(patch: unknown) {
   return SELF.fetch(`${base}/api/settings`, {
     method: "PUT",
-    headers: { ...(await adminAuth()), "content-type": "application/json" },
+    headers: JSON_AUTH,
     body: JSON.stringify(patch),
   });
 }
@@ -82,9 +81,9 @@ async function subscribeAndGetConfirmation() {
     body: JSON.stringify({ email }),
   });
   expect(sub.ok).toBe(true);
-  const outbox = (await (
-    await SELF.fetch(`${base}/api/dev/outbox`, { headers: await adminAuth() })
-  ).json()) as { messages: { to: string; subject: string; html: string; text: string }[] };
+  const outbox = (await (await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH })).json()) as {
+    messages: { to: string; subject: string; html: string; text: string }[];
+  };
   return outbox.messages.find((m) => m.to === email);
 }
 
@@ -137,7 +136,9 @@ describe("settings surface", () => {
   });
 
   // The suite's own env carries no provider credential, so a deployed env's secrets are
-  // put in front of the handler directly: no value may surface under any key.
+  // put in front of the handler directly: no value may surface under any key. Not through
+  // the router, because the Access vars make the env non-dev, where the suite's dev token
+  // no longer authenticates.
   it("reflects no secret value of a deployed env, whatever its provider", async () => {
     const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag-7f3e" };
     for (const deploy of [SES_DEPLOY, RESEND_DEPLOY]) {
@@ -392,7 +393,7 @@ describe("confirmation email copy (SPEC §7)", () => {
 // The masthead renders directly (a pure function of copy + identity), so its
 // degrade-to-plain behavior is unit-tested without the subscribe round-trip.
 describe("confirmation email masthead (SPEC §7)", () => {
-  const link = "https://kestrel.test/confirm?token=abc123";
+  const link = `${base}/confirm?token=abc123`;
 
   it("degrades to no masthead when there is no identity, keeping the confirm link", () => {
     const r = confirmationEmail(link, DEFAULT_CONFIRMATION_EMAIL, {
@@ -473,7 +474,7 @@ describe("publication logo", () => {
 
     const del = await SELF.fetch(`${base}/api/settings/logo`, {
       method: "DELETE",
-      headers: { ...(await adminAuth()) },
+      headers: AUTH,
     });
     expect(del.status).toBe(200);
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
@@ -533,9 +534,9 @@ describe("a corrupt settings row", () => {
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
       await env.MEDIA.delete(BRANDING_LOGO_KEY);
       const before = await readRow();
-      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const errors = vi.spyOn(console, "error");
       try {
-        const got = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
+        const got = await SELF.fetch(`${base}/api/settings`, { headers: AUTH });
         expect(got.status).toBe(500);
         expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);

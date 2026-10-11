@@ -26,26 +26,20 @@ import {
 import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
-import { resetDatabase } from "./support/fixtures";
-import { base } from "./support/http";
+import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH } from "./support/http";
 
 beforeEach(async () => {
   await resetDatabase();
   clearFakeOutbox();
 });
 
+/** A post sent to one reader (`a@example.com`) through the sweep, as the archive serves it. */
 async function sendPost(title: string, markdown: string): Promise<posts.PostRow> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  const { post } = await posts.createPost(env.DB, { subject: title, markdown }, "test");
-  await freeze(env, getConfig(env), post, Date.now() - 1000);
+  await seedConfirmed("a@example.com");
+  const send = await dueSend({ subject: title, markdown });
   await sweep(env);
-  return post;
+  return (await posts.getPost(env.DB, send.post_id))!;
 }
 
 describe("archive / view-in-browser", () => {
@@ -133,7 +127,7 @@ describe("archive / view-in-browser", () => {
       // The sent email carries every part: the recipient's unsubscribe link, view in
       // browser, and the address.
       const [sent] = fakeOutbox();
-      expect(sent!.html).toContain("uns-a");
+      expect(sent!.html).toContain("/unsubscribe?token=uns-a@example.com");
       expect(sent!.html).toContain(">Unsubscribe</a>");
       expect(sent!.html).toContain(">View in browser</a>");
       expect(sent!.html).toContain("12 Marsh Lane");
@@ -823,7 +817,7 @@ describe("a test email's unsubscribe link", () => {
     );
     const res = await SELF.fetch(`${base}/api/posts/${post.id}/test`, {
       method: "POST",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      headers: JSON_AUTH,
       body: JSON.stringify({ to: "me@example.com" }),
     });
     expect(res.status).toBe(200);
@@ -862,7 +856,7 @@ describe("a test email's unsubscribe link", () => {
       "test",
     );
     const res = await SELF.fetch(`${base}/api/posts/${post.id}/preview`, {
-      headers: await adminAuth(),
+      headers: AUTH,
     });
     expect(res.status).toBe(200);
     const html = await res.text();

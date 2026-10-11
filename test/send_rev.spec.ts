@@ -7,9 +7,8 @@ import * as sends from "../src/db/sends";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { frozenSend, resetDatabase, seedConfirmed, tpl } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
-import { tpl } from "./support/sends";
 
 // Every change a reader could see of a send moves its `rev` along one app-wide sequence,
 // and a list read hands back a cursor at that sequence (SPEC §8), so a client can later

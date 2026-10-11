@@ -15,9 +15,8 @@ import { nextRetry } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick, ticks } from "./support/fixtures";
-import { SesLikeProvider } from "./support/keyless";
 import { allowErrorLogs } from "./support/log";
-import { ResendLikeProvider } from "./support/resend_like";
+import { ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
 import { viewOf } from "./support/view";
 
 // A failure that is the provider's or the account's halts the send's run, not its

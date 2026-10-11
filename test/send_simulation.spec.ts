@@ -20,7 +20,7 @@ import { sweep } from "../src/send/sweep";
 import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
-import { AUTH, JSON_AUTH, readJson } from "./support/http";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith, withVars } from "./support/worker_env";
 
@@ -85,7 +85,7 @@ afterEach(() => {
 const recipients = (n: number, tag = "r") =>
   Array.from({ length: n }, (_, i) => ({
     email: `${tag}${i}@birds.example`,
-    unsubscribeUrl: `https://kestrel.test/unsubscribe?token=${tag}${i}`,
+    unsubscribeUrl: `${base}/unsubscribe?token=${tag}${i}`,
   }));
 
 /** `n` confirmed readers, `reader0@birds.example` up, with index-based ids and tokens

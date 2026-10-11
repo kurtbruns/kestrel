@@ -17,11 +17,9 @@ import { readAgainAt, SETTLE_FOLLOW_MS } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
 import { cancel, onTheMinute } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
-import { AUTH, base, JSON_AUTH } from "./support/http";
-import { setRow, tpl } from "./support/sends";
+import { frozenSend, resetDatabase, seedConfirmed, setRow, tpl } from "./support/fixtures";
+import { AUTH, adminAuth, base, JSON_AUTH } from "./support/http";
 
 // GET /api/sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever

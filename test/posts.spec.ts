@@ -1,8 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-import { AUTH, base, readJson } from "./support/http";
+import { AUTH, adminAuth, base, readJson } from "./support/http";
 
 async function createPost(body: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/posts`, {

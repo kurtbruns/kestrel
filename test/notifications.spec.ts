@@ -16,7 +16,6 @@ import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
 import { guardD1 } from "./support/d1_guard";
 import { RESEND_DEPLOY } from "./support/deploy";
 import {
@@ -27,7 +26,7 @@ import {
   seedConfirmed,
   ticks,
 } from "./support/fixtures";
-import { base } from "./support/http";
+import { AUTH, base, JSON_AUTH } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -65,9 +64,8 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
-  errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  errors = vi.spyOn(console, "error");
+  warnings = vi.spyOn(console, "warn");
 });
 
 afterEach(() => {
@@ -287,9 +285,7 @@ describe("isolation", () => {
     failFakeNotify(1);
     const surface = async () =>
       (
-        (await (
-          await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
-        ).json()) as {
+        (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as {
           notificationStatus: Awaited<ReturnType<typeof notifications.notificationStatus>>;
         }
       ).notificationStatus;
@@ -346,7 +342,7 @@ describe("isolation", () => {
 
   it("logs what it tells the publisher without the publisher's address", async () => {
     allowErrorLogs("notify.error");
-    const infos = vi.spyOn(console, "log").mockImplementation(() => {});
+    const infos = vi.spyOn(console, "log");
     await seedConfirmed(addresses(2));
     await dueSend({ subject: "Owls in winter" });
     failFakeNotify(1);
@@ -462,7 +458,7 @@ describe("after the review", () => {
     const test = async () =>
       SELF.fetch(`${base}/api/settings/notifications/test`, {
         method: "POST",
-        headers: await adminAuth(),
+        headers: AUTH,
       });
     expect((await test()).status).toBe(200);
     let status = await notifications.notificationStatus(env.DB);
@@ -573,17 +569,15 @@ describe("the settings surface", () => {
   const put = async (patch: unknown) =>
     SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      headers: JSON_AUTH,
       body: JSON.stringify(patch),
     });
   const get = async () =>
-    (await (
-      await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
-    ).json()) as any;
+    (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as any;
   const test = async () =>
     SELF.fetch(`${base}/api/settings/notifications/test`, {
       method: "POST",
-      headers: await adminAuth(),
+      headers: AUTH,
     });
 
   it("stores the address as a preference, normalized, and reflects the channel read-only", async () => {

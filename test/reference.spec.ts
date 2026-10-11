@@ -6,7 +6,7 @@ import { requireAuth } from "../src/auth/middleware";
 import { type AppEnv, getConfig } from "../src/env";
 import { buildReference } from "../src/reference";
 import { type RouteDef, Router } from "../src/router";
-import { adminAuth } from "./support/auth";
+import { AUTH, base } from "./support/http";
 
 // The point of the manifest: the reference IS the registration. These tests pin
 // that it can't drift — every live route is listed, its documented tier is the
@@ -154,13 +154,13 @@ describe("API reference is generated from the route registration", () => {
 
 describe("/api/reference is served like the rest of the authed admin surface", () => {
   it("401s without a token", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/reference");
+    const res = await SELF.fetch(`${base}/api/reference`);
     expect(res.status).toBe(401);
   });
 
   it("returns the manifest as JSON when authed, listing real routes (the SPA renders it)", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/reference", {
-      headers: await adminAuth(),
+    const res = await SELF.fetch(`${base}/api/reference`, {
+      headers: AUTH,
     });
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toContain("application/json");

@@ -10,8 +10,9 @@ import { _clearKeyCache, isSnsHost, type SnsEnvelope } from "../src/providers/sn
 import { PROVIDER_REQUEST_TIMEOUT_MS, type RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { deliveryEvent, seedDelivery } from "./support/deliveries";
 import { SNS_TOPIC_ARN } from "./support/deploy";
+import { deliveryEvent, resetDatabase, seedDelivery } from "./support/fixtures";
+import { base } from "./support/http";
 import { neverAnswers } from "./support/provider_timeout";
 import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
@@ -62,7 +63,7 @@ function decodeMimePart(mime: string, mediaType: string): string {
 }
 
 function webhookRequest(envelope: SnsEnvelope): Request {
-  return new Request("https://kestrel.test/webhooks/ses", {
+  return new Request(`${base}/webhooks/ses`, {
     method: "POST",
     headers: { "content-type": "text/plain; charset=UTF-8" },
     body: JSON.stringify(envelope),
@@ -72,10 +73,7 @@ function webhookRequest(envelope: SnsEnvelope): Request {
 // --- setup ------------------------------------------------------------------
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM suppressions"),
-  ]);
+  await resetDatabase();
   _clearKeyCache();
 });
 
@@ -742,7 +740,7 @@ describe("SesProvider.parseWebhook (SNS)", () => {
 
   it("rejects an unparseable body with 400", async () => {
     const result = await newProvider().parseWebhook(
-      new Request("https://kestrel.test/webhooks/ses", { method: "POST", body: "not json" }),
+      new Request(`${base}/webhooks/ses`, { method: "POST", body: "not json" }),
       sesEnv,
     );
     expect(result.response.status).toBe(400);

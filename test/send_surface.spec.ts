@@ -16,9 +16,8 @@ import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
 import { onTheMinute } from "../src/send/schedule";
 import { has } from "./support/conditions";
-import { frozenSend, resetDatabase } from "./support/fixtures";
+import { frozenSend, resetDatabase, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
-import { setRow } from "./support/sends";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it

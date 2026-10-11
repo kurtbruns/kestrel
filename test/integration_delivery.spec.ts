@@ -31,6 +31,7 @@ import { _clearKeyCache, type SnsEnvelope } from "../src/providers/sns";
 import { runSend } from "../src/send/loop";
 import { RESEND_DEPLOY, SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { base } from "./support/http";
 import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
 // --- env overrides ----------------------------------------------------------
@@ -85,7 +86,7 @@ async function signedResendWebhook(payload: unknown): Promise<Request> {
   const timestamp = String(Math.floor(Date.now() / 1000));
   const body = JSON.stringify(payload);
   const signature = await signSvix(RESEND_DEPLOY.RESEND_WEBHOOK_SECRET, id, timestamp, body);
-  return new Request("https://kestrel.test/webhooks/resend", {
+  return new Request(`${base}/webhooks/resend`, {
     method: "POST",
     headers: {
       "svix-id": id,
@@ -202,7 +203,7 @@ describe("webhook routes are wired through the real router", () => {
       return new Response("not found", { status: 404 });
     });
     const envelope = await signedSnsBounce(signer, "bounce@integ.test", providerId);
-    const req = new Request("https://kestrel.test/webhooks/ses", {
+    const req = new Request(`${base}/webhooks/ses`, {
       method: "POST",
       headers: { "content-type": "text/plain" },
       body: JSON.stringify(envelope),
@@ -260,11 +261,11 @@ describe("webhook routes are wired through the real router", () => {
     // adapter can produce: a 404 would mean the route is gone, and a 401 that requireAuth
     // stopped it before the adapter ever parsed it.
     const sesRes = await route(
-      new Request("https://kestrel.test/webhooks/ses", { method: "POST", body: "{}" }),
+      new Request(`${base}/webhooks/ses`, { method: "POST", body: "{}" }),
       sesEnv(),
     );
     const resendRes = await route(
-      new Request("https://kestrel.test/webhooks/resend", { method: "POST", body: "{}" }),
+      new Request(`${base}/webhooks/resend`, { method: "POST", body: "{}" }),
       resendEnv(),
     );
     // SES: the envelope parses but carries no signature, so SNS verification refuses it.

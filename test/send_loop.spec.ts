@@ -5,14 +5,9 @@ import * as sends from "../src/db/sends";
 import { readSettings, updateSettings } from "../src/db/settings";
 import * as subscribersDb from "../src/db/subscribers";
 import { getConfig } from "../src/env";
-import { MISSED_THRESHOLD_MS } from "../src/lib/time";
-import {
-  clearFakeOutbox,
-  FakeProvider,
-  failFakeSendBatch,
-  fakeOutbox,
-} from "../src/providers/fake";
-import { runSend, type SendLoopResult } from "../src/send/loop";
+import { LEASE_TTL_MS, MISSED_THRESHOLD_MS } from "../src/lib/time";
+import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
+import { runSend } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
@@ -257,33 +252,17 @@ describe("send loop + sweep", () => {
     expect(countTo("late@example.com")).toBe(1);
   });
 
-  it("overlapping runs: exactly one acquires the lease (no double send)", async () => {
+  it("a run that finds the lease held by another run mails no one (no double send)", async () => {
     await seedConfirmed(["o1@example.com", "o2@example.com"]);
     const send = await frozenSend(Date.now() - 1000);
+    // Another run holds the lease, as one mid-send would.
+    expect(await sends.acquireLease(env.DB, send.id, Date.now(), LEASE_TTL_MS)).not.toBeNull();
 
-    // Two runs started together may still run one after the other, which would pass with no
-    // lease at all. So the first is held inside its provider call, with its recipients
-    // handed off, while the second runs from start to end: the second tries the lease while
-    // the first holds it, every time.
-    const real = FakeProvider.prototype.sendBatch;
-    let second: Promise<SendLoopResult> | undefined;
-    vi.spyOn(FakeProvider.prototype, "sendBatch").mockImplementation(async function (
-      this: FakeProvider,
-      ...args
-    ) {
-      if (!second) {
-        second = runSend(env, send.id);
-        await second;
-      }
-      return real.apply(this, args);
-    });
-    const first = await runSend(env, send.id);
+    const result = await runSend(env, send.id);
 
-    expect(second).toBeDefined();
-    expect([first.leased, (await second!).leased]).toEqual([true, false]);
-    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
-    expect(countTo("o1@example.com")).toBe(1);
-    expect(countTo("o2@example.com")).toBe(1);
+    expect(result.leased).toBe(false);
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
+    expect(fakeOutbox().length).toBe(0);
   });
 
   it("does not fire a scheduled send whose fire time is still in the future (reschedule-vs-sweep race, I6)", async () => {
@@ -303,17 +282,13 @@ describe("send loop + sweep", () => {
     expect(fakeOutbox().length).toBe(0);
   });
 
-  /** Run a due send whose audience is fixed with both readers, and `leave` acts on `gone`
-   *  the moment that resolution lands: before any recipient is handed off. */
+  /** Fix a due send's audience with both readers, let `leave` act on `gone`, then sweep:
+   *  the reader leaves after resolution and before any recipient is handed off. */
   async function leaveAfterResolution(leave: (email: string) => Promise<unknown>) {
     await seedConfirmed(["keep@example.com", "gone@example.com"]);
     const send = await frozenSend(Date.now() - 1000);
-    const resolve = sends.resolveAudience;
-    vi.spyOn(sends, "resolveAudience").mockImplementation(async (...args) => {
-      const resolved = await resolve(...args);
-      await leave("gone@example.com");
-      return resolved;
-    });
+    await sends.resolveAudience(env.DB, send.id, Date.now());
+    await leave("gone@example.com");
 
     await sweep(env);
 

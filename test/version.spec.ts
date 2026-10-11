@@ -1,7 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-import { base } from "./support/http";
+import { AUTH, base } from "./support/http";
 
 describe("GET /api/version", () => {
   it("requires auth (401 without a token)", async () => {
@@ -10,7 +9,7 @@ describe("GET /api/version", () => {
   });
 
   it("reports the running build to an authed client", async () => {
-    const res = await SELF.fetch(`${base}/api/version`, { headers: await adminAuth() });
+    const res = await SELF.fetch(`${base}/api/version`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       version: string;

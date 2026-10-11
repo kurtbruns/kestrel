@@ -11,8 +11,8 @@ import {
 } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { deliveryEvent, seedDelivery } from "./support/deliveries";
-import { resetDatabase } from "./support/fixtures";
+import { deliveryEvent, resetDatabase, seedDelivery } from "./support/fixtures";
+import { base } from "./support/http";
 import { neverAnswers } from "./support/provider_timeout";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
@@ -390,7 +390,7 @@ async function signedRequest(
   if (opts.tamper) {
     signature = `${signature.slice(0, -3)}AAA`;
   }
-  return new Request("https://kestrel.test/webhooks/resend", {
+  return new Request(`${base}/webhooks/resend`, {
     method: "POST",
     headers: {
       "svix-id": id,
@@ -576,7 +576,7 @@ describe("ResendProvider.parseWebhook", () => {
 
 describe("POST /webhooks/resend route", () => {
   it("is public (not behind requireAuth): an unsigned POST reaches the provider", async () => {
-    const res = await SELF.fetch("https://kestrel.test/webhooks/resend", {
+    const res = await SELF.fetch(`${base}/webhooks/resend`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "email.delivered" }),

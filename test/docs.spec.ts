@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import readme from "../docs/README.md";
 import type { DocsResponse } from "../shared/docs";
 import { bundledPages, renderDocs } from "../src/docs";
-import { adminAuth } from "./support/auth";
+import { AUTH, base } from "./support/http";
 
 describe("docs registry (docs/README.md and the section folders it lists)", () => {
   it("renders the guide in the README's order with titles from each doc's H1 and an HTML fragment", () => {
@@ -87,12 +87,12 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
 
 describe("docs API is gated like the rest of the authoring API", () => {
   it("401s the guide without a token", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs");
+    const res = await SELF.fetch(`${base}/api/docs`);
     expect(res.status).toBe(401);
   });
 
   it("401s with a wrong token", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs", {
+    const res = await SELF.fetch(`${base}/api/docs`, {
       headers: { Authorization: "Bearer nope" },
     });
     expect(res.status).toBe(401);
@@ -101,7 +101,7 @@ describe("docs API is gated like the rest of the authoring API", () => {
 
 describe("docs API serves the setup content when authed", () => {
   it("returns the whole guide as sanitized HTML fragments in reading order", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/docs", { headers: await adminAuth() });
+    const res = await SELF.fetch(`${base}/api/docs`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as DocsResponse;
     expect(body.docs.every((d) => d.title.length > 0)).toBe(true);

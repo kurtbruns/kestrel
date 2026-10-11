@@ -17,9 +17,8 @@ import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
-import { NoKeyProvider } from "./support/keyless";
 import { allowErrorLogs } from "./support/log";
-import { ResendLikeProvider } from "./support/resend_like";
+import { NoKeyProvider, ResendLikeProvider } from "./support/resend_like";
 
 // Wedged has one definition (SPEC §12): sending, nothing left to hand off, recipients in
 // flight, and the lease released by the run that left them there. The watch, the feed, the

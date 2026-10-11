@@ -3,8 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { audienceEmails, isSuppressed } from "../src/db/subscribers";
 import type { DeliveryEvent } from "../src/providers/types";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { deliveryEvent, SEEDED_SEND_ID, seedDelivery } from "./support/deliveries";
-import { seedConfirmed } from "./support/fixtures";
+import {
+  deliveryEvent,
+  resetDatabase,
+  SEEDED_SEND_ID,
+  seedConfirmed,
+  seedDelivery,
+} from "./support/fixtures";
 import { logged } from "./support/log";
 
 // applyDeliveryEvents() is the ONLY thing that mutates state from provider events, so the
@@ -22,13 +27,7 @@ async function deliveryBounceKind(providerId: string): Promise<string | null> {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    // A fresh send each test, so its counters start at zero.
-    env.DB.prepare("DELETE FROM sends WHERE id = ?").bind(SEEDED_SEND_ID),
-  ]);
+  await resetDatabase();
 });
 
 describe("applyDeliveryEvents: suppression address recovery", () => {
@@ -256,7 +255,7 @@ describe("applyDeliveryEvents: what it logs", () => {
     await seedDelivery("hard@example.com", "msg-log-hard");
     await seedDelivery("soft@example.com", "msg-log-soft");
     await seedDelivery("cmp@example.com", "msg-log-cmp");
-    const printed = vi.spyOn(console, "log").mockImplementation(() => {});
+    const printed = vi.spyOn(console, "log");
 
     await applyDeliveryEvents(env.DB, [
       { type: "delivered", providerId: "msg-log-ok" },
