@@ -23,7 +23,7 @@ import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
-import { expectErrorLogs, logged } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
 // per provider with the adapter's own traits, receipts through the REAL ingest
@@ -325,7 +325,7 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   });
 
   it("halts on the daily quota, resumes at its retry, wedges on a lost request, and Resolve completes it", async () => {
-    expectErrorLogs("send.ambiguous", "send.wedged");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     // Workers Paid's budget, so a tick reaches every recipient; the default models Free. More
     // readers than one group, so the requests after each group's first go out together and
     // the resumed send takes more than one tick.

@@ -1,6 +1,6 @@
 /**
- * Fails a Worker test that logs an error-level event it did not declare with
- * `expectErrorLogs` (`test/support/log.ts`). An error line means a reader could be mailed
+ * Fails a Worker test that logs an error-level event it did not allow with
+ * `allowErrorLogs` (`test/support/log.ts`). An error line means a reader could be mailed
  * twice or a send has not gone out (the level rule in `src/lib/log.ts`), so one a test did
  * not ask for is a finding, not output to scroll past. It wraps the logger itself rather
  * than the console, so a spec's console spies (and `vi.restoreAllMocks`) can't hide a line

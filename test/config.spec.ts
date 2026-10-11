@@ -18,7 +18,7 @@ import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 
 /** Minimal binding bag for the pure getConfig tests (no D1/R2 needed). */
 function envWith(overrides: Record<string, string | undefined>): AppEnv {
@@ -255,7 +255,7 @@ describe("getConfig — deploy config is validated", () => {
   });
 
   it("answers every request with a 500 that names the variable", async () => {
-    expectErrorLogs("config.invalid");
+    allowErrorLogs("config.invalid");
     const broken = { ...env, PROVIDER: "SES" } as unknown as AppEnv;
     const ctx = createExecutionContext();
     const res = await worker.fetch(
