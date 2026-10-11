@@ -17,7 +17,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Select **Send test email**, enter your address, and send it.
 
-1. Open the email. It should arrive in your inbox, not in spam. The image loads and the subject reads as you wrote it. Its **View in browser** link opens "Nothing here yet" until the post goes out, and its unsubscribe link opens a page saying nobody was unsubscribed, since a test email unsubscribes no one. Section 5 unsubscribes for real.
+1. Open the email. It should arrive in your inbox, not in spam. The image loads and the subject reads as you wrote it. Its **View in browser** link opens "Nothing here yet" until the post goes out, and its unsubscribe link opens the page a subscriber sees, marked as a test and showing a sample address. Its button walks through to the confirmation, but a test email unsubscribes no one. Section 5 unsubscribes for real.
 
 ## 2. Check that it passes authentication
 
