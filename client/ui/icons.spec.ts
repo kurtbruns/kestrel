@@ -30,6 +30,13 @@ const ALL = {
   ul: true,
   upload: true,
   x: true,
+  book: true,
+  branch: true,
+  "circle-check": true,
+  "circle-minus": true,
+  desktop: true,
+  mail: true,
+  phone: true,
 } as const satisfies Record<IconName, true>;
 const names = Object.keys(ALL) as IconName[];
 

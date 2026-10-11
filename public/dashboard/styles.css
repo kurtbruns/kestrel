@@ -5279,30 +5279,188 @@ button.set-field-remove {
   color: var(--muted);
 }
 
-/* --- Reader pages: one reader page at a time, framed as the Worker renders it ---
-   The bar holds the journeys and the width; beneath it, the journey's states and what
-   on its pages is the publisher's. The page brings its own ground, so the frame has
-   none; at phone width it sits on the sunken stage at a phone's 375px. */
-.set-rp-bar {
-  flex-wrap: wrap;
+/* --- Reader pages: an outline of every page a reader can land on, beside one framed page ---
+   The journeys are the outline's headings, set like section titles and never controls;
+   the pages are its rows. A journey's steps are numbered on a thread, peers carry a dot,
+   and an off-path page carries a dashed branch mark. The section folds by its own width,
+   not the window's (the sidebar decides how wide Settings is): too narrow for the outline,
+   it becomes one grouped select, and the width toggle goes, since the frame is already
+   no wider than a phone. The page brings its own ground, so the frame has none. */
+.set-rp-sec {
+  container-type: inline-size;
 }
-.set-rp-head {
+.set-rp {
+  display: grid;
+  grid-template-columns: 210px minmax(0, 1fr);
+  overflow: hidden;
+}
+.set-rp-nav {
+  border-right: 1px solid var(--line);
+  background: var(--sunken);
+  padding: 14px 10px 18px;
+}
+.set-rp-journey + .set-rp-journey {
+  margin-top: 16px;
+}
+.set-rp-jhead {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 6px 6px;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.set-rp-jhead svg {
+  width: 13px;
+  height: 13px;
+}
+.set-rp-journey.current .set-rp-jhead {
+  color: var(--fg);
+}
+.set-rp-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+}
+/* The thread behind a journey's numbered steps, from the first mark to the last row. */
+.set-rp-list.steps::before {
+  content: "";
+  position: absolute;
+  left: 17px;
+  top: 14px;
+  bottom: 14px;
+  width: 1px;
+  background: var(--line-soft);
+}
+.set-rp-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: 7px;
+  padding: 5px 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--fg);
+  cursor: pointer;
+}
+.set-rp-item:hover {
+  background: var(--hover);
+}
+.set-rp-item[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+.set-rp-item.off {
+  color: var(--muted);
+}
+.set-rp-item.off[aria-current="page"] {
+  color: var(--accent);
+}
+.set-rp-mark {
+  position: relative;
+  z-index: 1;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid var(--line-soft);
+  background: var(--card);
+  font-size: 10.5px;
+  font-weight: 650;
+  color: var(--muted);
+}
+.set-rp-item[aria-current="page"] .set-rp-mark {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.set-rp-item.off .set-rp-mark {
+  border-style: dashed;
+  background: transparent;
+}
+.set-rp-mark svg {
+  width: 11px;
+  height: 11px;
+}
+.set-rp-pick {
+  display: none;
+}
+.set-rp-pick select {
+  width: 100%;
+}
+.set-rp-main {
+  min-width: 0;
   display: flex;
   flex-direction: column;
+}
+.set-rp-top {
+  display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 12px 14px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px 12px;
   border-bottom: 1px solid var(--line);
 }
-.set-rp-head .set-wtog {
+.set-rp-crumb {
+  display: flex;
   flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 650;
+}
+.set-rp-crumb-j {
+  color: var(--muted);
+  font-weight: 500;
+}
+.set-rp-crumb-sep {
+  color: var(--line-soft);
+  font-weight: 400;
 }
 .set-rp-note {
   margin: 0;
   font-size: 12.5px;
   line-height: 1.5;
   color: var(--muted);
-  max-width: 72ch;
+  max-width: 60ch;
+}
+.set-rp .set-wtog {
+  flex: 0 0 auto;
+}
+.set-rp .wtog-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.set-rp .wtog-btn svg {
+  width: 13px;
+  height: 13px;
+}
+/* Where a reader meets the page, and that this one is a sample: the cue a strip inside
+   the page would otherwise carry, kept in the app's chrome around it. */
+.set-rp-at {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.set-rp-at .mono {
+  overflow-wrap: anywhere;
 }
 .set-rp-stage.phone {
   padding: 18px 12px;
@@ -5323,9 +5481,33 @@ button.set-field-remove {
 }
 .set-rp-error {
   margin: 0;
-  padding: 12px 14px;
+  padding: 12px 16px;
   font-size: 13px;
   color: var(--danger-fg);
+}
+@container (max-width: 640px) {
+  .set-rp {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .set-rp-nav,
+  .set-rp .set-wtog {
+    display: none;
+  }
+  .set-rp-pick {
+    display: block;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--sunken);
+  }
+  .set-rp-stage.phone {
+    padding: 0;
+    background: none;
+  }
+  .set-rp-stage.phone .set-rp-frame {
+    width: 100%;
+    border: 0;
+    border-radius: 0;
+  }
 }
 
 /* --- shared unsaved-changes bar -------------------------------------------------

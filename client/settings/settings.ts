@@ -446,7 +446,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     body,
     html`${identitySection}${templateSection}${senderSection}${notifySection}${recipSection}${subscribeSection}${confirmationSection}${readerSection}${instanceSection}`,
   );
-  const readerPages = mountReaderPages(body, signal);
+  const readerPages = mountReaderPages(body, d, signal);
 
   // Keep the cached config + sidebar brand in step after a save (the sidebar brand
   // reads the same publication identity): this page's own response, with the saved half.
