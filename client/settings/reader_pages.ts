@@ -65,14 +65,18 @@ function outline(): Html {
   })}`;
 }
 
-/** The outline as one select, for a card too narrow for it: a group per journey, an
- *  off-path page marked as a branch. */
+/** The outline as one select, for a card too narrow for it: a group per journey, its
+ *  steps numbered as the outline numbers them. An off-path page carries no mark: a branch
+ *  glyph alone in an option's text reads as a stray character, not as "off the path",
+ *  and these pages' names already say what went wrong. */
 function picker(): Html {
   return html`<select id="rpSelect" aria-label="Reader page">${READER_JOURNEYS.map((j) => {
     const states: readonly ReaderPageState[] = j.states;
-    return html`<optgroup label="${j.label}">${states.map(
-      (s) => html`<option value="${j.id}/${s.id}">${s.offPath ? "↳ " : ""}${s.label}</option>`,
-    )}</optgroup>`;
+    let step = 0;
+    return html`<optgroup label="${j.label}">${states.map((s) => {
+      const n = j.flow === "steps" && !s.offPath ? `${++step}. ` : "";
+      return html`<option value="${j.id}/${s.id}">${n}${s.label}</option>`;
+    })}</optgroup>`;
   })}</select>`;
 }
 

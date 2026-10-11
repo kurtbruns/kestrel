@@ -142,7 +142,7 @@ describe("reader pages section (SPEC §5)", () => {
     expect(frame().srcdoc).toContain("/api/reader-pages/reading/post");
   });
 
-  it("offers the same pages as one grouped select, marking the off-path ones", async () => {
+  it("offers the same pages as one grouped select, numbering a journey's steps", async () => {
     await open();
     const select = $<HTMLSelectElement>("#rpSelect");
     expect($$("optgroup", select).map((g) => g.getAttribute("label"))).toEqual([
@@ -151,10 +151,17 @@ describe("reader pages section (SPEC §5)", () => {
       "Unsubscribe",
       "Reading",
     ]);
-    expect($$("optgroup[label='Unsubscribe'] option", select).map((o) => o.textContent)).toEqual([
-      "Ask",
-      "Unsubscribed",
-      "↳ Invalid link",
+    const options = (journey: string) =>
+      $$(`optgroup[label='${journey}'] option`, select).map((o) => o.textContent);
+    expect(options("Unsubscribe")).toEqual(["1. Ask", "2. Unsubscribed", "Invalid link"]);
+    // Reading's pages are peers, so none is numbered.
+    expect(options("Reading")).toEqual([
+      "Landing page",
+      "Archive",
+      "Post page",
+      "Landing, no posts yet",
+      "Archive, no posts yet",
+      "Nothing here yet",
     ]);
     select.value = "unsubscribe/invalid";
     select.dispatchEvent(new Event("change"));
