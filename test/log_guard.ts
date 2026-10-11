@@ -5,6 +5,10 @@
  * not ask for is a finding, not output to scroll past. It wraps the logger itself rather
  * than the console, so a spec's console spies (and `vi.restoreAllMocks`) can't hide a line
  * from it.
+ *
+ * A line counts against the test running when it is logged, so a test that leaves work to
+ * `waitUntil` must drain it (`waitOnExecutionContext`) before it ends, or a failure in that
+ * work lands on whichever test runs next.
  */
 
 import { afterEach, beforeEach } from "vitest";
@@ -24,6 +28,8 @@ beforeEach(() => {
 afterEach(() => {
   const problems = errorGuard.problems();
   if (problems.length > 0) {
-    throw new Error(problems.join("\n"));
+    throw new Error(
+      `${problems.join("\n")}\n(A line this test doesn't cause can be an earlier test's undrained waitUntil work.)`,
+    );
   }
 });

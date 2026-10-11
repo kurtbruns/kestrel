@@ -354,7 +354,7 @@ export function onceUntilRejected(init: () => Promise<void>): () => Promise<void
 // wrapped in `{ module_or_path }` and warn on a bare one, but the package's declaration
 // still names only the bare form, hence the cast.
 const inlinerReady = onceUntilRejected(() =>
-  initWasm({ module_or_path: wasmModule } as unknown as WebAssembly.Module),
+  initWasm({ module_or_path: wasmModule } as unknown as Parameters<typeof initWasm>[0]),
 );
 
 /** Inline the `<style>` rules onto elements and keep un-inlinable `@media` rules in a
