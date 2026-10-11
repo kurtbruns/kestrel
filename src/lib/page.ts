@@ -272,10 +272,17 @@ export function readerPage(opts: {
   const logo = logoUrl
     ? `<span class="r-logo"><img src="${escapeHtmlAttr(logoUrl)}" alt=""></span>`
     : "";
+  const nameHtml = name ? `<span class="r-name">${escapeHtml(name)}</span>` : "";
   const tag = tagline ? `<div class="r-tag">${escapeHtml(tagline)}</div>` : "";
+  const text = nameHtml || tag ? `<span>${nameHtml}${tag}</span>` : "";
+  // The brand shows only what the publication has, never a made-up name: a logo alone
+  // still needs a link name, and with nothing at all the way home reads "Archive".
+  const label = text ? "" : logo ? ' aria-label="Home"' : "";
+  const brand = `<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}"${label}>${logo || text ? `${logo}${text}` : "Archive"}</a>`;
   const cta = opts.subscribeUrl
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
+  const masthead = `<header class="r-mast"><div class="r-mast-in">\n${brand}\n${cta}\n</div></header>\n`;
   const banner = opts.banner
     ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
     : "";
@@ -289,11 +296,7 @@ ${FRAUNCES_FONT_LINKS}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
-${banner}<header class="r-mast"><div class="r-mast-in">
-<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}">${logo}<span><span class="r-name">${escapeHtml(name)}</span>${tag}</span></a>
-${cta}
-</div></header>
-<main class="r-body">${opts.mainHtml}</main>
+${banner}${masthead}<main class="r-body">${opts.mainHtml}</main>
 <footer class="r-foot"><div class="r-foot-in">Powered by Kestrel</div></footer>
 ${devDashboardBadge(opts.devDashboardUrl)}
 </body>
@@ -308,6 +311,12 @@ ${devDashboardBadge(opts.devDashboardUrl)}
         : { "cache-control": "public, max-age=300" }),
     },
   });
+}
+
+/** A reader page's tab title: the page's own name, then the publication's when it has
+ *  one, so a publication with no name gets "Archive", not "Archive · ". */
+export function pageTitle(page: string, name: string): string {
+  return name ? `${page} · ${name}` : page;
 }
 
 /** What a message page takes: the shell's identity and links, plus its own copy.
@@ -335,7 +344,7 @@ export function messagePage(opts: MessagePageOptions): Response {
   return readerPage({
     identity: opts.identity,
     homeUrl: opts.homeUrl,
-    title: `${opts.title} · ${opts.identity.name}`,
+    title: pageTitle(opts.title, opts.identity.name),
     mainHtml:
       `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` +
       `<h1 class="r-h1">${escapeHtml(opts.headline)}</h1>` +
@@ -393,7 +402,8 @@ export function landingPage(opts: {
     identity: opts.identity,
     subscribeUrl: opts.subscribeUrl,
     homeUrl: opts.homeUrl,
-    title: opts.identity.name,
+    // The front door is titled by the publication; with no name, by what it is.
+    title: opts.identity.name || "Home",
     mainHtml: main,
     devDashboardUrl: opts.devDashboardUrl,
   });
@@ -416,7 +426,7 @@ export function archiveIndexPage(opts: {
     identity: opts.identity,
     subscribeUrl: opts.subscribeUrl,
     homeUrl: opts.homeUrl,
-    title: `Archive · ${opts.identity.name}`,
+    title: pageTitle("Archive", opts.identity.name),
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
     devDashboardUrl: opts.devDashboardUrl,
   });

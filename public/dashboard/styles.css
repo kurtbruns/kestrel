@@ -2532,29 +2532,52 @@ body.web-mode .content {
 }
 
 /* toasts (live region) */
+/* Spans the viewport and centers its toasts, rather than left: 50% plus a transform,
+   which caps a toast's width at half the screen and wraps a sentence on a phone. */
 #toasts {
   position: fixed;
   bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 16px;
+  right: 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
   align-items: center;
   z-index: var(--z-toast);
   pointer-events: none;
 }
+/* Spaced by margin, not the column's gap, so a leaving toast can collapse its share. */
 .toast {
+  box-sizing: border-box;
+  max-width: 480px;
+  margin-top: 8px;
+  overflow: hidden;
   background: var(--fg);
   color: var(--bg);
   padding: 10px 16px;
   border-radius: 8px;
   font-size: 14px;
   opacity: 0;
-  transition: opacity 0.2s;
+  transform: translateY(6px);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
 }
 .toast.show {
   opacity: 1;
+  transform: none;
+}
+/* Leaving: fade while the height (set inline by leaveToast, since a transition can't run
+   from auto), padding, and spacing collapse, so the stack settles smoothly. 0.3s is
+   TOAST_LEAVE_MS in client/ui/widgets.ts. */
+.toast.leaving {
+  opacity: 0;
+  margin-top: 0;
+  padding-block: 0;
+  transition:
+    opacity 0.2s,
+    height 0.3s,
+    margin-top 0.3s,
+    padding-block 0.3s;
 }
 
 /* modal */

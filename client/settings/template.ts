@@ -2,6 +2,7 @@
 // editor.
 
 import { emailLogoHtml } from "../../shared/email_logo";
+import { publicationName } from "../../shared/publication";
 import type {
   SettingsPatchBody,
   SettingsResponse,
@@ -9,7 +10,6 @@ import type {
   TemplateTestResponse,
 } from "../../shared/settings";
 import { api } from "../api";
-import { parseFromName } from "../brand";
 import { withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -450,7 +450,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const d = data.deployment;
   const p = s.publication;
   const identity: TemplateIdentity = {
-    name: p.name || parseFromName(d.fromAddress) || "",
+    name: publicationName(p.name || "", d.fromAddress),
     tagline: p.tagline || "",
     logoUrl: p.logoUrl || "",
     address: p.address || "",

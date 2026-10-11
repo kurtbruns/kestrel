@@ -3,7 +3,7 @@ import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
 import * as posts from "../src/db/posts";
 import { latestSentSendForPost } from "../src/db/sends";
-import { updateSettings } from "../src/db/settings";
+import { setPublicationLogo, updateSettings } from "../src/db/settings";
 import { getConfig } from "../src/env";
 import { archiveIndexPage, landingPage } from "../src/lib/page";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
@@ -28,6 +28,7 @@ import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH } from "./support/http";
+import { fetchWith } from "./support/worker_env";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -867,5 +868,177 @@ describe("a test email's unsubscribe link", () => {
     expect(page.status).toBe(200);
     expect(await page.text()).toContain(banner);
     expect(await statusOf("a")).toBe("confirmed");
+  });
+});
+
+// With no publication name and no display name on the sending address, every reader page
+// words itself without a name rather than showing one the publisher didn't choose.
+describe("a publication with no name (SPEC §9)", () => {
+  const UNNAMED = { FROM_ADDRESS: "hello@send.example.com" };
+  const NAMED = { FROM_ADDRESS: '"Birds Weekly" <hello@send.example.com>' };
+
+  const titleOf = (page: string) => /<title>([^<]*)<\/title>/.exec(page)?.[1];
+  const headlineOf = (page: string) => /<h1 class="r-h1">([^<]*)<\/h1>/.exec(page)?.[1];
+  const mastheadOf = (page: string) =>
+    /<header class="r-mast">[\s\S]*?<\/header>/.exec(page)?.[0] ?? "";
+
+  /** The subscribers the pages need: a confirmed one (`uns-a`), a pending one with a live
+   *  confirm link (`cfm-p`), one whose link lapsed (`cfm-x`), and one who left. */
+  async function seedReaders(): Promise<void> {
+    await ensureSubscriber();
+    const now = Date.now();
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('p','p@example.com','pending','cfm-p','uns-p',?,?)",
+      ).bind(now, now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirm_sent_at) VALUES ('x','x@example.com','pending','cfm-x','uns-x',?,1)",
+      ).bind(now),
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at) VALUES ('u','u@example.com','unsubscribed',NULL,'uns-u',?,?)",
+      ).bind(now, now),
+    ]);
+  }
+
+  const asForm = { accept: "text/html", "content-type": "application/x-www-form-urlencoded" };
+  // Each row: the page, its path and request, and the title and headline it shows unnamed.
+  const pages: [string, string, RequestInit, string, string][] = [
+    ["subscribe form", "/subscribe", {}, "Subscribe", "Subscribe"],
+    [
+      "subscribe (bad address)",
+      "/subscribe",
+      { method: "POST", headers: asForm, body: "email=nope" },
+      "Subscribe",
+      "That doesn’t look like an email",
+    ],
+    [
+      "subscribe (sent)",
+      "/subscribe",
+      { method: "POST", headers: asForm, body: "email=new@example.com" },
+      "Subscribe",
+      "Almost there",
+    ],
+    [
+      "confirm (ready)",
+      "/confirm?token=cfm-p",
+      {},
+      "Confirm your subscription",
+      "Confirm your subscription",
+    ],
+    ["confirm (confirmed)", "/confirm?token=cfm-a", {}, "Subscribed", "You’re subscribed"],
+    ["confirm (expired)", "/confirm?token=cfm-x", {}, "Link expired", "This link has expired"],
+    ["confirm (invalid)", "/confirm?token=nope", {}, "Invalid link", "This link is invalid"],
+    ["unsubscribe (ready)", "/unsubscribe?token=uns-a", {}, "Unsubscribe", "Unsubscribe?"],
+    ["unsubscribe (test)", "/unsubscribe?test=1", {}, "Unsubscribe", "Unsubscribe?"],
+    [
+      "unsubscribe (already)",
+      "/unsubscribe?token=uns-u",
+      {},
+      "Unsubscribed",
+      "You’re unsubscribed",
+    ],
+    [
+      "unsubscribe (invalid)",
+      "/unsubscribe?token=nope",
+      {},
+      "Invalid link",
+      "This link is invalid",
+    ],
+    [
+      "unsubscribe POST (done)",
+      "/unsubscribe?token=uns-p",
+      { method: "POST", headers: asForm },
+      "Unsubscribed",
+      "You’re unsubscribed",
+    ],
+    ["post not found", "/archive/missing", {}, "Nothing here yet", "Nothing here yet"],
+  ];
+
+  it("words each subscribe, confirm, and unsubscribe page without a name, keeping a way home", async () => {
+    await seedReaders();
+    for (const [name, path, init, title, headline] of pages) {
+      const page = await (await fetchWith(UNNAMED, path, init)).text();
+      expect(titleOf(page), name).toBe(title);
+      expect(headlineOf(page), name).toBe(headline);
+      // With no name, logo, or tagline, the masthead still links home, labeled for where
+      // it leads rather than with a made-up name.
+      expect(mastheadOf(page), name).toBe(
+        '<header class="r-mast"><div class="r-mast-in">\n' +
+          '<a class="r-brand" href="http://localhost:8787/">Archive</a>\n\n' +
+          "</div></header>",
+      );
+    }
+  });
+
+  it("names the publication on the same pages when the sender has a display name", async () => {
+    await seedReaders();
+    const named: [string, string, string][] = [
+      ["/subscribe", "Subscribe · Birds Weekly", "Subscribe to Birds Weekly"],
+      [
+        "/confirm?token=cfm-p",
+        "Confirm your subscription · Birds Weekly",
+        "Confirm your subscription to Birds Weekly",
+      ],
+      ["/unsubscribe?token=uns-a", "Unsubscribe · Birds Weekly", "Unsubscribe from Birds Weekly?"],
+      ["/confirm?token=cfm-a", "Subscribed · Birds Weekly", "You’re subscribed"],
+    ];
+    for (const [path, title, headline] of named) {
+      const page = await (await fetchWith(NAMED, path)).text();
+      expect(titleOf(page), path).toBe(title);
+      expect(headlineOf(page), path).toBe(headline);
+      expect(mastheadOf(page), path).toBe(
+        '<header class="r-mast"><div class="r-mast-in">\n' +
+          '<a class="r-brand" href="http://localhost:8787/"><span><span class="r-name">Birds Weekly</span></span></a>\n\n' +
+          "</div></header>",
+      );
+    }
+  });
+
+  it("titles the landing page and the archive index without a name", async () => {
+    await publish("A Post", 1_000);
+    for (const [path, title] of [
+      ["/", "Home"],
+      ["/archive", "Archive"],
+    ] as const) {
+      const page = await (await fetchWith(UNNAMED, path)).text();
+      expect(titleOf(page), path).toBe(title);
+      expect(mastheadOf(page), path).toBe(
+        '<header class="r-mast"><div class="r-mast-in">\n' +
+          '<a class="r-brand" href="http://localhost:8787/">Archive</a>\n' +
+          '<span class="r-cta"><a class="r-sub" href="http://localhost:8787/subscribe">Subscribe here &rarr;</a></span>\n' +
+          "</div></header>",
+      );
+      expect(page, path).not.toContain("Newsletter");
+    }
+  });
+
+  it("titles the landing page and the archive index by the name when there is one", async () => {
+    await publish("A Post", 1_000);
+    expect(titleOf(await (await fetchWith(NAMED, "/")).text())).toBe("Birds Weekly");
+    expect(titleOf(await (await fetchWith(NAMED, "/archive")).text())).toBe(
+      "Archive · Birds Weekly",
+    );
+  });
+
+  it("links a logo alone home under an accessible name when there is no name", async () => {
+    await setPublicationLogo(env.DB, { version: 1, contentType: "image/png" });
+    const page = await (await fetchWith(UNNAMED, "/archive")).text();
+    expect(mastheadOf(page)).toContain(
+      '<a class="r-brand" href="http://localhost:8787/" aria-label="Home"><span class="r-logo">',
+    );
+    expect(page).not.toContain('class="r-name"');
+  });
+
+  it("points a post page's masthead back to the archive, by name when there is one (SPEC §5)", async () => {
+    const post = await publish("A Post", 1_000);
+    const backLink = (page: string) =>
+      /<a href="http:\/\/localhost:8787\/archive"[^>]*>.*?&larr;<\/span>&nbsp;([^<]*)<\/a>/.exec(
+        page,
+      )?.[1];
+    const unnamed = await (await fetchWith(UNNAMED, `/archive/${post.slug}`)).text();
+    // Only the masthead is the page's own: the sign-off stays as it was sent (I3).
+    expect(backLink(unnamed)).toBe("Archive");
+    const named = await (await fetchWith(NAMED, `/archive/${post.slug}`)).text();
+    expect(backLink(named)).toBe("Birds Weekly");
   });
 });

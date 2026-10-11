@@ -4,8 +4,8 @@
  *
  * Packs this repository as `npm publish` would (the `prepare` build included), checks the
  * tarball holds what an instance needs and none of Kestrel's source, then scaffolds a scratch
- * instance with the package's own `kestrel init` and installs the tarball into it. In that
- * instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
+ * instance with the package's own `kestrel init` and installs the tarball into it, which on
+ * npm 12 must block no dependency's install script. In that instance it runs the scaffold's typecheck (`wrangler types` and `tsc`), `tsc` again with
  * Kestrel's declaration checked too, and a `wrangler deploy --dry-run` that bundles the Worker
  * from node_modules; applies the migrations init copied to a local database; and checks that
  * `kestrel check-context` finds every context file current. Last it runs the instance: `npm
@@ -26,6 +26,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  writeFileSync,
 } from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -154,15 +155,44 @@ for (const key of ["compatibility_date", "compatibility_flags"]) {
 }
 
 // The instance pins a release npm doesn't have yet, so the tarball stands in for it, and the
-// tools install at the versions this repository uses.
-step("npm", [
+// tools install at the versions this repository uses. The install must end cleanly: npm 12
+// blocks a dependency's install script that the scaffold's `allowScripts` doesn't cover and
+// ends with a warning listing it, which reads like a failure to a new operator. Older npm
+// ignores `allowScripts` and runs every script, so it never warns: on older npm (CI's, from
+// Node 22) this one install runs through a pinned npm 12 instead, so the check proves what an
+// operator on npm 12 sees, and the rest of the run keeps the host's npm. A tarball is a non-registry
+// source, so npm 12 would also hold back the package's own `prepare` (its build, which an
+// operator's registry install never runs). The scratch instance denies it under the key npm
+// gives a tarball, its `file:` path, which an operator's instance has no need to.
+const tarball = join(work, packed.filename);
+const instancePkgPath = join(instance, "package.json");
+const instancePkg = JSON.parse(readFileSync(instancePkgPath, "utf8"));
+instancePkg.allowScripts = { ...instancePkg.allowScripts, [`file:${tarball}`]: false };
+writeFileSync(instancePkgPath, `${JSON.stringify(instancePkg, null, 2)}\n`);
+const installArgs = [
   "install",
   "--no-audit",
   "--no-fund",
-  join(work, packed.filename),
+  tarball,
   `wrangler@${versionOf("wrangler")}`,
   `typescript@${versionOf("typescript")}`,
-]);
+];
+const NPM_12 = "npm@12.0.1";
+const hostNpmMajor = Number(execFileSync("npm", ["--version"], { encoding: "utf8" }).split(".")[0]);
+const [installCmd, installCmdArgs] =
+  hostNpmMajor >= 12 ? ["npm", installArgs] : ["npx", ["-y", NPM_12, ...installArgs]];
+console.log(`[check-package] $ ${installCmd} ${installCmdArgs.join(" ")}`);
+const install = spawnSync(installCmd, installCmdArgs, { cwd: instance, encoding: "utf8" });
+process.stdout.write(install.stdout);
+process.stderr.write(install.stderr);
+if (install.status !== 0) {
+  fail(`npm install exited ${install.status}`);
+}
+if (/install scripts blocked/.test(`${install.stdout}${install.stderr}`)) {
+  fail(
+    "the instance's npm install blocked install scripts: add them to template/package.json's allowScripts",
+  );
+}
 step("npm", ["run", "typecheck"]);
 // Again without skipLibCheck, so Kestrel's own declaration is checked too.
 step("npx", ["--no", "--", "tsc", "--skipLibCheck", "false"]);

@@ -2,7 +2,7 @@
 // previous one down; the leave guards live here, over the mounted view's handle, wired by
 // installRouter() when boot calls it.
 
-import { dashboardRouteFromSearch } from "../shared/dashboard_link";
+import { dashboardRouteFromSearch, isDashboardRoute } from "../shared/dashboard_link";
 import { renderDashboard } from "./dashboard/dashboard";
 import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
@@ -27,7 +27,9 @@ let mountedHash = "";
 export function route(): Promise<void> {
   const hash = location.hash || "#/dashboard";
   mountedHash = hash;
-  const [, view, arg, sub] = hash.split("/");
+  // Views put a route's segments into API paths as they are, so a hash a link from an email
+  // could not name (a `..` segment, say) opens the dashboard home, as a mangled link does.
+  const [, view, arg, sub] = (isDashboardRoute(hash.slice(1)) ? hash : "#/dashboard").split("/");
   // The editor wants the full width, and carries its own "← Posts" affordance, so
   // it hides the sidebar rather than living beside it (SPEC §11: admin-only chrome).
   document.body.classList.toggle("editor-mode", view === "edit");

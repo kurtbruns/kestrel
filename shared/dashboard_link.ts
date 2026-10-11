@@ -26,10 +26,17 @@ const ROUTE = /^(\/[A-Za-z0-9._~%-]+)+$/;
  *  the path the page meant to read. */
 const DOT_SEGMENT = /\/(?:\.|%2e){1,2}(?=\/|$)/i;
 
-/** The hash a link's query names (`#/sent/<id>`), or null when it names none. Only a
- *  path-shaped route with no dot segment is taken, so a mangled or hand-typed query opens
- *  the editor's home rather than a nonsense route. */
+/** Whether `route` (a hash route without its `#`) is one the editor will open: path-shaped,
+ *  with no dot segment. The editor checks its hash with this as well as a link's query, so a
+ *  route typed into the address bar is held to the same rule as one from an email. */
+export function isDashboardRoute(route: string): boolean {
+  return ROUTE.test(route) && !DOT_SEGMENT.test(route);
+}
+
+/** The hash a link's query names (`#/sent/<id>`), or null when it names none. Only a route
+ *  the editor will open is taken, so a mangled or hand-typed query opens the editor's home
+ *  rather than a nonsense route. */
 export function dashboardRouteFromSearch(search: string): string | null {
   const route = new URLSearchParams(search).get(PARAM);
-  return route && ROUTE.test(route) && !DOT_SEGMENT.test(route) ? `#${route}` : null;
+  return route && isDashboardRoute(route) ? `#${route}` : null;
 }
