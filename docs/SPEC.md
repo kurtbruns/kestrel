@@ -257,7 +257,7 @@ The confirmation email's **wording** (its subject, the line above the button, th
 
 Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The publisher can also unsubscribe someone from the subscriber list, the same immediate, idempotent effect, for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
 
-A test email (§5) carries an unsubscribe link and the one-click header too, so the publisher can check them in a real inbox, but it is not a list send, so its link carries no subscriber's token and unsubscribes no one. Followed, it opens a page saying it was a test and that nobody was unsubscribed; a mail client's own Unsubscribe button gets a success that changes nothing. A link that carries a subscriber's token is always that subscriber's, never a test's.
+A test email (§5) carries an unsubscribe link and the one-click header too, so the publisher can check them in a real inbox, but it is not a list send, so its link carries no subscriber's token and unsubscribes no one. The preview's link is the same, since the preview is that email shown to the publisher. Followed, either opens a page saying nobody was unsubscribed and what the link does in an email to the list; a mail client's own Unsubscribe button gets a success that changes nothing. A link that carries a subscriber's token is always that subscriber's, never a test's.
 
 ### Two tokens, two jobs
 

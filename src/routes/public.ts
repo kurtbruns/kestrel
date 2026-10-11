@@ -238,13 +238,15 @@ function unsubscribedPage(c: RequestContext, email: string): Promise<Response> {
   });
 }
 
-/** The query a test email's unsubscribe link carries in place of a subscriber's token:
- *  a test is not a list send, so its link carries no subscriber's token and has no one
- *  to unsubscribe, even when it goes to a subscribed address. Built here, beside the route that answers it, so the link a test
- *  carries and the page it opens can't drift apart. */
+/** The query the unsubscribe link of a test email or a preview carries in place of a
+ *  subscriber's token: neither is a list send, so the link carries no subscriber's token
+ *  and has no one to unsubscribe, even when a test goes to a subscribed address. Built
+ *  here, beside the route that answers it, so the link they carry and the page it opens
+ *  can't drift apart. */
 const TEST_UNSUBSCRIBE_PARAM = "test";
 
-/** The unsubscribe link every test email carries (post and template tests alike). */
+/** The unsubscribe link a test email (post and template tests alike) and the editor's
+ *  preview carry. */
 export function testUnsubscribeUrl(config: Config): string {
   return `${config.appOrigin}/unsubscribe?${TEST_UNSUBSCRIBE_PARAM}=1`;
 }
@@ -255,15 +257,16 @@ function isTestUnsubscribe(c: RequestContext, token: string): boolean {
   return token === "" && c.url.searchParams.get(TEST_UNSUBSCRIBE_PARAM) === "1";
 }
 
-/** What a test email's unsubscribe link opens: it says what the link does in a real
- *  email, and that nobody was unsubscribed, instead of calling the link invalid. */
+/** What the unsubscribe link of a test email or a preview opens: it says nobody was
+ *  unsubscribed and what the link does in a real email, instead of calling the link
+ *  invalid. */
 function testUnsubscribePage(c: RequestContext): Promise<Response> {
   return readerMessage(c, {
-    title: "Test email",
-    eyebrow: "Test email",
-    headline: "This was a test email",
+    title: "Unsubscribe",
+    eyebrow: "Unsubscribe",
+    headline: "Nobody was unsubscribed",
     ledeHtml:
-      "In an email to your list, this link unsubscribes the person it was sent to. Nobody was unsubscribed.",
+      "This link came from a test email or a preview. In an email to your list, it unsubscribes the person it was sent to.",
   });
 }
 

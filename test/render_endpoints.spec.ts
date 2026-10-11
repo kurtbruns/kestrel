@@ -51,7 +51,8 @@ describe("preview + test endpoints", () => {
     const html = await res.text();
     expect(html).toContain(`/media/posts/${id}/cat.png`);
     expect(html).not.toContain("%%UNSUBSCRIBE_URL%%");
-    expect(html).toContain("/unsubscribe");
+    // The preview's link is a test's, so following it unsubscribes no one (SPEC §7).
+    expect(html).toContain("/unsubscribe?test=1");
   });
 
   it("GET /preview requires auth", async () => {
@@ -158,7 +159,7 @@ describe("preview + test endpoints", () => {
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
     expect(page).toContain(sentinel);
-    expect(page).toContain("/unsubscribe");
+    expect(page).toContain("/unsubscribe?test=1");
     expect(page).not.toContain("%%UNSUBSCRIBE_URL%%");
     const action = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),

@@ -1050,7 +1050,7 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
-      summary: "Unsubscribe landing page (`?token=`, or `?test=1` on a test email).",
+      summary: "Unsubscribe landing page (`?token=`, or `?test=1` on a test email or a preview).",
       query: [
         {
           name: "token",
@@ -1059,7 +1059,7 @@ export function createRouter({
         {
           name: "test",
           description:
-            "`1` on a test email's link, which carries no token: the page says it was a test and unsubscribes no one. A token, when present, wins.",
+            "`1` on the link of a test email or a preview, which carries no token: the page says nobody was unsubscribed, and unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribeLanding,
@@ -1069,7 +1069,8 @@ export function createRouter({
       path: "/unsubscribe",
       access: "public",
       resource: "subscriptions",
-      summary: "Process a one-click / form unsubscribe (`?token=`, or `?test=1` on a test email).",
+      summary:
+        "Process a one-click / form unsubscribe (`?token=`, or `?test=1` on a test email or a preview).",
       query: [
         {
           name: "token",
@@ -1078,7 +1079,7 @@ export function createRouter({
         {
           name: "test",
           description:
-            "`1` on a test email's link, which carries no token: answers 200 and unsubscribes no one. A token, when present, wins.",
+            "`1` on the link of a test email or a preview, which carries no token: answers 200 and unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribe,
