@@ -76,18 +76,20 @@ describe("web version", () => {
     expect(webVersionHash("a/b c")).toBe("#/web/post/a%2Fb%20c");
   });
 
-  it("says in its bar where the post stands and where its public page will be, as text", () => {
+  it("names the page as its tag, then where the post stands and where it will be published, as text", () => {
     const url = "https://newsletter.example.com/archive/herons";
     const short = "newsletter.example.com/archive/herons";
     const draft = bar({ scheduled: false, url });
-    expect(draft.textContent).toBe(`Web version Draft. Once sent, it will be at ${short}.`);
+    expect(draft.textContent).toBe(`Web version Draft · will be published at ${short}`);
     // The address doesn't answer yet, so it is text, and the bar has no link at all.
     expect(draft.querySelectorAll("a")).toHaveLength(0);
+    // The tag is the dev pill's chip, apart from the sentence.
+    expect(draft.querySelector(".web-bar-tag")?.textContent).toBe("Web version");
     expect(bar({ scheduled: true, url }).textContent).toBe(
-      `Web version Scheduled. Once sent, it will be at ${short}.`,
+      `Web version Scheduled · will be published at ${short}`,
     );
-    // Unknown address or post: the bar names no address rather than a wrong one.
-    expect(bar({ scheduled: false, url: null }).textContent).toBe("Web version Draft.");
+    // Unknown address or post: the bar names no address, or no stage, rather than a wrong one.
+    expect(bar({ scheduled: false, url: null }).textContent).toBe("Web version Draft");
     expect(bar(null).textContent).toBe("Web version");
   });
 
@@ -107,8 +109,10 @@ describe("web version", () => {
     expect(sandbox).not.toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-forms");
     expect($(".web-bar").textContent).toBe(
-      "Web version Scheduled. Once sent, it will be at newsletter.example.com/archive/herons.",
+      "Web version Scheduled · will be published at newsletter.example.com/archive/herons",
     );
+    // The window scrolls the page: the frame has no scrolling of its own.
+    expect(frame.getAttribute("scrolling")).toBe("no");
     // The bar and the page, nothing else: no back link, edit link, or app chrome.
     expect($(".web-page").children).toHaveLength(2);
     expect(document.querySelector(".web-page a")).toBeNull();

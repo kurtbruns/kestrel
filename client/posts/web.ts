@@ -1,8 +1,10 @@
 // A post's web version: the post as its public post page will show it (SPEC §5), for the
 // publisher to proof before it is permanent. It opens in a tab of its own from the editor's
-// Web version link, so it carries no app chrome: one thin bar above the page says what it
-// is, where the post stands, and where its public page will be, so the copy is never
-// mistaken for the live page, and the frame below holds the page exactly as it will be.
+// Web version link, so it carries no app chrome: one strip in the brand accent above the
+// page says what it is, where the post stands, and where its public page will be, so the
+// copy is never mistaken for the live page, and the frame below holds the page exactly as
+// it will be. The strip is the editor's, outside the frame, so it stays while the post
+// scrolls and the framed page is the public page's bytes.
 // Once the post's send starts, the public page itself is the web version.
 
 import { pagePolicy } from "../../shared/page_policy";
@@ -63,19 +65,17 @@ function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }
 
-/** The bar's words: what the page is, where the post stands, and where its public page will
- *  be once sent (as text, since it doesn't answer yet), with no date. Null state: the post
- *  couldn't be read, so the bar says only what the page is. */
+/** The bar's words: what the page is, as its tag, then where the post stands and where it
+ *  will be published (as text, since the address doesn't answer yet), with no date. Null
+ *  state: the post couldn't be read, so the bar says only what the page is. */
 export function webBar(state: WebBarState | null): Html {
-  const label = html`<strong>Web version</strong>`;
+  const tag = html`<span class="web-bar-tag">Web version</span>`;
   if (state === null) {
-    return label;
+    return tag;
   }
-  const lead = state.scheduled ? html`Scheduled.` : html`Draft.`;
-  const at = state.url
-    ? html` Once sent, it will be at <span class="web-url">${shortUrl(state.url)}</span>.`
-    : null;
-  return html`${label} <span>${lead}${at}</span>`;
+  const stage = state.scheduled ? "Scheduled" : "Draft";
+  const at = state.url ? html` · will be published at ${shortUrl(state.url)}` : null;
+  return html`${tag} <span class="web-bar-text">${stage}${at}</span>`;
 }
 
 /** The same address, spelled one way, or null for one that is not a whole URL. */
@@ -154,12 +154,12 @@ export async function renderWebVersion(
       leaveFor(url);
       return;
     }
-    const state = data ? { scheduled: data.scheduled != null, url } : null;
+    const bar = webBar(data ? { scheduled: data.scheduled != null, url } : null);
     setHtml(
       root,
       html`<div class="web-page">
-        <div class="web-bar" role="note">${webBar(state)}</div>
-        <iframe class="web-frame" sandbox="${EMAIL_FRAME_SANDBOX}" title="Web version"></iframe>
+        <div class="web-bar" role="note"><div class="web-bar-in">${bar}</div></div>
+        <iframe class="web-frame" sandbox="${EMAIL_FRAME_SANDBOX}" title="Web version" scrolling="no"></iframe>
       </div>`,
     );
     const frame = root.querySelector<HTMLIFrameElement>(".web-frame");
@@ -176,6 +176,21 @@ export async function renderWebVersion(
       openLinksInNewTab(page);
       if (page.title) {
         document.title = `Web version · ${page.title}`;
+      }
+      // The frame is as tall as the post, so the window scrolls the page and the strip
+      // above goes up with it rather than staying pinned. Measured on the body, which is
+      // content-sized, and kept fitted as fonts, images, and the window's width change it.
+      const fit = () => {
+        const h = page.body?.scrollHeight;
+        if (h) {
+          frame.style.height = `${h}px`;
+        }
+      };
+      fit();
+      if (page.body && typeof ResizeObserver !== "undefined") {
+        const watch = new ResizeObserver(fit);
+        watch.observe(page.body);
+        onAbort(signal, () => watch.disconnect());
       }
     };
     frame.srcdoc = framedCopy(doc);

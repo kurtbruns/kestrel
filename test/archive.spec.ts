@@ -691,7 +691,11 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(on, name).toContain('class="r-dev"');
       expect(on, name).toContain("--k-accent:#3355cc");
       expect(off, name).not.toContain("r-dev");
-      expect(off, name).not.toContain("--k-accent");
+      // The accent tokens come with the pill, or with a test page's strip, which wears the
+      // same accent; a page with neither carries none.
+      if (!off.includes('class="r-banner"')) {
+        expect(off, name).not.toContain("--k-accent");
+      }
       expect(off, name).not.toContain("/dashboard");
     }
   });
@@ -730,7 +734,9 @@ describe("a test email's unsubscribe link", () => {
     expect(body).toContain("<strong>reader@example.com</strong>");
     expect(body).toContain('class="r-banner"');
     expect(body).toContain(banner);
-    // The banner sits above the masthead, so it is the first thing on the page.
+    // The strip is the body's first child, outside the masthead, so the masthead beneath
+    // is the one a reader gets.
+    expect(body).toContain('<body>\n<div class="r-banner" role="note">');
     expect(body.indexOf('class="r-banner"')).toBeLessThan(body.indexOf('class="r-mast"'));
     // Its button posts back as a test, never with a token.
     expect(body).toContain('<form class="r-form" method="post" action="/unsubscribe?test=1">');

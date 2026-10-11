@@ -1711,7 +1711,7 @@ th.num .th-sort {
   gap: 10px;
 }
 /* A post's web version (#/web/post/…): the post page as it will look, filling the window
-   with no app chrome, since it opens in a tab of its own. The frame scrolls the page. */
+   with no app chrome, since it opens in a tab of its own. The window scrolls the page. */
 body.web-mode .sidebar,
 body.web-mode .nav-toggle {
   display: none;
@@ -1721,36 +1721,65 @@ body.web-mode .content {
   margin: 0;
   padding: 0;
 }
-/* The page fills the window under one thin bar that says what it is (DESIGN §7). */
+/* The page sits under one strip that says where the post stands (DESIGN §7). The strip is
+   the editor's, above the frame, and the frame is as tall as the post, so the window scrolls
+   and the strip goes up with the page like the test pages' strip. It wears the brand accent
+   like the reader surface's dev pill, its tag as the pill's inverted chip, and its content
+   sits in the default template's column so it lines up with the post. The test pages carry
+   the same strip in the reader shell (READER_BANNER_STYLE in src/lib/page.ts); keep the two
+   in sync. */
+/* At least the window's height, so a post shorter than the window still has its own
+   ground to the bottom: the frame grows into what's left, and the framed page's background
+   fills it. */
 .web-page {
   display: flex;
   flex-direction: column;
-  height: 100dvh;
+  min-height: 100dvh;
 }
 .web-bar {
   flex: none;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 4px 12px;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: var(--muted);
-  background: var(--bg);
-  border-bottom: 1px solid var(--line);
+  background: var(--accent);
+  color: var(--accent-on);
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.4;
 }
-.web-bar strong {
-  color: var(--fg);
-  font-weight: 600;
+/* The tag runs in, inline with the sentence, so on a phone the sentence wraps beneath it at
+   the strip's full width rather than in a narrow column beside it. */
+.web-bar-in {
+  /* The default template's 664px column inside its 12px gutter, with the column's 32px
+     padding, so the strip's text starts on the post's left edge at any width over a phone's. */
+  max-width: 688px;
+  margin: 0 auto;
+  padding: 10px 44px;
+  text-align: left;
 }
-.web-bar .web-url {
+.web-bar-tag {
+  display: inline-block;
+  margin-right: 10px;
+  font-size: 10px;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--accent-on);
+  color: var(--accent);
+}
+.web-bar-text {
   overflow-wrap: anywhere;
+}
+@media (max-width: 560px) {
+  .web-bar-in {
+    padding: 10px 16px;
+  }
 }
 .web-frame {
   display: block;
-  flex: 1 1 auto;
+  flex: 1 0 auto;
   width: 100%;
-  min-height: 0;
+  /* The post's height once measured; until then a window's, so the page doesn't flash short. */
+  height: 100vh;
   border: 0;
 }
 .web-error {
