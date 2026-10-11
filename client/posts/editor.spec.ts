@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
+import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
 import { appState } from "../state";
 import { feedReads, sendServer } from "../test/send_server";
@@ -64,9 +65,17 @@ function draftServer(initial = draft()) {
     apply(req: FakeRequest) {
       const body = req.json() as Record<string, unknown>;
       n += 1;
-      state = { ...state, post: { ...state.post, ...body, current_revision: `r${n}` } };
+      const post: Record<string, unknown> = { ...state.post, ...body, current_revision: `r${n}` };
+      if (typeof body.slug === "string") {
+        // The server slugifies what it is sent and numbers it past a slug another post holds.
+        const want = slugify(body.slug) || "post";
+        post.slug = server.taken.has(want) ? `${want}-2` : want;
+      }
+      state = { ...state, post };
       return { post: state.post };
     },
+    /** Slugs other posts hold, which a following slug is numbered past. */
+    taken: new Set<string>(),
     /** Another writer saved: the server moves on to a new revision. */
     elsewhere(author: string): string {
       n += 1;
@@ -605,34 +614,135 @@ describe("editor view", () => {
     expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
   });
 
-  it("derives the slug from the subject until the slug is hand-set, and never leaves it empty", async () => {
-    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+  it("follows the subject until the slug is hand-set, and never leaves it empty", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
     const subject = $<HTMLInputElement>("#f-subject");
     const slug = $<HTMLInputElement>("#f-slug");
     const auto = $<HTMLInputElement>("#f-slug-auto");
-    expect(auto.checked).toBe(true); // "owls" is what "Owls" derives to
+    expect(auto.checked).toBe(true); // the post's slug follows its subject
+    subject.focus();
     typeInto(subject, "Night owls & co");
+    slug.focus();
+    await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("night-owls-co");
     typeInto(slug, "custom");
     expect(auto.checked).toBe(false);
+    subject.focus(); // leaving the slug saves it as hand-set
+    await vi.advanceTimersByTimeAsync(0);
     typeInto(subject, "Something else");
+    slug.focus();
+    await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("custom"); // hand-set: the subject no longer drives it
+    expect(puts().at(-1)?.json()).toMatchObject({ slug: "custom" });
     typeInto(slug, "");
-    slug.dispatchEvent(new Event("blur"));
-    expect(slug.value).toBe("something-else");
     expect(auto.checked).toBe(true);
+    body().focus(); // leaving it empty hands it back to the subject, and saves
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("something-else");
+    expect(puts().at(-1)?.json()).toMatchObject({ slug: "something-else" });
   });
 
-  it("opens a new post with an empty subject under an Untitled placeholder, tracking the subject from the first keystroke", async () => {
+  it("shows the slug the server gives on leaving the subject, even while tabbing through the slug field", async () => {
+    const server = draftServer();
+    server.taken.add("spring-update"); // last year's post
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    const slug = $<HTMLInputElement>("#f-slug");
+    subject.focus();
+    typeInto(subject, "Spring update");
+    expect(slug.value).toBe("owls"); // no guess while typing: still the slug the post has
+    slug.focus(); // Tab: the subject's blur saves
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("spring-update-2"); // shown though the field has focus
+    expect(puts()[0]?.json()).toMatchObject({ subject: "Spring update", slug: "spring-update" });
+    body().focus(); // Tab on into the body
+    typeInto(body(), "This spring…");
+    expect(slug.value).toBe("spring-update-2");
+  });
+
+  it("saves on Enter in the subject", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    typeInto(subject, "Barn owls");
+    subject.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    expect($<HTMLInputElement>("#f-slug").value).toBe("barn-owls");
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
+  it("keeps a slug that looks numbered as written while the subject is untouched", async () => {
+    const server = draftServer(draft({ subject: "Spring update", slug: "spring-update-2027" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    typeInto(body(), "More news");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(puts()[0]?.json()).toMatchObject({ slug: "spring-update-2027" });
+    expect($<HTMLInputElement>("#f-slug").value).toBe("spring-update-2027");
+  });
+
+  it("keeps a slug typed while a save is out, and reads as unsaved", async () => {
+    const server = draftServer();
+    let release: () => void = () => {};
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) =>
+          server.put(
+            req,
+            (r) =>
+              new Promise((resolve) => {
+                release = () => resolve(server.apply(r));
+              }),
+          ),
+      },
+    ]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    const slug = $<HTMLInputElement>("#f-slug");
+    subject.focus();
+    typeInto(subject, "Barn owls");
+    slug.focus(); // the subject's blur sends a save, held open
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#saveStatus").textContent).toBe("Saving…");
+    typeInto(slug, "barns");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("barns");
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+  });
+
+  it("opens a new post with an empty subject under an Untitled placeholder, taking the subject's slug when the subject is left", async () => {
     // What the server makes of a new post: no subject, and its stand-in slug.
-    await open([{ path: "/api/posts/p1", reply: () => draft({ subject: "", slug: "post-3" }) }]);
+    const server = draftServer(draft({ subject: "", slug: "post-3" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
     const subject = $<HTMLInputElement>("#f-subject");
     const slug = $<HTMLInputElement>("#f-slug");
     expect(subject.value).toBe("");
     expect(subject.placeholder).toBe("Untitled");
     expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(true);
+    subject.focus();
     typeInto(subject, "Welcome to The Compiler");
-    expect(subject.value).toBe("Welcome to The Compiler");
+    expect(slug.value).toBe("post-3");
+    body().focus();
+    await vi.advanceTimersByTimeAsync(0);
     expect(slug.value).toBe("welcome-to-the-compiler");
   });
 
