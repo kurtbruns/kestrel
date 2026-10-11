@@ -25,6 +25,7 @@
 
 import { initWasm, inline } from "@css-inline/css-inline-wasm";
 import wasmModule from "@css-inline/css-inline-wasm/index_bg.wasm";
+import { publicationName } from "../../shared/publication";
 import type { IdentityField } from "../../shared/settings";
 import type { AppSettings } from "../db/settings";
 import { BRANDING_LOGO_KEY } from "../db/settings";
@@ -376,20 +377,15 @@ export interface EmailBranding {
   address: string;
 }
 
-/** Pull the display name out of a `Name <addr@host>` From header (or ""). */
-function fromDisplayName(fromAddress: string): string {
-  const m = /^\s*"?([^"<]*?)"?\s*<[^>]+>\s*$/.exec(fromAddress);
-  return m?.[1] ? m[1].trim() : "";
-}
-
 /** Resolve the branding the email carries from stored settings + deploy config. A
  *  blank template falls back to the built-in default; a blank name falls back to the
- *  From display name so the email is never nameless. */
+ *  From display name, and with neither the email carries no name rather than a made-up
+ *  one (SPEC §9). */
 export function resolveBranding(settings: AppSettings, config: Config): EmailBranding {
   const p = settings.publication;
   return {
     template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
-    name: p.name || fromDisplayName(config.fromAddress),
+    name: publicationName(p.name, config.fromAddress),
     tagline: p.tagline,
     logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
     address: p.address,

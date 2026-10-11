@@ -2,6 +2,7 @@
 // test recipients, and the deployment reflection.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
+import { fromDisplayName } from "../../shared/publication";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import type {
   ConfirmationEmailCopy,
@@ -15,7 +16,7 @@ import type {
   SimulationProfile,
 } from "../../shared/settings";
 import { api } from "../api";
-import { parseFromName, renderSidebarBrand } from "../brand";
+import { renderSidebarBrand } from "../brand";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
@@ -89,9 +90,13 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   const d = data.deployment;
   const p = s.publication;
   // The From display name as the email actually resolves it ("" for a bare address —
-  // see resolveBranding); fromName adds a visible placeholder for the inbox-row From.
-  const fromDisplay = parseFromName(d.fromAddress) || "";
+  // see resolveBranding); fromName adds a visible placeholder for the inbox-row From and
+  // the name field, which only the publisher sees. What a reader sees (the embed, the
+  // sample email) uses fromDisplay, so it never shows a name the publisher didn't choose.
+  const fromDisplay = fromDisplayName(d.fromAddress);
   const fromName = fromDisplay || "Your publication";
+  // The embed's heading: "Subscribe to <name>", or "Subscribe" with no name (SPEC §9).
+  const embedHeading = (name: string) => (name ? `Subscribe to ${name}` : "Subscribe");
 
   // Live, in-memory state. The save bar tracks the PERSISTED identity fields (name,
   // tagline, address) + test recipients against the saved baseline. The logo is
@@ -138,12 +143,12 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   const appOrigin = d.appOrigin || location.origin;
   const subscribeUrl = `${appOrigin}/subscribe`;
   const embedAction = `${escapeHtml(appOrigin)}/subscribe`;
-  const buildEmbed = (mode: EmbedMode, nameRaw: string): string => {
-    const name = escapeHtml(nameRaw || fromName);
+  const buildEmbed = (mode: EmbedMode, name: string): string => {
+    const heading = escapeHtml(embedHeading(name));
     if (mode === "styled") {
       return (
         `<form action="${embedAction}" method="post" style="max-width:420px;font:15px/1.4 system-ui,-apple-system,'Segoe UI',sans-serif">\n` +
-        `  <div style="font-weight:600;margin-bottom:6px">Subscribe to ${name}</div>\n` +
+        `  <div style="font-weight:600;margin-bottom:6px">${heading}</div>\n` +
         `  <div style="display:flex;gap:8px;flex-wrap:wrap">\n` +
         `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 200px;padding:10px 12px;border:1px solid #d4d4d8;border-radius:8px;font:inherit">\n` +
         `    <button type="submit" style="padding:10px 18px;border:0;border-radius:8px;background:#18181b;color:#fff;font:inherit;font-weight:600;cursor:pointer">Subscribe</button>\n` +
@@ -155,7 +160,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     return (
       `<form action="${embedAction}" method="post">\n` +
       `  <label>\n` +
-      `    Subscribe to ${name}\n` +
+      `    ${heading}\n` +
       `    <input type="email" name="email" placeholder="you@example.com" required>\n` +
       `  </label>\n` +
       `  <button type="submit">Subscribe</button>\n` +
@@ -217,7 +222,11 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
             <div class="set-field">
               <label for="setName">Name</label>
               <input id="setName" value="${state.name}" placeholder="${fromName}" maxlength="120" autocomplete="off">
-              <p class="field-hint">Blank falls back to the email “From” name (“${fromName}”).</p>
+              <p class="field-hint">${
+                fromDisplay
+                  ? html`Blank falls back to the email “From” name (“${fromDisplay}”).`
+                  : "Blank leaves the publication unnamed, since the email “From” has no name."
+              }</p>
             </div>
             <div class="set-field">
               <label for="setTagline">Tagline</label>
@@ -490,7 +499,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     $<HTMLIFrameElement>("#tplPreview"),
     () => state.template,
     () => ({
-      name: state.name || fromName,
+      name: state.name || fromDisplay,
       tagline: state.tagline,
       logoUrl: state.logoUrl,
       address: state.address,
@@ -611,13 +620,14 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   };
   let embedMode: EmbedMode = "plain";
   const renderEmbedPreview = (mode: EmbedMode, name: string): Html => {
+    const heading = embedHeading(name);
     if (mode === "styled") {
-      return html`<form class="set-pf-styled"><span class="l">Subscribe to ${name}</span><div class="rowf"><input type="email" placeholder="you@example.com" disabled><button type="button" class="sub-btn" tabindex="-1">Subscribe</button></div><p class="set-pf-fine">Double opt-in — we’ll email a confirmation link.</p></form>`;
+      return html`<form class="set-pf-styled"><span class="l">${heading}</span><div class="rowf"><input type="email" placeholder="you@example.com" disabled><button type="button" class="sub-btn" tabindex="-1">Subscribe</button></div><p class="set-pf-fine">Double opt-in — we’ll email a confirmation link.</p></form>`;
     }
-    return html`<form class="set-pf-plain"><label>Subscribe to ${name}</label><input type="email" placeholder="you@example.com" disabled><button type="button" tabindex="-1">Subscribe</button></form>`;
+    return html`<form class="set-pf-plain"><label>${heading}</label><input type="email" placeholder="you@example.com" disabled><button type="button" tabindex="-1">Subscribe</button></form>`;
   };
   const rebuildEmbed = () => {
-    const name = state.name || fromName;
+    const name = state.name || fromDisplay;
     embedCodeEl.textContent = buildEmbed(embedMode, name);
     embedHintEl.textContent = EMBED_HINTS[embedMode];
     setHtml(embedPreviewEl, renderEmbedPreview(embedMode, name));
@@ -632,7 +642,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   for (const b of $$("[data-embed]", body)) {
     b.onclick = () => setEmbed(b.dataset.embed ?? "");
   }
-  $("#embedCopy").onclick = () => copyText(buildEmbed(embedMode, state.name || fromName));
+  $("#embedCopy").onclick = () => copyText(buildEmbed(embedMode, state.name || fromDisplay));
 
   // --- live identity fields: repaint everything that shows the name/tagline/address.
   const addressEl = $<HTMLInputElement>("#setAddress");

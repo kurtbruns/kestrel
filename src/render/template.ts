@@ -145,7 +145,9 @@ export function archiveMasthead(opts: {
   dateLabel: string;
   indexUrl: string;
 }): string {
-  const name = escapeHtml(opts.name);
+  // The link back to the index is the publication's name, or, with none, what it leads
+  // to, so the arrow never points at nothing.
+  const name = escapeHtml(opts.name || "Archive");
   const date = escapeHtml(opts.dateLabel);
   const url = escapeHtmlAttr(opts.indexUrl);
   return (

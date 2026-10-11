@@ -6,26 +6,20 @@
  * them the same way.
  */
 
+import { publicationName } from "../../shared/publication";
 import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
 import { type MessagePageOptions, messagePage, type ReaderIdentity } from "../lib/page";
 import type { RequestContext } from "../router";
 
-/** Display name for the publication, from the `From:` header — the fallback when
- *  the operator hasn't set a name in the publication identity. */
-function fromDisplayName(fromAddress: string): string {
-  const lt = fromAddress.indexOf("<");
-  const display = (lt >= 0 ? fromAddress.slice(0, lt) : "").trim().replace(/^"|"$/g, "").trim();
-  return display || "Newsletter";
-}
-
-/** The resolved publication identity for a reader page: the operator's settings,
- *  falling back to the `From:` display name for the name (shape in `lib/page.ts`). A
- *  corrupt settings row reads as the defaults, so a reader page never fails on it. */
+/** The resolved publication identity for a reader page: the operator's settings, with
+ *  the name resolved as the email resolves it, so it is "" when neither the publisher
+ *  nor the `From:` header names the publication (shape in `lib/page.ts`). A corrupt
+ *  settings row reads as the defaults, so a reader page never fails on it. */
 export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
   const { publication: p } = await getSettingsForDisplay(c.env.DB);
   return {
-    name: p.name || fromDisplayName(config.fromAddress),
+    name: publicationName(p.name, config.fromAddress),
     tagline: p.tagline,
     logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
   };

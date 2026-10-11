@@ -440,6 +440,24 @@ describe("settings view", () => {
     expect(writeText.mock.calls[0]?.[0]).toContain("style=");
   });
 
+  it("offers an embed that reads whole when the publication has no name (SPEC §9)", async () => {
+    const writeText = stubClipboard();
+    const unnamed = response({
+      settings: { publication: { ...settings().publication, name: "" } },
+    });
+    unnamed.deployment.fromAddress = "hello@send.birds.example";
+    await open([{ path: "/api/settings", reply: () => unnamed }]);
+    expect($("#embedPreview label").textContent).toBe("Subscribe");
+    expect($("#embedCode").textContent).toContain("\n    Subscribe\n");
+    expect($("#embedCode").textContent).not.toContain("Subscribe to");
+    expect($("#setName").nextElementSibling?.textContent).toBe(
+      "Blank leaves the publication unnamed, since the email “From” has no name.",
+    );
+    $("#embedCopy").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writeText.mock.calls[0]?.[0]).not.toContain("Your publication");
+  });
+
   it("uploads a logo at once, and removes it", async () => {
     const withLogo = settings({
       publication: {

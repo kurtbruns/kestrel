@@ -7,7 +7,13 @@ import type { Config } from "../env";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
-import { archiveLink, type ReaderBanner, type ReaderIdentity, readerPage } from "../lib/page";
+import {
+  archiveLink,
+  pageTitle,
+  type ReaderBanner,
+  type ReaderIdentity,
+  readerPage,
+} from "../lib/page";
 import type { RequestContext } from "../router";
 import {
   type ConfirmLinkState,
@@ -65,6 +71,13 @@ async function readToken(c: RequestContext): Promise<string> {
   return "";
 }
 
+/** A headline that names the publication when it has a name ("Subscribe to Birds") and
+ *  reads whole without one ("Subscribe"), so no page shows a name the publisher didn't
+ *  choose (SPEC §9). */
+function toPublication(action: string, name: string): string {
+  return name ? `${action} to ${name}` : action;
+}
+
 /** The email field + submit + fine print, shared by the form and the retry-on-error
  *  page. Posts same-origin to `/subscribe`; the double opt-in starts from there (I1). */
 function subscribeFormHtml(): string {
@@ -87,7 +100,7 @@ function subscribePage(
   return readerPage({
     identity,
     homeUrl: `${c.config.appOrigin}/`,
-    title: `Subscribe · ${identity.name}`,
+    title: pageTitle("Subscribe", identity.name),
     mainHtml,
     devDashboardUrl: devDashboardUrl(c.config),
     status,
@@ -101,7 +114,7 @@ export async function subscribeForm(c: RequestContext): Promise<Response> {
     : "Get the next post delivered to your inbox.";
   const main =
     `<p class="r-ey">Newsletter</p>` +
-    `<h1 class="r-h1">Subscribe to ${escapeHtml(identity.name)}</h1>` +
+    `<h1 class="r-h1">${escapeHtml(toPublication("Subscribe", identity.name))}</h1>` +
     `<p class="r-lead">${lede}</p>` +
     subscribeFormHtml();
   return subscribePage(c, identity, main);
@@ -173,7 +186,7 @@ async function confirmStatePage(
         {
           title: "Confirm your subscription",
           eyebrow,
-          headline: `Confirm your subscription to ${identity.name}`,
+          headline: toPublication("Confirm your subscription", identity.name),
           ledeHtml: `Start sending the newsletter to <strong>${escapeHtml(state.subscriber.email)}</strong>?`,
           afterHtml:
             `<form class="r-form" method="post" action="/confirm">` +
@@ -260,7 +273,7 @@ async function unsubscribeAskPage(
     {
       title: "Unsubscribe",
       eyebrow: "Unsubscribe",
-      headline: `Unsubscribe from ${identity.name}?`,
+      headline: identity.name ? `Unsubscribe from ${identity.name}?` : "Unsubscribe?",
       ledeHtml: `We’ll stop sending the newsletter to <strong>${escapeHtml(email)}</strong>.`,
       afterHtml:
         `<form class="r-form" method="post" action="${escapeHtmlAttr(action)}">` +

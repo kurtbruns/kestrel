@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ImageRow } from "../src/db/images";
 import type { PostRow, RevisionRow } from "../src/db/posts";
+import { DEFAULT_SETTINGS } from "../src/db/settings";
 import type { Config } from "../src/env";
 import {
   omitEmailOnly,
@@ -10,7 +11,11 @@ import {
   UNSUB_SENTINEL,
 } from "../src/render/render";
 import { emailOnlyRegionsWhole } from "../src/render/template";
-import { DEFAULT_EMAIL_TEMPLATE, defaultBranding } from "../src/render/template_engine";
+import {
+  DEFAULT_EMAIL_TEMPLATE,
+  defaultBranding,
+  resolveBranding,
+} from "../src/render/template_engine";
 
 const config: Config = {
   provider: "fake",
@@ -377,5 +382,37 @@ describe("email-only regions the HTML parser rearranges", () => {
     expect(result.warnings.join(" ")).not.toMatch(/using the default/);
     expect(omitEmailOnly(result.html)).toContain("POSTBODY");
     expect(omitEmailOnly(result.html)).not.toContain(">u</a>");
+  });
+});
+
+// The email names the publication as the reader pages do: the publisher's name, else the
+// sender's display name, else none at all, never a made-up one.
+describe("the publication name in the email (SPEC §9)", () => {
+  const input = () => ({ post: post(), revision: revision("# Hi\n\nbody"), images: [] });
+  const signOffName = (html: string) => /<div class="name"[^>]*>([^<]*)<\/div>/.exec(html)?.[1];
+
+  async function emailFrom(fromAddress: string, name = ""): Promise<string> {
+    const cfg = { ...config, fromAddress };
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      publication: { ...DEFAULT_SETTINGS.publication, name },
+    };
+    return (await render(input(), cfg, resolveBranding(settings, cfg))).html;
+  }
+
+  it("signs off with no name when neither the publisher nor the sender names it", async () => {
+    for (const from of ["news@send.example", "<news@send.example>"]) {
+      const html = await emailFrom(from);
+      expect(signOffName(html), from).toBe("");
+      expect(html, from).not.toContain("Newsletter");
+    }
+  });
+
+  it("signs off with the sender's display name, or the publisher's name over it", async () => {
+    expect(signOffName(await emailFrom('"Birds Weekly" <news@send.example>'))).toBe("Birds Weekly");
+    expect(signOffName(await emailFrom("Birds Weekly <news@send.example>"))).toBe("Birds Weekly");
+    expect(signOffName(await emailFrom("Other <news@send.example>", "Field Notes"))).toBe(
+      "Field Notes",
+    );
   });
 });
