@@ -15,6 +15,7 @@ import { clearFakeOutbox } from "../src/providers/fake";
 import { RECEIPTS_CRON, resetSimulation } from "../src/providers/simulate";
 import { freeze } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
 
 // Locally, simulated receipts arrive on the dev ticker's own clock (SPEC §10), through the
 // scheduled handler with a cron value no deployed trigger can carry, and never because a
@@ -31,16 +32,7 @@ const withVars = (vars: Record<string, string>): AppEnv =>
   ({ ...env, ...vars }) as unknown as AppEnv;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   resetSimulation();
 });

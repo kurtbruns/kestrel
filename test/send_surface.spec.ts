@@ -11,13 +11,13 @@ import {
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
-import { freeze, onTheMinute } from "../src/send/schedule";
+import { onTheMinute } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
+import { frozenSend, resetDatabase } from "./support/fixtures";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it
@@ -28,11 +28,6 @@ const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
-
-async function frozenSend(fireAt: number, subject = "Subj") {
-  const { post } = await posts.createPost(env.DB, { subject, markdown: "# Hi\n\nbody" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
 
 async function setRow(id: string, fields: Record<string, number | string | null>): Promise<void> {
   const cols = Object.keys(fields);
@@ -53,15 +48,7 @@ const post = (path: string, body?: unknown, headers: Record<string, string> = {}
   });
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -195,7 +182,7 @@ describe("conditions: one server rule for each kind", () => {
 describe("every route reads a send the same way", () => {
   it("carries the same conditions and actions on the list, the send, its progress, and the feed, and rolls every open condition into each feed read", async () => {
     const now = Date.now();
-    const wedged = await frozenSend(now - 120_000, "Wedged");
+    const wedged = await frozenSend(now - 120_000, { subject: "Wedged" });
     await setRow(wedged.id, {
       status: "sending",
       started_at: now - 100_000,
@@ -203,7 +190,7 @@ describe("every route reads a send the same way", () => {
       c_in_flight: 2,
       c_accepted: 8,
     });
-    const upcoming = await frozenSend(now + 3_600_000, "Upcoming");
+    const upcoming = await frozenSend(now + 3_600_000, { subject: "Upcoming" });
     const list = (await readJson(
       await SELF.fetch(`${base}/api/sends`, { headers: AUTH }),
     )) as SendListResponse;
@@ -234,7 +221,7 @@ describe("every route reads a send the same way", () => {
   });
 
   it("clears remade once the scheduled send's frozen copy is tested", async () => {
-    const send = await frozenSend(Date.now() + 3_600_000, "Re-made");
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Re-made" });
     await setRow(send.id, { remade_at: Date.now() - 1000 });
     expect(has(await progress(send.id), "remade")).toBe(true);
     const test = await post(`/api/posts/${send.post_id}/test`, { to: "me@example.com" });
@@ -247,7 +234,7 @@ describe("every route reads a send the same way", () => {
 
 describe("a test racing a re-make", () => {
   it("does not mark the re-made copy tested when the test read the copy before the re-make", async () => {
-    const send = await frozenSend(Date.now() + 3_600_000, "Raced");
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Raced" });
     const readAt = Date.now();
     await setRow(send.id, { remade_at: readAt + 5 }); // the re-make lands while the test is out
     await sends.markTested(env.DB, send.id, readAt, readAt + 10);
@@ -261,7 +248,7 @@ describe("a test racing a re-make", () => {
 
 describe("the review window closes at the fire time", () => {
   it("refuses cancel and reschedule once the send is due, before the sweep starts it, with window_closed and the send", async () => {
-    const send = await frozenSend(Date.now() - 5_000, "Due");
+    const send = await frozenSend(Date.now() - 5_000, { subject: "Due" });
     for (const [path, body] of [
       [`/api/sends/${send.id}/cancel`, undefined],
       [`/api/sends/${send.id}/reschedule`, { fire_at: Date.now() + 3_600_000 }],

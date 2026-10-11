@@ -22,7 +22,6 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createRouter } from "../src/app";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import * as subscribers from "../src/db/subscribers";
 import type { AppEnv } from "../src/env";
@@ -31,8 +30,8 @@ import { signSvix } from "../src/providers/resend";
 import { base64Bytes } from "../src/providers/ses_mime";
 import { _clearKeyCache, canonicalString, type SnsEnvelope } from "../src/providers/sns";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
 import { RESEND_DEPLOY, SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
+import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // --- env overrides ----------------------------------------------------------
 
@@ -56,25 +55,6 @@ const resendEnv = () =>
   }) as unknown as AppEnv;
 
 // --- seeding helpers --------------------------------------------------------
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
-/** Freeze a scheduled send for the current audience (render is provider-agnostic). */
-async function scheduledSend(): Promise<sends.SendRow> {
-  const { post } = await posts.createPost(
-    env.DB,
-    { subject: "Subj", markdown: "# Hi\n\nbody" },
-    "test",
-  );
-  return freeze(env, getConfig(env), post, Date.now() - 1000);
-}
 
 async function providerIdFor(email: string): Promise<string | null> {
   const row = await env.DB.prepare("SELECT provider_id FROM deliveries WHERE email = ?")
@@ -203,15 +183,7 @@ async function route(req: Request, e: AppEnv): Promise<Response> {
 // --- setup ------------------------------------------------------------------
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   _clearKeyCache();
 });
 
@@ -224,7 +196,7 @@ describe("send loop drives the real SES adapter", () => {
   it("sends one SigV4 request per recipient (maxBatch=1) and records the MessageId", async () => {
     await seedConfirmed("s1@integ.test");
     await seedConfirmed("s2@integ.test");
-    const send = await scheduledSend();
+    const send = await dueSend();
 
     let n = 0;
     const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
@@ -258,7 +230,7 @@ describe("send loop drives the real Resend adapter", () => {
     await seedConfirmed("r1@integ.test");
     await seedConfirmed("r2@integ.test");
     await seedConfirmed("r3@integ.test");
-    const send = await scheduledSend();
+    const send = await dueSend();
 
     const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ data: [{ id: "re_a" }, { id: "re_b" }, { id: "re_c" }] }), {
@@ -286,7 +258,7 @@ describe("send loop drives the real Resend adapter", () => {
 describe("webhook routes are wired through the real router", () => {
   it("POST /webhooks/ses (PROVIDER=ses): verified hard bounce suppresses via the route", async () => {
     await seedConfirmed("bounce@integ.test");
-    const send = await scheduledSend();
+    const send = await dueSend();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ MessageId: "ses-live-1" }), { status: 200 }),
     );
@@ -323,7 +295,7 @@ describe("webhook routes are wired through the real router", () => {
 
   it("POST /webhooks/resend (PROVIDER=resend): a bounce webhook drops the address from the NEXT send (I2)", async () => {
     await seedConfirmed("victim@integ.test");
-    const send1 = await scheduledSend();
+    const send1 = await dueSend();
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify({ data: [{ id: "re_victim" }] }), { status: 200 }),
     );
@@ -345,7 +317,7 @@ describe("webhook routes are wired through the real router", () => {
     expect(await subscribers.isSuppressed(env.DB, "victim@integ.test")).toBe(true);
 
     // Next send: the suppressed address must not be materialized or mailed.
-    const send2 = await scheduledSend();
+    const send2 = await dueSend();
     const spy = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue(new Response(JSON.stringify({ data: [] }), { status: 200 }));

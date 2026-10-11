@@ -1,6 +1,5 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
@@ -11,11 +10,11 @@ import { SesProvider } from "../src/providers/ses";
 import type { SendBatchResult } from "../src/providers/types";
 import { Budget } from "../src/send/budget";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { nextRetry, toNextTick } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
+import { addresses, dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 import { viewOf } from "./support/view";
@@ -26,24 +25,6 @@ import { viewOf } from "./support/view";
 
 /** More sweep ticks than the per-recipient cap, so a halt that spent attempts would show. */
 const TICKS = MAX_DELIVERY_ATTEMPTS + 2;
-
-const addresses = (n: number, tag = "h") =>
-  Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function dueSend() {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, Date.now() - 1000);
-}
 
 /** The test env with its D1 held to the 100-bind cap. */
 function capped(): AppEnv {
@@ -100,16 +81,7 @@ async function expectHeld(sendId: string, audience: number) {
 let resend: ResendLikeProvider;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   // Only Date is faked: the backoff is read off the clock, and D1 and the provider stubs
   // still resolve on their own.
   vi.useFakeTimers({ toFake: ["Date"] });
@@ -684,9 +656,9 @@ describe("a recipient's own retryable failure", () => {
         return {
           kind: "answered",
           results: [
-            { email: "h000@example.com", accepted: true, providerId: "re_ok" },
+            { email: "r000@example.com", accepted: true, providerId: "re_ok" },
             {
-              email: "h001@example.com",
+              email: "r001@example.com",
               accepted: false,
               retryable: true,
               error: "resend batch: missing id in response",
@@ -701,8 +673,8 @@ describe("a recipient's own retryable failure", () => {
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     const byEmail = Object.fromEntries((await rows(send.id)).map((r) => [r.email, r]));
-    expect(byEmail["h000@example.com"]!.status).toBe("accepted");
-    expect(byEmail["h001@example.com"]).toMatchObject({
+    expect(byEmail["r000@example.com"]!.status).toBe("accepted");
+    expect(byEmail["r001@example.com"]).toMatchObject({
       status: "unsent",
       attempts: MAX_DELIVERY_ATTEMPTS,
     });

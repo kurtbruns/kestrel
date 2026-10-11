@@ -11,6 +11,7 @@ import {
 } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { resetDatabase } from "./support/fixtures";
 import { neverAnswers } from "./support/provider_timeout";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
@@ -404,14 +405,7 @@ async function deliveryEvent(providerId: string): Promise<string | undefined> {
 
 beforeEach(async () => {
   // Delete children before parents (FKs are enforced here).
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
 });
 
 describe("ResendProvider.parseWebhook", () => {

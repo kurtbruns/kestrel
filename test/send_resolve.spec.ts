@@ -21,6 +21,7 @@ import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { SES_DEPLOY } from "./support/deploy";
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 
 const config = () => getConfig(env);
@@ -34,15 +35,6 @@ const sesEnv = () =>
     AWS_ACCESS_KEY_ID: "AKIARESOLVETEST",
     AWS_SECRET_ACCESS_KEY: "resolve-secret-key",
   }) as unknown as AppEnv;
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
 
 /** A send moved to `sending` (as the lease does) but with no deliveries yet. */
 async function sendingSend(): Promise<sends.SendRow> {
@@ -74,16 +66,7 @@ async function insertDelivery(
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 

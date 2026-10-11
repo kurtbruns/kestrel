@@ -1,18 +1,16 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
-import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
-import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { condition, has } from "./support/conditions";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { viewOf } from "./support/view";
 
 // PR2 (#154, #152): the denormalized counters on `sends` are a rebuildable cache of the
@@ -20,27 +18,8 @@ import { viewOf } from "./support/view";
 // transition. These tests pin that they stay consistent across a full send, a resume, a
 // webhook, and a resolve — and that a send's view and its derived phase read off them.
 
-const config = () => getConfig(env);
 const AUTH = await adminAuth();
 const base = "https://kestrel.test";
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
-async function scheduledSend(fireAt: number) {
-  const { post } = await posts.createPost(
-    env.DB,
-    { subject: "Subj", markdown: "# Hi\n\nbody" },
-    "test",
-  );
-  return freeze(env, config(), post, fireAt);
-}
 
 /** The counters must always equal the `deliveries` aggregate (they are its cache). */
 async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {
@@ -74,16 +53,7 @@ async function expectCountersMatchAggregate(sendId: string): Promise<SendRow> {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -92,7 +62,7 @@ describe("send counters (sends.c_*)", () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     await seedConfirmed("c@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await runSend(env, send.id);
 
@@ -106,7 +76,7 @@ describe("send counters (sends.c_*)", () => {
   it("stay consistent through a mid-send crash and resume (I4)", async () => {
     await seedConfirmed("x@example.com");
     await seedConfirmed("y@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     failFakeSendBatch(1); // first send call throws → the unanswered batch is returned
     await runSend(env, send.id);
@@ -124,7 +94,7 @@ describe("send counters (sends.c_*)", () => {
   it("move a recipient from accepted to its event bucket on a webhook (and back out)", async () => {
     await seedConfirmed("d@example.com");
     await seedConfirmed("e@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     expect((await sends.getSend(env.DB, send.id))!.c_accepted).toBe(2);
 
@@ -147,7 +117,7 @@ describe("send counters (sends.c_*)", () => {
 
   it("recomputeSendCounters rebuilds the cache from deliveries", async () => {
     await seedConfirmed("f@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     // Corrupt the cache, then rebuild it.
     await env.DB.prepare("UPDATE sends SET c_accepted = 999, c_pending = 42 WHERE id = ?")
@@ -162,7 +132,7 @@ describe("a send's view on GET /api/sends/:id", () => {
   it("reports the counters and a derived phase", async () => {
     await seedConfirmed("p1@example.com");
     await seedConfirmed("p2@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
 
     const res = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
@@ -181,7 +151,7 @@ describe("a send's view on GET /api/sends/:id", () => {
 
   it("reports the sending state as backing-off after a transient whole-batch failure", async () => {
     await seedConfirmed("q1@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     failFakeSendBatch(1);
     await runSend(env, send.id); // requeues, leaves it sending with pending rows
 
@@ -195,7 +165,7 @@ describe("a send's view on GET /api/sends/:id", () => {
 
   it("flags a send in flight too long as stuck, the same on its list row as on its progress", async () => {
     await seedConfirmed("s1@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     failFakeSendBatch(1);
     await runSend(env, send.id); // left sending, with the recipient back in the queue
     const read = async () => {
@@ -364,7 +334,7 @@ describe("buildSendView — derived phase", () => {
 describe("resolve keeps counters consistent", () => {
   it("moves the adjudicated in-flight rows into the chosen bucket", async () => {
     await seedConfirmed("w1@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     // Manufacture a wedged row: dispatched, in flight, with the send left sending.
     await runSend(env, send.id);
     await env.DB.prepare("UPDATE sends SET status = 'sending', completed_at = NULL WHERE id = ?")
@@ -424,7 +394,7 @@ function batchesMeetAt(db: D1Database, n: number): D1Database {
 describe("receipts racing for one recipient", () => {
   it("move the counters once, from where the winner left the row", async () => {
     await seedConfirmed("race@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     const providerId = `fake-${send.id}:race@example.com`;
 
@@ -445,7 +415,7 @@ describe("receipts racing for one recipient", () => {
 
   it("leave a worse outcome in place when the better one loses the race", async () => {
     await seedConfirmed("race2@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     const providerId = `fake-${send.id}:race2@example.com`;
 
@@ -466,7 +436,7 @@ describe("receipts racing for one recipient", () => {
   it("check the counters against the record when a receipt turns a sent send complete", async () => {
     await seedConfirmed("s1@example.com");
     await seedConfirmed("s2@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     // A cache that has drifted one short, as the race above used to leave it.
     await env.DB.prepare("UPDATE sends SET c_accepted = 1, c_delivered = 1 WHERE id = ?")
@@ -488,7 +458,7 @@ describe("a cache that drifted before the receipt rule", () => {
   it("is rebuilt when a receipt drives its accepted count below zero, so a send already reading complete settles again", async () => {
     await seedConfirmed("n1@example.com");
     await seedConfirmed("n2@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     // As the old race left it: one recipient moved out of accepted twice, so the send
     // reads complete while both still await a receipt.
@@ -511,7 +481,7 @@ describe("resolve counts only the rows it moves", () => {
     await seedConfirmed("r1@example.com");
     await seedConfirmed("r2@example.com");
     await seedConfirmed("r3@example.com");
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await runSend(env, send.id);
     // Two recipients left in flight with their fate unknown, one still queued so the send
     // cannot complete (completion rebuilds the counters, which would hide a bad move).

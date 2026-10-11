@@ -4,12 +4,11 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { decodeSendCursor, encodeSendCursor } from "../shared/cursor";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // Every change a reader could see of a send moves its `rev` along one app-wide sequence,
 // and a list read hands back a cursor at that sequence (SPEC §8), so a client can later
@@ -17,7 +16,6 @@ import { adminAuth } from "./support/auth";
 // renewal is not such a change. List rows carry the same phase, conditions, and actions as the
 // send's `GET /api/sends/:id`.
 
-const config = () => getConfig(env);
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 const base = "https://kestrel.test";
@@ -25,22 +23,6 @@ const readJson = async (r: Response): Promise<any> => r.json();
 
 const tpl = (marker: string) =>
   `<div>{{ .Post.Body }}<p>${marker} · {{ .Publication.Name }}</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
-/** A send frozen straight through `freeze`, so a test can place its fire time anywhere
- *  (the API refuses one inside the minimum lead). */
-async function frozenSend(fireAt: number, subject = "Subj") {
-  const { post } = await posts.createPost(env.DB, { subject, markdown: "# Hi\n\nbody" }, "test");
-  return freeze(env, config(), post, fireAt);
-}
 
 async function rev(id: string): Promise<number> {
   const row = await sends.getSend(env.DB, id);
@@ -65,33 +47,23 @@ async function listSends(query = ""): Promise<any> {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
 describe("a send's rev", () => {
   it("is stamped from the one sequence when a send is scheduled, above every rev before it", async () => {
     const before = await seq();
-    const a = await frozenSend(Date.now() + 3_600_000, "A");
-    const b = await frozenSend(Date.now() + 3_600_000, "B");
+    const a = await frozenSend(Date.now() + 3_600_000, { subject: "A" });
+    const b = await frozenSend(Date.now() + 3_600_000, { subject: "B" });
     expect(await rev(a.id)).toBeGreaterThan(before);
     expect(await rev(b.id)).toBeGreaterThan(await rev(a.id));
     expect(await seq()).toBe(await rev(b.id));
   });
 
   it("moves on a cancel and a reschedule through the API, past a change to another send", async () => {
-    const a = await frozenSend(Date.now() + 3_600_000, "A");
-    const b = await frozenSend(Date.now() + 3_600_000, "B");
+    const a = await frozenSend(Date.now() + 3_600_000, { subject: "A" });
+    const b = await frozenSend(Date.now() + 3_600_000, { subject: "B" });
     const bBefore = await rev(b.id);
 
     const moved = await SELF.fetch(`${base}/api/sends/${a.id}/reschedule`, {
@@ -193,8 +165,8 @@ describe("a send's rev", () => {
   });
 
   it("takes a number for a delete, so it never falls back and the removal is itself a change", async () => {
-    const kept = await frozenSend(Date.now() + 3_600_000, "kept");
-    const gone = await frozenSend(Date.now() + 3_600_000, "gone");
+    const kept = await frozenSend(Date.now() + 3_600_000, { subject: "kept" });
+    const gone = await frozenSend(Date.now() + 3_600_000, { subject: "gone" });
     await sends.cancelStmt(env.DB, gone.id, Date.now()).run();
     await env.DB.prepare("UPDATE posts SET status = 'draft' WHERE id = ?").bind(gone.post_id).run();
     const top = await rev(gone.id);
@@ -300,13 +272,13 @@ describe("GET /api/sends", () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
     // scheduled, due, canceled, settling, and a send retrying a recipient
-    const scheduled = await frozenSend(Date.now() + 3_600_000, "scheduled");
-    const due = await frozenSend(Date.now() - 1000, "due");
-    const canceled = await frozenSend(Date.now() + 3_600_000, "canceled");
+    const scheduled = await frozenSend(Date.now() + 3_600_000, { subject: "scheduled" });
+    const due = await frozenSend(Date.now() - 1000, { subject: "due" });
+    const canceled = await frozenSend(Date.now() + 3_600_000, { subject: "canceled" });
     await sends.cancelStmt(env.DB, canceled.id, Date.now()).run();
-    const settling = await frozenSend(Date.now() - 1000, "settling");
+    const settling = await frozenSend(Date.now() - 1000, { subject: "settling" });
     await runSend(env, settling.id);
-    const retrying = await frozenSend(Date.now() - 1000, "retrying");
+    const retrying = await frozenSend(Date.now() - 1000, { subject: "retrying" });
     failFakeSendBatch(1);
     await runSend(env, retrying.id); // left sending, both recipients held in the queue
     // One of them in flight and the other retried: work remains, and the retry probe is

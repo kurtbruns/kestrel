@@ -17,6 +17,7 @@ import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { resetDatabase } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 
 /** Minimal binding bag for the pure getConfig tests (no D1/R2 needed). */
@@ -381,14 +382,7 @@ describe("the dev routes exist only in local development", () => {
 
 describe("createRouter — archive route follows the base path", () => {
   beforeEach(async () => {
-    await env.DB.batch([
-      env.DB.prepare("DELETE FROM deliveries"),
-      env.DB.prepare("DELETE FROM notifications"),
-      env.DB.prepare("DELETE FROM sends"),
-      env.DB.prepare("DELETE FROM post_revisions"),
-      env.DB.prepare("DELETE FROM posts"),
-      env.DB.prepare("DELETE FROM subscribers"),
-    ]);
+    await resetDatabase();
     clearFakeOutbox();
   });
 

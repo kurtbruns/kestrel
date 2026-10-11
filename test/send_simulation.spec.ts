@@ -22,6 +22,7 @@ import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { resetDatabase } from "./support/fixtures";
 import { expectErrorLogs, logged } from "./support/log";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
@@ -76,18 +77,13 @@ async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<v
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   resetSimulation();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 /** This suite's env with some vars overridden, as a dev server's own `.dev.vars` would set them. */
@@ -560,6 +556,8 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     // Accepts aged into the BOUNCE window: past the delivered (~≤12s) and bounce (~≤30s)
     // lags, but short of the complaint (~≥45s) lag. So on this drain every delivery and
     // bounce is due, and no complaint is yet — delivered/bounces genuinely precede complaints.
+    // Date is faked so that window holds however long seeding 300 rows takes.
+    vi.useFakeTimers({ toFake: ["Date"] });
     await seedAccepted("s-order", 300, 35_000);
     await drainSimulatedWebhooks(env, simConfig());
 
@@ -585,6 +583,8 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
   });
 
   it("leaves not-yet-due recipients unconfirmed (delivery lags acceptance)", async () => {
+    // Date is faked so no lag elapses while the rows are seeded, however slow the run.
+    vi.useFakeTimers({ toFake: ["Date"] });
     await seedAccepted("s-fresh", 20, 0); // just accepted → lag not elapsed
     const applied = await drainSimulatedWebhooks(env, simConfig());
     expect(applied).toBe(0);

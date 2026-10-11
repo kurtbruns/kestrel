@@ -27,20 +27,12 @@ import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
 
 const base = "https://kestrel.test";
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 

@@ -2,9 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type SendFeedResponse, type SendView, STUCK_THRESHOLD_MS } from "../shared/sends";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { Budget } from "../src/send/budget";
@@ -12,13 +10,13 @@ import { nextChangeAt } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -37,21 +35,6 @@ class NoKeyProvider extends ResendLikeProvider {
   override readonly idempotencyWindowMs: number | undefined = undefined;
 }
 
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function scheduledSend(fireAt: number) {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
-
 async function progress(id: string): Promise<SendView> {
   const res = await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH });
   return ((await res.json()) as { send: SendView }).send;
@@ -66,14 +49,7 @@ async function row(id: string) {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -90,7 +66,7 @@ describe("a wedged send", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await sweep(env); // fires; the one batch's answer is lost, so its fate is unknown
     const wedged = await row(send.id);
@@ -134,7 +110,7 @@ describe("a wedged send a receipt with no provider id reaches", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await sweep(env); // the one batch's answer is lost: three recipients of unknown fate
     const wedged = await row(send.id);
     expect(isWedged(wedged)).toBe(true);
@@ -177,7 +153,7 @@ describe("a wedged send a receipt with no provider id reaches", () => {
 describe("the one definition", () => {
   it("reads the same in the watch's predicate and in the SQL the feed, sweep, and notifications use", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() + 3_600_000);
+    const send = await frozenSend(Date.now() + 3_600_000);
     const now = Date.now();
     const cases = [];
     for (const status of ["scheduled", "sending", "sent"]) {
@@ -209,7 +185,7 @@ describe("a run on a provider that dedupes under its key", () => {
     const provider = new ResendLikeProvider();
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     // A first run fixes the audience and stops at once (its tick is over).
     await runSend(env, send.id, new Budget(10_000), new SendWindow(undefined, -1));
     // A run cut off mid-batch: every recipient handed off under one key, never answered,

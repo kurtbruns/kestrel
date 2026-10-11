@@ -1,19 +1,18 @@
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import worker from "../src/index";
 import { log, scrub, withRun } from "../src/lib/log";
 import { STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { runSend } from "../src/send/loop";
-import { cancel, freeze } from "../src/send/schedule";
+import { cancel } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { toNextTick } from "./support/clock";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { expectErrorLogs, type LoggedLine, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -53,21 +52,6 @@ function expectNoAddress(): void {
   }
 }
 
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function scheduledSend(fireAt: number) {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
-
 /** The Worker's own fetch handler, waiting for the work it leaves to `waitUntil`. */
 async function workerFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const ctx = createExecutionContext();
@@ -84,16 +68,7 @@ async function workerFetch(path: string, init: RequestInit = {}): Promise<Respon
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   spies = [
     vi.spyOn(console, "log").mockImplementation(() => {}),
@@ -110,7 +85,7 @@ afterEach(() => {
 describe("the send lifecycle in the log", () => {
   it("a send through the sweep logs fired, batch, completed in order under its sendId, and no address", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await withRun("tick-1", () => sweep(env));
 
@@ -142,7 +117,7 @@ describe("the send lifecycle in the log", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     // The first request's answer is lost, so the batch waits under its key to be re-sent
     // whole; by then one reader's subscriber record is gone, so the re-send closes them
     // unsent at hand-off rather than mail them with no unsubscribe link. Every member is
@@ -176,7 +151,7 @@ describe("the send lifecycle in the log", () => {
     // The provider's words may carry an address; the log keeps only its domain.
     provider.refuse = "The newsletter@send.example.com sender is not verified";
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await sweep(env);
     const retryAt = (await sends.getSend(env.DB, send.id))!.halt_retry_at!;
@@ -210,7 +185,7 @@ describe("the send lifecycle in the log", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await sweep(env);
     expect(lines().find((l) => l.event === "send.ambiguous")).toMatchObject({
@@ -245,7 +220,7 @@ describe("the send lifecycle in the log", () => {
 
   it("a run that loses its lease says so", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     // Another run took the send between this run's hand-off and its check.
     vi.spyOn(sends, "dispatchFresh").mockResolvedValue([]);
     vi.spyOn(sends, "renewLease").mockResolvedValue(false);
@@ -270,7 +245,7 @@ describe("the send lifecycle in the log", () => {
 
   it("receipts and the suppressions they add are logged per send, as counts", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await sweep(env);
     const { results } = await env.DB.prepare(
       "SELECT email, provider_id FROM deliveries WHERE send_id = ? ORDER BY email",
@@ -313,7 +288,7 @@ describe("the send lifecycle in the log", () => {
   });
 
   it("a cancel is logged against the send", async () => {
-    const send = await scheduledSend(Date.now() + 600_000);
+    const send = await frozenSend(Date.now() + 600_000);
     await cancel(env, send.id);
     expect(lines()).toEqual([
       expect.objectContaining({ event: "send.canceled", sendId: send.id, postId: send.post_id }),

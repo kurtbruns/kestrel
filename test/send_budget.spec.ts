@@ -17,10 +17,9 @@ import { Budget, D1_QUERY_LIMIT } from "../src/send/budget";
 import { MIN_RUN_COST, runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
+import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -31,49 +30,16 @@ class SesLikeProvider extends ResendLikeProvider {
   override readonly idempotencyWindowMs: number | undefined = undefined;
 }
 
-const addresses = (n: number, tag = "r") =>
-  Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function dueSend() {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, Date.now() - 1000);
-}
-
 /** The test env with its D1 held to the 100-bind cap and counted. */
 function guarded() {
   const guard = guardD1(env.DB);
   return { guard, env: { ...env, DB: guard.db } as AppEnv };
 }
 
-/** One sweep tick, on the next minute or the next halt retry, whichever is later. */
-async function tick(): Promise<void> {
-  await toNextTick(env.DB);
-  await sweep(env);
-}
-
 let resend: ResendLikeProvider;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   // Only Date is faked, so `tick` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();

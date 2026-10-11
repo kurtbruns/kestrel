@@ -11,15 +11,15 @@ import {
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox, failFakeSendBatch } from "../src/providers/fake";
 import { readAgainAt, SETTLE_FOLLOW_MS } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
-import { cancel, freeze, onTheMinute } from "../src/send/schedule";
+import { cancel, onTheMinute } from "../src/send/schedule";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // GET /api/sends/feed is what the admin pages, and any other client, follow instead of each
 // polling its own endpoint (SPEC §8): every send that changed after a cursor, whichever
@@ -27,28 +27,12 @@ import { has } from "./support/conditions";
 // to read again. These pin what it reports after a cursor, what it lists without one, and
 // the pace it sets.
 
-const config = () => getConfig(env);
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 const base = "https://kestrel.test";
 
 const tpl = (marker: string) =>
   `<div>{{ .Post.Body }}<p>${marker} · {{ .Publication.Name }}</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
-/** A fresh post frozen into a send firing at `fireAt` (each send its own post: one active send a post). */
-async function scheduledSend(subject: string, fireAt: number) {
-  const { post } = await posts.createPost(env.DB, { subject, markdown: "# Hi\n\nbody" }, "test");
-  return freeze(env, config(), post, fireAt);
-}
 
 /** Put a send's row in the given state, the way the send loop would have left it. It takes
  *  no `rev`, so what it sets is something the clock, not a write, has to surface. */
@@ -86,24 +70,14 @@ const post = (path: string, body?: unknown) =>
   });
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
 describe("GET /api/posts's cursor", () => {
   it("follows the listed posts' sends: a schedule and a cancel after the list read are reported", async () => {
     const far = Date.now() + 24 * 3_600_000;
-    const listed = await scheduledSend("Listed", far);
+    const listed = await frozenSend(far, { subject: "Listed" });
     const { post: draft } = await posts.createPost(
       env.DB,
       { subject: "Draft", markdown: "# Hi\n\nbody" },
@@ -134,9 +108,9 @@ describe("GET /api/posts's cursor", () => {
 describe("GET /api/sends/feed after a cursor", () => {
   it("reports a cancel, a move, and a new schedule of far-scheduled sends, whichever client made them, and nothing else", async () => {
     const far = Date.now() + 24 * 3_600_000;
-    const dropped = await scheduledSend("Dropped", far);
-    const moved = await scheduledSend("Moved", far);
-    const untouched = await scheduledSend("Untouched", far);
+    const dropped = await frozenSend(far, { subject: "Dropped" });
+    const moved = await frozenSend(far, { subject: "Moved" });
+    const untouched = await frozenSend(far, { subject: "Untouched" });
     const { post: fresh } = await posts.createPost(
       env.DB,
       { subject: "Fresh", markdown: "# Hi\n\nbody" },
@@ -178,7 +152,7 @@ describe("GET /api/sends/feed after a cursor", () => {
         body: JSON.stringify(body),
       });
     expect((await put({ emailTemplate: tpl("v1") })).status).toBe(200);
-    const remade = await scheduledSend("Remade", Date.now() + 24 * 3_600_000);
+    const remade = await frozenSend(Date.now() + 24 * 3_600_000, { subject: "Remade" });
     const since = await listCursor();
     expect((await put({ emailTemplate: tpl("v2"), remake: [remade.id] })).status).toBe(200);
     expect((await feed(since)).sends.map((s) => [s.id, s.phase])).toEqual([
@@ -187,7 +161,7 @@ describe("GET /api/sends/feed after a cursor", () => {
   });
 
   it("follows one send from its own read's cursor", async () => {
-    const send = await scheduledSend("Mine", Date.now() + 3_600_000);
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Mine" });
     const res = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const { cursor } = (await res.json()) as SendResponse;
     expect((await feed(cursor)).sends).toEqual([]);
@@ -197,8 +171,8 @@ describe("GET /api/sends/feed after a cursor", () => {
 
   it("reports a send the clock turned due, with no write, once its fire time falls after the cursor's read", async () => {
     const now = Date.now();
-    const due = await scheduledSend("Due", now - 10_000);
-    await scheduledSend("Ahead", now + 3_600_000);
+    const due = await frozenSend(now - 10_000, { subject: "Due" });
+    await frozenSend(now + 3_600_000, { subject: "Ahead" });
     const before = await feed(await cursorReadAt(now - 20_000));
     expect(before.sends.map((s) => [s.id, s.phase])).toEqual([[due.id, "due"]]);
     // A cursor read after the fire time already saw it due.
@@ -207,7 +181,7 @@ describe("GET /api/sends/feed after a cursor", () => {
 
   it("reports a send the clock made missed", async () => {
     const now = Date.now();
-    const late = await scheduledSend("Late", now - MISSED_THRESHOLD_MS - 10_000);
+    const late = await frozenSend(now - MISSED_THRESHOLD_MS - 10_000, { subject: "Late" });
     const body = await feed(await cursorReadAt(now - 20_000));
     expect(body.sends.map((s) => [s.id, has(s, "missed")])).toEqual([[late.id, true]]);
     expect((await feed(await cursorReadAt(now - 5_000))).sends).toEqual([]);
@@ -215,7 +189,7 @@ describe("GET /api/sends/feed after a cursor", () => {
 
   it("reports a send the clock made stuck", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Long", now - STUCK_THRESHOLD_MS - 60_000);
+    const send = await frozenSend(now - STUCK_THRESHOLD_MS - 60_000, { subject: "Long" });
     await setRow(send.id, {
       status: "sending",
       started_at: now - STUCK_THRESHOLD_MS - 10_000,
@@ -229,7 +203,7 @@ describe("GET /api/sends/feed after a cursor", () => {
 
   it("reports a send wedged by the write that released it, and not when a lease merely runs out", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Wedged", now - 120_000);
+    const send = await frozenSend(now - 120_000, { subject: "Wedged" });
     await setRow(send.id, {
       status: "sending",
       started_at: now - 100_000,
@@ -251,7 +225,7 @@ describe("GET /api/sends/feed after a cursor", () => {
 
   it("reports a late receipt on a send past the hour it is followed at pace", async () => {
     await seedConfirmed("a@example.com");
-    const send = await scheduledSend("Old", Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000, { subject: "Old" });
     await runSend(env, send.id);
     await setRow(send.id, { completed_at: Date.now() - SETTLE_FOLLOW_MS - 60_000 });
     const since = await listCursor();
@@ -273,9 +247,9 @@ describe("GET /api/sends/feed after a cursor", () => {
 describe("GET /api/sends/feed without a cursor", () => {
   it("lists the due, sending, and settling sends, soonest fire first, with a cursor to follow from", async () => {
     const now = Date.now();
-    await scheduledSend("Ahead", now + 3_600_000);
-    const due = await scheduledSend("Due", now - 10_000);
-    const sending = await scheduledSend("Sending", now - 120_000);
+    await frozenSend(now + 3_600_000, { subject: "Ahead" });
+    const due = await frozenSend(now - 10_000, { subject: "Due" });
+    const sending = await frozenSend(now - 120_000, { subject: "Sending" });
     await setRow(sending.id, {
       status: "sending",
       started_at: now - 110_000,
@@ -283,7 +257,7 @@ describe("GET /api/sends/feed without a cursor", () => {
       c_pending: 5,
       c_accepted: 3,
     });
-    const settling = await scheduledSend("Settling", now - 300_000);
+    const settling = await frozenSend(now - 300_000, { subject: "Settling" });
     await setRow(settling.id, {
       status: "sent",
       started_at: now - 290_000,
@@ -291,17 +265,17 @@ describe("GET /api/sends/feed without a cursor", () => {
       c_accepted: 2,
       c_delivered: 6,
     });
-    const complete = await scheduledSend("Complete", now - 600_000);
+    const complete = await frozenSend(now - 600_000, { subject: "Complete" });
     await setRow(complete.id, { status: "sent", completed_at: now - 500_000, c_delivered: 8 });
     // Still awaiting receipts, but done with longer ago than the hour it is followed at pace
     // (SPEC §6: some are never confirmed at all).
-    const stale = await scheduledSend("Stale", now - SETTLE_FOLLOW_MS - 600_000);
+    const stale = await frozenSend(now - SETTLE_FOLLOW_MS - 600_000, { subject: "Stale" });
     await setRow(stale.id, {
       status: "sent",
       completed_at: now - SETTLE_FOLLOW_MS - 1,
       c_accepted: 4,
     });
-    const canceled = await scheduledSend("Canceled", now + 900_000);
+    const canceled = await frozenSend(now + 900_000, { subject: "Canceled" });
     await cancel(env, canceled.id);
 
     const body = await feed();
@@ -327,7 +301,7 @@ describe("GET /api/sends/feed without a cursor", () => {
   it("reads a send the same as GET /api/sends/:id and the list do, as one view", async () => {
     await seedConfirmed("a@example.com");
     await seedConfirmed("b@example.com");
-    const send = await scheduledSend("Live", Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000, { subject: "Live" });
     failFakeSendBatch(1);
     await runSend(env, send.id); // left sending, the batch back in the queue
     const [row] = (await feed()).sends;
@@ -352,11 +326,13 @@ describe("GET /api/sends/feed without a cursor", () => {
   });
 
   it("eases to the idle pace once a due send is past the missed tolerance", async () => {
-    const missed = await scheduledSend("Missed", Date.now() - MISSED_THRESHOLD_MS - 60_000);
+    const missed = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 60_000, {
+      subject: "Missed",
+    });
     const body = await feed();
     expect(body.sends.map((s) => [s.id, has(s, "missed")])).toEqual([[missed.id, true]]);
     expect(body.read_again_at).toBe(body.now + 60_000); // the sweep isn't running: nothing moves
-    const _due = await scheduledSend("Due", Date.now() - 30_000);
+    await frozenSend(Date.now() - 30_000, { subject: "Due" });
     expect((await feed()).read_again_at - body.now).toBeLessThan(10_000);
   });
 
@@ -403,9 +379,9 @@ describe("read_again_at", () => {
 
   it("is set from the whole table, not only the sends a read reports", async () => {
     const now = Date.now();
-    const settled = await scheduledSend("Settling", now - 600_000);
+    const settled = await frozenSend(now - 600_000, { subject: "Settling" });
     await setRow(settled.id, { status: "sent", completed_at: now - 300_000, c_accepted: 2 });
-    const soon = await scheduledSend("Soon", now + 20_000);
+    const soon = await frozenSend(now + 20_000, { subject: "Soon" });
     const since = await listCursor();
     const body = await feed(since);
     expect(body.sends).toEqual([]); // neither changed
@@ -423,7 +399,7 @@ const feedStatus = async (query: string) =>
 describe("GET /api/sends/feed refuses a cursor ahead of the database", () => {
   it("answers a sequence above the current one with cursor_ahead, naming the field", async () => {
     const now = Date.now();
-    await scheduledSend("Far", now + 3_600_000);
+    await frozenSend(now + 3_600_000, { subject: "Far" });
     const seq = decodeSendCursor(await listCursor())?.seq ?? 0;
     // A cursor from before a local reset or a restore: far past anything this database holds.
     const res = await feedStatus(`?since=${seq + 5000}.${now}`);
@@ -442,7 +418,7 @@ describe("GET /api/sends/feed refuses a cursor ahead of the database", () => {
 
 describe("GET /api/sends/feed reports removed sends", () => {
   it("reports a canceled send deleted with its post as removed, after the cursor only", async () => {
-    const send = await scheduledSend("Dropped", Date.now() + 3_600_000);
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Dropped" });
     await cancel(env, send.id);
     const before = await listCursor();
     const del = await SELF.fetch(`${base}/api/posts/${send.post_id}`, {
@@ -467,7 +443,7 @@ describe("GET /api/sends/feed limit", () => {
     const far = Date.now() + 24 * 3_600_000;
     const made = [];
     for (let i = 0; i < 5; i++) {
-      made.push(await scheduledSend(`S${i}`, far + i));
+      made.push(await frozenSend(far + i, { subject: `S${i}` }));
     }
     const seen: string[] = [];
     let cursor = since;
@@ -490,8 +466,8 @@ describe("GET /api/sends/feed limit", () => {
 
   it("reports every send the clock changed, whatever the limit", async () => {
     const now = Date.now();
-    const a = await scheduledSend("A", now + 1000);
-    const b = await scheduledSend("B", now + 2000);
+    const a = await frozenSend(now + 1000, { subject: "A" });
+    const b = await frozenSend(now + 2000, { subject: "B" });
     // Both writes before the cursor, read 5 s ago; only the clock has moved them since.
     const since = await cursorReadAt(now - 5000);
     await setRow(a.id, { fire_at: now - 1000 });
@@ -514,7 +490,7 @@ describe("GET /api/sends/feed limit", () => {
 describe("GET /api/sends/feed paces from each send's next change", () => {
   it("does not hurry for a send the provider refuses: it reads at the retry", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Refused", now - 120_000);
+    const send = await frozenSend(now - 120_000, { subject: "Refused" });
     const retryAt = now + 5 * 60_000;
     await setRow(send.id, {
       status: "sending",
@@ -538,7 +514,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
 
   it("wakes just past a halt's retry when that comes within the minute", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Unavailable", now - 120_000);
+    const send = await frozenSend(now - 120_000, { subject: "Unavailable" });
     await setRow(send.id, {
       status: "sending",
       started_at: now - 110_000,
@@ -558,7 +534,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
 
   it("does not hurry for a wedged send: only Resolve or the in-flight-too-long flag moves it", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Wedged", now - 120_000);
+    const send = await frozenSend(now - 120_000, { subject: "Wedged" });
     await setRow(send.id, {
       status: "sending",
       started_at: now - 110_000,
@@ -575,7 +551,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
 
   it("follows closely while a run holds the send, or work waits for the next tick", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Running", now - 120_000);
+    const send = await frozenSend(now - 120_000, { subject: "Running" });
     await setRow(send.id, {
       status: "sending",
       started_at: now - 110_000,
@@ -595,7 +571,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
 describe("GET /api/sends/:id shape fixes", () => {
   it("links the archive once the send starts, and leaves a halt's times null rather than now", async () => {
     const now = Date.now();
-    const send = await scheduledSend("Unpublished", now + 3_600_000);
+    const send = await frozenSend(now + 3_600_000, { subject: "Unpublished" });
     let body = (await (
       await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;

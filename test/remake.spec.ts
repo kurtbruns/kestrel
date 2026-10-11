@@ -6,6 +6,7 @@ import worker from "../src/index";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
 
 // A template or identity change re-makes every scheduled send at once, after the
 // client acknowledges them (SPEC §6, §9). One test per rule.
@@ -92,27 +93,9 @@ async function cancel(id: string): Promise<void> {
   ).toBe(200);
 }
 
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
 // The rules are about "every scheduled send", so each test starts from none.
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   expect((await putSettings({ emailTemplate: tpl("v1") })).status).toBe(200);
 });
