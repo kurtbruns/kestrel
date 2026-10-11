@@ -23,7 +23,7 @@
  *                     minute. A dev tool's extra tick: the app behaves as it always does.
  *
  * The target is found as for the seed: this worktree's own dev server, proven by its run ID,
- * or a server named deliberately with `PORT` or a URL or port argument.
+ * or a server named deliberately with a URL or port argument.
  */
 import { callApi, devTarget, fail, parseArgs } from "../cli/dev-api.mjs";
 import { seedDemo } from "../cli/seed.mjs";

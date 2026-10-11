@@ -41,7 +41,7 @@ Your instance's repository holds its configuration, its database migrations, and
     npm run dev
     ```
 
-    Open http://localhost:8787/dashboard/ to see the editor. To fill it with demo content, run `npm run seed` in a second terminal in the same folder, and `npm run reset` to empty it again. Both act only on the server `npm run dev` started in that folder, and refuse when it isn't running; to aim one at another server on purpose, name its port, as in `PORT=8787 npm run seed`. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.
+    Open http://localhost:8787/dashboard/ to see the editor. To fill it with demo content, run `npm run seed` in a second terminal in the same folder, and `npm run reset` to empty it again. Both act only on the server `npm run dev` started in that folder, and refuse when it isn't running; to aim one at another server on purpose, name its port, as in `npm run seed -- 8787`. Press <kbd>Ctrl</kbd>+<kbd>C</kbd> to stop the server.
 
 ## 2. Sign in to Cloudflare
 

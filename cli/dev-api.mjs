@@ -11,7 +11,9 @@
  * Seed and reset wipe the database of the server they reach, so a target they find for
  * themselves must prove it is this directory's: the port `kestrel dev` recorded here, and a
  * server there that reports the run ID recorded with it (cli/dev-server.mjs). A target the
- * caller names, a port or URL argument or `PORT`, is their choice and is used as given.
+ * caller names, a port or URL argument, is their choice and is used as given. `PORT` names
+ * nothing here: a shell can carry it without the caller meaning anything by it, and a
+ * target that wipes a database has to be named on purpose.
  */
 import { readDevServer } from "./dev-server.mjs";
 
@@ -42,17 +44,14 @@ export function parseArgs(argv, booleans = []) {
 
 /**
  * Where a dev command aims, decided from what it was given and this directory's record:
- * `{ base, explicit: true }` for a port or URL argument, else `PORT`, used as given;
+ * `{ base, explicit: true }` for a port or URL argument, used as given;
  * `{ base, expectId }` for the recorded server, which must then report that ID
  * (`ownsServer`); or `{ refuse: "unrecorded" }` when nothing names a server and none is
  * recorded here. There is no fallback port: a guess could be another directory's server.
  */
-export function chooseTarget({ arg, envPort, record }) {
+export function chooseTarget({ arg, record }) {
   if (arg) {
     return { base: /^https?:\/\//.test(arg) ? arg : `http://localhost:${arg}`, explicit: true };
-  }
-  if (envPort) {
-    return { base: `http://localhost:${envPort}`, explicit: true };
   }
   if (!record) {
     return { refuse: "unrecorded" };
@@ -72,10 +71,14 @@ export function ownsServer(target, reportedId) {
  * argument, if any; `tag` names the command, as in `npm run <tag>`.
  */
 export async function devTarget(arg, tag) {
-  const target = chooseTarget({ arg, envPort: process.env.PORT, record: readDevServer() });
+  const target = chooseTarget({ arg, record: readDevServer() });
   const deliberately = [
-    "To act on a server deliberately, name its port:",
-    `\`PORT=<port> npm run ${tag}\` or \`npm run ${tag} -- <port>\`.`,
+    `To act on a server deliberately, name its port: \`npm run ${tag} -- <port>\`.`,
+    ...(process.env.PORT
+      ? [
+          `(PORT=${process.env.PORT} is set, but PORT doesn't name a target here: a shell can carry it unawares.)`,
+        ]
+      : []),
   ];
   if (target.refuse) {
     fail(

@@ -179,15 +179,18 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
 
   // The Worker reports this ID beside the dev token, and seed and reset with no target given
   // check it against the record, so they never wipe a server this directory didn't start.
+  // Not for --remote: its database is a deployed one, which an unnamed seed must never reach.
   const runId = newDevRunId();
-  const runIdArgs = ["--var", `DEV_RUN_ID:${runId}`];
+  const runIdArgs = isRemote ? [] : ["--var", `DEV_RUN_ID:${runId}`];
 
-  writeDevServer(port, runId);
+  if (!isRemote) {
+    writeDevServer(port, runId);
+  }
   // A remote session runs against deployed resources, where the real cron and the real
   // webhooks are the ones that count.
   const stopTicker = isRemote ? () => {} : startSweepTicker(origin);
   const stop = () => {
-    clearDevServer();
+    clearDevServer(runId);
     stopTicker();
     onStop();
   };

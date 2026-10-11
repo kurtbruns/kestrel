@@ -21,11 +21,12 @@
  */
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-// Under the directory the command runs in: this repository, or an instance repository.
-const RECORD_FILE = join(process.cwd(), ".wrangler", "dev-server.json");
-const LEGACY_PORT_FILE = join(process.cwd(), ".wrangler", "dev-port");
+// Under the directory the command runs in: this repository, or an instance repository. The
+// directory is a parameter only so the suite can point these at a scratch one.
+const recordFile = (dir) => join(dir, ".wrangler", "dev-server.json");
+const legacyPortFile = (dir) => join(dir, ".wrangler", "dev-port");
 
 /** A fresh ID for one run of the dev server. */
 export function newDevRunId() {
@@ -34,30 +35,34 @@ export function newDevRunId() {
 
 /** Record the port and run ID of the dev server starting here. Best-effort: on failure there
  *  is no record, and seed and reset refuse an implicit target rather than guess one. */
-export function writeDevServer(port, id) {
+export function writeDevServer(port, id, dir = process.cwd()) {
   try {
-    mkdirSync(dirname(RECORD_FILE), { recursive: true });
-    writeFileSync(RECORD_FILE, `${JSON.stringify({ port: String(port), id })}\n`, "utf8");
-    rmSync(LEGACY_PORT_FILE, { force: true });
+    mkdirSync(join(dir, ".wrangler"), { recursive: true });
+    writeFileSync(recordFile(dir), `${JSON.stringify({ port: String(port), id })}\n`, "utf8");
+    rmSync(legacyPortFile(dir), { force: true });
   } catch {
     /* best effort */
   }
 }
 
-/** Remove the record when the dev server exits, so a later seed/reset says no server is
- *  recorded rather than chase a port nothing is listening on. Best-effort. */
-export function clearDevServer() {
+/** Remove this run's record when its dev server exits, so a later seed/reset says no server is
+ *  recorded rather than chase a port nothing is listening on. Only when the record is still
+ *  this run's: a second `kestrel dev` here overwrites it, and the first one stopping must not
+ *  erase the record of the one still serving. Best-effort. */
+export function clearDevServer(id, dir = process.cwd()) {
   try {
-    rmSync(RECORD_FILE, { force: true });
+    if (readDevServer(dir)?.id === id) {
+      rmSync(recordFile(dir), { force: true });
+    }
   } catch {
     /* best effort */
   }
 }
 
 /** The dev server last recorded in this directory, `{ port, id }`, or undefined when none is. */
-export function readDevServer() {
+export function readDevServer(dir = process.cwd()) {
   try {
-    const { port, id } = JSON.parse(readFileSync(RECORD_FILE, "utf8"));
+    const { port, id } = JSON.parse(readFileSync(recordFile(dir), "utf8"));
     return /^\d+$/.test(String(port)) && typeof id === "string" && id
       ? { port: String(port), id }
       : undefined;

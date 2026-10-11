@@ -38,4 +38,5 @@ A local send is a real send through the real API, send loop, and receipt ingest;
 
 - "isn't simulating sends": the server runs with `SIMULATE_SENDS=off` or an old `.dev.vars` without it; `npm run dev` names missing settings at start. Restart with `SIMULATE_SENDS=resend npm run dev`.
 - "inside this server's minimum lead": ask for a later time, or set `MIN_LEAD_SECONDS="60"` in `.dev.vars` and restart (60 is the floor).
+- "no dev server is recorded in this directory" or "isn't this directory's dev server": the script acts only on the server `npm run dev` started in this worktree (another one's database would be the one changed). Start this worktree's server as in step 1 and run it again. Never pass another server's port to get past it; that is only for when the person means that server.
 - A send that never fires: check the dev server log for `[dev] send sweep: running once a minute`; a server started some other way than `npm run dev` has no ticker.

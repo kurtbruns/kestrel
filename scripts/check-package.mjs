@@ -189,7 +189,9 @@ if (context.status !== 0 || lines.some((l) => !/: current$/.test(l))) {
 
 // The instance runs: `npm run dev` serves the Worker from node_modules (the health check and
 // the editor answer), and seed loads the demo through it. A bundle that only fails once it
-// runs gets this far and no further.
+// runs gets this far and no further. Seed is given no port, so it finds the server through the
+// record `kestrel dev` left and the run ID the Worker reports, with a PORT naming somewhere
+// else that it must not follow.
 copyFileSync(join(instance, ".dev.vars.example"), join(instance, ".dev.vars"));
 const port = String(await freePort());
 const dev = spawn("npm", ["run", "dev"], {
@@ -222,7 +224,11 @@ for (let i = 0; i < 90 && !health; i++) {
 }
 const dashboard = health ? (await fetch(`${base}/dashboard/`).catch(() => null))?.status : null;
 const seeded = health
-  ? spawnSync("npx", ["--no", "--", "kestrel", "seed", port], { cwd: instance, encoding: "utf8" })
+  ? spawnSync("npx", ["--no", "--", "kestrel", "seed"], {
+      cwd: instance,
+      env: { ...process.env, PORT: "1" },
+      encoding: "utf8",
+    })
   : null;
 stopDev();
 if (health?.status !== "ok" || dashboard !== 200 || seeded?.status !== 0) {

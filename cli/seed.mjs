@@ -12,8 +12,8 @@
  * With no target given, it goes only to the dev server `kestrel dev` recorded in this
  * directory, and only when that server reports the run ID recorded with it, so it never wipes
  * another directory's database (cli/dev-api.mjs, cli/dev-server.mjs); with none recorded it
- * refuses rather than guess a port. `PORT` or a URL or port argument names a server
- * deliberately, and is used as given. Scale the demo list
+ * refuses rather than guess a port. A URL or port argument names a server deliberately, and
+ * is used as given; `PORT` names nothing here (cli/dev-api.mjs says why). Scale the demo list
  * with `--size` (100 / 1k / 10k / 100k, an approximate target) and pin the seeded PRNG with
  * `--seed`. Without `--size`, the curated story-shaped list (~155 subscribers) loads.
  */

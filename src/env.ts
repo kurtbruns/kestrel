@@ -280,6 +280,7 @@ export function getConfig(env: AppEnv): Config {
   // local dev" has a single source.
   const devShaped = provider === "fake" && !accessTeamDomain && isLoopbackOrigin(appOrigin);
   const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
+  const devMode = devAuthSecret !== undefined;
   const notifyChannel: NotifyChannel = devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
   return {
     provider,
@@ -298,9 +299,9 @@ export function getConfig(env: AppEnv): Config {
     // Show the dev-only dashboard link, and register the dev routes, exactly when the
     // dev credential path is live (dev-shaped AND the secret resolved). Never true in a
     // deployed env, so the reader surface stays clean of any admin link there.
-    devMode: devAuthSecret !== undefined,
+    devMode,
     devAuthSecret,
-    devRunId: devAuthSecret !== undefined ? orUndefined(env.DEV_RUN_ID) : undefined,
+    devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
     // Only ever read in a dev-shaped env; a deployed env runs a real provider, so the
     // simulation can never engage there whatever the var says.
     simulation: devShaped ? readSimulation(env.SIMULATE_SENDS) : null,
