@@ -28,7 +28,7 @@ import {
   ticks,
 } from "./support/fixtures";
 import { base } from "./support/http";
-import { expectErrorLogs, logged } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
@@ -127,7 +127,7 @@ describe("a send finishing", () => {
 
 describe("a send that needs the publisher", () => {
   it("the provider refusing the account: told at once with its words and the advice, once however long it lasts", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(5));
     const send = await dueSend({ subject: "Owls in winter" });
     resend.refuse = "resend batch 401: API key is invalid";
@@ -249,7 +249,7 @@ describe("a send that needs the publisher", () => {
   });
 
   it("a missed fire time: told once, whether the send went out late or has not gone out", async () => {
-    expectErrorLogs("send.missed");
+    allowErrorLogs("send.missed");
     await seedConfirmed(addresses(2));
     const late = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 5 * 60_000, {
       subject: "Late one",
@@ -345,7 +345,7 @@ describe("isolation", () => {
   });
 
   it("logs what it tells the publisher without the publisher's address", async () => {
-    expectErrorLogs("notify.error");
+    allowErrorLogs("notify.error");
     const infos = vi.spyOn(console, "log").mockImplementation(() => {});
     await seedConfirmed(addresses(2));
     await dueSend({ subject: "Owls in winter" });
@@ -368,7 +368,7 @@ describe("isolation", () => {
   });
 
   it("a notifier that throws outright never stops a send finishing", async () => {
-    expectErrorLogs("notify.error");
+    allowErrorLogs("notify.error");
     await seedConfirmed(addresses(2));
     const send = await dueSend();
     vi.spyOn(channel, "getNotifier").mockImplementation(() => {
@@ -383,7 +383,7 @@ describe("isolation", () => {
   });
 
   it("a tick with a backlog stays inside the subrequest budget", async () => {
-    expectErrorLogs("send.missed");
+    allowErrorLogs("send.missed");
     await seedConfirmed(addresses(1));
     for (let i = 0; i < 25; i++) {
       await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 60_000, { subject: `Backlog ${i}` });

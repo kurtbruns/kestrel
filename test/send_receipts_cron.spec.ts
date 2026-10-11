@@ -42,7 +42,7 @@ async function scheduled(cron: string, e: AppEnv = env as AppEnv): Promise<void>
 }
 
 /** A scheduled send whose fire time has passed, to one confirmed reader: the sweep would fire it. */
-async function dueSend(): Promise<string> {
+async function dueSendToOneReader(): Promise<string> {
   const now = Date.now();
   await env.DB.prepare(
     "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('sub-r', 'r@example.com', 'confirmed', 'cfm-r', 'uns-r', ?, ?)",
@@ -82,7 +82,7 @@ const delivered = async (sendId: string) => (await sends.getSend(env.DB, sendId)
 describe("the receipts cron", () => {
   it("settles the simulated receipts that have come due and never runs the sweep", async () => {
     await settlingSend("s-settling", 3);
-    const due = await dueSend();
+    const due = await dueSendToOneReader();
     await scheduled(RECEIPTS_CRON, withVars(SIM));
     expect(await delivered("s-settling")).toBe(3);
     expect((await sends.getSend(env.DB, due))?.status).toBe("scheduled");

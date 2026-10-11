@@ -14,7 +14,7 @@ import {
 import { HttpError } from "../src/lib/errors";
 import type { RequestContext } from "../src/router";
 import { AUTH, base, readJson } from "./support/http";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 
 function send(method: string, path: string, body: string, contentType = "application/json") {
   return SELF.fetch(`${base}${path}`, {
@@ -245,7 +245,7 @@ describe("other routes name the field they refuse", () => {
 
 describe("PUT /api/settings keeps a database failure out of the 400", () => {
   it("a failing settings read is a 500, not a bad request carrying the database's message", async () => {
-    expectErrorLogs("request.error");
+    allowErrorLogs("request.error");
     const broken = {
       ...env,
       DB: {

@@ -18,6 +18,18 @@ import { PAGE_SECURITY_HEADERS } from "./page_headers";
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
 
+/* The app's brand accent (DESIGN.md §3), mirrored here for the publisher-only chrome the
+   reader surface carries: the dev pill and the test pages' strip. Only the publisher ever
+   sees them, and they are the app speaking, not the publication, so they wear the app's
+   action color, matching a Primary action, rather than the reader ink; keep these values in
+   sync with styles.css. This is the one deliberate exception to "the reader surface is not
+   styled from the admin tokens" (DESIGN.md, reader-surface note). Each stylesheet below
+   carries them, so either works alone on a page. */
+const APP_ACCENT_TOKENS = `
+:root { --k-accent:#3355cc; --k-accent-contrast:#ffffff; }
+@media (prefers-color-scheme: dark) { :root { --k-accent:#7d9bff; --k-accent-contrast:#10131f; } }
+`;
+
 /* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
    over-the-page dev chrome — deliberately not the publication's own identity — so
@@ -25,15 +37,7 @@ const READER_BG_DARK = "#12110f";
    Self-contained, because it rides two kinds of page: the reader shell and a post
    page (as browser-only chrome injected into the frozen render). The post page has
    none of the reader tokens, so the font is set here rather than inherited. */
-const DEV_BADGE_STYLE = `
-/* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only element
-   the reader surface carries. That badge is app chrome, not the publication's
-   identity, so it wears the app's action color, matching a Primary action, rather
-   than the reader ink; keep these values in sync with styles.css. This is the
-   single, deliberate exception to "the reader surface is not styled from the admin
-   tokens" (DESIGN.md, reader-surface note). */
-:root { --k-accent:#3355cc; --k-accent-contrast:#ffffff; }
-@media (prefers-color-scheme: dark) { :root { --k-accent:#7d9bff; --k-accent-contrast:#10131f; } }
+const DEV_BADGE_STYLE = `${APP_ACCENT_TOKENS}
 .r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
          font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
@@ -48,6 +52,27 @@ const DEV_BADGE_STYLE = `
                     background:var(--k-accent-contrast); color:var(--k-accent); }
 .r-dev:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
 @media (prefers-color-scheme: dark) { .r-dev:focus-visible { outline-color:#60a5fa; } }
+`;
+
+/* The test strip: a full-width strip across the top of a page that only shows what a
+   reader would see (a test email's or a preview's unsubscribe link), above and outside the
+   publication's masthead, so the masthead beneath is exactly the one a reader gets. Only
+   the publisher sees it, so it wears the dev pill's look: the full accent fill with
+   contrast text (about 6.3:1 light and 7:1 dark), and its tag as the pill's inverted chip.
+   Its content sits in the reader measure, so the sentence starts on the masthead's left
+   edge while the ground runs edge to edge. The editor's web version wears the same strip
+   in admin CSS (`.web-bar` in styles.css); keep the two in sync. */
+const READER_BANNER_STYLE = `${APP_ACCENT_TOKENS}
+.r-banner { background:var(--k-accent); color:var(--k-accent-contrast);
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+            font-size:13.5px; font-weight:500; line-height:1.4; }
+/* The tag runs in, inline with the sentence, so on a phone the sentence wraps beneath it at
+   the strip's full width rather than in a narrow column beside it. */
+.r-banner-in { max-width:var(--r-measure); margin:0 auto; padding:10px 24px; }
+.r-banner-tag { display:inline-block; margin-right:10px; font-size:10px; letter-spacing:.09em;
+                text-transform:uppercase; font-weight:700; padding:1px 7px; border-radius:999px;
+                background:var(--k-accent-contrast); color:var(--k-accent); }
+.r-banner-text { overflow-wrap:anywhere; }
 `;
 
 const READER_STYLE = `
@@ -122,16 +147,6 @@ a.r-t:hover { text-decoration:underline; }
          background:var(--r-ink); color:var(--r-bg); cursor:pointer; white-space:nowrap; }
 .r-btn:hover { filter:brightness(1.06); }
 .r-fine { font-size:12.5px; color:var(--r-mut); margin:16px 0 0; }
-
-/* The test banner: a full-width strip above the masthead on a page that only shows what
-   a reader would see (a test email's or a preview's unsubscribe link). It wears the
-   reader ink as its ground, the inverse of the page, so it reads as a notice laid over
-   the publication rather than part of it, and turns with the theme like the rest. */
-.r-banner { background:var(--r-ink); color:var(--r-bg); }
-.r-banner-in { max-width:var(--r-measure); margin:0 auto; padding:12px 24px; font-size:14px; line-height:1.45;
-               display:flex; align-items:baseline; gap:10px; }
-.r-banner-tag { flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
-                padding:2px 8px; border-radius:999px; border:1px solid currentColor; }
 
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
@@ -225,6 +240,11 @@ export function archiveDevDashboardChrome(url?: string): { head: string; masthea
   return { head: devDashboardStyle(url), masthead: devDashboardBadge(url) };
 }
 
+/** The strip's stylesheet, emitted beside it and only when it is. */
+function readerBannerStyle(banner?: ReaderBanner): string {
+  return banner ? `<style>${READER_BANNER_STYLE}</style>` : "";
+}
+
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
  *  `mainHtml`. Public and indexable unless `private`; every link points only at public
@@ -240,7 +260,7 @@ export function readerPage(opts: {
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
    *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
-  /** A banner above the masthead, for a page shown as a test of what a reader sees. */
+  /** A strip above the masthead, for a page shown as a test of what a reader sees. */
   banner?: ReaderBanner;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
@@ -257,7 +277,7 @@ export function readerPage(opts: {
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
   const banner = opts.banner
-    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span>${escapeHtml(opts.banner.text)}</span></div></div>`
+    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
     : "";
   const doc = `<!doctype html>
 <html lang="en">
@@ -266,7 +286,7 @@ export function readerPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
 ${FRAUNCES_FONT_LINKS}
-<style>${READER_STYLE}</style>${devDashboardStyle(opts.devDashboardUrl)}
+<style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
 ${banner}<header class="r-mast"><div class="r-mast-in">

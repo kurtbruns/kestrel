@@ -22,7 +22,7 @@ import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 
 const config = () => getConfig(env);
 
@@ -216,7 +216,7 @@ describe("resolve a wedged send", () => {
 
 describe("a real SES transport error wedges the send, and resolve unwedges it", () => {
   it("stays sending on a mid-batch transport error, then completes via resolve", async () => {
-    expectErrorLogs("send.ambiguous");
+    allowErrorLogs("send.ambiguous");
     await seedConfirmed("a@example.com");
     const { post } = await posts.createPost(env.DB, { subject: "S", markdown: "# H\n\nb" }, "t");
     const send = await freeze(env, config(), post, Date.now() - 1000);

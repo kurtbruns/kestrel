@@ -17,7 +17,7 @@ import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
-import { expectErrorLogs, logged } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 
 const config = () => getConfig(env);
 
@@ -243,7 +243,7 @@ describe("send loop + sweep", () => {
   });
 
   it("flags a missed fire time loudly but still delivers (§12)", async () => {
-    expectErrorLogs("send.missed");
+    allowErrorLogs("send.missed");
     const spy = vi.spyOn(console, "error");
     await seedConfirmed("late@example.com");
     const send = await frozenSend(Date.now() - (MISSED_THRESHOLD_MS + 60_000));

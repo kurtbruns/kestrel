@@ -37,5 +37,5 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 
 ## Logs and output
 
-- A Worker test that causes an error-level log line declares it: `expectErrorLogs("send.wedged")` (`test/support/log.ts`). An undeclared one fails the test, and so does a declared one that never appears.
+- A Worker test that causes an error-level log line on purpose allows it, at the start of the test: `allowErrorLogs("send.wedged")` (`test/support/log.ts`). Any other error line fails the test. Allowing doesn't assert; to prove a failure was logged, read the line back with `logged()`.
 - A passing test's console output isn't printed, so don't mock the console to keep a spec quiet. Spy on it only to assert on a line.

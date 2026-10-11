@@ -35,9 +35,9 @@ export async function resetDatabase(): Promise<void> {
   await env.DB.batch(TABLES.map((table) => env.DB.prepare(`DELETE FROM ${table}`)));
 }
 
-/** `n` distinct addresses, `r000@example.com` on, with `tag` in place of the `r`. */
-export function addresses(n: number, tag = "r"): string[] {
-  return Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
+/** `n` distinct addresses: `r000@example.com`, `r001@example.com`, and on. */
+export function addresses(n: number): string[] {
+  return Array.from({ length: n }, (_, i) => `r${String(i).padStart(3, "0")}@example.com`);
 }
 
 /**
@@ -64,12 +64,15 @@ export async function frozenSend(
 }
 
 /** A send already due: its fire time a second past, so the next sweep starts it. */
-export function dueSend(post: { subject?: string; markdown?: string } = {}): Promise<SendRow> {
-  return frozenSend(Date.now() - 1000, post);
+export function dueSend(opts: { subject?: string; markdown?: string } = {}): Promise<SendRow> {
+  return frozenSend(Date.now() - 1000, opts);
 }
 
-/** One sweep tick, the clock first moved on as the cron would (`toNextTick`), so `Date`
- *  must be faked. */
+/**
+ * One sweep tick, the clock first moved on as the cron would (`toNextTick`). It sets the
+ * system time, so the spec fakes `Date` first: `vi.useFakeTimers({ toFake: ["Date"] })` in
+ * its `beforeEach`. `e` is the env to sweep with, such as one whose D1 is guarded.
+ */
 export async function tick(e: AppEnv = env): Promise<void> {
   await toNextTick(env.DB);
   await sweep(e);

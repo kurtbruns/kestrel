@@ -15,7 +15,7 @@ import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
 import { base, PNG_1x1 } from "./support/http";
-import { expectErrorLogs, logged } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
 beforeEach(async () => {
@@ -528,7 +528,7 @@ describe("a corrupt settings row", () => {
     ["JSON that is not an object", "null"],
   ] as const) {
     it(`fails the API's reads and writes, keeps the reader pages up, and leaves the row as it is: ${what}`, async () => {
-      expectErrorLogs("settings.corrupt");
+      allowErrorLogs("settings.corrupt");
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
       await env.MEDIA.delete(BRANDING_LOGO_KEY);

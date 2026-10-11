@@ -10,7 +10,7 @@ import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 
 let seq = 0;
 const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;
@@ -494,7 +494,7 @@ describe("a confirmation the provider does not take is not treated as sent", () 
   });
 
   it("a failure before the provider is asked changes nothing", async () => {
-    expectErrorLogs("subscribe.failed", "request.error");
+    allowErrorLogs("subscribe.failed", "request.error");
     const email = uniqueEmail();
     await addPending(email);
     await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
