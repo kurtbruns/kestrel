@@ -328,7 +328,7 @@ export function createRouter({
       resource: "settings",
       summary: "Remove the publication logo.",
       description:
-        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead.",
+        "Under the same re-make rule as `PUT /api/settings` when the template renders the logo and sends are scheduled: acknowledged as `?remake=` (comma-separated send ids), refused inside the minimum lead. The image itself stays served, since emails already sent still show it (I3); only what renders from then on loses it.",
       handler: settingsRoutes.deleteLogo,
     },
     {

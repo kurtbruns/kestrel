@@ -101,10 +101,12 @@ export async function seed(c: RequestContext): Promise<Response> {
 export async function reset(c: RequestContext): Promise<Response> {
   requireDevMode(c);
   await resetAll(c.env.DB); // clears every D1 table, the settings singleton included
-  // resetAll can't reach R2, so drop the one global branding asset here too — a fresh
-  // reset then shows the From-name fallback and no logo.
+  // resetAll can't reach R2, so drop every logo upload here too — a fresh reset then
+  // shows the From-name fallback and no logo. Only here, on a dev database being wiped:
+  // a deployed logo's bytes are never deleted (I3).
   try {
-    await c.env.MEDIA.delete(BRANDING_LOGO_KEY);
+    const { objects } = await c.env.MEDIA.list({ prefix: BRANDING_LOGO_KEY });
+    await c.env.MEDIA.delete(objects.map((o) => o.key));
   } catch {
     /* best effort — an absent logo is fine */
   }

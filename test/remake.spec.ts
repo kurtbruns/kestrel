@@ -5,7 +5,7 @@ import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
-import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { clearLogos, logoKeys, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 // A template or identity change re-makes every scheduled send at once, after the
@@ -84,6 +84,7 @@ async function cancel(id: string): Promise<void> {
 // The rules are about "every scheduled send", so each test starts from none.
 beforeEach(async () => {
   await resetDatabase();
+  await clearLogos();
   clearFakeOutbox();
   expect((await putSettings({ emailTemplate: tpl("v1") })).status).toBe(200);
 });
@@ -168,7 +169,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(up.status).toBe(409);
     expect((await readJson(up)).error).toBe("remake_required");
     // A refused upload wrote no bytes.
-    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
+    expect(await logoKeys()).toEqual([]);
 
     const upOk = await SELF.fetch(`${base}/api/settings/logo?remake=${a.id}`, {
       method: "POST",
@@ -178,8 +179,8 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(upOk.status).toBe(200);
     const upBody = await readJson(upOk);
     expect(upBody.remade.map((s: any) => s.id)).toEqual([a.id]);
-    expect((await getSend(a.id)).rendered_html).toContain("/media/branding/logo?v=");
-    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(200);
+    const [key] = await logoKeys();
+    expect((await getSend(a.id)).rendered_html).toContain(`/media/${key}"`);
 
     const del = await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(409);
@@ -188,7 +189,7 @@ describe("a template or identity change re-makes the scheduled emails", () => {
       headers: AUTH,
     });
     expect(delOk.status).toBe(200);
-    expect((await getSend(a.id)).rendered_html).not.toContain("/media/branding/logo?v=");
+    expect((await getSend(a.id)).rendered_html).not.toContain("/media/branding/logo");
   });
 
   it("an identical save changes nothing and asks nothing", async () => {

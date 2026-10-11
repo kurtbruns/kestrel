@@ -43,7 +43,7 @@ import {
   type SeedSuppression,
 } from "../db/seed";
 import { recomputeSendCounters } from "../db/sends";
-import { BRANDING_LOGO_KEY, getSettings, setPublicationLogo, updateSettings } from "../db/settings";
+import { getSettings, logoKeyFor, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
@@ -879,14 +879,15 @@ export async function seedDatabase(
   });
 
   // And a real logo when one was supplied, so the brand tile isn't just the initial.
-  // The bytes go to R2 under the reserved branding key; the metadata (with a
-  // cache-busting version) goes to settings — the same two-step the upload route does.
+  // The bytes go to R2 under the upload's own key; the metadata (version and key) goes to
+  // settings — the same two-step the upload route does.
   let logoWritten = false;
   if (logoFile) {
-    await env.MEDIA.put(BRANDING_LOGO_KEY, logoFile.bytes, {
+    const key = logoKeyFor(now);
+    await env.MEDIA.put(key, logoFile.bytes, {
       httpMetadata: { contentType: logoFile.contentType },
     });
-    await setPublicationLogo(db, { version: now, contentType: logoFile.contentType });
+    await setPublicationLogo(db, { version: now, contentType: logoFile.contentType, key });
     logoWritten = true;
   }
 

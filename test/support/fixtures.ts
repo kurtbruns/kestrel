@@ -11,6 +11,7 @@
 import { env } from "cloudflare:workers";
 import * as posts from "../../src/db/posts";
 import type { SendRow } from "../../src/db/sends";
+import { BRANDING_LOGO_KEY } from "../../src/db/settings";
 import type { AppEnv } from "../../src/env";
 import { getConfig } from "../../src/env";
 import { freeze } from "../../src/send/schedule";
@@ -133,4 +134,19 @@ export async function deliveryEvent(providerId: string): Promise<string | null> 
     .bind(providerId)
     .first<{ event: string | null }>();
   return row?.event ?? null;
+}
+
+/** The R2 keys the logo's uploads are stored under, so a spec can see what an upload wrote. */
+export async function logoKeys(): Promise<string[]> {
+  const { objects } = await env.MEDIA.list({ prefix: BRANDING_LOGO_KEY });
+  return objects.map((o) => o.key);
+}
+
+/** Delete every logo upload. R2 outlives `resetDatabase()`, so a spec that uploads a logo
+ *  clears them in its own `beforeEach`. */
+export async function clearLogos(): Promise<void> {
+  const keys = await logoKeys();
+  if (keys.length > 0) {
+    await env.MEDIA.delete(keys);
+  }
 }

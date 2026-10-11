@@ -25,14 +25,18 @@ import { log } from "../lib/log";
  * The publication's identity. It themes the reader surface and the admin, and rides
  * *inside* the email as its masthead/branding (the post template and the confirmation
  * email) — but it is never the email's authenticated *sender* (that is the `From:`
- * header, deploy-time), and never a frozen record (I3). The logo *bytes* live in R2
- * under `BRANDING_LOGO_KEY`, served by the public media route; here we keep only its
- * version (a cache-buster, a timestamp bumped on each upload) and content type. A blank
- * `name` falls back to the `From:` display name at render time.
+ * header, deploy-time), and never a frozen record (I3). The logo *bytes* live in R2,
+ * served by the public media route: each upload under a key of its own (`logoKeyFor`),
+ * never overwritten or deleted, since a sent email and its archive page keep pointing at
+ * it (I3). Here we keep only the version (the upload's timestamp), the key, and the
+ * content type. A blank `name` falls back to the `From:` display name at render time.
  */
 export interface PublicationLogo {
   version: number;
   contentType: string;
+  /** Where the bytes are. Absent on a logo uploaded before each upload had its own key,
+   *  whose bytes are at `BRANDING_LOGO_KEY`. */
+  key?: string;
 }
 export interface PublicationSettings {
   name: string;
@@ -78,8 +82,26 @@ export interface AppSettings {
   notifications: NotificationPrefs;
 }
 
-/** The reserved R2 key the publication logo is stored under (served by /media). */
+/** The R2 key a logo uploaded before each upload had its own key is stored under, and the
+ *  prefix every logo key starts with (served by /media). Nothing writes or deletes it now. */
 export const BRANDING_LOGO_KEY = "branding/logo";
+
+/** The R2 key for a logo uploaded at `version`: its own, so no later upload or removal
+ *  changes what an email already sent with it shows (I3, SPEC §9). */
+export function logoKeyFor(version: number): string {
+  return `${BRANDING_LOGO_KEY}/${version}`;
+}
+
+/** The logo's public URL, or "" with none. A logo from before per-upload keys keeps the
+ *  URL its sends already carry, its version a cache-buster on the shared key. */
+export function publicationLogoUrl(mediaBase: string, logo: PublicationLogo | null): string {
+  if (!logo) {
+    return "";
+  }
+  return logo.key
+    ? `${mediaBase}/${logo.key}`
+    : `${mediaBase}/${BRANDING_LOGO_KEY}?v=${logo.version}`;
+}
 
 /** The built-in confirmation copy — what ships until the operator edits it, and the
  *  fallback each required field resolves to when left blank (`resolveConfirmationEmail`).
@@ -122,9 +144,14 @@ function coercePublication(raw: unknown): PublicationSettings {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const lr = o.logo as Record<string, unknown> | null | undefined;
+  const key = lr && typeof lr.key === "string" && lr.key.startsWith(`${BRANDING_LOGO_KEY}/`);
   const logo =
     lr && typeof lr === "object" && typeof lr.version === "number"
-      ? { version: lr.version, contentType: str(lr.contentType) || "image/png" }
+      ? {
+          version: lr.version,
+          contentType: str(lr.contentType) || "image/png",
+          ...(key ? { key: lr.key as string } : {}),
+        }
       : null;
   return {
     name: str(o.name).slice(0, MAX_NAME),

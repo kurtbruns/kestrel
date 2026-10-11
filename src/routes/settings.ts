@@ -40,9 +40,10 @@ import { listScheduledSends } from "../db/sends";
 import {
   type AppSettings,
   applyPatch,
-  BRANDING_LOGO_KEY,
   DEFAULT_CONFIRMATION_EMAIL,
   getSettings,
+  logoKeyFor,
+  publicationLogoUrl,
   resolveConfirmationEmail,
   type SettingsPatch,
   withPublicationLogo,
@@ -97,15 +98,15 @@ function deploymentView(cfg: Config): DeploymentView {
 }
 
 /** The publication identity as the clients consume it: the stored fields plus a
- *  resolved absolute `logoUrl` (cache-busted). The raw logo metadata (R2 version)
- *  is an implementation detail. */
+ *  resolved absolute `logoUrl` (the current upload's own address). The raw logo
+ *  metadata (its version and R2 key) is an implementation detail. */
 function publicationView(settings: AppSettings, cfg: Config): PublicationView {
   const p = settings.publication;
   return {
     name: p.name,
     tagline: p.tagline,
     address: p.address,
-    logoUrl: p.logo ? `${cfg.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
+    logoUrl: publicationLogoUrl(cfg.mediaPublicBase, p.logo),
   };
 }
 
@@ -254,7 +255,7 @@ export async function update(c: RequestContext): Promise<Response> {
   return json(saved);
 }
 
-/** Store the uploaded logo bytes under the reserved R2 key, then bump its version. */
+/** Store the uploaded logo's bytes under a key of their own, and make it the logo. */
 export async function uploadLogo(c: RequestContext): Promise<Response> {
   const ct = c.req.headers.get("content-type") ?? "";
   if (!ct.includes("multipart/form-data")) {
@@ -278,10 +279,10 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   if (bytes.byteLength > MAX_LOGO_BYTES) {
     throw badRequest("logo must be 512 KB or smaller");
   }
-  // The `?v=` cache-buster is a timestamp, not a counter: it must strictly increase
-  // even across a delete → re-upload, so it never reuses an old value and serves a
-  // stale logo through a cache that ignores the ETag (self-hosted deployments vary).
+  // A timestamp names the upload's key, so a new upload never lands on an old key, even
+  // after a removal, and nothing already sent changes what it shows (I3).
   const version = Date.now();
+  const key = logoKeyFor(version);
   // The logo is part of the identity, so the same re-make rule applies (SPEC §9); the
   // bytes are written only once the refusals are ruled out, so a refused upload never
   // leaves a new logo behind the old version.
@@ -289,10 +290,10 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   const { settings, remade } = await saveSettingsRemaking(
     c.env,
     c.config,
-    (current) => withPublicationLogo(current, { version, contentType: type }),
+    (current) => withPublicationLogo(current, { version, contentType: type, key }),
     ack,
     async () => {
-      await c.env.MEDIA.put(BRANDING_LOGO_KEY, bytes, { httpMetadata: { contentType: type } });
+      await c.env.MEDIA.put(key, bytes, { httpMetadata: { contentType: type } });
     },
   );
   const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
@@ -306,7 +307,9 @@ export async function deleteLogo(c: RequestContext): Promise<Response> {
     c.config,
     (current) => withPublicationLogo(current, null),
     ack,
-    () => c.env.MEDIA.delete(BRANDING_LOGO_KEY),
+    // The bytes stay: emails already sent, and their archive pages, still show them (I3).
+    // Removing the logo takes it out of what renders from now on, nothing more.
+    async () => {},
   );
   const body: LogoResponse = { settings: settingsView(settings, c.config), remade };
   return json(body);

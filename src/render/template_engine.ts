@@ -28,7 +28,7 @@ import wasmModule from "@css-inline/css-inline-wasm/index_bg.wasm";
 import { publicationName } from "../../shared/publication";
 import type { IdentityField } from "../../shared/settings";
 import type { AppSettings } from "../db/settings";
-import { BRANDING_LOGO_KEY } from "../db/settings";
+import { publicationLogoUrl } from "../db/settings";
 import type { Config } from "../env";
 import { escapeHtmlAttr } from "../lib/html";
 import { EMAIL_ONLY_CLOSE, EMAIL_ONLY_OPEN } from "./template";
@@ -387,7 +387,7 @@ export function resolveBranding(settings: AppSettings, config: Config): EmailBra
     template: settings.emailTemplate.trim() ? settings.emailTemplate : DEFAULT_EMAIL_TEMPLATE,
     name: publicationName(p.name, config.fromAddress),
     tagline: p.tagline,
-    logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
+    logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
     address: p.address,
   };
 }

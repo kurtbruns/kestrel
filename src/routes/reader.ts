@@ -7,7 +7,7 @@
  */
 
 import { publicationName } from "../../shared/publication";
-import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
+import { getSettingsForDisplay, publicationLogoUrl } from "../db/settings";
 import type { Config } from "../env";
 import { type MessagePageOptions, messagePage, type ReaderIdentity } from "../lib/page";
 import type { RequestContext } from "../router";
@@ -21,7 +21,7 @@ export async function readerIdentity(c: RequestContext, config: Config): Promise
   return {
     name: publicationName(p.name, config.fromAddress),
     tagline: p.tagline,
-    logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
+    logoUrl: publicationLogoUrl(config.mediaPublicBase, p.logo),
   };
 }
 

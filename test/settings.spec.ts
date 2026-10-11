@@ -12,13 +12,14 @@ import { type AppEnv, getConfig } from "../src/env";
 import type { RequestContext } from "../src/router";
 import * as settingsRoutes from "../src/routes/settings";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
-import { resetDatabase } from "./support/fixtures";
+import { clearLogos, dueSend, logoKeys, resetDatabase, tick } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 
 // Each test starts from no settings row, so none sees a name, logo, or address another left.
 beforeEach(async () => {
   await resetDatabase();
+  await clearLogos();
 });
 
 async function getSettings() {
@@ -460,14 +461,13 @@ describe("publication logo", () => {
     expect(del.status).toBe(401);
   });
 
-  it("uploads a logo, reflects a cache-busted URL, serves it hardened, then removes it", async () => {
-    const up = await putLogo(PNG_1x1, "image/png");
-    expect(up.status).toBe(200);
-    const { body } = await getSettings();
-    expect(body.settings.publication.logoUrl).toContain("/media/branding/logo?v=");
+  it("uploads a logo under a key of its own, serves it hardened, and keeps the bytes when it is removed (I3)", async () => {
+    expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
+    const logoUrl = (await getSettings()).body.settings.publication.logoUrl;
+    expect(logoUrl).toMatch(/\/media\/branding\/logo\/\d+$/);
 
     // Served publicly, and hardened so a hostile SVG can't run script on direct nav.
-    const served = await SELF.fetch(`${base}/media/branding/logo`);
+    const served = await SELF.fetch(logoUrl);
     expect(served.status).toBe(200);
     expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect(served.headers.get("content-security-policy")).toBe("sandbox");
@@ -478,7 +478,46 @@ describe("publication logo", () => {
     });
     expect(del.status).toBe(200);
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
+    // Gone from what renders from now on; still there for what was already sent.
+    expect((await SELF.fetch(logoUrl)).status).toBe(200);
+  });
+
+  it("keeps showing a sent email the logo it was sent with, after a new upload and a removal (I3, SPEC §9)", async () => {
+    const logoA = new Uint8Array([...PNG_1x1]);
+    const logoB = new Uint8Array([...PNG_1x1, 0]); // other bytes, so the two can be told apart
+    expect((await putLogo(logoA, "image/png")).status).toBe(200);
+    const send = await dueSend();
+    await tick();
+    const row = await env.DB.prepare("SELECT status, rendered_html FROM sends WHERE id = ?")
+      .bind(send.id)
+      .first<{ status: string; rendered_html: string }>();
+    const sentUrl = /src="([^"]*\/media\/branding\/logo\/\d+)"/.exec(row?.rendered_html ?? "")?.[1];
+    expect(sentUrl).toBeDefined();
+    const bytesAt = async (url: string) =>
+      new Uint8Array(await (await SELF.fetch(url)).arrayBuffer());
+
+    expect((await putLogo(logoB, "image/png")).status).toBe(200);
+    const newUrl = (await getSettings()).body.settings.publication.logoUrl;
+    expect(newUrl).not.toBe(sentUrl);
+    expect(await bytesAt(newUrl)).toEqual(logoB); // a new render shows the new logo
+    expect(await bytesAt(sentUrl ?? "")).toEqual(logoA); // the sent copy still shows its own
+
+    await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE", headers: AUTH });
+    expect(await bytesAt(sentUrl ?? "")).toEqual(logoA);
+  });
+
+  it("serves a logo from before per-upload keys where its sends point, and never writes or deletes that key again", async () => {
+    await env.MEDIA.put(BRANDING_LOGO_KEY, PNG_1x1, { httpMetadata: { contentType: "image/png" } });
+    await setPublicationLogo(env.DB, { version: 7, contentType: "image/png" }); // no key: the old shape
+    expect((await getSettings()).body.settings.publication.logoUrl).toMatch(
+      /\/media\/branding\/logo\?v=7$/,
+    );
+    expect((await putLogo(new Uint8Array([...PNG_1x1, 0]), "image/png")).status).toBe(200);
+    await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE", headers: AUTH });
+    const legacy = await env.MEDIA.get(BRANDING_LOGO_KEY);
+    expect(new Uint8Array(await (legacy as R2ObjectBody).arrayBuffer())).toEqual(
+      new Uint8Array([...PNG_1x1]),
+    );
   });
 
   it("refuses anything but a raster image with a 400 naming the formats, SVG included", async () => {
@@ -489,9 +528,9 @@ describe("publication logo", () => {
         /PNG, JPEG, WebP, or GIF/,
       );
     }
-    // Nothing was stored: no logo is set and none is served.
+    // Nothing was stored: no logo is set and no bytes were written.
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
+    expect(await logoKeys()).toEqual([]);
     // A PNG still uploads, and so does one whose declared type carries case or parameters.
     expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
     expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
@@ -532,7 +571,7 @@ describe("a corrupt settings row", () => {
       allowErrorLogs("settings.corrupt");
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
-      await env.MEDIA.delete(BRANDING_LOGO_KEY);
+      await clearLogos();
       const before = await readRow();
       const errors = vi.spyOn(console, "error");
       try {
@@ -542,7 +581,7 @@ describe("a corrupt settings row", () => {
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
         expect((await putLogo(PNG_1x1, "image/png")).status).toBe(500);
         // The refused upload stored no bytes: no logo object the row doesn't name.
-        expect(await env.MEDIA.head(BRANDING_LOGO_KEY)).toBeNull();
+        expect(await logoKeys()).toEqual([]);
         // The reader pages only show the identity, so they stay up on the defaults.
         for (const path of ["/", "/archive", "/subscribe"]) {
           const page = await SELF.fetch(`${base}${path}`, { headers: { accept: "text/html" } });
