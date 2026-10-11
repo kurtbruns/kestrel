@@ -123,6 +123,16 @@ a.r-t:hover { text-decoration:underline; }
 .r-btn:hover { filter:brightness(1.06); }
 .r-fine { font-size:12.5px; color:var(--r-mut); margin:16px 0 0; }
 
+/* The test banner: a full-width strip above the masthead on a page that only shows what
+   a reader would see (a test email's or a preview's unsubscribe link). It wears the
+   reader ink as its ground, the inverse of the page, so it reads as a notice laid over
+   the publication rather than part of it, and turns with the theme like the rest. */
+.r-banner { background:var(--r-ink); color:var(--r-bg); }
+.r-banner-in { max-width:var(--r-measure); margin:0 auto; padding:12px 24px; font-size:14px; line-height:1.45;
+               display:flex; align-items:baseline; gap:10px; }
+.r-banner-tag { flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
+                padding:2px 8px; border-radius:999px; border:1px solid currentColor; }
+
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
@@ -171,6 +181,13 @@ export interface ArchiveIndexPost {
   title: string;
   url: string;
   dateLabel: string;
+}
+
+/** A strip above the masthead naming what kind of page this is, for a page that only
+ *  shows what a reader would see: a short tag ("Test") and a sentence. */
+export interface ReaderBanner {
+  tag: string;
+  text: string;
 }
 
 /** The publication identity the reader chrome renders. */
@@ -223,6 +240,8 @@ export function readerPage(opts: {
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
    *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
+  /** A banner above the masthead, for a page shown as a test of what a reader sees. */
+  banner?: ReaderBanner;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
   /** For a page that can show one reader's address: never stored by a cache and kept
@@ -237,6 +256,9 @@ export function readerPage(opts: {
   const cta = opts.subscribeUrl
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
+  const banner = opts.banner
+    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span>${escapeHtml(opts.banner.text)}</span></div></div>`
+    : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
@@ -247,7 +269,7 @@ ${FRAUNCES_FONT_LINKS}
 <style>${READER_STYLE}</style>${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
-<header class="r-mast"><div class="r-mast-in">
+${banner}<header class="r-mast"><div class="r-mast-in">
 <a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}">${logo}<span><span class="r-name">${escapeHtml(name)}</span>${tag}</span></a>
 ${cta}
 </div></header>
@@ -281,6 +303,7 @@ export interface MessagePageOptions {
   afterHtml?: string;
   status?: number;
   devDashboardUrl?: string;
+  banner?: ReaderBanner;
 }
 
 /** A message page in the reader shell (confirm, unsubscribe, not found): an eyebrow,
@@ -300,6 +323,7 @@ export function messagePage(opts: MessagePageOptions): Response {
       (opts.afterHtml ?? ""),
     status: opts.status,
     devDashboardUrl: opts.devDashboardUrl,
+    banner: opts.banner,
     private: true,
   });
 }

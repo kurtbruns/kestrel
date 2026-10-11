@@ -78,6 +78,41 @@ export function webBar(state: WebBarState | null): Html {
   return html`${label} <span>${lead}${at}</span>`;
 }
 
+/** The same address, spelled one way, or null for one that is not a whole URL. */
+function normalUrl(url: string): string | null {
+  try {
+    return new URL(url).href;
+  } catch {
+    return null;
+  }
+}
+
+/** In the Preview tab of an unpublished post, every link to the post's own public address
+ *  (its "View in browser" link) made to open its web version instead (SPEC §5). That address
+ *  answers "Nothing here yet" until the send starts, so a publisher who follows it to see
+ *  the post's page would find none; the web version is that page. Only the framed copy
+ *  changes: the email's bytes, and every test and send of it, keep the public address.
+ *  Links to anywhere else, another post's page among them, are left as they are. Only
+ *  the address changes: `openLinksInNewTab` still opens the link in a new tab. */
+export function previewOpensWebVersion(
+  doc: Document,
+  archiveUrl: string | null,
+  webUrl: string,
+): void {
+  const own = archiveUrl ? normalUrl(archiveUrl) : null;
+  if (!own) {
+    return;
+  }
+  for (const link of doc.querySelectorAll<HTMLAnchorElement | HTMLAreaElement>(
+    "a[href], area[href]",
+  )) {
+    const href = link.getAttribute("href");
+    if (href && normalUrl(href) === own) {
+      link.setAttribute("href", webUrl);
+    }
+  }
+}
+
 /** Leave for another page, replacing this one in the history (so Back skips it). */
 export function leaveFor(url: string): void {
   location.replace(url);
