@@ -59,7 +59,6 @@ export function confirmationSection(page: SettingsPage): Html {
             <div class="set-field">
               <label for="ceButton">Button label</label>
               <input id="ceButton" value="${state.confirmation.buttonLabel}" maxlength="80" autocomplete="off">
-              <p class="field-hint set-ce-lock">${icon("readonly")}<span>Kestrel fills in the confirmation link — you set the words, never the URL.</span></p>
             </div>
             <div class="set-field">
               <label for="ceFooter">Reassurance line</label>
