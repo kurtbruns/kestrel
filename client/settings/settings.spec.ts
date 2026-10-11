@@ -6,8 +6,9 @@ import {
   $$,
   type FakeApi,
   type FakeRoute,
+  fakeApi,
   jsonResponse,
-  openView,
+  mount,
   resetShell,
   settingsResponse,
   stubClipboard,
@@ -23,20 +24,12 @@ const DEFAULT_COPY = {
   reassurance: "If this wasn't you, ignore this email.",
 };
 
-const settings = (over: Partial<SettingsView> = {}): SettingsView =>
-  settingsResponse({
-    settings: {
-      testRecipients: ["me@b.c"],
-      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
-      confirmationEmailDefault: DEFAULT_COPY,
-      ...over,
-    },
-  }).settings;
-
 // Deployed on SES, with notifications through it; the template prints the name and logo.
-const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  ...settingsResponse({
-    settings: settings(),
+// `settings` merges field by field over this publication; the rest replaces.
+const response = (
+  over: { settings?: Partial<SettingsView> } & Partial<Omit<SettingsResponse, "settings">> = {},
+): SettingsResponse =>
+  settingsResponse({
     deployment: {
       provider: "ses",
       fromAddress: "Birds <hello@send.birds.example>",
@@ -46,9 +39,18 @@ const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
       notifyFrom: "Birds <hello@send.birds.example>",
     },
     inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
-  }),
-  ...over,
-});
+    ...over,
+    settings: {
+      testRecipients: ["me@b.c"],
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
+      confirmationEmailDefault: DEFAULT_COPY,
+      ...over.settings,
+    },
+  });
+
+// The settings alone, as a write answers them.
+const settings = (over: Partial<SettingsView> = {}): SettingsView =>
+  response({ settings: over }).settings;
 
 const bar = () => $("#savebar");
 
@@ -66,7 +68,9 @@ describe("settings view", () => {
   });
 
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = await openView(renderSettings, routes);
+    fake = fakeApi(routes);
+    await mount(renderSettings);
+    await vi.advanceTimersByTimeAsync(0);
   }
 
   it("renders the identity, the sender and instance reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
@@ -147,7 +151,7 @@ describe("settings view", () => {
         path: "/api/settings",
         reply: () =>
           response({
-            settings: settings({ publication: pub }),
+            settings: { publication: pub },
             inUse: { sends: [], retry_after: null, identityFields: ["name", "address"] },
           }),
       },
@@ -189,25 +193,17 @@ describe("settings view", () => {
       {
         method: "PUT",
         path: "/api/settings",
-        reply: (req) => {
-          const body = req.json() as { publication: { name: string }; testRecipients: string[] };
-          return {
-            settings: settings({
-              // The server's own normalizing, which the client leaves to it: inner runs of
-              // whitespace collapse, and the recipients come back in its order.
-              publication: {
-                name: body.publication.name.replace(/\s+/g, " "),
-                tagline: "",
-                address: "",
-                logoUrl: "",
-              },
-              testRecipients: [...body.testRecipients].sort().reverse(),
-              confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
-            }),
-            warnings: [],
-            remade: [],
-          };
-        },
+        // The server's own normalizing, which the client leaves to it: the name's inner
+        // whitespace collapsed, the tagline cleared, and the recipients in its order.
+        reply: () => ({
+          settings: settings({
+            publication: { name: "Birds Monthly", tagline: "", address: "", logoUrl: "" },
+            testRecipients: ["new@b.c", "me@b.c"],
+            confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
+          }),
+          warnings: [],
+          remade: [],
+        }),
       },
     ]);
     typeInto($<HTMLInputElement>("#setName"), "  Birds   Monthly  ");
@@ -241,7 +237,7 @@ describe("settings view", () => {
         path: "/api/settings",
         reply: () =>
           response({
-            settings: settings({ notifications: { to: "me@b.c" } }),
+            settings: { notifications: { to: "me@b.c" } },
             notificationStatus: {
               lastSent: { kind: "finished", subject: "Gulls", at: 1_800_000_000_000 },
               lastFailure: {
@@ -320,7 +316,7 @@ describe("settings view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ settings: settings({ notifications: { to: "me@b.c" } }) }),
+        reply: () => response({ settings: { notifications: { to: "me@b.c" } } }),
       },
     ]);
     typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");

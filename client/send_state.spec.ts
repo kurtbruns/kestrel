@@ -11,14 +11,13 @@ import {
   type StageChange,
   stageOf,
 } from "./send_state";
+import { feedReads, sendView } from "./test/send_server";
 import {
   type FakeApi,
   fakeApi,
-  feedReads,
   jsonResponse,
   restoreHidden,
   sendSummary,
-  sendView,
   setHidden,
 } from "./test/support";
 

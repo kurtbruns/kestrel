@@ -1,18 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DeliveryOutcomes, SendSummary, SendView } from "../../shared/sends";
+import { condition, feedReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
   $$,
-  condition,
   type FakeApi,
   fakeApi,
-  feedReads,
   jsonResponse,
   mount,
   resetShell,
-  sendServer,
   sendSummary,
-  sendView,
   typeInto,
   unmount,
 } from "../test/support";
@@ -90,7 +87,7 @@ describe("sent record", () => {
       routes: server.routes,
       receipt: (counts: Partial<SendSummary>) => server.edit("x1", counts),
       remove: () => server.remove("x1"),
-      aheadOnce: () => server.aheadOnce(),
+      aheadOnce: server.aheadOnce,
     };
   };
   const SETTLING = { c_delivered: 5, c_bounced: 0, c_unsent: 0, c_accepted: 5 };

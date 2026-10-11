@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendSummary, SendView } from "../../shared/sends";
-import { $, condition, sendSummary, sendView } from "../test/support";
+import { condition, sendView } from "../test/send_server";
+import { $, sendSummary } from "../test/support";
 import {
   activeRowHtml,
   can,

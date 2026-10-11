@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewHandle } from "./lifecycle";
 import { adoptLinkedRoute, installRouter, route } from "./router";
+import { sendServer } from "./test/send_server";
 import {
   $,
   type FakeApi,
@@ -8,7 +9,6 @@ import {
   jsonResponse,
   mount,
   resetShell,
-  sendServer,
   settle,
   unmount,
 } from "./test/support";

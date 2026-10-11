@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReferenceGroup } from "../../shared/reference";
 import {
   $,
@@ -342,7 +342,6 @@ describe("reference room", () => {
     const phone = document.createElement("style");
     phone.textContent = ".api-nav-res { display: none; }";
     document.head.append(phone);
-    onTestFinished(() => phone.remove());
     scrollTo(["api-admin", "api-admin-posts", "api-admin-sends"]);
     expect(active()).toEqual(["admin"]);
     phone.remove();

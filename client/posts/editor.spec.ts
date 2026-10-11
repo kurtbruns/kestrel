@@ -3,18 +3,18 @@ import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { ViewHandle } from "../lifecycle";
 import { appState } from "../state";
+import { feedReads, sendServer } from "../test/send_server";
 import {
   $,
   type FakeApi,
   type FakeRequest,
   type FakeRoute,
-  feedReads,
+  fakeApi,
   jsonResponse,
+  mount,
   mounted,
-  openView,
   resetShell,
   restoreHidden,
-  sendServer,
   sendSummary,
   setHidden,
   typeInto,
@@ -157,7 +157,9 @@ describe("editor view", () => {
 
   // The editor mounted the way the router mounts it; `handle()` is what the router sees.
   async function open(routes: FakeRoute[]) {
-    fake = await openView((r, s) => renderEditor("p1", r, s), routes);
+    fake = fakeApi(routes);
+    await mount((r, s) => renderEditor("p1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
   }
   const handle = () => unwrapHandle(mounted());
   const puts = () => fake.calls.filter((c) => c.method === "PUT");
@@ -1227,7 +1229,7 @@ describe("editor view", () => {
       },
     );
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(feedReads(fake).length).toBeGreaterThan(0);
+    expect(feedReads(fake)).toHaveLength(2); // at the fire time, then the one carrying the edit
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);

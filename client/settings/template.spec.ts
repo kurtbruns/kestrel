@@ -6,9 +6,9 @@ import {
   $$,
   type FakeApi,
   type FakeRoute,
+  fakeApi,
   jsonResponse,
   mount,
-  openView,
   resetShell,
   settingsResponse,
   typeInto,
@@ -22,12 +22,11 @@ import {
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
-const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  ...settingsResponse({
+const response = (over: Partial<Omit<SettingsResponse, "settings">> = {}): SettingsResponse =>
+  settingsResponse({
     settings: { testRecipients: ["me@b.c", "you@b.c"], emailTemplate: TEMPLATE },
-  }),
-  ...over,
-});
+    ...over,
+  });
 
 const bar = () => $("#savebar");
 const editor = () => $<HTMLTextAreaElement>("#tplEditor");
@@ -78,7 +77,9 @@ describe("template view", () => {
   });
 
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = await openView(renderTemplate, routes);
+    fake = fakeApi(routes);
+    await mount(renderTemplate);
+    await vi.advanceTimersByTimeAsync(0);
   }
 
   it("renders the in-use chip, the saved template in the editor with its highlight and gutter, and the required pills", async () => {

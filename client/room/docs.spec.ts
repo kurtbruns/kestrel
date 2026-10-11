@@ -79,7 +79,9 @@ const config = (repoUrl: string): SettingsResponse =>
 // The module caches the guide after its first fetch (the bundle never changes at runtime).
 // `beforeAll` fills this instance's cache once, so every test that reads it does so in any
 // order; a test that needs a fetch of its own loads a fresh instance. A fresh instance
-// comes with its own app state, so it is handed the same config the shared one reads.
+// comes with its own app state, so it is handed the same config the shared one reads. It
+// also has its own lifecycle, so a view it mounts itself (a link it follows) is not torn down
+// by resetShell's unmount; the room's DOM is still cleared with the shell.
 async function freshDocs(repoUrl = "https://github.com/x/kestrel") {
   vi.resetModules();
   const fresh = await import("../state");

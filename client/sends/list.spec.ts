@@ -1,17 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendListResponse, SendSummary } from "../../shared/sends";
+import { condition, feedReads, listReads, sendServer } from "../test/send_server";
 import {
   $,
   $$,
-  condition,
   type FakeApi,
   type FakeRoute,
   fakeApi,
-  feedReads,
-  listReads,
   mount,
   resetShell,
-  sendServer,
   sendSummary,
 } from "../test/support";
 import { toLocalInput } from "../ui/format";
@@ -368,7 +365,8 @@ describe("sent view", () => {
     const lists = listReads(fake).length;
     srv.edit("x1", { c_accepted: 0, c_delivered: 148, c_bounced: 2 });
     await vi.advanceTimersByTimeAsync(3000);
-    expect($("tr[data-id='x1'] .delivered").textContent).toBe("1482 bounced");
+    expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
+    expect($("tr[data-id='x1'] .delivered-note").textContent).toBe("2 bounced");
     expect(listReads(fake)).toHaveLength(lists);
   });
 
@@ -442,7 +440,9 @@ describe("sent view", () => {
     expect(feedReads(fake)).toHaveLength(2); // refused, then from the fresh reads
     srv.edit("x1", { c_accepted: 0, c_delivered: 148, c_bounced: 2 });
     await vi.advanceTimersByTimeAsync(3000);
-    expect($("tr[data-id='x1'] .delivered").textContent).toBe("1482 bounced"); // following again
+    // Following again: the receipts reach the Delivered cell.
+    expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
+    expect($("tr[data-id='x1'] .delivered-note").textContent).toBe("2 bounced");
     expect(fake.unhandled).toEqual([]);
   });
 
