@@ -55,12 +55,19 @@ describe("reader and preview pages", () => {
     expect(csp).toContain("form-action 'none'");
   });
 
-  it("serve the landing page, the archive index, a not-found post, and the subscribe pages the same way", async () => {
-    for (const path of ["/", "/archive", "/archive/no-such-post", "/unsubscribe?token=nope"]) {
+  it("serve the landing page, the archive index, a not-found post, and the subscribe, confirm, and unsubscribe pages the same way", async () => {
+    for (const path of [
+      "/",
+      "/archive",
+      "/archive/no-such-post",
+      "/subscribe",
+      "/confirm?token=nope",
+      "/unsubscribe?token=nope",
+    ]) {
       const res = await SELF.fetch(`${base}${path}`, { headers: { accept: "text/html" } });
       expect(res.headers.get("content-type"), path).toContain("text/html");
       expectHardenedPage(res);
-      // The app's own forms (subscribe, unsubscribe) post back to it.
+      // The app's own forms (subscribe, confirm, unsubscribe) post back to it.
       expect(res.headers.get("content-security-policy"), path).toContain("form-action 'self'");
     }
   });

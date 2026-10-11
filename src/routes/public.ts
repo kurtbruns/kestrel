@@ -6,7 +6,7 @@ import * as subscribers from "../db/subscribers";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
-import { htmlPage, readerPage } from "../lib/page";
+import { archiveLink, type ReaderIdentity, readerPage } from "../lib/page";
 import type { RequestContext } from "../router";
 import {
   type ConfirmLinkState,
@@ -14,7 +14,7 @@ import {
   confirmSubscription,
   requestSubscription,
 } from "../services/subscriptions";
-import { devDashboardUrl, readerIdentity } from "./archive";
+import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 function wantsHtml(c: RequestContext): boolean {
   const accept = c.req.headers.get("accept") ?? "";
@@ -79,7 +79,7 @@ function subscribeFormHtml(): string {
  *  reader is already here). */
 function subscribePage(
   c: RequestContext,
-  identity: Awaited<ReturnType<typeof readerIdentity>>,
+  identity: ReaderIdentity,
   mainHtml: string,
   status = 200,
 ): Response {
@@ -156,104 +156,124 @@ export async function confirm(c: RequestContext): Promise<Response> {
   return confirmStatePage(c, await confirmSubscription(c.env.DB, token), token);
 }
 
-function confirmStatePage(c: RequestContext, state: ConfirmLinkState, token: string): Response {
-  const dev = devDashboardUrl(c.config);
+async function confirmStatePage(
+  c: RequestContext,
+  state: ConfirmLinkState,
+  token: string,
+): Promise<Response> {
+  const eyebrow = "Newsletter";
   switch (state.kind) {
-    case "ready":
-      return htmlPage(
-        "Confirm your subscription",
-        `<h1 style="margin-top:0;">Confirm your subscription</h1><p>Start sending the newsletter to <strong>${escapeHtml(
-          state.subscriber.email,
-        )}</strong>?</p>
-<form method="post" action="/confirm">
-<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">
-<button type="submit" class="btn">Confirm subscription</button>
-</form>`,
-        200,
-        dev,
+    case "ready": {
+      // The consent step names whose list the reader is joining, so a link that opens
+      // from an email can't read as anyone's.
+      const identity = await readerIdentity(c, c.config);
+      return readerMessage(
+        c,
+        {
+          title: "Confirm your subscription",
+          eyebrow,
+          headline: `Confirm your subscription to ${identity.name}`,
+          ledeHtml: `Start sending the newsletter to <strong>${escapeHtml(state.subscriber.email)}</strong>?`,
+          afterHtml:
+            `<form class="r-form" method="post" action="/confirm">` +
+            `<input type="hidden" name="token" value="${escapeHtmlAttr(token)}">` +
+            `<button class="r-btn" type="submit">Confirm subscription</button></form>`,
+        },
+        identity,
       );
+    }
     case "confirmed":
-      return htmlPage(
-        "Subscribed",
-        `<h1 style="margin-top:0;">You're subscribed 🎉</h1><p>Thanks for confirming <strong>${escapeHtml(
-          state.subscriber.email,
-        )}</strong>. You'll hear from us soon.</p>`,
-        200,
-        dev,
-      );
+      return readerMessage(c, {
+        title: "Subscribed",
+        eyebrow,
+        headline: "You’re subscribed",
+        ledeHtml: `Thanks for confirming <strong>${escapeHtml(state.subscriber.email)}</strong>. The next post will land in your inbox.`,
+        afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
+      });
     case "expired":
       // A fresh link goes through the ordinary subscribe path, cooldown and all.
-      return htmlPage(
-        "Link expired",
-        `<h1 style="margin-top:0;">This link has expired</h1><p>Confirmation links only work for a limited time. We can send a new one to <strong>${escapeHtml(
-          state.subscriber.email,
-        )}</strong>.</p>
-<form method="post" action="/subscribe">
-<input type="hidden" name="email" value="${escapeHtmlAttr(state.subscriber.email)}">
-<button type="submit" class="btn">Send a new link</button>
-</form>`,
-        410,
-        dev,
-      );
+      return readerMessage(c, {
+        title: "Link expired",
+        eyebrow,
+        headline: "This link has expired",
+        ledeHtml: `Confirmation links only work for a limited time. We can send a new one to <strong>${escapeHtml(state.subscriber.email)}</strong>.`,
+        afterHtml:
+          `<form class="r-form" method="post" action="/subscribe">` +
+          `<input type="hidden" name="email" value="${escapeHtmlAttr(state.subscriber.email)}">` +
+          `<button class="r-btn" type="submit">Send a new link</button></form>`,
+        status: 410,
+      });
     case "invalid":
-      return htmlPage(
-        "Invalid link",
-        `<h1 style="margin-top:0;">This link is invalid</h1><p><a href="/subscribe">Subscribe again</a> to get a new one.</p>`,
-        400,
-        dev,
-      );
+      return readerMessage(c, {
+        title: "Invalid link",
+        eyebrow,
+        headline: "This link is invalid",
+        ledeHtml: `<a href="/subscribe">Subscribe again</a> to get a new one.`,
+        status: 400,
+      });
   }
+}
+
+/** An unsubscribe link that matches no subscriber: most often one cut short when it
+ *  was copied, so the page points at a link that works. */
+function unsubscribeInvalidPage(c: RequestContext): Promise<Response> {
+  return readerMessage(c, {
+    title: "Invalid link",
+    eyebrow: "Unsubscribe",
+    headline: "This link is invalid",
+    ledeHtml:
+      "It may be incomplete. The unsubscribe link at the bottom of any email from the newsletter will work.",
+    status: 400,
+  });
+}
+
+/** The page once an address is off the list, whether it just left or already had. */
+function unsubscribedPage(c: RequestContext, email: string): Promise<Response> {
+  return readerMessage(c, {
+    title: "Unsubscribed",
+    eyebrow: "Unsubscribe",
+    headline: "You’re unsubscribed",
+    ledeHtml: `<strong>${escapeHtml(email)}</strong> won’t receive further emails.`,
+  });
 }
 
 export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
   const row = await subscribers.getByUnsubToken(c.env.DB, token);
-  const dev = devDashboardUrl(c.config);
   if (!row) {
-    return htmlPage(
-      "Invalid link",
-      `<h1 style="margin-top:0;">This link is invalid</h1>`,
-      400,
-      dev,
-    );
+    return unsubscribeInvalidPage(c);
   }
   if (row.status === "unsubscribed") {
-    return htmlPage(
-      "Unsubscribed",
-      `<h1 style="margin-top:0;">You're unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
-      200,
-      dev,
-    );
+    return unsubscribedPage(c, row.email);
   }
-  return htmlPage(
-    "Unsubscribe",
-    `<h1>Unsubscribe?</h1><p>Stop sending the newsletter to <strong>${escapeHtml(
-      row.email,
-    )}</strong>?</p>
-<form method="post" action="/unsubscribe?token=${encodeURIComponent(token)}">
-<button type="submit" class="btn btn-danger">Unsubscribe</button>
-</form>`,
-    200,
-    dev,
+  const identity = await readerIdentity(c, c.config);
+  // The button wears the reader ink, not a danger red: leaving is what the reader came
+  // here to do, and the reader palette has no alarm color.
+  return readerMessage(
+    c,
+    {
+      title: "Unsubscribe",
+      eyebrow: "Unsubscribe",
+      headline: `Unsubscribe from ${identity.name}?`,
+      ledeHtml: `We’ll stop sending the newsletter to <strong>${escapeHtml(row.email)}</strong>.`,
+      afterHtml:
+        `<form class="r-form" method="post" action="/unsubscribe?token=${encodeURIComponent(token)}">` +
+        `<button class="r-btn" type="submit">Unsubscribe</button></form>`,
+    },
+    identity,
   );
 }
 
 export async function unsubscribe(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
   const row = await subscribers.unsubscribeByToken(c.env.DB, token);
-  const dev = devDashboardUrl(c.config);
   if (!row) {
     return wantsHtml(c)
-      ? htmlPage("Invalid link", `<h1 style="margin-top:0;">This link is invalid</h1>`, 400, dev)
+      ? unsubscribeInvalidPage(c)
       : new Response("invalid token", { status: 400 });
   }
   // Plain 200 for the RFC 8058 one-click POST; a friendly page for humans.
   return wantsHtml(c)
-    ? htmlPage(
-        "Unsubscribed",
-        `<h1 style="margin-top:0;">You've been unsubscribed</h1><p>${escapeHtml(row.email)} won't receive further emails.</p>`,
-        200,
-        dev,
-      )
+    ? unsubscribedPage(c, row.email)
     : new Response("unsubscribed", { status: 200 });
 }

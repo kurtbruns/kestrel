@@ -23,6 +23,7 @@ import {
   unsubscribe,
   unsubscribeLanding,
 } from "../src/routes/public";
+import { readerIdentity } from "../src/routes/reader";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 
@@ -491,10 +492,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     expect(off).not.toContain("/dashboard");
   });
 
-  // The card pages: confirm and unsubscribe, which a local developer reaches from a
-  // link in a test email, and the post 404. Each has its own stylesheet, so the pill
-  // brings its own.
-  it("the card pages render the pill and its styles only when devMode is true", async () => {
+  // The message pages: confirm and unsubscribe, which a reader (or a local developer)
+  // reaches from a link in an email, and the post 404, plus the subscribe form's error
+  // page. All wear the reader shell, so each must carry the pill only in dev.
+  it("the message pages render the pill and its styles only when devMode is true", async () => {
     await ensureSubscriber();
     const now = Date.now();
     // A pending subscriber with a live link (the confirm page's "ready" state), one
@@ -516,31 +517,72 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       headers: { accept: "text/html", "content-type": "application/x-www-form-urlencoded" },
       body: "email=not-an-email",
     };
-    // Each row: the case, its handler and path, a phrase only that state's page shows
-    // (so the row provably reached it), and the request's method, headers, and body.
+    const { name: publication } = await readerIdentity(ctxFor(false), getConfig(env));
+    // Each row: the case, its handler and path, what only that state's page shows (so
+    // the row provably reached it: its headline, and its form where it has one), its
+    // status, and the request's method, headers, and body.
     const cards: [
       string,
       (c: RequestContext) => Promise<Response>,
       string,
-      string,
+      string[],
+      number,
       RequestInit?,
     ][] = [
-      ["confirm (ready)", confirmLanding, "/confirm?token=cfm-p", "Confirm your subscription"],
-      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", "You're subscribed"],
-      ["confirm (expired)", confirmLanding, "/confirm?token=cfm-x", "This link has expired"],
-      ["confirm (invalid link)", confirmLanding, "/confirm?token=nope", "This link is invalid"],
-      ["unsubscribe (ready)", unsubscribeLanding, "/unsubscribe?token=uns-a", "Unsubscribe?"],
+      [
+        "confirm (ready)",
+        confirmLanding,
+        "/confirm?token=cfm-p",
+        [
+          `Confirm your subscription to ${publication}`,
+          '<form class="r-form" method="post" action="/confirm">',
+          '<button class="r-btn" type="submit">Confirm subscription</button>',
+        ],
+        200,
+      ],
+      ["confirm (confirmed)", confirmLanding, "/confirm?token=cfm-a", ["You’re subscribed"], 200],
+      [
+        "confirm (expired)",
+        confirmLanding,
+        "/confirm?token=cfm-x",
+        [
+          "This link has expired",
+          '<form class="r-form" method="post" action="/subscribe">',
+          '<button class="r-btn" type="submit">Send a new link</button>',
+        ],
+        410,
+      ],
+      [
+        "confirm (invalid link)",
+        confirmLanding,
+        "/confirm?token=nope",
+        ["This link is invalid"],
+        400,
+      ],
+      [
+        "unsubscribe (ready)",
+        unsubscribeLanding,
+        "/unsubscribe?token=uns-a",
+        [
+          `Unsubscribe from ${publication}?`,
+          '<form class="r-form" method="post" action="/unsubscribe?token=uns-a">',
+          '<button class="r-btn" type="submit">Unsubscribe</button>',
+        ],
+        200,
+      ],
       [
         "unsubscribe (already)",
         unsubscribeLanding,
         "/unsubscribe?token=uns-u",
-        "You're unsubscribed",
+        ["You’re unsubscribed"],
+        200,
       ],
       [
         "unsubscribe (invalid link)",
         unsubscribeLanding,
         "/unsubscribe?token=nope",
-        "This link is invalid",
+        ["This link is invalid"],
+        400,
       ],
       // The POST's page for a person. It unsubscribes `uns-p`, so it runs after the
       // pages that read that subscriber, and repeating it answers the same page.
@@ -548,25 +590,53 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         "unsubscribe POST (invalid link)",
         unsubscribe,
         "/unsubscribe?token=nope",
-        "This link is invalid",
+        ["This link is invalid"],
+        400,
         html,
       ],
       [
         "unsubscribe POST (done)",
         unsubscribe,
         "/unsubscribe?token=uns-p",
-        "You've been unsubscribed",
+        ["You’re unsubscribed"],
+        200,
         html,
       ],
-      ["subscribe (bad address)", subscribe, "/subscribe", "doesn’t look like an email", badForm],
-      ["post not found", archivePage, "/archive/missing", "Not found"],
+      ["subscribe form", subscribeForm, "/subscribe", [`Subscribe to ${publication}`], 200],
+      [
+        "subscribe (bad address)",
+        subscribe,
+        "/subscribe",
+        ["doesn’t look like an email"],
+        400,
+        badForm,
+      ],
+      ["post not found", archivePage, "/archive/missing", ["Not found"], 404],
     ];
-    for (const [name, handler, path, shows, init] of cards) {
+    for (const [name, handler, path, shows, status, init] of cards) {
       const params = { slug: "missing" };
       // A fresh Request per call, since a form body can be read only once.
       const on = await (await handler(ctxFor(true, path, params, init))).text();
-      const off = await (await handler(ctxFor(false, path, params, init))).text();
-      expect(on, name).toContain(shows);
+      const offRes = await handler(ctxFor(false, path, params, init));
+      const off = await offRes.text();
+      for (const shown of shows) {
+        expect(on, name).toContain(shown);
+      }
+      expect(offRes.status, name).toBe(status);
+      // The reader shell, with the publication's identity and no subscribe CTA.
+      expect(off, name).toContain('class="r-mast"');
+      expect(off, name).toContain(` · ${publication}</title>`);
+      expect(off, name).not.toContain('class="r-sub"');
+      if (handler === subscribeForm || handler === subscribe) {
+        // The subscribe pages show no one's address, so they stay briefly cacheable
+        // and indexable like the rest of the public surface.
+        expect(offRes.headers.get("cache-control"), name).toBe("public, max-age=300");
+        expect(offRes.headers.get("x-robots-tag"), name).toBeNull();
+      } else {
+        // Some show the reader's address: never cached, never indexed.
+        expect(offRes.headers.get("cache-control"), name).toBe("no-store");
+        expect(offRes.headers.get("x-robots-tag"), name).toBe("noindex");
+      }
       expect(on, name).toContain('class="r-dev"');
       expect(on, name).toContain("--k-accent:#3355cc");
       expect(off, name).not.toContain("r-dev");
@@ -575,7 +645,10 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
     }
   });
 
-  it("the one-click unsubscribe POST still answers plain text, with no page chrome", async () => {
+  // A client that sends neither an HTML accept nor a form body gets a word, not a page.
+  // (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
+  // it never shows.)
+  it("a bare unsubscribe POST, asking for no page, answers plain text", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
     expect(res.status).toBe(200);

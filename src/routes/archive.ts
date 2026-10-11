@@ -11,15 +11,12 @@
 
 import { getBySlug } from "../db/posts";
 import { listPublishedPosts, publishedSendForPost } from "../db/sends";
-import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
-import type { Config } from "../env";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
   archiveIndexPage,
-  htmlPage,
+  archiveLink,
   landingPage,
-  type ReaderIdentity,
 } from "../lib/page";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import {
@@ -32,26 +29,7 @@ import {
 import { fillDeliveryTokens } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-
-/** Display name for the publication, from the `From:` header — the fallback when
- *  the operator hasn't set a name in the publication identity. */
-function fromDisplayName(fromAddress: string): string {
-  const lt = fromAddress.indexOf("<");
-  const display = (lt >= 0 ? fromAddress.slice(0, lt) : "").trim().replace(/^"|"$/g, "").trim();
-  return display || "Newsletter";
-}
-
-/** The resolved publication identity for a reader page: the operator's settings,
- *  falling back to the `From:` display name for the name (shape in `lib/page.ts`). A
- *  corrupt settings row reads as the defaults, so a reader page never fails on it. */
-export async function readerIdentity(c: RequestContext, config: Config): Promise<ReaderIdentity> {
-  const { publication: p } = await getSettingsForDisplay(c.env.DB);
-  return {
-    name: p.name || fromDisplayName(config.fromAddress),
-    tagline: p.tagline,
-    logoUrl: p.logo ? `${config.mediaPublicBase}/${BRANDING_LOGO_KEY}?v=${p.logo.version}` : "",
-  };
-}
+import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
 function formatPublishedDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", {
@@ -60,19 +38,6 @@ function formatPublishedDate(ms: number): string {
     month: "long",
     day: "numeric",
   });
-}
-
-/** The full archive URL (origin + base path) — the "Browse the full archive" target
- *  and the home of the post list. Built from the same config the route registers at. */
-function archiveHomeUrl(config: Config): string {
-  return `${config.archiveOrigin}${config.archiveBasePath}`;
-}
-
-/** The dev-only "Open dashboard" target for the reader surface, or `undefined` when
- *  not a dev-shaped instance. Only local dev (no Access edge) surfaces this link, so
- *  a deployed public page never points at the Access-gated editor (SPEC §5, §11). */
-export function devDashboardUrl(config: Config): string | undefined {
-  return config.devMode ? `${config.appOrigin}/dashboard/` : undefined;
 }
 
 /** The public front door (§5): a landing page featuring the latest post over a few
@@ -125,12 +90,14 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const post = await getBySlug(c.env.DB, slug);
   const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
   if (!post || !send) {
-    return htmlPage(
-      "Not found",
-      `<h1 style="margin-top:0;">Not found</h1><p>This post isn't available.</p>`,
-      404,
-      devDashboardUrl(c.config),
-    );
+    return readerMessage(c, {
+      title: "Not found",
+      eyebrow: "Archive",
+      headline: "Not found",
+      ledeHtml: "This post isn’t available.",
+      afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
+      status: 404,
+    });
   }
   // Four edits to the frozen record on the way to the browser (I3), all at reserved
   // markers — none touches the reviewed content: the generic unsubscribe link (no single

@@ -243,7 +243,7 @@ describe("confirming: only the owner's click records consent (I1)", () => {
     // The button again, or the link again, lands on the confirmed page.
     expect((await confirmToken(token)).status).toBe(200);
     expect(await (await SELF.fetch(`${base}/confirm?token=${token}`)).text()).toMatch(
-      /You're subscribed/,
+      /You’re subscribed/,
     );
   });
 

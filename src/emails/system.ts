@@ -10,10 +10,9 @@ const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial
 // light+dark support (render/template.ts). Unlike the newsletter render path this email
 // carries no CSS-inlining pass — it is authored inline — so these class rules use
 // `!important` to beat the inline light styles (the standard email dark-mode technique).
-// The palette is the reader card pages' (lib/page.ts `--*` tokens: page #f4f4f5→#18181b,
-// card #fff→#232327, ink #18181b→#ededed, muted #71717a/#52525b→#a1a1aa, rule
-// #e4e4e7→#2e2e33, accent button #18181b/#fff → #e5e7eb/#18181b) so a confirmation and
-// the confirm/unsubscribe page it links to agree in both schemes.
+// The palette is a neutral zinc, light→dark: page #f4f4f5→#18181b, card #fff→#232327,
+// ink #18181b→#ededed, muted #71717a/#52525b→#a1a1aa, rule #e4e4e7→#2e2e33, button
+// #18181b/#fff → #e5e7eb/#18181b.
 const DARK_STYLE = `<style>@media (prefers-color-scheme: dark) {
   .k-sys-bg { background:#18181b !important; }
   .k-sys-card { background:#232327 !important; }

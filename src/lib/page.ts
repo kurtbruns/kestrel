@@ -1,81 +1,16 @@
-/** HTML for the reader-facing routes: small card pages (confirm, unsubscribe,
- *  invalid-link) via `htmlPage`, and the branded reader shell (`readerPage`) behind
- *  the landing page, the archive index, and the subscribe flow. Automatic light/dark
- *  via prefers-color-scheme. */
+/** HTML for the reader-facing routes: the branded reader shell (`readerPage`) behind
+ *  the landing page, the archive index, the subscribe flow, and the message pages a
+ *  reader lands on from an email (confirm, unsubscribe, not found), via `messagePage`.
+ *  Automatic light/dark via prefers-color-scheme. */
 import { escapeHtml, escapeHtmlAttr } from "./html";
 import { PAGE_SECURITY_HEADERS } from "./page_headers";
 
-/** Color tokens + resets shared by every reader page. This is its own palette,
- *  independent of, and never loaded alongside, the admin `:root` in
- *  public/dashboard/styles.css. The two reuse names like --muted and --bg with
- *  different values on purpose; don't assume they share meaning. */
-const TOKENS = `
-:root {
-  color-scheme: light dark;
-  --fg:#18181b; --muted:#71717a; --line:#e4e4e7; --bg:#f4f4f5; --card:#fff;
-  --accent:#18181b; --accent-fg:#fff; --danger:#b91c1c; --danger-fg:#fff;
-  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-}
-@media (prefers-color-scheme: dark) {
-  :root { --fg:#ededed; --muted:#a1a1aa; --line:#2e2e33; --bg:#18181b; --card:#232327;
-          --accent:#e5e7eb; --accent-fg:#18181b; --danger:#f87171; --danger-fg:#18181b; }
-}
-* { box-sizing: border-box; }
-body { margin:0; font-family:var(--font); background:var(--bg); color:var(--fg); }
-a { color: inherit; }
-.muted { color: var(--muted); }
-`;
-
-const CARD_STYLE = `${TOKENS}
-.wrap { max-width:480px; margin:64px auto; padding:32px; background:var(--card);
-        border:1px solid var(--line); border-radius:10px; line-height:1.6; }
-h1 { margin-top:0; }
-input { font:inherit; font-size:16px; padding:10px; width:100%; border:1px solid var(--line);
-        border-radius:6px; background:var(--card); color:var(--fg); }
-.btn { font:inherit; font-size:16px; margin-top:12px; padding:10px 18px; border-radius:6px;
-       border:1px solid var(--accent); background:var(--accent); color:var(--accent-fg); cursor:pointer; }
-.btn:hover { filter: brightness(1.08); }
-.btn:active { transform: translateY(1px); }
-.btn-danger { border-color:var(--danger); background:var(--danger); color:var(--danger-fg); }
-.btn:focus-visible, input:focus-visible, a:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
-.wrap p a { text-decoration: underline; }
-@media (prefers-color-scheme: dark) { .btn:focus-visible, input:focus-visible, a:focus-visible { outline-color:#60a5fa; } }
-`;
-
-/** A small card page (confirm, unsubscribe, not found). `devDashboardUrl` is the
- *  dev-only editor shortcut (SPEC §5/§11), passed solely on a dev-shaped instance; the
- *  card has none of the reader tokens, so the pill brings its own stylesheet. */
-export function htmlPage(
-  title: string,
-  bodyHtml: string,
-  status = 200,
-  devDashboardUrl?: string,
-): Response {
-  const doc = `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<style>${CARD_STYLE}</style>${devDashboardStyle(devDashboardUrl)}
-</head>
-<body><div class="wrap">${bodyHtml}</div>${devDashboardBadge(devDashboardUrl)}</body>
-</html>`;
-  return new Response(doc, {
-    status,
-    headers: {
-      ...PAGE_SECURITY_HEADERS,
-      "content-type": "text/html; charset=utf-8",
-      "x-robots-tag": "noindex",
-    },
-  });
-}
-
-/* The reader surface (§5): the public landing page at `/` and the full archive
-   index at the archive base path. Both wear the publication's identity — a light
-   masthead over an editorial serif — deliberately not the neutral zinc admin
-   chrome. Indexable (no noindex) and linking only to public pages, never into the
-   Access-gated admin surface (§11). */
+/* The reader surface (§5): the public landing page at `/`, the full archive index at
+   the archive base path, the subscribe pages, and the message pages. All wear the
+   publication's identity — a light masthead over an editorial serif — deliberately
+   not the neutral zinc admin chrome, and link only to public pages, never into the
+   Access-gated admin surface (§11). The listing pages are indexable; the message
+   pages are not (see `messagePage`). */
 
 /** The reader ground — shared by the chrome pages here and injected onto the hosted
  *  post page (see `ARCHIVE_POST_HEAD`), so the whole publication sits on one
@@ -87,10 +22,9 @@ const READER_BG_DARK = "#12110f";
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
    over-the-page dev chrome — deliberately not the publication's own identity — so
    it reads as tooling, never as part of the reader surface. Absent once deployed.
-   Self-contained, because it rides three kinds of page: the reader shell, the small
-   card pages, and a post page (as browser-only chrome injected into the frozen
-   render). The last two have none of the reader tokens, so the font is set here
-   rather than inherited. */
+   Self-contained, because it rides two kinds of page: the reader shell and a post
+   page (as browser-only chrome injected into the frozen render). The post page has
+   none of the reader tokens, so the font is set here rather than inherited. */
 const DEV_BADGE_STYLE = `
 /* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only element
    the reader surface carries. That badge is app chrome, not the publication's
@@ -173,10 +107,13 @@ a.r-t:hover { text-decoration:underline; }
 .r-empty { color:var(--r-mut); padding:20px 0; }
 .r-arch { display:inline-block; margin-top:24px; font-size:14px; font-weight:600; color:var(--brand-ink); text-decoration:none; }
 .r-arch:hover { text-decoration:underline; }
+/* A lede already ends in its own margin, so a link straight beneath it sits closer. */
+.r-lead + .r-arch { margin-top:0; }
 
 /* Subscribe / message pages: a headline, lede, and a branded form. */
 .r-h1 { font-family:var(--r-serif); font-size:30px; line-height:1.12; font-weight:600; letter-spacing:-.01em; margin:0 0 12px; }
 .r-lead { font-size:16px; color:var(--r-mut); margin:0 0 22px; max-width:54ch; }
+.r-lead strong { color:var(--r-ink); font-weight:600; }
 .r-form { display:flex; gap:10px; flex-wrap:wrap; max-width:460px; }
 .r-form input { flex:1 1 220px; font:inherit; font-size:16px; padding:11px 13px; border:1px solid var(--r-line);
                 border-radius:9px; background:var(--r-card); color:var(--r-ink); }
@@ -189,8 +126,10 @@ a.r-t:hover { text-decoration:underline; }
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
-a:focus-visible, .r-sub:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
-@media (prefers-color-scheme: dark) { a:focus-visible, .r-sub:focus-visible { outline-color:#60a5fa; } }
+a:focus-visible, .r-sub:focus-visible, .r-btn:focus-visible { outline:2px solid #2563eb; outline-offset:2px; }
+@media (prefers-color-scheme: dark) {
+  a:focus-visible, .r-sub:focus-visible, .r-btn:focus-visible { outline-color:#60a5fa; }
+}
 @media (max-width:560px) {
   .r-mast-in { flex-wrap:wrap; gap:12px; }
   .r-cta { margin-left:0; }
@@ -271,7 +210,8 @@ export function archiveDevDashboardChrome(url?: string): { head: string; masthea
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
- *  `mainHtml`. Public + indexable; every link points only at public pages (§11). */
+ *  `mainHtml`. Public and indexable unless `private`; every link points only at public
+ *  pages (§11). */
 export function readerPage(opts: {
   identity: ReaderIdentity;
   homeUrl: string;
@@ -285,6 +225,9 @@ export function readerPage(opts: {
   devDashboardUrl?: string;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
+  /** For a page that can show one reader's address: never stored by a cache and kept
+   *  out of search engines. Otherwise the page is briefly cacheable and indexable. */
+  private?: boolean;
 }): Response {
   const { name, tagline, logoUrl } = opts.identity;
   const logo = logoUrl
@@ -318,9 +261,52 @@ ${devDashboardBadge(opts.devDashboardUrl)}
     headers: {
       ...PAGE_SECURITY_HEADERS,
       "content-type": "text/html; charset=utf-8",
-      "cache-control": "public, max-age=300",
+      ...(opts.private
+        ? { "cache-control": "no-store", "x-robots-tag": "noindex" }
+        : { "cache-control": "public, max-age=300" }),
     },
   });
+}
+
+/** What a message page takes: the shell's identity and links, plus its own copy.
+ *  `ledeHtml` and `afterHtml` are markup, so the caller escapes what it interpolates. */
+export interface MessagePageOptions {
+  identity: ReaderIdentity;
+  homeUrl: string;
+  /** The page's own name; the publication name is appended for the tab title. */
+  title: string;
+  eyebrow: string;
+  headline: string;
+  ledeHtml: string;
+  afterHtml?: string;
+  status?: number;
+  devDashboardUrl?: string;
+}
+
+/** A message page in the reader shell (confirm, unsubscribe, not found): an eyebrow,
+ *  a serif headline, a muted lede, and an optional form or link beneath. A reader
+ *  arrives here from an email, so the page carries their newsletter's identity but no
+ *  subscribe call to action, which would pull them off the task they came for. Always
+ *  `private`: several show the reader's address, and none is worth indexing. */
+export function messagePage(opts: MessagePageOptions): Response {
+  return readerPage({
+    identity: opts.identity,
+    homeUrl: opts.homeUrl,
+    title: `${opts.title} · ${opts.identity.name}`,
+    mainHtml:
+      `<p class="r-ey">${escapeHtml(opts.eyebrow)}</p>` +
+      `<h1 class="r-h1">${escapeHtml(opts.headline)}</h1>` +
+      `<p class="r-lead">${opts.ledeHtml}</p>` +
+      (opts.afterHtml ?? ""),
+    status: opts.status,
+    devDashboardUrl: opts.devDashboardUrl,
+    private: true,
+  });
+}
+
+/** A reader page's closing link into the archive, never an admin path (§11). */
+export function archiveLink(url: string, label: string): string {
+  return `<a class="r-arch" href="${escapeHtmlAttr(url)}">${escapeHtml(label)} &rarr;</a>`;
 }
 
 function postRow(i: ArchiveIndexPost): string {
@@ -357,8 +343,7 @@ export function landingPage(opts: {
     const list = opts.recent.length
       ? `<ul class="r-list">${opts.recent.map(postRow).join("")}</ul>`
       : "";
-    const archive = `<a class="r-arch" href="${escapeHtmlAttr(opts.archiveUrl)}">Browse the full archive &rarr;</a>`;
-    main = feature + list + archive;
+    main = feature + list + archiveLink(opts.archiveUrl, "Browse the full archive");
   }
   return readerPage({
     identity: opts.identity,
