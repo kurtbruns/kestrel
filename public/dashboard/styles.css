@@ -2879,7 +2879,7 @@ textarea.is-invalid {
 .info.tip-below:focus::after {
   transform: translateY(0);
 }
-/* The "Follow the subject" toggle, grouped just under the slug field. */
+/* The "Auto-generate from subject" toggle, grouped just under the slug field. */
 .slug-auto-toggle {
   display: inline-flex;
   align-items: center;

@@ -8,7 +8,7 @@
 -- numbered `spring-update`, and the server could not tell the two apart at all.
 --
 -- An existing post reads as set by hand (0), so an upgrade never moves its slug. Ticking
--- the editor's "Follow the subject" box, or a save that sends `slug_auto: true`, has it
--- follow the subject again.
+-- the editor's "Auto-generate from subject" box, or a save that sends `slug_auto: true`,
+-- has it follow the subject again.
 
 ALTER TABLE posts ADD COLUMN slug_auto INTEGER NOT NULL DEFAULT 0 CHECK (slug_auto IN (0, 1));

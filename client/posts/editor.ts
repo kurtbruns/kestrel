@@ -186,7 +186,7 @@ export async function renderEditor(
             ${infoTip("The web address of this post's archive page.")}
           </div>
           <input id="f-slug" value="${post.slug}"${ro}>
-          ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Follow the subject</label>`}
+          ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
         </div>
       </div>
 
@@ -305,11 +305,11 @@ export async function renderEditor(
     return true;
   }
 
-  // The "Follow the subject" box. The slug stays editable throughout; the
-  // checkbox says whether it follows the subject. Typing your own slug takes manual
-  // control (unchecks); emptying the field, or ticking the box, hands it back to the
-  // subject. The slug the subject gives arrives with the save that leaving the
-  // subject makes (or Enter, or the autosave).
+  // The "Auto-generate from subject" box, checked while the slug follows the subject. The
+  // slug stays editable throughout. Typing your own slug takes manual control (unchecks);
+  // emptying the field, or ticking the box, hands it back to the subject. The slug the
+  // subject gives arrives with the save that leaving the subject makes (or Enter, or the
+  // autosave).
   if (autoEl) {
     autoEl.checked = post.slug_auto;
 
