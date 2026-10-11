@@ -54,7 +54,7 @@ export function confirmationSection(page: SettingsPage): Html {
             <div class="set-field">
               <label for="ceMessage">Message</label>
               <textarea id="ceMessage" rows="3" maxlength="1000">${state.confirmation.body}</textarea>
-              <p class="field-hint">The line above the confirm button. Keep it short — this is a one-click step, not a letter.</p>
+              <p class="field-hint">The line above the confirm button.</p>
             </div>
             <div class="set-field">
               <label for="ceButton">Button label</label>

@@ -27,7 +27,7 @@ function notifyChannelLabel(
     case "provider":
       return `Your email provider (${provider})`;
     default:
-      return "No email provider configured — nothing is delivered";
+      return "No email provider configured, so nothing is delivered";
   }
 }
 
@@ -112,7 +112,7 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
         });
         toast(
           r.channel === "fake"
-            ? `Test notification recorded for ${r.to} (no email provider configured — nothing is delivered)`
+            ? `Test notification recorded for ${r.to} (no email provider configured, so nothing is delivered)`
             : `Test notification sent to ${r.to}`,
         );
         setHtml(

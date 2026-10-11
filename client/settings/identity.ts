@@ -192,7 +192,7 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
       return;
     }
     if (file.size > 512 * 1024) {
-      toast("That image is over 512 KB — pick a smaller one.");
+      toast("That image is over 512 KB. Pick a smaller one.");
       return;
     }
     showLogoError("");

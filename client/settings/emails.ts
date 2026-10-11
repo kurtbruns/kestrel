@@ -75,7 +75,7 @@ export function mountRecipients(root: HTMLElement, page: SettingsPage): SectionH
     if (!state.recipients.length) {
       setHtml(
         chips,
-        html`<span class="set-recip-empty">No default recipients yet — add one below.</span>`,
+        html`<span class="set-recip-empty">No default recipients yet. Add one below.</span>`,
       );
       return;
     }

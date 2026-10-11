@@ -47,7 +47,7 @@ export function senderSection(page: SettingsPage): Html {
           <div class="set-inbox-avatar">${monogram(fromName, fromName)}</div>
           <div class="set-inbox-body">
             <div class="set-inbox-top"><span class="set-inbox-from">${fromName}</span><span class="set-inbox-time">9:02 AM</span></div>
-            <div class="set-inbox-subj">Your latest post — a sample subject line</div>
+            <div class="set-inbox-subj">Your latest post: a sample subject line</div>
             <div class="set-inbox-snip">The opening lines of your post show here as the inbox preview…</div>
             <div class="set-inbox-addr">${bareAddress(d.fromAddress)}</div>
           </div>

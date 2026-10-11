@@ -77,7 +77,7 @@ export function noEmailProvider(): boolean {
  * already ran, a send now queued, and a schedule that will fire later alike.
  */
 export function withNoProviderNote(msg: string): string {
-  return noEmailProvider() ? `${msg} (no email provider configured — nothing is delivered)` : msg;
+  return noEmailProvider() ? `${msg} (no email provider configured, so nothing is delivered)` : msg;
 }
 
 /** A post's public archive address under this deployment, by the formula the Worker

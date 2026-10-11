@@ -477,7 +477,7 @@ describe("settings view", () => {
     expect($("[data-embed='styled']").getAttribute("aria-pressed")).toBe("true");
     expect($("[data-embed='plain']").getAttribute("aria-pressed")).toBe("false");
     expect($("#embedBlock code").textContent).toContain('style="max-width:420px');
-    expect($("#embedHint").textContent).toMatch(/Self-contained/);
+    expect($("#embedHint").textContent).toBe("Carries its own styles, so it pastes in anywhere.");
     // The block's label follows the toggle.
     expect($("#embedBlock .block-label").textContent).toBe("Styled");
     expect($("#embedPreview form").className).toBe("set-pf-styled");

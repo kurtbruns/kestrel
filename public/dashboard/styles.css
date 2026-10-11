@@ -4056,8 +4056,8 @@ button.copy-btn {
   border: 0;
   background: transparent;
   color: var(--muted);
-  font-size: 12px;
-  padding: 2px 6px;
+  font-size: 13px;
+  padding: 4px 8px;
   border-radius: 5px;
 }
 button.copy-btn:hover {
@@ -4069,8 +4069,8 @@ button.copy-btn:active {
   transform: none;
 }
 button.copy-btn svg {
-  width: 13px;
-  height: 13px;
+  width: 14px;
+  height: 14px;
 }
 button.copy-btn.copied svg {
   color: var(--ok-fg);
@@ -4726,6 +4726,11 @@ button.set-field-remove {
   gap: 12px;
   flex-wrap: wrap;
   margin: 2px 0 8px;
+}
+/* The snippet's block sits a full step below the rendered preview above it, so the two
+   read as separate things: what the form looks like, then the code that makes it. */
+#embedBlock .block {
+  margin-top: 22px;
 }
 .set-embed pre {
   margin: 0;

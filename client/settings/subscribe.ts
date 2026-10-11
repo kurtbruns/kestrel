@@ -10,8 +10,8 @@ import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 type EmbedMode = "plain" | "styled";
 
 const EMBED_HINTS: Record<EmbedMode, string> = {
-  styled: "Self-contained — inline styles, ready to paste anywhere.",
-  plain: "Minimal markup, no styles — style it to match your site.",
+  styled: "Carries its own styles, so it pastes in anywhere.",
+  plain: "Bare markup. Style it to match your site.",
 };
 
 /** The embed's heading: "Subscribe to <name>", or "Subscribe" with no name (SPEC §9). */
@@ -32,7 +32,7 @@ export function buildEmbed(mode: EmbedMode, name: string, appOrigin: string): st
       `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 200px;padding:10px 12px;border:1px solid #d4d4d8;border-radius:8px;font:inherit">\n` +
       `    <button type="submit" style="padding:10px 18px;border:0;border-radius:8px;background:#18181b;color:#fff;font:inherit;font-weight:600;cursor:pointer">Subscribe</button>\n` +
       `  </div>\n` +
-      `  <p style="margin:8px 0 0;font-size:13px;color:#71717a">Double opt-in — we'll email a confirmation link. Unsubscribe anytime.</p>\n` +
+      `  <p style="margin:8px 0 0;font-size:13px;color:#71717a">Double opt-in: we'll email a confirmation link. Unsubscribe anytime.</p>\n` +
       `</form>`
     );
   }
@@ -51,7 +51,7 @@ export function buildEmbed(mode: EmbedMode, name: string, appOrigin: string): st
 function embedPreview(mode: EmbedMode, name: string): Html {
   const heading = embedHeading(name);
   if (mode === "styled") {
-    return html`<form class="set-pf-styled"><span class="l">${heading}</span><div class="rowf"><input type="email" placeholder="you@example.com" disabled><button type="button" class="sub-btn" tabindex="-1">Subscribe</button></div><p class="set-pf-fine">Double opt-in — we’ll email a confirmation link.</p></form>`;
+    return html`<form class="set-pf-styled"><span class="l">${heading}</span><div class="rowf"><input type="email" placeholder="you@example.com" disabled><button type="button" class="sub-btn" tabindex="-1">Subscribe</button></div><p class="set-pf-fine">Double opt-in: we’ll email a confirmation link.</p></form>`;
   }
   return html`<form class="set-pf-plain"><label>${heading}</label><input type="email" placeholder="you@example.com" disabled><button type="button" tabindex="-1">Subscribe</button></form>`;
 }
