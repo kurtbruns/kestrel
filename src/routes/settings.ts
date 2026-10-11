@@ -42,7 +42,7 @@ import {
   applyPatch,
   DEFAULT_CONFIRMATION_EMAIL,
   getSettings,
-  logoKeyFor,
+  newLogoKey,
   publicationLogoUrl,
   resolveConfirmationEmail,
   type SettingsPatch,
@@ -282,7 +282,7 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   // A timestamp names the upload's key, so a new upload never lands on an old key, even
   // after a removal, and nothing already sent changes what it shows (I3).
   const version = Date.now();
-  const key = logoKeyFor(version);
+  const key = newLogoKey(version);
   // The logo is part of the identity, so the same re-make rule applies (SPEC §9); the
   // bytes are written only once the refusals are ruled out, so a refused upload never
   // leaves a new logo behind the old version.

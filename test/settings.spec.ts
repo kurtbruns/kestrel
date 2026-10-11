@@ -464,7 +464,7 @@ describe("publication logo", () => {
   it("uploads a logo under a key of its own, serves it hardened, and keeps the bytes when it is removed (I3)", async () => {
     expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
     const logoUrl = (await getSettings()).body.settings.publication.logoUrl;
-    expect(logoUrl).toMatch(/\/media\/branding\/logo\/\d+$/);
+    expect(logoUrl).toMatch(/\/media\/branding\/logo\/\d+-[0-9a-f]{8}$/);
 
     // Served publicly, and hardened so a hostile SVG can't run script on direct nav.
     const served = await SELF.fetch(logoUrl);
@@ -491,7 +491,9 @@ describe("publication logo", () => {
     const row = await env.DB.prepare("SELECT status, rendered_html FROM sends WHERE id = ?")
       .bind(send.id)
       .first<{ status: string; rendered_html: string }>();
-    const sentUrl = /src="([^"]*\/media\/branding\/logo\/\d+)"/.exec(row?.rendered_html ?? "")?.[1];
+    const sentUrl = /src="([^"]*\/media\/branding\/logo\/\d+-[0-9a-f]{8})"/.exec(
+      row?.rendered_html ?? "",
+    )?.[1];
     expect(sentUrl).toBeDefined();
     const bytesAt = async (url: string) =>
       new Uint8Array(await (await SELF.fetch(url)).arrayBuffer());
@@ -504,6 +506,17 @@ describe("publication logo", () => {
 
     await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE", headers: AUTH });
     expect(await bytesAt(sentUrl ?? "")).toEqual(logoA);
+  });
+
+  it("reads a stored logo key only in the shape an upload makes, so it can't point the logo at another object", async () => {
+    await setPublicationLogo(env.DB, {
+      version: 7,
+      contentType: "image/png",
+      key: "branding/logo/../posts/p1/photo.png",
+    });
+    expect((await getSettings()).body.settings.publication.logoUrl).toMatch(
+      /\/media\/branding\/logo\?v=7$/,
+    );
   });
 
   it("serves a logo from before per-upload keys where its sends point, and never writes or deletes that key again", async () => {

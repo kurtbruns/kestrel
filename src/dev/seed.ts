@@ -43,7 +43,7 @@ import {
   type SeedSuppression,
 } from "../db/seed";
 import { recomputeSendCounters } from "../db/sends";
-import { getSettings, logoKeyFor, setPublicationLogo, updateSettings } from "../db/settings";
+import { getSettings, newLogoKey, setPublicationLogo, updateSettings } from "../db/settings";
 import { audienceEmails } from "../db/subscribers";
 import type { AppEnv, Config } from "../env";
 import { newId, newToken } from "../lib/ids";
@@ -883,7 +883,7 @@ export async function seedDatabase(
   // settings — the same two-step the upload route does.
   let logoWritten = false;
   if (logoFile) {
-    const key = logoKeyFor(now);
+    const key = newLogoKey(now);
     await env.MEDIA.put(key, logoFile.bytes, {
       httpMetadata: { contentType: logoFile.contentType },
     });

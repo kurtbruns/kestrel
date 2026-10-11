@@ -26,7 +26,7 @@ import { log } from "../lib/log";
  * *inside* the email as its masthead/branding (the post template and the confirmation
  * email) — but it is never the email's authenticated *sender* (that is the `From:`
  * header, deploy-time), and never a frozen record (I3). The logo *bytes* live in R2,
- * served by the public media route: each upload under a key of its own (`logoKeyFor`),
+ * served by the public media route: each upload under a key of its own (`newLogoKey`),
  * never overwritten or deleted, since a sent email and its archive page keep pointing at
  * it (I3). Here we keep only the version (the upload's timestamp), the key, and the
  * content type. A blank `name` falls back to the `From:` display name at render time.
@@ -86,11 +86,16 @@ export interface AppSettings {
  *  prefix every logo key starts with (served by /media). Nothing writes or deletes it now. */
 export const BRANDING_LOGO_KEY = "branding/logo";
 
-/** The R2 key for a logo uploaded at `version`: its own, so no later upload or removal
- *  changes what an email already sent with it shows (I3, SPEC §9). */
-export function logoKeyFor(version: number): string {
-  return `${BRANDING_LOGO_KEY}/${version}`;
+/** A new upload's R2 key: its own, so no later upload or removal changes what an email
+ *  already sent with it shows (I3, SPEC §9). The random part keeps two uploads in the same
+ *  millisecond (two tabs, or the publisher and Claude) from sharing one. */
+export function newLogoKey(version: number): string {
+  return `${BRANDING_LOGO_KEY}/${version}-${crypto.randomUUID().slice(0, 8)}`;
 }
+
+// The shape newLogoKey makes, and the only key a stored logo is read with, so the setting
+// can never point the logo at some other object.
+const LOGO_KEY = /^branding\/logo\/\d+-[0-9a-f]{8}$/;
 
 /** The logo's public URL, or "" with none. A logo from before per-upload keys keeps the
  *  URL its sends already carry, its version a cache-buster on the shared key. */
@@ -144,7 +149,7 @@ function coercePublication(raw: unknown): PublicationSettings {
   const o = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" ? v : "");
   const lr = o.logo as Record<string, unknown> | null | undefined;
-  const key = lr && typeof lr.key === "string" && lr.key.startsWith(`${BRANDING_LOGO_KEY}/`);
+  const key = lr && typeof lr.key === "string" && LOGO_KEY.test(lr.key);
   const logo =
     lr && typeof lr === "object" && typeof lr.version === "number"
       ? {
