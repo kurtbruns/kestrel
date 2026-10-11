@@ -1,7 +1,7 @@
 // Settings' Publication identity section (SPEC §9): the name, tagline, and mailing address,
 // which commit through the save bar, and the logo, which saves the moment it changes.
 
-import type { IdentityField, InUseView, LogoResponse } from "../../shared/settings";
+import type { InUseView, LogoResponse } from "../../shared/settings";
 import { api } from "../api";
 import { $ } from "../ui/dom";
 import { fmt } from "../ui/format";
@@ -11,34 +11,15 @@ import { busy, toast } from "../ui/widgets";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 
-const FIELD_WORDS: Record<IdentityField, string> = {
-  name: "name",
-  tagline: "tagline",
-  logoUrl: "logo",
-  address: "mailing address",
-};
-
-/** "the name", "the name and logo", "the name, tagline, and logo". */
-function fieldList(fields: IdentityField[]): string {
-  const words = (["name", "tagline", "logoUrl", "address"] as const)
-    .filter((f) => fields.includes(f))
-    .map((f) => FIELD_WORDS[f]);
-  if (words.length < 3) {
-    return `the ${words.join(" and ")}`;
-  }
-  return `the ${words.slice(0, -1).join(", ")}, and ${words.at(-1)}`;
-}
-
-/** The note under the card: which of these fields every email shows and, only while
- *  posts are scheduled, that a save reaches them too (SPEC §9). The confirmation dialog
- *  carries the rest, at the moment it matters, so the standing note stays one or two
- *  short lines. */
-export function identityNote(inUse: InUseView): string {
-  const fields = inUse.identityFields || [];
-  if (!fields.length) {
+/** The note under the card: where the identity shows up (the sample email shows which
+ *  fields) and, only while posts are scheduled, that a save reaches them too (SPEC §9).
+ *  The confirmation dialog carries the rest, at the moment it matters, so the standing
+ *  note stays one or two short lines. */
+function identityNote(inUse: InUseView): string {
+  if (!(inUse.identityFields || []).length) {
     return "Your email template doesn’t show any of these.";
   }
-  const shown = `Your email template shows ${fieldList(fields)} in every email.`;
+  const shown = "Shown in every email.";
   const n = inUse.sends.length;
   if (!n) {
     return shown;

@@ -62,7 +62,7 @@ export function chip(kind: IconName, label: string): Html {
 
 /** A section's head: its title, its chips, and the rule that runs to the edge. */
 export function secHead(title: string, chipHtml: Html, extra: Html | null = null): Html {
-  return html`<div class="set-sec-head"><h3 class="set-sec-title">${title}</h3>${chipHtml}${extra}<span class="set-rule"></span></div>`;
+  return html`<div class="set-sec-head"><h2 class="set-sec-title">${title}</h2>${chipHtml}${extra}<span class="set-rule"></span></div>`;
 }
 
 /** The letter an inbox row shows for a sender with no avatar. */

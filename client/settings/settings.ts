@@ -1,5 +1,6 @@
-// The Settings page: its sections grouped by whom they serve, editable first and
-// set-at-deploy last, under one save bar. Each section is its own module; this one loads
+// The Settings page: its sections in groups by whom they serve (the publication, its
+// readers, its emails, the publisher), editable first and set-at-deploy last, under one
+// save bar. Each section is its own module; this one loads
 // the settings, holds the live state against the saved baseline, and commits it.
 
 import { fromDisplayName } from "../../shared/publication";
@@ -36,12 +37,10 @@ import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
 
-/** One group of sections: who it serves, and the question it answers. */
-function group(id: string, title: string, question: string, sections: Html[]): Html {
-  return html`<section class="set-group" aria-labelledby="setGroup-${id}">
-    <header class="set-group-head"><h2 class="set-group-title" id="setGroup-${id}">${title}</h2><p class="set-group-q">${question}</p></header>
-    ${sections}
-  </section>`;
+/** One group of sections, kept together by whom they serve: no heading of its own, since
+ *  the sections' titles already say what each is, only a wider gap from the next group. */
+function group(id: string, sections: Html[]): Html {
+  return html`<div class="set-group" data-group="${id}">${sections}</div>`;
 }
 
 function baselineOf(state: SettingsBaseline): SettingsBaseline {
@@ -66,7 +65,7 @@ const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
 export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
     root,
-    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Grouped by whom each part serves: your publication, your readers, the emails you send, and you. What only a redeploy changes comes last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
+    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the ways readers subscribe and the pages they land on, the email each post is sent inside, and where Kestrel tells you about your sends. Facts set when Kestrel was deployed come last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
   );
   const body = $("#settingsBody", root);
   let data: SettingsResponse;
@@ -139,18 +138,18 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   setHtml(
     body,
     html`
-      ${group("publication", "Your publication", "Who readers see.", [identitySection(page)])}
-      ${group("readers", "Your readers", "How someone joins, confirms, and leaves, in the order they do it.", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("Reader pages", chip("preview", "Preview")))])}
-      ${group("emails", "Your emails", "What you send, and where you proof it.", [templateSection(page), recipientsSection()])}
-      ${group("you", "You", "What Kestrel tells you.", [notificationsSection(page)])}
-      ${group("deploy", "Set at deploy", "What only a redeploy changes, shown read-only.", [senderSection(page), instanceSection(page)])}
+      ${group("publication", [identitySection(page)])}
+      ${group("readers", [subscribeSection(page), confirmationSection(page), readerPagesSection(secHead("Reader pages", chip("preview", "Preview")))])}
+      ${group("emails", [templateSection(page), recipientsSection()])}
+      ${group("you", [notificationsSection(page)])}
+      ${group("deploy", [senderSection(page), instanceSection(page)])}
     `,
   );
   handles.push(
     mountIdentity(body, page),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
-    mountTemplate(body),
+    mountTemplate(body, page),
     mountRecipients(body, page),
     mountNotifications(body, page),
   );

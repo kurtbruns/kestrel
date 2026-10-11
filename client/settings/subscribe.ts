@@ -77,10 +77,10 @@ export function subscribeSection(page: SettingsPage): Html {
         </div>
         <div class="set-embed-head" style="margin-top:18px">
           <label style="margin:0">Embeddable subscribe form</label>
-          <div class="seg" role="group" aria-label="Snippet style">
-            <button type="button" class="seg-btn active" data-embed="plain">Plain HTML</button>
-            <button type="button" class="seg-btn" data-embed="styled">Styled</button>
-          </div>
+          <span class="set-wtog" role="group" aria-label="Snippet style">
+            <button type="button" class="wtog-btn" data-embed="plain" aria-pressed="true">Plain HTML</button>
+            <button type="button" class="wtog-btn" data-embed="styled" aria-pressed="false">Styled</button>
+          </span>
         </div>
         <p class="field-hint" id="embedHint" style="margin:0 0 10px"></p>
         <div class="set-embed-preview">
@@ -112,7 +112,7 @@ export function mountSubscribe(root: HTMLElement, page: SettingsPage): SectionHa
     b.onclick = () => {
       mode = b.dataset.embed === "styled" ? "styled" : "plain";
       for (const o of modeButtons) {
-        o.classList.toggle("active", o.dataset.embed === mode);
+        o.setAttribute("aria-pressed", String(o.dataset.embed === mode));
       }
       rebuild();
     };

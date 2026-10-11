@@ -1,5 +1,5 @@
-// Settings' "Your emails" group: the email template, as one line pointing at the Template
-// page where it is edited and proofed, and the default test recipients the publisher
+// Settings' "Your emails" group: the email template, shown as a sample email with the way
+// to the Template page where it is edited, and the default test recipients the publisher
 // proofs a post against.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
@@ -9,26 +9,44 @@ import { icon } from "../ui/icons";
 import { toast } from "../ui/widgets";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { inUseChip } from "./remake";
+import { mountSampleEmailPreview } from "./template";
 
-/** The template as one card: what it does, whether scheduled posts use it, and the way to
- *  the Template page. The sample email lives there, beside the editor, so Settings doesn't
- *  hold a second full-height copy of it. */
+/** The template as what a publication's email looks like: a sample email in the saved
+ *  template, read-only, with the way to the Template page, where editing lives (so each
+ *  surface has one save). */
 export function templateSection(page: SettingsPage): Html {
   return html`
     <section class="set-sec">
       ${secHead("Email template", chip("editable", "Editable"), inUseChip(page.data.inUse))}
-      <div class="set-card set-tpl-card">
-        <p class="set-tpl-card-text">Every post you send goes out inside your template: its layout, its styles, and the footer around your words. Edit it and send yourself a sample on the Template page.</p>
-        <button type="button" class="primary" id="tplEditLink">Edit template →</button>
+      <p class="set-lede">The template controls the look and feel of the emails you send. Edit it on the Template page.</p>
+      <div class="set-preview set-tpl-sample">
+        <div class="set-preview-bar">
+          <span class="set-preview-lbl">Sample email</span>
+          <span class="set-preview-dot">Current template</span>
+        </div>
+        <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
+      <div class="row" style="margin-top:12px"><button type="button" class="primary" id="tplEditLink">Edit template →</button></div>
     </section>`;
 }
 
-export function mountTemplate(root: HTMLElement): SectionHandle {
+/** The sample follows the identity fields as they are typed. */
+export function mountTemplate(root: HTMLElement, page: SettingsPage): SectionHandle {
+  const template = page.data.settings.emailTemplate || "";
+  const preview = mountSampleEmailPreview(
+    $<HTMLIFrameElement>("#tplPreview", root),
+    () => template,
+    () => ({
+      name: page.state.name || page.fromDisplay,
+      tagline: page.state.tagline,
+      logoUrl: page.state.logoUrl,
+      address: page.state.address,
+    }),
+  );
   $("#tplEditLink", root).onclick = () => {
     location.hash = "#/template";
   };
-  return {};
+  return { repaint: () => preview.repaint() };
 }
 
 export function recipientsSection(): Html {

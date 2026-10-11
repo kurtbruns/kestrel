@@ -4087,50 +4087,11 @@ button.api-copy.copied svg {
   margin-bottom: 34px;
 }
 
-/* --- groups: the sections gathered by whom they serve (DESIGN §5). A group's head is a
-   step above a section's uppercase title: a plain heading in the page's ink and the one
-   question the group answers, muted, with a hairline above that starts each group after
-   the first. --- */
+/* --- groups: the sections kept together by whom they serve (DESIGN §5). A group has no
+   heading, since each section's title already says what it is; a wider gap than the one
+   between sections is all that separates one group from the next. --- */
 .set-group + .set-group {
-  margin-top: 14px;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-.set-group-head {
-  margin: 0 0 18px;
-}
-.set-group-title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-  text-transform: none;
-  color: var(--fg);
-}
-.set-group-q {
-  margin: 3px 0 0;
-  font-size: 13px;
-  color: var(--muted);
-}
-
-/* The email template as one card: what it does, and the way to the Template page. */
-.set-tpl-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px 18px;
-  flex-wrap: wrap;
-  padding: 16px 18px;
-}
-.set-tpl-card-text {
-  margin: 0;
-  flex: 1 1 320px;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--muted);
-}
-.set-tpl-card button {
-  flex: none;
+  margin-top: 22px;
 }
 .set-sec-head {
   display: flex;
