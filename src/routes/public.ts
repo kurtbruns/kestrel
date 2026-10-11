@@ -7,7 +7,7 @@ import type { Config } from "../env";
 import { json } from "../lib/errors";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { log } from "../lib/log";
-import { archiveLink, type ReaderIdentity, readerPage } from "../lib/page";
+import { archiveLink, type ReaderBanner, type ReaderIdentity, readerPage } from "../lib/page";
 import type { RequestContext } from "../router";
 import {
   type ConfirmLinkState,
@@ -228,14 +228,47 @@ function unsubscribeInvalidPage(c: RequestContext): Promise<Response> {
   });
 }
 
-/** The page once an address is off the list, whether it just left or already had. */
-function unsubscribedPage(c: RequestContext, email: string): Promise<Response> {
+/** The page once an address is off the list, whether it just left or already had. A
+ *  test walks through it too, with a sample address under the test banner. */
+function unsubscribedPage(
+  c: RequestContext,
+  email: string,
+  banner?: ReaderBanner,
+): Promise<Response> {
   return readerMessage(c, {
     title: "Unsubscribed",
     eyebrow: "Unsubscribe",
     headline: "You’re unsubscribed",
     ledeHtml: `<strong>${escapeHtml(email)}</strong> won’t receive further emails.`,
+    banner,
   });
+}
+
+/** The page that asks before unsubscribing, its button posting to `action`. A test
+ *  shows the same page with a sample address under the test banner. */
+async function unsubscribeAskPage(
+  c: RequestContext,
+  email: string,
+  action: string,
+  banner?: ReaderBanner,
+): Promise<Response> {
+  const identity = await readerIdentity(c, c.config);
+  // The button wears the reader ink, not a danger red: leaving is what the reader came
+  // here to do, and the reader palette has no alarm color.
+  return readerMessage(
+    c,
+    {
+      title: "Unsubscribe",
+      eyebrow: "Unsubscribe",
+      headline: `Unsubscribe from ${identity.name}?`,
+      ledeHtml: `We’ll stop sending the newsletter to <strong>${escapeHtml(email)}</strong>.`,
+      afterHtml:
+        `<form class="r-form" method="post" action="${escapeHtmlAttr(action)}">` +
+        `<button class="r-btn" type="submit">Unsubscribe</button></form>`,
+      banner,
+    },
+    identity,
+  );
 }
 
 /** The query the unsubscribe link of a test email or a preview carries in place of a
@@ -257,23 +290,28 @@ function isTestUnsubscribe(c: RequestContext, token: string): boolean {
   return token === "" && c.url.searchParams.get(TEST_UNSUBSCRIBE_PARAM) === "1";
 }
 
-/** What the unsubscribe link of a test email or a preview opens: it says nobody was
- *  unsubscribed and what the link does in a real email, instead of calling the link
- *  invalid. */
-function testUnsubscribePage(c: RequestContext): Promise<Response> {
-  return readerMessage(c, {
-    title: "Unsubscribe",
-    eyebrow: "Unsubscribe",
-    headline: "Nobody was unsubscribed",
-    ledeHtml:
-      "This link came from a test email or a preview. In an email to your list, it unsubscribes the person it was sent to.",
-  });
-}
+/** What a test shows in place of the recipient's address. Never the address the test
+ *  went to: the link carries none, and putting one in a URL would leak it. */
+const TEST_UNSUBSCRIBE_EMAIL = "reader@example.com";
+
+/** The strip over every page a test's unsubscribe link walks through, so the real
+ *  pages can be shown without anyone mistaking them for a real unsubscribe. */
+const TEST_UNSUBSCRIBE_BANNER: ReaderBanner = {
+  tag: "Test",
+  text: "This is the page a subscriber sees. Nothing here changes anyone’s subscription.",
+};
 
 export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   const token = c.url.searchParams.get("token") ?? "";
+  // A test or a preview opens the page a subscriber sees, so the publisher proofs the
+  // real thing (SPEC §7), with a sample address and its button posting back as a test.
   if (isTestUnsubscribe(c, token)) {
-    return testUnsubscribePage(c);
+    return unsubscribeAskPage(
+      c,
+      TEST_UNSUBSCRIBE_EMAIL,
+      `/unsubscribe?${TEST_UNSUBSCRIBE_PARAM}=1`,
+      TEST_UNSUBSCRIBE_BANNER,
+    );
   }
   const row = await subscribers.getByUnsubToken(c.env.DB, token);
   if (!row) {
@@ -282,30 +320,18 @@ export async function unsubscribeLanding(c: RequestContext): Promise<Response> {
   if (row.status === "unsubscribed") {
     return unsubscribedPage(c, row.email);
   }
-  const identity = await readerIdentity(c, c.config);
-  // The button wears the reader ink, not a danger red: leaving is what the reader came
-  // here to do, and the reader palette has no alarm color.
-  return readerMessage(
-    c,
-    {
-      title: "Unsubscribe",
-      eyebrow: "Unsubscribe",
-      headline: `Unsubscribe from ${identity.name}?`,
-      ledeHtml: `We’ll stop sending the newsletter to <strong>${escapeHtml(row.email)}</strong>.`,
-      afterHtml:
-        `<form class="r-form" method="post" action="/unsubscribe?token=${encodeURIComponent(token)}">` +
-        `<button class="r-btn" type="submit">Unsubscribe</button></form>`,
-    },
-    identity,
-  );
+  return unsubscribeAskPage(c, row.email, `/unsubscribe?token=${encodeURIComponent(token)}`);
 }
 
 export async function unsubscribe(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
-  // A mail client's own Unsubscribe button on a test email posts here (RFC 8058). It
-  // changes nothing and answers as a success would, so the client reports no error.
+  // The test page's button, or a mail client's own Unsubscribe button on a test email
+  // (RFC 8058). It changes nothing and answers as a success would: a person gets the
+  // page a subscriber would, under the test banner, and a client reports no error.
   if (isTestUnsubscribe(c, token)) {
-    return wantsHtml(c) ? testUnsubscribePage(c) : new Response("test email", { status: 200 });
+    return wantsHtml(c)
+      ? unsubscribedPage(c, TEST_UNSUBSCRIBE_EMAIL, TEST_UNSUBSCRIBE_BANNER)
+      : new Response("test email", { status: 200 });
   }
   const row = await subscribers.unsubscribeByToken(c.env.DB, token);
   if (!row) {

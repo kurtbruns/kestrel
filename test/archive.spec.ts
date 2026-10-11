@@ -660,14 +660,14 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         "test unsubscribe",
         unsubscribeLanding,
         "/unsubscribe?test=1",
-        ["Nobody was unsubscribed"],
+        [`Unsubscribe from ${publication}?`, "reader@example.com", 'class="r-banner"'],
         200,
       ],
       [
         "test unsubscribe POST",
         unsubscribe,
         "/unsubscribe?test=1",
-        ["Nobody was unsubscribed"],
+        ["You’re unsubscribed", "reader@example.com", 'class="r-banner"'],
         200,
         html,
       ],
@@ -725,20 +725,44 @@ describe("a test email's unsubscribe link", () => {
         .first<{ status: string }>()
     )?.status;
 
-  it("opens a page that says nobody was unsubscribed, and unsubscribes no one", async () => {
+  const banner = "This is the page a subscriber sees. Nothing here changes anyone’s subscription.";
+
+  it("opens the page a subscriber sees, marked as a test, and unsubscribes no one", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?test=1`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-robots-tag")).toBe("noindex");
     const body = await res.text();
-    expect(body).toContain("Nobody was unsubscribed");
-    expect(body).toContain("This link came from a test email or a preview.");
-    expect(body).not.toContain("<form");
+    expect(body).toContain("Unsubscribe from ");
+    expect(body).toContain("<strong>reader@example.com</strong>");
+    expect(body).toContain('class="r-banner"');
+    expect(body).toContain(banner);
+    // The banner sits above the masthead, so it is the first thing on the page.
+    expect(body.indexOf('class="r-banner"')).toBeLessThan(body.indexOf('class="r-mast"'));
+    // Its button posts back as a test, never with a token.
+    expect(body).toContain('<form class="r-form" method="post" action="/unsubscribe?test=1">');
+    expect(body).not.toContain("token=");
     expect(await statusOf("a")).toBe("confirmed");
   });
 
-  it("answers a mail client's one-click POST with a plain 200 and changes nothing", async () => {
+  it("walks through to the page a subscriber sees once unsubscribed, changing nothing", async () => {
+    await ensureSubscriber();
+    const res = await SELF.fetch(`${base}/unsubscribe?test=1`, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("x-robots-tag")).toBe("noindex");
+    const body = await res.text();
+    expect(body).toContain("You’re unsubscribed");
+    expect(body).toContain("<strong>reader@example.com</strong>");
+    expect(body).toContain(banner);
+    expect(await statusOf("a")).toBe("confirmed");
+  });
+
+  it("answers a mail client's one-click POST with a 200 and changes nothing", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?test=1`, {
       method: "POST",
@@ -748,7 +772,7 @@ describe("a test email's unsubscribe link", () => {
     expect(res.status).toBe(200);
     // RFC 8058's body is form-encoded, which reads as a person's form; a bare POST
     // answers plain text.
-    expect(await res.text()).toContain("Nobody was unsubscribed");
+    expect(await res.text()).toContain(banner);
     const bare = await SELF.fetch(`${base}/unsubscribe?test=1`, { method: "POST" });
     expect(bare.status).toBe(200);
     expect(await bare.text()).toBe("test email");
@@ -759,6 +783,8 @@ describe("a test email's unsubscribe link", () => {
     await ensureSubscriber();
     const page = await (await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`)).text();
     expect(page).toContain("Unsubscribe from ");
+    expect(page).toContain('action="/unsubscribe?token=uns-a"');
+    expect(page).not.toContain('class="r-banner"');
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a&test=1`, { method: "POST" });
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("unsubscribed");
@@ -779,7 +805,9 @@ describe("a test email's unsubscribe link", () => {
       body: "token=uns-a",
     });
     expect(res.status).toBe(200);
-    expect(await res.text()).toContain("You’re unsubscribed");
+    const done = await res.text();
+    expect(done).toContain("You’re unsubscribed");
+    expect(done).not.toContain('class="r-banner"');
     expect(await statusOf("a")).toBe("unsubscribed");
   });
 
@@ -787,7 +815,7 @@ describe("a test email's unsubscribe link", () => {
     await ensureSubscriber();
     const page = await SELF.fetch(`${base}/unsubscribe?token=&test=1`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Nobody was unsubscribed");
+    expect(await page.text()).toContain(banner);
     const post = await SELF.fetch(`${base}/unsubscribe?token=&test=1`, { method: "POST" });
     expect(post.status).toBe(200);
     expect(await post.text()).toBe("test email");
@@ -796,7 +824,7 @@ describe("a test email's unsubscribe link", () => {
 
   // The links a test email really carries, not ones written out here, so the link a
   // test builds and the pages it opens can't drift apart.
-  it("opens the honest pages from the links a sent test carries", async () => {
+  it("opens the test pages from the links a sent test carries", async () => {
     await ensureSubscriber();
     const { post } = await posts.createPost(
       env.DB,
@@ -818,7 +846,11 @@ describe("a test email's unsubscribe link", () => {
     const unsubPath = `${unsub!.pathname}${unsub!.search}`;
     const unsubPage = await SELF.fetch(`${base}${unsubPath}`);
     expect(unsubPage.status).toBe(200);
-    expect(await unsubPage.text()).toContain("Nobody was unsubscribed");
+    const unsubBody = await unsubPage.text();
+    expect(unsubBody).toContain(banner);
+    expect(unsubBody).toContain("<strong>reader@example.com</strong>");
+    // The recipient's own address never appears: the link carries none.
+    expect(unsubBody).not.toContain("me@example.com");
     const oneClick = await SELF.fetch(`${base}${unsubPath}`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -849,7 +881,7 @@ describe("a test email's unsubscribe link", () => {
     expect(unsub?.search).toBe("?test=1");
     const page = await SELF.fetch(`${base}${unsub!.pathname}${unsub!.search}`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("Nobody was unsubscribed");
+    expect(await page.text()).toContain(banner);
     expect(await statusOf("a")).toBe("confirmed");
   });
 });

@@ -712,6 +712,70 @@ describe("editor view", () => {
     expect(body().hidden).toBe(true);
   });
 
+  describe("the preview's link to the post's own public page", () => {
+    const ARCHIVE = "https://newsletter.example.com/archive";
+    const webUrl = () => `${location.origin}${location.pathname}#/web/post/p1`;
+    beforeEach(() => {
+      appState.appConfig = {
+        deployment: {
+          archiveOrigin: "https://newsletter.example.com",
+          archiveBasePath: "/archive",
+        },
+      } as unknown as SettingsResponse;
+    });
+    afterEach(() => {
+      appState.appConfig = null;
+    });
+    /** The preview frame loaded with `markup`, as the browser would load its srcdoc
+     *  (happy-dom loads none), and its links. */
+    function loadPreview(markup: string): HTMLAnchorElement[] {
+      const frame = $<HTMLIFrameElement>("#previewFrame");
+      const doc = frame.contentDocument!;
+      doc.open();
+      doc.write(markup);
+      doc.close();
+      frame.dispatchEvent(new Event("load"));
+      return [...doc.querySelectorAll("a")];
+    }
+
+    it("opens a draft's web version, under the slug it has now, and leaves every other link alone", async () => {
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+        { path: "/api/posts/p1/preview", reply: () => new Response("<p>rendered</p>") },
+      ]);
+      typeInto($<HTMLInputElement>("#f-slug"), "owls-at-dusk");
+      $(".ctab[data-tab='preview']").click();
+      await vi.advanceTimersByTimeAsync(0);
+      const [own, before, other, out] = loadPreview(
+        // The host spelled differently is still the same address.
+        `<a href="https://NEWSLETTER.example.com/archive/owls-at-dusk">View in browser</a><a href="${ARCHIVE}/owls">Old slug</a><a href="${ARCHIVE}/herons">Herons</a><a href="https://x.example">x</a>`,
+      );
+      expect(own!.getAttribute("href")).toBe(webUrl());
+      expect(own!.target).toBe("_blank");
+      expect(own!.rel).toBe("noopener noreferrer");
+      // The slug the post had before its edit, and another post's page, are other addresses.
+      expect(before!.getAttribute("href")).toBe(`${ARCHIVE}/owls`);
+      expect(other!.getAttribute("href")).toBe(`${ARCHIVE}/herons`);
+      expect(other!.target).toBe("_blank");
+      expect(out!.getAttribute("href")).toBe("https://x.example");
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("opens a scheduled post's web version from its frozen copy", async () => {
+      const post = scheduledPost();
+      await open(post.routes);
+      const [own, other] = loadPreview(
+        `<a href="${ARCHIVE}/owls">View in browser</a><a href="${ARCHIVE}/herons">Herons</a>`,
+      );
+      expect(own!.getAttribute("href")).toBe(webUrl());
+      expect(own!.target).toBe("_blank");
+      expect(other!.getAttribute("href")).toBe(`${ARCHIVE}/herons`);
+      expect(fake.unhandled).toEqual([]);
+    });
+  });
+
   it("links to the web version in a new tab, and a click saves pending edits without holding the link", async () => {
     const server = draftServer();
     await open([
