@@ -3917,9 +3917,6 @@ button.api-filter-clear svg {
   border-radius: 6px;
   padding: 6px 9px;
 }
-.pub-row button.ghost {
-  flex: 0 0 auto;
-}
 .pub-foot {
   margin-top: 4px;
 }
@@ -3992,6 +3989,16 @@ button.api-filter-clear svg {
 }
 .setup-steps li button {
   flex: 0 0 auto;
+}
+/* The setup step's Copy keeps the step's button look, with the shared Copy's glyph. */
+.setup-steps li button[data-copy] {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.setup-steps li button[data-copy] svg {
+  width: 14px;
+  height: 14px;
 }
 .setup-url {
   font: 12.5px var(--mono);
@@ -4072,7 +4079,8 @@ button.copy-btn svg {
   width: 14px;
   height: 14px;
 }
-button.copy-btn.copied svg {
+/* Any Copy that has just landed, whatever button it rides (ui/copy.ts). */
+button.copied svg {
   color: var(--ok-fg);
 }
 .block-label {
@@ -4089,6 +4097,10 @@ button.copy-btn.copied svg {
   border-radius: 6px;
   padding: 10px 12px;
   font: 12.5px / 1.5 var(--mono);
+}
+/* A Copy beside a value keeps its size however long the value runs. */
+.pub-row button.copy-btn {
+  flex: 0 0 auto;
 }
 
 /* --- groups: the sections kept together by whom they serve (DESIGN §5). A group has no
@@ -5151,10 +5163,6 @@ button.set-field-remove {
   color: var(--accent);
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 30%, var(--line-soft));
-}
-.set-icon-btn.copied {
-  color: var(--ok-fg);
-  border-color: color-mix(in srgb, var(--ok-fg) 40%, var(--line-soft));
 }
 /* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
    absence blocks a save, shown upper-right of the editor toolbar. */

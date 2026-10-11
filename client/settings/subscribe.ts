@@ -120,5 +120,15 @@ export function mountSubscribe(root: HTMLElement, page: SettingsPage): SectionHa
   }
   wireCopy($(".set-sec-subscribe", root));
   rebuild();
-  return { repaint: rebuild };
+  // The page repaints every section on any change, but the snippet shows only the name:
+  // rebuilt for anything else, its Copy would lose a check it had just shown.
+  let shownName = name();
+  return {
+    repaint() {
+      if (name() !== shownName) {
+        shownName = name();
+        rebuild();
+      }
+    },
+  };
 }

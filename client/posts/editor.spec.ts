@@ -1343,7 +1343,7 @@ describe("editor view", () => {
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(2);
-    expect($("#toasts").textContent).toMatch(/Sent 1\/2 — some failed/);
+    expect($("#toasts").textContent).toMatch(/Sent 1 of 2; the rest failed/);
     expect($("#toasts").textContent).not.toMatch(/Test sent to/);
     expect(fake.unhandled).toEqual([]);
   });

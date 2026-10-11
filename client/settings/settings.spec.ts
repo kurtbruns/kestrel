@@ -490,6 +490,18 @@ describe("settings view", () => {
     expect($("#toasts").textContent).toBe("");
   });
 
+  it("keeps the embed's Copy as it is while other fields change, and rebuilds it for the name", async () => {
+    stubClipboard();
+    await open();
+    $("#embedBlock .copy-btn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLInputElement>("#notifyTo"), "me@example.com");
+    // The snippet doesn't show the notifications address, so its block is left alone.
+    expect($("#embedBlock .copy-btn").getAttribute("aria-label")).toBe("Copied");
+    typeInto($<HTMLInputElement>("#setName"), "Owls Monthly");
+    expect($("#embedBlock code").textContent).toContain("Subscribe to Owls Monthly");
+  });
+
   it("offers an embed that reads whole when the publication has no name (SPEC §9)", async () => {
     const writeText = stubClipboard();
     const unnamed = response({

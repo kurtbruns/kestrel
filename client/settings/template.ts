@@ -586,7 +586,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     // unsaved edits the button says so plainly: it saves first, then sends.
     tplTestLbl.textContent = isDirty() ? "Save & send test" : "Send test email";
     tplTestEl.title = isDirty()
-      ? "Saves your changes first, then sends — a test always reflects the saved template that will ship."
+      ? "Saves your changes first, then sends: a test always reflects the saved template that will ship."
       : "Sends a sample post through the saved template so you can see it in a real inbox.";
   }
   // Advisory warnings for the template that was just saved; blocking errors go to the
@@ -810,7 +810,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
             withNoProviderNote(
               r.sent === r.total
                 ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
-                : `Sent ${r.sent}/${r.total} — some failed`,
+                : `Sent ${r.sent} of ${r.total}; the rest failed`,
             ),
           );
         } catch (e) {

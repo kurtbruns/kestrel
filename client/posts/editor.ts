@@ -1211,7 +1211,7 @@ export async function renderEditor(
             withNoProviderNote(
               sent === addrs.length
                 ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}`
-                : `Sent ${sent}/${addrs.length} — some failed`,
+                : `Sent ${sent} of ${addrs.length}; the rest failed`,
             ),
           );
         } catch (e) {

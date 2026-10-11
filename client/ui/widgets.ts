@@ -1,6 +1,6 @@
-// Small shared widgets, each independent of the others: the toast, the clipboard copy
-// with its toast, the status badge, the modal, the info tooltip, the row-action menu, the
-// busy state on a button, and the error view with its retry. The tooltip's document
+// Small shared widgets, each independent of the others: the toast, the status badge, the
+// modal, the info tooltip, the row-action menu, the busy state on a button, and the error
+// view with its retry. The tooltip's document
 // listeners are wired by installTooltips() when boot calls it.
 
 import { toasts } from "../shell";
