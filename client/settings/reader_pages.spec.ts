@@ -92,9 +92,13 @@ describe("reader pages section (SPEC §5)", () => {
       { mark: "", off: true },
       { mark: "", off: true },
     ]);
-    expect(
-      $(".set-rp-journey[data-journey='reading'] .set-rp-list").classList.contains("steps"),
-    ).toBe(false);
+    // The thread joins only a journey's steps: never Reading's peers, never an off-path page.
+    const threaded = (journey: string) =>
+      $$(`.set-rp-journey[data-journey="${journey}"] .set-rp-list.steps .set-rp-item`).map(
+        (b) => b.dataset.state,
+      );
+    expect(threaded("confirm")).toEqual(["ready", "confirmed"]);
+    expect(threaded("reading")).toEqual([]);
   });
 
   it("opens on the subscribe form, framed so no form on it submits", async () => {

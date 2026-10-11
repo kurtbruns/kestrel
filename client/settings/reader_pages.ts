@@ -46,7 +46,9 @@ function outlineRow(j: ReaderJourney, s: ReaderPageState, mark: Html | string): 
 }
 
 /** The outline: each journey a heading over its main-path pages, then the ones off it.
- *  A thread joins a journey's steps; peers carry a dot, not a number. */
+ *  A thread joins a journey's steps; peers carry a dot, not a number. The off-path pages
+ *  are a list of their own, so the thread ends at the last step and never runs behind
+ *  a page a reader reaches only when something goes wrong. */
 function outline(): Html {
   return html`${READER_JOURNEYS.map((j) => {
     const states: readonly ReaderPageState[] = j.states;
@@ -55,6 +57,8 @@ function outline(): Html {
       <div class="set-rp-jhead">${icon(JOURNEY_ICONS[j.id])}${j.label}</div>
       <ul class="set-rp-list${steps ? " steps" : ""}">
         ${states.filter((s) => !s.offPath).map((s, i) => outlineRow(j, s, steps ? String(i + 1) : "·"))}
+      </ul>
+      <ul class="set-rp-list">
         ${states.filter((s) => s.offPath).map((s) => outlineRow(j, s, icon("branch")))}
       </ul>
     </div>`;
