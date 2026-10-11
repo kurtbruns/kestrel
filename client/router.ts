@@ -89,7 +89,12 @@ export function route(): Promise<void> {
 export function adoptLinkedRoute(): void {
   const linked = dashboardRouteFromSearch(location.search);
   if (linked) {
-    history.replaceState(null, "", `${location.pathname}${linked}`);
+    // Edit this page's own URL, so the result is same-origin whatever its path; the link's
+    // route replaces any hash, since it is the page the link was sent to open.
+    const url = new URL(location.href);
+    url.search = "";
+    url.hash = linked;
+    history.replaceState(null, "", url);
   }
 }
 

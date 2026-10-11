@@ -15,6 +15,8 @@ describe("links into the editor from outside it", () => {
   it("keeps an encoded segment encoded, both ways", () => {
     const url = dashboardLink("https://x.example", `/sent/${encodeURIComponent("a/b c")}`);
     expect(route(url)).toBe("#/sent/a%2Fb%20c");
+    // A dot inside a segment is only a character; a whole `.` or `..` segment is refused.
+    expect(dashboardRouteFromSearch("?to=/sent/s.1..2")).toBe("#/sent/s.1..2");
   });
 
   it("names no route for a query that isn't one", () => {
@@ -26,6 +28,14 @@ describe("links into the editor from outside it", () => {
       "?to=//evil.example",
       "?to=/sent/<b>",
       "?to=/sent/s1?x=1",
+      "?to=/sent/s1%23x",
+      "?to=%2F%2Fevil.example",
+      "?to=/%5Cevil.example",
+      "?to=https://evil.example",
+      "?to=javascript:alert(1)",
+      "?to=/sent/..",
+      "?to=/sent/.",
+      "?to=/sent/%2e%2E/x",
     ]) {
       expect(dashboardRouteFromSearch(search), search).toBeNull();
     }

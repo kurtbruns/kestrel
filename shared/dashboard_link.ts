@@ -18,10 +18,18 @@ export function dashboardLink(appOrigin: string, route: string): string {
   return `${appOrigin}/dashboard/?${PARAM}=${encodeURIComponent(route).replaceAll("%2F", "/")}`;
 }
 
+/** A route: `/` and then the characters an encoded segment uses, repeated. */
+const ROUTE = /^(\/[A-Za-z0-9._~%-]+)+$/;
+
+/** A segment a URL parser reads as `.` or `..`, spelled out or percent-encoded. The editor
+ *  puts a route's segments into API paths as they are, so one of these would climb out of
+ *  the path the page meant to read. */
+const DOT_SEGMENT = /\/(?:\.|%2e){1,2}(?=\/|$)/i;
+
 /** The hash a link's query names (`#/sent/<id>`), or null when it names none. Only a
- *  path-shaped route (`/` and then the characters an encoded segment uses) is taken, so
- *  a mangled or hand-typed query opens the editor's home rather than a nonsense route. */
+ *  path-shaped route with no dot segment is taken, so a mangled or hand-typed query opens
+ *  the editor's home rather than a nonsense route. */
 export function dashboardRouteFromSearch(search: string): string | null {
   const route = new URLSearchParams(search).get(PARAM);
-  return route && /^(\/[A-Za-z0-9._~%-]+)+$/.test(route) ? `#${route}` : null;
+  return route && ROUTE.test(route) && !DOT_SEGMENT.test(route) ? `#${route}` : null;
 }

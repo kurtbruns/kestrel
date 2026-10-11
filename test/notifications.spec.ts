@@ -1,6 +1,8 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
+import { dashboardRouteFromSearch } from "../shared/dashboard_link";
+import type { NotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
@@ -10,6 +12,7 @@ import { getConfig } from "../src/env";
 import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as channel from "../src/notify/channel";
 import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
+import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
 import { freeze } from "../src/send/schedule";
@@ -573,5 +576,47 @@ describe("the settings surface", () => {
       error: "notify_failed",
       message: "fake notification failure",
     });
+  });
+});
+
+describe("the link in a notification", () => {
+  it("opens the send's own page, carried in the query, for every kind", () => {
+    const config = getConfig(env);
+    const kinds: NotificationKind[] = ["finished", "refused", "stuck", "wedged", "missed"];
+    for (const kind of kinds) {
+      const email = composeNotification(
+        {
+          send_id: "s 1",
+          kind,
+          episode: 0,
+          attempts: 0,
+          subject: "Owls",
+          send_status: "sent",
+          fire_at: 0,
+          started_at: null,
+          completed_at: null,
+          locked_until: null,
+          halt_reason: null,
+          halted_at: null,
+          halt_cause: null,
+          halt_error: null,
+          c_pending: 0,
+          c_in_flight: 0,
+          c_accepted: 0,
+          c_delivered: 0,
+          c_bounced: 0,
+          c_complained: 0,
+          c_skipped: 0,
+          c_unsent: 0,
+        },
+        config,
+      );
+      const link = sendLink(config, "s 1");
+      expect(email.text, kind).toContain(link);
+      expect(email.html, kind).toContain(`href="${link}"`);
+      // The editor opens the page the link names, with the id's own encoding intact.
+      expect(new URL(link).pathname, kind).toBe("/dashboard/");
+      expect(dashboardRouteFromSearch(new URL(link).search), kind).toBe("#/sent/s%201");
+    }
   });
 });

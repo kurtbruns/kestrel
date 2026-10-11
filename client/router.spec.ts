@@ -154,4 +154,12 @@ describe("router", () => {
     expect(location.hash).toBe("#/drafts");
     history.replaceState(null, "", "/dashboard/");
   });
+
+  it("takes a linked route over a hash beside it", () => {
+    history.replaceState(null, "", "/dashboard/?to=/settings#/drafts");
+    adoptLinkedRoute();
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("#/settings");
+    history.replaceState(null, "", "/dashboard/");
+  });
 });
