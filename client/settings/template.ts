@@ -14,7 +14,7 @@ import { withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
-import { openLinksInNewTab } from "../ui/email_frame";
+import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import { invalidAddressesMessage, parseAddresses } from "../ui/format";
 import { highlightTemplate } from "../ui/highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
@@ -355,13 +355,19 @@ export interface SampleEmailPreview {
 /**
  * Mount a sample-email preview into an <iframe>, kept sized to its content. getTemplate()
  * returns the current template HTML; getIdentity() the live identity. Shared by the
- * Template page (live editor preview) and Settings (a read-only one).
+ * Template page (live editor preview) and Settings (a read-only one). The frame takes the
+ * Preview tab's sandbox: the template is HTML Claude may write too (`PUT /api/settings`),
+ * and markup set into a same-origin frame runs an inline handler (`onerror`) though it
+ * leaves a `<script>` inert, so without the sandbox a template could act as the
+ * publisher (SPEC §5).
  */
 export function mountSampleEmailPreview(
   iframe: HTMLIFrameElement,
   getTemplate: () => string,
   getIdentity: () => TemplateIdentity,
 ): SampleEmailPreview {
+  // Before the srcdoc below: a sandbox applies from the frame's next navigation.
+  iframe.setAttribute("sandbox", EMAIL_FRAME_SANDBOX);
   let ready = false;
   const size = () => {
     try {
@@ -380,8 +386,9 @@ export function mountSampleEmailPreview(
     if (!slot) {
       return;
     }
-    // Set as markup (not srcdoc per keystroke): flicker-free, and any <script> stays
-    // inert. The publisher's own template, filled with sample values, in its own frame.
+    // Set as markup (not srcdoc per keystroke): flicker-free. A <script> stays inert and
+    // the frame's sandbox stops an inline handler. The publisher's own template, filled
+    // with sample values, in its own frame.
     setHtml(slot, unsafeHtml(sampleEmailHtml(getTemplate(), getIdentity())));
     openLinksInNewTab(slot.ownerDocument);
     size();
