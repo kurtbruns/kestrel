@@ -17,9 +17,7 @@ import {
   archiveDevDashboardChrome,
   archiveIndexPage,
   archiveLink,
-  archiveReaderBanner,
   landingPage,
-  type ReaderBanner,
   type ReaderIdentity,
 } from "../lib/page";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
@@ -93,8 +91,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
  *  markers, none touching the reviewed content: the per-recipient slots filled for no one
  *  (the generic unsubscribe link, and an empty sent-to address so none leaks), the
  *  template's email-only regions left out, the browser-only masthead (plus, in local dev
- *  only, the "Open dashboard" pill, and on the publisher's web version only, the reader
- *  banner saying what the page is), and the hosted-page <head> chrome (display-serif links
+ *  only, the "Open dashboard" pill), and the hosted-page <head> chrome (display-serif links
  *  and the reader ground), which never ships in an email. The public post page and the
  *  publisher's web version both build from this, so the web version is the page. */
 export function webVersion(
@@ -105,8 +102,6 @@ export function webVersion(
     /** The date the masthead carries: when the post went out, or will. */
     dateMs: number;
     devDashboardUrl?: string;
-    /** The banner above the masthead, for the web version: never on the public page. */
-    banner?: ReaderBanner;
   },
 ): string {
   const masthead = archiveMasthead({
@@ -117,7 +112,6 @@ export function webVersion(
     indexUrl: archiveHomeUrl(opts.config),
   });
   const dev = archiveDevDashboardChrome(opts.devDashboardUrl);
-  const banner = archiveReaderBanner(opts.banner);
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
   return fillDeliveryTokens(
     omitEmailOnly(html),
@@ -125,9 +119,9 @@ export function webVersion(
     "html",
   )
     .split(ARCHIVE_MASTHEAD_ANCHOR)
-    .join(banner.masthead + masthead + dev.masthead)
+    .join(masthead + dev.masthead)
     .split(ARCHIVE_HEAD_ANCHOR)
-    .join(ARCHIVE_POST_HEAD + banner.head + dev.head);
+    .join(ARCHIVE_POST_HEAD + dev.head);
 }
 
 export async function archivePage(c: RequestContext): Promise<Response> {

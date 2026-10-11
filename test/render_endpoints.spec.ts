@@ -322,17 +322,6 @@ describe("template test-send (POST /api/settings/template/test)", () => {
 });
 
 describe("web version (GET /api/posts/:id/web)", () => {
-  /** A post page without the dev-only pill, and its stylesheet. */
-  const withoutPill = (html: string) =>
-    html
-      .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
-      .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
-  /** A web version without its banner, and the banner's stylesheet. */
-  const withoutBanner = (html: string) =>
-    html
-      .replace(/<div class="r-banner"[\s\S]*?<\/span><\/div>/, "")
-      .replace(/<style>[^<]*\.r-banner[\s\S]*?<\/style>/, "");
-
   it("requires auth", async () => {
     const id = await draftWithImage("Web Auth");
     expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
@@ -359,18 +348,9 @@ describe("web version (GET /api/posts/:id/web)", () => {
     }
     // A publisher's look, not a reader page: no dev-only dashboard pill.
     expect(html).not.toContain('class="r-dev"');
-    // The reader banner says what the page is, at the top of the post's column (in the
-    // masthead anchor, just above the masthead), with the address as text, not a link.
-    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
-      .post.slug;
-    const address = `${new URL(env.APP_ORIGIN).host}/archive/${slug}`;
-    expect(html).toContain(
-      `<div class="r-banner" role="note"><span class="r-banner-tag">Web version</span><span class="r-banner-text">Draft. Once sent, it will be at ${address}.</span></div><div class="k-mast"`,
-    );
-    expect(html).toContain(".r-banner {");
   });
 
-  it("is the post page itself once the send starts, apart from the pill and the banner", async () => {
+  it("is the post page itself once the send starts, apart from the dev-only pill", async () => {
     const id = await draftWithImage("Web Sent");
     await env.DB.prepare(
       "INSERT OR IGNORE INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('web','web@example.com','confirmed','cfm-web','uns-web',?,?)",
@@ -391,7 +371,6 @@ describe("web version (GET /api/posts/:id/web)", () => {
         await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })
       ).text();
       expect(before).toContain('class="k-mast"');
-      expect(before).toContain(">Scheduled. Once sent, it will be at ");
 
       await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
         .bind(Date.now() - 1000, scheduled.send.id)
@@ -402,14 +381,13 @@ describe("web version (GET /api/posts/:id/web)", () => {
         .post.slug;
       const web = await (await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })).text();
       const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
-      // The two differ only in their browser-only chrome: the post page's dev-only pill (the
-      // test env is dev-shaped), and the web version's banner, which the public page never has.
+      // The post page adds only the dev-only pill (the test env is dev-shaped).
+      const withoutPill = (html: string) =>
+        html
+          .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+          .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
       expect(archive).toContain('class="r-dev"');
-      expect(archive).not.toContain('class="r-banner"');
-      expect(web).toContain(
-        `Sent. Its public page is at ${new URL(env.APP_ORIGIN).host}/archive/${slug}.`,
-      );
-      expect(withoutPill(archive)).toBe(withoutBanner(web));
+      expect(withoutPill(archive)).toBe(web);
     } finally {
       await env.DB.prepare("DELETE FROM deliveries WHERE email = 'web@example.com'").run();
       await env.DB.prepare("DELETE FROM subscribers WHERE id = 'web'").run();
@@ -442,10 +420,11 @@ describe("web version (GET /api/posts/:id/web)", () => {
     const web = await res.text();
     expect(web).toContain(">Frozen</h1>");
     const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
-    expect(web).toContain(
-      `Sending. Its public page is at ${new URL(env.APP_ORIGIN).host}/archive/${slug}.`,
-    );
-    expect(withoutPill(archive)).toBe(withoutBanner(web));
+    const withoutPill = (html: string) =>
+      html
+        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+    expect(withoutPill(archive)).toBe(web);
   });
 
   it("404s for an unknown post", async () => {

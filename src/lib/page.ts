@@ -19,10 +19,10 @@ const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
 
 /* The app's brand accent (DESIGN.md §3), mirrored here for the publisher-only chrome the
-   reader surface carries: the dev pill and the reader banner. Only the publisher ever sees
-   them, and they are the app speaking, not the publication, so they wear the app's action
-   color, matching a Primary action, rather than the reader ink; keep these values in sync
-   with styles.css. This is the one deliberate exception to "the reader surface is not
+   reader surface carries: the dev pill and the test pages' strip. Only the publisher ever
+   sees them, and they are the app speaking, not the publication, so they wear the app's
+   action color, matching a Primary action, rather than the reader ink; keep these values in
+   sync with styles.css. This is the one deliberate exception to "the reader surface is not
    styled from the admin tokens" (DESIGN.md, reader-surface note). Each stylesheet below
    carries them, so either works alone on a page. */
 const APP_ACCENT_TOKENS = `
@@ -54,26 +54,25 @@ const DEV_BADGE_STYLE = `${APP_ACCENT_TOKENS}
 @media (prefers-color-scheme: dark) { .r-dev:focus-visible { outline-color:#60a5fa; } }
 `;
 
-/* The reader banner: a notice at the top of a page that is not the live page a reader
-   gets, saying what it is instead (a test's unsubscribe pages, a post's web version). It
-   is a block within the page's own column, never a full-width strip, because on a post
-   page it sits inside the template's content column (the masthead anchor), where it
-   cannot reach the window's edges; the reader shell places it in its measure to match,
-   so it is one component on both kinds of page. Only the publisher sees it, so it wears
-   the dev pill's look: the full accent fill with contrast text (about 6.3:1 light and
-   7:1 dark), and its tag as the pill's inverted chip, which clears AA where a tint would
-   not. Self-contained, like the pill, because a post page has none of the reader tokens. */
+/* The test strip: a full-width strip across the top of a page that only shows what a
+   reader would see (a test email's or a preview's unsubscribe link), above and outside the
+   publication's masthead, so the masthead beneath is exactly the one a reader gets. Only
+   the publisher sees it, so it wears the dev pill's look: the full accent fill with
+   contrast text (about 6.3:1 light and 7:1 dark), and its tag as the pill's inverted chip.
+   Its content sits in the reader measure, so the sentence starts on the masthead's left
+   edge while the ground runs edge to edge. The editor's web version wears the same strip
+   in admin CSS (`.web-bar` in styles.css); keep the two in sync. */
 const READER_BANNER_STYLE = `${APP_ACCENT_TOKENS}
-.r-banner { display:flex; align-items:baseline; gap:10px; margin:0 0 20px; padding:11px 16px; border-radius:10px;
-            background:var(--k-accent); color:var(--k-accent-contrast); text-align:left;
+.r-banner { background:var(--k-accent); color:var(--k-accent-contrast);
             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-            font-size:14px; font-weight:500; line-height:1.45; }
-.r-banner-tag { flex:none; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
-                padding:2px 8px; border-radius:999px;
+            font-size:13.5px; font-weight:500; line-height:1.4; }
+/* The tag runs in, inline with the sentence, so on a phone the sentence wraps beneath it at
+   the strip's full width rather than in a narrow column beside it. */
+.r-banner-in { max-width:var(--r-measure); margin:0 auto; padding:10px 24px; }
+.r-banner-tag { display:inline-block; margin-right:10px; font-size:10px; letter-spacing:.09em;
+                text-transform:uppercase; font-weight:700; padding:1px 7px; border-radius:999px;
                 background:var(--k-accent-contrast); color:var(--k-accent); }
-.r-banner-text { min-width:0; overflow-wrap:anywhere; }
-/* On a phone the tag takes its own line, so the sentence has the column's whole width. */
-@media (max-width:560px) { .r-banner { flex-direction:column; align-items:flex-start; gap:6px; } }
+.r-banner-text { overflow-wrap:anywhere; }
 `;
 
 const READER_STYLE = `
@@ -149,11 +148,6 @@ a.r-t:hover { text-decoration:underline; }
 .r-btn:hover { filter:brightness(1.06); }
 .r-fine { font-size:12.5px; color:var(--r-mut); margin:16px 0 0; }
 
-/* Where the shell places a banner (its look is READER_BANNER_STYLE): on the masthead's
-   surface, above it, in the same measure, so the banner's edges line up with the
-   masthead's content and the body's. */
-.r-banner-slot { max-width:var(--r-measure); margin:0 auto; padding:16px 24px 0; }
-
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
 
@@ -204,8 +198,8 @@ export interface ArchiveIndexPost {
   dateLabel: string;
 }
 
-/** A banner above the masthead saying what kind of page this is, for a page that is not
- *  the live page a reader gets: a short tag ("Test", "Web version") and a sentence. */
+/** A strip above the masthead naming what kind of page this is, for a page that only
+ *  shows what a reader would see: a short tag ("Test") and a sentence. */
 export interface ReaderBanner {
   tag: string;
   text: string;
@@ -246,24 +240,9 @@ export function archiveDevDashboardChrome(url?: string): { head: string; masthea
   return { head: devDashboardStyle(url), masthead: devDashboardBadge(url) };
 }
 
-/** The banner's stylesheet, emitted beside it and only when it is. */
+/** The strip's stylesheet, emitted beside it and only when it is. */
 function readerBannerStyle(banner?: ReaderBanner): string {
   return banner ? `<style>${READER_BANNER_STYLE}</style>` : "";
-}
-
-/** The banner's markup, the one builder for every page that carries it. */
-function readerBannerMarkup(banner?: ReaderBanner): string {
-  return banner
-    ? `<div class="r-banner" role="note"><span class="r-banner-tag">${escapeHtml(banner.tag)}</span><span class="r-banner-text">${escapeHtml(banner.text)}</span></div>`
-    : "";
-}
-
-/** The reader banner as browser-only chrome for a hosted post page: its stylesheet for
- *  the head anchor and the banner for the masthead anchor, so it sits at the top of the
- *  template's content column and takes its width. Only the publisher's web version passes
- *  one; the public post page and every email carry neither (I3). */
-export function archiveReaderBanner(banner?: ReaderBanner): { head: string; masthead: string } {
-  return { head: readerBannerStyle(banner), masthead: readerBannerMarkup(banner) };
 }
 
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
@@ -281,7 +260,7 @@ export function readerPage(opts: {
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
    *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
-  /** A banner above the masthead, for a page that is not the live page a reader gets. */
+  /** A strip above the masthead, for a page shown as a test of what a reader sees. */
   banner?: ReaderBanner;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
@@ -298,7 +277,7 @@ export function readerPage(opts: {
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
   const banner = opts.banner
-    ? `<div class="r-banner-slot">${readerBannerMarkup(opts.banner)}</div>`
+    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
     : "";
   const doc = `<!doctype html>
 <html lang="en">
@@ -310,7 +289,7 @@ ${FRAUNCES_FONT_LINKS}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
-<header class="r-mast">${banner}<div class="r-mast-in">
+${banner}<header class="r-mast"><div class="r-mast-in">
 <a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}">${logo}<span><span class="r-name">${escapeHtml(name)}</span>${tag}</span></a>
 ${cta}
 </div></header>
