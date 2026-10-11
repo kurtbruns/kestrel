@@ -27,7 +27,7 @@ const JOURNEY_NOTES: Record<ReaderJourneyId, Html> = {
   subscribe: html`Your name, tagline, and logo head each page; the words are Kestrel’s. The embeddable form in Ways to subscribe posts to these pages too.`,
   confirm: html`Your identity heads each page. You word the email that links here, under Confirmation email; these pages’ words are fixed, so what a reader agrees to can’t be edited away.`,
   unsubscribe: html`Your identity heads each page; the words are fixed, so leaving always reads the same. A mail client’s own Unsubscribe button leaves without a page.`,
-  reading: html`Your identity heads each page, and a post page is your <a class="set-link" href="#/template">email template</a> around the post, as its web version shows it. Shown with sample posts.`,
+  reading: html`Your identity heads each page, and a post page is your <a class="set-link" href="#/template">email template</a> around the post, as its web version shows it. Where a page lists posts, they are samples.`,
 };
 
 const JOURNEY_ICONS: Record<ReaderJourneyId, IconName> = {

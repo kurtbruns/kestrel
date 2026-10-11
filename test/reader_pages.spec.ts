@@ -27,6 +27,8 @@ const SHOWS: Record<string, string[]> = {
   "reading/landing": ["Latest post", "The starlings are back", "Browse the full archive"],
   "reading/archive": ["The starlings are back", "What the river kept"],
   "reading/post": ["<title>The starlings are back</title>", 'class="k-mast"'],
+  "reading/landing-empty": ["No posts yet — subscribe to get the first one."],
+  "reading/archive-empty": ["No posts yet."],
   "reading/not-found": ["Nothing here yet"],
 };
 

@@ -92,6 +92,22 @@ async function previewOf(c: RequestContext, journey: string, state: string): Pro
         homeUrl: home,
         posts: samplePosts(c, Date.now()),
       });
+    // The same two pages before the first post is sent.
+    case "reading/landing-empty":
+      return landingPage({
+        identity: await readerIdentity(c, c.config),
+        subscribeUrl,
+        homeUrl: home,
+        archiveUrl: archiveHomeUrl(c.config),
+        recent: [],
+      });
+    case "reading/archive-empty":
+      return archiveIndexPage({
+        identity: await readerIdentity(c, c.config),
+        subscribeUrl,
+        homeUrl: home,
+        posts: [],
+      });
     case "reading/post": {
       // The sample post through the one render path and the saved template (I5), then
       // the post page's own code, as a template test renders it.

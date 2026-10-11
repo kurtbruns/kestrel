@@ -11,7 +11,8 @@ export interface ReaderPageAddress {
 }
 
 /** One page or state a reader can land on. `offPath` marks one a reader reaches only when
- *  something goes wrong or there is nothing yet (an expired link, an empty archive). */
+ *  something goes wrong or there is nothing yet (an expired link, a publication that has
+ *  sent no post). */
 export interface ReaderPageState {
   id: string;
   label: string;
@@ -68,6 +69,19 @@ export const READER_JOURNEYS = [
       { id: "archive", label: "Archive", at: { base: "archive", path: "" } },
       // The sample post's slug, as the Worker's preview renders it.
       { id: "post", label: "Post page", at: { base: "archive", path: "/sample-post" } },
+      // A publication with nothing sent yet: what its first visitors get.
+      {
+        id: "landing-empty",
+        label: "Landing, no posts yet",
+        offPath: true,
+        at: { base: "app", path: "/" },
+      },
+      {
+        id: "archive-empty",
+        label: "Archive, no posts yet",
+        offPath: true,
+        at: { base: "archive", path: "" },
+      },
       {
         id: "not-found",
         label: "Nothing here yet",

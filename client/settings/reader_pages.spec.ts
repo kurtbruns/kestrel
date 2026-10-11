@@ -84,7 +84,14 @@ describe("reader pages section (SPEC §5)", () => {
       { mark: "", off: true },
     ]);
     // Reading's pages are peers, so they carry no numbers.
-    expect(marks("reading").map((m) => m.mark)).toEqual(["·", "·", "·", ""]);
+    expect(marks("reading")).toEqual([
+      { mark: "·", off: false },
+      { mark: "·", off: false },
+      { mark: "·", off: false },
+      { mark: "", off: true },
+      { mark: "", off: true },
+      { mark: "", off: true },
+    ]);
     expect(
       $(".set-rp-journey[data-journey='reading'] .set-rp-list").classList.contains("steps"),
     ).toBe(false);

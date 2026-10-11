@@ -370,7 +370,7 @@ export function createRouter({
       summary:
         "A page a reader can land on, as a standalone HTML page: Settings' preview of it (SPEC §5).",
       description:
-        "`journey` is `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `not-found`), naming the `state`. Rendered by the code that serves the real page, with the saved publication identity and a sample address and sample posts in place of a reader's own, and nothing marking it as a preview, since Settings frames it as one; the post page renders the sample post through the saved template. Always 200, whatever status the real page carries; an unknown pair is a 404. A preview changes nothing: its forms submit nowhere (`form-action 'none'`).",
+        "`journey` is `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `landing-empty`, `archive-empty`, `not-found`), naming the `state`. Rendered by the code that serves the real page, with the saved publication identity and a sample address and sample posts in place of a reader's own (the `-empty` pages show the landing page and archive before any post is sent), and nothing marking it as a preview, since Settings frames it as one; the post page renders the sample post through the saved template. Always 200, whatever status the real page carries; an unknown pair is a 404. A preview changes nothing: its forms submit nowhere (`form-action 'none'`).",
       handler: readerPageRoutes.readerPagePreview,
     },
 
