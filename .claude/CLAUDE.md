@@ -84,7 +84,11 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 
 ## GitHub issues
 
-When the user asks you to change what an issue asks for, rewrite its body instead of adding a comment, since whoever picks it up often reads only the body. Work the change in where it belongs rather than appending, with no "Updated:" line; GitHub keeps the edit history.
+An issue records what was expected, and the PR that closes it records what shipped, so the gap between the two stays visible. Which one you edit depends on whether work has started.
+
+- **Before work starts** (no branch or PR for it yet), the body is where the ask gets right, since whoever picks it up often reads only the body. When the user changes what an issue asks for, rewrite the body instead of adding a comment, working the change in where it belongs, with no "Updated:" line; GitHub keeps the edit history.
+- **Once work starts, the body is frozen.** Never rewrite it to match what shipped. A decision that changes the ask during the work (a design reversed, a question settled differently, scope cut or added) goes in the PR description under a "Where this differs from the issue" heading, which the squash carries into the commit on `main`. If nothing differs, that section says so in one line.
+- **Follow-up work the PR leaves out** becomes a new issue that links the original, never an edit to it.
 
 ## Comment & doc style
 
