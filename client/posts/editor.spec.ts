@@ -694,7 +694,7 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("goes to Drafts when the preview finds its post deleted elsewhere", async () => {
+  it("says the post was deleted elsewhere when the preview finds it gone", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -705,7 +705,6 @@ describe("editor view", () => {
     ]);
     $(".ctab[data-tab='preview']").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(location.hash).toBe("#/drafts");
     expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
     expect(fake.unhandled).toEqual([]);
   });

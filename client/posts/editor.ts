@@ -405,12 +405,10 @@ export async function renderEditor(
       if (signal.aborted) {
         return;
       }
-      if (e instanceof ApiError && e.status === 404) {
-        toast("This post was deleted elsewhere.");
-        handOff("#/drafts");
-        return;
-      }
-      toast(message(e));
+      // The API names only what it didn't find ("post"), which says nothing on its own.
+      toast(
+        e instanceof ApiError && e.status === 404 ? "This post was deleted elsewhere." : message(e),
+      );
     }
   }
   for (const t of tabs) {
