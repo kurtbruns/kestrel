@@ -48,6 +48,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - `kestrel init` refuses before writing anything when a migration of the release's is already there, where it wrote the other files first.
 - When the web version, a post's Preview tab, or a send's CSV export can't be loaded, the editor now says why, such as "post has no content yet". Before, a deployed instance, served over HTTP/2, showed an empty error box or toast, and a local one only "Not Found" or "Bad Request". A web version address with no post says "There's no post here. It may have been deleted.", and a preview whose post was deleted elsewhere says so. An error page that isn't the API's own, such as a proxy's, now names its HTTP status anywhere in the editor, where it could show a JSON parse error.
 - The Worker no longer writes "using deprecated parameters for the initialization function" to its logs the first time it renders an email after starting, a plain-text line among the structured ones.
+- The Worker no longer writes "Called .text() on an HTTP body which does not appear to be text" to its logs when a request to the API sends a body that isn't JSON (a form post, say); the request is still refused the same way.
 
 ## [1.5.0] - 2026-10-09
 

@@ -49,7 +49,10 @@ export async function readJsonObject(
   c: RequestContext,
   opts: { optional?: boolean } = {},
 ): Promise<JsonObject> {
-  const text = await c.req.text();
+  // The bytes decoded as UTF-8, which is what `.text()` does, but without workerd's
+  // console warning for a body whose type isn't text: the type is checked below, after
+  // an empty body (whitespace included, whatever its type) has had its answer.
+  const text = new TextDecoder().decode(await c.req.arrayBuffer());
   if (text.trim() === "") {
     if (opts.optional) {
       return {};
