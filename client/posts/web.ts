@@ -180,15 +180,15 @@ export async function renderWebVersion(
       // The frame is as tall as the post, so the window scrolls the page and the strip
       // above goes up with it rather than staying pinned. Measured on the body, which is
       // content-sized, and kept fitted as fonts, images, and the window's width change it.
-      const fit = () => {
+      const fitFrame = () => {
         const h = page.body?.scrollHeight;
         if (h) {
           frame.style.height = `${h}px`;
         }
       };
-      fit();
+      fitFrame();
       if (page.body && typeof ResizeObserver !== "undefined") {
-        const watch = new ResizeObserver(fit);
+        const watch = new ResizeObserver(fitFrame);
         watch.observe(page.body);
         onAbort(signal, () => watch.disconnect());
       }
