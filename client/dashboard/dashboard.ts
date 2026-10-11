@@ -23,12 +23,13 @@ import {
 import { appliedNoticeHtml } from "../settings/remake";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
+import { copyButton, copyFace, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { notice } from "../ui/notice";
-import { badge, copyText, renderError } from "../ui/widgets";
+import { badge, renderError } from "../ui/widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
 // from existing authed endpoints — GET /api/posts, /sends, /subscribers, and the cached
@@ -228,8 +229,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const archiveBase =
     (deployment?.archiveOrigin || location.origin) + (deployment?.archiveBasePath || "");
   const pubCardHtml = html`<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code><button class="ghost" data-copy="${appOrigin}">Copy</button></div>
-    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code><button class="ghost" data-copy="${archiveBase}">Copy</button></div>
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code>${copyButton(appOrigin, "Copy the publication's address")}</div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code>${copyButton(archiveBase, "Copy the archive's address")}</div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
@@ -468,9 +469,7 @@ function wireDashActions(root: HTMLElement, reload: () => void): void {
   for (const b of $$("[data-act='add-sub']", root)) {
     b.onclick = () => addSubscriberModal(reload);
   }
-  for (const b of $$("[data-copy]", root)) {
-    b.onclick = () => copyText(b.dataset.copy ?? "");
-  }
+  wireCopy(root);
 }
 
 // The onboarding checklist, shared by the first-run dashboard and Getting-started.
@@ -505,7 +504,7 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>
-      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button data-copy="${subscribeUrl}">Copy</button></li>
+      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>
     </ol>
   </div>`;
 }

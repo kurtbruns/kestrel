@@ -97,7 +97,7 @@ describe("settings view", () => {
     expect($(".set-pill").textContent).toBe("default: app origin"); // archive on the app origin
     expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["me@b.c"]);
     expect($(".pub-val").textContent).toBe("https://app.birds.example/subscribe");
-    expect($("#embedCode").textContent).toContain(
+    expect($("#embedBlock code").textContent).toContain(
       `<form action="https://app.birds.example/subscribe" method="post">`,
     );
     expect($("#embedPreview label").textContent).toBe("Subscribe to Birds Weekly");
@@ -476,13 +476,18 @@ describe("settings view", () => {
     $("[data-embed='styled']").click();
     expect($("[data-embed='styled']").getAttribute("aria-pressed")).toBe("true");
     expect($("[data-embed='plain']").getAttribute("aria-pressed")).toBe("false");
-    expect($("#embedCode").textContent).toContain('style="max-width:420px');
+    expect($("#embedBlock code").textContent).toContain('style="max-width:420px');
     expect($("#embedHint").textContent).toMatch(/Self-contained/);
+    // The block's label follows the toggle.
+    expect($("#embedBlock .block-label").textContent).toBe("Styled");
     expect($("#embedPreview form").className).toBe("set-pf-styled");
-    $("#embedCopy").click();
+    $("#embedBlock .copy-btn").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Subscribe to Birds Weekly"));
     expect(writeText.mock.calls[0]?.[0]).toContain("style=");
+    // It says so where it sits: the check, and no toast.
+    expect($("#embedBlock .copy-btn").getAttribute("aria-label")).toBe("Copied");
+    expect($("#toasts").textContent).toBe("");
   });
 
   it("offers an embed that reads whole when the publication has no name (SPEC §9)", async () => {
@@ -493,12 +498,12 @@ describe("settings view", () => {
     unnamed.deployment.fromAddress = "hello@send.birds.example";
     await open([{ path: "/api/settings", reply: () => unnamed }]);
     expect($("#embedPreview label").textContent).toBe("Subscribe");
-    expect($("#embedCode").textContent).toContain("\n    Subscribe\n");
-    expect($("#embedCode").textContent).not.toContain("Subscribe to");
+    expect($("#embedBlock code").textContent).toContain("\n    Subscribe\n");
+    expect($("#embedBlock code").textContent).not.toContain("Subscribe to");
     expect($("#setName").nextElementSibling?.textContent).toBe(
       "Blank leaves the publication unnamed, since the email “From” has no name.",
     );
-    $("#embedCopy").click();
+    $("#embedBlock .copy-btn").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(writeText.mock.calls[0]?.[0]).not.toContain("Your publication");
   });

@@ -627,6 +627,8 @@ describe("dashboard", () => {
     $(".pub-card [data-copy]").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(writeText).toHaveBeenCalledWith("https://app.birds.example");
-    expect($("#toasts").textContent).toMatch(/Copied/);
+    // Said on the button, not in a toast.
+    expect($(".pub-card [data-copy]").getAttribute("aria-label")).toBe("Copied");
+    expect($("#toasts").textContent).toBe("");
   });
 });

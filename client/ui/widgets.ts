@@ -58,15 +58,6 @@ function leaveToast(t: HTMLElement): void {
   setTimeout(() => t.remove(), TOAST_LEAVE_MS);
 }
 
-export async function copyText(text: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-    toast("Copied");
-  } catch {
-    toast("Couldn't copy to clipboard");
-  }
-}
-
 /** A status pill; the status doubles as its class. */
 export const badge = (status: string): Html => html`<span class="badge ${status}">${status}</span>`;
 

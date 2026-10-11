@@ -10,11 +10,12 @@ import type {
 import { api } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
+import { codeBlock, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { highlightCurl, highlightJson } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { renderError, toast } from "../ui/widgets";
+import { renderError } from "../ui/widgets";
 import { concretePath, curlCommand } from "./curl";
 import { roomShell } from "./shell";
 
@@ -23,23 +24,15 @@ import { roomShell } from "./shell";
 // it natively: a rail of tiers and their resources beside the route list, where each
 // route is one scannable row, a native <details>, that opens in place to its full
 // documentation.
-/** The copy control's face: its word, then its glyph, which is a check once a copy has landed. */
-function copyFace(glyph: "copyout" | "check"): Html {
-  return html`<span>Copy</span>${icon(glyph)}`;
-}
-/** One labelled code block with a Copy of its plain text: an example, or the curl command. */
-function apiCode(label: string, code: Html, raw: string): Html {
-  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">${label}</span><button type="button" class="api-copy" data-copy="${raw}" aria-label="Copy ${label}">${copyFace("copyout")}</button></div><pre><code>${code}</code></pre></div>`;
-}
 function apiExample(label: string, value: unknown): Html | null {
   return value === undefined
     ? null
-    : apiCode(label, highlightJson(value), JSON.stringify(value, null, 2));
+    : codeBlock(label, highlightJson(value), JSON.stringify(value, null, 2));
 }
 /** The route as a curl command on this instance, with the credential its tier needs. */
 function apiCurl(r: ReferenceEntry): Html | null {
   const cmd = curlCommand(r, location.origin, appState.session?.auth.mode ?? "dev");
-  return cmd === null ? null : apiCode("curl", highlightCurl(cmd), cmd);
+  return cmd === null ? null : codeBlock("curl", highlightCurl(cmd), cmd);
 }
 // Query params for a list route, rendered as a name→description table so the
 // generated reference documents filter/sort/pagination from the registration.
@@ -51,7 +44,7 @@ function apiQueryHtml(query: QueryParam[] | undefined): Html | null {
     (q) =>
       html`<tr><td><code>${q.name}</code>${q.required ? html` <span class="api-req">required</span>` : null}</td><td class="muted">${q.description}</td></tr>`,
   );
-  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
+  return html`<div class="block"><div class="block-head"><span class="block-label">Query</span></div><table class="api-query"><tbody>${rows}</tbody></table></div>`;
 }
 // The body types a write accepts, from the registration the router enforces them by. A
 // route that takes no body lists none.
@@ -60,7 +53,7 @@ function apiAcceptsHtml(accepts: readonly string[] | undefined): Html | null {
     return null;
   }
   const rows = accepts.map((t) => html`<tr><td><code>${t}</code></td></tr>`);
-  return html`<div class="api-ex"><div class="api-ex-head"><span class="api-ex-label">Content-Type</span></div><table class="api-query api-accepts"><tbody>${rows}</tbody></table></div>`;
+  return html`<div class="block"><div class="block-head"><span class="block-label">Content-Type</span></div><table class="api-query api-accepts"><tbody>${rows}</tbody></table></div>`;
 }
 /**
  * The path as a URL path to type (the curl command's own, without the router's pattern
@@ -253,35 +246,8 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
     filterEl.focus();
   });
   // A code block's Copy puts its plain text (the example, or the curl command) on the
-  // clipboard, and its glyph turns to a check for a moment to say it worked; the word
-  // stays. The accessible name says "Copied" meanwhile, for a screen reader; a second
-  // copy restarts the moment.
-  const copied = new WeakMap<HTMLElement, { label: string; timer: number }>();
-  contentEl.addEventListener("click", async (ev) => {
-    const b = ev.target instanceof Element ? ev.target.closest<HTMLElement>("[data-copy]") : null;
-    if (!b) {
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(b.dataset.copy ?? "");
-    } catch {
-      toast("Couldn't copy to clipboard");
-      return;
-    }
-    const prior = copied.get(b);
-    const label = prior?.label ?? b.getAttribute("aria-label") ?? "Copy";
-    window.clearTimeout(prior?.timer);
-    setHtml(b, copyFace("check"));
-    b.setAttribute("aria-label", "Copied");
-    b.classList.add("copied");
-    const timer = window.setTimeout(() => {
-      setHtml(b, copyFace("copyout"));
-      b.setAttribute("aria-label", label);
-      b.classList.remove("copied");
-      copied.delete(b);
-    }, 1500);
-    copied.set(b, { label, timer });
-  });
+  // clipboard and says so where it sits (ui/copy.ts).
+  wireCopy(contentEl);
   // "/" jumps to the filter from anywhere in the room (unless typing elsewhere); Escape
   // in the filter clears it. Bound to the view, so it ends when the room does.
   document.addEventListener(

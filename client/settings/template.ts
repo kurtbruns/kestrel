@@ -13,6 +13,7 @@ import { api } from "../api";
 import { withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
+import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import { invalidAddressesMessage, parseAddresses } from "../ui/format";
@@ -20,7 +21,7 @@ import { highlightTemplate } from "../ui/highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
-import { busy, copyText, modal, renderError, toast } from "../ui/widgets";
+import { busy, modal, renderError, toast } from "../ui/widgets";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -496,7 +497,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
                 </div>
               </div>
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${icon("lines")}</button>
-              <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard">${icon("copyout")}<span id="tplCopyLbl">Copy</span></button>
+              <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard" aria-label="Copy the whole template">${copyFace()}</button>
             </div>
             <div class="set-tpl-required" aria-label="Required variables">
               <span class="set-req-lbl">Required</span>
@@ -737,18 +738,9 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     } catch {}
   };
 
-  // Copy the whole template to the clipboard.
+  // Copy the whole template to the clipboard, said on the button (ui/copy.ts).
   const copyAllBtn = $<HTMLButtonElement>("#tplCopyAll");
-  const copyAllLbl = $("#tplCopyLbl");
-  copyAllBtn.onclick = async () => {
-    await copyText(tplEditor.value);
-    copyAllBtn.classList.add("copied");
-    copyAllLbl.textContent = "Copied";
-    setTimeout(() => {
-      copyAllBtn.classList.remove("copied");
-      copyAllLbl.textContent = "Copy";
-    }, 1100);
-  };
+  copyAllBtn.onclick = () => copyWith(copyAllBtn, tplEditor.value);
 
   // --- send a test of the saved template (edit → test → iterate) ---
   // A test renders a sample post through the SAVED template — what will actually

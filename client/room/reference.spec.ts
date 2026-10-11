@@ -128,18 +128,18 @@ describe("reference room", () => {
     expect($(".api-query td code", rows[0]).textContent).toBe("status");
     expect($(".api-summary", rows[1]).textContent).toBe("Create <a post>."); // text, not markup
     expect(document.querySelector(".api-summary a, .api-route-line a")).toBeNull();
-    expect($$(".api-ex-label", rows[1]).map((l) => l.textContent)).toEqual([
+    expect($$(".block-label", rows[1]).map((l) => l.textContent)).toEqual([
       "Request",
       "Response",
       "curl",
     ]);
-    expect($$(".api-ex", rows[0]).map((e) => $(".api-ex-label", e).textContent)).toEqual([
+    expect($$(".block", rows[0]).map((e) => $(".block-label", e).textContent)).toEqual([
       "Query",
       "Response",
       "curl",
     ]); // no request example, no request block
     // An example is pretty-printed JSON, highlighted: the key and the string are marked.
-    const request = $(".api-ex pre code", rows[1]);
+    const request = $(".block pre code", rows[1]);
     expect(request.textContent).toBe(`{\n  "subject": "Owls"\n}`);
     expect($(".cx-prop", request).textContent).toBe(`"subject"`);
     expect($(".cx-str", request).textContent).toBe(`"Owls"`);
@@ -169,7 +169,7 @@ describe("reference room", () => {
     await mount(renderReference);
     await settle();
     const curlOf = (row: Element) =>
-      $$(".api-ex", row).find((e) => $(".api-ex-label", e).textContent === "curl");
+      $$(".block", row).find((e) => $(".block-label", e).textContent === "curl");
     const create = $$("#api-admin-posts details.api-route")[1]!;
     // No session in this harness, so the dev token stands in for Access.
     expect(curlOf(create)?.querySelector("code")?.textContent).toBe(
@@ -190,7 +190,7 @@ describe("reference room", () => {
     await settle();
     vi.useFakeTimers();
     const create = $$("#api-admin-posts details.api-route")[1]!;
-    const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
+    const copy = $<HTMLButtonElement>(".block button.copy-btn", create);
     const glyph = () => copy.querySelector("svg")?.outerHTML;
     const resting = glyph();
     expect(copy.textContent?.trim()).toBe("Copy");
@@ -268,7 +268,7 @@ describe("reference room", () => {
     await mount(renderReference);
     await settle();
     expect($(".api-query td").textContent).toBe("token required");
-    expect($$("code", $$(".api-ex").at(-1)!).at(-1)?.textContent).toBe(
+    expect($$("code", $$(".block").at(-1)!).at(-1)?.textContent).toBe(
       `curl "${location.origin}/confirm?token=:token"`,
     );
   });

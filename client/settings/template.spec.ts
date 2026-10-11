@@ -11,6 +11,7 @@ import {
   mount,
   resetShell,
   settingsResponse,
+  stubClipboard,
   typeInto,
 } from "../test/support";
 import {
@@ -301,6 +302,16 @@ describe("template view", () => {
     expect($("#toasts").textContent).toMatch(/Test sent to 2 addresses/);
     expect(bar().classList.contains("show")).toBe(false); // saved on the way
     expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  it("copies the whole template and says so on the button, not in a toast", async () => {
+    const writeText = stubClipboard();
+    await open();
+    $("#tplCopyAll").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writeText).toHaveBeenCalledWith(editor().value);
+    expect($("#tplCopyAll").getAttribute("aria-label")).toBe("Copied");
+    expect($("#toasts").textContent).toBe("");
   });
 
   it("remembers the line-number toggle per browser", async () => {

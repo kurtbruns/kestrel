@@ -3529,44 +3529,6 @@ button.api-filter-clear svg {
   margin: 6px 0 0;
   font-size: 14px;
 }
-.api-ex {
-  margin-top: 10px;
-}
-.api-ex-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin: 8px 0 4px;
-}
-/* A code block's Copy (DESIGN §1, a control outside the five roles): the word and its
-   glyph, no fill or border, quiet on the label line it shares. The glyph turns to a check
-   in the ok hue for a moment once the copy has landed; the word stays. */
-button.api-copy {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  border: 0;
-  background: transparent;
-  color: var(--muted);
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 5px;
-}
-button.api-copy:hover {
-  color: var(--fg);
-  background: var(--hover);
-}
-/* No pressed nudge: on a quiet word the button-wide half-pixel drop reads as a jump. */
-button.api-copy:active {
-  transform: none;
-}
-button.api-copy svg {
-  width: 13px;
-  height: 13px;
-}
-button.api-copy.copied svg {
-  color: var(--ok-fg);
-}
 /* A query parameter the route can't be called without. */
 .api-req {
   margin-left: 4px;
@@ -3576,22 +3538,7 @@ button.api-copy.copied svg {
   border-radius: 4px;
   padding: 0 4px;
 }
-.api-ex-label {
-  display: block;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--muted);
-}
 
-.api-ex pre {
-  margin: 0;
-  overflow-x: auto;
-  background: var(--bg);
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  padding: 10px 12px;
-  font: 12.5px / 1.5 var(--mono);
-}
 .api-empty {
   margin: 20px 0;
 }
@@ -4085,6 +4032,63 @@ button.api-copy.copied svg {
 /* --- section scaffold: uppercase title + intent chip(s) + a trailing rule --- */
 .set-sec {
   margin-bottom: 34px;
+}
+
+/* --- copying text out of the app (DESIGN §1, ui/copy.ts) ---
+   A labelled block (a code block, or the API reference's query and content-type tables):
+   its label line, then the block. The Copy is a control outside the five roles: the word
+   and its glyph, no fill or border, quiet on the line it shares; the glyph turns to a
+   check in the ok hue for a moment once a copy has landed, and the word stays. A Copy
+   beside a single value (an address) is the same control. --- */
+.block {
+  margin-top: 10px;
+}
+.block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 8px 0 4px;
+}
+button.copy-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+button.copy-btn:hover {
+  color: var(--fg);
+  background: var(--hover);
+}
+/* No pressed nudge: on a quiet word the button-wide half-pixel drop reads as a jump. */
+button.copy-btn:active {
+  transform: none;
+}
+button.copy-btn svg {
+  width: 13px;
+  height: 13px;
+}
+button.copy-btn.copied svg {
+  color: var(--ok-fg);
+}
+.block-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.block pre {
+  margin: 0;
+  overflow-x: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: 12.5px / 1.5 var(--mono);
 }
 
 /* --- groups: the sections kept together by whom they serve (DESIGN §5). A group has no

@@ -2,9 +2,9 @@
 // paste into the publisher's own site. Both post to the public /subscribe and start the
 // double opt-in, never an auto-confirm (I1).
 
+import { codeBlock, copyButton, wireCopy } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { escapeHtml, type Html, html, setHtml } from "../ui/html";
-import { copyText } from "../ui/widgets";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 
 type EmbedMode = "plain" | "styled";
@@ -63,14 +63,14 @@ function appOriginOf(page: SettingsPage): string {
 export function subscribeSection(page: SettingsPage): Html {
   const subscribeUrl = `${appOriginOf(page)}/subscribe`;
   return html`
-    <section class="set-sec">
+    <section class="set-sec set-sec-subscribe">
       ${secHead("Ways to subscribe", chip("copyout", "Copy-out"))}
       <div class="set-card set-card-pad">
         <div class="set-field">
           <label>Public subscribe page</label>
           <div class="pub-row">
             <code class="pub-val">${subscribeUrl}</code>
-            <button class="ghost" data-copy="${subscribeUrl}">Copy</button>
+            ${copyButton(subscribeUrl, "Copy the subscribe page's address")}
             <a class="ghost-link" href="${subscribeUrl}" target="_blank" rel="noopener">Open&nbsp;↗</a>
           </div>
           <p class="field-hint">The double opt-in page Kestrel hosts. Share it directly, or embed the form below.</p>
@@ -87,8 +87,7 @@ export function subscribeSection(page: SettingsPage): Html {
           <div class="set-embed-cap">Rendered preview</div>
           <div id="embedPreview"></div>
         </div>
-        <div class="set-embed" style="margin-top:14px"><pre><code id="embedCode"></code></pre></div>
-        <div class="row" style="justify-content:flex-end;margin-top:10px"><button class="ghost" id="embedCopy">Copy code</button></div>
+        <div class="set-embed" id="embedBlock"></div>
       </div>
     </section>`;
 }
@@ -97,13 +96,15 @@ export function subscribeSection(page: SettingsPage): Html {
  *  payload; the name follows the live identity field. */
 export function mountSubscribe(root: HTMLElement, page: SettingsPage): SectionHandle {
   const appOrigin = appOriginOf(page);
-  const codeEl = $("#embedCode", root);
+  const blockEl = $("#embedBlock", root);
   const hintEl = $("#embedHint", root);
   const previewEl = $("#embedPreview", root);
   let mode: EmbedMode = "plain";
   const name = () => page.state.name || page.fromDisplay;
   const rebuild = () => {
-    codeEl.textContent = buildEmbed(mode, name(), appOrigin);
+    // The snippet as a labelled code block, its Copy on the label line (ui/copy.ts).
+    const code = buildEmbed(mode, name(), appOrigin);
+    setHtml(blockEl, codeBlock(mode === "styled" ? "Styled" : "Plain HTML", html`${code}`, code));
     hintEl.textContent = EMBED_HINTS[mode];
     setHtml(previewEl, embedPreview(mode, name()));
   };
@@ -117,10 +118,7 @@ export function mountSubscribe(root: HTMLElement, page: SettingsPage): SectionHa
       rebuild();
     };
   }
-  $("#embedCopy", root).onclick = () => copyText(buildEmbed(mode, name(), appOrigin));
-  for (const b of $$("[data-copy]", root)) {
-    b.onclick = () => copyText(b.dataset.copy ?? "");
-  }
+  wireCopy($(".set-sec-subscribe", root));
   rebuild();
   return { repaint: rebuild };
 }
