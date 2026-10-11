@@ -272,6 +272,17 @@ export async function renderEditor(
     slug: following() ? slugify(subjectEl.value) : slugEl.value,
     markdown: ta.value,
   });
+  // A save's answer for a slug being typed by hand waits until the field is left (or Enter),
+  // so the cursor is never moved under the publisher; it lands only if the field still
+  // holds what that save sent.
+  let held: { shown: string; slug: string } | null = null;
+  const applyHeld = () => {
+    if (held && slugEl.value === held.shown) {
+      slugEl.value = held.slug;
+      refreshDirty(); // the field now matches what was saved
+    }
+    held = null;
+  };
 
   // --- subject validation (SPEC §6: freeze() rejects a subjectless send) ---
   // Surfaced on the field, not by disabling the button. The old guard greyed out
@@ -340,14 +351,19 @@ export async function renderEditor(
         slugEl.select();
       }
     });
-    // Never leave an empty slug: a field left empty follows the subject again, and the
-    // save that leaving it makes fills it in.
+    // Never leave an empty slug: a field left empty follows the subject again. The save
+    // that leaving it makes fills it in; with nothing to save, the post already has the
+    // subject's slug, so the field shows that.
     slugEl.addEventListener("blur", () => {
+      applyHeld();
       if (slugEl.value.trim() === "") {
         autoEl.checked = true;
         rederive = true;
         reflect();
         markEdited();
+        if (!dirty.dirty) {
+          slugEl.value = savedSlug;
+        }
       }
     });
 
@@ -606,13 +622,18 @@ export async function renderEditor(
         method: "PUT",
         json: body,
       });
-      // Show the slug the server gave (derived, deduplicated), unless the field changed while
-      // the save was out: that edit is unsaved, and the next save brings its own answer. Focus
-      // alone is no reason to hold it back, since tabbing through the field changes nothing.
+      // Show the slug the server gave (derived, numbered if taken), unless the field changed
+      // while the save was out: that edit is unsaved, and the next save brings its own answer.
+      // Focus alone is no reason to drop it, since tabbing through the field changes nothing;
+      // a slug being typed by hand only has it wait until the field is left.
       if (u.slug && slugEl.value === slugShown) {
-        slugEl.value = u.slug;
-        // A hand-set slug is saved as the server made it, not as typed. A following one is
-        // compared as the subject's slug, so its numbered answer leaves the snapshot alone.
+        if (!followed && document.activeElement === slugEl) {
+          held = { shown: slugShown, slug: u.slug }; // being typed by hand: see applyHeld
+        } else {
+          slugEl.value = u.slug;
+        }
+        // A slug set by hand is saved as the server made it, not as typed. A following one
+        // is compared as the subject's slug, so its numbered answer leaves the snapshot alone.
         if (!followed && fields.slug === slugShown) {
           sent = JSON.stringify({ ...fields, slug: u.slug });
         }
@@ -742,7 +763,9 @@ export async function renderEditor(
       el.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
           e.preventDefault();
-          saveDraft(true).catch((err) => toast(`Couldn't save — ${message(err)}`));
+          saveDraft(true)
+            .then(applyHeld) // Enter commits the slug, so show what it saved as
+            .catch((err) => toast(`Couldn't save — ${message(err)}`));
         }
       });
     }

@@ -667,6 +667,59 @@ describe("editor view", () => {
     expect(slug.value).toBe("spring-update-2");
   });
 
+  it("refills a cleared slug on leaving the field when the post already has the subject's slug", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const slug = $<HTMLInputElement>("#f-slug");
+    slug.focus();
+    typeInto(slug, "");
+    body().focus();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("owls");
+    expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(true);
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(puts()).toHaveLength(0); // nothing changed, so nothing to save
+  });
+
+  it("lets a slug being typed by hand keep its cursor, showing the saved slug once the field is left", async () => {
+    const server = draftServer();
+    server.taken.add("custom");
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const slug = $<HTMLInputElement>("#f-slug");
+    slug.focus();
+    typeInto(slug, "custom");
+    await vi.advanceTimersByTimeAsync(5000); // the autosave lands mid-typing
+    expect(puts()).toHaveLength(1);
+    expect(slug.value).toBe("custom"); // not rewritten under the cursor
+    body().focus();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("custom-2");
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(puts()).toHaveLength(1);
+  });
+
+  it("shows the saved slug on Enter in the slug field", async () => {
+    const server = draftServer();
+    server.taken.add("custom");
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const slug = $<HTMLInputElement>("#f-slug");
+    slug.focus();
+    typeInto(slug, "custom");
+    slug.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("custom-2");
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
   it("hands a cleared slug back to the subject even when it saves before the field is left", async () => {
     const server = draftServer(draft({ subject: "Barn owls", slug: "custom" }));
     await open([
