@@ -1,16 +1,22 @@
 import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
 import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
 
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
 const base = "https://kestrel.test";
 const readJson = async (r: Response): Promise<any> => r.json();
+
+// Each test starts from an empty database, so a count or a list read sees only its own rows.
+beforeEach(async () => {
+  await resetDatabase();
+});
 
 const PNG_1x1 = Uint8Array.from(
   atob(

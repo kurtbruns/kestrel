@@ -1138,7 +1138,9 @@ describe("editor view", () => {
   });
 
   it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
-    const linked = scheduledPost(1_800_000_000_000, 1_790_000_000_000);
+    // Relative to now, so the send stays ahead of its fire time and the re-make behind it
+    // whatever day the suite runs.
+    const linked = scheduledPost(Date.now() + 86_400_000, Date.now() - 86_400_000);
     await open([
       ...linked.routes,
       {

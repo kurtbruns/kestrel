@@ -1,12 +1,18 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
 import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
 import { expectErrorLogs, logged } from "./support/log";
 
 const BASE = "https://kestrel.test";
+
+// Each test starts from no settings row, so none sees a name, logo, or address another left.
+beforeEach(async () => {
+  await resetDatabase();
+});
 
 async function getSettings() {
   const res = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
@@ -222,8 +228,6 @@ describe("email template (wired to the render path)", () => {
     expect((await getSettings()).body.settings.publication.address).toBe(
       "123 Marsh Lane, Duluth, MN 55802",
     );
-    // Settings persist between tests in this file; don't leave an address set for them.
-    await env.DB.prepare("DELETE FROM settings").run();
   });
 
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
