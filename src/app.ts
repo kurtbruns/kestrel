@@ -1059,7 +1059,7 @@ export function createRouter({
         {
           name: "test",
           description:
-            "`1` on the link of a test email or a preview, which carries no token: the page says nobody was unsubscribed, and unsubscribes no one. A token, when present, wins.",
+            "`1` on the link of a test email or a preview, which carries no token: the page a subscriber sees, marked as a test and showing a sample address, whose button posts back with the marker. It unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribeLanding,
@@ -1079,7 +1079,7 @@ export function createRouter({
         {
           name: "test",
           description:
-            "`1` on the link of a test email or a preview, which carries no token: answers 200 and unsubscribes no one. A token, when present, wins.",
+            "`1` on the link of a test email or a preview, which carries no token: answers 200 (a form gets the page a subscriber sees once unsubscribed, marked as a test and showing a sample address) and unsubscribes no one. A token, when present, wins.",
         },
       ],
       handler: publicRoutes.unsubscribe,

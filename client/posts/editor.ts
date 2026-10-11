@@ -14,7 +14,7 @@ import type { SettingsResponse } from "../../shared/settings";
 import { EMPTY_SUBJECT_SLUG, slugify } from "../../shared/slug";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { earliestFireAt, minLeadText, withNoProviderNote } from "../deployment";
+import { earliestFireAt, minLeadText, postArchiveUrl, withNoProviderNote } from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
@@ -39,7 +39,7 @@ import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { trackSaves } from "./pending_save";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
-import { webVersionHash } from "./web";
+import { previewOpensWebVersion, webVersionHash } from "./web";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -377,6 +377,9 @@ export async function renderEditor(
       syncMdScroll();
     }
   }
+  // The slug the server last saved, which the preview renders with (a dedupe may differ
+  // from what the field shows while it is being typed in).
+  let savedSlug = post.slug;
   async function showPreview() {
     showTab("preview");
     try {
@@ -389,6 +392,11 @@ export async function renderEditor(
           const doc = previewFrame.contentDocument;
           if (doc) {
             openLinksInNewTab(doc);
+            // Read on each load, so a slug edited since the last preview is the one
+            // matched. The editor holds only an unpublished post: once its send starts, the
+            // editor hands off to the send page (and a web version opened after that goes
+            // on to the public page itself).
+            previewOpensWebVersion(doc, postArchiveUrl(savedSlug), webVersionUrl);
             previewFrame.style.height = `${doc.body.scrollHeight + 24}px`;
           }
         } catch {}
@@ -588,6 +596,9 @@ export async function renderEditor(
       // if an autosave lands while the field is focused.
       if (u.slug && document.activeElement !== slugEl) {
         slugEl.value = u.slug;
+      }
+      if (u.slug) {
+        savedSlug = u.slug;
       }
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
