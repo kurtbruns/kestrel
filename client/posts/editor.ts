@@ -21,7 +21,7 @@ import { openRescheduleModal } from "../sends/dialogs";
 import { can, has } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { $, $$ } from "../ui/dom";
-import { openLinksInNewTab } from "../ui/email_frame";
+import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import {
   fmt,
   invalidAddressesMessage,
@@ -39,13 +39,6 @@ import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { webVersionHash } from "./web";
-
-// The preview frame's sandbox. Same-origin, so the editor can size the frame and set its
-// links to open a new tab (openLinksInNewTab); popups, so that new tab can open at all;
-// and popups escaping the sandbox, so the page it opens works as it would from an inbox
-// rather than inheriting this sandbox. Never scripts or forms: the email's markup does
-// nothing inside the editor but show.
-const PREVIEW_SANDBOX = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -204,7 +197,7 @@ export async function renderEditor(
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
-          <iframe id="previewFrame" class="preview" sandbox="${PREVIEW_SANDBOX}" title="Email preview" hidden></iframe>
+          <iframe id="previewFrame" class="preview" sandbox="${EMAIL_FRAME_SANDBOX}" title="Email preview" hidden></iframe>
         </div>
         ${
           locked
@@ -782,19 +775,23 @@ export async function renderEditor(
   const webBtn = $<HTMLButtonElement>("#webBtn");
   webBtn.onclick = () => {
     const tab = window.open("", "_blank");
-    const url = `${location.origin}${location.pathname}${webVersionHash(id)}`;
+    if (!tab) {
+      toast(
+        "Your browser blocked the new tab. Allow pop-ups for this site to see the web version.",
+      );
+      return;
+    }
     return busy(webBtn, "Opening…", async () => {
       try {
-        if (!locked) {
-          await saveDraft(true);
+        // A refused save (another writer's revision, or the out-of-date banner already up)
+        // would show their copy, not this one: the banner is the next step instead.
+        if (!locked && (await saveDraft(true)) === "refused") {
+          tab.close();
+          return;
         }
-        if (tab) {
-          tab.location.href = url;
-        } else {
-          window.open(url, "_blank");
-        }
+        tab.location.href = `${location.origin}${location.pathname}${webVersionHash(id)}`;
       } catch (e) {
-        tab?.close();
+        tab.close();
         toast(message(e));
       }
     });

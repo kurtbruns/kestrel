@@ -11,8 +11,7 @@
  * The policy, as a header value. `formAction` is the one difference between the kinds of
  * page (a post's page submits no form at all; a page the app wrote posts back to itself).
  * `framed` is the copy the editor frames, carried in a <meta> tag: it leaves out
- * `frame-ancestors`, which a <meta> can't carry, and `base-uri`, which would refuse the
- * <base> the editor adds so a link leaves the frame.
+ * `frame-ancestors`, which a <meta> can't carry.
  */
 export function pagePolicy(formAction: string, opts: { framed?: boolean } = {}): string {
   return [
@@ -20,7 +19,7 @@ export function pagePolicy(formAction: string, opts: { framed?: boolean } = {}):
     "script-src 'none'",
     "object-src 'none'",
     "frame-src 'none'",
-    opts.framed ? null : "base-uri 'none'",
+    "base-uri 'none'",
     `form-action ${formAction}`,
     opts.framed ? null : "frame-ancestors 'none'",
     "img-src * data:",

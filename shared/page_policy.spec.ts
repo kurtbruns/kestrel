@@ -17,12 +17,12 @@ describe("the post page's content security policy", () => {
     expect(pagePolicy("'self'")).toContain("form-action 'self'");
   });
 
-  it("restates the same inside a framed copy, less what a <meta> can't carry or the copy's <base> needs", () => {
+  it("restates the same inside a framed copy, less what a <meta> can't carry", () => {
     const framed = pagePolicy("'none'", { framed: true });
     expect(framed).toBe(
       pagePolicy("'none'")
         .split("; ")
-        .filter((d) => !d.startsWith("base-uri") && !d.startsWith("frame-ancestors"))
+        .filter((d) => !d.startsWith("frame-ancestors"))
         .join("; "),
     );
   });

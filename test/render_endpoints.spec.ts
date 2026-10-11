@@ -393,6 +393,39 @@ describe("web version (GET /api/posts/:id/web)", () => {
     }
   });
 
+  it("serves the frozen copy while the send is going out, the same page its readers already reach", async () => {
+    const id = await draftWithImage("Web Sending");
+    const scheduled = await readJson(
+      await SELF.fetch(`${base}/api/posts/${id}/schedule`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({ fire_at: new Date(Date.now() + 600_000).toISOString() }),
+      }),
+    );
+    // The send has started and is still going out.
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(Date.now() - 1000, scheduled.send.id)
+      .run();
+    // Mark the frozen copy, so a page built from anything else (a fresh render) shows.
+    await env.DB.prepare(
+      "UPDATE sends SET rendered_html = replace(rendered_html, '>Hi</h1>', '>Frozen</h1>') WHERE id = ?",
+    )
+      .bind(scheduled.send.id)
+      .run();
+    const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
+      .post.slug;
+    const res = await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH });
+    expect(res.status).toBe(200);
+    const web = await res.text();
+    expect(web).toContain(">Frozen</h1>");
+    const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
+    const withoutPill = (html: string) =>
+      html
+        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+    expect(withoutPill(archive)).toBe(web);
+  });
+
   it("404s for an unknown post", async () => {
     expect((await SELF.fetch(`${base}/api/posts/nope/web`, { headers: AUTH })).status).toBe(404);
   });

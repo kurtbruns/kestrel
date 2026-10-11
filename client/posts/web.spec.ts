@@ -48,23 +48,23 @@ describe("web version", () => {
     appState.appConfig = null;
   });
 
-  it("restates the page's own policy inside the framed copy, opens links in a new tab, and never as an opener", () => {
-    const framed = framedCopy(
-      '<html><head lang="en"><title>t</title></head><body><a rel="opener nofollow" href="https://x.example">x</a><a rel=\'OPENER\' href="https://y.example">y</a></body></html>',
-    );
+  it("restates the page's own policy inside the framed copy, and changes nothing else", () => {
+    const doc =
+      '<html><head lang="en"><title>t</title></head><body><pre>rel="opener"</pre><a rel=opener href="https://x.example">x</a></body></html>';
+    const framed = framedCopy(doc);
     expect(framed).toMatch(
-      /^<html><head lang="en"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none';[^"]*"><base target="_blank"><title>/,
+      /^<html><head lang="en"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none';[^"]*"><title>/,
     );
     expect(framed).toContain("form-action 'none'");
     expect(framed).toContain("frame-src 'none'");
-    // The <base> the copy adds must stand, and a <meta> can't carry frame-ancestors.
-    expect(framed).not.toContain("base-uri");
+    expect(framed).toContain("base-uri 'none'");
+    // A <meta> can't carry frame-ancestors.
     expect(framed).not.toContain("frame-ancestors");
-    expect(framed).toContain('rel="nofollow"');
-    expect(framed).toContain("rel=''");
-    expect(framed.toLowerCase()).not.toContain("opener");
+    // The page's own markup is untouched, a code sample's text included; its links are
+    // set once the frame has loaded.
+    expect(framed.replace(/<meta [^>]*>/, "")).toBe(doc);
     // No <head> (and a <header> is not one): the markup goes first.
-    expect(framedCopy("<header>x</header>")).toMatch(/^<meta [^>]*><base target="_blank"><header>/);
+    expect(framedCopy("<header>x</header>")).toMatch(/^<meta [^>]*><header>/);
   });
 
   it("reads its post from the route, and names its route", () => {
@@ -80,14 +80,14 @@ describe("web version", () => {
     const url = "https://newsletter.example.com/archive/herons";
     const short = "newsletter.example.com/archive/herons";
     const draft = bar({ fireAt: null, url });
-    expect(draft.textContent).toBe(`Web versionNot published yet. It will be at ${short}.`);
+    expect(draft.textContent).toBe(`Web version Not published yet. It will be at ${short}.`);
     // The address doesn't answer yet, so it is text, and the bar has no link at all.
     expect(draft.querySelectorAll("a")).toHaveLength(0);
     expect(bar({ fireAt: FIRE_AT, url }).textContent).toBe(
-      `Web versionSends ${fmt(FIRE_AT)}. It will be at ${short}.`,
+      `Web version Sends ${fmt(FIRE_AT)}. It will be at ${short}.`,
     );
     // Unknown address or post: the bar names no address rather than a wrong one.
-    expect(bar({ fireAt: null, url: null }).textContent).toBe("Web versionNot published yet.");
+    expect(bar({ fireAt: null, url: null }).textContent).toBe("Web version Not published yet.");
     expect(bar(null).textContent).toBe("Web version");
   });
 
@@ -107,12 +107,39 @@ describe("web version", () => {
     expect(sandbox).not.toContain("allow-scripts");
     expect(sandbox).not.toContain("allow-forms");
     expect($(".web-bar").textContent).toBe(
-      `Web versionSends ${fmt(FIRE_AT)}. It will be at newsletter.example.com/archive/herons.`,
+      `Web version Sends ${fmt(FIRE_AT)}. It will be at newsletter.example.com/archive/herons.`,
     );
     // The bar and the page, nothing else: no back link, edit link, or app chrome.
     expect($(".web-page").children).toHaveLength(2);
     expect(document.querySelector(".web-page a")).toBeNull();
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("sends the framed page's links to a new tab once it loads, and a fragment-only link nowhere", async () => {
+    location.hash = "#/web/post/p1";
+    fake = fakeApi([
+      { path: "/api/posts/p1/web", reply: htmlReply },
+      { path: "/api/posts/p1", reply: postReply("draft") },
+    ]);
+    await mount((r, s) => renderWebVersion("p1", r, s));
+    await settle();
+    const frame = $<HTMLIFrameElement>(".web-frame");
+    // happy-dom loads no srcdoc, so the page is written in as the browser would load it.
+    const doc = frame.contentDocument!;
+    doc.open();
+    doc.write(
+      '<title>Herons</title><a href="https://x.example" target="_self" rel="opener">x</a><a href="#notes">notes</a>',
+    );
+    doc.close();
+    frame.dispatchEvent(new Event("load"));
+    const [out, jump] = [...doc.querySelectorAll("a")];
+    expect(out!.getAttribute("target")).toBe("_blank");
+    expect(out!.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(jump!.hasAttribute("target")).toBe(false);
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    jump!.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+    expect(document.title).toBe("Web version · Herons");
   });
 
   it("still shows the page, with a bar that names no stage or address, when the post can't be read", async () => {

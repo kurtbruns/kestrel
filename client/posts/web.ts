@@ -10,6 +10,7 @@ import type { PostResponse } from "../../shared/posts";
 import { api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
+import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
@@ -33,20 +34,6 @@ export function webPostId(kind: string | undefined, id: string | undefined): str
   }
 }
 
-/** The sandbox for a frame holding a post's page: no script and no form, as the page
- *  forbids when served, but a link may open a new tab that leaves the sandbox, since a
- *  page it leads to may refuse to be framed and would blank the frame. */
-export const POST_FRAME_SANDBOX = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
-
-/** A link's `rel="opener"` taken out, so a tab a framed link opens never gets a handle on
- *  the frame, which shares the editor's origin. Every other `rel` token stays. */
-function withoutOpener(doc: string): string {
-  return doc.replace(/\brel\s*=\s*(["'])([^"']*)\1/gi, (_m, q: string, value: string) => {
-    const kept = value.split(/\s+/).filter((t) => t !== "" && t.toLowerCase() !== "opener");
-    return `rel=${q}${kept.join(" ")}${q}`;
-  });
-}
-
 /** `markup` placed first in the document's <head> (never a <header>), or first in the
  *  document when it has none. */
 function intoHead(doc: string, markup: string): string {
@@ -54,14 +41,13 @@ function intoHead(doc: string, markup: string): string {
   return head.test(doc) ? doc.replace(head, (tag) => tag + markup) : markup + doc;
 }
 
-/** The framed copy of a post's page, for a frame under `POST_FRAME_SANDBOX`: every link
- *  opens in a new tab and never as an opener, under the policy the page carries when served
- *  (shared/page_policy.ts). The sandbox already keeps script and forms out; the policy is the
- *  second lock. Only the framed copy changes, never the page served. */
+/** The framed copy of a post's page, under the policy the page carries when served
+ *  (shared/page_policy.ts). The frame's sandbox already keeps script and forms out; the
+ *  policy is the second lock. Only the framed copy changes, never the page served. */
 export function framedCopy(doc: string): string {
   return intoHead(
-    withoutOpener(doc),
-    `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}"><base target="_blank">`,
+    doc,
+    `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`,
   );
 }
 
@@ -89,7 +75,7 @@ export function webBar(state: WebBarState | null): Html {
   const at = state.url
     ? html` It will be at <span class="web-url">${shortUrl(state.url)}</span>.`
     : null;
-  return html`${label}<span>${lead}${at}</span>`;
+  return html`${label} <span>${lead}${at}</span>`;
 }
 
 /** Leave for another page, replacing this one in the history (so Back skips it). */
@@ -136,18 +122,23 @@ export async function renderWebVersion(
       root,
       html`<div class="web-page">
         <div class="web-bar" role="note">${webBar(state)}</div>
-        <iframe class="web-frame" sandbox="${POST_FRAME_SANDBOX}" title="Web version"></iframe>
+        <iframe class="web-frame" sandbox="${EMAIL_FRAME_SANDBOX}" title="Web version"></iframe>
       </div>`,
     );
     const frame = root.querySelector<HTMLIFrameElement>(".web-frame");
     if (!frame) {
       return;
     }
-    // The page's own <title> is the post's subject.
+    // A link opens a new tab, as in the Preview tab, and the page's own <title> is the
+    // post's subject.
     frame.onload = () => {
-      const subject = frame.contentDocument?.title;
-      if (subject && !signal.aborted) {
-        document.title = `Web version · ${subject}`;
+      const page = frame.contentDocument;
+      if (!page || signal.aborted) {
+        return;
+      }
+      openLinksInNewTab(page);
+      if (page.title) {
+        document.title = `Web version · ${page.title}`;
       }
     };
     frame.srcdoc = framedCopy(doc);

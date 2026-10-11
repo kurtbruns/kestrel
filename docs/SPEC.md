@@ -34,7 +34,7 @@ flowchart LR
     provider -. bounces, complaints .-> api
 ```
 
-Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; the publisher never touches an upload URL. Every send freezes the rendered email, and that frozen copy *is* both the reader's "view in browser" page and the permanent record of what went out.
+Content lives in the app's own database, with every version of a post kept as a revision. Images are uploaded to a post and referenced by name; the publisher never touches an upload URL. Every send freezes the rendered email, and that frozen copy *is* both the reader's post page, where an email's "view in browser" link leads, and the permanent record of what went out.
 
 ### What it isn't
 
@@ -96,7 +96,7 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further mail reaches that person: a send already in flight skips them if they have not yet been handed off to the provider, and no later send includes them. There is no window in which they still get one, and it is never silently reversed.
 
-**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's "view in browser" page and the permanent record are that same frozen copy, not a re-render, which could differ. Any public chrome an archived post carries (§5) never rewrites the reviewed content.
+**I3 — What went out is preserved exactly.** Every send freezes its rendered HTML. The reader's post page, where an email's "view in browser" link leads, and the permanent record are that same frozen copy, not a re-render, which could differ. Any public chrome an archived post carries (§5) never rewrites the reviewed content.
 
 **I4 — A post is sent at most once per send, to each person at most once.** A repeated trigger never creates a second send (a second send-now finds the existing one; a second schedule is refused, §6), and a retry, a double-click, or a resumed send never mails anyone twice.
 
@@ -143,17 +143,19 @@ This is deliberately unlike the systems where text is addressable but an image i
 
 ## 5. Preview and the reader surface
 
-Preview means three concrete things, all the same render aimed differently.
+Before a post goes out, the publisher can look at it three ways, all the same render aimed differently.
 
-**View in browser** — the post rendered as the email, on a page. For the publisher it is the editor's preview page, behind the admin gate: a live render of the current draft before scheduling, the quick way to check layout, and the frozen copy that will fire once scheduled. For the reader it is the public post page at the archive URL (below), the address every sent email's own "view in browser" link carries; that page exists from the moment the post's send starts, so a reader who opens it while the send is still going out finds it, and the link in a test email resolves once the send fires.
+**Preview** — the post rendered as the email, on a page in the editor, behind the admin gate: a live render of the current draft before scheduling, the quick way to check layout, and the frozen copy that will fire once scheduled.
+
+**Web version** — the post as its public post page will show it, for the publisher to proof before the page is permanent. It sits beside the preview, behind the admin gate until the post is published, and shows the same copy the preview shows (a live render of the current draft, or the frozen copy once scheduled) with the edits the post page makes (below): the template's email-only parts left out and the browser-only chrome added. Apart from the page itself, it says that it is the web version, where the post stands, and where its public page will be, so it is never mistaken for the live page and the public address is in view before any email to the list carries it. Once the post's send starts, the public post page is the web version, and that is where it leads.
+
+**Send test** — the real email, rendered and delivered to an address the publisher names, so they can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific post to a named address; a **template test**, from the template's settings surface (§9), sends a synthetic sample post so the publisher can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template, the one that will ship, never unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. Once a post is scheduled, a post test sends its **frozen copy**, exactly as the fire path will, so the test and the preview never disagree about what is going out. The default recipients (§9) pre-fill both.
+
+Every email carries a **"view in browser" link**, which leads to the post's public post page at the archive URL (below). That page exists from the moment the post's send starts, so a reader who opens it while the send is still going out finds it, and the link in a test email resolves once the send fires.
 
 A post is **published** when its send starts, not when the send finishes. The review window closes at the fire time (§6), and a send in flight can't be canceled or ended, so the frozen copy is final the moment the send starts; the link in an email has to work when the email lands, even on a list large enough that the last email goes out long after the first. A send held up in flight (retrying, halted on the provider account, or wedged awaiting Resolve, §12) keeps its post published, since some readers already have the email. A post's publish date is when its send started.
 
-**Web version** is the post as its public post page will show it, for the publisher to proof before the page is permanent. It sits beside the preview, behind the admin gate, and shows the same copy the preview shows (a live render of the current draft, or the frozen copy once scheduled) with the edits the post page makes (below): the template's email-only parts left out and the browser-only chrome added. Apart from the page itself, it says that it is the web version, where the post stands, and where its public page will be, so it is never mistaken for the live page and the public address is in view before any email to the list carries it. Once the post's send starts, the public page is the web version, and that is where it leads.
-
-**Send test** — the real email, rendered and delivered to an address the publisher names, so they can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific post to a named address; a **template test**, from the template's settings surface (§9), sends a synthetic sample post so the publisher can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template, the one that will ship, never unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. Once a post is scheduled, a post test sends its **frozen copy**, exactly as the fire path will, so the test and the view-in-browser page never disagree about what is going out. The default recipients (§9) pre-fill both.
-
-There is exactly **one render path**. It turns a post into the email, and the preview, the test, and the real send all call it. That's what makes I5 hold: if the test looks right, the send is right, because they're the same code producing the same output. Email rendering is client-dependent enough that a faithful web preview isn't sufficient on its own, so the test is the thing the publisher trusts before scheduling, and the view-in-browser page is the convenient first look.
+There is exactly **one render path**. It turns a post into the email, and the preview, the test, and the real send all call it. That's what makes I5 hold: if the test looks right, the send is right, because they're the same code producing the same output. Email rendering is client-dependent enough that a faithful web preview isn't sufficient on its own, so the test is the thing the publisher trusts before scheduling, and the preview is the convenient first look.
 
 ### The public reader surface
 
