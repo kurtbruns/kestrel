@@ -138,6 +138,23 @@ describe("router", () => {
     expect(document.body.classList.contains("web-mode")).toBe(false);
   });
 
+  it("opens the dashboard home for a typed hash with a dot segment, reading only what the dashboard reads", async () => {
+    // What a route reads, from a page elsewhere, so the route mounts its view afresh.
+    const readsAt = async (hash: string) => {
+      await at("#/drafts");
+      fake.calls.length = 0;
+      await at(hash);
+      return fake.calls.map((c) => c.url.pathname + c.url.search);
+    };
+    const home = await readsAt("#/dashboard");
+    expect(home).toContain("/api/sends?limit=200");
+    for (const hash of ["#/sent/..", "#/sent/.", "#/sent/%2e%2E", "#/edit/..", "#/sent/x/../.."]) {
+      expect(await readsAt(hash), hash).toEqual(home);
+      const current = document.querySelector<HTMLElement>('.sidebar a[aria-current="page"]');
+      expect(current?.dataset.view, hash).toBe("dashboard");
+    }
+  });
+
   it("adopts the route a link from an email names in its query, adding no history entry", async () => {
     history.replaceState(null, "", "/dashboard/?to=/drafts");
     const entries = history.length;
