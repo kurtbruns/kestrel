@@ -7,16 +7,55 @@ import { toasts } from "../shell";
 import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";
 
+// Long enough to read a sentence-length confirmation ("Test sent to 2 addresses").
+const TOAST_MS = 3600;
+// Matches the .toast.leaving transition in styles.css, so removal trails the collapse.
+const TOAST_LEAVE_MS = 300;
+// More than this at once is a wall, not a confirmation (DESIGN §2).
+const MAX_TOASTS = 3;
+const toastTimers = new WeakMap<HTMLElement, number>();
+
+/**
+ * A transient confirmation in the app-wide toast region (DESIGN §2). The same message
+ * already showing has its time restarted rather than a second copy stacked beneath it,
+ * and past MAX_TOASTS the oldest leaves early, so a burst never builds a tower.
+ */
 export function toast(msg: string): void {
+  const live = [...toasts.querySelectorAll<HTMLElement>(".toast:not(.leaving)")];
+  const same = live.find((t) => t.textContent === msg);
+  if (same) {
+    lingerToast(same);
+    return;
+  }
   const t = document.createElement("div");
   t.className = "toast";
   t.textContent = msg;
   toasts.appendChild(t);
   requestAnimationFrame(() => t.classList.add("show"));
-  // Linger long enough to read a sentence-length confirmation ("Test sent to 2
-  // addresses") before it fades; the removal trails the fade-out transition.
-  setTimeout(() => t.classList.remove("show"), 3600);
-  setTimeout(() => t.remove(), 3900);
+  lingerToast(t);
+  for (const old of live.slice(0, live.length + 1 - MAX_TOASTS)) {
+    leaveToast(old);
+  }
+}
+
+function lingerToast(t: HTMLElement): void {
+  clearTimeout(toastTimers.get(t));
+  toastTimers.set(
+    t,
+    window.setTimeout(() => leaveToast(t), TOAST_MS),
+  );
+}
+
+// Fade and collapse the toast's height together, so the ones beside it slide into its
+// place rather than jump. The height is pinned and committed first because a transition
+// can't start from auto.
+function leaveToast(t: HTMLElement): void {
+  clearTimeout(toastTimers.get(t));
+  t.style.height = `${t.offsetHeight}px`;
+  void t.offsetHeight;
+  t.classList.add("leaving");
+  t.style.height = "0";
+  setTimeout(() => t.remove(), TOAST_LEAVE_MS);
 }
 
 export async function copyText(text: string): Promise<void> {
