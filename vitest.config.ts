@@ -1,9 +1,9 @@
 import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { configDefaults, defineConfig } from "vitest/config";
 
-// Two test projects, one per runtime:
+// Four test projects, one per runtime a suite's code runs in:
 //
-//   worker — the Worker's suite (test/**), run inside the Workers runtime (workerd) via
+//   worker — the Worker's suite (test/**/*.spec.ts), run inside the Workers runtime (workerd) via
 //            Miniflare with the real D1/R2 bindings from wrangler.jsonc. Migrations are
 //            read here (Node side) and injected as `TEST_MIGRATIONS`, then applied per
 //            test file by the setup file.
@@ -12,6 +12,8 @@ import { configDefaults, defineConfig } from "vitest/config";
 //            against a DOM, with no Worker, no bindings, and nothing of the pool above.
 //   shared — the suite for code both of them import (shared/**), run in plain Node: no
 //            DOM and no Worker, which is the contract that code must keep.
+//   cli    — the suite for the `kestrel` command (test/cli/**/*.spec.mjs), run in plain
+//            Node as cli/ itself runs; kept under test/ so the package never ships it.
 //
 // The split is what lets client/ be tested at all — the workerd pool can't load browser
 // code — while keeping that pool exactly as it was for the Worker.
@@ -97,6 +99,14 @@ export default defineConfig(async () => {
             name: "shared",
             environment: "node",
             include: ["shared/**/*.spec.ts"],
+            exclude: [...configDefaults.exclude, "**/.claude/**"],
+          },
+        },
+        {
+          test: {
+            name: "cli",
+            environment: "node",
+            include: ["test/cli/**/*.spec.mjs"],
             exclude: [...configDefaults.exclude, "**/.claude/**"],
           },
         },

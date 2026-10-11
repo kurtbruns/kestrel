@@ -351,6 +351,21 @@ describe("the dev routes exist only in local development", () => {
     expect(await env.DB.prepare("SELECT 1 AS ok").first()).toEqual({ ok: 1 });
   });
 
+  // The CLI's seed and reset check this ID against the record `kestrel dev` left in their
+  // directory before wiping a database (cli/dev-api.mjs).
+  it("reports the run ID kestrel dev gave the server beside the token, and none without one", async () => {
+    const run = { ...env, DEV_RUN_ID: "run-1234" } as unknown as AppEnv;
+    const withId = await fetchWith(run, "/api/dev/token?kind=service");
+    expect(await withId.json()).toMatchObject({ kind: "service", runId: "run-1234" });
+    const without = await fetchWith(env as AppEnv, "/api/dev/token");
+    expect(await without.json()).not.toHaveProperty("runId");
+  });
+
+  it("never resolves a run ID outside local development", () => {
+    const deployed = { ...env, ...SES_DEPLOY, DEV_RUN_ID: "run-1234" } as unknown as AppEnv;
+    expect(getConfig(deployed).devRunId).toBeUndefined();
+  });
+
   it("is registered in local development (the suite's own env)", () => {
     expect(getConfig(env as AppEnv).devMode).toBe(true);
     const listed = createRouter(getConfig(env as AppEnv)).routes.map(

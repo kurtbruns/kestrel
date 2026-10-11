@@ -6,12 +6,11 @@
  * settings), so this needs the dev server up. It shows the first-run dashboard and setup
  * checklist an operator meets when they deploy. The target is found as for seed.
  */
-import { baseUrl, callApi, devToken, fail } from "./dev-api.mjs";
+import { callApi, devTarget, fail } from "./dev-api.mjs";
 
 /** `kestrel reset [port|url]`. */
 export async function resetCommand(argv) {
-  const base = baseUrl(argv[0]);
-  const token = await devToken(base, "reset");
+  const { base, token } = await devTarget(argv[0], "reset");
   const res = await callApi(base, token, "/api/dev/reset", { method: "POST", tag: "reset" });
   if (!res.ok) {
     fail("reset", `request failed: ${res.status}`, JSON.stringify(res.body));

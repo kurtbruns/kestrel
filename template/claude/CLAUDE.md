@@ -17,7 +17,7 @@ Deploying, migrating the production database, and anything that sends mail or ch
 - **Deploying and migrating are plain wrangler,** always naming the environment, since the top level is development: `npx wrangler deploy --env production`, and `npx wrangler d1 migrations apply DB --remote --env production`.
 - **Upgrade with the `/upgrade` skill.** It follows the guide's upgrade page.
 - **Secrets never pass through you.** The person enters each one themselves with `npx wrangler secret put NAME --env production`, which prompts for the value; never ask for a secret in chat. Claude's own token goes in `.claude/settings.local.json`. Never write a secret into `wrangler.jsonc`, `.claude/settings.json`, or a commit.
-- **Locally,** `npm run dev` runs the app with its once-a-minute send sweep (after `cp .dev.vars.example .dev.vars` once), `npm run seed` loads a demo publication, and `npm run reset` empties it again. Local email goes to a stand-in, never a real inbox.
+- **Locally,** `npm run dev` runs the app with its once-a-minute send sweep (after `cp .dev.vars.example .dev.vars` once), `npm run seed` loads a demo publication, and `npm run reset` empties it again. Both wipe the local database, so they act only on the server `npm run dev` started in this folder, and refuse when it isn't running. When they refuse, start it here; name another server's port (`PORT=8787 npm run seed`) only when the person means that server. Local email goes to a stand-in, never a real inbox.
 
 ## Publishing through the API
 

@@ -210,7 +210,7 @@ export function createRouter({
       resource: "dev",
       summary: "Mint an admin token (local dev only).",
       description:
-        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance.",
+        "Public because it's how a local client gets the token every admin route requires. Registered only on a local instance. When `kestrel dev` started the server, the answer also carries `runId`, the ID it recorded for this run, which `kestrel seed` and `kestrel reset` check before wiping the database.",
       query: [
         {
           name: "kind",

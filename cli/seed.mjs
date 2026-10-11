@@ -9,8 +9,11 @@
  * never talks to D1 or R2 directly. The images travel through the running Worker so they land
  * in the same R2 the dev server serves.
  *
- * The target defaults to the port the dev server recorded in this directory
- * (cli/dev-port.mjs); override it with `PORT` or a URL or port argument. Scale the demo list
+ * With no target given, it goes only to the dev server `kestrel dev` recorded in this
+ * directory, and only when that server reports the run ID recorded with it, so it never wipes
+ * another directory's database (cli/dev-api.mjs, cli/dev-server.mjs); with none recorded it
+ * refuses rather than guess a port. `PORT` or a URL or port argument names a server
+ * deliberately, and is used as given. Scale the demo list
  * with `--size` (100 / 1k / 10k / 100k, an approximate target) and pin the seeded PRNG with
  * `--seed`. Without `--size`, the curated story-shaped list (~155 subscribers) loads.
  */
@@ -18,7 +21,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { baseUrl, devToken, fail, parseArgs } from "./dev-api.mjs";
+import { devTarget, fail, parseArgs } from "./dev-api.mjs";
 
 // The demo ships beside the CLI, in this repository and in the package.
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -117,8 +120,7 @@ export async function seedDemo(base, token, { size, seed } = {}, tag = "seed") {
 /** `kestrel seed [--size n] [--seed s] [port|url]`. */
 export async function seedCommand(argv) {
   const { flags, positional } = parseArgs(argv);
-  const base = baseUrl(positional[0]);
-  const token = await devToken(base, "seed");
+  const { base, token } = await devTarget(positional[0], "seed");
   const summary = await seedDemo(base, token, { size: flags.size, seed: flags.seed });
   console.log("[seed] done:");
   if (flags.size) {

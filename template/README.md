@@ -12,7 +12,7 @@ cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-Open the editor at http://localhost:8787/dashboard/. Email goes to a stand-in that never reaches a real inbox. `npm run seed` loads a demo publication, and `npm run reset` empties it again.
+Open the editor at http://localhost:8787/dashboard/. Email goes to a stand-in that never reaches a real inbox. `npm run seed` loads a demo publication, and `npm run reset` empties it again. Both act only on the server `npm run dev` started in this folder; to aim one at another server on purpose, name its port, as in `PORT=8787 npm run seed`.
 
 ## Commands
 

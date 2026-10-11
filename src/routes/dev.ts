@@ -5,7 +5,9 @@
  * once Access is the gate. Each handler checks `devMode` again, so reaching one through a
  * router built for another config still 404s.
  *
- *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap).
+ *   GET  /api/dev/token → mint a local admin token (the editor's + seed's bootstrap), with
+ *                         the `runId` `kestrel dev` gave this run, which seed and reset
+ *                         check against their directory's record before wiping anything.
  *   POST /api/dev/seed  → reset the DB and load the local "Field Notes" dataset.
  *                         Optional multipart files: `image` (repeatable, named
  *                         `<bundle>/<file>`) → an image a demo post shows, `logo` → the
@@ -42,7 +44,11 @@ export async function token(c: RequestContext): Promise<Response> {
   }
   const service = c.url.searchParams.get("kind") === "service";
   const jwt = await mintDevToken(c.config.devAuthSecret, service ? {} : { email: "dev@localhost" });
-  return json({ token: jwt, kind: service ? "service" : "human" });
+  return json({
+    token: jwt,
+    kind: service ? "service" : "human",
+    ...(c.config.devRunId ? { runId: c.config.devRunId } : {}),
+  });
 }
 
 export async function seed(c: RequestContext): Promise<Response> {

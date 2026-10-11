@@ -36,6 +36,8 @@ npm run simulate-send -- --in 90s     # schedule a send and print a link to watc
 npm run reset                         # back to an empty instance
 ```
 
+These act only on the dev server `npm run dev` started in the same directory, so a second worktree's server is never wiped by mistake, and they refuse when that server isn't running. To aim one at another server on purpose, name its port: `PORT=8795 npm run seed`, or `npm run seed -- 8795`.
+
 ### Calling the API
 
 The editor is one client of Kestrel's HTTP API, and Claude is the other. Locally, mint a token to call it yourself:

@@ -22,10 +22,10 @@
  *                     whether it started, rather than leave it to the server's own tick that
  *                     minute. A dev tool's extra tick: the app behaves as it always does.
  *
- * The target is this worktree's dev server, as for the seed; override it with `PORT` or a
- * URL or port argument.
+ * The target is found as for the seed: this worktree's own dev server, proven by its run ID,
+ * or a server named deliberately with `PORT` or a URL or port argument.
  */
-import { baseUrl, callApi, devToken, fail, parseArgs } from "../cli/dev-api.mjs";
+import { callApi, devTarget, fail, parseArgs } from "../cli/dev-api.mjs";
 import { seedDemo } from "../cli/seed.mjs";
 import { triggerSweep } from "../cli/sweep-ticker.mjs";
 
@@ -65,8 +65,7 @@ const clock = (ms) => new Date(ms).toLocaleTimeString();
 
 async function main() {
   const { flags, positional } = parseArgs(process.argv.slice(2), ["punctual"]);
-  const base = baseUrl(positional[0]);
-  const token = await devToken(base, TAG);
+  const { base, token } = await devTarget(positional[0], TAG);
   const api = (path, init = {}) => callApi(base, token, path, { ...init, tag: TAG });
 
   const settings = await api("/api/settings");

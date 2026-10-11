@@ -15,7 +15,8 @@
  * `--port`. This reads PORT and forwards it as `--port`. With no PORT it prefers 8787 and
  * falls back to a free port, so a second server still starts. The resolved port drives the
  * origin overrides, so the absolute URLs an email carries point at the server actually bound,
- * and is recorded (cli/dev-port.mjs) so seed and reset find this server.
+ * and is recorded with an ID made up for this run (cli/dev-server.mjs), which the Worker is
+ * handed too, so seed and reset find this server and can tell it from another directory's.
  *
  * A fresh local database. A new checkout or worktree has an empty `.wrangler/state`, so every
  * D1 route would 500 until the migrations ran. The local database is probed and, when its
@@ -34,7 +35,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { parseEnv } from "node:util";
-import { clearDevPort, writeDevPort } from "./dev-port.mjs";
+import { clearDevServer, newDevRunId, writeDevServer } from "./dev-server.mjs";
 import { startSweepTicker } from "./sweep-ticker.mjs";
 import { captureWrangler, runWrangler, spawnWrangler } from "./wrangler.mjs";
 
@@ -176,17 +177,30 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
     checkDevVars(fromShell);
   }
 
-  writeDevPort(port);
+  // The Worker reports this ID beside the dev token, and seed and reset with no target given
+  // check it against the record, so they never wipe a server this directory didn't start.
+  const runId = newDevRunId();
+  const runIdArgs = ["--var", `DEV_RUN_ID:${runId}`];
+
+  writeDevServer(port, runId);
   // A remote session runs against deployed resources, where the real cron and the real
   // webhooks are the ones that count.
   const stopTicker = isRemote ? () => {} : startSweepTicker(origin);
   const stop = () => {
-    clearDevPort();
+    clearDevServer();
     stopTicker();
     onStop();
   };
 
-  const child = spawnWrangler(["dev", "--port", port, ...originArgs, ...overrideArgs, ...argv]);
+  const child = spawnWrangler([
+    "dev",
+    "--port",
+    port,
+    ...originArgs,
+    ...overrideArgs,
+    ...runIdArgs,
+    ...argv,
+  ]);
 
   // A signal aimed at this process alone (a harness stop, `kill <pid>`) must not leave
   // wrangler serving, the ticker calling a server that is gone, or the caller's companions

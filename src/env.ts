@@ -98,6 +98,12 @@ export interface OptionalVars {
    * `kestrel@` the app's own hostname.
    */
   NOTIFY_FROM?: string;
+  /**
+   * The ID `kestrel dev` makes up for one run of the local dev server and records beside its
+   * port, so the CLI's seed and reset can tell this directory's server from another's before
+   * wiping a database. Set by `kestrel dev` alone; honored only in local dev (see `devRunId`).
+   */
+  DEV_RUN_ID?: string;
 }
 
 /**
@@ -172,6 +178,11 @@ export interface Config {
    * Access is then the only door.
    */
   devAuthSecret?: string;
+  /**
+   * This run's `DEV_RUN_ID`, which `/api/dev/token` reports. Resolved only when `devMode`
+   * holds, like the routes that report it, so a deployed env never carries one.
+   */
+  devRunId?: string;
   /**
    * The local send simulation that stands in for a provider on list sends (SPEC §10), or
    * null for the plain fake. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
@@ -289,6 +300,7 @@ export function getConfig(env: AppEnv): Config {
     // deployed env, so the reader surface stays clean of any admin link there.
     devMode: devAuthSecret !== undefined,
     devAuthSecret,
+    devRunId: devAuthSecret !== undefined ? orUndefined(env.DEV_RUN_ID) : undefined,
     // Only ever read in a dev-shaped env; a deployed env runs a real provider, so the
     // simulation can never engage there whatever the var says.
     simulation: devShaped ? readSimulation(env.SIMULATE_SENDS) : null,
