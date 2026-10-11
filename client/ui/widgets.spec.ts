@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetShell } from "../test/support";
 import { $ } from "./dom";
-import { toast } from "./widgets";
+import { html } from "./html";
+import { modal, toast } from "./widgets";
 
 // What the reader sees: the toasts still showing, oldest first, leaving ones excluded.
 const showing = (): string[] =>
@@ -44,5 +45,32 @@ describe("toast (DESIGN §2)", () => {
     expect(showing()).toEqual(["Three", "Four", "Five"]);
     vi.advanceTimersByTime(300);
     expect($("#toasts").children.length).toBe(3);
+  });
+});
+
+const pressEscape = () => document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+
+describe("modal", () => {
+  beforeEach(() => {
+    resetShell();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("closes on Escape", () => {
+    const m = modal(html`<p>Sure?</p>`);
+    expect(m.el.isConnected).toBe(true);
+    pressEscape();
+    expect(m.el.isConnected).toBe(false);
+  });
+
+  it("leaves no Escape listener behind when it closes another way", () => {
+    const m = modal(html`<p>Sure?</p>`);
+    m.close();
+    // A listener left on the document would run the closed dialog's close() again.
+    const remove = vi.spyOn(m.el, "remove");
+    pressEscape();
+    expect(remove).not.toHaveBeenCalled();
   });
 });

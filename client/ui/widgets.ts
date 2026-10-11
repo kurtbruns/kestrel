@@ -81,18 +81,23 @@ export function modal(content: Html): Modal {
   back.className = "modal-backdrop";
   setHtml(back, html`<div class="modal" role="dialog" aria-modal="true">${content}</div>`);
   document.body.appendChild(back);
-  const close = () => back.remove();
+  // Escape listens on the document, so close() takes the listener with it however the
+  // dialog closes (a button, the backdrop, Escape), and it lives as long as the dialog.
+  const onEsc = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      close();
+    }
+  };
+  const close = () => {
+    back.remove();
+    document.removeEventListener("keydown", onEsc);
+  };
   back.addEventListener("click", (e) => {
     if (e.target === back) {
       close();
     }
   });
-  document.addEventListener("keydown", function onEsc(e) {
-    if (e.key === "Escape") {
-      close();
-      document.removeEventListener("keydown", onEsc);
-    }
-  });
+  document.addEventListener("keydown", onEsc);
   return { el: back, close };
 }
 
