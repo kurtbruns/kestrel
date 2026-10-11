@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SettingsResponse, SettingsView } from "../../shared/settings";
+import type { IdentityField, SettingsResponse, SettingsView } from "../../shared/settings";
 import { appState } from "../state";
 import {
   $,
@@ -15,6 +15,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
+import { identityNote } from "./identity";
 import { renderSettings } from "./settings";
 
 const DEFAULT_COPY = {
@@ -85,9 +86,12 @@ describe("settings view", () => {
     await open();
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
-    // Nothing scheduled: the note says where the identity shows up, and no more.
-    expect($(".set-note span").textContent).toBe("Shown in every email.");
-    expect($$(".set-inbox-from")[0]?.textContent).toBe("Birds");
+    // Nothing scheduled: the note names the fields every email shows, and no more.
+    expect($(".set-note span").textContent).toBe(
+      "Your email template shows the name and logo in every email.",
+    );
+    // The sender's inbox row, in its read-only card.
+    expect($(".set-card.sunken .set-inbox-from").textContent).toBe("Birds");
     expect($(".set-inbox-addr").textContent).toBe("hello@send.birds.example");
     const facts = $$(".set-kv-v").map((v) => v.textContent?.trim());
     expect(facts).toContain("Amazon SES");
@@ -109,6 +113,54 @@ describe("settings view", () => {
     expect($("#logoRemove").hidden).toBe(true);
     expect(bar().hidden).toBe(true);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("groups the sections by whom they serve, editable first and set at deploy last", async () => {
+    await open();
+    const groups = $$(".set-group").map((g) => ({
+      title: $(".set-group-title", g).textContent,
+      sections: $$(".set-sec-title", g).map((t) => t.textContent),
+    }));
+    expect(groups).toEqual([
+      { title: "Your publication", sections: ["Publication identity"] },
+      {
+        title: "Your readers",
+        sections: ["Ways to subscribe", "Confirmation email", "Reader pages"],
+      },
+      { title: "Your emails", sections: ["Email template", "Default test recipients"] },
+      { title: "You", sections: ["Notifications"] },
+      { title: "Set at deploy", sections: ["Email sender", "Instance"] },
+    ]);
+    // A group is a heading over its sections; each section's own title sits beneath it.
+    expect($$(".set-group-title").every((h) => h.tagName === "H2")).toBe(true);
+    expect($$(".set-sec-title").every((h) => h.tagName === "H3")).toBe(true);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("shows the email template as one card that leads to the Template page", async () => {
+    await open();
+    const card = $(".set-tpl-card");
+    // No sample email here: it lives on the Template page, beside the editor.
+    expect($$("iframe", card)).toEqual([]);
+    expect(card.textContent).toMatch(/Every post you send goes out inside your template/);
+    expect($$(".set-chip").map((c) => c.textContent?.trim())).toContain("No posts scheduled");
+    $("#tplEditLink").click();
+    expect(location.hash).toBe("#/template");
+  });
+
+  it("names which identity fields every email shows, and says when none is", () => {
+    const inUse = (identityFields: IdentityField[]) => ({
+      sends: [],
+      retry_after: null,
+      identityFields,
+    });
+    expect(identityNote(inUse(["name"]))).toBe(
+      "Your email template shows the name in every email.",
+    );
+    expect(identityNote(inUse(["address", "logoUrl", "tagline", "name"]))).toBe(
+      "Your email template shows the name, tagline, logo, and mailing address in every email.",
+    );
+    expect(identityNote(inUse([]))).toBe("Your email template doesn’t show any of these.");
   });
 
   it("reflects the minimum lead and a local send simulation read-only, as deploy config", async () => {
