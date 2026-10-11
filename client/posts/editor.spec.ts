@@ -667,6 +667,88 @@ describe("editor view", () => {
     expect(slug.value).toBe("spring-update-2");
   });
 
+  it("hands a cleared slug back to the subject even when it saves before the field is left", async () => {
+    const server = draftServer(draft({ subject: "Barn owls", slug: "custom" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const slug = $<HTMLInputElement>("#f-slug");
+    expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(false);
+    slug.focus();
+    typeInto(slug, "");
+    slug.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()[0]?.json()).toMatchObject({ slug: "barn-owls" }); // not "", which the server makes post-N
+    expect(slug.value).toBe("barn-owls");
+    expect($<HTMLInputElement>("#f-slug-auto").checked).toBe(true);
+  });
+
+  it("saves at once when the box is ticked, taking the subject's slug", async () => {
+    const server = draftServer(draft({ subject: "Barn owls", slug: "custom" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const auto = $<HTMLInputElement>("#f-slug-auto");
+    auto.checked = true;
+    auto.dispatchEvent(new Event("change", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    expect(puts()[0]?.json()).toMatchObject({ slug: "barn-owls" });
+    expect($<HTMLInputElement>("#f-slug").value).toBe("barn-owls");
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
+  it("reads as saved after the server numbers a slug, without saving again", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    const slug = $<HTMLInputElement>("#f-slug");
+    subject.focus();
+    typeInto(subject, "Barn owls");
+    body().focus();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("barn-owls");
+    // Following the subject: another post takes its slug, and the next save is numbered.
+    server.taken.add("barn-owls");
+    typeInto(body(), "Hoot.");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(slug.value).toBe("barn-owls-2");
+    expect($("#saveStatus").textContent).toBe("Saved");
+    // Hand-set: the slug is saved as the server made it, not as typed.
+    server.taken.add("custom");
+    slug.focus();
+    typeInto(slug, "custom");
+    body().focus();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(slug.value).toBe("custom-2");
+    expect($("#saveStatus").textContent).toBe("Saved");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toHaveLength(3); // neither numbered answer left the editor dirty
+  });
+
+  it("does not save on the Enter that ends an IME composition", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    const subject = $<HTMLInputElement>("#f-subject");
+    typeInto(subject, "フクロウ");
+    subject.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true }),
+    );
+    subject.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", keyCode: 229, bubbles: true }),
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(0);
+  });
+
   it("saves on Enter in the subject", async () => {
     const server = draftServer();
     await open([

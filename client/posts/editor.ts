@@ -318,9 +318,13 @@ export async function renderEditor(
     subjectEl.addEventListener("input", () => {
       rederive = true;
     });
-    // Typing a slug takes manual control; clearing it re-links to the subject.
+    // Typing a slug takes manual control; clearing it re-links to the subject, so a save
+    // made before the field is left (Enter, the autosave) sends the subject's slug, not "".
     slugEl.addEventListener("input", () => {
       autoEl.checked = slugEl.value.trim() === "";
+      if (autoEl.checked) {
+        rederive = true;
+      }
       reflect();
     });
     // Ticking the box saves at once, so the field shows the subject's slug as soon as the
@@ -595,6 +599,7 @@ export async function renderEditor(
     const fields = collect();
     let sent = JSON.stringify(fields);
     const slugShown = slugEl.value;
+    const followed = following();
     try {
       const body: PostEditBody = { ...fields, base_revision: revisions.base };
       const { post: u } = await api<PostSavedResponse>(`/api/posts/${id}`, {
@@ -606,8 +611,10 @@ export async function renderEditor(
       // alone is no reason to hold it back, since tabbing through the field changes nothing.
       if (u.slug && slugEl.value === slugShown) {
         slugEl.value = u.slug;
-        if (fields.slug === slugShown) {
-          sent = JSON.stringify({ ...fields, slug: u.slug }); // what was saved, not what was typed
+        // A hand-set slug is saved as the server made it, not as typed. A following one is
+        // compared as the subject's slug, so its numbered answer leaves the snapshot alone.
+        if (!followed && fields.slug === slugShown) {
+          sent = JSON.stringify({ ...fields, slug: u.slug });
         }
       }
       if (u.slug) {
@@ -730,9 +737,10 @@ export async function renderEditor(
       el.addEventListener("blur", () =>
         saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`)),
       );
-      // Enter commits a one-line field the way leaving it does.
+      // Enter commits a one-line field the way leaving it does, but not the Enter that ends
+      // an IME composition, which Safari reports with isComposing false and keyCode 229.
       el.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" && !e.isComposing) {
+        if (e.key === "Enter" && !e.isComposing && e.keyCode !== 229) {
           e.preventDefault();
           saveDraft(true).catch((err) => toast(`Couldn't save — ${message(err)}`));
         }
