@@ -158,8 +158,9 @@ for (const key of ["compatibility_date", "compatibility_flags"]) {
 // tools install at the versions this repository uses. The install must end cleanly: npm 12
 // blocks a dependency's install script that the scaffold's `allowScripts` doesn't cover and
 // ends with a warning listing it, which reads like a failure to a new operator. Older npm
-// ignores `allowScripts` and runs every script, so it never warns, and this part of the check
-// proves nothing there; it says so rather than pass quietly. A tarball is a non-registry
+// ignores `allowScripts` and runs every script, so it never warns: on older npm (CI's, from
+// Node 22) this one install runs through a pinned npm 12 instead, so the check proves what an
+// operator on npm 12 sees, and the rest of the run keeps the host's npm. A tarball is a non-registry
 // source, so npm 12 would also hold back the package's own `prepare` (its build, which an
 // operator's registry install never runs). The scratch instance denies it under the key npm
 // gives a tarball, its `file:` path, which an operator's instance has no need to.
@@ -176,8 +177,12 @@ const installArgs = [
   `wrangler@${versionOf("wrangler")}`,
   `typescript@${versionOf("typescript")}`,
 ];
-console.log(`[check-package] $ npm ${installArgs.join(" ")}`);
-const install = spawnSync("npm", installArgs, { cwd: instance, encoding: "utf8" });
+const NPM_12 = "npm@12.0.1";
+const hostNpmMajor = Number(execFileSync("npm", ["--version"], { encoding: "utf8" }).split(".")[0]);
+const [installCmd, installCmdArgs] =
+  hostNpmMajor >= 12 ? ["npm", installArgs] : ["npx", ["-y", NPM_12, ...installArgs]];
+console.log(`[check-package] $ ${installCmd} ${installCmdArgs.join(" ")}`);
+const install = spawnSync(installCmd, installCmdArgs, { cwd: instance, encoding: "utf8" });
 process.stdout.write(install.stdout);
 process.stderr.write(install.stderr);
 if (install.status !== 0) {
@@ -186,12 +191,6 @@ if (install.status !== 0) {
 if (/install scripts blocked/.test(`${install.stdout}${install.stderr}`)) {
   fail(
     "the instance's npm install blocked install scripts: add them to template/package.json's allowScripts",
-  );
-}
-const npmMajor = Number(execFileSync("npm", ["--version"], { encoding: "utf8" }).split(".")[0]);
-if (npmMajor < 12) {
-  console.warn(
-    `[check-package] SKIPPED the blocked-install-scripts check: npm ${npmMajor} ignores allowScripts, so its install can't show the warning npm 12 would`,
   );
 }
 step("npm", ["run", "typecheck"]);
