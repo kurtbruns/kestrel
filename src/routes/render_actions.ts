@@ -34,7 +34,8 @@ import {
 import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
-import { readerIdentity, webVersion } from "./archive";
+import { webVersion } from "./archive";
+import { readerIdentity } from "./reader";
 
 async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));

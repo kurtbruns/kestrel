@@ -11,12 +11,14 @@
 
 import { getBySlug } from "../db/posts";
 import { listPublishedPosts, publishedSendForPost } from "../db/sends";
+import type { Config } from "../env";
 import {
   ARCHIVE_POST_HEAD,
   archiveDevDashboardChrome,
   archiveIndexPage,
   archiveLink,
   landingPage,
+  type ReaderIdentity,
 } from "../lib/page";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import {
