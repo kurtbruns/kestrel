@@ -151,7 +151,7 @@ Before a post goes out, the publisher can look at it three ways, all the same re
 
 **Send test** — the real email, rendered and delivered to an address the publisher names, so they can see it in an actual mail client where the rendering finally counts. A test comes in two shapes, both through the one render path (I5): a **post test** sends a specific post to a named address; a **template test**, from the template's settings surface (§9), sends a synthetic sample post so the publisher can proof the *layout* in a real inbox without picking a post. A template test always renders the **saved** template, the one that will ship, never unsaved editor content, so a clean template test is a real guarantee and never a lookalike; the surface saves any pending edits before it sends. Once a post is scheduled, a post test sends its **frozen copy**, exactly as the fire path will, so the test and the preview never disagree about what is going out. The default recipients (§9) pre-fill both.
 
-Every email carries a **"view in browser" link**, which leads to the post's public post page at the archive URL (below). That page exists from the moment the post's send starts, so a reader who opens it while the send is still going out finds it, and the link in a test email resolves once the send fires.
+Every email carries a **"view in browser" link**, which leads to the post's public post page at the archive URL (below). That page exists from the moment the post's send starts, so a reader who opens it while the send is still going out finds it, and the link in a test email resolves once the send fires. Before then it lands on a page saying a post appears there as soon as it's sent, the same page every address without a published post shows, so it reveals nothing about a post that is scheduled.
 
 A post is **published** when its send starts, not when the send finishes. The review window closes at the fire time (§6), and a send in flight can't be canceled or ended, so the frozen copy is final the moment the send starts; the link in an email has to work when the email lands, even on a list large enough that the last email goes out long after the first. A send held up in flight (retrying, halted on the provider account, or wedged awaiting Resolve, §12) keeps its post published, since some readers already have the email. A post's publish date is when its send started.
 
@@ -256,6 +256,8 @@ The confirmation email's **wording** (its subject, the line above the button, th
 ### Leaving
 
 Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The publisher can also unsubscribe someone from the subscriber list, the same immediate, idempotent effect, for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
+
+A test email (§5) carries an unsubscribe link and the one-click header too, so the publisher can check them in a real inbox, but it is not a list send, so its link carries no subscriber's token and unsubscribes no one. Followed, it opens a page saying it was a test and that nobody was unsubscribed; a mail client's own Unsubscribe button gets a success that changes nothing. A link that carries a subscriber's token is always that subscriber's, never a test's.
 
 ### Two tokens, two jobs
 
@@ -412,7 +414,7 @@ Two environments, each with its own database, its own storage, and, the load-bea
 
 Notifications to the publisher (§8) follow the same rule: in development they reach the same dead end, whatever else is configured.
 
-A new instance proves itself on production, before it has a reader. Email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only appear once deployed, and a real test send to the developer's own address is the only way to prove them. A new instance's list is empty, so that proof reaches no one else, and subscribers come after it passes. For someone running their own newsletter, a second deployed environment would only repeat that proof, so it is not part of the default shape.
+A new instance proves itself on production, before it has a reader. Email's real failure modes (DKIM alignment, inbox rendering, the bounce webhook round-trip, one-click unsubscribe in a real client) only appear once deployed, and only real email proves them. A test email to the developer's own address shows authentication and rendering, but its unsubscribe link unsubscribes no one (§7), so one-click unsubscribe takes a real send to a list of one, the developer's own address, and the bounce round-trip takes the provider's test addresses. A new instance has no reader yet, so that proof reaches no one else, and subscribers come after it passes. For someone running their own newsletter, a second deployed environment would only repeat that proof, so it is not part of the default shape.
 
 A developer who wants a rehearsal space for later changes, such as a feature they are building or a new release, may add a **staging** environment beside production, with its own database, storage, and access. Its provider is kept to a sandbox or a test domain, so it can mail only addresses the developer owns.
 

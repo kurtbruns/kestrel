@@ -35,6 +35,7 @@ import { type EmailBranding, resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { webVersion } from "./archive";
+import { testUnsubscribeUrl } from "./public";
 import { readerIdentity } from "./reader";
 
 async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
@@ -167,7 +168,7 @@ export async function test(c: RequestContext): Promise<Response> {
   const { input, email, warnings, frozen } = await loadPostEmail(c);
   const provider = getProvider(c.config, c.env);
   // A test uses the same per-recipient substitution path as a real send.
-  const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
+  const unsubscribeUrl = testUnsubscribeUrl(c.config);
   const recipients = [{ email: to, unsubscribeUrl }];
   // Each press is a deliberate new send, never a retry of the last one, so it carries a
   // key of its own. A key derived from the post and recipient would be the same on every
@@ -306,7 +307,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
 
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
   const provider = getProvider(c.config, c.env);
-  const unsubscribeUrl = `${c.config.appOrigin}/unsubscribe?test=1`;
+  const unsubscribeUrl = testUnsubscribeUrl(c.config);
   // A deliberate manual test is a fresh send each press (not a retry), so it carries a
   // key of its own, as a post test does: an idempotent provider won't fold two
   // intentional tests into one.

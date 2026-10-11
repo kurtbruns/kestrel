@@ -129,11 +129,14 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const post = await getBySlug(c.env.DB, slug);
   const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
   if (!post || !send) {
+    // One page for every address with no published post, a draft, a scheduled post, or
+    // none at all, so it never reveals that a post is on its way. A test email's "view
+    // in browser" link lands here until the send starts.
     return readerMessage(c, {
-      title: "Not found",
+      title: "Nothing here yet",
       eyebrow: "Archive",
-      headline: "Not found",
-      ledeHtml: "This post isn’t available.",
+      headline: "Nothing here yet",
+      ledeHtml: "A post appears here as soon as it’s sent.",
       afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
       status: 404,
     });
