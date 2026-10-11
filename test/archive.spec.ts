@@ -738,8 +738,10 @@ describe("a test email's unsubscribe link", () => {
     expect(body).toContain("<strong>reader@example.com</strong>");
     expect(body).toContain('class="r-banner"');
     expect(body).toContain(banner);
-    // The banner sits above the masthead, so it is the first thing on the page.
-    expect(body.indexOf('class="r-banner"')).toBeLessThan(body.indexOf('class="r-mast"'));
+    // The banner sits above the masthead's identity, in its measure, so it is the first
+    // thing on the page.
+    expect(body).toContain('<div class="r-banner-slot"><div class="r-banner" role="note">');
+    expect(body.indexOf('class="r-banner"')).toBeLessThan(body.indexOf('class="r-mast-in"'));
     // Its button posts back as a test, never with a token.
     expect(body).toContain('<form class="r-form" method="post" action="/unsubscribe?test=1">');
     expect(body).not.toContain("token=");

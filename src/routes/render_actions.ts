@@ -26,6 +26,7 @@ import { fakeNotifications } from "../notify/fake";
 import { getProvider, perRecipient } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
+  archiveUrl,
   type RenderedEmail,
   type RenderInput,
   render,
@@ -72,6 +73,8 @@ interface PostEmail {
   /** When the post went out, or will: the send's start, else its fire time, or now for a
    *  draft. The date the web version's masthead carries, as the post page dates it. */
   dateMs: number;
+  /** Where the post stands: a draft, scheduled, its send going out, or sent. */
+  stage: "draft" | "scheduled" | "sending" | "sent";
 }
 
 async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
@@ -89,10 +92,19 @@ async function loadPostEmail(c: RequestContext): Promise<PostEmail> {
       warnings: [],
       frozen: { id: send.id },
       dateMs: send.started_at ?? send.fire_at,
+      stage:
+        input.post.status === "sent" ? "sent" : send.started_at != null ? "sending" : "scheduled",
     };
   }
   const result = await render(input, c.config, await loadBranding(c));
-  return { input, email: result, warnings: result.warnings, frozen: null, dateMs: Date.now() };
+  return {
+    input,
+    email: result,
+    warnings: result.warnings,
+    frozen: null,
+    dateMs: Date.now(),
+    stage: "draft",
+  };
 }
 
 /** An authed page carrying a post's HTML: no script, no form, never framed by another
@@ -133,16 +145,39 @@ export async function previewPage(c: RequestContext): Promise<Response> {
  * The post's web version: what its public post page will show, built by the post page's
  * own code from the same copy the preview shows (a draft's live render, or the frozen copy
  * once scheduled), so the publisher can proof the page before it is permanent (SPEC §5).
+ * Its one addition is the reader banner at the top of the post's column, saying what the
+ * page is, so a faithful copy is never mistaken for the live page.
  */
 export async function webPage(c: RequestContext): Promise<Response> {
-  const { email, dateMs } = await loadPostEmail(c);
+  const { input, email, dateMs, stage } = await loadPostEmail(c);
   return postPage(
     webVersion(email.html, {
       config: c.config,
       identity: await readerIdentity(c, c.config),
       dateMs,
+      banner: {
+        tag: "Web version",
+        text: webVersionSentence(stage, archiveUrl(c.config, input.post.slug)),
+      },
     }),
   );
+}
+
+/** The web version's banner sentence: where the post stands and where its public page is,
+ *  or will be once sent. The address is text without its scheme, never a link: before the
+ *  send starts it doesn't answer yet. No date, which the masthead already carries. */
+function webVersionSentence(stage: PostEmail["stage"], url: string): string {
+  const at = url.replace(/^https?:\/\//, "");
+  switch (stage) {
+    case "draft":
+      return `Draft. Once sent, it will be at ${at}.`;
+    case "scheduled":
+      return `Scheduled. Once sent, it will be at ${at}.`;
+    case "sending":
+      return `Sending. Its public page is at ${at}.`;
+    case "sent":
+      return `Sent. Its public page is at ${at}.`;
+  }
 }
 
 /**

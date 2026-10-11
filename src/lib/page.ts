@@ -17,6 +17,9 @@ import { PAGE_SECURITY_HEADERS } from "./page_headers";
  *  background in each theme. The sent email keeps its own white; this is web-only. */
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
+/** The reader ink, the text color on that ground in each theme. */
+const READER_INK_LIGHT = "#1b1a17";
+const READER_INK_DARK = "#ece9e3";
 
 /* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
@@ -50,10 +53,32 @@ const DEV_BADGE_STYLE = `
 @media (prefers-color-scheme: dark) { .r-dev:focus-visible { outline-color:#60a5fa; } }
 `;
 
+/* The reader banner: a notice at the top of a page that is not the live page a reader
+   gets, saying what it is instead (a test's unsubscribe pages, a post's web version). It
+   is a block within the page's own column, never a full-width strip, because on a post
+   page it sits inside the template's content column (the masthead anchor), where it
+   cannot reach the window's edges; the reader shell places it in its measure to match,
+   so it is one component on both kinds of page. It wears the reader ink as its ground,
+   the inverse of the page, so it reads as a notice laid over the publication rather than
+   part of it, and turns with the theme. Self-contained, like the dev pill, because a post
+   page has none of the reader tokens. */
+const READER_BANNER_STYLE = `
+.r-banner { display:flex; align-items:baseline; gap:10px; margin:0 0 20px; padding:11px 16px; border-radius:10px;
+            background:${READER_INK_LIGHT}; color:${READER_BG_LIGHT}; text-align:left;
+            font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+            font-size:14px; font-weight:400; line-height:1.45; }
+.r-banner-tag { flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
+                padding:2px 8px; border-radius:999px; border:1px solid currentColor; }
+.r-banner-text { min-width:0; overflow-wrap:anywhere; }
+@media (prefers-color-scheme: dark) { .r-banner { background:${READER_INK_DARK}; color:${READER_BG_DARK}; } }
+/* On a phone the tag takes its own line, so the sentence has the column's whole width. */
+@media (max-width:560px) { .r-banner { flex-direction:column; align-items:flex-start; gap:6px; } }
+`;
+
 const READER_STYLE = `
 :root {
   color-scheme: light dark;
-  --r-bg:${READER_BG_LIGHT}; --r-ink:#1b1a17; --r-card:#ffffff; --r-line:#e7e5df; --r-mut:#6b6a63;
+  --r-bg:${READER_BG_LIGHT}; --r-ink:${READER_INK_LIGHT}; --r-card:#ffffff; --r-line:#e7e5df; --r-mut:#6b6a63;
   --r-serif:Fraunces,Georgia,'Iowan Old Style','Times New Roman',serif;
   --r-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --r-measure:820px; /* one reading width shared by the masthead, body, and footer so their edges line up */
@@ -62,7 +87,7 @@ const READER_STYLE = `
   --brand-ink:currentColor;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
+  :root { --r-bg:${READER_BG_DARK}; --r-ink:${READER_INK_DARK}; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font-family:var(--r-sans); background:var(--r-bg); color:var(--r-ink); line-height:1.6; }
@@ -123,15 +148,10 @@ a.r-t:hover { text-decoration:underline; }
 .r-btn:hover { filter:brightness(1.06); }
 .r-fine { font-size:12.5px; color:var(--r-mut); margin:16px 0 0; }
 
-/* The test banner: a full-width strip above the masthead on a page that only shows what
-   a reader would see (a test email's or a preview's unsubscribe link). It wears the
-   reader ink as its ground, the inverse of the page, so it reads as a notice laid over
-   the publication rather than part of it, and turns with the theme like the rest. */
-.r-banner { background:var(--r-ink); color:var(--r-bg); }
-.r-banner-in { max-width:var(--r-measure); margin:0 auto; padding:12px 24px; font-size:14px; line-height:1.45;
-               display:flex; align-items:baseline; gap:10px; }
-.r-banner-tag { flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
-                padding:2px 8px; border-radius:999px; border:1px solid currentColor; }
+/* Where the shell places a banner (its look is READER_BANNER_STYLE): on the masthead's
+   surface, above it, in the same measure, so the banner's edges line up with the
+   masthead's content and the body's. */
+.r-banner-slot { max-width:var(--r-measure); margin:0 auto; padding:16px 24px 0; }
 
 .r-foot { border-top:1px solid var(--r-line); }
 .r-foot-in { max-width:var(--r-measure); margin:0 auto; padding:22px 24px 40px; font-size:12.5px; color:var(--r-mut); }
@@ -183,8 +203,8 @@ export interface ArchiveIndexPost {
   dateLabel: string;
 }
 
-/** A strip above the masthead naming what kind of page this is, for a page that only
- *  shows what a reader would see: a short tag ("Test") and a sentence. */
+/** A banner above the masthead saying what kind of page this is, for a page that is not
+ *  the live page a reader gets: a short tag ("Test", "Web version") and a sentence. */
 export interface ReaderBanner {
   tag: string;
   text: string;
@@ -225,6 +245,26 @@ export function archiveDevDashboardChrome(url?: string): { head: string; masthea
   return { head: devDashboardStyle(url), masthead: devDashboardBadge(url) };
 }
 
+/** The banner's stylesheet, emitted beside it and only when it is. */
+function readerBannerStyle(banner?: ReaderBanner): string {
+  return banner ? `<style>${READER_BANNER_STYLE}</style>` : "";
+}
+
+/** The banner's markup, the one builder for every page that carries it. */
+function readerBannerMarkup(banner?: ReaderBanner): string {
+  return banner
+    ? `<div class="r-banner" role="note"><span class="r-banner-tag">${escapeHtml(banner.tag)}</span><span class="r-banner-text">${escapeHtml(banner.text)}</span></div>`
+    : "";
+}
+
+/** The reader banner as browser-only chrome for a hosted post page: its stylesheet for
+ *  the head anchor and the banner for the masthead anchor, so it sits at the top of the
+ *  template's content column and takes its width. Only the publisher's web version passes
+ *  one; the public post page and every email carry neither (I3). */
+export function archiveReaderBanner(banner?: ReaderBanner): { head: string; masthead: string } {
+  return { head: readerBannerStyle(banner), masthead: readerBannerMarkup(banner) };
+}
+
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
  *  `mainHtml`. Public and indexable unless `private`; every link points only at public
@@ -240,7 +280,7 @@ export function readerPage(opts: {
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
    *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
-  /** A banner above the masthead, for a page shown as a test of what a reader sees. */
+  /** A banner above the masthead, for a page that is not the live page a reader gets. */
   banner?: ReaderBanner;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
@@ -257,7 +297,7 @@ export function readerPage(opts: {
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
   const banner = opts.banner
-    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span>${escapeHtml(opts.banner.text)}</span></div></div>`
+    ? `<div class="r-banner-slot">${readerBannerMarkup(opts.banner)}</div>`
     : "";
   const doc = `<!doctype html>
 <html lang="en">
@@ -266,10 +306,10 @@ export function readerPage(opts: {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
 ${FRAUNCES_FONT_LINKS}
-<style>${READER_STYLE}</style>${devDashboardStyle(opts.devDashboardUrl)}
+<style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>
-${banner}<header class="r-mast"><div class="r-mast-in">
+<header class="r-mast">${banner}<div class="r-mast-in">
 <a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}">${logo}<span><span class="r-name">${escapeHtml(name)}</span>${tag}</span></a>
 ${cta}
 </div></header>

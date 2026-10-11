@@ -1,9 +1,9 @@
 // A post's web version: the post as its public post page will show it (SPEC §5), for the
 // publisher to proof before it is permanent. It opens in a tab of its own from the editor's
-// Web version link, so it carries no app chrome: one thin bar above the page says what it
-// is, where the post stands, and where its public page will be, so the copy is never
-// mistaken for the live page, and the frame below holds the page exactly as it will be.
-// Once the post's send starts, the public page itself is the web version.
+// Web version link, so it carries no app chrome: the frame fills the tab with the page the
+// server builds, whose reader banner says what it is, where the post stands, and where its
+// public page will be, so the copy is never mistaken for the live page. Once the post's send
+// starts, the public page itself is the web version.
 
 import { pagePolicy } from "../../shared/page_policy";
 import type { PostResponse } from "../../shared/posts";
@@ -11,7 +11,7 @@ import { api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
-import { type Html, html, setHtml } from "../ui/html";
+import { html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
 import { savesSettled } from "./pending_save";
 
@@ -49,33 +49,6 @@ export function framedCopy(doc: string): string {
     doc,
     `<meta http-equiv="Content-Security-Policy" content="${pagePolicy("'none'", { framed: true })}">`,
   );
-}
-
-/** Where a post stands, for the bar: a draft or scheduled, and its public address (null
- *  while unknown, so the bar names none). */
-export interface WebBarState {
-  scheduled: boolean;
-  url: string | null;
-}
-
-/** An address as the bar shows it: without its scheme, which says nothing to a reader. */
-function shortUrl(url: string): string {
-  return url.replace(/^https?:\/\//, "");
-}
-
-/** The bar's words: what the page is, where the post stands, and where its public page will
- *  be once sent (as text, since it doesn't answer yet), with no date. Null state: the post
- *  couldn't be read, so the bar says only what the page is. */
-export function webBar(state: WebBarState | null): Html {
-  const label = html`<strong>Web version</strong>`;
-  if (state === null) {
-    return label;
-  }
-  const lead = state.scheduled ? html`Scheduled.` : html`Draft.`;
-  const at = state.url
-    ? html` Once sent, it will be at <span class="web-url">${shortUrl(state.url)}</span>.`
-    : null;
-  return html`${label} <span>${lead}${at}</span>`;
 }
 
 /** The same address, spelled one way, or null for one that is not a whole URL. */
@@ -118,8 +91,8 @@ export function leaveFor(url: string): void {
   location.replace(url);
 }
 
-/** The post's read, or null when it fails (the page still shows, under a bar that names no
- *  stage or address). */
+/** The post's read, or null when it fails (the page still shows; only the move to the
+ *  public page once the send starts waits on it). */
 async function readPost(id: string, signal: AbortSignal): Promise<PostResponse | null> {
   try {
     return await api<PostResponse>(`/api/posts/${encodeURIComponent(id)}`, { signal });
@@ -154,11 +127,9 @@ export async function renderWebVersion(
       leaveFor(url);
       return;
     }
-    const state = data ? { scheduled: data.scheduled != null, url } : null;
     setHtml(
       root,
       html`<div class="web-page">
-        <div class="web-bar" role="note">${webBar(state)}</div>
         <iframe class="web-frame" sandbox="${EMAIL_FRAME_SANDBOX}" title="Web version"></iframe>
       </div>`,
     );
