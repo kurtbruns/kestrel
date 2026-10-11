@@ -17,7 +17,7 @@ import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { adminAuth } from "./support/auth";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
-import { resetDatabase } from "./support/fixtures";
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { expectErrorLogs } from "./support/log";
 
 /** Minimal binding bag for the pure getConfig tests (no D1/R2 needed). */
@@ -325,6 +325,9 @@ describe("the dev routes exist only in local development", () => {
   // Defense in depth: a handler reached through a router built for another config (the
   // router cache keyed wrong, say) still refuses outside local dev.
   it("each handler refuses on its own outside local dev", async () => {
+    // A known reader, so a reset that ran despite the refusal would show as a missing row.
+    await resetDatabase();
+    await seedConfirmed("kept@example.com");
     const e = {
       ...env,
       PROVIDER: "fake",
@@ -350,8 +353,9 @@ describe("the dev routes exist only in local development", () => {
     for (const [method, path, handler] of handlers) {
       await expect(handler(context(path, method)), path).rejects.toMatchObject({ status: 404 });
     }
-    // The reset refused before touching anything: the suite's own database still answers.
-    expect(await env.DB.prepare("SELECT 1 AS ok").first()).toEqual({ ok: 1 });
+    // The reset refused before touching anything: the reader seeded above is still there.
+    const kept = await env.DB.prepare("SELECT email FROM subscribers").all<{ email: string }>();
+    expect(kept.results.map((r) => r.email)).toEqual(["kept@example.com"]);
   });
 
   // The CLI's seed and reset check this ID against the record `kestrel dev` left in their
@@ -398,29 +402,29 @@ describe("createRouter — archive route follows the base path", () => {
     await sweep(env as AppEnv);
   }
 
-  it("serves the archive at the configured base path, and 404s the old one", async () => {
+  it("serves the archive at the configured base path, and 404s the default one", async () => {
     await sendPost("routed");
     const post = (await posts.getBySlug(env.DB, "routed"))!;
+    // A non-default base path, so a route hard-coded to /archive can't pass for this one.
     const router = createRouter({
-      archiveBasePath: "/archive",
+      archiveBasePath: "/issues",
       devMode: false,
       minLeadMs: DEFAULT_MIN_LEAD_MS,
     });
     const ctx = createExecutionContext();
+    const get = (path: string) =>
+      router.handle(new Request(`https://k.test${path}`), env as AppEnv, ctx);
 
-    const hit = await router.handle(
-      new Request(`https://k.test/archive/${post.slug}`),
-      env as AppEnv,
-      ctx,
-    );
-    const miss = await router.handle(
-      new Request(`https://k.test/newsletter/${post.slug}`),
-      env as AppEnv,
-      ctx,
-    );
+    const hit = await get(`/issues/${post.slug}`);
+    const index = await get("/issues");
+    const atDefault = await get(`/archive/${post.slug}`);
+    const legacy = await get(`/newsletter/${post.slug}`);
     await waitOnExecutionContext(ctx);
 
     expect(hit.status).toBe(200);
-    expect(miss.status).toBe(404); // the hardcoded /newsletter path is gone
+    expect(await hit.text()).toContain("routed");
+    expect(index.status).toBe(200);
+    expect(atDefault.status).toBe(404);
+    expect(legacy.status).toBe(404); // the hardcoded /newsletter path is gone
   });
 });

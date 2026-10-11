@@ -331,8 +331,9 @@ describe("webhook routes are wired through the real router", () => {
   });
 
   it("both /webhooks/* routes are public (reach the adapter, never a 401/404)", async () => {
-    // No signature headers → the adapter rejects (400/401/403), proving the route
-    // is registered and NOT behind requireAuth (auth would be 401 before parsing).
+    // An unsigned body gets each adapter's own refusal, status and words, which only the
+    // adapter can produce: a 404 would mean the route is gone, and a 401 that requireAuth
+    // stopped it before the adapter ever parsed it.
     const sesRes = await route(
       new Request("https://kestrel.test/webhooks/ses", { method: "POST", body: "{}" }),
       sesEnv(),
@@ -341,11 +342,11 @@ describe("webhook routes are wired through the real router", () => {
       new Request("https://kestrel.test/webhooks/resend", { method: "POST", body: "{}" }),
       resendEnv(),
     );
-    for (const res of [sesRes, resendRes]) {
-      expect(res.status).not.toBe(404); // route exists
-      expect([400, 401, 403]).toContain(res.status); // adapter-level rejection, not auth gate
-    }
-    // Resend with no svix headers is specifically a 400 "missing signature headers".
+    // SES: the envelope parses but carries no signature, so SNS verification refuses it.
+    expect(sesRes.status).toBe(403);
+    expect(await sesRes.text()).toBe("invalid signature");
+    // Resend: no svix headers at all.
     expect(resendRes.status).toBe(400);
+    expect(await resendRes.text()).toBe("missing signature headers");
   });
 });

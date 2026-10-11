@@ -5,6 +5,7 @@ import {
   $$,
   type FakeApi,
   fakeApi,
+  feedReads,
   jsonResponse,
   mount,
   resetShell,
@@ -147,6 +148,7 @@ describe("drafts view", () => {
     let sending = false;
     let failing = false;
     let fireAt = row.fire_at;
+    const cursors: string[] = [];
     const listed = () => [
       posts[0],
       {
@@ -161,12 +163,17 @@ describe("drafts view", () => {
         ...sends.routes,
         {
           path: "/api/posts",
-          reply: () =>
-            failing
-              ? jsonResponse({ error: "down" }, 500)
-              : { posts: listed(), page, cursor: sends.cursor() },
+          reply: () => {
+            if (failing) {
+              return jsonResponse({ error: "down" }, 500);
+            }
+            cursors.push(sends.cursor());
+            return { posts: listed(), page, cursor: sends.cursor() };
+          },
         },
       ],
+      /** The cursor each list read was handed, in order. */
+      cursors,
       start() {
         sending = true;
         sends.edit("s2", { status: "sending", started_at: Date.now() });
@@ -211,6 +218,7 @@ describe("drafts view", () => {
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(10);
     expect(fake.calls.some((c) => c.url.pathname === "/api/sends")).toBe(false); // no second read
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(post.cursors[0]);
     post.start();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(postReads()).toHaveLength(2); // started: re-read once

@@ -441,8 +441,12 @@ describe("editor view", () => {
 
   it("follows its send through the layer, reading at once when a hidden tab is shown again", async () => {
     const linked = scheduledPost();
+    // The clock stands still until the spec advances it, so this is the cursor the send's
+    // read is handed.
+    const cursor = linked.sends.cursor();
     await open(linked.routes);
     expect(feedCalls()).toHaveLength(1); // the layer's first read, from the send's cursor
+    expect(feedCalls()[0]?.url.searchParams.get("since")).toBe(cursor);
     try {
       setHidden(true);
       await vi.advanceTimersByTimeAsync(120_000); // a hidden tab reads nothing
@@ -618,7 +622,7 @@ describe("editor view", () => {
 
   it("goes to Drafts when its post is deleted elsewhere", async () => {
     const linked = scheduledPost();
-    await open([...linked.routes, { path: "/api/posts", reply: () => ({ posts: [], page: {} }) }]);
+    await open(linked.routes);
     linked.sends.remove("s1");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(location.hash).toBe("#/drafts");
@@ -859,6 +863,110 @@ describe("editor view", () => {
     expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toEqual([]);
     expect($("#toasts").textContent).toMatch(/Not an email address: typo@gmail/);
     expect(document.querySelector(".modal")).not.toBeNull(); // left open to fix the typo
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says an autosave failed, and has a leave ask rather than flush again", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error", message: "disk full" }, 500),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(puts()).toHaveLength(1);
+    expect($("#toasts").textContent).toMatch(/Couldn't autosave — disk full/);
+    expect($("#saveStatus").textContent).not.toBe("Saved");
+    expect(handle().dirty()).toBe(true);
+    expect(handle().beforeLeave()).toBe("confirm"); // a silent flush would fail again
+  });
+
+  it("says a leave's save failed, since no one is left on the page to see it otherwise", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error", message: "disk full" }, 500),
+      },
+    ]);
+    typeInto(body(), "leaving");
+    expect(handle().beforeLeave()).toBe("leave");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    expect($("#toasts").textContent).toMatch(/Couldn't save your changes — disk full/);
+  });
+
+  it("locks the draft when a save is refused because it left draft elsewhere", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () =>
+          jsonResponse({ error: "not_draft", message: "the post is no longer a draft" }, 409),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    const banner = $("#freshnessBanner");
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).toMatch(/scheduled elsewhere/);
+    expect(document.querySelector("#freshKeep")).toBeNull(); // nothing to keep editing
+    expect($("#toasts").textContent).toBe(""); // a conflict, not an error
+    expect(handle().beforeLeave()).toBe("confirm");
+    typeInto(body(), "mine still");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toHaveLength(1); // paused while the banner is up
+  });
+
+  it("reloads the other writer's version from the out-of-date banner, discarding the unsaved edit", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    server.elsewhere("service");
+    await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+    expect($("#freshnessBanner").hidden).toBe(false);
+    typeInto(body(), "mine"); // held, since saving waits on the banner
+    const before = reads().length;
+    $("#freshReload").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads()).toHaveLength(before + 1); // the view re-entered, reading the post again
+    expect(body().value).toBe("# Owls\n\nHoot.");
+    expect($("#freshnessBanner").hidden).toBe(true);
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(handle().dirty()).toBe(false);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toEqual([]); // the discarded edit is never saved
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says when only some of a test's addresses were sent", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: (req) => ({ sent: (req.json() as { to: string }).to !== "you@b.c", warnings: [] }),
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "me@b.c\nyou@b.c");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(2);
+    expect($("#toasts").textContent).toMatch(/Sent 1\/2 — some failed/);
+    expect($("#toasts").textContent).not.toMatch(/Test sent to/);
     expect(fake.unhandled).toEqual([]);
   });
 

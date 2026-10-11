@@ -507,9 +507,13 @@ describe("the send-state layer", () => {
     followSends(joinedAt, on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(2); // no second read while one is out
+    // A change after the page joined: the held read answers past the page's cursor.
+    srv.write(live("x", "sending", "progressing"));
     srv.state.hold = null;
     release();
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(3);
+    // Its own read starts where the page's read stood, not where the held one ended.
+    expect(srv.reads()[2]?.url.searchParams.get("since")).toBe(joinedAt.cursor);
   });
 });

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendSummary, SendView } from "../../shared/sends";
+import type { SendListResponse, SendSummary, SendView } from "../../shared/sends";
 import {
   $,
   $$,
@@ -8,12 +8,14 @@ import {
   type FakeRoute,
   fakeApi,
   feedReads,
+  jsonResponse,
   listReads,
   mount,
   resetShell,
   sendServer,
   sendView,
 } from "../test/support";
+import { toLocalInput } from "../ui/format";
 import { renderSent } from "./list";
 import { activeRowHtml, countdownHtml, countdowns, deliveredCell, needsOperator } from "./progress";
 
@@ -173,14 +175,18 @@ describe("the scheduled card's countdown", () => {
 
   it("ticks once a second for the life of the mount", () => {
     const el = document.createElement("div");
-    el.innerHTML = countdownHtml(row(NOW + 3_000)).markup;
+    el.innerHTML = countdownHtml(row(NOW + 5_000)).markup;
     const c = new AbortController();
     countdowns(el, c.signal);
     vi.advanceTimersByTime(1000);
-    expect(el.textContent).toBe("Sends in 2s");
+    expect(el.textContent).toBe("Sends in 4s");
     vi.advanceTimersByTime(2000);
-    expect(el.textContent).toBe("Preparing to send…");
+    expect(el.textContent).toBe("Sends in 2s");
+    // The mount ends mid-countdown: the cell stops where it was, and the fire time's own
+    // tick never comes.
     c.abort();
+    vi.advanceTimersByTime(5000);
+    expect(el.textContent).toBe("Sends in 2s");
   });
 });
 
@@ -248,7 +254,11 @@ describe("sent view", () => {
   });
 
   it("follows from its own reads: the layer's first read asks from the earliest of their cursors", async () => {
-    fake = world(sendServer([scheduled(), send()]));
+    const srv = sendServer([scheduled(), send()]);
+    // The clock stands still until the spec advances it, so this is the cursor each of the
+    // page's own reads is handed.
+    const cursor = srv.cursor();
+    fake = world(srv);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     const lists = listReads(fake);
@@ -258,7 +268,7 @@ describe("sent view", () => {
       "sent",
     ]);
     const [feed] = feedReads(fake);
-    expect(feed?.url.searchParams.get("since")).toBeTruthy();
+    expect(feed?.url.searchParams.get("since")).toBe(cursor);
     for (const c of lists) {
       expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(c));
     }
@@ -267,11 +277,13 @@ describe("sent view", () => {
   it("catches a change made between its own reads, following from the earliest of them", async () => {
     const srv = sendServer([scheduled(), send()]);
     const lists = srv.routes.find((r) => r.path === "/api/sends")!;
+    const cursors: string[] = [];
     fake = world(srv, [
       {
         path: "/api/sends",
         reply: (req) => {
-          const out = lists.reply(req);
+          const out = lists.reply(req) as SendListResponse;
+          cursors.push(out.cursor);
           if (req.url.searchParams.get("status") === "scheduled") {
             srv.edit("sch", { status: "canceled" }); // the other client, just after the queue's read
           }
@@ -282,6 +294,8 @@ describe("sent view", () => {
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     // The queue's read predates the cancel; the layer's first read reports it.
+    expect(new Set(cursors).size).toBe(2);
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(cursors[0]);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
   });
 
@@ -345,6 +359,39 @@ describe("sent view", () => {
     expect(feedReads(fake)).toHaveLength(2);
   });
 
+  it("reschedules a scheduled send from its card, refreshes the queue, and has the layer read at once", async () => {
+    const srv = sendServer([scheduled(), send()]);
+    fake = world(srv, [
+      {
+        method: "POST",
+        path: "/api/sends/sch/reschedule",
+        reply: (req) => {
+          srv.edit("sch", {
+            fire_at: new Date((req.json() as { fire_at: string }).fire_at).getTime(),
+          });
+          return {};
+        },
+      },
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(feedReads(fake)).toHaveLength(1);
+    $("[data-reschedule='sch']").click();
+    const when = $<HTMLInputElement>("#rsWhen");
+    expect(when.value).toBe(toLocalInput(new Date(NOW + 2 * 3_600_000))); // opens at its time
+    const moved = new Date(NOW + 3 * 86_400_000);
+    when.value = toLocalInput(moved);
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(10);
+    const posted = fake.calls.find((c) => c.url.pathname === "/api/sends/sch/reschedule");
+    expect(posted?.json()).toEqual({ fire_at: new Date(toLocalInput(moved)).toISOString() });
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toMatch(/Rescheduled/);
+    expect($(".sched-card .countdown").textContent).toBe("Sends in 3 days");
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("offers a scheduled card's Cancel and Reschedule only while the server would take them, hiding them at the fire time", async () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 5_000 })]);
     fake = world(srv);
@@ -405,8 +452,8 @@ describe("sent view", () => {
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(10);
     const lists = listReads(fake).length;
-    await vi.advanceTimersByTimeAsync(30 * 60_000);
-    expect(feedReads(fake)).toHaveLength(31);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(feedReads(fake)).toHaveLength(6); // the first, then one a minute
     expect(listReads(fake)).toHaveLength(lists);
   });
 
@@ -547,6 +594,34 @@ describe("sent view", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect(document.querySelector("#stuck .stuck-card")).toBeNull();
     expect($(".active-card").dataset.watch).toBe("act");
+  });
+
+  it("reads the page again and follows from those reads when its cursor is ahead of the database", async () => {
+    const srv = sendServer([
+      send({ c_accepted: 50, c_delivered: 100, c_bounced: 0, c_complained: 0 }),
+    ]);
+    const feed = srv.routes.find((r) => r.path === "/api/sends/feed")!;
+    let ahead = true;
+    fake = world(srv, [
+      {
+        path: "/api/sends/feed",
+        reply: (req) => {
+          if (ahead) {
+            ahead = false; // a local reset, once
+            return jsonResponse({ error: "cursor_ahead", message: "reset" }, 409);
+          }
+          return feed.reply(req);
+        },
+      },
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(listReads(fake)).toHaveLength(6); // its three reads, then all three again
+    expect(feedReads(fake)).toHaveLength(2); // refused, then from the fresh reads
+    srv.edit("x1", { c_accepted: 0, c_delivered: 148, c_bounced: 2 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("tr[data-id='x1'] .delivered").textContent).toBe("1482 bounced"); // following again
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("says so in place when the read of the sends in flight fails, and follows from its Retry", async () => {

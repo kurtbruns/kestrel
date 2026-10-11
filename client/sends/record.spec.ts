@@ -154,9 +154,7 @@ describe("sent record", () => {
     const reads = others();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(others()).toBe(reads);
-    expect(
-      fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length,
-    ).toBeLessThanOrEqual(4);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/sends/feed")).toHaveLength(3); // the first, then one a minute
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -834,10 +832,13 @@ describe("sent record", () => {
     expect(feedReads()).toBe(1);
     await vi.advanceTimersByTimeAsync(3000); // the next read is now pending
     expect(feedReads()).toBe(2);
+    const calls = fake.calls.length;
     unmount(); // what navigating away does: the pending read is cut off with the mount
     release();
     await vi.advanceTimersByTimeAsync(9000);
-    expect(feedReads()).toBe(2); // no reschedule
-    expect(document.querySelector(".watch-card")).toBeNull(); // nothing painted back
+    // No reschedule, and the cut-off answer reached nothing that would read again (the
+    // send's own read, its recipients).
+    expect(feedReads()).toBe(2);
+    expect(fake.calls).toHaveLength(calls);
   });
 });

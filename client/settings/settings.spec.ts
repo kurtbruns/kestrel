@@ -210,13 +210,15 @@ describe("settings view", () => {
           const body = req.json() as { publication: { name: string }; testRecipients: string[] };
           return {
             settings: settings({
+              // The server's own normalizing, which the client leaves to it: inner runs of
+              // whitespace collapse, and the recipients come back in its order.
               publication: {
-                name: body.publication.name.trim(),
+                name: body.publication.name.replace(/\s+/g, " "),
                 tagline: "",
                 address: "",
                 logoUrl: "",
               },
-              testRecipients: body.testRecipients.map((r) => r.toLowerCase()),
+              testRecipients: [...body.testRecipients].sort().reverse(),
               confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
             }),
             warnings: [],
@@ -225,7 +227,7 @@ describe("settings view", () => {
         },
       },
     ]);
-    typeInto($<HTMLInputElement>("#setName"), "  Birds Monthly  ");
+    typeInto($<HTMLInputElement>("#setName"), "  Birds   Monthly  ");
     typeInto($<HTMLInputElement>("#recipInput"), "New@B.C");
     $("#recipAdd").click();
     $("#ceTabEdit").click();
@@ -234,13 +236,15 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const put = fake.calls.find((c) => c.method === "PUT");
     expect(put?.json()).toEqual({
-      publication: { name: "Birds Monthly", tagline: "Owls & more", address: "" },
+      publication: { name: "Birds   Monthly", tagline: "Owls & more", address: "" },
       testRecipients: ["me@b.c", "new@b.c"],
       confirmationEmail: { subject: "Please confirm", body: "", buttonLabel: "", reassurance: "" },
       notifications: { to: "" },
     });
-    expect($<HTMLInputElement>("#setTagline").value).toBe(""); // the server's result is the baseline now
-    expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["me@b.c", "new@b.c"]);
+    // The server's result is the baseline now, wherever it differs from what was sent.
+    expect($<HTMLInputElement>("#setName").value).toBe("Birds Monthly");
+    expect($<HTMLInputElement>("#setTagline").value).toBe("");
+    expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["new@b.c", "me@b.c"]);
     expect($<HTMLInputElement>("#ceMessage").value).toBe(DEFAULT_COPY.body);
     expect($("#brandName").textContent).toBe("Birds Monthly");
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Monthly");

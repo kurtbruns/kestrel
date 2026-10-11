@@ -1,7 +1,8 @@
 import { createExecutionContext, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
+import * as sendsDb from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
@@ -16,6 +17,9 @@ const readJson = async (r: Response): Promise<any> => r.json();
 // Each test starts from an empty database, so a count or a list read sees only its own rows.
 beforeEach(async () => {
   await resetDatabase();
+});
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 const PNG_1x1 = Uint8Array.from(
@@ -181,13 +185,22 @@ describe("schedule / send / cancel + soft-lock", () => {
     expect(still).toBe(frozenHtml);
     expect(still).toContain("original body");
 
-    // cancel again → nothing to do: 200, unchanged, so a retried cancel is safe
+    // cancel again → nothing to do: 200, unchanged, so a retried cancel is safe. It takes no
+    // rev either, so the feed reports no change that did not happen.
+    const canceledRev = (await readJson(cancel)).send.rev;
     const twice = await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, {
       method: "POST",
       headers: AUTH,
     });
     expect(twice.status).toBe(200);
-    expect(await readJson(twice)).toMatchObject({ changed: false, send: { status: "canceled" } });
+    expect(await readJson(twice)).toMatchObject({
+      changed: false,
+      send: { status: "canceled", rev: canceledRev },
+    });
+    const reread = await readJson(
+      await SELF.fetch(`${base}/api/sends/${sendId}`, { headers: AUTH }),
+    );
+    expect(reread.send.rev).toBe(canceledRev);
   });
 
   it("cancel changes the send and the post together, or neither", async () => {
@@ -477,6 +490,47 @@ describe("schedule / send / cancel + soft-lock", () => {
       .bind(id)
       .all();
     expect(results.length).toBe(1);
+  });
+
+  it("leaves two send-nows racing the same post with one send, which both answers name", async () => {
+    const id = await makeDraft();
+    const call = () =>
+      SELF.fetch(`${base}/api/posts/${id}/send`, { method: "POST", headers: AUTH });
+
+    const [a, b] = await Promise.all([call(), call()]);
+    const [first, second] = [await readJson(a), await readJson(b)];
+    const { results } = await env.DB.prepare(
+      "SELECT id FROM sends WHERE post_id = ? AND status IN ('scheduled', 'sending')",
+    )
+      .bind(id)
+      .all<{ id: string }>();
+    expect(results).toHaveLength(1);
+    expect([first.send?.id, second.send?.id]).toEqual([results[0]?.id, results[0]?.id]);
+    expect([a.status, b.status]).toContain(201);
+  });
+
+  // BUG: a send-now that passes the route's idempotency check before a concurrent one
+  // freezes is refused 409 active_send_exists by freeze(), where SPEC §6 has it find the
+  // existing send and return it as the idempotent answer.
+  it.fails("answers a send-now that lost the race to another with the existing send, not a refusal (SPEC §6)", async () => {
+    const id = await makeDraft();
+    const first = await SELF.fetch(`${base}/api/posts/${id}/send`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(first.status).toBe(201);
+    // The race made deterministic: the second request's own check runs before the first
+    // request's send exists, so it sees none and goes on to freeze.
+    vi.spyOn(sendsDb, "getActiveSendForPost").mockResolvedValueOnce(null);
+    const second = await SELF.fetch(`${base}/api/posts/${id}/send`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(second.status).toBe(200);
+    expect(await readJson(second)).toMatchObject({
+      idempotent: true,
+      send: { id: (await readJson(first)).send.id },
+    });
   });
 
   it("re-schedules a post after its prior send is canceled (predicate excludes terminal states)", async () => {

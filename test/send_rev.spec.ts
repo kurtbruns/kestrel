@@ -32,13 +32,9 @@ async function rev(id: string): Promise<number> {
   return row.rev;
 }
 
-/** The sequence now, read the way the list reads it. */
-async function seq(): Promise<number> {
-  const row = await env.DB.prepare(
-    "SELECT MAX(COALESCE((SELECT MAX(rev) FROM sends), 0), COALESCE((SELECT MAX(rev) FROM send_tombstones), 0)) AS value",
-  ).first<{ value: number }>();
-  return row!.value;
-}
+/** The sequence now, through the app's own reader of it, so a change to its formula is
+ *  checked here rather than a copy of the old one. */
+const seq = (): Promise<number> => sends.currentSendSeq(env.DB);
 
 async function listSends(query = ""): Promise<any> {
   const res = await SELF.fetch(`${base}/api/sends${query}`, { headers: AUTH });

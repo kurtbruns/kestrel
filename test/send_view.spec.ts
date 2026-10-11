@@ -331,9 +331,16 @@ describe("GET /api/sends/:id is tagged", () => {
 
 describe("the ETag follows the words the clock changes", () => {
   it("changes as a missed send's minutes late do, with no write", async () => {
+    // Date is faked so only the test moves the clock: a minute boundary the real clock
+    // crossed between the reads could not change the words in its place.
+    vi.useFakeTimers({ toFake: ["Date"] });
     const send = await frozenSend(Date.now() - 20 * 60_000);
     const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const etag = first.headers.get("etag") ?? "";
+    const same = await SELF.fetch(`${base}/api/sends/${send.id}`, {
+      headers: { ...AUTH, "if-none-match": etag },
+    });
+    expect(same.status).toBe(304);
     // A minute later by the send's own clock: the fire time a minute further back, with no rev.
     await env.DB.prepare("UPDATE sends SET fire_at = fire_at - 60000 WHERE id = ?")
       .bind(send.id)

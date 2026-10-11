@@ -213,7 +213,10 @@ describe("resolve a wedged send", () => {
   });
 
   it("rejects resolving a missing send", async () => {
-    await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toThrow();
+    await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
   });
 });
 
@@ -227,7 +230,7 @@ describe("a real SES transport error wedges the send, and resolve unwedges it", 
     // The outbound SES POST throws (request left, no response) — the ambiguous case.
     const spy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
     await runSend(sesEnv(), send.id);
-    spy.mockRestore();
+    expect(spy).toHaveBeenCalledTimes(1);
 
     // Wedged: sending, one dispatched row, nothing pending, nothing mailed.
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
@@ -235,8 +238,12 @@ describe("a real SES transport error wedges the send, and resolve unwedges it", 
     expect(await sends.countDeliveries(env.DB, send.id, "pending")).toBe(0);
     expect(await sends.countDeliveries(env.DB, send.id, "accepted")).toBe(0);
 
-    // Resuming does NOT clear it — a non-idempotent provider is never auto-retried.
+    // Resuming does NOT clear it — a non-idempotent provider is never auto-retried. The
+    // transport stays mocked, so a blind re-send would show as a second request here
+    // rather than failing on the real network and leaving the row looking the same.
+    spy.mockClear();
     await runSend(sesEnv(), send.id);
+    expect(spy).not.toHaveBeenCalled();
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
     expect(await sends.countDeliveries(env.DB, send.id, "dispatched")).toBe(1);
 

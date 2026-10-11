@@ -170,5 +170,10 @@ describe("renderPager", () => {
     expect(reload).toHaveBeenCalledTimes(1);
     renderPager(el, state, page(120, 0, 25), reload);
     expect(el.querySelector<HTMLButtonElement>(".pager-prev")!.disabled).toBe(true);
+    expect(el.querySelector<HTMLButtonElement>(".pager-next")!.disabled).toBe(false);
+    renderPager(el, state, page(120, 100, 25), reload); // the last page
+    expect(el.textContent).toContain("101–120 of 120");
+    expect(el.querySelector<HTMLButtonElement>(".pager-prev")!.disabled).toBe(false);
+    expect(el.querySelector<HTMLButtonElement>(".pager-next")!.disabled).toBe(true);
   });
 });

@@ -1,27 +1,45 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 
-describe("schema (0001_init)", () => {
-  it("creates all nine tables", async () => {
+// The exact set, not a containment check: a table a migration adds or drops has to be
+// named here, so the list can't silently fall behind the schema.
+describe("schema (every migration applied)", () => {
+  it("has exactly the app's ten tables", async () => {
     const { results } = await env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+      "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
     ).all<{ name: string }>();
-    const names = results.map((r) => r.name);
-    for (const t of [
-      "posts",
-      "post_revisions",
-      "images",
-      "subscribers",
-      "suppressions",
-      "settings",
-      "sends",
-      "deliveries",
-      "notifications",
-    ]) {
-      expect(names).toContain(t);
-    }
+    expect(results.map((r) => r.name).sort()).toEqual(
+      [
+        // 0001_init
+        "deliveries",
+        "images",
+        "notifications",
+        "post_revisions",
+        "posts",
+        "sends",
+        "settings",
+        "subscribers",
+        "suppressions",
+        // 0002_sends_since_1_0
+        "send_tombstones",
+      ].sort(),
+    );
   });
+});
 
+describe("schema (0002_sends_since_1_0)", () => {
+  it("adds a send's change number (required, default 0) and when it was last tested (nullable)", async () => {
+    const { results } = await env.DB.prepare("PRAGMA table_info(sends)").all<{
+      name: string;
+      notnull: number;
+      dflt_value: string | null;
+    }>();
+    expect(results.find((c) => c.name === "rev")).toMatchObject({ notnull: 1, dflt_value: "0" });
+    expect(results.find((c) => c.name === "tested_at")).toMatchObject({ notnull: 0 });
+  });
+});
+
+describe("schema (0001_init)", () => {
   it("sends.remade_at exists and is nullable (a send that was never re-made carries null)", async () => {
     const { results } = await env.DB.prepare("PRAGMA table_info(sends)").all<{
       name: string;

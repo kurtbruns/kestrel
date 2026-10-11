@@ -296,9 +296,10 @@ describe("lease ownership", () => {
     expect(await sends.openDeliveryCount(env.DB, send.id)).toBe(2);
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("scheduled");
 
-    // The successor still owns the send and finishes it.
+    // The successor still owns the send: a third run stays out while its lease is live, and
+    // it can still renew that lease to carry on.
     const result = await runSend(env, send.id);
-    expect(result.leased).toBe(false); // its lease is live, so a third run stays out
+    expect(result.leased).toBe(false);
     expect(await sends.renewLease(env.DB, send.id, successor!, now + LEASE_TTL_MS)).toBe(true);
   });
 
@@ -633,16 +634,16 @@ describe("the tick's clock", () => {
     const a = await dueSend();
     const b = await dueSend();
     const budget = new Budget(1000);
-    // 10 a second in a one-second window: at most eleven starts in all, fewer than A's
-    // thirty recipients, so A runs until the window closes and leaves B nothing to start.
-    const window = new SendWindow(10, 1000);
+    // 10 a second in a 300 ms window: at most four starts in all, fewer than A's thirty
+    // recipients, so A runs until the window closes and leaves B nothing to start.
+    const window = new SendWindow(10, 300);
 
     await runSend(env, a.id, budget, window);
     const afterA = ses.requests;
     await runSend(env, b.id, budget, window);
 
     expect(afterA).toBeGreaterThan(0);
-    expect(afterA).toBeLessThanOrEqual(11);
+    expect(afterA).toBeLessThanOrEqual(4);
     expect(ses.requests).toBe(afterA);
     expect(window.startsLeft()).toBe(0);
   });

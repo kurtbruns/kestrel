@@ -1,9 +1,18 @@
-import { SELF } from "cloudflare:test";
+import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
+import {
+  BRANDING_LOGO_KEY,
+  DEFAULT_CONFIRMATION_EMAIL,
+  setPublicationLogo,
+  updateSettings,
+} from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
+import { type AppEnv, getConfig } from "../src/env";
+import type { RequestContext } from "../src/router";
+import * as settingsRoutes from "../src/routes/settings";
 import { adminAuth } from "./support/auth";
+import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase } from "./support/fixtures";
 import { expectErrorLogs, logged } from "./support/log";
 
@@ -131,6 +140,39 @@ describe("settings surface", () => {
     ]) {
       expect(keys).not.toContain(leaked);
     }
+    // A key renamed would slip past the list above, so look for the values themselves too.
+    expect(JSON.stringify(body)).not.toContain("test-dev-secret");
+  });
+
+  // The suite's own env carries no provider credential, so a deployed env's secrets are
+  // put in front of the handler directly: no value may surface under any key.
+  it("reflects no secret value of a deployed env, whatever its provider", async () => {
+    const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag-7f3e" };
+    for (const deploy of [SES_DEPLOY, RESEND_DEPLOY]) {
+      const e = { ...env, ...deploy, ...ACCESS } as unknown as AppEnv;
+      const req = new Request(`${BASE}/api/settings`);
+      const res = await settingsRoutes.get({
+        req,
+        env: e,
+        ctx: createExecutionContext(),
+        url: new URL(req.url),
+        params: {},
+        config: getConfig(e),
+      } as unknown as RequestContext);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain(`"provider":"${deploy.PROVIDER}"`);
+      for (const secret of [
+        "test-dev-secret",
+        SES_DEPLOY.AWS_ACCESS_KEY_ID,
+        SES_DEPLOY.AWS_SECRET_ACCESS_KEY,
+        RESEND_DEPLOY.RESEND_API_KEY,
+        RESEND_DEPLOY.RESEND_WEBHOOK_SECRET,
+        ACCESS.ACCESS_AUD,
+      ]) {
+        expect(text, deploy.PROVIDER).not.toContain(secret);
+      }
+    }
   });
 
   it("persists test recipients (normalized + deduped) and reflects them back", async () => {
@@ -171,6 +213,13 @@ describe("publication identity (issue #81)", () => {
     const html = await (await SELF.fetch(`${BASE}/`)).text();
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");
+
+    // A name saved blank falls back to the From address's display name (wrangler.jsonc's
+    // "Newsletter <newsletter@send.example.com>"), never an empty title.
+    expect((await putSettings({ publication: { name: "   " } })).status).toBe(200);
+    const fallback = await (await SELF.fetch(`${BASE}/`)).text();
+    expect(fallback).not.toContain("The Hovering Hunter");
+    expect(fallback).toMatch(/<title>[^<]*Newsletter[^<]*<\/title>/);
   });
 });
 
@@ -490,6 +539,7 @@ describe("a corrupt settings row", () => {
       expectErrorLogs("settings.corrupt");
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
+      await env.MEDIA.delete(BRANDING_LOGO_KEY);
       const before = await readRow();
       const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       try {
@@ -498,6 +548,8 @@ describe("a corrupt settings row", () => {
         expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
         expect((await putLogo(PNG_1x1, "image/png")).status).toBe(500);
+        // The refused upload stored no bytes: no logo object the row doesn't name.
+        expect(await env.MEDIA.head(BRANDING_LOGO_KEY)).toBeNull();
         // The reader pages only show the identity, so they stay up on the defaults.
         for (const path of ["/", "/archive", "/subscribe"]) {
           const page = await SELF.fetch(`${BASE}${path}`, { headers: { accept: "text/html" } });

@@ -1,4 +1,5 @@
 import { SELF } from "cloudflare:test";
+import { SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
 import { isHumanAllowed } from "../src/auth/access";
 import { mintDevToken, verifyDevToken } from "../src/auth/dev_token";
@@ -29,6 +30,40 @@ describe("auth on the admin surface", () => {
     const token = await mintDevToken("some-other-secret", { email: "x@example.com" });
     const res = await SELF.fetch("https://kestrel.test/api/whoami", {
       headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects an expired token signed with the right secret (401)", async () => {
+    // Signed exactly as mintDevToken signs, but its expiry an hour past.
+    const now = Math.floor(Date.now() / 1000);
+    const token = await new SignJWT({ email: "human@example.com" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuer("kestrel-dev")
+      .setAudience("kestrel-admin")
+      .setIssuedAt(now - 7200)
+      .setExpirationTime(now - 3600)
+      .sign(new TextEncoder().encode(DEV_SECRET));
+    expect(await verifyDevToken(token, DEV_SECRET)).toBeNull();
+    const res = await SELF.fetch("https://kestrel.test/api/whoami", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a valid token whose claims were edited after signing (401)", async () => {
+    const token = await mintDevToken(DEV_SECRET, {});
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+    // Promote the service token to a human by adding an email the signature never covered.
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const forged = btoa(JSON.stringify({ ...claims, email: "intruder@example.com" }))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const tampered = `${header}.${forged}.${signature}`;
+    expect(await verifyDevToken(tampered, DEV_SECRET)).toBeNull();
+    const res = await SELF.fetch("https://kestrel.test/api/whoami", {
+      headers: { Authorization: `Bearer ${tampered}` },
     });
     expect(res.status).toBe(401);
   });
@@ -70,10 +105,17 @@ describe("dev-token bootstrap endpoint", () => {
     expect(who.status).toBe(200);
   });
 
-  it("mints a service token when asked", async () => {
+  it("mints a working service token when asked", async () => {
     const res = await SELF.fetch("https://kestrel.test/api/dev/token?kind=service");
-    const { kind } = (await res.json()) as { kind: string };
+    expect(res.status).toBe(200);
+    const { token, kind } = (await res.json()) as { token: string; kind: string };
     expect(kind).toBe("service");
+    // The token itself is a service principal, not a human one labeled "service".
+    const who = await SELF.fetch("https://kestrel.test/api/whoami", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(who.status).toBe(200);
+    expect(await who.json()).toMatchObject({ principal: { kind: "service" } });
   });
 });
 

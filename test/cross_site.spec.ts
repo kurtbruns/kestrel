@@ -237,6 +237,9 @@ describe("public and webhook routes are outside these checks", () => {
       headers: { "content-type": "text/plain", "sec-fetch-site": "cross-site" },
       body: "{}",
     });
-    expect([403, 415]).not.toContain(res.status);
+    // The suite runs on the fake transport, whose adapter acknowledges every webhook with a
+    // plain "ok": that answer, rather than a refusal, shows the request reached it.
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
   });
 });

@@ -108,12 +108,15 @@ describe("images", () => {
 
   it("lists images and deletes one", async () => {
     const id = await newDraft("Gallery");
-    await upload(id, "a.png", AUTH);
+    // Two, so the delete is shown to take the one named and leave its sibling.
+    expect((await upload(id, "a.png", AUTH)).status).toBe(201);
+    expect((await upload(id, "b.png", AUTH)).status).toBe(201);
+    const listed = async () =>
+      (await readJson(await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }))).images
+        .map((i: any) => i.filename)
+        .sort();
 
-    const list = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}/images`, { headers: AUTH }),
-    );
-    expect(list.images.map((i: any) => i.filename)).toContain("a.png");
+    expect(await listed()).toEqual(["a.png", "b.png"]);
 
     const del = await SELF.fetch(`${base}/api/posts/${id}/images/a.png`, {
       method: "DELETE",
@@ -121,8 +124,14 @@ describe("images", () => {
     });
     expect(del.status).toBe(200);
 
-    const served = await SELF.fetch(`${base}/media/posts/${id}/a.png`);
-    expect(served.status).toBe(404);
+    // Gone from the list, the table, and the bucket; the sibling untouched in all three.
+    expect(await listed()).toEqual(["b.png"]);
+    const rows = await env.DB.prepare("SELECT filename FROM images WHERE post_id = ?")
+      .bind(id)
+      .all<{ filename: string }>();
+    expect(rows.results.map((r) => r.filename)).toEqual(["b.png"]);
+    expect((await SELF.fetch(`${base}/media/posts/${id}/a.png`)).status).toBe(404);
+    expect((await SELF.fetch(`${base}/media/posts/${id}/b.png`)).status).toBe(200);
   });
 
   it("rejects upload on a non-draft post (409)", async () => {

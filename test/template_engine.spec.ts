@@ -218,12 +218,12 @@ describe("inlineEmailCss", () => {
   it("inlines <style> onto elements, keeps @media, and preserves comments + the sentinel", async () => {
     const html =
       "<html><head><style>.x a{color:#111}@media (max-width:1px){.x{padding:0}}</style></head>" +
-      '<body><div class="x"><!--kestrel:masthead--><a href="%%UNSUBSCRIBE_URL%%">u</a></div></body></html>';
+      `<body><div class="x"><!--kestrel:masthead--><a href="${UNSUB_SENTINEL}">u</a></div></body></html>`;
     const out = await inlineEmailCss(html);
     expect(out).toMatch(/<a[^>]*style="[^"]*color: #111/);
     expect(out).toContain("@media");
     expect(out).toContain("<!--kestrel:masthead-->");
-    expect(out).toContain("%%UNSUBSCRIBE_URL%%");
+    expect(out).toContain(UNSUB_SENTINEL);
   });
 });
 

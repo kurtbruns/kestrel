@@ -1,13 +1,18 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { readSettings, updateSettings } from "../src/db/settings";
 import * as subscribersDb from "../src/db/subscribers";
 import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
-import { clearFakeOutbox, failFakeSendBatch, fakeOutbox } from "../src/providers/fake";
-import { runSend } from "../src/send/loop";
+import {
+  clearFakeOutbox,
+  FakeProvider,
+  failFakeSendBatch,
+  fakeOutbox,
+} from "../src/providers/fake";
+import { runSend, type SendLoopResult } from "../src/send/loop";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
@@ -23,6 +28,10 @@ const countTo = (email: string) => fakeOutbox().filter((m) => m.to === email).le
 beforeEach(async () => {
   await resetDatabase();
   clearFakeOutbox();
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("the freeze reads the template it froze with", () => {
@@ -87,17 +96,38 @@ describe("the freeze reads the template it froze with", () => {
 
 describe("send loop + sweep", () => {
   it("delivers a due send to the whole audience and completes (I1)", async () => {
-    await seedConfirmed("a@example.com");
-    await seedConfirmed("b@example.com");
-    await seedConfirmed("c@example.com");
+    await seedConfirmed(["a@example.com", "b@example.com", "c@example.com"]);
+    // Everyone else on the list, none of whom the audience may reach (I1): a reader who
+    // never confirmed, one who left, and a confirmed reader whose address is suppressed.
+    await env.DB.prepare(
+      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES
+         ('id-p', 'pending@example.com', 'pending', 'cfm-p', 'uns-p', ?1, NULL),
+         ('id-u', 'left@example.com', 'unsubscribed', 'cfm-u', 'uns-u', ?1, ?1)`,
+    )
+      .bind(Date.now())
+      .run();
+    await seedConfirmed("bounced@example.com");
+    await env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, detail, created_at) VALUES ('bounced@example.com', 'bounce', 'hard bounce', ?)",
+    )
+      .bind(Date.now())
+      .run();
     const send = await frozenSend(Date.now() - 1000);
+    expect(send.recipient_count).toBe(3);
 
     await sweep(env);
 
-    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.recipient_count).toBe(3);
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("sent");
-    expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 3 });
-    expect(fakeOutbox().length).toBe(3);
+    // Only the audience has a delivery row at all: the rest were never part of the send.
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
+    expect(
+      fakeOutbox()
+        .map((m) => m.to)
+        .sort(),
+    ).toEqual(["a@example.com", "b@example.com", "c@example.com"]);
     // per-recipient unsubscribe link carries the subscriber's DURABLE unsub token
     // (not the one-shot confirm token), so it survives a later re-subscribe (I2).
     expect(fakeOutbox().every((m) => m.html.includes("/unsubscribe?token="))).toBe(true);
@@ -248,12 +278,29 @@ describe("send loop + sweep", () => {
   });
 
   it("overlapping runs: exactly one acquires the lease (no double send)", async () => {
-    await seedConfirmed("o1@example.com");
-    await seedConfirmed("o2@example.com");
+    await seedConfirmed(["o1@example.com", "o2@example.com"]);
     const send = await frozenSend(Date.now() - 1000);
 
-    const [a, b] = await Promise.all([runSend(env, send.id), runSend(env, send.id)]);
-    expect([a.leased, b.leased].filter(Boolean).length).toBe(1);
+    // Two runs started together may still run one after the other, which would pass with no
+    // lease at all. So the first is held inside its provider call, with its recipients
+    // handed off, while the second runs from start to end: the second tries the lease while
+    // the first holds it, every time.
+    const real = FakeProvider.prototype.sendBatch;
+    let second: Promise<SendLoopResult> | undefined;
+    vi.spyOn(FakeProvider.prototype, "sendBatch").mockImplementation(async function (
+      this: FakeProvider,
+      ...args
+    ) {
+      if (!second) {
+        second = runSend(env, send.id);
+        await second;
+      }
+      return real.apply(this, args);
+    });
+    const first = await runSend(env, send.id);
+
+    expect(second).toBeDefined();
+    expect([first.leased, (await second!).leased]).toEqual([true, false]);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(countTo("o1@example.com")).toBe(1);
     expect(countTo("o2@example.com")).toBe(1);
@@ -276,27 +323,43 @@ describe("send loop + sweep", () => {
     expect(fakeOutbox().length).toBe(0);
   });
 
-  it("skips a recipient who unsubscribed after audience resolution (I2)", async () => {
-    await seedConfirmed("keep@example.com");
-    await seedConfirmed("gone@example.com");
+  /** Run a due send whose audience is fixed with both readers, and `leave` acts on `gone`
+   *  the moment that resolution lands: before any recipient is handed off. */
+  async function leaveAfterResolution(leave: (email: string) => Promise<unknown>) {
+    await seedConfirmed(["keep@example.com", "gone@example.com"]);
     const send = await frozenSend(Date.now() - 1000);
-
-    // Simulate: 'gone' had a pending delivery row (confirmed at resolution),
-    // then unsubscribed before dispatch.
-    await env.DB.prepare(
-      "INSERT OR IGNORE INTO deliveries (send_id, email, status, attempts, updated_at) VALUES (?, 'gone@example.com', 'pending', 0, ?)",
-    )
-      .bind(send.id, Date.now())
-      .run();
-    await env.DB.prepare(
-      "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'gone@example.com'",
-    ).run();
+    const resolve = sends.resolveAudience;
+    vi.spyOn(sends, "resolveAudience").mockImplementation(async (...args) => {
+      const resolved = await resolve(...args);
+      await leave("gone@example.com");
+      return resolved;
+    });
 
     await sweep(env);
 
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.recipient_count).toBe(2); // both were in the audience it fixed
     expect(countTo("keep@example.com")).toBe(1);
     expect(countTo("gone@example.com")).toBe(0);
-    const rollup = await sends.deliveryRollup(env.DB, send.id);
-    expect(rollup.skipped).toBeGreaterThanOrEqual(1);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 1, skipped: 1 });
+  }
+
+  it("skips a recipient who unsubscribed after audience resolution (I2)", async () => {
+    await leaveAfterResolution((email) =>
+      env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
+        .bind(email)
+        .run(),
+    );
+  });
+
+  it("skips a recipient suppressed after audience resolution, at hand-off (SPEC §6, §10)", async () => {
+    await leaveAfterResolution((email) =>
+      env.DB.prepare(
+        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, 'complaint', 'marked as spam', ?)",
+      )
+        .bind(email, Date.now())
+        .run(),
+    );
   });
 });

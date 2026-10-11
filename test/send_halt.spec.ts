@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
-import { HALT_BACKOFF_MS, MAX_DELIVERY_ATTEMPTS } from "../src/lib/time";
+import { HALT_BACKOFF_MS, MAX_DELIVERY_ATTEMPTS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { ResendProvider } from "../src/providers/resend";
 import { SesProvider } from "../src/providers/ses";
@@ -163,6 +163,17 @@ describe("a provider outage", () => {
       false,
       false,
       false,
+    ]);
+
+    // Still quiet at the threshold itself, and raised as stuck just past it, backing off all
+    // the while.
+    const row = (await sends.getSend(env.DB, send.id))!;
+    const threshold = row.started_at! + STUCK_THRESHOLD_MS;
+    const at = (now: number) => viewOf(row, "resend", false, now);
+    expect([at(threshold).phase, has(at(threshold), "stuck")]).toEqual(["backing-off", false]);
+    expect([at(threshold + 1).phase, has(at(threshold + 1), "stuck")]).toEqual([
+      "backing-off",
+      true,
     ]);
   });
 });
@@ -570,11 +581,15 @@ describe("the real adapters, end to end through the loop", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ unsent: 3 });
   });
 
+  // The adapter paces its requests to the account's send rate; these specs are about which
+  // requests go out, not how fast, so a high rate keeps them from waiting it out for real.
   const sesEnv = {
     ...env,
     AWS_ACCESS_KEY_ID: "AKIATESTTESTTEST",
     AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
+    SES_MAX_SEND_RATE: "1000",
   } as AppEnv;
+  const sesAdapter = () => new SesProvider(getConfig(sesEnv), sesEnv);
 
   /** SES answers per recipient; `answer` decides each request, and `mailed` counts accepts. */
   function sesAnswers(answer: (to: string) => Response) {
@@ -599,7 +614,7 @@ describe("the real adapters, end to end through the loop", () => {
     const emails = addresses(20);
     await seedConfirmed(emails);
     const send = await dueSend();
-    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(env), sesEnv));
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
 
     let paused = true;
     const { spy, mailed } = sesAnswers(() =>
@@ -629,7 +644,7 @@ describe("the real adapters, end to end through the loop", () => {
     const emails = addresses(4);
     await seedConfirmed(emails);
     const send = await dueSend();
-    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(env), sesEnv));
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
     sesAnswers((to) =>
       to === emails[1]
         ? new Response(JSON.stringify({ __type: "BadRequestException", message: "bad" }), {

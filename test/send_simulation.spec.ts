@@ -156,11 +156,9 @@ describe("SIMULATE_SENDS", () => {
     for (const value of ["sendgrid", "ses:loud", "ses:none:x", "resend:", ":none"]) {
       expect(() => simulation(value)).toThrow(ConfigError);
     }
-    try {
-      simulation("sesv2");
-    } catch (err) {
-      expect((err as ConfigError).variable).toBe("SIMULATE_SENDS");
-    }
+    expect(() => simulation("sesv2")).toThrow(
+      expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_SENDS" }),
+    );
   });
 
   it("is never on outside local dev, whatever it says", () => {
@@ -262,7 +260,10 @@ describe("list sends only", () => {
         purpose,
         idempotencyKeyPrefix: `${purpose}-1`,
       });
-      expect(Date.now() - started).toBeLessThan(500); // not paced like a list batch
+      // Not paced like a list batch, which spends about 20 ms a recipient here (two seconds
+      // for these hundred; see the generic profile's own spec): the bound leaves a slow
+      // runner room while still telling the two apart.
+      expect(Date.now() - started).toBeLessThan(1000);
       expect(answer.kind).toBe("answered");
       const results = answer.kind === "answered" ? answer.results : [];
       expect(results.every((r) => r.accepted)).toBe(true);

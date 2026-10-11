@@ -33,6 +33,22 @@ async function deliveriesFor(sendId: string): Promise<{ email: string; event: st
   return results;
 }
 
+// The tables a seed fills and a reset must empty, children first.
+const RESET_TABLES = [
+  "deliveries",
+  "sends",
+  "post_revisions",
+  "posts",
+  "suppressions",
+  "subscribers",
+  "settings",
+];
+
+async function rowCount(table: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 describe("dev seed (Field Notes dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
@@ -128,12 +144,11 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("reset wipes the database back to a fresh install (the reverse of seed)", async () => {
     await seedDatabase(env, config());
-    // Set an identity so we can prove the settings singleton resets too.
-    await SELF.fetch(`${base}/api/settings`, {
-      method: "PUT",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
-      body: JSON.stringify({ publication: { name: "Field Notes" } }),
-    });
+    // The seed's own identity is what the reset has to clear, and every table has rows.
+    expect((await getSettings(env.DB)).publication.name).toBe("Field Notes");
+    for (const table of RESET_TABLES) {
+      expect(await rowCount(table), table).toBeGreaterThan(0);
+    }
 
     const res = await SELF.fetch(`${base}/api/dev/reset`, {
       method: "POST",
@@ -141,6 +156,9 @@ describe("dev seed (Field Notes dataset)", () => {
     });
     expect(res.status).toBe(200);
 
+    for (const table of RESET_TABLES) {
+      expect(await rowCount(table), table).toBe(0);
+    }
     expect(await counts(env.DB)).toEqual({
       confirmed: 0,
       pending: 0,

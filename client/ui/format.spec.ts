@@ -1,5 +1,12 @@
-import { describe, expect, it } from "vitest";
-import { invalidAddressesMessage, parseAddresses } from "./format";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  fmt,
+  invalidAddressesMessage,
+  lateStr,
+  parseAddresses,
+  toLocalInput,
+  untilStr,
+} from "./format";
 
 describe("parseAddresses", () => {
   it("normalizes and dedupes the addresses, and keeps what isn't one, as typed", () => {
@@ -20,5 +27,67 @@ describe("invalidAddressesMessage", () => {
     expect(invalidAddressesMessage([])).toBeNull();
     expect(invalidAddressesMessage(["typo@gmail"])).toBe("Not an email address: typo@gmail");
     expect(invalidAddressesMessage(["a", "b@c"])).toBe("Not email addresses: a, b@c");
+  });
+});
+
+describe("fmt", () => {
+  it("gives a short local date and time, to the minute, and an em dash for none", () => {
+    const at = new Date(2026, 8, 5, 7, 3, 45).getTime();
+    expect(fmt(at)).toMatch(/\b5\b/); // the day
+    expect(fmt(at)).toMatch(/:03\b/); // the minute, padded; no seconds
+    expect(fmt(at)).not.toMatch(/2026|:45/);
+    expect(fmt(null)).toBe("—");
+    expect(fmt(undefined)).toBe("—");
+    expect(fmt(0)).toBe("—"); // no timestamp is the epoch
+  });
+});
+
+describe("toLocalInput", () => {
+  it("writes a datetime-local value in local time, padded, to the minute", () => {
+    expect(toLocalInput(new Date(2026, 8, 5, 7, 3, 45))).toBe("2026-09-05T07:03");
+    expect(toLocalInput(new Date(2026, 11, 31, 23, 59))).toBe("2026-12-31T23:59");
+    // What the input hands back reads as the same moment, to the minute.
+    const d = new Date(2026, 0, 2, 3, 4);
+    expect(new Date(toLocalInput(d)).getTime()).toBe(d.getTime());
+  });
+});
+
+describe("untilStr and lateStr", () => {
+  const NOW = 1_700_000_000_000;
+  const s = 1000;
+  const min = 60 * s;
+  const hr = 60 * min;
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("ticks seconds only in the last five minutes, then coarsens by minute, hour, and day", () => {
+    const until = (ms: number) => untilStr(NOW + ms);
+    expect(until(45 * s)).toBe("Sends in 45s");
+    expect(until(90 * s)).toBe("Sends in 1m 30s");
+    expect(until(4 * min + 5 * s)).toBe("Sends in 4m 05s");
+    expect(until(5 * min - 1)).toBe("Sends in 4m 59s");
+    expect(until(5 * min)).toBe("Sends in 5m");
+    expect(until(hr - 1)).toBe("Sends in 59m");
+    expect(until(hr)).toBe("Sends in 1h");
+    expect(until(hr + min)).toBe("Sends in 1h 1m");
+    expect(until(24 * hr - 1)).toBe("Sends in 23h 59m");
+    expect(until(24 * hr)).toBe("Sends in 1 day");
+    expect(until(35 * hr)).toBe("Sends in 1 day");
+    expect(until(36 * hr)).toBe("Sends in 2 days"); // whole days, rounded
+  });
+
+  it("says Preparing to send from the fire time, or as soon as the server reads it due", () => {
+    expect(untilStr(NOW)).toBe("Preparing to send…");
+    expect(untilStr(NOW - min)).toBe("Preparing to send…");
+    expect(untilStr(NOW + hr, true)).toBe("Preparing to send…");
+  });
+
+  it("says how many whole minutes late a missed send is, never fewer than none", () => {
+    expect(lateStr(NOW - 7 * min - 59 * s)).toBe("Missed its fire time · 7 min late");
+    expect(lateStr(NOW - 5 * min)).toBe("Missed its fire time · 5 min late");
+    expect(lateStr(NOW + min)).toBe("Missed its fire time · 0 min late"); // a clock behind
   });
 });

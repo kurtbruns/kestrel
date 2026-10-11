@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
 import { adminAuth } from "./support/auth";
 
 const AUTH = await adminAuth();
@@ -26,7 +27,13 @@ async function draftWithImage(title: string): Promise<string> {
   const id = created.post.id;
   const fd = new FormData();
   fd.append("file", new File([PNG_1x1], "cat.png", { type: "image/png" }));
-  await SELF.fetch(`${base}/api/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+  const upload = await SELF.fetch(`${base}/api/posts/${id}/images`, {
+    method: "POST",
+    headers: AUTH,
+    body: fd,
+  });
+  // Every caller asserts on the image's rewritten URL, so a failed upload must stop here.
+  expect(upload.status).toBe(201);
   return id;
 }
 
@@ -50,7 +57,7 @@ describe("preview + test endpoints", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
     expect(html).toContain(`/media/posts/${id}/cat.png`);
-    expect(html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(html).not.toContain(UNSUB_SENTINEL);
     // The preview's link is a test's, so following it unsubscribes no one (SPEC §7).
     expect(html).toContain("/unsubscribe?test=1");
   });
@@ -80,7 +87,7 @@ describe("preview + test endpoints", () => {
     expect(msg.subject).toBe("Subject: Test Send");
     // Same render path as preview: resolved image URL present, sentinel substituted.
     expect(msg.html).toContain(`/media/posts/${id}/cat.png`);
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
     expect(msg.html).toContain("/unsubscribe?test=1");
   });
 
@@ -133,8 +140,8 @@ describe("preview + test endpoints", () => {
     const sentinel = `FROZEN-${crypto.randomUUID()}`;
     await env.DB.prepare("UPDATE sends SET rendered_html = ?, rendered_text = ? WHERE id = ?")
       .bind(
-        `<p>${sentinel}</p><a href="%%UNSUBSCRIBE_URL%%">u</a>`,
-        `${sentinel}\nUnsubscribe: %%UNSUBSCRIBE_URL%%`,
+        `<p>${sentinel}</p><a href="${UNSUB_SENTINEL}">u</a>`,
+        `${sentinel}\nUnsubscribe: ${UNSUB_SENTINEL}`,
         scheduled.send.id,
       )
       .run();
@@ -153,14 +160,14 @@ describe("preview + test endpoints", () => {
     ).messages.find((m: any) => m.to === to);
     expect(msg.html).toContain(sentinel);
     expect(msg.html).toContain("/unsubscribe?test=1"); // the placeholders are filled as at fire
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
 
     const page = await (
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
     expect(page).toContain(sentinel);
     expect(page).toContain("/unsubscribe?test=1");
-    expect(page).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(page).not.toContain(UNSUB_SENTINEL);
     const action = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
     );
@@ -257,7 +264,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(msg).toBeTruthy();
     // The sample body flows through the same render as a real send: sentinel
     // substituted, the test unsubscribe link present.
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
     expect(msg.html).toContain("/unsubscribe?test=1");
     // The sample subject line proves it rendered the synthetic post.
     expect(msg.subject).toContain("Template test");
@@ -343,7 +350,7 @@ describe("web version (GET /api/posts/:id/web)", () => {
     expect(html).not.toContain(">Unsubscribe</a>");
     expect(html).not.toContain(">View in browser</a>");
     expect(html).toContain("Powered by Kestrel");
-    for (const s of ["%%UNSUBSCRIBE_URL%%", "%%SENT_TO%%"]) {
+    for (const s of [UNSUB_SENTINEL, SENTTO_SENTINEL]) {
       expect(html).not.toContain(s);
     }
     // A publisher's look, not a reader page: no dev-only dashboard pill.

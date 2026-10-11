@@ -5,6 +5,39 @@ describe("the cursor format", () => {
   it("is `<seq>.<at>` in decimal, as the API reference documents it for every client", () => {
     expect(encodeSendCursor({ seq: 57, at: 1_768_467_610_000 })).toBe("57.1768467610000");
     expect(decodeSendCursor("57.1768467610000")).toEqual({ seq: 57, at: 1_768_467_610_000 });
+    expect(decodeSendCursor("0.0")).toEqual({ seq: 0, at: 0 });
+  });
+
+  it("refuses anything else rather than guess at it", () => {
+    for (const raw of [
+      "",
+      "57",
+      "57.",
+      ".1768467610000",
+      "57.1768467610000.1",
+      "57.5e3",
+      "5.7.1",
+      "-1.1000",
+      "1.-1000",
+      "1.5.1000",
+      "0x1.1000",
+      " 57.1000",
+      "57.1000 ",
+      "57,1000",
+    ]) {
+      expect(decodeSendCursor(raw), raw).toBeNull();
+    }
+  });
+
+  it("refuses a number too large to be held exactly", () => {
+    const unsafe = String(Number.MAX_SAFE_INTEGER + 1); // 9007199254740992
+    expect(decodeSendCursor(`${Number.MAX_SAFE_INTEGER}.1`)).toEqual({
+      seq: Number.MAX_SAFE_INTEGER,
+      at: 1,
+    });
+    expect(decodeSendCursor(`${unsafe}.1`)).toBeNull();
+    expect(decodeSendCursor(`1.${unsafe}`)).toBeNull();
+    expect(decodeSendCursor(`1.${"9".repeat(400)}`)).toBeNull(); // Infinity, not a cursor
   });
 });
 

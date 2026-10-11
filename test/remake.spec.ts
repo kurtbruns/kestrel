@@ -357,10 +357,31 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await getSend(a.id)).rendered_html).toContain("v1");
   });
 
-  it("a schedule racing a template save never leaves the send on the older template", async () => {
-    // Whichever order lands: either the save is refused (the send is on v1, the
-    // template in use) or the save lands first (the send renders with v2). What can
-    // never happen is a scheduled send on v1 under a saved v2.
+  it("a schedule that lands before a template save holds the save off, and stays on the template in use", async () => {
+    const postId = await makeDraft("First");
+    const send = await schedule(postId);
+    // The client looked before the send existed, so its acknowledgement lists nothing.
+    const save = await putSettings({ emailTemplate: tpl("v2"), remake: [] });
+    expect(save.status).toBe(409);
+    expect((await readJson(save)).sends.map((s: any) => s.id)).toEqual([send.id]);
+    expect((await getSettings()).settings.emailTemplate).toBe(tpl("v1"));
+    expect((await getSend(send.id)).rendered_html).toContain("v1");
+  });
+
+  it("a schedule that lands after a template save renders with the saved template", async () => {
+    const postId = await makeDraft("Second");
+    expect((await putSettings({ emailTemplate: tpl("v2"), remake: [] })).status).toBe(200);
+    const send = await schedule(postId);
+    const html = (await getSend(send.id)).rendered_html;
+    expect(html).toContain("v2");
+    expect(html).not.toContain("v1");
+  });
+
+  it("a schedule sent alongside a template save ends on the template in use, whichever lands first", async () => {
+    // The two orders are pinned one by one above. Here both requests are in flight at once,
+    // and which lands first is up to the runtime, so the test can't choose the outcome; it
+    // holds only that the end state is one of the two consistent ones, never a scheduled
+    // send on v1 under a saved v2.
     const postId = await makeDraft("Racer");
     const [sched, save] = await Promise.all([
       SELF.fetch(`${base}/api/posts/${postId}/schedule`, {
@@ -373,8 +394,9 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(sched.status).toBe(201);
     const send = await getSend((await readJson(sched)).send.id);
     const inUse = (await getSettings()).settings.emailTemplate;
+    // The save's answer and the template in use agree, and the send carries that template.
     const marker = inUse === tpl("v2") ? "v2" : "v1";
-    expect([200, 409]).toContain(save.status);
+    expect(save.status).toBe(marker === "v2" ? 200 : 409);
     expect(send.rendered_html).toContain(marker);
   });
 

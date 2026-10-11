@@ -13,6 +13,7 @@ import {
   type FakeRoute,
   fakeApi,
   feedReads,
+  jsonResponse,
   listReads,
   mount,
   resetShell,
@@ -235,13 +236,17 @@ describe("dashboard", () => {
   });
 
   it("follows from its own list read: the layer's first read asks from that read's cursor", async () => {
-    fake = world([post()], sendServer([send()]));
+    const srv = sendServer([send()]);
+    // The clock stands still until the spec advances it, so this is the cursor the page's
+    // own read is handed.
+    const cursor = srv.cursor();
+    fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const [list] = listReads(fake);
     const [feed] = feedReads(fake);
     expect(listReads(fake)).toHaveLength(1);
-    expect(feed?.url.searchParams.get("since")).toBeTruthy();
+    expect(feed?.url.searchParams.get("since")).toBe(cursor);
     // The feed's first read comes after the page's own, never beside it.
     expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(list!));
   });
@@ -449,17 +454,23 @@ describe("dashboard", () => {
   });
 
   it("reads about once a minute while nothing moves, and once just past the next fire time", async () => {
-    const fire = NOW + 2 * 3_600_000;
+    // Off the minute grid, so only the read the server arms for just past the fire time can
+    // see the send due: a read once a minute would land half a minute either side of it.
+    const fire = NOW + 5 * 60_000 + 30_000;
     fake = world([post()], sendServer([scheduled({ fire_at: fire })]));
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(10);
     const lists = listReads(fake).length;
-    await vi.advanceTimersByTimeAsync(60 * 60_000);
-    expect(feedReads(fake)).toHaveLength(61); // the first, then one a minute
-    expect(listReads(fake).length).toBe(lists); // nothing changed, nothing re-read
-    await vi.advanceTimersByTimeAsync(60 * 60_000 + 1_000);
-    // The fire time: the read just past it sees the send due and re-reads the queue.
-    expect(listReads(fake).length).toBe(lists + 1);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(feedReads(fake)).toHaveLength(6); // the first, then one a minute
+    expect(listReads(fake)).toHaveLength(lists); // nothing changed, nothing re-read
+    await vi.advanceTimersByTimeAsync(fire + 999 - Date.now());
+    expect(feedReads(fake)).toHaveLength(6);
+    expect(listReads(fake)).toHaveLength(lists);
+    // A second past the fire time: that read sees the send due and re-reads the queue.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(feedReads(fake)).toHaveLength(7);
+    expect(listReads(fake)).toHaveLength(lists + 1);
     expect(countdown("p2").textContent).toBe("Preparing to send…");
   });
 
@@ -540,8 +551,8 @@ describe("dashboard", () => {
     // A wedged send moves only when someone resolves it: the layer reads at the idle pace,
     // not every few seconds, and the line stays.
     const reads = feedReads(fake).length;
-    await vi.advanceTimersByTimeAsync(50_000);
-    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(feedReads(fake).length - reads).toBe(1);
     expect($(".health.red a").getAttribute("href")).toBe("#/sent/w1");
     // Resolve, on the send's page (another tab): shown within the minute.
     srv.edit("w1", { status: "sent", c_in_flight: 0, c_unsent: 1, completed_at: Date.now() });
@@ -570,7 +581,7 @@ describe("dashboard", () => {
     // Complete: back to the idle pace, one read a minute.
     const reads = feedReads(fake).length;
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(11);
+    expect(feedReads(fake).length - reads).toBe(10);
     // A receipt long after dispatch still shows, within the minute.
     srv.edit("x1", { c_delivered: 97, c_bounced: 3 });
     await vi.advanceTimersByTimeAsync(60_000);
@@ -587,6 +598,33 @@ describe("dashboard", () => {
     await vi.advanceTimersByTimeAsync(3000);
     expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("34");
     expect($("#dashActive .active-stat").textContent).toMatch(/34 confirmed/);
+  });
+
+  it("reads the page again and follows from that read when its cursor is ahead of the database", async () => {
+    const srv = sendServer([sending({ c_pending: 60, c_accepted: 40 })]);
+    const feed = srv.routes.find((r) => r.path === "/api/sends/feed")!;
+    let ahead = true;
+    fake = world([post()], srv, counts, [
+      {
+        path: "/api/sends/feed",
+        reply: (req) => {
+          if (ahead) {
+            ahead = false; // a local reset, once
+            return jsonResponse({ error: "cursor_ahead", message: "reset" }, 409);
+          }
+          return feed.reply(req);
+        },
+      },
+    ]);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(10);
+    expect(listReads(fake)).toHaveLength(2); // its own read, then again after the refusal
+    expect(feedReads(fake)).toHaveLength(2); // refused, then from the fresh read
+    expect($$(".dash-head")).toHaveLength(1);
+    srv.edit("x3", { c_accepted: 6, c_delivered: 34 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("34"); // following again
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("stops reading when the reader navigates away", async () => {

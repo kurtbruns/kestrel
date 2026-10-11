@@ -104,13 +104,13 @@ interface Signer {
  * certificate — enough structure for the adapter's SPKI extractor to find it —
  * served as PEM. A unique cert URL per signer sidesteps the adapter's key cache.
  */
-async function makeSigner(): Promise<Signer> {
+async function makeSigner(hash: "SHA-1" | "SHA-256" = "SHA-256"): Promise<Signer> {
   const pair = (await crypto.subtle.generateKey(
     {
       name: "RSASSA-PKCS1-v1_5",
       modulusLength: 2048,
       publicExponent: new Uint8Array([0x01, 0x00, 0x01]),
-      hash: "SHA-256",
+      hash,
     },
     true,
     ["sign", "verify"],
@@ -569,6 +569,58 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(await subscribers.isSuppressed(env.DB, "softbounce@example.com")).toBe(false);
   });
 
+  it("records a delivery notification without suppressing", async () => {
+    const signer = await makeSigner();
+    mockCert(signer);
+    await seedDelivery("arrived@example.com", "msg-dlv-1");
+
+    const message = JSON.stringify({
+      notificationType: "Delivery",
+      mail: { messageId: "msg-dlv-1", destination: ["arrived@example.com"] },
+      delivery: { recipients: ["arrived@example.com"] },
+    });
+    const envelope = await signEnvelope(notification(signer, message), signer);
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(200);
+    expect(result.events).toEqual([
+      { type: "delivered", providerId: "msg-dlv-1", email: "arrived@example.com" },
+    ]);
+    const applied = await applyDeliveryEvents(env.DB, result.events);
+    expect(applied).toEqual({ applied: 1, suppressed: 0 });
+    const row = await env.DB.prepare(
+      "SELECT event FROM deliveries WHERE provider_id = 'msg-dlv-1'",
+    ).first<{ event: string }>();
+    expect(row?.event).toBe("delivered");
+    expect(await subscribers.isSuppressed(env.DB, "arrived@example.com")).toBe(false);
+  });
+
+  it("verifies a SignatureVersion 1 (SHA-1) message, as SNS still sends by default", async () => {
+    const signer = await makeSigner("SHA-1");
+    mockCert(signer);
+
+    const envelope = await signEnvelope(
+      {
+        ...notification(signer, bounceMessage("v1@example.com", "msg-v1", "Permanent")),
+        SignatureVersion: "1",
+      },
+      signer,
+    );
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(200);
+    expect(result.events).toMatchObject([{ type: "bounced", email: "v1@example.com", hard: true }]);
+
+    // The version names the hash: the same SHA-1 signature claimed as version 2 fails.
+    _clearKeyCache();
+    const misnamed = await newProvider().parseWebhook(
+      webhookRequest({ ...envelope, SignatureVersion: "2" }),
+      sesEnv,
+    );
+    expect(misnamed.response.status).toBe(403);
+    expect(misnamed.events).toEqual([]);
+  });
+
   function subscriptionConfirmation(
     signer: Signer,
     subscribeUrl: string,
@@ -618,6 +670,60 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(spy.mock.calls.some((c) => reqUrl(c[0]) === subscribeUrl)).toBe(true);
   });
 
+  it("answers 502 when the SubscribeURL fetch fails, so SNS retries the handshake", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    let fetched = false;
+    mockCert(signer, (url) => {
+      if (url === subscribeUrl) {
+        fetched = true;
+        return new Response("Service Unavailable", { status: 503 });
+      }
+      return undefined;
+    });
+
+    const envelope = await signEnvelope(subscriptionConfirmation(signer, subscribeUrl), signer);
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(fetched).toBe(true);
+    expect(result.response.status).toBe(502);
+    expect(await result.response.text()).toBe("subscription confirmation failed");
+    expect(result.events).toEqual([]);
+  });
+
+  it("acknowledges an UnsubscribeConfirmation without fetching anything or applying events", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    const { fetched } = mockSubscribe(signer, subscribeUrl);
+
+    const envelope = await signEnvelope(
+      { ...subscriptionConfirmation(signer, subscribeUrl), Type: "UnsubscribeConfirmation" },
+      signer,
+    );
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(200);
+    expect(result.events).toEqual([]);
+    expect(fetched.subscribe).toBe(false);
+  });
+
+  it("refuses a correctly signed message of a type it doesn't know with 400", async () => {
+    const signer = await makeSigner();
+    const subscribeUrl = newSubscribeUrl();
+    const { fetched } = mockSubscribe(signer, subscribeUrl);
+
+    const envelope = await signEnvelope(
+      { ...subscriptionConfirmation(signer, subscribeUrl), Type: "SomethingNew" },
+      signer,
+    );
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(400);
+    expect(await result.response.text()).toBe("unsupported message type");
+    expect(result.events).toEqual([]);
+    expect(fetched.subscribe).toBe(false);
+  });
+
   // A valid SNS signature proves only that SNS sent the message; any AWS account's topic
   // could have. The configured topic is what makes it this deployment's.
   it("refuses a correctly signed subscription from another topic, never fetching its SubscribeURL", async () => {
@@ -653,6 +759,8 @@ describe("SesProvider.parseWebhook (SNS)", () => {
 
     expect(result.response.status).toBe(403);
     expect(result.events).toHaveLength(0);
+    // Applied as the route applies them: had the bounce slipped through, this suppresses.
+    await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "listed@example.com")).toBe(false);
   });
 
@@ -691,7 +799,13 @@ describe("SesProvider.parseWebhook (SNS)", () => {
 
     expect(result.response.status).toBe(403);
     expect(result.events).toHaveLength(0);
+    // Applied as the route applies them: had the bounce slipped through, this suppresses.
+    await applyDeliveryEvents(env.DB, result.events);
     expect(await subscribers.isSuppressed(env.DB, "victim@example.com")).toBe(false);
+    const row = await env.DB.prepare(
+      "SELECT event FROM deliveries WHERE provider_id = 'msg-forged-1'",
+    ).first<{ event: string | null }>();
+    expect(row).toEqual({ event: null });
   });
 
   it("rejects a signing cert served from an untrusted host", async () => {

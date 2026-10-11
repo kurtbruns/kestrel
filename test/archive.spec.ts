@@ -110,8 +110,16 @@ describe("archive / view-in-browser", () => {
     expect(body).toContain('class="r-dev"');
     expect(body).toContain('href="http://localhost:8787/dashboard/"');
     expect(body).toContain("--k-accent:#3355cc");
-    expect(body.indexOf(".r-dev {")).toBeLessThan(body.indexOf("</head>"));
-    expect(body.indexOf('class="k-mast"')).toBeLessThan(body.indexOf('class="r-dev"'));
+    // Present first, then in order: indexOf's -1 for a missing piece would sort first.
+    const style = body.indexOf(".r-dev {");
+    const headEnd = body.indexOf("</head>");
+    const mast = body.indexOf('class="k-mast"');
+    const pill = body.indexOf('class="r-dev"');
+    for (const at of [style, headEnd, mast, pill]) {
+      expect(at).toBeGreaterThanOrEqual(0);
+    }
+    expect(style).toBeLessThan(headEnd);
+    expect(mast).toBeLessThan(pill);
   });
 
   it("keeps the built-in footer's email-only part in the sent email and leaves it off the archive page", async () => {

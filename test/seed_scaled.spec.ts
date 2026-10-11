@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { listSends } from "../src/db/sends";
+import { addSuppression, audienceEmails, counts, isSuppressed } from "../src/db/subscribers";
 import {
   buildScaledAudience,
   buildTimeline,
@@ -10,6 +11,7 @@ import {
   seedDatabase,
 } from "../src/dev/seed";
 import { getConfig } from "../src/env";
+import { seedConfirmed } from "./support/fixtures";
 
 // The parametric seed (issue #149): a `size` selects a PRNG-driven list scaled to an
 // approximate target, while the default (no size) keeps the curated Field Notes dataset
@@ -133,17 +135,47 @@ describe("buildScaledAudience", () => {
   });
 });
 
+/** What the database holds after a seed, read back table by table rather than taken from
+ *  the summary the seed returns. */
+async function stored() {
+  const { results: posts } = await env.DB.prepare(
+    "SELECT status, COUNT(*) AS n FROM posts GROUP BY status",
+  ).all<{ status: string; n: number }>();
+  const { results: sentDeliveries } = await env.DB.prepare(
+    `SELECT s.recipient_count AS recipients, COUNT(d.email) AS rows FROM sends s
+     LEFT JOIN deliveries d ON d.send_id = s.id WHERE s.status = 'sent'
+     GROUP BY s.id ORDER BY s.fire_at`,
+  ).all<{ recipients: number; rows: number }>();
+  const deliveries = await env.DB.prepare("SELECT COUNT(*) AS n FROM deliveries").first<{
+    n: number;
+  }>();
+  return {
+    posts: Object.fromEntries(posts.map((p) => [p.status, p.n])),
+    counts: await counts(env.DB),
+    audience: (await audienceEmails(env.DB)).length,
+    sentDeliveries,
+    deliveries: deliveries?.n,
+  };
+}
+
 describe("dev seed — scaled (parametric, DB-backed)", () => {
   it("loads a spec-valid scaled dataset and is idempotent", async () => {
     const summary = await seedDatabase(env, config(), undefined, undefined, { size: 100, seed: 7 });
 
-    expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
+    // The summary is what the seed meant to write; everything below reads back what it did.
+    const loaded = await stored();
+    expect(loaded.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
+    expect(summary.posts).toEqual(loaded.posts);
+    const { suppressed, ...subscribers } = loaded.counts;
+    expect(subscribers).toEqual(summary.subscribers);
+    expect(suppressed).toBe(summary.suppressions);
     // Confirmed-now ≈ the requested 100 (PRNG-jittered so it reads organic, not exactly 100).
-    expect(summary.subscribers.confirmed).toBeGreaterThan(80);
-    expect(summary.subscribers.confirmed).toBeLessThan(120);
-    // I1: the current audience is confirmed − suppressed.
-    expect(summary.suppressions).toBeGreaterThanOrEqual(2);
-    expect(summary.audience).toBe(summary.subscribers.confirmed - summary.suppressions);
+    expect(loaded.counts.confirmed).toBeGreaterThan(80);
+    expect(loaded.counts.confirmed).toBeLessThan(120);
+    // I1: the current audience is confirmed − suppressed, read from the list itself.
+    expect(suppressed).toBeGreaterThanOrEqual(2);
+    expect(loaded.audience).toBe(loaded.counts.confirmed - suppressed);
+    expect(summary.audience).toBe(loaded.audience);
 
     const sent = (await listSends(env.DB))
       .filter((s) => s.status === "sent")
@@ -151,20 +183,28 @@ describe("dev seed — scaled (parametric, DB-backed)", () => {
     expect(sent).toHaveLength(4);
     const recipients = sent.map((s) => s.recipient_count);
     // The frozen audiences fluctuate (not all equal) and differ from today's list. At this
-    // small size two of the three can coincide by chance, so require ≥2 distinct here; the
-    // 10k unit test above asserts all three differ, where there's room for it.
+    // small size two of the four can coincide by chance, so require ≥2 distinct here; the
+    // 10k unit test above asserts all four differ, where there's room for it.
     expect(new Set(recipients).size).toBeGreaterThanOrEqual(2);
     for (const r of recipients) {
-      expect(r).not.toBe(summary.audience);
+      expect(r).not.toBe(loaded.audience);
     }
-    // Every recipient is backed by a real delivery row.
-    expect(summary.deliveries).toBe(recipients.reduce((x, y) => x + y, 0));
+    // Every recipient count is backed by exactly that many delivery rows on its own send.
+    expect(loaded.sentDeliveries).toEqual(recipients.map((n) => ({ recipients: n, rows: n })));
+    expect(loaded.deliveries).toBe(recipients.reduce((x, y) => x + y, 0));
+    expect(summary.deliveries).toBe(loaded.deliveries);
 
-    // Same (size, seed) reloads to the same counts.
-    const again = await seedDatabase(env, config(), undefined, undefined, { size: 100, seed: 7 });
-    expect(again.subscribers).toEqual(summary.subscribers);
-    expect(again.audience).toBe(summary.audience);
-    expect(again.deliveries).toBe(summary.deliveries);
+    // A re-seed starts from empty: rows the first load never wrote don't survive it, and the
+    // same (size, seed) writes the same dataset again rather than a second copy beside it.
+    await seedConfirmed("stray@example.com");
+    await addSuppression(env.DB, "stray-suppressed@example.com", "manual");
+    await seedDatabase(env, config(), undefined, undefined, { size: 100, seed: 7 });
+    const stray = await env.DB.prepare("SELECT 1 FROM subscribers WHERE email = ?")
+      .bind("stray@example.com")
+      .first();
+    expect(stray).toBeNull();
+    expect(await isSuppressed(env.DB, "stray-suppressed@example.com")).toBe(false);
+    expect(await stored()).toEqual(loaded);
   });
 
   it("leaves the default (unsized) seed unchanged", async () => {
