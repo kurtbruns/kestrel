@@ -17,9 +17,18 @@ import { PAGE_SECURITY_HEADERS } from "./page_headers";
  *  background in each theme. The sent email keeps its own white; this is web-only. */
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
-/** The reader ink, the text color on that ground in each theme. */
-const READER_INK_LIGHT = "#1b1a17";
-const READER_INK_DARK = "#ece9e3";
+
+/* The app's brand accent (DESIGN.md §3), mirrored here for the publisher-only chrome the
+   reader surface carries: the dev pill and the reader banner. Only the publisher ever sees
+   them, and they are the app speaking, not the publication, so they wear the app's action
+   color, matching a Primary action, rather than the reader ink; keep these values in sync
+   with styles.css. This is the one deliberate exception to "the reader surface is not
+   styled from the admin tokens" (DESIGN.md, reader-surface note). Each stylesheet below
+   carries them, so either works alone on a page. */
+const APP_ACCENT_TOKENS = `
+:root { --k-accent:#3355cc; --k-accent-contrast:#ffffff; }
+@media (prefers-color-scheme: dark) { :root { --k-accent:#7d9bff; --k-accent-contrast:#10131f; } }
+`;
 
 /* Dev-only affordance (SPEC §5/§11): a fixed corner pill that hops a local
    developer into the editor. Shown solely on a dev-shaped instance and rendered as
@@ -28,15 +37,7 @@ const READER_INK_DARK = "#ece9e3";
    Self-contained, because it rides two kinds of page: the reader shell and a post
    page (as browser-only chrome injected into the frozen render). The post page has
    none of the reader tokens, so the font is set here rather than inherited. */
-const DEV_BADGE_STYLE = `
-/* The app's brand accent (DESIGN.md §3), mirrored here for the ONE dev-only element
-   the reader surface carries. That badge is app chrome, not the publication's
-   identity, so it wears the app's action color, matching a Primary action, rather
-   than the reader ink; keep these values in sync with styles.css. This is the
-   single, deliberate exception to "the reader surface is not styled from the admin
-   tokens" (DESIGN.md, reader-surface note). */
-:root { --k-accent:#3355cc; --k-accent-contrast:#ffffff; }
-@media (prefers-color-scheme: dark) { :root { --k-accent:#7d9bff; --k-accent-contrast:#10131f; } }
+const DEV_BADGE_STYLE = `${APP_ACCENT_TOKENS}
 .r-dev { position:fixed; right:18px; bottom:18px; z-index:50; display:inline-flex; align-items:center; gap:8px;
          font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; line-height:1.6;
          font-size:13px; font-weight:600; text-decoration:none; padding:9px 15px 9px 10px; border-radius:999px;
@@ -58,19 +59,19 @@ const DEV_BADGE_STYLE = `
    is a block within the page's own column, never a full-width strip, because on a post
    page it sits inside the template's content column (the masthead anchor), where it
    cannot reach the window's edges; the reader shell places it in its measure to match,
-   so it is one component on both kinds of page. It wears the reader ink as its ground,
-   the inverse of the page, so it reads as a notice laid over the publication rather than
-   part of it, and turns with the theme. Self-contained, like the dev pill, because a post
-   page has none of the reader tokens. */
-const READER_BANNER_STYLE = `
+   so it is one component on both kinds of page. Only the publisher sees it, so it wears
+   the dev pill's look: the full accent fill with contrast text (about 6.3:1 light and
+   7:1 dark), and its tag as the pill's inverted chip, which clears AA where a tint would
+   not. Self-contained, like the pill, because a post page has none of the reader tokens. */
+const READER_BANNER_STYLE = `${APP_ACCENT_TOKENS}
 .r-banner { display:flex; align-items:baseline; gap:10px; margin:0 0 20px; padding:11px 16px; border-radius:10px;
-            background:${READER_INK_LIGHT}; color:${READER_BG_LIGHT}; text-align:left;
+            background:var(--k-accent); color:var(--k-accent-contrast); text-align:left;
             font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
-            font-size:14px; font-weight:400; line-height:1.45; }
-.r-banner-tag { flex:none; font-size:11px; letter-spacing:.1em; text-transform:uppercase; font-weight:700;
-                padding:2px 8px; border-radius:999px; border:1px solid currentColor; }
+            font-size:14px; font-weight:500; line-height:1.45; }
+.r-banner-tag { flex:none; font-size:10.5px; letter-spacing:.09em; text-transform:uppercase; font-weight:700;
+                padding:2px 8px; border-radius:999px;
+                background:var(--k-accent-contrast); color:var(--k-accent); }
 .r-banner-text { min-width:0; overflow-wrap:anywhere; }
-@media (prefers-color-scheme: dark) { .r-banner { background:${READER_INK_DARK}; color:${READER_BG_DARK}; } }
 /* On a phone the tag takes its own line, so the sentence has the column's whole width. */
 @media (max-width:560px) { .r-banner { flex-direction:column; align-items:flex-start; gap:6px; } }
 `;
@@ -78,7 +79,7 @@ const READER_BANNER_STYLE = `
 const READER_STYLE = `
 :root {
   color-scheme: light dark;
-  --r-bg:${READER_BG_LIGHT}; --r-ink:${READER_INK_LIGHT}; --r-card:#ffffff; --r-line:#e7e5df; --r-mut:#6b6a63;
+  --r-bg:${READER_BG_LIGHT}; --r-ink:#1b1a17; --r-card:#ffffff; --r-line:#e7e5df; --r-mut:#6b6a63;
   --r-serif:Fraunces,Georgia,'Iowan Old Style','Times New Roman',serif;
   --r-sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --r-measure:820px; /* one reading width shared by the masthead, body, and footer so their edges line up */
@@ -87,7 +88,7 @@ const READER_STYLE = `
   --brand-ink:currentColor;
 }
 @media (prefers-color-scheme: dark) {
-  :root { --r-bg:${READER_BG_DARK}; --r-ink:${READER_INK_DARK}; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
+  :root { --r-bg:${READER_BG_DARK}; --r-ink:#ece9e3; --r-card:#1b1a17; --r-line:#2c2a25; --r-mut:#a5a199; }
 }
 * { box-sizing:border-box; }
 body { margin:0; font-family:var(--r-sans); background:var(--r-bg); color:var(--r-ink); line-height:1.6; }

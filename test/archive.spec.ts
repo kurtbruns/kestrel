@@ -699,7 +699,11 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(on, name).toContain('class="r-dev"');
       expect(on, name).toContain("--k-accent:#3355cc");
       expect(off, name).not.toContain("r-dev");
-      expect(off, name).not.toContain("--k-accent");
+      // The accent tokens come with the pill, or with a test page's banner, which wears
+      // the same accent; a page with neither carries none.
+      if (!off.includes('class="r-banner"')) {
+        expect(off, name).not.toContain("--k-accent");
+      }
       expect(off, name).not.toContain("/dashboard");
     }
   });
