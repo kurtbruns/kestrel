@@ -5,6 +5,7 @@
  * its publisher, not a post: it carries no template, no identity, and no unsubscribe link.
  */
 
+import { dashboardLink } from "../../shared/dashboard_link";
 import { refusalAdvice } from "../../shared/sends";
 import type { DueNotification } from "../db/notifications";
 import type { Config } from "../env";
@@ -21,9 +22,10 @@ function minutes(ms: number): number {
   return Math.round(ms / 60_000);
 }
 
-/** The send's page in the admin UI: the record once sent, the live watch before. */
+/** The send's page in the admin UI: the record once sent, the live watch before. Carried
+ *  in the query, so it still opens the send after an Access login (`dashboardLink`). */
 export function sendLink(config: Config, sendId: string): string {
-  return `${config.appOrigin}/dashboard/#/sent/${encodeURIComponent(sendId)}`;
+  return dashboardLink(config.appOrigin, `/sent/${encodeURIComponent(sendId)}`);
 }
 
 /** Paragraphs and a closing link, as both a text and an HTML body. */
@@ -107,6 +109,6 @@ export function sampleNotification(config: Config): RenderedEmail {
       "This is a test of the notifications that tell you when a send goes out, and right away if a send runs into a problem.",
       "If it arrived, the channel works; nothing else was sent.",
     ],
-    `${config.appOrigin}/dashboard/#/settings`,
+    dashboardLink(config.appOrigin, "/settings"),
   );
 }
