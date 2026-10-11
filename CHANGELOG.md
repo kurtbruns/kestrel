@@ -29,6 +29,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Fixed
 
+- Two send-now requests for the same post that arrive at the same moment (from Claude and the editor, say) now both answer with the one send they made. Before, the one that lost the race was refused with "post already has an active send", though the send was scheduled and no one was mailed twice; a later repeat already answered this way (SPEC §6).
 - A link in a notification email now opens the send it is about even when you have to sign in first. Before, the sign-in dropped the page from the link and you landed on the dashboard home (SPEC §8).
 - Leaving a draft while a save was still going (just after leaving the subject or slug field, say) no longer warns "Changed elsewhere — your edits weren't saved" about your own save, and an edit made while that save was going is no longer lost. The editor now waits for the save to land and saves what is left on top of it.
 - A link in a post's Preview tab, or in the sample email on the Template page and in Settings, now opens in a new tab. Before, it loaded in the preview's frame, which went blank when the page refused to be framed, as most do, and the preview was lost until you switched tabs.
