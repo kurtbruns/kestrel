@@ -307,13 +307,13 @@ describe("sample email preview", () => {
     '<div class="email">{{ .Post.Body }}<table><tr><td class="logo-cell">{{ .Publication.Logo }}</td><td>{{ .Publication.Name }}</td></tr></table></div>';
   const identity = { name: "Birds Weekly", tagline: "", address: "" };
 
-  function preview(logoUrl: string): HTMLElement {
+  function preview(logoUrl: string, template = SIGNOFF): HTMLElement {
     resetShell();
     const frame = document.createElement("iframe");
     document.body.append(frame);
     mountSampleEmailPreview(
       frame,
-      () => SIGNOFF,
+      () => template,
       () => ({ ...identity, logoUrl }),
     );
     frame.dispatchEvent(new Event("load"));
@@ -335,5 +335,13 @@ describe("sample email preview", () => {
     const img = preview("https://app.birds.example/media/branding/logo?v=1").querySelector("img");
     expect(img?.getAttribute("src")).toBe("https://app.birds.example/media/branding/logo?v=1");
     expect(img?.getAttribute("alt")).toBe("Birds Weekly");
+  });
+
+  it("opens the template's links in a new tab, so following one never blanks the frame", () => {
+    const link = preview("", '<p><a href="https://birds.example/">Visit</a></p>').querySelector(
+      "a",
+    );
+    expect(link?.getAttribute("target")).toBe("_blank");
+    expect(link?.getAttribute("rel")).toBe("noopener noreferrer");
   });
 });

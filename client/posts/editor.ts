@@ -21,6 +21,7 @@ import { openRescheduleModal } from "../sends/dialogs";
 import { can, has } from "../sends/progress";
 import { appliedNoticeHtml } from "../settings/remake";
 import { $, $$ } from "../ui/dom";
+import { openLinksInNewTab } from "../ui/email_frame";
 import {
   fmt,
   invalidAddressesMessage,
@@ -37,6 +38,13 @@ import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
+
+// The preview frame's sandbox. Same-origin, so the editor can size the frame and set its
+// links to open a new tab (openLinksInNewTab); popups, so that new tab can open at all;
+// and popups escaping the sandbox, so the page it opens works as it would from an inbox
+// rather than inheriting this sandbox. Never scripts or forms: the email's markup does
+// nothing inside the editor but show.
+const PREVIEW_SANDBOX = "allow-same-origin allow-popups allow-popups-to-escape-sandbox";
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -195,7 +203,7 @@ export async function renderEditor(
         <div class="composer-body${locked ? " locked" : ""}" id="composerBody">
           <pre class="md-hl" id="mdHl" aria-hidden="true"><code></code></pre>
           <textarea id="f-markdown" class="editor"${locked ? null : html` placeholder="Type your post in Markdown…"`}${ro}>${markdown}</textarea>
-          <iframe id="previewFrame" class="preview" sandbox="allow-same-origin" title="Email preview" hidden></iframe>
+          <iframe id="previewFrame" class="preview" sandbox="${PREVIEW_SANDBOX}" title="Email preview" hidden></iframe>
         </div>
         ${
           locked
@@ -380,6 +388,7 @@ export async function renderEditor(
         try {
           const doc = previewFrame.contentDocument;
           if (doc) {
+            openLinksInNewTab(doc);
             previewFrame.style.height = `${doc.body.scrollHeight + 24}px`;
           }
         } catch {}

@@ -14,6 +14,7 @@ import { withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
+import { openLinksInNewTab } from "../ui/email_frame";
 import { invalidAddressesMessage, parseAddresses } from "../ui/format";
 import { highlightTemplate } from "../ui/highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
@@ -382,6 +383,7 @@ export function mountSampleEmailPreview(
     // Set as markup (not srcdoc per keystroke): flicker-free, and any <script> stays
     // inert. The publisher's own template, filled with sample values, in its own frame.
     setHtml(slot, unsafeHtml(sampleEmailHtml(getTemplate(), getIdentity())));
+    openLinksInNewTab(slot.ownerDocument);
     size();
   };
   iframe.addEventListener("load", () => {

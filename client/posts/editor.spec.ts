@@ -701,6 +701,14 @@ describe("editor view", () => {
     const frame = $<HTMLIFrameElement>("#previewFrame");
     expect(frame.hidden).toBe(false);
     expect(frame.srcdoc).toBe("<p>rendered</p>");
+    // A link may open a new tab (and its page escape the sandbox), but the email never runs
+    // script or submits a form.
+    const sandbox = frame.getAttribute("sandbox")?.split(" ");
+    expect(sandbox).toEqual([
+      "allow-same-origin",
+      "allow-popups",
+      "allow-popups-to-escape-sandbox",
+    ]);
     expect(body().hidden).toBe(true);
   });
 
