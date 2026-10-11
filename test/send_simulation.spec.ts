@@ -106,8 +106,9 @@ async function fetchWith(
   return res;
 }
 
-/** `n` confirmed subscribers, `reader0@birds.example` up. */
-async function seedConfirmed(n: number): Promise<string[]> {
+/** `n` confirmed readers, `reader0@birds.example` up, with index-based ids and tokens
+ *  (`sub-0`, `uns-0`) that this spec's links name. */
+async function seedReaders(n: number): Promise<string[]> {
   const now = Date.now();
   const emails = Array.from({ length: n }, (_, i) => `reader${i}@birds.example`);
   await env.DB.batch(
@@ -120,8 +121,8 @@ async function seedConfirmed(n: number): Promise<string[]> {
   return emails;
 }
 
-/** A post frozen onto a send that is already due, as the sweep finds one at its fire time. */
-async function dueSend(e: AppEnv, subject: string): Promise<string> {
+/** A due send frozen under `e`'s config (its own vars), and its id. */
+async function dueSendUnder(e: AppEnv, subject: string): Promise<string> {
   const { post } = await posts.createPost(
     e.DB,
     { subject, markdown: `# ${subject}\n\nbody` },
@@ -345,8 +346,8 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     ];
     const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
-    const emails = await seedConfirmed(30);
-    const sendId = await dueSend(e, "Kestrels");
+    const emails = await seedReaders(30);
+    const sendId = await dueSendUnder(e, "Kestrels");
     const progress = async () =>
       (await readJson(await fetchWith(vars, `/api/sends/${sendId}`, { headers: AUTH }))).send;
     const addresses = async (status: string) =>
@@ -457,8 +458,8 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   it("runs clean with no faults: one tick, no halt, every receipt a delivery", async () => {
     const vars = { SIMULATE_SENDS: "ses:none", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
-    await seedConfirmed(12);
-    const sendId = await dueSend(e, "Merlins");
+    await seedReaders(12);
+    const sendId = await dueSendUnder(e, "Merlins");
     await sweep(e);
     let row = (await sends.getSend(env.DB, sendId))!;
     expect(row.status).toBe("sent");

@@ -12,7 +12,7 @@ import { cancel } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { toNextTick } from "./support/clock";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { dueSend, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { allowErrorLogs, type LoggedLine, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
@@ -85,7 +85,7 @@ afterEach(() => {
 describe("the send lifecycle in the log", () => {
   it("a send through the sweep logs fired, batch, completed in order under its sendId, and no address", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
 
     await withRun("tick-1", () => sweep(env));
 
@@ -117,7 +117,7 @@ describe("the send lifecycle in the log", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
     // The first request's answer is lost, so the batch waits under its key to be re-sent
     // whole; by then one reader's subscriber record is gone, so the re-send closes them
     // unsent at hand-off rather than mail them with no unsubscribe link. Every member is
@@ -151,7 +151,7 @@ describe("the send lifecycle in the log", () => {
     // The provider's words may carry an address; the log keeps only its domain.
     provider.refuse = "The newsletter@send.example.com sender is not verified";
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
 
     await sweep(env);
     const retryAt = (await sends.getSend(env.DB, send.id))!.halt_retry_at!;
@@ -185,7 +185,7 @@ describe("the send lifecycle in the log", () => {
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
 
     await sweep(env);
     expect(lines().find((l) => l.event === "send.ambiguous")).toMatchObject({
@@ -220,7 +220,7 @@ describe("the send lifecycle in the log", () => {
 
   it("a run that loses its lease says so", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
     // Another run took the send between this run's hand-off and its check.
     vi.spyOn(sends, "dispatchFresh").mockResolvedValue([]);
     vi.spyOn(sends, "renewLease").mockResolvedValue(false);
@@ -245,7 +245,7 @@ describe("the send lifecycle in the log", () => {
 
   it("receipts and the suppressions they add are logged per send, as counts", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await frozenSend(Date.now() - 1000);
+    const send = await dueSend();
     await sweep(env);
     const { results } = await env.DB.prepare(
       "SELECT email, provider_id FROM deliveries WHERE send_id = ? ORDER BY email",
