@@ -253,7 +253,7 @@ export interface SendView {
    * can change it (wedged, missed, finished).
    */
   next_change_at: number | null;
-  /** Where the send's other resources are. `archive` is the published post, absolute, once the send is sent; null before. */
+  /** Where the send's other resources are. `archive` is the published post, absolute, once the send has started; null before. */
   links: {
     self: string;
     email_html: string;

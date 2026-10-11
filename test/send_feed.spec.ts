@@ -593,7 +593,7 @@ describe("GET /api/sends/feed paces from each send's next change", () => {
 });
 
 describe("GET /api/sends/:id shape fixes", () => {
-  it("links the archive only once the send is sent, and leaves a halt's times null rather than now", async () => {
+  it("links the archive once the send starts, and leaves a halt's times null rather than now", async () => {
     const now = Date.now();
     const send = await scheduledSend("Unpublished", now + 3_600_000);
     let body = (await (
@@ -612,5 +612,7 @@ describe("GET /api/sends/:id shape fixes", () => {
       await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH })
     ).json()) as SendResponse;
     expect(body.send.provider.halt).toMatchObject({ since: null, retry_at: null });
+    // Published from the start, so a halted send in flight still links its page.
+    expect(body.send.links.archive).toMatch(/\/archive\/[^/]+$/);
   });
 });

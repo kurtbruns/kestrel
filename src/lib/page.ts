@@ -370,7 +370,7 @@ export function landingPage(opts: {
   });
 }
 
-/** The full public archive: every sent post, newest first (§5). Reached from the
+/** The full public archive: every published post, newest first (§5). Reached from the
  *  landing page's "Browse the full archive" link; served at the archive base path. */
 export function archiveIndexPage(opts: {
   identity: ReaderIdentity;
