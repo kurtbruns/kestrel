@@ -9,6 +9,7 @@ import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
 import { adminAuth } from "./support/auth";
+import { expectErrorLogs } from "./support/log";
 
 const AUTH = await adminAuth();
 const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
@@ -435,7 +436,6 @@ describe("a confirmation the provider does not take is not treated as sent", () 
       },
     };
     vi.spyOn(providers, "getProvider").mockReturnValue(stub);
-    vi.spyOn(console, "error").mockImplementation(() => {});
     return { calls };
   }
 
@@ -498,6 +498,7 @@ describe("a confirmation the provider does not take is not treated as sent", () 
   });
 
   it("a failure before the provider is asked changes nothing", async () => {
+    expectErrorLogs("subscribe.failed", "request.error");
     const email = uniqueEmail();
     await addPending(email);
     await ageConfirmation(email, CONFIRM_COOLDOWN_MS);

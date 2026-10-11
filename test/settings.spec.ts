@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
 import { adminAuth } from "./support/auth";
-import { logged } from "./support/log";
+import { expectErrorLogs, logged } from "./support/log";
 
 const BASE = "https://kestrel.test";
 
@@ -483,6 +483,7 @@ describe("a corrupt settings row", () => {
     ["JSON that is not an object", "null"],
   ] as const) {
     it(`fails the API's reads and writes, keeps the reader pages up, and leaves the row as it is: ${what}`, async () => {
+      expectErrorLogs("settings.corrupt");
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
       const before = await readRow();

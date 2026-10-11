@@ -14,6 +14,7 @@ import {
 import { HttpError } from "../src/lib/errors";
 import type { RequestContext } from "../src/router";
 import { adminAuth } from "./support/auth";
+import { expectErrorLogs } from "./support/log";
 
 const AUTH = await adminAuth();
 const base = "https://kestrel.test";
@@ -247,6 +248,7 @@ describe("other routes name the field they refuse", () => {
 
 describe("PUT /api/settings keeps a database failure out of the 400", () => {
   it("a failing settings read is a 500, not a bad request carrying the database's message", async () => {
+    expectErrorLogs("request.error");
     const broken = {
       ...env,
       DB: {

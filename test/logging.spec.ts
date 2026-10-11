@@ -14,7 +14,7 @@ import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { toNextTick } from "./support/clock";
-import { type LoggedLine, logged } from "./support/log";
+import { expectErrorLogs, type LoggedLine, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The structured log (SPEC §12): every line one JSON object, a send's lifecycle in order
@@ -204,6 +204,7 @@ describe("the send lifecycle in the log", () => {
   });
 
   it("a request lost on a provider with no key logs send.ambiguous once, then send.wedged each tick from the one that left it", async () => {
+    expectErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
@@ -256,6 +257,7 @@ describe("the send lifecycle in the log", () => {
   });
 
   it("a tick that throws logs sweep.error, then its sweep.tick, and still throws", async () => {
+    expectErrorLogs("sweep.error");
     vi.spyOn(sends, "dueSends").mockRejectedValue(new Error("D1 went away"));
 
     await expect(sweep(env)).rejects.toThrow("D1 went away");

@@ -21,6 +21,11 @@ export default defineConfig(async () => {
   const migrations = await readD1Migrations("./migrations");
   return {
     test: {
+      // A passing test's console output is dropped and a failing one's kept. The Worker's
+      // structured log (src/lib/log.ts) writes a line per lifecycle step, and the send specs
+      // drive hundreds of them on purpose (halts, wedges, refusals), so printing them all
+      // buries the run's result; a spec that asserts on a line reads it through a spy.
+      silent: "passed-only",
       projects: [
         {
           plugins: [
@@ -51,7 +56,7 @@ export default defineConfig(async () => {
           test: {
             name: "worker",
             include: ["test/**/*.spec.ts"],
-            setupFiles: ["./test/apply_migrations.ts"],
+            setupFiles: ["./test/apply_migrations.ts", "./test/log_guard.ts"],
             // Don't discover specs inside git worktrees under .claude/ (task copies).
             exclude: [...configDefaults.exclude, "**/.claude/**"],
           },

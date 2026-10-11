@@ -18,7 +18,7 @@ import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { RESEND_DEPLOY } from "./support/deploy";
-import { logged } from "./support/log";
+import { expectErrorLogs, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
@@ -152,6 +152,7 @@ describe("a send finishing", () => {
 
 describe("a send that needs the publisher", () => {
   it("the provider refusing the account: told at once with its words and the advice, once however long it lasts", async () => {
+    expectErrorLogs("send.stuck");
     await seedConfirmed(addresses(5));
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
@@ -245,6 +246,7 @@ describe("a send that needs the publisher", () => {
   });
 
   it("a missed fire time: told once, whether the send went out late or has not gone out", async () => {
+    expectErrorLogs("send.missed");
     await seedConfirmed(addresses(2));
     const late = await dueSend("Late one", Date.now() - MISSED_THRESHOLD_MS - 5 * 60_000);
 
@@ -313,6 +315,7 @@ describe("isolation", () => {
   });
 
   it("a notifier that throws outright never stops a send finishing", async () => {
+    expectErrorLogs("notify.error");
     await seedConfirmed(addresses(2));
     const send = await dueSend();
     vi.spyOn(channel, "getNotifier").mockImplementation(() => {
@@ -327,6 +330,7 @@ describe("isolation", () => {
   });
 
   it("a tick with a backlog stays inside the subrequest budget", async () => {
+    expectErrorLogs("send.missed");
     await seedConfirmed(addresses(1));
     for (let i = 0; i < 25; i++) {
       await dueSend(`Backlog ${i}`, Date.now() - MISSED_THRESHOLD_MS - 60_000);

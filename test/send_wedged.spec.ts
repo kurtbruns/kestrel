@@ -19,6 +19,7 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
+import { expectErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // Wedged has one definition (SPEC §12): sending, nothing left to hand off, recipients in
@@ -83,6 +84,7 @@ afterEach(() => {
 
 describe("a wedged send", () => {
   it("is left alone by the sweep: its rev, its phase, and the feed stay still until Resolve", async () => {
+    expectErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
@@ -126,6 +128,7 @@ describe("a wedged send", () => {
 
 describe("a wedged send a receipt with no provider id reaches", () => {
   it("keeps every unknown recipient, its count, and Resolve: a receipt that cannot name its message never settles one", async () => {
+    expectErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
