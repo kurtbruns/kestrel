@@ -10,7 +10,7 @@ export interface Post {
   id: string;
   slug: string;
   /**
-   * Whether the slug follows the subject: derived from it again, and deduplicated afresh, on
+   * Whether the slug follows the subject: derived from it again, and numbered afresh, on
    * every draft save. False once a slug is set by hand.
    */
   slug_auto: boolean;
@@ -68,7 +68,7 @@ export interface PostResponse {
  */
 export interface PostEditBody {
   subject?: string;
-  /** A hand-set slug; sending one turns `slug_auto` off. Refused beside `slug_auto: true`. */
+  /** A slug set by hand; sending one turns `slug_auto` off. Refused beside `slug_auto: true`. */
   slug?: string;
   /**
    * Have the slug follow the subject (true) or keep it as it stands (false). Absent, a create

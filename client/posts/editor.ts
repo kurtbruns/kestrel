@@ -186,7 +186,7 @@ export async function renderEditor(
             ${infoTip("The web address of this post's archive page.")}
           </div>
           <input id="f-slug" value="${post.slug}"${ro}>
-          ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
+          ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Follow the subject</label>`}
         </div>
       </div>
 
@@ -257,9 +257,9 @@ export async function renderEditor(
   paintMarkdown(); // paint the initial content (a scheduled post is read-only but still highlighted)
 
   // Whether the slug follows the subject is the post's own (`slug_auto`), never guessed from
-  // its shape: a hand-set `spring-update-2027` looks just like a deduplicated `spring-update`.
-  // While it follows, a save sends no slug of its own and the server derives and dedupes it;
-  // once hand-set, the field is what is sent. Either way the field shows only slugs the server
+  // its shape: `spring-update-2027` set by hand looks just like a numbered `spring-update`.
+  // While it follows, a save sends no slug of its own and the server derives and numbers it;
+  // once set by hand, the field is what is sent. Either way the field shows only slugs the server
   // answered with, never the editor's own guess, so it can lag a subject edit until the save
   // but never shows an address the post won't get.
   const autoEl = locked ? null : $<HTMLInputElement>("#f-slug-auto");
@@ -305,7 +305,7 @@ export async function renderEditor(
     return true;
   }
 
-  // Auto-generate slug from subject. The slug stays editable throughout; the
+  // The "Follow the subject" box. The slug stays editable throughout; the
   // checkbox says whether it follows the subject. Typing your own slug takes manual
   // control (unchecks); emptying the field, or ticking the box, hands it back to the
   // subject. The slug the subject gives arrives with the save that leaving the
@@ -313,11 +313,11 @@ export async function renderEditor(
   if (autoEl) {
     autoEl.checked = post.slug_auto;
 
-    // Muted while it tracks the subject; normal color once it's a hand-set slug.
+    // Muted while it tracks the subject; normal color once it's set by hand.
     const reflect = () => slugEl.classList.toggle("slug-auto", autoEl.checked);
     reflect();
 
-    // Typing a slug takes manual control; clearing it re-links to the subject.
+    // Typing a slug takes manual control; clearing it follows the subject again.
     slugEl.addEventListener("input", () => {
       autoEl.checked = slugEl.value.trim() === "";
       reflect();

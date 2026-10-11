@@ -614,7 +614,7 @@ describe("editor view", () => {
     expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
   });
 
-  it("follows the subject until the slug is hand-set, and never leaves it empty", async () => {
+  it("follows the subject until the slug is set by hand, and never leaves it empty", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
@@ -631,12 +631,12 @@ describe("editor view", () => {
     expect(slug.value).toBe("night-owls-co");
     typeInto(slug, "custom");
     expect(auto.checked).toBe(false);
-    subject.focus(); // leaving the slug saves it as hand-set
+    subject.focus(); // leaving the slug saves it as set by hand
     await vi.advanceTimersByTimeAsync(0);
     typeInto(subject, "Something else");
     slug.focus();
     await vi.advanceTimersByTimeAsync(0);
-    expect(slug.value).toBe("custom"); // hand-set: the subject no longer drives it
+    expect(slug.value).toBe("custom"); // set by hand: the subject no longer drives it
     expect(puts().at(-1)?.json()).toMatchObject({ slug: "custom", slug_auto: false });
     typeInto(slug, "");
     expect(auto.checked).toBe(true);
@@ -774,7 +774,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(5000);
     expect(slug.value).toBe("barn-owls-2");
     expect($("#saveStatus").textContent).toBe("Saved");
-    // Hand-set: the slug is saved as the server made it, not as typed.
+    // Set by hand: the slug is saved as the server made it, not as typed.
     server.taken.add("custom");
     slug.focus();
     typeInto(slug, "custom");
@@ -819,7 +819,7 @@ describe("editor view", () => {
     expect($("#saveStatus").textContent).toBe("Saved");
   });
 
-  it("keeps a hand-set slug that looks numbered as written", async () => {
+  it("keeps a slug set by hand that looks numbered as written", async () => {
     const server = draftServer(
       draft({ subject: "Spring update", slug: "spring-update-2027", slug_auto: false }),
     );

@@ -253,8 +253,8 @@ export async function createPost(
 /**
  * Write a new revision and advance `current_revision`. Draft-only (the caller
  * checks status first; the WHERE guard is a backstop). A slug that follows the
- * subject is derived and deduplicated afresh on every save, so it tracks subject
- * edits and drops a numbered suffix once the plain slug is free; a hand-set slug
+ * subject is derived and numbered afresh on every save, so it tracks subject
+ * edits and drops a number it no longer needs once the plain slug is free; a slug set by hand
  * changes only when a save names a new one. Sending a slug sets it by hand.
  */
 export async function updatePost(

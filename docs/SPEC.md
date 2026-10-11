@@ -115,15 +115,17 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 ## 4. Authoring
 
-The publisher writes in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post is a **subject** and a body; the **slug** (derived from the subject) rounds out the metadata, and the inbox **preheader** (the snippet a mail client shows beside the subject) is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
+The publisher writes in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post is a **subject** and a body; the **slug** (derived from the subject unless set by hand, below) rounds out the metadata, and the inbox **preheader** (the snippet a mail client shows beside the subject) is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
 
 Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug: one field carrying the weight rather than a separate "title" that would have to be kept in sync with it.
 
 ### Slugs
 
-A slug is unique across all posts, drafts included, since it is a post's permanent address in the archive. When the slug a post would take is already held, it is numbered (`spring-update-2`, `-3`, and so on), so a subject that recurs, like a yearly "Spring update", never collides with an earlier issue.
+A slug is a post's permanent address in the archive, and no two posts share one, drafts included, since every test email of a draft already carries the address (§5). When the slug a post would take is already held, it is numbered (`spring-update-2`, `-3`, and so on), so a subject that recurs, like a yearly "Spring update", never collides with an earlier post.
 
-A slug either follows the subject or was set by hand, and the post records which. A slug that follows is derived from the subject again, and numbered afresh, on every save of the draft, so it tracks subject edits and drops a number it no longer needs once the slug it stood in for is free (the earlier draft was deleted or renamed). A hand-set slug is kept exactly as written until the publisher changes it, even when it looks like a numbered one (`spring-update-2027`). A new post follows its subject unless it is created with a slug; setting a slug makes it hand-set, and either client can have it follow the subject again. Both modes stop at scheduling, which freezes the slug with the rest of the post (§6), so a draft's slug may move but a sent post's address never does. Whatever the client sends, the server decides the slug and answers with it, so the editor shows the address the post will actually get rather than its own guess.
+A slug either follows the subject or is set by hand, and the post records which. A slug that follows the subject is derived from it again, and numbered afresh, on every save of the draft: it tracks subject edits, and drops a number once the slug it stood in for is free (the earlier draft was deleted or renamed). A slug set by hand is kept exactly as written, even when it looks numbered (`spring-update-2027`), until the publisher changes it. A new post's slug follows its subject unless the post is created with one; setting a slug sets it by hand, and either client can have it follow the subject again. Scheduling freezes the slug with the rest of the post (§6), so a draft's slug may move, and a test email sent before it moved links to the old address, but a scheduled or sent post's address never moves.
+
+The server decides the slug and answers every save with it, so neither client works one out for itself: what the editor shows is the slug the post has.
 
 ### Revisions
 
@@ -489,6 +491,8 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Content lives in the app's database**, over Markdown files in a repo (§2, §4).
 - **Full-text revisions**, over delta chains (§4).
 - **Subject is the primary post field**, over a separate title (§4).
+- **A slug follows the subject until set by hand, and the post records which**, over inferring it from the slug's shape (§4).
+- **No two posts share a slug, drafts included, numbered when a draft is saved**, over checking only at publish (§4).
 - **Notify, don't clobber**, over last-write-wins for concurrent edits (§4).
 - **Images belong to the post and are referenced by name**, over an upload that returns a URL to paste (§4).
 - **The archive page is the record**, over a separate email archive (§5).

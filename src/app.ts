@@ -369,11 +369,12 @@ export function createRouter({
       access: "admin",
       accepts: JSON_BODY,
       resource: "posts",
-      summary: "Create a draft post.",
+      summary:
+        "Create a draft post. Its slug follows the subject (`slug_auto: true`) unless you send a `slug`, which sets it by hand.",
       example: {
         request: { subject: "Hello, world", markdown: "# Hello\n\nWelcome." },
         response: {
-          post: { id: "p_abc123", status: "draft", slug: "hello-world" },
+          post: { id: "p_abc123", status: "draft", slug: "hello-world", slug_auto: true },
           revision_id: "r_1",
         },
       },
@@ -429,15 +430,22 @@ export function createRouter({
       summary:
         "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
       description:
-        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled.",
+        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled. While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again and numbers it if another post holds it, so take the slug from the answer. Sending `slug` sets it by hand and turns `slug_auto` off; `slug_auto: true` has it follow the subject again. Sending both is a 400 naming `slug`.",
       example: {
         request: {
-          subject: "Hello, world",
-          slug: "hello-world",
+          subject: "Hello again, world",
           markdown: "# Hello\n\nEdited.",
           base_revision: "r_1",
         },
-        response: { post: { id: "p_abc123", current_revision: "r_2", status: "draft" } },
+        response: {
+          post: {
+            id: "p_abc123",
+            current_revision: "r_2",
+            status: "draft",
+            slug: "hello-again-world",
+            slug_auto: true,
+          },
+        },
       },
       handler: postRoutes.updatePost,
     },

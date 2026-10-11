@@ -114,7 +114,7 @@ describe("posts + revisions", () => {
     expect(relinked.post.slug_auto).toBe(true);
   });
 
-  it("keeps a slug named on create as hand-set", async () => {
+  it("keeps a slug named on create as set by hand", async () => {
     const { post } = await readJson(
       await createPost({ subject: "Spring update", slug: "spring-update-2027" }),
     );
@@ -143,6 +143,31 @@ describe("posts + revisions", () => {
       base_revision: resaved.post.current_revision,
     });
     expect(freed.post.slug).toBe("two-directions");
+  });
+
+  it("lists each post's slug mode as true or false (SPEC §4)", async () => {
+    const { post } = await readJson(await createPost({ subject: "Listed Mode" }));
+    const { posts } = await readJson(
+      await SELF.fetch(`${base}/api/posts?search=Listed%20Mode`, { headers: AUTH }),
+    );
+    expect(posts.map((p: { id: string; slug_auto: unknown }) => [p.id, p.slug_auto])).toEqual([
+      [post.id, true],
+    ]);
+  });
+
+  it("reads a post saved before slugs recorded their mode as set by hand (SPEC §4)", async () => {
+    // A row as an older release wrote it: no slug_auto, so the migration's default applies.
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO posts (id, slug, subject, status, created_at, updated_at) VALUES ('p-older', 'older-post', 'Older post', 'draft', ?, ?)",
+    )
+      .bind(now, now)
+      .run();
+    const { post } = await readJson(
+      await SELF.fetch(`${base}/api/posts/p-older`, { headers: AUTH }),
+    );
+    expect(post.slug).toBe("older-post");
+    expect(post.slug_auto).toBe(false);
   });
 
   it("refuses a slug beside slug_auto: true, and a slug_auto that is not a boolean", async () => {
