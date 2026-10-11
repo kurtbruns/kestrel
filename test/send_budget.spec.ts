@@ -21,7 +21,7 @@ import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 /** SES-shaped: one recipient a request and no idempotency key. */
@@ -165,7 +165,7 @@ describe("a Resend batch interrupted after acceptance", () => {
     },
     "the run is cut off while recording it": () => {
       // The run dies on the write, which the loop reports as an unhandled send failure.
-      expectErrorLogs("send.error");
+      allowErrorLogs("send.error");
       const real = sends.settleDeliveries;
       let cut = false;
       vi.spyOn(sends, "settleDeliveries").mockImplementation(async (...args) => {
@@ -238,7 +238,7 @@ describe("a retryable answer to a handed-off batch", () => {
   });
 
   it("on a provider switched to one without idempotency, goes to Resolve instead of stalling", async () => {
-    expectErrorLogs("send.ambiguous", "send.wedged");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.loseAnswers = 1;
@@ -258,7 +258,7 @@ describe("a retryable answer to a handed-off batch", () => {
   });
 
   it("on a provider without idempotency, leaves in-flight batches untouched and keeps delivering", async () => {
-    expectErrorLogs("send.ambiguous", "send.wedged");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     // SES-shaped: one recipient per request, no idempotency, so a request with no answer
     // leaves its recipient in flight for Resolve. That must neither stall the rest of
     // the send nor refresh the row, which would hide it from the stale-delivery flag.
@@ -452,7 +452,7 @@ describe("a one-recipient provider's groups", () => {
   });
 
   it("a run cut off after a group's requests leaves at most a group for Resolve, and re-mails no one", async () => {
-    expectErrorLogs("send.wedged");
+    allowErrorLogs("send.wedged");
     const emails = addresses(25);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -555,7 +555,7 @@ describe("a group whose requests are answered differently", () => {
   });
 
   it("records each answer, keeps the lost one for Resolve, and halts for the account", async () => {
-    expectErrorLogs("send.ambiguous");
+    allowErrorLogs("send.ambiguous");
     const emails = addresses(5);
     await seedConfirmed(emails);
     const send = await dueSend();

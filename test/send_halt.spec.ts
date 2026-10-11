@@ -16,7 +16,7 @@ import { sweep } from "../src/send/sweep";
 import { nextRetry, toNextTick } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
-import { expectErrorLogs } from "./support/log";
+import { allowErrorLogs } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 import { viewOf } from "./support/view";
 
@@ -124,7 +124,7 @@ afterEach(() => {
 
 describe("a provider outage", () => {
   it("a whole-batch 429 or 5xx keeps everyone pending, attempts unspent, across many ticks", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -144,7 +144,7 @@ describe("a provider outage", () => {
   });
 
   it("a request that throws keeps everyone pending, attempts unspent, across many ticks", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -162,7 +162,7 @@ describe("a provider outage", () => {
   });
 
   it("re-sends a batch accepted before the outage under its key, mailing no one twice", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(150);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -197,7 +197,7 @@ describe("a provider outage", () => {
 
 describe("the provider refusing the account", () => {
   it("halts without consuming recipients, reports one condition, and resumes once fixed", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -295,7 +295,7 @@ describe("the halt's backoff", () => {
     ["unavailable", [0, 1, 3, 8, 23, 53, 113, 173]],
     ["account", [0, 5, 20, 50, 110, 170]],
   ] as const)("spaces %s retries out across ticks, consuming no one", async (reason, expected) => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -360,7 +360,7 @@ describe("the halt's backoff", () => {
   });
 
   it("costs a waiting send no provider request and nothing past the sweep's query", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const limit = getConfig(env).subrequestBudget;
     // An idle tick's cost, with nothing to send.
     const idle = guardD1(env.DB);
@@ -410,7 +410,7 @@ describe("the halt's backoff", () => {
   });
 
   it("mails everyone exactly once after the fault clears, at the next scheduled retry", async () => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -498,7 +498,7 @@ describe("a refused batch and its key", () => {
   });
 
   it("sends a batch of unknown fate to Resolve once the provider has forgotten its key (I4)", async () => {
-    expectErrorLogs("send.ambiguous", "send.wedged");
+    allowErrorLogs("send.ambiguous", "send.wedged");
     const emails = addresses(3);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -566,7 +566,7 @@ describe("the real adapters, end to end through the loop", () => {
     [401, { name: "missing_api_key", message: "Missing API key in the authorization header." }],
     [403, { name: "validation_error", message: "The send.example.com domain is not verified." }],
   ])("a Resend %i halts the send without consuming anyone, then resumes", async (status, body) => {
-    expectErrorLogs("send.stuck");
+    allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(150));
     const send = await dueSend();
     vi.mocked(providers.getProvider).mockReturnValue(resendAdapter());

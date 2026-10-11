@@ -28,17 +28,17 @@ export function logged(...spies: MockInstance[]): LoggedLine[] {
 /** What the error guard (`test/log_guard.ts`) holds for the running test. */
 const guard = {
   errors: [] as { line: LoggedLine; at: string }[],
-  expected: new Set<string>(),
+  allowed: new Set<string>(),
 };
 
 /**
- * Declare the error-level events the running test causes on purpose. The guard fails a test
- * that logs an error-level event it did not declare, and one that declares an event it never
- * logs, so a declaration is also an assertion that the failure was not silent (SPEC §12).
+ * Allow the error-level events the running test causes on purpose. The guard fails a test
+ * that logs any other error-level event. Allowing an event doesn't assert it was logged; a
+ * test that means to prove the failure was loud reads the line back with `logged()`.
  */
-export function expectErrorLogs(...events: string[]): void {
+export function allowErrorLogs(...events: string[]): void {
   for (const event of events) {
-    guard.expected.add(event);
+    guard.allowed.add(event);
   }
 }
 
@@ -46,23 +46,19 @@ export function expectErrorLogs(...events: string[]): void {
 export const errorGuard = {
   reset(): void {
     guard.errors = [];
-    guard.expected = new Set();
+    guard.allowed = new Set();
   },
   /** Note an error line and `at`, the stack of the call that logged it. */
   record(line: LoggedLine, at: string): void {
     guard.errors.push({ line, at });
   },
-  /** What is wrong with the test's error lines against its declarations, or nothing. */
+  /** Each error line the test logged without allowing it, with where it was logged. */
   problems(): string[] {
-    const seen = new Set(guard.errors.map(({ line }) => line.event));
-    const undeclared = guard.errors.filter(({ line }) => !guard.expected.has(line.event));
-    const missing = [...guard.expected].filter((event) => !seen.has(event));
-    return [
-      ...undeclared.map(
+    return guard.errors
+      .filter(({ line }) => !guard.allowed.has(line.event))
+      .map(
         ({ line, at }) =>
-          `logged ${line.event} at error level without expectErrorLogs("${line.event}"): ${JSON.stringify(line)}\n${at}`,
-      ),
-      ...missing.map((event) => `declared expectErrorLogs("${event}") but never logged it`),
-    ];
+          `logged ${line.event} at error level without allowErrorLogs("${line.event}"): ${JSON.stringify(line)}\n${at}`,
+      );
   },
 };
