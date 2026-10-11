@@ -16,4 +16,17 @@ describe("openLinksInNewTab", () => {
     }
     expect(doc.querySelector("a:not([href])")?.hasAttribute("target")).toBe(false);
   });
+
+  it("leaves a fragment-only link in place and refuses its click, since it names the editor's URL", () => {
+    const doc = document.implementation.createHTMLDocument("email");
+    doc.body.innerHTML = '<a href="#unsubscribe">Unsubscribe</a>';
+    openLinksInNewTab(doc);
+    openLinksInNewTab(doc); // a repaint runs it again on the same link
+    const link = doc.querySelector("a")!;
+    expect(link.hasAttribute("target")).toBe(false);
+    expect(link.hasAttribute("rel")).toBe(false);
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(true);
+  });
 });
