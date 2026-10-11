@@ -84,10 +84,12 @@ A user-facing or operator-visible change also earns a one-line `CHANGELOG.md` en
 
 ## GitHub issues
 
-An issue records what was expected, and the PR that closes it records what shipped, so the gap between the two stays visible. Which one you edit depends on whether work has started.
+An issue records what was expected, and the PR that closes it records what shipped, so the gap between the two stays visible. Which one you edit depends on whether a PR is working on the issue.
 
-- **Before work starts** (no branch or PR for it yet), the body is where the ask gets right, since whoever picks it up often reads only the body. When the user changes what an issue asks for, rewrite the body instead of adding a comment, working the change in where it belongs, with no "Updated:" line; GitHub keeps the edit history.
-- **Once work starts, the body is frozen.** Never rewrite it to match what shipped. A decision that changes the ask during the work (a design reversed, a question settled differently, scope cut or added) goes in the PR description under a "Where this differs from the issue" heading, which the squash carries into the commit on `main`. If nothing differs, that section says so in one line.
+- **A PR names each issue it closes** with a closing keyword (`Fixes #N`), so the link is one GitHub tracks and you can check: `gh issue view N --json closedByPullRequestsReferences` lists the open and merged PRs that close it, and leaves out a PR closed without merging.
+- **While that list is empty,** the body is where the ask gets right, since whoever picks it up often reads only the body. When the user changes what an issue asks for, rewrite the body instead of adding a comment, working the change in where it belongs, with no "Updated:" line; GitHub keeps the edit history.
+- **Once a PR is listed, the body is frozen.** Never rewrite it to match what shipped. A decision that changes the ask during the work (a design reversed, a question settled differently, scope cut or added) goes in the PR description under a "Where this differs from the issue" heading, which the squash carries into the commit on `main`. If nothing differs, that section says so in one line.
+- **Abandoning the work reopens the body.** A PR closed without merging drops off the list, so the body may be rewritten again, and the closed PR, still in the issue's timeline, keeps what that attempt learned. Closing a PR is the user's decision, never a way around the freeze.
 - **Follow-up work the PR leaves out** becomes a new issue that links the original, never an edit to it.
 
 ## Comment & doc style
