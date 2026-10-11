@@ -11,6 +11,7 @@ import {
   unmount,
 } from "../test/support";
 import { html, setHtml } from "../ui/html";
+import { trackSaves } from "./pending_save";
 import { framedCopy, renderWebVersion, webBar, webPostId, webVersionHash } from "./web";
 
 const page =
@@ -112,6 +113,28 @@ describe("web version", () => {
     expect($(".web-page").children).toHaveLength(2);
     expect(document.querySelector(".web-page a")).toBeNull();
     expect(fake.unhandled).toEqual([]);
+  });
+
+  it("reads the page only once the editor's save in flight has landed, so an edit just made shows", async () => {
+    location.hash = "#/web/post/p1";
+    deployment();
+    fake = fakeApi([
+      { path: "/api/posts/p1/web", reply: htmlReply },
+      { path: "/api/posts/p1", reply: postReply("draft") },
+    ]);
+    let land!: () => void;
+    trackSaves(new Promise<void>((r) => (land = r)));
+    const mounted = mount((r, s) => renderWebVersion("p1", r, s));
+    await settle();
+    expect(fake.calls).toHaveLength(0);
+    land();
+    await mounted;
+    await settle();
+    expect(fake.calls.map((c) => c.url.pathname).sort()).toEqual([
+      "/api/posts/p1",
+      "/api/posts/p1/web",
+    ]);
+    expect($<HTMLIFrameElement>(".web-frame").srcdoc).toBe(framedCopy(page));
   });
 
   it("sends the framed page's links to a new tab once it loads, and a fragment-only link nowhere", async () => {

@@ -37,6 +37,7 @@ import { notice } from "../ui/notice";
 import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
+import { trackSaves } from "./pending_save";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { webVersionHash } from "./web";
 
@@ -560,6 +561,7 @@ export async function renderEditor(
   function saveDraft(silent: boolean): Promise<SaveResult> {
     const next = saveChain.catch(() => {}).then(() => doSaveDraft(silent));
     saveChain = next;
+    trackSaves(saveChain);
     return next;
   }
   async function doSaveDraft(silent: boolean): Promise<SaveResult> {
@@ -675,6 +677,7 @@ export async function renderEditor(
             : `Couldn't save your changes — ${message(e)}`,
         ),
       );
+    trackSaves(saveChain);
   };
   const handle: ViewHandle = {
     dirty: () => editorDirty,
@@ -791,7 +794,8 @@ export async function renderEditor(
   // --- web version: the post as its public page will show it (SPEC §5) ---
   // A plain link, so no browser blocks it as a pop-up. The click saves pending edits and
   // lets the link go: a new tab loads the editor and signs in before it reads the page, so
-  // the save is ahead of it, and a refused or failed save shows here as any save does.
+  // the save is ahead of it; opened in place, the page waits for it (pending_save.ts). A
+  // refused or failed save shows here as any save does.
   // Where the link opens in place (a browser pane with no tabs), it is a same-document hash
   // change, so nothing unloads to cut the save off, and the leave flush that follows sees
   // it in flight and doesn't send it twice.

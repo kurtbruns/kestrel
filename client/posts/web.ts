@@ -13,6 +13,7 @@ import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import { type Html, html, setHtml } from "../ui/html";
 import { renderError } from "../ui/widgets";
+import { savesSettled } from "./pending_save";
 
 /** The editor route (the hash) of a post's web version. */
 export function webVersionHash(postId: string): string {
@@ -103,6 +104,8 @@ export async function renderWebVersion(
     document.title = appTitle;
   });
   try {
+    // Opened in place from the editor, the click's save may still be going: read after it.
+    await savesSettled();
     const [doc, data] = await Promise.all([
       apiText(`/api/posts/${encodeURIComponent(id)}/web`, { signal }),
       readPost(id, signal),
