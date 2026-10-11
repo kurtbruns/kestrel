@@ -10,7 +10,7 @@ import type {
   SendResponse,
   SendView,
 } from "../../shared/sends";
-import { api, apiFile } from "../api";
+import { ApiError, api, apiFile } from "../api";
 import { noEmailProvider } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
@@ -652,7 +652,12 @@ function renderFrozenRecord(
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10000);
       } catch (e) {
-        toast(message(e));
+        // The API names only what it didn't find ("send"), which says nothing on its own.
+        toast(
+          e instanceof ApiError && e.status === 404
+            ? "This send no longer exists, so there are no deliveries to export."
+            : message(e),
+        );
       }
     });
 

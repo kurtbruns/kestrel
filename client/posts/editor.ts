@@ -402,6 +402,14 @@ export async function renderEditor(
         } catch {}
       };
     } catch (e) {
+      if (signal.aborted) {
+        return;
+      }
+      if (e instanceof ApiError && e.status === 404) {
+        toast("This post was deleted elsewhere.");
+        handOff("#/drafts");
+        return;
+      }
       toast(message(e));
     }
   }

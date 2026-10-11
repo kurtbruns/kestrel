@@ -235,15 +235,32 @@ describe("web version", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  // Bug: apiText throws with only the status text, which HTTP/2 leaves empty, so the box says nothing.
-  it.fails("says what went wrong in the server's words when the page can't be read", async () => {
-    location.hash = "#/web/post/gone";
+  it("says what went wrong in the server's words when the page can't be read", async () => {
+    location.hash = "#/web/post/empty";
+    const empty = () =>
+      jsonResponse({ error: "bad_request", message: "post has no content yet" }, 400);
     fake = fakeApi([
-      { path: "/api/posts/gone/web", reply: () => jsonResponse({ error: "post not found" }, 404) },
-      { path: "/api/posts/gone", reply: () => jsonResponse({ error: "post not found" }, 404) },
+      { path: "/api/posts/empty/web", reply: empty },
+      { path: "/api/posts/empty", reply: postReply("draft") },
+    ]);
+    await mount((r, s) => renderWebVersion("empty", r, s));
+    await settle();
+    expect($(".web-error .error span").textContent).toBe("post has no content yet");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says there's no post at an address that names none", async () => {
+    location.hash = "#/web/post/gone";
+    const gone = () => jsonResponse({ error: "not_found", message: "post" }, 404);
+    fake = fakeApi([
+      { path: "/api/posts/gone/web", reply: gone },
+      { path: "/api/posts/gone", reply: gone },
     ]);
     await mount((r, s) => renderWebVersion("gone", r, s));
     await settle();
-    expect($(".web-error .error").textContent).toMatch(/post not found/);
+    expect($(".web-error .error span").textContent).toBe(
+      "There's no post here. It may have been deleted.",
+    );
+    expect(fake.unhandled).toEqual([]);
   });
 });

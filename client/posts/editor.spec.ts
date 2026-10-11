@@ -678,6 +678,38 @@ describe("editor view", () => {
     expect(body().hidden).toBe(true);
   });
 
+  it("says why the preview can't be shown in the server's words", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        path: "/api/posts/p1/preview",
+        reply: () =>
+          jsonResponse({ error: "bad_request", message: "post has no content yet" }, 400),
+      },
+    ]);
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toBe("post has no content yet");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("goes to Drafts when the preview finds its post deleted elsewhere", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        path: "/api/posts/p1/preview",
+        reply: () => jsonResponse({ error: "not_found", message: "post" }, 404),
+      },
+    ]);
+    $(".ctab[data-tab='preview']").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(location.hash).toBe("#/drafts");
+    expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   describe("the preview's link to the post's own public page", () => {
     const ARCHIVE = "https://newsletter.example.com/archive";
     const webUrl = () => `${location.origin}${location.pathname}#/web/post/p1`;
