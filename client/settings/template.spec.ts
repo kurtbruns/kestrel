@@ -363,6 +363,22 @@ describe("sample email preview", () => {
     expect(img?.getAttribute("alt")).toBe("Birds Weekly");
   });
 
+  it("runs nothing the template carries: the frame has the Preview tab's sandbox, with no script or form (SPEC §5)", () => {
+    resetShell();
+    const frame = document.createElement("iframe");
+    document.body.append(frame);
+    mountSampleEmailPreview(
+      frame,
+      () => SIGNOFF,
+      () => ({ ...identity, logoUrl: "" }),
+    );
+    expect(frame.getAttribute("sandbox")?.split(" ")).toEqual([
+      "allow-same-origin",
+      "allow-popups",
+      "allow-popups-to-escape-sandbox",
+    ]);
+  });
+
   it("opens the template's links in a new tab, so following one never blanks the frame", () => {
     const link = preview("", '<p><a href="https://birds.example/">Visit</a></p>').querySelector(
       "a",

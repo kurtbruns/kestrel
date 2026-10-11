@@ -115,9 +115,17 @@ Six guarantees. In a newsletter the guarantees that matter are about consent, de
 
 ## 4. Authoring
 
-The publisher writes in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post is a **subject** and a body; the **slug** (derived from the subject) rounds out the metadata, and the inbox **preheader** (the snippet a mail client shows beside the subject) is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
+The publisher writes in Markdown, in the web editor or through the API. Both do the same thing: they read and write posts and their revisions. A post is a **subject** and a body; the **slug** (derived from the subject unless set by hand, below) rounds out the metadata, and the inbox **preheader** (the snippet a mail client shows beside the subject) is derived from the body at render time. A post is editable only while it's a draft; scheduling locks it (§6).
 
 Subject is deliberately the primary field. For an email that is what the reader sees in their inbox, so it is also what names the post in the editor's list and what seeds the slug: one field carrying the weight rather than a separate "title" that would have to be kept in sync with it.
+
+### Slugs
+
+A slug is a post's permanent address in the archive, and no two posts share one, drafts included, since every test email of a draft already carries the address (§5). When the slug a post would take is already held, it is numbered (`spring-update-2`, `-3`, and so on), so a subject that recurs, like a yearly "Spring update", never collides with an earlier post.
+
+A slug either follows the subject or is set by hand, and the post records which. A slug that follows the subject is derived from it again, and numbered afresh, on every save of the draft: it tracks subject edits, and drops a number once the slug it stood in for is free (the earlier draft was deleted or renamed). A slug set by hand is kept exactly as written, even when it looks numbered (`spring-update-2027`), until the publisher changes it. A new post's slug follows its subject unless the post is created with one; setting a slug sets it by hand, and either client can have it follow the subject again. Scheduling freezes the slug with the rest of the post (§6), so a draft's slug may move, and a test email sent before it moved links to the old address, but a scheduled or sent post's address never moves.
+
+The server decides the slug and answers every save with it, so neither client works one out for itself: what the editor shows is the slug the post has.
 
 ### Revisions
 
@@ -171,7 +179,7 @@ The pages a reader reaches from an email to join or leave (confirm and unsubscri
 
 The publisher can see every page a reader can land on, in each of its states, without walking the flows that reach them: the subscribe pages, the confirm and unsubscribe pages (the expired and invalid links among them, which a reader rarely meets), the landing page, the archive index, a post page, and the page for a post that isn't there. Each is built by the code that serves the real page, with the publication's identity and sample values in place of any reader's address or post (a post page shows a sample post in the saved template), behind the admin gate. The page itself is exactly a reader's, unmarked, and it is the settings surface that frames it as a preview, so it is never mistaken for the live page. Nothing on a preview acts: it subscribes, confirms, and unsubscribes no one, and its links and forms go nowhere.
 
-No script runs on a reader page, and none can be framed by another site. A post's body is the author's HTML, written by hand or by Claude from material it read, and it is served from the same origin as the admin surface, so the page itself forbids script rather than trusting the render to have removed it. For the same reason nothing in a post can submit a form or send the reader elsewhere on arrival: a form on that origin would act with the publisher's session. The publisher's preview holds to the same rules.
+No script runs on a reader page, and none can be framed by another site. A post's body is the author's HTML, written by hand or by Claude from material it read, and it is served from the same origin as the admin surface, so the page itself forbids script rather than trusting the render to have removed it. For the same reason nothing in a post can submit a form or send the reader elsewhere on arrival: a form on that origin would act with the publisher's session. The publisher's preview holds to the same rules, and so does the template's sample email on the Template page and in Settings: the template is HTML too, which Claude may write, and it is shown on the admin surface's own origin.
 
 On a local dev instance only, every public page (the landing page, the archive index, each post page, the page for a post that isn't there, and the subscribe, confirm, and unsubscribe pages) also carries a small, clearly marked shortcut into the editor, a developer convenience that is structurally absent once deployed. Whoever sees a local instance is its developer or publisher trying it out, never a reader, so the shortcut is on every page they reach, including the ones a link in a test email opens. On a post page it is browser-only chrome like the masthead, so it is never in the frozen copy or a sent email (I3). It is the one deliberate exception to never linking toward admin, allowed because a local instance has no access wall in front of the editor; §11 states the rule and the carve-out.
 
@@ -485,6 +493,8 @@ An index of what was decided and the alternative each choice was made over, in t
 - **Content lives in the app's database**, over Markdown files in a repo (§2, §4).
 - **Full-text revisions**, over delta chains (§4).
 - **Subject is the primary post field**, over a separate title (§4).
+- **A slug follows the subject until set by hand, and the post records which**, over inferring it from the slug's shape (§4).
+- **No two posts share a slug, drafts included, numbered when a draft is saved**, over checking only at publish (§4).
 - **Notify, don't clobber**, over last-write-wins for concurrent edits (§4).
 - **Images belong to the post and are referenced by name**, over an upload that returns a URL to paste (§4).
 - **The archive page is the record**, over a separate email archive (§5).

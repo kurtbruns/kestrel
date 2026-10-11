@@ -234,6 +234,7 @@ export function sampleRenderInput(subject = TEMPLATE_TEST_SUBJECT): RenderInput 
   const post: PostRow = {
     id: "sample",
     slug: "sample-post",
+    slug_auto: false,
     subject,
     status: "draft",
     current_revision: "sample-rev",

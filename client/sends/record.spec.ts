@@ -149,6 +149,30 @@ describe("sent record", () => {
     expect(fake.unhandled).toHaveLength(0);
   });
 
+  it("says why the deliveries can't be exported: the server's words, or that the send is gone", async () => {
+    let answer = jsonResponse({ error: "internal_error", message: "database unavailable" }, 500);
+    fake = fakeApi([
+      ...sentSend().routes,
+      noRows,
+      { path: "/api/sends/x1/deliveries.csv", reply: () => answer },
+    ]);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#csvBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toBe("database unavailable");
+    resetShell();
+    answer = jsonResponse({ error: "not_found", message: "send" }, 404);
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#csvBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#toasts").textContent).toBe(
+      "This send no longer exists, so there are no deliveries to export.",
+    );
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
   it("names each leftover recipient for what it is: only an accepted one awaits a receipt", async () => {
     const sent = sentSend({
       c_delivered: 5,

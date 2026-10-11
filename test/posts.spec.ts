@@ -1,7 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { AUTH, adminAuth, base, readJson } from "./support/http";
+import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 
 async function createPost(body: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/posts`, {
@@ -9,6 +9,17 @@ async function createPost(body: unknown): Promise<Response> {
     headers: { ...AUTH, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
+}
+
+/** Save a draft, expecting it to land, and read back the saved post. */
+async function save(id: string, body: unknown): Promise<any> {
+  const res = await SELF.fetch(`${base}/api/posts/${id}`, {
+    method: "PUT",
+    headers: JSON_AUTH,
+    body: JSON.stringify(body),
+  });
+  expect(res.status).toBe(200);
+  return readJson(res);
 }
 
 describe("posts + revisions", () => {
@@ -74,27 +85,99 @@ describe("posts + revisions", () => {
     expect(b.post.slug).toBe("dup-title-2");
   });
 
-  it("keeps the slug stable across a subject edit unless overridden", async () => {
-    const created = await readJson(await createPost({ subject: "Stable", markdown: "x" }));
+  it("has a slug follow the subject until one is set by hand", async () => {
+    const created = await readJson(await createPost({ subject: "Follows", markdown: "x" }));
     const id = created.post.id;
+    expect(created.post.slug_auto).toBe(true);
 
-    const renamed = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}`, {
-        method: "PUT",
-        headers: { ...AUTH, "content-type": "application/json" },
-        body: JSON.stringify({ subject: "Renamed Completely", base_revision: created.revision_id }),
-      }),
-    );
-    expect(renamed.post.slug).toBe("stable");
+    const renamed = await save(id, {
+      subject: "Renamed Completely",
+      base_revision: created.revision_id,
+    });
+    expect(renamed.post.slug).toBe("renamed-completely");
 
-    const reslugged = await readJson(
-      await SELF.fetch(`${base}/api/posts/${id}`, {
-        method: "PUT",
-        headers: { ...AUTH, "content-type": "application/json" },
-        body: JSON.stringify({ slug: "brand-new-slug", base_revision: renamed.revision_id }),
-      }),
-    );
+    const reslugged = await save(id, {
+      slug: "brand-new-slug",
+      base_revision: renamed.post.current_revision,
+    });
     expect(reslugged.post.slug).toBe("brand-new-slug");
+    expect(reslugged.post.slug_auto).toBe(false); // sending a slug sets it by hand
+
+    const kept = await save(id, {
+      subject: "Third Name",
+      base_revision: reslugged.post.current_revision,
+    });
+    expect(kept.post.slug).toBe("brand-new-slug");
+
+    const relinked = await save(id, { slug_auto: true, base_revision: kept.post.current_revision });
+    expect(relinked.post.slug).toBe("third-name");
+    expect(relinked.post.slug_auto).toBe(true);
+  });
+
+  it("keeps a slug named on create as set by hand", async () => {
+    const { post } = await readJson(
+      await createPost({ subject: "Spring update", slug: "spring-update-2027" }),
+    );
+    expect(post.slug).toBe("spring-update-2027");
+    expect(post.slug_auto).toBe(false);
+  });
+
+  it("drops a following slug's suffix on the next save once the plain slug is free", async () => {
+    const first = await readJson(await createPost({ subject: "Two Directions" }));
+    const second = await readJson(await createPost({ subject: "Two Directions" }));
+    expect(second.post.slug).toBe("two-directions-2");
+
+    const resaved = await save(second.post.id, {
+      markdown: "y",
+      base_revision: second.revision_id,
+    });
+    expect(resaved.post.slug).toBe("two-directions-2"); // still taken: the dedupe holds
+
+    const del = await SELF.fetch(`${base}/api/posts/${first.post.id}`, {
+      method: "DELETE",
+      headers: AUTH,
+    });
+    expect(del.status).toBe(200);
+    const freed = await save(second.post.id, {
+      markdown: "z",
+      base_revision: resaved.post.current_revision,
+    });
+    expect(freed.post.slug).toBe("two-directions");
+  });
+
+  it("lists each post's slug mode as true or false (SPEC §4)", async () => {
+    const { post } = await readJson(await createPost({ subject: "Listed Mode" }));
+    const { posts } = await readJson(
+      await SELF.fetch(`${base}/api/posts?search=Listed%20Mode`, { headers: AUTH }),
+    );
+    expect(posts.map((p: { id: string; slug_auto: unknown }) => [p.id, p.slug_auto])).toEqual([
+      [post.id, true],
+    ]);
+  });
+
+  it("reads a post saved before slugs recorded their mode as set by hand (SPEC §4)", async () => {
+    // A row as an older release wrote it: no slug_auto, so the migration's default applies.
+    const now = Date.now();
+    await env.DB.prepare(
+      "INSERT INTO posts (id, slug, subject, status, created_at, updated_at) VALUES ('p-older', 'older-post', 'Older post', 'draft', ?, ?)",
+    )
+      .bind(now, now)
+      .run();
+    const { post } = await readJson(
+      await SELF.fetch(`${base}/api/posts/p-older`, { headers: AUTH }),
+    );
+    expect(post.slug).toBe("older-post");
+    expect(post.slug_auto).toBe(false);
+  });
+
+  it("refuses a slug beside slug_auto: true, and a slug_auto that is not a boolean", async () => {
+    const both = await createPost({ subject: "Both", slug: "mine", slug_auto: true });
+    expect(both.status).toBe(400);
+    expect((await readJson(both)).field).toBe("slug");
+
+    const wrong = await createPost({ subject: "Wrong", slug_auto: "yes" });
+    expect(wrong.status).toBe(400);
+    expect((await readJson(wrong)).field).toBe("slug_auto");
   });
 
   it("blocks edits and deletes on a non-draft post (409)", async () => {

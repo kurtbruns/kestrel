@@ -33,6 +33,7 @@ export interface SeedSuppression {
 export interface SeedPost {
   id: string;
   slug: string;
+  slug_auto: boolean;
   subject: string;
   status: PostStatus;
   current_revision: string | null;
@@ -169,11 +170,12 @@ export async function insertPost(
   await db.batch([
     db
       .prepare(
-        "INSERT INTO posts (id, slug, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO posts (id, slug, slug_auto, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       )
       .bind(
         post.id,
         post.slug,
+        post.slug_auto ? 1 : 0,
         post.subject,
         post.status,
         post.current_revision,

@@ -90,6 +90,18 @@ export function optString(o: JsonObject, key: string, at?: string): string | und
   return v;
 }
 
+/** An optional boolean field: absent is `undefined`; present and not a boolean is a 400. */
+export function optBoolean(o: JsonObject, key: string, at?: string): boolean | undefined {
+  const v = o[key];
+  if (v === undefined) {
+    return undefined;
+  }
+  if (typeof v !== "boolean") {
+    throw fieldError(path(key, at), `${path(key, at)} must be true or false`);
+  }
+  return v;
+}
+
 /** An optional string field that also accepts `null`, for a field where null means "none". */
 export function optStringOrNull(
   o: JsonObject,

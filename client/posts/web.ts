@@ -9,7 +9,7 @@
 
 import { pagePolicy } from "../../shared/page_policy";
 import type { PostResponse } from "../../shared/posts";
-import { api, apiText } from "../api";
+import { ApiError, api, apiText } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
@@ -201,9 +201,14 @@ export async function renderWebVersion(
     setHtml(root, html`<div class="web-error"></div>`);
     const box = root.querySelector(".web-error");
     if (box) {
-      renderError(box, e instanceof Error ? e.message : String(e), () =>
-        mount((r, s) => renderWebVersion(id, r, s)),
-      );
+      // The API names only what it didn't find ("post"), which says nothing on its own.
+      const notFound = e instanceof ApiError && e.status === 404;
+      const msg = notFound
+        ? "There's no post here. It may have been deleted."
+        : e instanceof Error
+          ? e.message
+          : String(e);
+      renderError(box, msg, () => mount((r, s) => renderWebVersion(id, r, s)));
     }
   }
 }

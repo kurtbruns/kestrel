@@ -488,13 +488,10 @@ describe("schedule / send / cancel + soft-lock", () => {
       .bind(id)
       .all<{ id: string }>();
     expect(results).toHaveLength(1);
-    expect([a.status, b.status]).toContain(201);
+    expect([a.status, b.status].sort()).toEqual([200, 201]);
   });
 
-  // BUG: a send-now that passes the route's idempotency check before a concurrent one
-  // freezes is refused 409 active_send_exists by freeze(), where SPEC §6 has it find the
-  // existing send and return it as the idempotent answer.
-  it.fails("answers a send-now that lost the race to another with the existing send, not a refusal (SPEC §6)", async () => {
+  it("answers a send-now that lost the race to another with the existing send, not a refusal (SPEC §6)", async () => {
     const id = await makeDraft();
     const first = await SELF.fetch(`${base}/api/posts/${id}/send`, {
       method: "POST",

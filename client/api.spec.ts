@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ApiError, api, apiText } from "./api";
+import { ApiError, api, apiFile, apiText } from "./api";
 import { setToken } from "./auth";
 import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test/support";
 
@@ -82,5 +82,36 @@ describe("api", () => {
     ]);
     expect(await apiText("/preview")).toBe("<h1>hi</h1>");
     await expect(apiText("/nope")).rejects.toMatchObject({ status: 404, message: "Not Found" });
+  });
+
+  it("apiText and apiFile throw the server's message and body, as api() does", async () => {
+    const notFound = () => jsonResponse({ error: "not_found", message: "post" }, 404);
+    fake = fakeApi([
+      { path: "/page", reply: notFound },
+      { path: "/file", reply: notFound },
+    ]);
+    const expected = { status: 404, message: "post", code: "not_found" };
+    await expect(apiText("/page")).rejects.toMatchObject(expected);
+    await expect(apiFile("/file")).rejects.toMatchObject(expected);
+  });
+
+  it("says what failed when the error body is not the API's, from every reader", async () => {
+    // A proxy's HTML page has no message to give; over HTTP/2 there is no status text either.
+    const proxyPage = () =>
+      new Response("<html><body>Bad gateway</body></html>", {
+        status: 502,
+        headers: { "content-type": "text/html" },
+      });
+    fake = fakeApi([
+      { path: "/json", reply: proxyPage },
+      { path: "/text", reply: proxyPage },
+      { path: "/file", reply: proxyPage },
+      { path: "/named", reply: () => new Response("", { status: 503, statusText: "Busy" }) },
+    ]);
+    const expected = { status: 502, message: "Request failed (HTTP 502)", data: null };
+    await expect(api("/json")).rejects.toMatchObject(expected);
+    await expect(apiText("/text")).rejects.toMatchObject(expected);
+    await expect(apiFile("/file")).rejects.toMatchObject(expected);
+    await expect(apiText("/named")).rejects.toMatchObject({ status: 503, message: "Busy" });
   });
 });

@@ -1,5 +1,6 @@
-// The one network seam: every call to the HTTP API goes through api() / apiText(), which
-// attach the credential and route a 401 to re-auth. They call the global fetch, so a spec
+// The one network seam: every call to the HTTP API goes through api(), apiText(), or
+// apiFile(), which attach the credential, route a 401 to re-auth, and turn any other failure
+// into one ApiError carrying the server's message. They call the global fetch, so a spec
 // stands in for the API by scripting fetch and the real functions run over it.
 
 import { authHeaders, showReauth } from "./auth";
@@ -76,15 +77,32 @@ function messageOf(data: unknown): string | undefined {
   return undefined;
 }
 
+/**
+ * The ApiError a non-2xx response stands for, the same from every reader: the server's
+ * words from its JSON error body, or, for a body that is not one (a proxy's error page, an
+ * empty body), the status text, and the status itself when even that is empty, as it
+ * always is over HTTP/2.
+ */
+async function failure(res: Response): Promise<ApiError> {
+  const text = await res.text();
+  let data: unknown = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    // Not JSON, so not the API's error body: fall back to the status below.
+  }
+  const fallback = res.statusText || `Request failed (HTTP ${res.status})`;
+  return new ApiError(messageOf(data) ?? fallback, res.status, data);
+}
+
 /** Call the API and parse its JSON answer (null for an empty body). Throws ApiError on a non-2xx. */
 export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
   const res = await send(path, opts);
-  const text = await res.text();
-  const data: unknown = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    throw new ApiError(messageOf(data) ?? res.statusText, res.status, data);
+    throw await failure(res);
   }
-  return data as T;
+  const text = await res.text();
+  return (text ? JSON.parse(text) : null) as T;
 }
 
 /**
@@ -94,7 +112,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
 export async function apiText(path: string, opts: ApiOptions = {}): Promise<string> {
   const res = await send(path, opts);
   if (!res.ok) {
-    throw new ApiError(res.statusText, res.status);
+    throw await failure(res);
   }
   return res.text();
 }
@@ -107,7 +125,7 @@ export async function apiFile(
 ): Promise<{ text: string; filename: string | null }> {
   const res = await send(path, opts);
   if (!res.ok) {
-    throw new ApiError(res.statusText, res.status);
+    throw await failure(res);
   }
   const disposition = res.headers.get("content-disposition") ?? "";
   const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? null;

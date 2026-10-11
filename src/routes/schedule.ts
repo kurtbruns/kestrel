@@ -2,9 +2,9 @@
 
 import type { ScheduleResponse } from "../../shared/sends";
 import { getPost } from "../db/posts";
-import { getActiveSendForPost } from "../db/sends";
+import { getActiveSendForPost, type SendRow } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
-import { json, notFound } from "../lib/errors";
+import { HttpError, json, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -101,18 +101,37 @@ export async function sendNow(c: RequestContext): Promise<Response> {
   // Idempotent: if a send is already in flight for this post, return it.
   const active = await getActiveSendForPost(c.env.DB, post.id);
   if (active) {
-    const repeat: ScheduleResponse = {
-      ...unwrap(await viewWithCursor(c.env, active.id), "send"),
-      idempotent: true,
-    };
-    return json(repeat);
+    return repeatAnswer(c, active.id);
   }
 
   // The soonest time the lead allows, through the same gate as a schedule, so it lands on
   // the minute at or after it like any other fire time.
   const now = Date.now();
   const fireAt = acceptFireAt(now + c.config.minLeadMs, c.config.minLeadMs, { now });
-  const send = await freeze(c.env, c.config, post, fireAt);
+  let send: SendRow;
+  try {
+    send = await freeze(c.env, c.config, post, fireAt);
+  } catch (err) {
+    // A concurrent send-now (the editor and Claude at once) passed the check above too and froze first.
+    // The repeat gets the same answer as one that came after it (SPEC §6); a schedule
+    // keeps refusing, since its caller asked for a time of its own.
+    if (err instanceof HttpError && err.code === "active_send_exists") {
+      const winner = await getActiveSendForPost(c.env.DB, post.id);
+      if (winner) {
+        return repeatAnswer(c, winner.id);
+      }
+    }
+    throw err;
+  }
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);
+}
+
+/** A repeated send-now's answer: the post's active send, marked `idempotent`. */
+async function repeatAnswer(c: RequestContext, sendId: string): Promise<Response> {
+  const repeat: ScheduleResponse = {
+    ...unwrap(await viewWithCursor(c.env, sendId), "send"),
+    idempotent: true,
+  };
+  return json(repeat);
 }

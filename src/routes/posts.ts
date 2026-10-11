@@ -11,7 +11,7 @@ import type {
 import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { currentSendSeq, getActiveSendForPost, latestSentSendForPost } from "../db/sends";
-import { optString, optStringOrNull, readJsonObject } from "../lib/body";
+import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
 import { badRequest, conflict, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
@@ -29,17 +29,25 @@ interface EditBody {
 
 /**
  * Read an edit body. Every field is optional, and one that is present must be a
- * string: a wrong type is a 400 naming it, never dropped, so a save can't report
- * success for a field it ignored. `base_revision` also takes `null` ("no base", which
+ * string (`slug_auto` a boolean): a wrong type is a 400 naming it, never dropped, so a
+ * save can't report success for a field it ignored. `base_revision` also takes `null` ("no base", which
  * `updatePost` refuses), and nothing else, so a malformed one is named as the field at
  * fault rather than answered as a missing base.
  */
 async function readBody(c: RequestContext, opts: { optional?: boolean } = {}): Promise<EditBody> {
   const raw = await readJsonObject(c, opts);
+  const slug = optString(raw, "slug");
+  const slugAuto = optBoolean(raw, "slug_auto");
+  if (slug !== undefined && slugAuto === true) {
+    // A slug that follows the subject has none of its own to take; honoring either would
+    // quietly drop the other.
+    throw fieldError("slug", "slug cannot be set while slug_auto is true");
+  }
   return {
     input: {
       subject: optString(raw, "subject"),
-      slug: optString(raw, "slug"),
+      slug,
+      slug_auto: slugAuto,
       markdown: optString(raw, "markdown"),
     },
     base_revision: optStringOrNull(raw, "base_revision") ?? null,

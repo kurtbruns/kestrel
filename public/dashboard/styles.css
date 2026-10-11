@@ -2879,7 +2879,7 @@ textarea.is-invalid {
 .info.tip-below:focus::after {
   transform: translateY(0);
 }
-/* "Auto-generate from subject" toggle, grouped just under the slug field. */
+/* The "Auto-generate from subject" toggle, grouped just under the slug field. */
 .slug-auto-toggle {
   display: inline-flex;
   align-items: center;
@@ -2897,7 +2897,7 @@ textarea.is-invalid {
   accent-color: var(--ring);
   cursor: pointer;
 }
-/* Slug is muted while it auto-tracks the subject; normal once hand-set. */
+/* Slug is muted while it follows the subject; normal once set by hand. */
 #f-slug.slug-auto {
   color: var(--muted);
 }

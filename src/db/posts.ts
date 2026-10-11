@@ -24,7 +24,16 @@ export interface RevisionRow {
 export interface PostInput {
   subject?: string;
   slug?: string;
+  slug_auto?: boolean;
   markdown?: string;
+}
+
+// SQLite has no boolean: `slug_auto` is stored as 0 or 1, and every read turns it back into
+// the wire's boolean here, so nothing above this module sees the integer.
+type Stored<T extends Post> = Omit<T, "slug_auto"> & { slug_auto: number };
+
+function fromStored<T extends Post>(row: Stored<T>): T {
+  return { ...row, slug_auto: row.slug_auto === 1 } as T;
 }
 
 /**
@@ -46,12 +55,20 @@ export function setPostStatusStmt(
     .bind(to, now, postId, from, ...(guard?.binds ?? []));
 }
 
-export function getPost(db: D1Database, id: string): Promise<PostRow | null> {
-  return db.prepare("SELECT * FROM posts WHERE id = ?").bind(id).first<PostRow>();
+export async function getPost(db: D1Database, id: string): Promise<PostRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM posts WHERE id = ?")
+    .bind(id)
+    .first<Stored<PostRow>>();
+  return row && fromStored(row);
 }
 
-export function getBySlug(db: D1Database, slug: string): Promise<PostRow | null> {
-  return db.prepare("SELECT * FROM posts WHERE slug = ?").bind(slug).first<PostRow>();
+export async function getBySlug(db: D1Database, slug: string): Promise<PostRow | null> {
+  const row = await db
+    .prepare("SELECT * FROM posts WHERE slug = ?")
+    .bind(slug)
+    .first<Stored<PostRow>>();
+  return row && fromStored(row);
 }
 
 export type PostListRow = PostListItem;
@@ -124,8 +141,8 @@ export async function listPosts(
          LIMIT ? OFFSET ?`,
     )
     .bind(...binds, limit, offset)
-    .all<PostListRow>();
-  return results;
+    .all<Stored<PostListRow>>();
+  return results.map(fromStored);
 }
 
 /** How many posts match `filter` — the `page.total` for the post list. */
@@ -206,15 +223,18 @@ export async function createPost(
   const revId = newId();
   const subject = input.subject ?? "";
   const markdown = input.markdown ?? "";
-  const slug = await uniqueSlug(db, slugify(input.slug ?? subject));
+  // A create follows the subject unless it names a slug; `slug_auto: false` alone takes the
+  // subject's slug once and keeps it from then on.
+  const auto = input.slug_auto ?? input.slug === undefined;
+  const slug = await uniqueSlug(db, slugify(auto ? subject : (input.slug ?? subject)));
   const metadata = JSON.stringify({ subject, slug });
 
   await db.batch([
     db
       .prepare(
-        "INSERT INTO posts (id, slug, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, 'draft', ?, ?, ?)",
+        "INSERT INTO posts (id, slug, slug_auto, subject, status, current_revision, created_at, updated_at) VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)",
       )
-      .bind(id, slug, subject, revId, now, now),
+      .bind(id, slug, auto ? 1 : 0, subject, revId, now, now),
     db
       .prepare(
         "INSERT INTO post_revisions (id, post_id, markdown, metadata, author, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -232,8 +252,10 @@ export async function createPost(
 
 /**
  * Write a new revision and advance `current_revision`. Draft-only (the caller
- * checks status first; the WHERE guard is a backstop). The slug stays stable
- * unless explicitly overridden, so archive links don't break on a subject edit.
+ * checks status first; the WHERE guard is a backstop). A slug that follows the
+ * subject is derived and numbered afresh on every save, so it tracks subject
+ * edits and drops a number it no longer needs once the plain slug is free; a slug set by hand
+ * changes only when a save names a new one. Sending a slug sets it by hand.
  */
 export async function updatePost(
   db: D1Database,
@@ -246,8 +268,11 @@ export async function updatePost(
   const revId = newId();
   const subject = input.subject ?? post.subject;
   const markdown = input.markdown ?? current?.markdown ?? "";
+  const auto = input.slug_auto ?? (input.slug === undefined && post.slug_auto);
   let slug = post.slug;
-  if (input.slug !== undefined) {
+  if (auto) {
+    slug = await uniqueSlug(db, slugify(subject), post.id);
+  } else if (input.slug !== undefined) {
     slug = await uniqueSlug(db, slugify(input.slug), post.id);
   }
   const metadata = JSON.stringify({ subject, slug });
@@ -260,9 +285,9 @@ export async function updatePost(
       .bind(revId, post.id, markdown, metadata, author, now),
     db
       .prepare(
-        "UPDATE posts SET slug = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
+        "UPDATE posts SET slug = ?, slug_auto = ?, subject = ?, current_revision = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
       )
-      .bind(slug, subject, revId, now, post.id),
+      .bind(slug, auto ? 1 : 0, subject, revId, now, post.id),
   ]);
 
   const updated = unwrap(await getPost(db, post.id), "post");

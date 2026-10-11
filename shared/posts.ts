@@ -9,6 +9,11 @@ export type PostStatus = "draft" | "scheduled" | "sent";
 export interface Post {
   id: string;
   slug: string;
+  /**
+   * Whether the slug follows the subject: derived from it again, and numbered afresh, on
+   * every draft save. False once a slug is set by hand.
+   */
+  slug_auto: boolean;
   subject: string;
   status: PostStatus;
   /** The current revision's id; the editor carries it on every save (optimistic concurrency). */
@@ -63,7 +68,13 @@ export interface PostResponse {
  */
 export interface PostEditBody {
   subject?: string;
+  /** A slug set by hand; sending one turns `slug_auto` off. Refused beside `slug_auto: true`. */
   slug?: string;
+  /**
+   * Have the slug follow the subject (true) or keep it as it stands (false). Absent, a create
+   * follows the subject unless it names a slug, and an edit keeps the post's mode.
+   */
+  slug_auto?: boolean;
   markdown?: string;
   base_revision?: string | null;
 }
