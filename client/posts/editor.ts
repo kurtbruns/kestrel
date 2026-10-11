@@ -90,12 +90,11 @@ export async function renderEditor(
       mount((r, s) => renderEditor(id, r, s));
     }
   };
-  // The post was deleted elsewhere (another tab, or Claude through the API), found by a
-  // read or write that answers 404: say so once and go to Drafts. A draft with unsaved
-  // edits stays open instead (postGone, below), so they are not thrown away.
+  // The post was deleted elsewhere (another tab, or Claude through the API), found by
+  // whichever read or write answers 404 first: say so once and go to Drafts. Deleting a
+  // post is deliberate, and autosave keeps what is unsaved to the last few seconds of
+  // typing, so the editor doesn't stay open to hold it.
   let gone = false;
-  // Gone, with the editor kept open on text that now exists nowhere else (postGone).
-  let stranded = false;
   const removed = (msg = "This post was deleted elsewhere.") => {
     if (gone) {
       return;
@@ -414,8 +413,8 @@ export async function renderEditor(
   async function showPreview() {
     showTab("preview");
     try {
-      if (!locked && (await saveDraft(true)) === "refused" && gone) {
-        return; // the save found the post gone, and said so
+      if (!locked) {
+        await saveDraft(true);
       }
       previewFrame.srcdoc = await apiText(`/api/posts/${id}/preview`);
       previewFrame.onload = () => {
@@ -592,7 +591,7 @@ export async function renderEditor(
     }
     paintMarkdown(); // repaint the highlight overlay from the new textarea value
     refreshDirty();
-    if (!conflicted && !gone) {
+    if (!conflicted) {
       scheduleAutosave();
     }
   }
@@ -610,8 +609,8 @@ export async function renderEditor(
     if (silent && !dirty.dirty) {
       return "unchanged"; // nothing changed since the last save
     }
-    if (conflicted || gone) {
-      return "refused"; // paused behind the out-of-date banner, or nothing left to save to
+    if (conflicted) {
+      return "refused"; // paused until the out-of-date banner is resolved
     }
     mine.cancel(); // a save is starting — cancel any pending autosave trigger
     saving = true;
@@ -662,7 +661,7 @@ export async function renderEditor(
         return "refused";
       }
       if (isNotFound(e)) {
-        postGone();
+        removed();
         return "refused";
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
@@ -678,7 +677,7 @@ export async function renderEditor(
       // §4), so the button reads as unavailable and a click (or ⌘S) does not pretend to
       // save: it points at the banner, whose Reload or Keep editing is the next step.
       // aria-disabled, not disabled, so the click still lands to do that.
-      if (conflicted || gone) {
+      if (conflicted) {
         freshnessEl.scrollIntoView({ block: "nearest" });
         return;
       }
@@ -692,10 +691,7 @@ export async function renderEditor(
     if (!saveBtn) {
       return;
     }
-    if (gone) {
-      saveBtn.setAttribute("aria-disabled", "true");
-      saveBtn.title = "This post was deleted elsewhere, so there is nothing to save to";
-    } else if (conflicted) {
+    if (conflicted) {
       saveBtn.setAttribute("aria-disabled", "true");
       saveBtn.title = "Saving is paused: choose Reload or Keep editing above";
     } else {
@@ -750,16 +746,10 @@ export async function renderEditor(
     trackSaves(saveChain);
   };
   const handle: ViewHandle = {
-    // Once the editor is kept open on a gone post, "unsaved" no longer measures what would
-    // be lost: the last save went with the post, so whatever is on screen exists nowhere
-    // else, and leaving always asks.
-    dirty: () => editorDirty || stranded,
+    dirty: () => editorDirty,
     beforeLeave() {
-      if (stranded) {
-        return "confirm";
-      }
       if (gone) {
-        return "leave"; // on its way to Drafts, with nothing unsaved
+        return "leave"; // on its way to Drafts: there is nothing left to save to
       }
       if (editorDirty && (saveFailed || conflicted)) {
         return "confirm"; // a silent flush would fail (or clobber): the reader decides
@@ -851,42 +841,13 @@ export async function renderEditor(
     }
   }
 
-  // Any read or write of the post that finds it deleted elsewhere. With nothing unsaved (a
-  // scheduled post never has any) it goes to Drafts, as the send follow does. With unsaved
-  // edits, going would throw away what the publisher just wrote, and there is nowhere left
-  // to save it, so the editor stays open and says so: saving stops, the text stays to copy
-  // out, and leaving asks first.
-  function postGone() {
-    if (gone) {
-      return;
-    }
-    if (!dirty.dirty) {
-      removed();
-      return;
-    }
-    gone = true;
-    stranded = true;
-    mine.cancel();
-    paintSaveBtn();
-    showTab("edit"); // the banner points at the text, so the text is what shows
-    setHtml(
-      freshnessEl,
-      html`<span><span aria-hidden="true">⚠️</span> This post was deleted elsewhere, so your unsaved edits can't be saved. They're still here: copy them out before you leave.</span>`,
-    );
-    freshnessEl.hidden = false;
-  }
-
   // A read or write that found the post gone (a 404) answers it here, whichever control
   // made it: the API names only what it didn't find ("post"), which says nothing alone.
   function foundGone(e: unknown): boolean {
     if (!isNotFound(e)) {
       return false;
     }
-    if (locked) {
-      removed();
-    } else {
-      postGone();
-    }
+    removed();
     return true;
   }
 
@@ -913,7 +874,7 @@ export async function renderEditor(
         }
       } catch (e) {
         if (isNotFound(e)) {
-          postGone();
+          removed();
         }
         // Anything else is transient: try again next tick.
       }

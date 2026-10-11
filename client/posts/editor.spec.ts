@@ -615,17 +615,7 @@ describe("editor view", () => {
     expect(reads()).toHaveLength(2); // it stops reading a post that is gone
   });
 
-  // What the editor shows once its draft is gone with edits that could not be saved.
-  const keptOpen = () => {
-    expect(location.hash).toBe("#/edit/p1");
-    expect($("#freshnessBanner").hidden).toBe(false);
-    expect($("#freshnessBanner").textContent).toMatch(
-      /This post was deleted elsewhere, so your unsaved edits can't be saved\. They're still here/,
-    );
-    expect($("#saveBtn").getAttribute("aria-disabled")).toBe("true");
-  };
-
-  it("keeps a draft open with its unsaved edits when an autosave finds it deleted elsewhere, and stops saving", async () => {
+  it("goes to Drafts when a save finds the draft deleted elsewhere, unsaved edits and all (SPEC §4)", async () => {
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
       { method: "PUT", path: "/api/posts/p1", reply: postGone },
@@ -633,56 +623,11 @@ describe("editor view", () => {
     typeInto(body(), "mine");
     await vi.advanceTimersByTimeAsync(5000);
     expect(puts()).toHaveLength(1);
-    keptOpen();
-    expect(body().value).toBe("mine");
-    expect($("#toasts").textContent).toBe(""); // the banner says it, not a save error
-    typeInto(body(), "mine still");
-    $("#f-subject").dispatchEvent(new Event("blur")); // a blur's save, too
-    await vi.advanceTimersByTimeAsync(30000);
-    expect(puts()).toHaveLength(1); // nothing left to save to
-    expect(reads()).toHaveLength(1); // nor to poll
-    expect(handle().dirty()).toBe(true); // closing the tab still asks
-    expect(handle().beforeLeave()).toBe("confirm"); // and so does leaving
-    $("#saveBtn").click(); // Save draft saves nothing
+    expect(location.hash).toBe("#/drafts");
+    expect($("#toasts").textContent).toBe("This post was deleted elsewhere."); // not a save error
+    expect(handle().beforeLeave()).toBe("leave"); // no prompt, and no save to a post that is gone
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()).toHaveLength(1);
-    typeInto(body(), "# Owls\n\nHoot."); // back to the last save, which went with the post
-    expect(handle().dirty()).toBe(true);
-    expect(handle().beforeLeave()).toBe("confirm");
-  });
-
-  it("goes to Drafts, without asking, when Schedule finds a clean draft deleted elsewhere", async () => {
-    await open([
-      { path: "/api/posts/p1", reply: () => draft() },
-      { method: "POST", path: "/api/posts/p1/schedule", reply: postGone },
-    ]);
-    $("#scheduleBtn").click();
-    $<HTMLInputElement>("#schWhen").value = "2026-09-25T15:00";
-    $("#schGo").click();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(location.hash).toBe("#/drafts");
-    expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
-    expect(document.querySelector(".modal")).toBeNull();
-    expect(handle().beforeLeave()).toBe("leave"); // nothing unsaved to ask about
-  });
-
-  it("goes to Drafts when the post it opens isn't there, rather than offering a Retry that can't work", async () => {
-    await open([{ path: "/api/posts/p1", reply: postGone }]);
-    expect(location.hash).toBe("#/drafts");
-    expect($("#toasts").textContent).toBe("There's no post here. It may have been deleted.");
-    expect(document.querySelector("[data-retry]")).toBeNull();
-  });
-
-  it("keeps a draft open with its unsaved edits when the freshness poll finds it deleted elsewhere", async () => {
-    let deleted = false;
-    await open([{ path: "/api/posts/p1", reply: () => (deleted ? postGone() : draft()) }]);
-    await vi.advanceTimersByTimeAsync(9000);
-    deleted = true;
-    typeInto(body(), "mine"); // typed just before the poll, the autosave not yet due
-    await vi.advanceTimersByTimeAsync(1000);
-    expect(puts()).toHaveLength(0);
-    keptOpen();
-    expect(body().value).toBe("mine");
   });
 
   it("says a leave's save found the draft deleted elsewhere, without moving the reader", async () => {
@@ -1061,21 +1006,6 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(10000);
     expect($("#toasts").textContent).toBe("");
     expect(fake.unhandled).toEqual([]);
-  });
-
-  it("keeps unsaved edits in view when the save before a preview finds the post deleted elsewhere", async () => {
-    await open([
-      { path: "/api/posts/p1", reply: () => draft() },
-      { method: "PUT", path: "/api/posts/p1", reply: postGone },
-    ]);
-    typeInto(body(), "mine");
-    $(".ctab[data-tab='preview']").click();
-    await vi.advanceTimersByTimeAsync(0);
-    keptOpen();
-    expect(body().hidden).toBe(false); // back on Edit, where the banner points
-    expect(body().value).toBe("mine");
-    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/preview")).toBe(false);
-    expect($("#toasts").textContent).toBe("");
   });
 
   describe("the preview's link to the post's own public page", () => {
