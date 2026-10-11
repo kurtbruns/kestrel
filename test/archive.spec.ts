@@ -193,14 +193,14 @@ async function ensureSubscriber(): Promise<void> {
     .run();
 }
 
-async function publish(subject: string, completedAt: number): Promise<posts.PostRow> {
+async function publish(subject: string, startedAt: number): Promise<posts.PostRow> {
   await ensureSubscriber();
   const { post } = await posts.createPost(env.DB, { subject, markdown: `# ${subject}` }, "test");
   await freeze(env, getConfig(env), post, Date.now() - 1000);
   await sweep(env);
-  // Pin completed_at so ordering is deterministic (sweep uses wall-clock ms).
-  await env.DB.prepare("UPDATE sends SET completed_at = ? WHERE post_id = ?")
-    .bind(completedAt, post.id)
+  // Pin started_at, the public date, so ordering is deterministic (sweep uses wall-clock ms).
+  await env.DB.prepare("UPDATE sends SET started_at = ? WHERE post_id = ?")
+    .bind(startedAt, post.id)
     .run();
   return post;
 }
@@ -256,7 +256,7 @@ describe("landing page (the public front door, §5)", () => {
 });
 
 describe("archive index (the full list, §5)", () => {
-  it("lists every sent post newest-first, linking to their canonical archive URLs", async () => {
+  it("lists every published post newest-first, linking to their canonical archive URLs", async () => {
     const older = await publish("The Older One", 1_000);
     const newer = await publish("The Newer One", 2_000);
 
@@ -297,6 +297,88 @@ describe("archive index (the full list, §5)", () => {
       const body = await res.text();
       expect(body).toContain("A Post");
       expect(body).toContain(`http://localhost:8787/archive/${post.slug}`);
+    }
+  });
+});
+
+describe("a post is published when its send starts (§5)", () => {
+  const JAN_5 = Date.UTC(2026, 0, 5, 12);
+  const JAN_7 = Date.UTC(2026, 0, 7, 12);
+
+  /** A post frozen for later, so its send sits `scheduled` until a test moves it. */
+  async function frozenPost(subject: string): Promise<{ post: posts.PostRow; sendId: string }> {
+    await ensureSubscriber();
+    const { post } = await posts.createPost(env.DB, { subject, markdown: `# ${subject}` }, "test");
+    const send = await freeze(env, getConfig(env), post, Date.now() + 3_600_000);
+    return { post, sendId: send.id };
+  }
+
+  async function reader(): Promise<{
+    page: (slug: string) => Promise<Response>;
+    index: string;
+    landing: string;
+  }> {
+    return {
+      page: (slug) => SELF.fetch(`${base}/archive/${slug}`),
+      index: await (await SELF.fetch(`${base}/archive`)).text(),
+      landing: await (await SELF.fetch(`${base}/`)).text(),
+    };
+  }
+
+  it("serves a send still going out at its archive URL, in the index and on the landing page, dated by its start", async () => {
+    const { post, sendId } = await frozenPost("Going Out");
+    await env.DB.prepare("UPDATE sends SET status = 'sending', started_at = ? WHERE id = ?")
+      .bind(JAN_5, sendId)
+      .run();
+    const send = (await env.DB.prepare("SELECT rendered_html FROM sends WHERE id = ?")
+      .bind(sendId)
+      .first<{ rendered_html: string }>())!;
+    expect(send.rendered_html).toContain(">Going Out</h1>");
+
+    const r = await reader();
+    const res = await r.page(post.slug);
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // The same frozen copy the email carries, with the masthead dated by the start.
+    expect(body).toContain(">Going Out</h1>");
+    expect(body).toContain('class="k-mast"');
+    expect(body).toContain("January 5, 2026");
+    for (const list of [r.index, r.landing]) {
+      expect(list).toContain("Going Out");
+      expect(list).toContain(`http://localhost:8787/archive/${post.slug}`);
+      expect(list).toContain("January 5, 2026");
+    }
+  });
+
+  it("dates a finished send by when it started, not when it completed", async () => {
+    const { post, sendId } = await frozenPost("Long Send");
+    await env.DB.prepare(
+      "UPDATE sends SET status = 'sent', started_at = ?, completed_at = ? WHERE id = ?",
+    )
+      .bind(JAN_5, JAN_7, sendId)
+      .run();
+    const r = await reader();
+    const body = await (await r.page(post.slug)).text();
+    for (const html of [body, r.index, r.landing]) {
+      expect(html).toContain("January 5, 2026");
+      expect(html).not.toContain("January 7, 2026");
+    }
+  });
+
+  it("keeps a scheduled or canceled post unpublished", async () => {
+    const scheduled = await frozenPost("Still Scheduled");
+    const canceled = await frozenPost("Called Off");
+    await env.DB.prepare("UPDATE sends SET status = 'canceled' WHERE id = ?")
+      .bind(canceled.sendId)
+      .run();
+    const r = await reader();
+    for (const { post } of [scheduled, canceled]) {
+      expect((await r.page(post.slug)).status).toBe(404);
+    }
+    for (const list of [r.index, r.landing]) {
+      expect(list).toContain("No posts yet");
+      expect(list).not.toContain("Still Scheduled");
+      expect(list).not.toContain("Called Off");
     }
   });
 });

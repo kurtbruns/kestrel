@@ -484,7 +484,7 @@ function renderFrozenRecord(
     renderCanceled(send, root);
     return;
   }
-  // The published post, which the send's view links once it is sent.
+  // The published post, which the send's view links once it has started.
   const archive = send.links.archive;
   const total = outcomes.recipients;
   const sentAt = send.completed_at ?? send.fire_at;

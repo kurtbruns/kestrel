@@ -271,9 +271,9 @@ export function buildSendView(
       deliveries: `/api/sends/${id}/deliveries`,
       deliveries_csv: `/api/sends/${id}/deliveries.csv`,
       post: `/api/posts/${send.post_id}`,
-      // The archive serves a post's page only once it is sent: before, the link would 404.
+      // The archive serves a post's page once its send starts: before, the link would 404.
       archive:
-        send.status === "sent" && send.post_slug !== null
+        (send.status === "sending" || send.status === "sent") && send.post_slug !== null
           ? archiveUrl(config, send.post_slug)
           : null,
     },

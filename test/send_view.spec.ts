@@ -117,7 +117,7 @@ describe("one SendView on every route", () => {
     expect([canceled.send.status, canceled.send.phase]).toEqual(["canceled", "canceled"]);
     for (const view of [scheduled.send, moved.send, list.sends[0], one.send, canceled.send]) {
       expect(view.links.email_html).toBe(`/api/sends/${id}/email?format=html`);
-      expect(view.links.archive).toBeNull(); // not sent: nothing published to link
+      expect(view.links.archive).toBeNull(); // never started: nothing published to link
     }
   });
 

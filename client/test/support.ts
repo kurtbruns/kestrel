@@ -163,7 +163,7 @@ export interface SendExtras {
    *  the page's, or a server that withholds one. */
   actions?: SendAction[];
   eta_ms?: number | null;
-  /** The published post's page, which the server links once the send is sent. */
+  /** The published post's page, which the server links once the send has started. */
   archive?: string | null;
 }
 
@@ -240,7 +240,10 @@ export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendVi
       deliveries: `/api/sends/${row.id}/deliveries`,
       deliveries_csv: `/api/sends/${row.id}/deliveries.csv`,
       post: `/api/posts/${row.post_id}`,
-      archive: row.status === "sent" ? `https://birds.example/${row.post_id}` : null,
+      archive:
+        row.status === "sending" || row.status === "sent"
+          ? `https://birds.example/${row.post_id}`
+          : null,
     },
     ...over,
   };

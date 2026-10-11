@@ -199,7 +199,8 @@ export function getActiveSendForPost(db: D1Database, postId: string): Promise<Se
     .first<SendRow>();
 }
 
-/** The most recent successfully-sent Send for a post (backs the archive page). */
+/** The most recent completed Send for a post: the record a sent post's editor view
+ *  and preview open. The public archive reads `publishedSendForPost` instead. */
 export function latestSentSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
   return db
     .prepare(
@@ -209,25 +210,47 @@ export function latestSentSendForPost(db: D1Database, postId: string): Promise<S
     .first<SendRow>();
 }
 
-/** One published post for the public archive index (§5): the frozen subject and
- *  the slug that addresses its archive page. */
+/*
+ * A post is published (§5) from the moment the sweep starts its send, not when the send
+ * finishes: the frozen copy is final once the send fires (a send in flight can't be
+ * canceled or ended), and a reader who opens the email's link mid-send must find the
+ * page. A send stuck in flight keeps its page, since some readers already have the email.
+ * Its public date is therefore the start; `fire_at` covers a row whose `started_at` was
+ * never written, which the sweep always writes but a hand-made row may not.
+ */
+const PUBLISHED_SEND = "s.status IN ('sending', 'sent')";
+const PUBLISHED_AT = "COALESCE(s.started_at, s.fire_at)";
+
+/** The send whose frozen copy a post's archive page serves, or null while the post is
+ *  unpublished. */
+export function publishedSendForPost(db: D1Database, postId: string): Promise<SendRow | null> {
+  return db
+    .prepare(
+      `SELECT * FROM sends s WHERE s.post_id = ? AND ${PUBLISHED_SEND} ORDER BY ${PUBLISHED_AT} DESC LIMIT 1`,
+    )
+    .bind(postId)
+    .first<SendRow>();
+}
+
+/** One published post for the public archive index (§5): the frozen subject, the
+ *  slug that addresses its archive page, and when its send started. */
 export interface PublishedPost {
   slug: string;
   subject: string;
-  sent_at: number;
+  published_at: number;
 }
 
-/** Sent posts for the public archive index, newest first — one row per post
+/** Published posts for the public archive index, newest first — one row per post
  *  (a re-send collapses to its latest). SQLite carries the bare `subject`/`slug`
- *  from the MAX(completed_at) row of each group. */
+ *  from the MAX(published_at) row of each group. */
 export async function listPublishedPosts(db: D1Database, limit = 200): Promise<PublishedPost[]> {
   const { results } = await db
     .prepare(
-      `SELECT p.slug AS slug, s.subject AS subject, MAX(s.completed_at) AS sent_at
+      `SELECT p.slug AS slug, s.subject AS subject, MAX(${PUBLISHED_AT}) AS published_at
          FROM sends s JOIN posts p ON p.id = s.post_id
-         WHERE s.status = 'sent'
+         WHERE ${PUBLISHED_SEND}
          GROUP BY s.post_id
-         ORDER BY sent_at DESC
+         ORDER BY published_at DESC
          LIMIT ?`,
     )
     .bind(Math.min(limit, 1000))

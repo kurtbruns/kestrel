@@ -1,7 +1,7 @@
 /**
  * Public reader pages: the landing page at `/` (§5 front door — identity + a
  * subscribe CTA, never a bounce to admin), the archive index at the archive base
- * path (every sent post), and each post page — a sent Send's frozen rendered_html,
+ * path (every published post), and each post page — a started Send's frozen rendered_html,
  * the reviewed, delivered copy (I3), with edits that leave the content untouched and
  * only fill reserved anchors: the per-recipient unsubscribe sentinel becomes a generic
  * manage-subscription link (a public page has no single recipient), the inert
@@ -10,7 +10,7 @@
  */
 
 import { getBySlug } from "../db/posts";
-import { latestSentSendForPost, listPublishedPosts } from "../db/sends";
+import { listPublishedPosts, publishedSendForPost } from "../db/sends";
 import { BRANDING_LOGO_KEY, getSettingsForDisplay } from "../db/settings";
 import type { Config } from "../env";
 import {
@@ -53,7 +53,7 @@ export async function readerIdentity(c: RequestContext, config: Config): Promise
   };
 }
 
-function formatSentDate(ms: number): string {
+function formatPublishedDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", {
     timeZone: "UTC",
     year: "numeric",
@@ -86,7 +86,7 @@ export async function landing(c: RequestContext): Promise<Response> {
   const mapped = posts.map((i) => ({
     title: i.subject,
     url: archiveUrl(c.config, i.slug),
-    dateLabel: formatSentDate(i.sent_at),
+    dateLabel: formatPublishedDate(i.published_at),
   }));
   const [featured, ...recent] = mapped;
   return landingPage({
@@ -100,8 +100,8 @@ export async function landing(c: RequestContext): Promise<Response> {
   });
 }
 
-/** The full public archive index: every sent post, newest first, linking to their
- *  permanent (canonical) archive URLs — the same address emails carry. */
+/** The full public archive index: every published post (its send has started), newest
+ *  first, linking to their permanent (canonical) archive URLs — the same address emails carry. */
 export async function archiveIndex(c: RequestContext): Promise<Response> {
   const [posts, identity] = await Promise.all([
     listPublishedPosts(c.env.DB),
@@ -114,7 +114,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
     posts: posts.map((i) => ({
       title: i.subject,
       url: archiveUrl(c.config, i.slug),
-      dateLabel: formatSentDate(i.sent_at),
+      dateLabel: formatPublishedDate(i.published_at),
     })),
     devDashboardUrl: devDashboardUrl(c.config),
   });
@@ -123,7 +123,7 @@ export async function archiveIndex(c: RequestContext): Promise<Response> {
 export async function archivePage(c: RequestContext): Promise<Response> {
   const slug = param(c, "slug");
   const post = await getBySlug(c.env.DB, slug);
-  const send = post ? await latestSentSendForPost(c.env.DB, post.id) : null;
+  const send = post ? await publishedSendForPost(c.env.DB, post.id) : null;
   if (!post || !send) {
     return htmlPage(
       "Not found",
@@ -141,7 +141,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
   const identity = await readerIdentity(c, c.config);
   const masthead = archiveMasthead({
     name: identity.name,
-    dateLabel: formatSentDate(send.completed_at ?? send.fire_at),
+    dateLabel: formatPublishedDate(send.started_at ?? send.fire_at),
     // Back to the archive index the post belongs to, on the same (archive) origin —
     // so an apex-hosted post stays on the apex instead of jumping to the app subdomain.
     indexUrl: archiveHomeUrl(c.config),

@@ -16,6 +16,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- A post's page, the archive index, and the landing page show a post as soon as its send starts, dated by when it went out, so a reader who opens "View in browser" while a large send is still going out finds the post instead of "Not found". A send's view links the published post from the start too (SPEC §5).
 - The operator's Claude context no longer tells Claude to send `If-Match` when it acts on a send, or to handle `precondition_failed`, since neither applies any more. It now says an act is safe to repeat and that every answer carries the send as it now stands. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
 
 ### Fixed

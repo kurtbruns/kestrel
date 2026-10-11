@@ -1087,7 +1087,8 @@ export function createRouter({
       path: `${archiveBasePath}{/}?`,
       access: "public",
       resource: "archive",
-      summary: "The public archive index: every sent post, newest first.",
+      summary:
+        "The public archive index: every published post (its send has started), newest first.",
       handler: archiveRoutes.archiveIndex,
     },
     {
@@ -1095,7 +1096,8 @@ export function createRouter({
       path: `${archiveBasePath}/:slug`,
       access: "public",
       resource: "archive",
-      summary: "A frozen post's archive page / view-in-browser (I3).",
+      summary:
+        "A published post's archive page / view-in-browser (I3), from the moment its send starts.",
       handler: archiveRoutes.archivePage,
     },
 
