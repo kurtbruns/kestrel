@@ -26,7 +26,10 @@ export function logged(...spies: MockInstance[]): LoggedLine[] {
 }
 
 /** What the error guard (`test/log_guard.ts`) holds for the running test. */
-const guard = { errors: [] as LoggedLine[], expected: new Set<string>() };
+const guard = {
+  errors: [] as { line: LoggedLine; at: string }[],
+  expected: new Set<string>(),
+};
 
 /**
  * Declare the error-level events the running test causes on purpose. The guard fails a test
@@ -45,18 +48,19 @@ export const errorGuard = {
     guard.errors = [];
     guard.expected = new Set();
   },
-  record(line: LoggedLine): void {
-    guard.errors.push(line);
+  /** Note an error line and `at`, the stack of the call that logged it. */
+  record(line: LoggedLine, at: string): void {
+    guard.errors.push({ line, at });
   },
   /** What is wrong with the test's error lines against its declarations, or nothing. */
   problems(): string[] {
-    const seen = new Set(guard.errors.map((line) => line.event));
-    const undeclared = guard.errors.filter((line) => !guard.expected.has(line.event));
+    const seen = new Set(guard.errors.map(({ line }) => line.event));
+    const undeclared = guard.errors.filter(({ line }) => !guard.expected.has(line.event));
     const missing = [...guard.expected].filter((event) => !seen.has(event));
     return [
       ...undeclared.map(
-        (line) =>
-          `logged ${line.event} at error level without expectErrorLogs("${line.event}"): ${JSON.stringify(line)}`,
+        ({ line, at }) =>
+          `logged ${line.event} at error level without expectErrorLogs("${line.event}"): ${JSON.stringify(line)}\n${at}`,
       ),
       ...missing.map((event) => `declared expectErrorLogs("${event}") but never logged it`),
     ];

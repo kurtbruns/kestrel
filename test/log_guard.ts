@@ -15,9 +15,22 @@ import { afterEach, beforeEach } from "vitest";
 import { type LogFields, log } from "../src/lib/log";
 import { errorGuard } from "./support/log";
 
+// How many frames of the logging call's stack a failure shows: enough to reach from the
+// `log.error` call through the route or sweep that made it, which also names the test that
+// started work it left to `waitUntil`.
+const STACK_FRAMES = 8;
+
 const logError = log.error;
 log.error = (event: string, fields: LogFields = {}): void => {
-  errorGuard.record({ ...fields, event, level: "error" });
+  // Drop the "Error" line and this wrapper's own frame, so the first frame is the caller,
+  // and the test runner's frames, which say nothing about where the line came from.
+  const at = (new Error().stack ?? "")
+    .split("\n")
+    .slice(2)
+    .filter((frame) => !frame.includes("node_modules") && !frame.includes("(<anonymous>)"))
+    .slice(0, STACK_FRAMES)
+    .join("\n");
+  errorGuard.record({ ...fields, event, level: "error" }, at);
   logError(event, fields);
 };
 
