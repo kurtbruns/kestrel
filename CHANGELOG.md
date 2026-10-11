@@ -16,6 +16,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
+- Settings has a **Reader pages** section that shows every page a reader can land on, by journey (subscribe, confirm, unsubscribe, reading) and state, including the expired and invalid links a reader rarely meets, at desktop or phone width. Each is the real page rendered with your publication's identity and sample values under a Preview strip, so you can see what readers see without walking the flows; nothing on a preview acts (SPEC §5).
 - The editor shows a post's **web version**: the post as its public page will look, with the template's email-only parts left out and the masthead and display font added, so you can proof the page before it's permanent. **Web version ↗** in the editor opens it in a new tab, under a strip above the page that says where the post stands and where its public page will be, and replaces **Open in browser**, which showed the same email as the Preview tab. The email's own "View in browser" link in the Preview tab opens the web version too, rather than a public page that doesn't exist yet. Once a post's send starts, the web version opens its public page (SPEC §5).
 
 ### Changed

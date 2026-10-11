@@ -39,6 +39,7 @@ import * as docsRoutes from "./routes/docs";
 import * as imageRoutes from "./routes/images";
 import * as postRoutes from "./routes/posts";
 import * as publicRoutes from "./routes/public";
+import * as readerPageRoutes from "./routes/reader_pages";
 import * as renderRoutes from "./routes/render_actions";
 import * as scheduleRoutes from "./routes/schedule";
 import * as sendRoutes from "./routes/sends";
@@ -360,6 +361,17 @@ export function createRouter({
         "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 `notify_failed` carrying its words.",
       example: { response: { to: "you@example.com", channel: "cloudflare" } },
       handler: settingsRoutes.notificationTest,
+    },
+    {
+      method: "GET",
+      path: "/api/reader-pages/:journey/:state",
+      access: "admin",
+      resource: "settings",
+      summary:
+        "A page a reader can land on, as a standalone HTML page: Settings' preview of it (SPEC §5).",
+      description:
+        "`journey` is `subscribe` (`form`, `check-inbox`, `not-an-email`), `confirm` (`ready`, `confirmed`, `expired`, `invalid`), `unsubscribe` (`ask`, `done`, `invalid`), or `reading` (`landing`, `archive`, `post`, `not-found`), naming the `state`. Rendered by the code that serves the real page, with the saved publication identity, a sample address and sample posts in place of a reader's own, and a Preview strip across the top; the post page renders the sample post through the saved template. Always 200, whatever status the real page carries; an unknown pair is a 404. A preview changes nothing: its forms submit nowhere (`form-action 'none'`).",
+      handler: readerPageRoutes.readerPagePreview,
     },
 
     // --- posts + revisions (authed) ---

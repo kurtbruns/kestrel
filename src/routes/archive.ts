@@ -18,6 +18,8 @@ import {
   archiveIndexPage,
   archiveLink,
   landingPage,
+  postBannerChrome,
+  type ReaderBanner,
   type ReaderIdentity,
 } from "../lib/page";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
@@ -33,7 +35,8 @@ import type { RequestContext } from "../router";
 import { param } from "../router";
 import { archiveHomeUrl, devDashboardUrl, readerIdentity, readerMessage } from "./reader";
 
-function formatPublishedDate(ms: number): string {
+/** A post's date as the reader surface shows it. */
+export function formatPublishedDate(ms: number): string {
   return new Date(ms).toLocaleDateString("en-US", {
     timeZone: "UTC",
     year: "numeric",
@@ -102,6 +105,8 @@ export function webVersion(
     /** The date the masthead carries: when the post went out, or will. */
     dateMs: number;
     devDashboardUrl?: string;
+    /** For a preview of the page, a strip at its top saying so. */
+    banner?: ReaderBanner;
   },
 ): string {
   const masthead = archiveMasthead({
@@ -112,8 +117,9 @@ export function webVersion(
     indexUrl: archiveHomeUrl(opts.config),
   });
   const dev = archiveDevDashboardChrome(opts.devDashboardUrl);
+  const banner = postBannerChrome(opts.banner);
   // Same delivery resolver as a real send, one phase later — then swap the inert anchors.
-  return fillDeliveryTokens(
+  const page = fillDeliveryTokens(
     omitEmailOnly(html),
     { ".Email.UnsubscribeURL": `${opts.config.appOrigin}/unsubscribe`, ".Email.SentTo": "" },
     "html",
@@ -121,7 +127,23 @@ export function webVersion(
     .split(ARCHIVE_MASTHEAD_ANCHOR)
     .join(masthead + dev.masthead)
     .split(ARCHIVE_HEAD_ANCHOR)
-    .join(ARCHIVE_POST_HEAD + dev.head);
+    .join(ARCHIVE_POST_HEAD + dev.head + banner.head);
+  // The strip spans the page above the email's column, so it goes first in the body
+  // rather than at the masthead anchor, which sits inside the column.
+  return banner.body ? page.replace(/<body(\s[^>]*)?>/i, (tag) => tag + banner.body) : page;
+}
+
+/** One page for every archive address with no published post (see `archivePage`). */
+export function nothingHereYetPage(c: RequestContext, banner?: ReaderBanner): Promise<Response> {
+  return readerMessage(c, {
+    title: "Nothing here yet",
+    eyebrow: "Archive",
+    headline: "Nothing here yet",
+    ledeHtml: "A post appears here as soon as it’s sent.",
+    afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
+    status: 404,
+    banner,
+  });
 }
 
 export async function archivePage(c: RequestContext): Promise<Response> {
@@ -132,14 +154,7 @@ export async function archivePage(c: RequestContext): Promise<Response> {
     // One page for every address with no published post, a draft, a scheduled post, or
     // none at all, so it never reveals that a post is on its way. A test email's "view
     // in browser" link lands here until the send starts.
-    return readerMessage(c, {
-      title: "Nothing here yet",
-      eyebrow: "Archive",
-      headline: "Nothing here yet",
-      ledeHtml: "A post appears here as soon as it’s sent.",
-      afterHtml: archiveLink(archiveHomeUrl(c.config), "Browse the archive"),
-      status: 404,
-    });
+    return nothingHereYetPage(c);
   }
   const html = webVersion(send.rendered_html, {
     config: c.config,

@@ -80,8 +80,16 @@ describe("settings view", () => {
     vi.useRealTimers();
   });
 
+  // The Reader pages section reads the page it shows on every open (reader_pages.spec.ts).
+  const readerPage: FakeRoute = {
+    path: /^\/api\/reader-pages\//,
+    reply: () => new Response("<html><body>page</body></html>"),
+  };
+  const readerPageReads = () =>
+    fake.calls.filter((c) => c.url.pathname.startsWith("/api/reader-pages/")).length;
+
   async function open(routes: FakeRoute[] = [{ path: "/api/settings", reply: () => response() }]) {
-    fake = fakeApi(routes);
+    fake = fakeApi([...routes, readerPage]);
     await mount(renderSettings);
     await vi.advanceTimersByTimeAsync(0);
   }
@@ -246,6 +254,8 @@ describe("settings view", () => {
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Monthly");
     expect($("#toasts").textContent).toMatch(/Settings saved/);
     expect(bar().classList.contains("show")).toBe(false);
+    // The reader page shown re-reads the identity it wears: once on open, once after.
+    expect(readerPageReads()).toBe(2);
   });
 
   it("shows where notifications go, how they are sent, and how the last one went", async () => {

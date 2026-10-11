@@ -1,5 +1,5 @@
 // The Settings page: publication identity, sending, notifications, confirmation wording,
-// test recipients, and the deployment reflection.
+// the reader pages, test recipients, and the deployment reflection.
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
@@ -24,6 +24,7 @@ import { escapeHtml, type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
 import { busy, copyText, renderError, toast } from "../ui/widgets";
+import { mountReaderPages, readerPagesSection } from "./reader_pages";
 import {
   inUseChip,
   isRemakeTooClose,
@@ -75,7 +76,7 @@ const HIDDEN = html` hidden`;
 export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
     root,
-    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, and the ways readers subscribe. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
+    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the email each post is sent inside, how mail is sent, the ways readers subscribe, and the pages they land on. Facts set when Kestrel was deployed are shown read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
   );
   const body = $("#settingsBody", root);
   let data: SettingsResponse;
@@ -421,6 +422,8 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       </div>
     </section>`;
 
+  const readerSection = readerPagesSection(secHead("Reader pages", chip("preview", "Preview")));
+
   const archiveBase = `${d.archiveOrigin || ""}${d.archiveBasePath || ""}`;
   const archiveIsDefault = d.archiveOrigin === d.appOrigin;
   const instanceSection = html`
@@ -441,14 +444,17 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
 
   setHtml(
     body,
-    html`${identitySection}${templateSection}${senderSection}${notifySection}${recipSection}${subscribeSection}${confirmationSection}${instanceSection}`,
+    html`${identitySection}${templateSection}${senderSection}${notifySection}${recipSection}${subscribeSection}${confirmationSection}${readerSection}${instanceSection}`,
   );
+  const readerPages = mountReaderPages(body, signal);
 
   // Keep the cached config + sidebar brand in step after a save (the sidebar brand
   // reads the same publication identity): this page's own response, with the saved half.
   const applySettings = (settings: SettingsView) => {
     appState.appConfig = { ...data, settings };
     renderSidebarBrand();
+    // The reader pages wear the saved identity, so the one shown re-reads it.
+    readerPages.refresh();
   };
 
   const nameEl = $<HTMLInputElement>("#setName");

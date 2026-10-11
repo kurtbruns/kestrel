@@ -5279,6 +5279,55 @@ button.set-field-remove {
   color: var(--muted);
 }
 
+/* --- Reader pages: one reader page at a time, framed as the Worker renders it ---
+   The bar holds the journeys and the width; beneath it, the journey's states and what
+   on its pages is the publisher's. The page brings its own ground, so the frame has
+   none; at phone width it sits on the sunken stage at a phone's 375px. */
+.set-rp-bar {
+  flex-wrap: wrap;
+}
+.set-rp-head {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.set-rp-head .set-wtog {
+  flex-wrap: wrap;
+}
+.set-rp-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 72ch;
+}
+.set-rp-stage.phone {
+  padding: 18px 12px;
+  background: var(--sunken);
+}
+.set-rp-frame {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  border: 0;
+}
+.set-rp-stage.phone .set-rp-frame {
+  width: 375px;
+  max-width: 100%;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.set-rp-error {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--danger-fg);
+}
+
 /* --- shared unsaved-changes bar -------------------------------------------------
    One full-width banner fixed to the bottom of the viewport, used by every surface
    with an explicit save + a revertible baseline (Settings and the Template page).
