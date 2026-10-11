@@ -46,7 +46,7 @@ describe("reader page previews (SPEC §5)", () => {
     expect(res.status).toBe(401);
   });
 
-  it("render every page and state in the catalog, under the preview strip, acting on nothing", async () => {
+  it("render every page and state in the catalog as a reader gets it, acting on nothing", async () => {
     const listed = READER_JOURNEYS.flatMap((j) => j.states.map((s) => `${j.id}/${s.id}`));
     // The catalog and this test name the same pages, so a page added to one is tested.
     expect(listed.sort()).toEqual(Object.keys(SHOWS).sort());
@@ -65,10 +65,9 @@ describe("reader page previews (SPEC §5)", () => {
           expect(body, name).toContain(shown);
         }
         expect(body, name).toContain(publication);
-        // The strip is the body's first child, above the page's own masthead.
-        expect(body, name).toMatch(/<body[^>]*>\s*<div class="r-banner" role="note">/);
-        expect(body, name).toContain("Preview");
-        // A preview is the deployed page, so local dev's dashboard shortcut stays off it.
+        // The page exactly as a reader gets it: no test strip, and, since a preview is the
+        // deployed page, no local dev dashboard shortcut.
+        expect(body, name).not.toContain('class="r-banner"');
         expect(body, name).not.toContain('class="r-dev"');
       }
     }
@@ -78,13 +77,6 @@ describe("reader page previews (SPEC §5)", () => {
     }>();
     expect(count?.n).toBe(0);
     expect(fakeOutbox()).toHaveLength(0);
-  });
-
-  it("puts the strip above the post page's column, outside the frozen content", async () => {
-    const body = await (await preview("reading", "post")).text();
-    expect(body.indexOf('class="r-banner"')).toBeLessThan(body.indexOf('class="k-mast"'));
-    // The strip's stylesheet rides the head, beside the post page's own chrome.
-    expect(body.indexOf(".r-banner-in")).toBeLessThan(body.indexOf("</head>"));
   });
 
   it("answers 404 for a page the catalog lacks", async () => {

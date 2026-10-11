@@ -245,34 +245,6 @@ function readerBannerStyle(banner?: ReaderBanner): string {
   return banner ? `<style>${READER_BANNER_STYLE}</style>` : "";
 }
 
-/** The strip itself, or nothing. */
-function readerBannerHtml(banner?: ReaderBanner): string {
-  return banner
-    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(banner.tag)}</span><span class="r-banner-text">${escapeHtml(banner.text)}</span></div></div>`
-    : "";
-}
-
-/* A post page has no reader measure: its column is the email's. So the strip's content
-   takes the web version's measure (`.web-bar-in` in styles.css), the default template's
-   664px column in its 12px gutter with the column's 32px padding, and starts on the
-   post's left edge. Keep the two in sync. */
-const POST_BANNER_STYLE = `
-.r-banner-in { max-width:688px; padding:10px 44px; }
-@media (max-width:560px) { .r-banner-in { padding:10px 16px; } }
-`;
-
-/** The test strip's browser-only chrome for a hosted post page, which is not a reader
- *  shell: its stylesheet for the head anchor and the strip for the top of the body. Both
- *  empty without a banner, as on every page a reader is served. */
-export function postBannerChrome(banner?: ReaderBanner): { head: string; body: string } {
-  return banner
-    ? {
-        head: `<style>${READER_BANNER_STYLE}${POST_BANNER_STYLE}</style>`,
-        body: readerBannerHtml(banner),
-      }
-    : { head: "", body: "" };
-}
-
 /** The shared reader shell: a brand masthead (identity, plus a "Subscribe here →"
  *  call to action when `subscribeUrl` is given) and a footer, wrapping page-specific
  *  `mainHtml`. Public and indexable unless `private`; every link points only at public
@@ -288,8 +260,7 @@ export function readerPage(opts: {
   /** Dev-only: the `/dashboard` URL for the local-developer shortcut. Passed solely
    *  on a dev-shaped instance (§11); omitted — and so hidden — in any deployed env. */
   devDashboardUrl?: string;
-  /** A strip above the masthead, for a page shown as a test of what a reader sees: a
-   *  test email's unsubscribe pages, and Settings' previews of every reader page. */
+  /** A strip above the masthead, for a page shown as a test of what a reader sees. */
   banner?: ReaderBanner;
   /** HTTP status; defaults to 200 (a rejected subscribe form uses 400). */
   status?: number;
@@ -305,7 +276,9 @@ export function readerPage(opts: {
   const cta = opts.subscribeUrl
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
-  const banner = readerBannerHtml(opts.banner);
+  const banner = opts.banner
+    ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
+    : "";
   const doc = `<!doctype html>
 <html lang="en">
 <head>
@@ -400,8 +373,6 @@ export function landingPage(opts: {
   recent: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
-  /** For a preview of the page (see `readerPage`). */
-  banner?: ReaderBanner;
 }): Response {
   let main: string;
   if (!opts.featured) {
@@ -425,7 +396,6 @@ export function landingPage(opts: {
     title: opts.identity.name,
     mainHtml: main,
     devDashboardUrl: opts.devDashboardUrl,
-    banner: opts.banner,
   });
 }
 
@@ -438,8 +408,6 @@ export function archiveIndexPage(opts: {
   posts: ArchiveIndexPost[];
   /** Dev-only editor shortcut (§11); set only on a dev-shaped instance. */
   devDashboardUrl?: string;
-  /** For a preview of the page (see `readerPage`). */
-  banner?: ReaderBanner;
 }): Response {
   const list = opts.posts.length
     ? `<ul class="r-list">${opts.posts.map(postRow).join("")}</ul>`
@@ -451,7 +419,6 @@ export function archiveIndexPage(opts: {
     title: `Archive · ${opts.identity.name}`,
     mainHtml: `<p class="r-ey">Archive</p>${list}`,
     devDashboardUrl: opts.devDashboardUrl,
-    banner: opts.banner,
   });
 }
 
