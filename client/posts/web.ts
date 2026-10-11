@@ -65,18 +65,17 @@ function shortUrl(url: string): string {
   return url.replace(/^https?:\/\//, "");
 }
 
-/** The bar's words: where the post stands, as its tag, and where its public page will be
- *  once sent (as text, since it doesn't answer yet), with no date. What the page is, the
- *  tab's title says. Null when the post couldn't be read: there is no stage to name. */
-export function webBar(state: WebBarState | null): Html | null {
+/** The bar's words: what the page is, as its tag, then where the post stands and where it
+ *  will be published (as text, since the address doesn't answer yet), with no date. Null
+ *  state: the post couldn't be read, so the bar says only what the page is. */
+export function webBar(state: WebBarState | null): Html {
+  const tag = html`<span class="web-bar-tag">Web version</span>`;
   if (state === null) {
-    return null;
+    return tag;
   }
-  const tag = html`<span class="web-bar-tag">${state.scheduled ? "Scheduled" : "Draft"}</span>`;
-  const at = state.url
-    ? html` <span class="web-bar-text">Once sent, it will be at ${shortUrl(state.url)}.</span>`
-    : null;
-  return html`${tag}${at}`;
+  const stage = state.scheduled ? "Scheduled" : "Draft";
+  const at = state.url ? html` · will be published at ${shortUrl(state.url)}` : null;
+  return html`${tag} <span class="web-bar-text">${stage}${at}</span>`;
 }
 
 /** The same address, spelled one way, or null for one that is not a whole URL. */
@@ -159,7 +158,7 @@ export async function renderWebVersion(
     setHtml(
       root,
       html`<div class="web-page">
-        ${bar ? html`<div class="web-bar" role="note"><div class="web-bar-in">${bar}</div></div>` : null}
+        <div class="web-bar" role="note"><div class="web-bar-in">${bar}</div></div>
         <iframe class="web-frame" sandbox="${EMAIL_FRAME_SANDBOX}" title="Web version" scrolling="no"></iframe>
       </div>`,
     );
