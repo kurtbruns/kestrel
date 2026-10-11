@@ -4,9 +4,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { READER_JOURNEYS, readerPagePath } from "../shared/reader_pages";
 import { updateSettings } from "../src/db/settings";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
-import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
+import { AUTH, base } from "./support/http";
 
-const base = "https://kestrel.test";
 const publication = "Marsh Lane";
 
 /** What each page shows that no other does, so a preview can't answer with the wrong one. */
@@ -31,13 +31,13 @@ const SHOWS: Record<string, string[]> = {
 };
 
 beforeEach(async () => {
-  await env.DB.prepare("DELETE FROM subscribers").run();
+  await resetDatabase();
   await updateSettings(env.DB, { publication: { name: publication } });
   clearFakeOutbox();
 });
 
 async function preview(journey: string, state: string): Promise<Response> {
-  return SELF.fetch(`${base}${readerPagePath(journey, state)}`, { headers: await adminAuth() });
+  return SELF.fetch(`${base}${readerPagePath(journey, state)}`, { headers: AUTH });
 }
 
 describe("reader page previews (SPEC §5)", () => {
