@@ -582,6 +582,28 @@ describe("editor view", () => {
     expect($<HTMLInputElement>("#rsWhen").value).toBe(toLocalInput(new Date(moved)));
   });
 
+  it("goes to Drafts, saying so once, when Reschedule finds the post deleted elsewhere", async () => {
+    const linked = scheduledPost(Date.now() + 3_600_000);
+    await open([
+      ...linked.routes,
+      {
+        method: "POST",
+        path: "/api/sends/s1/reschedule",
+        reply: () => {
+          linked.sends.remove("s1"); // deleted with its post before the follow noticed
+          return jsonResponse({ error: "not_found", message: "send" }, 404);
+        },
+      },
+    ]);
+    $("#rescheduleSchedule").click();
+    $<HTMLInputElement>("#rsWhen").value = toLocalInput(new Date(Date.now() + 2 * 3_600_000));
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect(location.hash).toBe("#/drafts"); // the follow, read at once, found the send gone
+    expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
+  });
+
   it("says a send turned missed while the editor is open", async () => {
     await open(scheduledPost(Date.now() + 5_000).routes);
     expect($("#schedWhen").textContent).toMatch(/Sends in/);

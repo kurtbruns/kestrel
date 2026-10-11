@@ -2,8 +2,9 @@
 // (the list, the watch) and rescheduling (the list's scheduled card, the editor's banner).
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 import { earliestFireAt, minLeadText } from "../deployment";
+import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
@@ -93,6 +94,15 @@ export function openRescheduleModal(
         toast("Rescheduled");
         onDone();
       } catch (e) {
+        if (e instanceof ApiError && e.status === 404) {
+          // The send went with its post. Say so in words (the API names only "send"), and
+          // read the feed now so the page showing it follows: the editor goes to Drafts with
+          // the same message, which shows as one toast.
+          m.close();
+          toast("This post was deleted elsewhere.");
+          readSendsNow();
+          return;
+        }
         toast(message(e));
       }
     });

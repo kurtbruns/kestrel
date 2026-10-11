@@ -733,7 +733,6 @@ export async function renderEditor(
       .catch((e) => {
         if (isNotFound(e)) {
           // The reader has left, and their edits with the page: say what happened to them.
-          gone = true;
           toast("This post was deleted elsewhere, so your last edits weren't saved.");
           return;
         }
