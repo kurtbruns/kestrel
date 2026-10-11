@@ -660,14 +660,14 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
         "test unsubscribe",
         unsubscribeLanding,
         "/unsubscribe?test=1",
-        ["This was a test email"],
+        ["Nobody was unsubscribed"],
         200,
       ],
       [
         "test unsubscribe POST",
         unsubscribe,
         "/unsubscribe?test=1",
-        ["This was a test email"],
+        ["Nobody was unsubscribed"],
         200,
         html,
       ],
@@ -725,15 +725,15 @@ describe("a test email's unsubscribe link", () => {
         .first<{ status: string }>()
     )?.status;
 
-  it("opens a page that says it was a test, and unsubscribes no one", async () => {
+  it("opens a page that says nobody was unsubscribed, and unsubscribes no one", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?test=1`);
     expect(res.status).toBe(200);
     expect(res.headers.get("cache-control")).toBe("no-store");
     expect(res.headers.get("x-robots-tag")).toBe("noindex");
     const body = await res.text();
-    expect(body).toContain("This was a test email");
-    expect(body).toContain("Nobody was unsubscribed.");
+    expect(body).toContain("Nobody was unsubscribed");
+    expect(body).toContain("This link came from a test email or a preview.");
     expect(body).not.toContain("<form");
     expect(await statusOf("a")).toBe("confirmed");
   });
@@ -748,7 +748,7 @@ describe("a test email's unsubscribe link", () => {
     expect(res.status).toBe(200);
     // RFC 8058's body is form-encoded, which reads as a person's form; a bare POST
     // answers plain text.
-    expect(await res.text()).toContain("This was a test email");
+    expect(await res.text()).toContain("Nobody was unsubscribed");
     const bare = await SELF.fetch(`${base}/unsubscribe?test=1`, { method: "POST" });
     expect(bare.status).toBe(200);
     expect(await bare.text()).toBe("test email");
@@ -787,7 +787,7 @@ describe("a test email's unsubscribe link", () => {
     await ensureSubscriber();
     const page = await SELF.fetch(`${base}/unsubscribe?token=&test=1`);
     expect(page.status).toBe(200);
-    expect(await page.text()).toContain("This was a test email");
+    expect(await page.text()).toContain("Nobody was unsubscribed");
     const post = await SELF.fetch(`${base}/unsubscribe?token=&test=1`, { method: "POST" });
     expect(post.status).toBe(200);
     expect(await post.text()).toBe("test email");
@@ -818,7 +818,7 @@ describe("a test email's unsubscribe link", () => {
     const unsubPath = `${unsub!.pathname}${unsub!.search}`;
     const unsubPage = await SELF.fetch(`${base}${unsubPath}`);
     expect(unsubPage.status).toBe(200);
-    expect(await unsubPage.text()).toContain("This was a test email");
+    expect(await unsubPage.text()).toContain("Nobody was unsubscribed");
     const oneClick = await SELF.fetch(`${base}${unsubPath}`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -828,6 +828,28 @@ describe("a test email's unsubscribe link", () => {
     const viewPage = await SELF.fetch(`${base}${view!.pathname}`);
     expect(viewPage.status).toBe(404);
     expect(await viewPage.text()).toContain("Nothing here yet");
+    expect(await statusOf("a")).toBe("confirmed");
+  });
+
+  // The preview is the same email shown to the publisher, so its link opens the same page.
+  it("opens the same page from the link the editor's preview carries", async () => {
+    await ensureSubscriber();
+    const { post } = await posts.createPost(
+      env.DB,
+      { subject: "Preview Copy", markdown: "proofing" },
+      "test",
+    );
+    const res = await SELF.fetch(`${base}/api/posts/${post.id}/preview`, {
+      headers: await adminAuth(),
+    });
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => new URL(m[1]!));
+    const unsub = hrefs.find((u) => u.pathname === "/unsubscribe");
+    expect(unsub?.search).toBe("?test=1");
+    const page = await SELF.fetch(`${base}${unsub!.pathname}${unsub!.search}`);
+    expect(page.status).toBe(200);
+    expect(await page.text()).toContain("Nobody was unsubscribed");
     expect(await statusOf("a")).toBe("confirmed");
   });
 });

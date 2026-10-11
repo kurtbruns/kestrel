@@ -1169,6 +1169,7 @@ button:active {
 button.primary,
 button.secondary,
 button.ghost,
+a.ghost.btn,
 button.danger,
 button.danger-subtle {
   min-height: 35px;
@@ -1212,7 +1213,8 @@ button.secondary:hover {
 /* Ghost — the quiet neutral role: back, cancel, a menu trigger, a pager step, a copy
    control. The default for anything not asking for attention; absorbs the old
    .ghost-btn / .set-btn-ghost idioms. */
-button.ghost {
+button.ghost,
+a.ghost.btn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1223,9 +1225,18 @@ button.ghost {
   padding: 6px 12px;
   border-radius: 6px;
 }
-button.ghost:hover {
+button.ghost:hover,
+a.ghost.btn:hover {
   color: var(--fg);
   border-color: var(--muted);
+}
+/* A link that wears Ghost (`a.ghost.btn`: Web version ↗ goes to a page rather than
+   acting on one), with a link's own underline and transition taken off so it reads as
+   the buttons beside it. The plain `a.ghost` is the sidebar's text-link Sign out. */
+a.ghost.btn {
+  text-decoration: none;
+  line-height: normal;
+  transition: border-color 0.12s;
 }
 /* A copy control flashes green (--ok) once the clipboard write lands. */
 button.ghost.copied {

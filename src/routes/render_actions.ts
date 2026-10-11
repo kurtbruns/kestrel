@@ -51,11 +51,6 @@ async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   return { post, revision, images: imgs };
 }
 
-/** Generic (non-tokened) unsubscribe link used in preview + archive. */
-function genericUnsubscribeUrl(c: RequestContext): string {
-  return `${c.config.appOrigin}/unsubscribe`;
-}
-
 /** The branding (template + identity) the render path fills — the same the send uses. */
 async function loadBranding(c: RequestContext): Promise<EmailBranding> {
   return resolveBranding(await getSettings(c.env.DB), c.config);
@@ -126,7 +121,9 @@ export async function preview(c: RequestContext): Promise<Response> {
 export async function previewPage(c: RequestContext): Promise<Response> {
   const { email } = await loadPostEmail(c);
   const html = substituteRecipient(email, {
-    ".Email.UnsubscribeURL": genericUnsubscribeUrl(c),
+    // The preview is the email shown to the publisher, so its link opens the same page
+    // a test email's does, not one calling the link invalid (SPEC §7).
+    ".Email.UnsubscribeURL": testUnsubscribeUrl(c.config),
     ".Email.SentTo": "",
   }).html;
   return postPage(html);

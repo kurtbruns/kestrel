@@ -37,6 +37,7 @@ import { notice } from "../ui/notice";
 import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
+import { trackSaves } from "./pending_save";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { webVersionHash } from "./web";
 
@@ -160,13 +161,18 @@ export async function renderEditor(
   // and the conflict banner, so the top of the editor reads state, then event, then
   // decision. Empty, it has no height; notice() renders into it.
 
+  // The web version's address (SPEC §5), whole, so it opens as its own page. It differs
+  // from this one only in the hash, which is what keeps a save safe when the link opens in
+  // place (below).
+  const webVersionUrl = `${location.origin}${location.pathname}${webVersionHash(id)}`;
+
   setHtml(
     root,
     html`
     <div class="editor-head">
       <a href="#/drafts" class="back">← Drafts</a>
       <div class="editor-head-right">
-        <button type="button" class="ghost" id="webBtn" aria-label="Web version (opens in a new tab)">Web version ↗</button>
+        <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
     ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
@@ -555,6 +561,7 @@ export async function renderEditor(
   function saveDraft(silent: boolean): Promise<SaveResult> {
     const next = saveChain.catch(() => {}).then(() => doSaveDraft(silent));
     saveChain = next;
+    trackSaves(saveChain);
     return next;
   }
   async function doSaveDraft(silent: boolean): Promise<SaveResult> {
@@ -634,20 +641,35 @@ export async function renderEditor(
   }
 
   // Leaving the editor saves in the background instead of prompting. Capture the
-  // payload NOW (the mount tears down the DOM right after) and send it through
-  // the chain so it can't overlap an in-flight save. Deliberately not bound to the
+  // fields NOW (the mount tears down the DOM right after) and send them through
+  // the chain so they can't overlap an in-flight save. Deliberately not bound to the
   // signal: a save the reader started must land whether or not they stayed to watch.
+  // A save already in flight (a blur's, the Web version link's) may carry these very
+  // edits, so the flush asks again once it lands, and reads the base then: a base taken
+  // now would be older than that save, and the server would refuse our own edits as
+  // another writer's.
   const leaveFlush = () => {
     mine.cancel();
     if (locked || !dirty.dirty) {
       return;
     }
-    const body: PostEditBody = { ...collect(), base_revision: revisions.base };
-    dirty.markSaved();
+    const fields = collect();
+    const sent = JSON.stringify(fields);
     editorDirty = false;
     saveChain = saveChain
       .catch(() => {})
-      .then(() => api<PostSavedResponse>(`/api/posts/${id}`, { method: "PUT", json: body }))
+      .then(async () => {
+        if (!dirty.dirty) {
+          return;
+        }
+        const body: PostEditBody = { ...fields, base_revision: revisions.base };
+        const { post: u } = await api<PostSavedResponse>(`/api/posts/${id}`, {
+          method: "PUT",
+          json: body,
+        });
+        revisions.saved(u.current_revision);
+        dirty.markSaved(sent);
+      })
       .catch((e) =>
         toast(
           e instanceof ApiError && e.status === 409
@@ -655,6 +677,7 @@ export async function renderEditor(
             : `Couldn't save your changes — ${message(e)}`,
         ),
       );
+    trackSaves(saveChain);
   };
   const handle: ViewHandle = {
     dirty: () => editorDirty,
@@ -769,33 +792,18 @@ export async function renderEditor(
   }
 
   // --- web version: the post as its public page will show it (SPEC §5) ---
-  // The tab opens in the click itself, then goes to the page once the draft is saved: a
-  // browser that blocks a tab opened after an await (Safari, iOS) would otherwise drop it
-  // without a word.
-  const webBtn = $<HTMLButtonElement>("#webBtn");
-  webBtn.onclick = () => {
-    const tab = window.open("", "_blank");
-    if (!tab) {
-      toast(
-        "Your browser blocked the new tab. Allow pop-ups for this site to see the web version.",
-      );
-      return;
+  // A plain link, so no browser blocks it as a pop-up. The click saves pending edits and
+  // lets the link go: a new tab loads the editor and signs in before it reads the page, so
+  // the save is ahead of it; opened in place, the page waits for it (pending_save.ts). A
+  // refused or failed save shows here as any save does.
+  // Where the link opens in place (a browser pane with no tabs), it is a same-document hash
+  // change, so nothing unloads to cut the save off, and the leave flush that follows sees
+  // it in flight and doesn't send it twice.
+  $<HTMLAnchorElement>("#webLink").addEventListener("click", () => {
+    if (!locked) {
+      saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`));
     }
-    return busy(webBtn, "Opening…", async () => {
-      try {
-        // A refused save (another writer's revision, or the out-of-date banner already up)
-        // would show their copy, not this one: the banner is the next step instead.
-        if (!locked && (await saveDraft(true)) === "refused") {
-          tab.close();
-          return;
-        }
-        tab.location.href = `${location.origin}${location.pathname}${webVersionHash(id)}`;
-      } catch (e) {
-        tab.close();
-        toast(message(e));
-      }
-    });
-  };
+  });
 
   if (locked && scheduled) {
     // The send as last reported: this page's read of it (or, until that succeeds, what the

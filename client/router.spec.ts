@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewHandle } from "./lifecycle";
-import { installRouter } from "./router";
+import { adoptLinkedRoute, installRouter, route } from "./router";
 import {
   $,
   type FakeApi,
@@ -125,5 +125,41 @@ describe("router", () => {
     expect(document.querySelector(".web-frame")).not.toBeNull();
     await at("#/web/post/%E0");
     expect(document.body.classList.contains("web-mode")).toBe(false);
+  });
+
+  it("adopts the route a link from an email names in its query, adding no history entry", async () => {
+    history.replaceState(null, "", "/dashboard/?to=/drafts");
+    const entries = history.length;
+    adoptLinkedRoute();
+    expect(location.pathname).toBe("/dashboard/");
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("#/drafts");
+    expect(history.length).toBe(entries);
+    // The first route() after it, as boot runs them, mounts the linked page.
+    await route();
+    await settle();
+    expect($("#app h1").textContent).toBe("Drafts");
+    expect(fake.unhandled).toEqual([]);
+    history.replaceState(null, "", "/dashboard/");
+  });
+
+  it("leaves a normal load alone, and a query that names no route where it is", () => {
+    history.replaceState(null, "", "/dashboard/#/subscribers");
+    adoptLinkedRoute();
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("#/subscribers");
+    history.replaceState(null, "", "/dashboard/?to=//elsewhere#/drafts");
+    adoptLinkedRoute();
+    expect(location.search).toBe("?to=//elsewhere");
+    expect(location.hash).toBe("#/drafts");
+    history.replaceState(null, "", "/dashboard/");
+  });
+
+  it("takes a linked route over a hash beside it", () => {
+    history.replaceState(null, "", "/dashboard/?to=/settings#/drafts");
+    adoptLinkedRoute();
+    expect(location.search).toBe("");
+    expect(location.hash).toBe("#/settings");
+    history.replaceState(null, "", "/dashboard/");
   });
 });

@@ -712,115 +712,110 @@ describe("editor view", () => {
     expect(body().hidden).toBe(true);
   });
 
-  it("opens the web version in a tab opened by the click itself, then saved and pointed at the page", async () => {
+  it("links to the web version in a new tab, and a click saves pending edits without holding the link", async () => {
     const server = draftServer();
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
     ]);
-    const tab = { location: { href: "" }, close: vi.fn() };
-    const opened = vi.fn(() => tab);
-    vi.stubGlobal("open", opened);
+    const link = $<HTMLAnchorElement>("#webLink");
+    expect(link.tagName).toBe("A");
+    expect(link.textContent).toBe("Web version ↗");
+    expect(link.classList.contains("ghost")).toBe(true);
+    expect(link.getAttribute("href")).toBe(`${location.origin}${location.pathname}#/web/post/p1`);
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener");
+    expect(link.getAttribute("aria-label")).toBe("Web version (opens in a new tab)");
     typeInto(body(), "changed");
-    const button = $<HTMLButtonElement>("#webBtn");
-    expect(button.textContent).toBe("Web version ↗");
-    expect(button.classList.contains("ghost")).toBe(true);
-    expect(button.getAttribute("aria-label")).toContain("opens in a new tab");
-    button.click();
-    // The tab opens before any await, so a browser that blocks a late one keeps it.
-    expect(opened).toHaveBeenCalledWith("", "_blank");
-    expect(tab.location.href).toBe("");
+    // The link is left to do what a link does; the test stops it there, since the document
+    // has nowhere to go.
+    let prevented: boolean | null = null;
+    window.addEventListener(
+      "click",
+      (e) => {
+        prevented = e.defaultPrevented;
+        e.preventDefault();
+      },
+      { once: true },
+    );
+    link.click();
+    expect(prevented).toBe(false);
     await vi.advanceTimersByTimeAsync(0);
-    expect(puts()).toHaveLength(1); // the draft is saved before the tab goes to the page
-    expect(tab.location.href).toBe(`${location.origin}${location.pathname}#/web/post/p1`);
-    expect(opened).toHaveBeenCalledTimes(1);
-    expect(tab.close).not.toHaveBeenCalled();
-    vi.unstubAllGlobals();
+    expect(puts()).toHaveLength(1);
+    expect(puts()[0]?.json()).toMatchObject({ markdown: "changed", base_revision: "r1" });
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(fake.unhandled).toEqual([]);
   });
 
-  it("closes the web version's tab when the save before it is refused, and the out-of-date banner is the next step", async () => {
+  it("saves once when the web version opens in place, while its save is in flight", async () => {
     const server = draftServer();
+    let release = () => {};
     await open([
       { path: "/api/posts/p1", reply: server.get },
       {
         method: "PUT",
         path: "/api/posts/p1",
-        // Another writer saved first, so the tab would have shown their copy.
+        // The click's save is held open, so the leave below comes while it is in flight.
         reply: (req) =>
-          server.put(req, () =>
-            jsonResponse(
-              {
-                error: "stale_revision",
-                message: "changed",
-                current_revision: server.elsewhere("service"),
-                author: "service",
-              },
-              409,
-            ),
+          server.put(
+            req,
+            (r) =>
+              new Promise((resolve) => {
+                release = () => resolve(server.apply(r));
+              }),
           ),
       },
     ]);
-    vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
-    const tab = { location: { href: "" }, close: vi.fn() };
-    vi.stubGlobal(
-      "open",
-      vi.fn(() => tab),
-    );
-    typeInto(body(), "mine, not theirs");
-    $("#webBtn").click();
+    window.addEventListener("click", (e) => e.preventDefault(), { once: true });
+    typeInto(body(), "changed");
+    $("#webLink").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(tab.close).toHaveBeenCalledTimes(1);
-    expect(tab.location.href).toBe("");
-    expect($("#freshnessBanner").hidden).toBe(false);
-    // With the banner up, a second click is refused the same way, before any request.
-    tab.close.mockClear();
-    $("#webBtn").click();
+    expect(puts()).toHaveLength(1);
+    // In place, the link is a hash change: the router asks the editor to leave, and the
+    // leave waits for the click's save, which already carries the edit.
+    expect(handle().beforeLeave()).toBe("leave");
+    release();
     await vi.advanceTimersByTimeAsync(0);
-    expect(tab.close).toHaveBeenCalledTimes(1);
-    expect(tab.location.href).toBe("");
-    vi.unstubAllGlobals();
+    expect(puts()).toHaveLength(1);
+    expect(puts()[0]?.json()).toMatchObject({ markdown: "changed", base_revision: "r1" });
+    expect($("#toasts").textContent).toBe("");
   });
 
-  it("closes the web version's tab and says why when the save before it fails", async () => {
+  it("sends a leave's edits after a save in flight, on the revision that save made", async () => {
     const server = draftServer();
+    let release = () => {};
+    let held = false;
     await open([
       { path: "/api/posts/p1", reply: server.get },
       {
         method: "PUT",
         path: "/api/posts/p1",
-        reply: () => jsonResponse({ error: "internal", message: "the database is away" }, 500),
+        reply: (req) =>
+          server.put(req, (r) => {
+            if (held) {
+              return undefined;
+            }
+            held = true;
+            return new Promise((resolve) => {
+              release = () => resolve(server.apply(r));
+            });
+          }),
       },
     ]);
-    const tab = { location: { href: "" }, close: vi.fn() };
-    vi.stubGlobal(
-      "open",
-      vi.fn(() => tab),
-    );
-    typeInto(body(), "changed");
-    $("#webBtn").click();
+    typeInto(body(), "first");
+    $<HTMLInputElement>("#f-subject").dispatchEvent(new Event("blur")); // a blur's save
     await vi.advanceTimersByTimeAsync(0);
-    expect(tab.close).toHaveBeenCalledTimes(1);
-    expect(tab.location.href).toBe("");
-    expect($("#toasts").textContent).toMatch(/database is away/);
-    vi.unstubAllGlobals();
-  });
-
-  it("says so when the browser blocks the web version's tab, and saves nothing for it", async () => {
-    const server = draftServer();
-    await open([
-      { path: "/api/posts/p1", reply: server.get },
-      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    typeInto(body(), "second"); // typed while it is in flight
+    expect(handle().beforeLeave()).toBe("leave");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+    // A base taken at the leave would be r1, and the server would refuse our own edit as
+    // another writer's.
+    expect(puts().map((c) => c.json())).toMatchObject([
+      { markdown: "first", base_revision: "r1" },
+      { markdown: "second", base_revision: "r2" },
     ]);
-    vi.stubGlobal(
-      "open",
-      vi.fn(() => null),
-    );
-    typeInto(body(), "changed");
-    $("#webBtn").click();
-    await vi.advanceTimersByTimeAsync(0);
-    expect($("#toasts").textContent).toMatch(/blocked the new tab/);
-    expect(puts()).toHaveLength(0);
-    vi.unstubAllGlobals();
+    expect($("#toasts").textContent).toBe("");
   });
 
   it("sends a test to each address, pre-filled from the settings defaults, and shows the warnings", async () => {

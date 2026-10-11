@@ -2,6 +2,7 @@
 // previous one down; the leave guards live here, over the mounted view's handle, wired by
 // installRouter() when boot calls it.
 
+import { dashboardRouteFromSearch } from "../shared/dashboard_link";
 import { renderDashboard } from "./dashboard/dashboard";
 import { mount, mounted } from "./lifecycle";
 import { renderDrafts } from "./posts/drafts";
@@ -80,6 +81,23 @@ export function route(): Promise<void> {
   }
   return mount(renderDashboard);
 }
+
+/** Adopt the route a link from an email names in its query (`/dashboard/?to=/sent/<id>`,
+ *  shared/dashboard_link.ts), which survives an Access login where a hash would not: it
+ *  becomes the hash, the query goes, and no history entry is added. Boot calls this once,
+ *  signed in, before the first route(). */
+export function adoptLinkedRoute(): void {
+  const linked = dashboardRouteFromSearch(location.search);
+  if (linked) {
+    // Edit this page's own URL, so the result is same-origin whatever its path; the link's
+    // route replaces any hash, since it is the page the link was sent to open.
+    const url = new URL(location.href);
+    url.search = "";
+    url.hash = linked;
+    history.replaceState(null, "", url);
+  }
+}
+
 /** Wire navigation and the mounted view's guards: hashchange, the unload prompt, and ⌘S. Boot calls this once. */
 export function installRouter(): void {
   // hashchange fires after the hash has already moved, so the mounted view is asked
