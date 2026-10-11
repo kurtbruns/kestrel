@@ -1,10 +1,8 @@
-import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { type AppEnv, type Config, ConfigError, getConfig } from "../src/env";
-import worker from "../src/index";
 import { getProvider } from "../src/providers";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { ResendProvider } from "../src/providers/resend";
@@ -19,19 +17,16 @@ import type { EmailProvider, RenderedEmail } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
 import { has } from "./support/conditions";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
-import { logged } from "./support/log";
+import { resetDatabase } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
+import { allowErrorLogs, logged } from "./support/log";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // The local send simulation behind the provider seam (SPEC §10): list sends only, a profile
 // per provider with the adapter's own traits, receipts through the REAL ingest
 // (applyDeliveryEvents), and the plain fake untouched when it is off.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
 
 const HOUR = 60 * 60 * 1000;
 const rendered: RenderedEmail = { subject: "Subj", html: "<p>hi</p>", text: "hi" };
@@ -76,42 +71,26 @@ async function seedAccepted(sendId: string, n: number, ageMs: number): Promise<v
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   resetSimulation();
 });
 
-/** This suite's env with some vars overridden, as a dev server's own `.dev.vars` would set them. */
-const withVars = (vars: Record<string, string>): AppEnv =>
-  ({ ...env, ...vars }) as unknown as AppEnv;
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+});
 
-/** A request to the Worker under `vars`, waiting for its background work. */
-async function fetchWith(
-  vars: Record<string, string>,
-  path: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const ctx = createExecutionContext();
-  const res = await worker.fetch(
-    new Request(`${base}${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
-    withVars(vars),
-    ctx,
-  );
-  await waitOnExecutionContext(ctx);
-  return res;
-}
+/** `n` recipients of a batch, `${tag}0@birds.example` up, each with its own link. */
+const recipients = (n: number, tag = "r") =>
+  Array.from({ length: n }, (_, i) => ({
+    email: `${tag}${i}@birds.example`,
+    unsubscribeUrl: `${base}/unsubscribe?token=${tag}${i}`,
+  }));
 
-/** `n` confirmed subscribers, `reader0@birds.example` up. */
-async function seedConfirmed(n: number): Promise<string[]> {
+/** `n` confirmed readers, `reader0@birds.example` up, with index-based ids and tokens
+ *  (`sub-0`, `uns-0`) that this spec's links name. */
+async function seedReaders(n: number): Promise<string[]> {
   const now = Date.now();
   const emails = Array.from({ length: n }, (_, i) => `reader${i}@birds.example`);
   await env.DB.batch(
@@ -124,8 +103,8 @@ async function seedConfirmed(n: number): Promise<string[]> {
   return emails;
 }
 
-/** A post frozen onto a send that is already due, as the sweep finds one at its fire time. */
-async function dueSend(e: AppEnv, subject: string): Promise<string> {
+/** A due send frozen under `e`'s config (its own vars), and its id. */
+async function dueSendUnder(e: AppEnv, subject: string): Promise<string> {
   const { post } = await posts.createPost(
     e.DB,
     { subject, markdown: `# ${subject}\n\nbody` },
@@ -160,11 +139,9 @@ describe("SIMULATE_SENDS", () => {
     for (const value of ["sendgrid", "ses:loud", "ses:none:x", "resend:", ":none"]) {
       expect(() => simulation(value)).toThrow(ConfigError);
     }
-    try {
-      simulation("sesv2");
-    } catch (err) {
-      expect((err as ConfigError).variable).toBe("SIMULATE_SENDS");
-    }
+    expect(() => simulation("sesv2")).toThrow(
+      expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_SENDS" }),
+    );
   });
 
   it("is never on outside local dev, whatever it says", () => {
@@ -234,28 +211,16 @@ describe("a profile per provider, with the real adapter's traits", () => {
     // included. An adapter answer the SES profile can't read fails setting up that profile
     // (a dev server simulating SES), where built at load it would fail a deployed Worker's
     // startup.
-    const classify = vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
-    try {
-      const config = getConfig(env);
-      expect(
-        () => new SimProvider({ profile: "resend", faults: "realistic" }, config),
-      ).not.toThrow();
-      expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
-        "expected a halting error response to exist",
-      );
-    } finally {
-      classify.mockRestore();
-    }
+    vi.spyOn(sesAdapter, "classifySesError").mockReturnValue(null);
+    const config = getConfig(env);
+    expect(() => new SimProvider({ profile: "resend", faults: "realistic" }, config)).not.toThrow();
+    expect(() => new SimProvider({ profile: "ses", faults: "realistic" }, config)).toThrow(
+      "expected a halting error response to exist",
+    );
   });
 });
 
 describe("list sends only", () => {
-  const recipients = (n: number, tag = "r") =>
-    Array.from({ length: n }, (_, i) => ({
-      email: `${tag}${i}@birds.example`,
-      unsubscribeUrl: `https://kestrel.test/unsubscribe?token=${tag}${i}`,
-    }));
-
   it("hands tests, confirmations, and notifications to the outbox at once, never refused", async () => {
     // The generic profile refuses about one recipient in 25 once; none of these may be.
     const sim = new SimProvider({ profile: "generic", faults: "realistic" }, getConfig(env));
@@ -266,7 +231,10 @@ describe("list sends only", () => {
         purpose,
         idempotencyKeyPrefix: `${purpose}-1`,
       });
-      expect(Date.now() - started).toBeLessThan(500); // not paced like a list batch
+      // Not paced like a list batch, which spends about 20 ms a recipient here (two seconds
+      // for these hundred; see the generic profile's own spec): the bound leaves a slow
+      // runner room while still telling the two apart.
+      expect(Date.now() - started).toBeLessThan(1000);
       expect(answer.kind).toBe("answered");
       const results = answer.kind === "answered" ? answer.results : [];
       expect(results.every((r) => r.accepted)).toBe(true);
@@ -322,15 +290,10 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   // still take their real (short) time.
   beforeEach(() => {
     vi.useFakeTimers({ toFake: ["Date"] });
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(console, "log").mockImplementation(() => {});
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.restoreAllMocks();
   });
 
   it("halts on the daily quota, resumes at its retry, wedges on a lost request, and Resolve completes it", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     // Workers Paid's budget, so a tick reaches every recipient; the default models Free. More
     // readers than one group, so the requests after each group's first go out together and
     // the resumed send takes more than one tick.
@@ -343,15 +306,16 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
     vi.spyOn(crypto, "randomUUID").mockImplementation(
       () => `5e5e5e5e-0000-4000-8000-${(++ids).toString(16).padStart(12, "0")}` as const,
     );
+    // Read back, not silenced: the log's story is asserted at the end.
     const printed = [
-      vi.spyOn(console, "log").mockImplementation(() => {}),
-      vi.spyOn(console, "warn").mockImplementation(() => {}),
-      vi.spyOn(console, "error").mockImplementation(() => {}),
+      vi.spyOn(console, "log"),
+      vi.spyOn(console, "warn"),
+      vi.spyOn(console, "error"),
     ];
     const vars = { SIMULATE_SENDS: "ses", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
-    const emails = await seedConfirmed(30);
-    const sendId = await dueSend(e, "Kestrels");
+    const emails = await seedReaders(30);
+    const sendId = await dueSendUnder(e, "Kestrels");
     const progress = async () =>
       (await readJson(await fetchWith(vars, `/api/sends/${sendId}`, { headers: AUTH }))).send;
     const addresses = async (status: string) =>
@@ -462,8 +426,8 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
   it("runs clean with no faults: one tick, no halt, every receipt a delivery", async () => {
     const vars = { SIMULATE_SENDS: "ses:none", SUBREQUEST_BUDGET: "10000" };
     const e = withVars(vars);
-    await seedConfirmed(12);
-    const sendId = await dueSend(e, "Merlins");
+    await seedReaders(12);
+    const sendId = await dueSendUnder(e, "Merlins");
     await sweep(e);
     let row = (await sends.getSend(env.DB, sendId))!;
     expect(row.status).toBe("sent");
@@ -487,7 +451,7 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     simulation: { profile: "generic", faults: "realistic" },
   });
 
-  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (I1, SPEC §10)", async () => {
+  it("fabricates due delivered/bounced/complained events and suppresses only the hard-bad addresses (SPEC §10)", async () => {
     await seedAccepted("s-drain", 300, 2 * HOUR); // long-past accepts → all lags elapsed (< the drain cap)
 
     const applied = await drainSimulatedWebhooks(env, simConfig());
@@ -561,6 +525,8 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
     // Accepts aged into the BOUNCE window: past the delivered (~≤12s) and bounce (~≤30s)
     // lags, but short of the complaint (~≥45s) lag. So on this drain every delivery and
     // bounce is due, and no complaint is yet — delivered/bounces genuinely precede complaints.
+    // Date is faked so that window holds however long seeding 300 rows takes.
+    vi.useFakeTimers({ toFake: ["Date"] });
     await seedAccepted("s-order", 300, 35_000);
     await drainSimulatedWebhooks(env, simConfig());
 
@@ -586,6 +552,8 @@ describe("drainSimulatedWebhooks (delayed synthetic receipts through the real in
   });
 
   it("leaves not-yet-due recipients unconfirmed (delivery lags acceptance)", async () => {
+    // Date is faked so no lag elapses while the rows are seeded, however slow the run.
+    vi.useFakeTimers({ toFake: ["Date"] });
     await seedAccepted("s-fresh", 20, 0); // just accepted → lag not elapsed
     const applied = await drainSimulatedWebhooks(env, simConfig());
     expect(applied).toBe(0);
@@ -600,12 +568,8 @@ describe("the generic profile", () => {
     expect(provider.maxBatch).toBe(8);
     expect(provider.idempotentRetry).toBe(true);
 
-    const recipients = Array.from({ length: 40 }, (_, i) => ({
-      email: `r${i}@example.com`,
-      unsubscribeUrl: `https://x/u?token=t${i}`,
-    }));
     const started = Date.now();
-    const answer = await provider.sendBatch(rendered, recipients, {
+    const answer = await provider.sendBatch(rendered, recipients(40), {
       purpose: "list",
       idempotencyKeyPrefix: "sim-batch",
     });

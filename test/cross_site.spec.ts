@@ -8,18 +8,7 @@ import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { createRouter } from "../src/app";
 import { type AppEnv, getConfig } from "../src/env";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
+import { AUTH, base, PNG_1x1, readJson } from "./support/http";
 
 function post(path: string, init: { headers?: Record<string, string>; body?: BodyInit }) {
   return SELF.fetch(`${base}${path}`, {
@@ -237,6 +226,9 @@ describe("public and webhook routes are outside these checks", () => {
       headers: { "content-type": "text/plain", "sec-fetch-site": "cross-site" },
       body: "{}",
     });
-    expect([403, 415]).not.toContain(res.status);
+    // The suite runs on the fake transport, whose adapter acknowledges every webhook with a
+    // plain "ok": that answer, rather than a refusal, shows the request reached it.
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
   });
 });

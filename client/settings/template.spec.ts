@@ -10,6 +10,7 @@ import {
   jsonResponse,
   mount,
   resetShell,
+  settingsResponse,
   typeInto,
 } from "../test/support";
 import {
@@ -21,44 +22,11 @@ import {
 
 const TEMPLATE = `<style>.email{color:#111}</style>\n<div class="email">{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
-const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  settings: {
-    testRecipients: ["me@b.c", "you@b.c"],
-    publication: { name: "Birds Weekly", tagline: "", address: "", logoUrl: "" },
-    emailTemplate: TEMPLATE,
-    confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
-    confirmationEmailDefault: { subject: "s", body: "b", buttonLabel: "c", reassurance: "" },
-    notifications: { to: "" },
-  },
-  deployment: {
-    provider: "fake",
-    fromAddress: "Birds <hello@birds.example>",
-    sendingDomain: "birds.example",
-    appOrigin: "https://app.birds.example",
-    archiveOrigin: "https://app.birds.example",
-    archiveBasePath: "/archive",
-    mediaPublicBase: "https://app.birds.example/media",
-    awsRegion: "",
-    accessConfigured: false,
-    authMode: "dev",
-    notifyChannel: "fake",
-    notifyFrom: "Birds <hello@birds.example>",
-    minLeadMs: 5 * 60 * 1000,
-    simulation: null,
-    build: {
-      version: "",
-      sha: "dev",
-      tag: "",
-      buildTime: "",
-      repoUrl: "",
-      commitUrl: "",
-      tagUrl: "",
-    },
-  },
-  notificationStatus: { lastSent: null, lastFailure: null },
-  inUse: { sends: [], retry_after: null, identityFields: ["name"] },
-  ...over,
-});
+const response = (over: Partial<Omit<SettingsResponse, "settings">> = {}): SettingsResponse =>
+  settingsResponse({
+    settings: { testRecipients: ["me@b.c", "you@b.c"], emailTemplate: TEMPLATE },
+    ...over,
+  });
 
 const bar = () => $("#savebar");
 const editor = () => $<HTMLTextAreaElement>("#tplEditor");
@@ -102,11 +70,9 @@ describe("template view", () => {
     localStorage.clear();
     vi.useFakeTimers();
     location.hash = "#/template";
-    appState.appConfig = null;
   });
   afterEach(() => {
     fake?.restore();
-    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -222,6 +188,61 @@ describe("template view", () => {
     expect($("#toasts").textContent).toMatch(/Template saved and applied to 1 scheduled email/);
   });
 
+  it("keeps the edit and the bar when the publisher backs out of applying it", async () => {
+    const sends = [
+      { id: "x1", post_id: "p1", subject: "Gulls", fire_at: 1_800_000_000_000, remade_at: null },
+    ];
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ inUse: { sends, retry_after: null, identityFields: [] } }),
+      },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () => jsonResponse({ error: "remake_required", message: "ack", sends }, 409),
+      },
+    ]);
+    typeInto(editor(), `${TEMPLATE}<!-- v2 -->`);
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#rmCancel").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.filter((c) => c.method === "PUT")).toHaveLength(1);
+    expect(editor().value).toBe(`${TEMPLATE}<!-- v2 -->`);
+    expect(bar().classList.contains("show")).toBe(true);
+    expect(bar().classList.contains("is-error")).toBe(false); // declined, not refused
+    expect($("#toasts").textContent).toBe("");
+  });
+
+  it("shows a send about to fire as the bar's blocking error, keeping the edit", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () =>
+          jsonResponse(
+            {
+              error: "remake_too_close",
+              message: `"Gulls" sends in 3 minutes; try again once it has sent`,
+              retry_after: 1,
+              sends: [],
+            },
+            409,
+          ),
+      },
+    ]);
+    typeInto(editor(), `${TEMPLATE}<!-- v2 -->`);
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).toBeNull(); // nothing to acknowledge
+    expect(bar().classList.contains("is-error")).toBe(true);
+    expect($(".savebar-msg").textContent).toMatch(/sends in 3 minutes/);
+    expect(editor().value).toBe(`${TEMPLATE}<!-- v2 -->`);
+    expect($("#toasts").textContent).toBe(""); // the bar says it; no toast over it
+  });
+
   it("loads an example from the menu, closes it on an outside click, and discards back to the baseline", async () => {
     await open();
     $("#tplExamplesBtn").click();
@@ -296,9 +317,14 @@ describe("template view", () => {
 
   it("proofs both inbox widths", async () => {
     await open();
+    const pressed = () => $$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"));
+    expect(pressed()).toEqual(["true", "false"]);
     $(".wtog-btn[data-w='375']").click();
     expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("375px");
-    expect($$(".wtog-btn").map((b) => b.getAttribute("aria-pressed"))).toEqual(["false", "true"]);
+    expect(pressed()).toEqual(["false", "true"]);
+    $(".wtog-btn[data-w='640']").click();
+    expect($<HTMLIFrameElement>("#tplPreview").style.maxWidth).toBe("640px");
+    expect(pressed()).toEqual(["true", "false"]);
   });
 });
 

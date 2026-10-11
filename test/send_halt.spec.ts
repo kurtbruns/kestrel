@@ -1,22 +1,22 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
-import { HALT_BACKOFF_MS, MAX_DELIVERY_ATTEMPTS } from "../src/lib/time";
+import { HALT_BACKOFF_MS, MAX_DELIVERY_ATTEMPTS, STUCK_THRESHOLD_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { ResendProvider } from "../src/providers/resend";
 import { SesProvider } from "../src/providers/ses";
 import type { SendBatchResult } from "../src/providers/types";
 import { Budget } from "../src/send/budget";
 import { runSend } from "../src/send/loop";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { nextRetry, toNextTick } from "./support/clock";
+import { nextRetry } from "./support/clock";
 import { has } from "./support/conditions";
 import { guardD1 } from "./support/d1_guard";
-import { ResendLikeProvider } from "./support/resend_like";
+import { addresses, dueSend, resetDatabase, seedConfirmed, tick, ticks } from "./support/fixtures";
+import { allowErrorLogs } from "./support/log";
+import { ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
 import { viewOf } from "./support/view";
 
 // A failure that is the provider's or the account's halts the send's run, not its
@@ -26,46 +26,15 @@ import { viewOf } from "./support/view";
 /** More sweep ticks than the per-recipient cap, so a halt that spent attempts would show. */
 const TICKS = MAX_DELIVERY_ATTEMPTS + 2;
 
-const addresses = (n: number, tag = "h") =>
-  Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function dueSend() {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, Date.now() - 1000);
-}
-
 /** The test env with its D1 held to the 100-bind cap. */
 function capped(): AppEnv {
   return { ...env, DB: guardD1(env.DB).db } as AppEnv;
-}
-
-/** One sweep tick, on the next minute or the next halt retry, whichever is later: so each
- *  tick here is one retry of a halted send. */
-async function tick(e: AppEnv = capped()): Promise<void> {
-  await toNextTick(env.DB);
-  await sweep(e);
 }
 
 /** One sweep tick at the cron's own pace: the clock a minute on, never further. */
 async function minute(e: AppEnv = capped()): Promise<void> {
   vi.setSystemTime(Date.now() + 60_000);
   await sweep(e);
-}
-
-async function ticks(n: number, e: AppEnv = capped()): Promise<void> {
-  for (let i = 0; i < n; i++) {
-    await tick(e);
-  }
 }
 
 async function untilSent(sendId: string, max = 30): Promise<void> {
@@ -99,22 +68,12 @@ async function expectHeld(sendId: string, audience: number) {
 let resend: ResendLikeProvider;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   // Only Date is faked: the backoff is read off the clock, and D1 and the provider stubs
   // still resolve on their own.
   vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
-  vi.spyOn(console, "error").mockImplementation(() => {});
 });
 
 afterEach(() => {
@@ -124,12 +83,13 @@ afterEach(() => {
 
 describe("a provider outage", () => {
   it("a whole-batch 429 or 5xx keeps everyone pending, attempts unspent, across many ticks", async () => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
 
     resend.rateLimit = TICKS;
-    await ticks(TICKS);
+    await ticks(TICKS, capped());
 
     const held = await expectHeld(send.id, 250);
     expect(held.halt_reason).toBe("unavailable");
@@ -143,12 +103,13 @@ describe("a provider outage", () => {
   });
 
   it("a request that throws keeps everyone pending, attempts unspent, across many ticks", async () => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
 
     resend.outage = TICKS;
-    await ticks(TICKS);
+    await ticks(TICKS, capped());
 
     const held = await expectHeld(send.id, 250);
     expect(held.halt_reason).toBe("unavailable");
@@ -160,15 +121,16 @@ describe("a provider outage", () => {
   });
 
   it("re-sends a batch accepted before the outage under its key, mailing no one twice", async () => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(150);
     await seedConfirmed(emails);
     const send = await dueSend();
 
     resend.loseAnswers = 1; // the first batch is accepted, its answer lost
-    await tick();
+    await tick(capped());
     resend.outage = 2;
     resend.rateLimit = TICKS;
-    await ticks(TICKS + 2);
+    await ticks(TICKS + 2, capped());
 
     await untilSent(send.id);
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 150 });
@@ -179,7 +141,7 @@ describe("a provider outage", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.rateLimit = 2;
-    await ticks(2);
+    await ticks(2, capped());
 
     const prog = viewOf((await sends.getSend(env.DB, send.id))!, "resend", false, Date.now());
     expect(prog.phase).toBe("backing-off");
@@ -189,17 +151,29 @@ describe("a provider outage", () => {
       false,
       false,
     ]);
+
+    // Still quiet at the threshold itself, and raised as stuck just past it, backing off all
+    // the while.
+    const row = (await sends.getSend(env.DB, send.id))!;
+    const threshold = row.started_at! + STUCK_THRESHOLD_MS;
+    const at = (now: number) => viewOf(row, "resend", false, now);
+    expect([at(threshold).phase, has(at(threshold), "stuck")]).toEqual(["backing-off", false]);
+    expect([at(threshold + 1).phase, has(at(threshold + 1), "stuck")]).toEqual([
+      "backing-off",
+      true,
+    ]);
   });
 });
 
 describe("the provider refusing the account", () => {
   it("halts without consuming recipients, reports one condition, and resumes once fixed", async () => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
 
     resend.refuse = "resend batch 401: API key is invalid";
-    await ticks(TICKS);
+    await ticks(TICKS, capped());
 
     const held = await expectHeld(send.id, 250);
     expect(held.halt_reason).toBe("account");
@@ -222,11 +196,11 @@ describe("the provider refusing the account", () => {
     await seedConfirmed(addresses(450)); // more than one free-plan tick delivers
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await tick();
+    await tick(capped());
     expect((await sends.getSend(env.DB, send.id))!.halt_reason).toBe("account");
 
     resend.refuse = null;
-    await tick();
+    await tick(capped());
     const going = (await sends.getSend(env.DB, send.id))!;
     expect(going.status).toBe("sending");
     expect(going.c_accepted).toBeGreaterThan(0);
@@ -238,17 +212,17 @@ describe("the provider refusing the account", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.refuse = "resend batch 403: API key is not active";
-    await tick();
+    await tick(capped());
     const first = (await sends.getSend(env.DB, send.id))!.halted_at!;
     await env.DB.prepare("UPDATE sends SET halted_at = halted_at - 60000 WHERE id = ?")
       .bind(send.id)
       .run();
-    await tick();
+    await tick(capped());
     expect((await sends.getSend(env.DB, send.id))!.halted_at).toBe(first - 60_000);
 
     resend.refuse = null;
     resend.rateLimit = 1;
-    await tick();
+    await tick(capped());
     const now = (await sends.getSend(env.DB, send.id))!;
     expect(now.halt_reason).toBe("unavailable");
     expect(now.halted_at).toBeGreaterThanOrEqual(first);
@@ -291,6 +265,7 @@ describe("the halt's backoff", () => {
     ["unavailable", [0, 1, 3, 8, 23, 53, 113, 173]],
     ["account", [0, 5, 20, 50, 110, 170]],
   ] as const)("spaces %s retries out across ticks, consuming no one", async (reason, expected) => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -334,10 +309,10 @@ describe("the halt's backoff", () => {
     await seedConfirmed(addresses(900)); // several free-plan ticks' worth
     const send = await dueSend();
     resend.rateLimit = 4;
-    await ticks(4); // four halts: the next retry would be fifteen minutes out
+    await ticks(4, capped()); // four halts: the next retry would be fifteen minutes out
     expect((await sends.getSend(env.DB, send.id))!.halt_retries).toBe(4);
 
-    await tick(); // answered
+    await tick(capped()); // answered
     const going = (await sends.getSend(env.DB, send.id))!;
     expect(going.status).toBe("sending");
     expect(going.c_accepted).toBeGreaterThan(0);
@@ -355,6 +330,7 @@ describe("the halt's backoff", () => {
   });
 
   it("costs a waiting send no provider request and nothing past the sweep's query", async () => {
+    allowErrorLogs("send.stuck");
     const limit = getConfig(env).subrequestBudget;
     // An idle tick's cost, with nothing to send.
     const idle = guardD1(env.DB);
@@ -404,6 +380,7 @@ describe("the halt's backoff", () => {
   });
 
   it("mails everyone exactly once after the fault clears, at the next scheduled retry", async () => {
+    allowErrorLogs("send.stuck");
     const emails = addresses(250);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -447,11 +424,11 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await tick();
+    await tick(capped());
     expect(await keysOf(send.id)).toEqual([]);
     resend.rateLimit = 1; // a definite 429 on a first attempt, likewise
     resend.refuse = null;
-    await tick();
+    await tick(capped());
     expect(await keysOf(send.id)).toEqual([]);
   });
 
@@ -460,7 +437,7 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await ticks(2);
+    await ticks(2, capped());
     const leaving = emails[1]!;
     await env.DB.prepare("UPDATE subscribers SET status = 'unsubscribed' WHERE email = ?")
       .bind(leaving)
@@ -478,10 +455,10 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.failAfterSending = 1; // a 5xx after the batch went out
-    await tick();
+    await tick(capped());
     expect(await keysOf(send.id)).toHaveLength(1);
     resend.refuse = "resend batch 401: API key is invalid";
-    await ticks(2);
+    await ticks(2, capped());
     expect(await keysOf(send.id)).toHaveLength(1); // the refusal proves nothing about the first try
 
     resend.refuse = null;
@@ -491,13 +468,14 @@ describe("a refused batch and its key", () => {
   });
 
   it("sends a batch of unknown fate to Resolve once the provider has forgotten its key (I4)", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     const emails = addresses(3);
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.loseAnswers = 1; // accepted, the answer lost
-    await tick();
+    await tick(capped());
     resend.refuse = "resend batch 401: API key is invalid";
-    await ticks(2);
+    await ticks(2, capped());
     // A day later the key is fixed, but Resend no longer remembers the batch's key.
     await env.DB.prepare(
       "UPDATE deliveries SET keyed_at = keyed_at - 24 * 60 * 60 * 1000 WHERE send_id = ?",
@@ -506,7 +484,7 @@ describe("a refused batch and its key", () => {
       .run();
     resend.refuse = null;
     const before = resend.requests;
-    await ticks(3);
+    await ticks(3, capped());
 
     expect(resend.requests).toBe(before); // never re-sent under a key it can't dedupe
     expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
@@ -520,14 +498,10 @@ describe("a refused batch and its key", () => {
     await seedConfirmed(emails);
     const send = await dueSend();
     resend.refuse = "resend batch 401: API key is invalid";
-    await ticks(2);
+    await ticks(2, capped());
 
     // The operator moves the deployment to an SES-shaped provider.
-    const ses = new (class extends ResendLikeProvider {
-      override readonly maxBatch: number = 1;
-      override readonly idempotentRetry: boolean = false;
-      override readonly idempotencyWindowMs: number | undefined = undefined;
-    })();
+    const ses = new SesLikeProvider();
     vi.mocked(providers.getProvider).mockReturnValue(ses);
     await untilSent(send.id);
 
@@ -558,12 +532,13 @@ describe("the real adapters, end to end through the loop", () => {
     [401, { name: "missing_api_key", message: "Missing API key in the authorization header." }],
     [403, { name: "validation_error", message: "The send.example.com domain is not verified." }],
   ])("a Resend %i halts the send without consuming anyone, then resumes", async (status, body) => {
+    allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(150));
     const send = await dueSend();
     vi.mocked(providers.getProvider).mockReturnValue(resendAdapter());
 
     const refused = resendAnswers(status, body);
-    await ticks(TICKS);
+    await ticks(TICKS, capped());
     expect(refused).toHaveBeenCalledTimes(TICKS);
     const held = await expectHeld(send.id, 150);
     expect(held.halt_reason).toBe("account");
@@ -583,17 +558,21 @@ describe("the real adapters, end to end through the loop", () => {
     vi.mocked(providers.getProvider).mockReturnValue(resendAdapter());
     resendAnswers(422, { name: "missing_required_field", message: "The `to` field is missing." });
 
-    await tick();
+    await tick(capped());
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ unsent: 3 });
   });
 
+  // The adapter paces its requests to the account's send rate; these specs are about which
+  // requests go out, not how fast, so a high rate keeps them from waiting it out for real.
   const sesEnv = {
     ...env,
     AWS_ACCESS_KEY_ID: "AKIATESTTESTTEST",
     AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
+    SES_MAX_SEND_RATE: "1000",
   } as AppEnv;
+  const sesAdapter = () => new SesProvider(getConfig(sesEnv), sesEnv);
 
   /** SES answers per recipient; `answer` decides each request, and `mailed` counts accepts. */
   function sesAnswers(answer: (to: string) => Response) {
@@ -618,7 +597,7 @@ describe("the real adapters, end to end through the loop", () => {
     const emails = addresses(20);
     await seedConfirmed(emails);
     const send = await dueSend();
-    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(env), sesEnv));
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
 
     let paused = true;
     const { spy, mailed } = sesAnswers(() =>
@@ -648,7 +627,7 @@ describe("the real adapters, end to end through the loop", () => {
     const emails = addresses(4);
     await seedConfirmed(emails);
     const send = await dueSend();
-    vi.mocked(providers.getProvider).mockReturnValue(new SesProvider(getConfig(env), sesEnv));
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
     sesAnswers((to) =>
       to === emails[1]
         ? new Response(JSON.stringify({ __type: "BadRequestException", message: "bad" }), {
@@ -675,9 +654,9 @@ describe("a recipient's own retryable failure", () => {
         return {
           kind: "answered",
           results: [
-            { email: "h000@example.com", accepted: true, providerId: "re_ok" },
+            { email: addresses(2)[0]!, accepted: true, providerId: "re_ok" },
             {
-              email: "h001@example.com",
+              email: addresses(2)[1]!,
               accepted: false,
               retryable: true,
               error: "resend batch: missing id in response",
@@ -692,8 +671,8 @@ describe("a recipient's own retryable failure", () => {
 
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
     const byEmail = Object.fromEntries((await rows(send.id)).map((r) => [r.email, r]));
-    expect(byEmail["h000@example.com"]!.status).toBe("accepted");
-    expect(byEmail["h001@example.com"]).toMatchObject({
+    expect(byEmail[addresses(2)[0]!]!.status).toBe("accepted");
+    expect(byEmail[addresses(2)[1]!]).toMatchObject({
       status: "unsent",
       attempts: MAX_DELIVERY_ATTEMPTS,
     });

@@ -26,35 +26,20 @@ import {
 import { readerIdentity } from "../src/routes/reader";
 import { cancel, freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
-
-const base = "https://kestrel.test";
+import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH } from "./support/http";
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
+/** A post sent to one reader (`a@example.com`) through the sweep, as the archive serves it. */
 async function sendPost(title: string, markdown: string): Promise<posts.PostRow> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('a','a@example.com','confirmed','cfm-a','uns-a',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  const { post } = await posts.createPost(env.DB, { subject: title, markdown }, "test");
-  await freeze(env, getConfig(env), post, Date.now() - 1000);
+  await seedConfirmed("a@example.com");
+  const send = await dueSend({ subject: title, markdown });
   await sweep(env);
-  return post;
+  return (await posts.getPost(env.DB, send.post_id))!;
 }
 
 describe("archive / view-in-browser", () => {
@@ -118,8 +103,16 @@ describe("archive / view-in-browser", () => {
     expect(body).toContain('class="r-dev"');
     expect(body).toContain('href="http://localhost:8787/dashboard/"');
     expect(body).toContain("--k-accent:#3355cc");
-    expect(body.indexOf(".r-dev {")).toBeLessThan(body.indexOf("</head>"));
-    expect(body.indexOf('class="k-mast"')).toBeLessThan(body.indexOf('class="r-dev"'));
+    // Present first, then in order: indexOf's -1 for a missing piece would sort first.
+    const style = body.indexOf(".r-dev {");
+    const headEnd = body.indexOf("</head>");
+    const mast = body.indexOf('class="k-mast"');
+    const pill = body.indexOf('class="r-dev"');
+    for (const at of [style, headEnd, mast, pill]) {
+      expect(at).toBeGreaterThanOrEqual(0);
+    }
+    expect(style).toBeLessThan(headEnd);
+    expect(mast).toBeLessThan(pill);
   });
 
   it("keeps the built-in footer's email-only part in the sent email and leaves it off the archive page", async () => {
@@ -134,7 +127,7 @@ describe("archive / view-in-browser", () => {
       // The sent email carries every part: the recipient's unsubscribe link, view in
       // browser, and the address.
       const [sent] = fakeOutbox();
-      expect(sent!.html).toContain("uns-a");
+      expect(sent!.html).toContain("/unsubscribe?token=uns-a@example.com");
       expect(sent!.html).toContain(">Unsubscribe</a>");
       expect(sent!.html).toContain(">View in browser</a>");
       expect(sent!.html).toContain("12 Marsh Lane");
@@ -168,21 +161,6 @@ describe("archive / view-in-browser", () => {
     } finally {
       await updateSettings(env.DB, { emailTemplate: "" });
     }
-  });
-
-  it("404s for an unknown slug", async () => {
-    const res = await SELF.fetch(`${base}/archive/does-not-exist`);
-    expect(res.status).toBe(404);
-  });
-
-  it("404s for a post that hasn't been sent yet", async () => {
-    const { post } = await posts.createPost(
-      env.DB,
-      { subject: "Draft Only", markdown: "wip" },
-      "test",
-    );
-    const res = await SELF.fetch(`${base}/archive/${post.slug}`);
-    expect(res.status).toBe(404);
   });
 
   // A test email's "view in browser" link lands here before the send starts. The page
@@ -413,9 +391,7 @@ describe("a post is published when its send starts (§5)", () => {
   it("keeps a scheduled or canceled post unpublished", async () => {
     const scheduled = await frozenPost("Still Scheduled");
     const canceled = await frozenPost("Called Off");
-    await env.DB.prepare("UPDATE sends SET status = 'canceled' WHERE id = ?")
-      .bind(canceled.sendId)
-      .run();
+    await cancel(env, canceled.sendId);
     const r = await reader();
     for (const { post } of [scheduled, canceled]) {
       expect((await r.page(post.slug)).status).toBe(404);
@@ -707,11 +683,13 @@ describe("reader routes gate the pill on config.devMode (§11)", () => {
       expect(off, name).not.toContain("/dashboard");
     }
   });
+});
 
-  // A client that sends neither an HTML accept nor a form body gets a word, not a page.
-  // (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
-  // it never shows.)
-  it("a bare unsubscribe POST, asking for no page, answers plain text", async () => {
+// A client that sends neither an HTML accept nor a form body gets a word, not a page.
+// (A mail client's RFC 8058 one-click POST is form-encoded, so it gets the page, which
+// it never shows.)
+describe("an unsubscribe POST asking for no page", () => {
+  it("answers plain text", async () => {
     await ensureSubscriber();
     const res = await SELF.fetch(`${base}/unsubscribe?token=uns-a`, { method: "POST" });
     expect(res.status).toBe(200);
@@ -839,7 +817,7 @@ describe("a test email's unsubscribe link", () => {
     );
     const res = await SELF.fetch(`${base}/api/posts/${post.id}/test`, {
       method: "POST",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      headers: JSON_AUTH,
       body: JSON.stringify({ to: "me@example.com" }),
     });
     expect(res.status).toBe(200);
@@ -878,7 +856,7 @@ describe("a test email's unsubscribe link", () => {
       "test",
     );
     const res = await SELF.fetch(`${base}/api/posts/${post.id}/preview`, {
-      headers: await adminAuth(),
+      headers: AUTH,
     });
     expect(res.status).toBe(200);
     const html = await res.text();

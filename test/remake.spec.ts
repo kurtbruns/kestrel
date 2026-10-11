@@ -5,27 +5,16 @@ import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 // A template or identity change re-makes every scheduled send at once, after the
 // client acknowledges them (SPEC §6, §9). One test per rule.
 
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
-
-/** A valid template whose footer carries `marker`, renders the name and the logo, and
- *  (optionally) the address, so a test can tell which branding a frozen copy is on. */
+/** A valid template whose footer carries `marker`, renders the name and (optionally) the
+ *  address, but not the logo, so a test can tell which branding a frozen copy is on. */
 const tpl = (marker: string, withAddress = false) =>
-  `<div>{{ .Post.Body }}<p class="foot">${marker} · {{ .Publication.Name }} · <img src="{{ .Email.UnsubscribeURL }}">${
+  `<div>{{ .Post.Body }}<p class="foot">${marker} · {{ .Publication.Name }}${
     withAddress ? " · {{ .Publication.Address }}" : ""
   }</p><a href="{{ .Email.UnsubscribeURL }}">Unsubscribe</a></div>`;
 
@@ -92,27 +81,9 @@ async function cancel(id: string): Promise<void> {
   ).toBe(200);
 }
 
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
-
 // The rules are about "every scheduled send", so each test starts from none.
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   expect((await putSettings({ emailTemplate: tpl("v1") })).status).toBe(200);
 });
@@ -374,10 +345,31 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect((await getSend(a.id)).rendered_html).toContain("v1");
   });
 
-  it("a schedule racing a template save never leaves the send on the older template", async () => {
-    // Whichever order lands: either the save is refused (the send is on v1, the
-    // template in use) or the save lands first (the send renders with v2). What can
-    // never happen is a scheduled send on v1 under a saved v2.
+  it("a schedule that lands before a template save holds the save off, and stays on the template in use", async () => {
+    const postId = await makeDraft("First");
+    const send = await schedule(postId);
+    // The client looked before the send existed, so its acknowledgement lists nothing.
+    const save = await putSettings({ emailTemplate: tpl("v2"), remake: [] });
+    expect(save.status).toBe(409);
+    expect((await readJson(save)).sends.map((s: any) => s.id)).toEqual([send.id]);
+    expect((await getSettings()).settings.emailTemplate).toBe(tpl("v1"));
+    expect((await getSend(send.id)).rendered_html).toContain("v1");
+  });
+
+  it("a schedule that lands after a template save renders with the saved template", async () => {
+    const postId = await makeDraft("Second");
+    expect((await putSettings({ emailTemplate: tpl("v2"), remake: [] })).status).toBe(200);
+    const send = await schedule(postId);
+    const html = (await getSend(send.id)).rendered_html;
+    expect(html).toContain("v2");
+    expect(html).not.toContain("v1");
+  });
+
+  it("a schedule sent alongside a template save ends on the template in use, whichever lands first", async () => {
+    // The two orders are pinned one by one above. Here both requests are in flight at once,
+    // and which lands first is up to the runtime, so the test can't choose the outcome; it
+    // holds only that the end state is one of the two consistent ones, never a scheduled
+    // send on v1 under a saved v2.
     const postId = await makeDraft("Racer");
     const [sched, save] = await Promise.all([
       SELF.fetch(`${base}/api/posts/${postId}/schedule`, {
@@ -390,8 +382,9 @@ describe("a template or identity change re-makes the scheduled emails", () => {
     expect(sched.status).toBe(201);
     const send = await getSend((await readJson(sched)).send.id);
     const inUse = (await getSettings()).settings.emailTemplate;
+    // The save's answer and the template in use agree, and the send carries that template.
     const marker = inUse === tpl("v2") ? "v2" : "v1";
-    expect([200, 409]).toContain(save.status);
+    expect(save.status).toBe(marker === "v2" ? 200 : 409);
     expect(send.rendered_html).toContain(marker);
   });
 

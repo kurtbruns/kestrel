@@ -1,6 +1,6 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decodeSendCursor } from "../shared/cursor";
 import type {
   ResolveResponse,
@@ -12,26 +12,15 @@ import type {
 import * as posts from "../src/db/posts";
 import type { SendRow } from "../src/db/sends";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
-import { freeze } from "../src/send/schedule";
 import { tickEstimate } from "../src/send/view";
-import { adminAuth } from "./support/auth";
+import { frozenSend, resetDatabase } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { viewOf } from "./support/view";
 
 // One `SendView` on every route (SPEC §8): the list, the send, the feed, and every action's
 // answer carry the same shape, with `rev` to tell two apart and a cursor to follow from; the
 // frozen bodies at their own route; `GET /api/sends/:id` tagged so an unchanged send is a 304.
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-async function frozenSend(fireAt: number, subject = "Subj", markdown = "# Hi\n\nbody") {
-  const { post } = await posts.createPost(env.DB, { subject, markdown }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
 
 const post = (path: string, body?: unknown) =>
   SELF.fetch(`${base}${path}`, {
@@ -41,16 +30,11 @@ const post = (path: string, body?: unknown) =>
   });
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
+});
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 /** Every key a `SendView` carries, and none else: nothing internal on the wire. */
@@ -319,6 +303,9 @@ describe("the time to finish, in ticks", () => {
 
 describe("GET /api/sends/:id is tagged", () => {
   it("answers 304 while nothing about the send has changed, and 200 once a write or the clock changes it", async () => {
+    // Date is faked so the clock moves only when the test moves it: no real wait for the
+    // fire time, and no slow run carrying the second read past it before the 304.
+    vi.useFakeTimers({ toFake: ["Date"] });
     const send = await frozenSend(Date.now() + 2_000);
     const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const etag = first.headers.get("etag");
@@ -328,7 +315,7 @@ describe("GET /api/sends/:id is tagged", () => {
     });
     expect(again.status).toBe(304);
     // The clock alone: the fire time passes and the send reads due, with no write.
-    await new Promise((r) => setTimeout(r, 2_100));
+    vi.setSystemTime(Date.now() + 2_100);
     const due = await SELF.fetch(`${base}/api/sends/${send.id}`, {
       headers: { ...AUTH, "if-none-match": etag ?? "" },
     });
@@ -339,9 +326,16 @@ describe("GET /api/sends/:id is tagged", () => {
 
 describe("the ETag follows the words the clock changes", () => {
   it("changes as a missed send's minutes late do, with no write", async () => {
+    // Date is faked so only the test moves the clock: a minute boundary the real clock
+    // crossed between the reads could not change the words in its place.
+    vi.useFakeTimers({ toFake: ["Date"] });
     const send = await frozenSend(Date.now() - 20 * 60_000);
     const first = await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH });
     const etag = first.headers.get("etag") ?? "";
+    const same = await SELF.fetch(`${base}/api/sends/${send.id}`, {
+      headers: { ...AUTH, "if-none-match": etag },
+    });
+    expect(same.status).toBe(304);
     // A minute later by the send's own clock: the fire time a minute further back, with no rev.
     await env.DB.prepare("UPDATE sends SET fire_at = fire_at - 60000 WHERE id = ?")
       .bind(send.id)
@@ -356,7 +350,10 @@ describe("the ETag follows the words the clock changes", () => {
 
 describe("the frozen email at its own route", () => {
   it("serves the html and text a send froze, and refuses another format", async () => {
-    const send = await frozenSend(Date.now() + 3_600_000, "Owls", "# Owls\n\nhoot");
+    const send = await frozenSend(Date.now() + 3_600_000, {
+      subject: "Owls",
+      markdown: "# Owls\n\nhoot",
+    });
     const row = await sends.getSend(env.DB, send.id);
     const htmlRes = await SELF.fetch(`${base}/api/sends/${send.id}/email`, { headers: AUTH });
     expect(htmlRes.headers.get("content-type")).toMatch(/^text\/html/);

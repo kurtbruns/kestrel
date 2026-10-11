@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { $, $$, type FakeApi, fakeApi, mount, resetShell, settle, typeInto } from "../test/support";
-import { addSubscriberModal } from "./dialogs";
 import { renderSubscribers } from "./list";
 
 const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
@@ -43,7 +42,6 @@ describe("subscribers view", () => {
   });
   afterEach(() => {
     fake?.restore();
-    vi.useRealTimers();
   });
 
   it("shows the counts, the roster with the suppression flag and its reason, and actions only for the confirmed", async () => {
@@ -121,14 +119,4 @@ describe("subscribers view", () => {
       expect($("#toasts").textContent).toMatch(said);
     });
   }
-
-  it("refuses an address without an @ before asking the API", () => {
-    fake = fakeApi([]);
-    addSubscriberModal();
-    typeInto($<HTMLInputElement>("#addEmail"), "nope");
-    $("#aGo").click();
-    expect(fake.calls).toHaveLength(0);
-    expect($("#toasts").textContent).toMatch(/valid email/);
-    document.querySelector(".modal-backdrop")?.remove();
-  });
 });

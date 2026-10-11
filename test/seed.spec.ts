@@ -6,9 +6,8 @@ import { getSettings, updateSettings } from "../src/db/settings";
 import { audienceEmails, counts } from "../src/db/subscribers";
 import { seedDatabase } from "../src/dev/seed";
 import { getConfig } from "../src/env";
-import { adminAuth } from "./support/auth";
+import { AUTH, base } from "./support/http";
 
-const base = "https://kestrel.test";
 const config = () => getConfig(env);
 
 // The seeded publication's shape. The list is imported, grows in a continuous confirmed
@@ -33,6 +32,22 @@ async function deliveriesFor(sendId: string): Promise<{ email: string; event: st
   return results;
 }
 
+// The tables a seed fills and a reset must empty, children first.
+const RESET_TABLES = [
+  "deliveries",
+  "sends",
+  "post_revisions",
+  "posts",
+  "suppressions",
+  "subscribers",
+  "settings",
+];
+
+async function rowCount(table: string): Promise<number> {
+  const row = await env.DB.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
+  return row?.n ?? 0;
+}
+
 describe("dev seed (Field Notes dataset)", () => {
   it("resets and loads a realistic, spec-valid dataset", async () => {
     const summary = await seedDatabase(env, config());
@@ -52,7 +67,7 @@ describe("dev seed (Field Notes dataset)", () => {
       unsubscribed: UNSUBSCRIBED,
     });
     expect(summary.suppressions).toBe(SUPPRESSED);
-    expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (I1)
+    expect(summary.audience).toBe(AUDIENCE_NOW); // confirmed − suppressed (SPEC §7)
     expect(summary.posts).toEqual({ sent: 4, scheduled: 1, draft: 2 });
     expect(summary.deliveries).toBe(TOTAL_DELIVERIES);
 
@@ -100,14 +115,14 @@ describe("dev seed (Field Notes dataset)", () => {
 
     const nowMailable = new Set(await audienceEmails(env.DB));
 
-    // Someone who unsubscribed after issue #1 was still mailed by it: the oldest send's
+    // Someone who unsubscribed after the first post was still mailed by it: the oldest send's
     // record retains addresses that are no longer in the current audience (I2 is about
     // future sends, not rewriting the past).
     const firstEmails = (await deliveriesFor(sent[0]!.id)).map((r) => r.email);
     expect(firstEmails.some((e) => !nowMailable.has(e))).toBe(true);
 
-    // The bounce and complaint on issue #2 shadow those two confirmed addresses out of
-    // the current audience — yet they remain in #2's delivery record, carrying the event
+    // The bounce and complaint on the second post shadow those two confirmed addresses out of
+    // the current audience — yet they remain in its delivery record, carrying the event
     // that produced their suppression.
     const secondRows = await deliveriesFor(sent[1]!.id);
     const shadowed = secondRows.filter((r) => r.event === "bounced" || r.event === "complained");
@@ -128,19 +143,21 @@ describe("dev seed (Field Notes dataset)", () => {
 
   it("reset wipes the database back to a fresh install (the reverse of seed)", async () => {
     await seedDatabase(env, config());
-    // Set an identity so we can prove the settings singleton resets too.
-    await SELF.fetch(`${base}/api/settings`, {
-      method: "PUT",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
-      body: JSON.stringify({ publication: { name: "Field Notes" } }),
-    });
+    // The seed's own identity is what the reset has to clear, and every table has rows.
+    expect((await getSettings(env.DB)).publication.name).toBe("Field Notes");
+    for (const table of RESET_TABLES) {
+      expect(await rowCount(table), table).toBeGreaterThan(0);
+    }
 
     const res = await SELF.fetch(`${base}/api/dev/reset`, {
       method: "POST",
-      headers: { ...(await adminAuth()) },
+      headers: AUTH,
     });
     expect(res.status).toBe(200);
 
+    for (const table of RESET_TABLES) {
+      expect(await rowCount(table), table).toBe(0);
+    }
     expect(await counts(env.DB)).toEqual({
       confirmed: 0,
       pending: 0,
@@ -149,9 +166,9 @@ describe("dev seed (Field Notes dataset)", () => {
     });
     expect(await listSends(env.DB)).toHaveLength(0);
     // Settings are back to defaults, so the identity falls back to the From name.
-    const after = (await (
-      await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() })
-    ).json()) as { settings: { publication: { name: string } } };
+    const after = (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as {
+      settings: { publication: { name: string } };
+    };
     expect(after.settings.publication.name).toBe("");
   });
 

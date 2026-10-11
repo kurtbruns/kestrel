@@ -1,11 +1,12 @@
 import { SELF } from "cloudflare:test";
+import { SignJWT } from "jose";
 import { describe, expect, it } from "vitest";
 import { isHumanAllowed } from "../src/auth/access";
 import { mintDevToken, verifyDevToken } from "../src/auth/dev_token";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
-import { adminAuth, DEV_SECRET } from "./support/auth";
 import { SES_DEPLOY } from "./support/deploy";
+import { adminAuth, base, DEV_SECRET } from "./support/http";
 
 describe("Access admin allowlist", () => {
   it("admits anyone when no allowlist is configured", () => {
@@ -21,20 +22,54 @@ describe("Access admin allowlist", () => {
 
 describe("auth on the admin surface", () => {
   it("rejects /api/whoami with no token (401)", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/whoami");
+    const res = await SELF.fetch(`${base}/api/whoami`);
     expect(res.status).toBe(401);
   });
 
   it("rejects a token signed with the wrong secret (401)", async () => {
     const token = await mintDevToken("some-other-secret", { email: "x@example.com" });
-    const res = await SELF.fetch("https://kestrel.test/api/whoami", {
+    const res = await SELF.fetch(`${base}/api/whoami`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(res.status).toBe(401);
   });
 
+  it("rejects an expired token signed with the right secret (401)", async () => {
+    // Signed exactly as mintDevToken signs, but its expiry an hour past.
+    const now = Math.floor(Date.now() / 1000);
+    const token = await new SignJWT({ email: "human@example.com" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuer("kestrel-dev")
+      .setAudience("kestrel-admin")
+      .setIssuedAt(now - 7200)
+      .setExpirationTime(now - 3600)
+      .sign(new TextEncoder().encode(DEV_SECRET));
+    expect(await verifyDevToken(token, DEV_SECRET)).toBeNull();
+    const res = await SELF.fetch(`${base}/api/whoami`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a valid token whose claims were edited after signing (401)", async () => {
+    const token = await mintDevToken(DEV_SECRET, {});
+    const [header, payload, signature] = token.split(".") as [string, string, string];
+    // Promote the service token to a human by adding an email the signature never covered.
+    const claims = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    const forged = btoa(JSON.stringify({ ...claims, email: "intruder@example.com" }))
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_")
+      .replace(/=+$/, "");
+    const tampered = `${header}.${forged}.${signature}`;
+    expect(await verifyDevToken(tampered, DEV_SECRET)).toBeNull();
+    const res = await SELF.fetch(`${base}/api/whoami`, {
+      headers: { Authorization: `Bearer ${tampered}` },
+    });
+    expect(res.status).toBe(401);
+  });
+
   it("admits a human dev token (200) and reports the principal + mode", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/whoami", {
+    const res = await SELF.fetch(`${base}/api/whoami`, {
       headers: await adminAuth({ email: "human@example.com" }),
     });
     expect(res.status).toBe(200);
@@ -45,7 +80,7 @@ describe("auth on the admin surface", () => {
   });
 
   it("admits a service dev token (200) with no email", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/whoami", {
+    const res = await SELF.fetch(`${base}/api/whoami`, {
       headers: await adminAuth({}),
     });
     expect(res.status).toBe(200);
@@ -53,27 +88,34 @@ describe("auth on the admin surface", () => {
   });
 
   it("keeps /health public (200, no token)", async () => {
-    const res = await SELF.fetch("https://kestrel.test/health");
+    const res = await SELF.fetch(`${base}/health`);
     expect(res.status).toBe(200);
   });
 });
 
 describe("dev-token bootstrap endpoint", () => {
   it("mints a working human token by default", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/dev/token");
+    const res = await SELF.fetch(`${base}/api/dev/token`);
     expect(res.status).toBe(200);
     const { token, kind } = (await res.json()) as { token: string; kind: string };
     expect(kind).toBe("human");
-    const who = await SELF.fetch("https://kestrel.test/api/whoami", {
+    const who = await SELF.fetch(`${base}/api/whoami`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(who.status).toBe(200);
   });
 
-  it("mints a service token when asked", async () => {
-    const res = await SELF.fetch("https://kestrel.test/api/dev/token?kind=service");
-    const { kind } = (await res.json()) as { kind: string };
+  it("mints a working service token when asked", async () => {
+    const res = await SELF.fetch(`${base}/api/dev/token?kind=service`);
+    expect(res.status).toBe(200);
+    const { token, kind } = (await res.json()) as { token: string; kind: string };
     expect(kind).toBe("service");
+    // The token itself is a service principal, not a human one labeled "service".
+    const who = await SELF.fetch(`${base}/api/whoami`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(who.status).toBe(200);
+    expect(await who.json()).toMatchObject({ principal: { kind: "service" } });
   });
 });
 

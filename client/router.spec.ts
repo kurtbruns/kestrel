@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewHandle } from "./lifecycle";
 import { adoptLinkedRoute, installRouter, route } from "./router";
+import { sendServer } from "./test/send_server";
 import {
   $,
   type FakeApi,
@@ -8,12 +9,12 @@ import {
   jsonResponse,
   mount,
   resetShell,
-  sendServer,
   settle,
+  unmount,
 } from "./test/support";
 
-// The router's listeners are installed once by boot; here once per file, which is what a
-// page gets. hashchange is dispatched by hand so the spec does not depend on whether the
+// The router's listeners are installed once by boot; here once per file (`beforeAll`),
+// which is what a page gets. hashchange is dispatched by hand so the spec does not depend on whether the
 // DOM fires it for a scripted `location.hash = …` (happy-dom does, later; that echo lands
 // on the hash already mounted and is nothing to do, the same as a revert's echo).
 const hashchange = () => window.dispatchEvent(new Event("hashchange"));
@@ -29,6 +30,11 @@ const editorLike = (h: ViewHandle) => mount(() => h);
 
 describe("router", () => {
   let fake: FakeApi;
+  // Once for the file, as boot does once for a page, so every test runs with the router's
+  // listeners whatever order the tests run in.
+  beforeAll(() => {
+    installRouter();
+  });
   beforeEach(() => {
     resetShell();
     fake = fakeApi([
@@ -47,14 +53,19 @@ describe("router", () => {
       },
     ]);
   });
-  afterEach(() => {
+  // Put the URL back first: happy-dom fires hashchange for a replaceState that moves the
+  // hash, so its route has to land while the fake API still answers. Then leave no view or
+  // stub behind, so nothing routes after the real fetch is back.
+  afterEach(async () => {
+    history.replaceState(null, "", "/dashboard/");
+    await settle();
+    unmount();
     fake.restore();
     vi.unstubAllGlobals();
   });
 
-  it("installs once, then a hashchange mounts the view the hash names", async () => {
+  it("mounts the view a hashchange names", async () => {
     expect(document.querySelector("#app h1")).toBeNull();
-    installRouter();
     await at("#/drafts");
     expect($("#app h1").textContent).toBe("Drafts");
     expect(fake.unhandled).toEqual([]);
@@ -140,7 +151,6 @@ describe("router", () => {
     await settle();
     expect($("#app h1").textContent).toBe("Drafts");
     expect(fake.unhandled).toEqual([]);
-    history.replaceState(null, "", "/dashboard/");
   });
 
   it("leaves a normal load alone, and a query that names no route where it is", () => {
@@ -152,7 +162,6 @@ describe("router", () => {
     adoptLinkedRoute();
     expect(location.search).toBe("?to=//elsewhere");
     expect(location.hash).toBe("#/drafts");
-    history.replaceState(null, "", "/dashboard/");
   });
 
   it("takes a linked route over a hash beside it", () => {
@@ -160,6 +169,5 @@ describe("router", () => {
     adoptLinkedRoute();
     expect(location.search).toBe("");
     expect(location.hash).toBe("#/settings");
-    history.replaceState(null, "", "/dashboard/");
   });
 });

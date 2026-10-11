@@ -15,39 +15,26 @@ import { CloudflareNotifier, ProviderNotifier } from "../src/notify/channel";
 import { composeNotification, sendLink } from "../src/notify/compose";
 import { clearFakeNotifications, failFakeNotify, fakeNotifications } from "../src/notify/fake";
 import * as providers from "../src/providers";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { adminAuth } from "./support/auth";
-import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
 import { RESEND_DEPLOY } from "./support/deploy";
-import { logged } from "./support/log";
+import {
+  addresses,
+  dueSend,
+  frozenSend,
+  resetDatabase,
+  seedConfirmed,
+  ticks,
+} from "./support/fixtures";
+import { AUTH, base, JSON_AUTH } from "./support/http";
+import { allowErrorLogs, logged } from "./support/log";
 import { ResendLikeProvider } from "./support/resend_like";
 
 // The publisher is told, by email, when a send goes out or runs into a problem (SPEC §8): once per
 // event, however many ticks the condition lasts, through a channel that is the fake here
 // (the test env is dev-shaped), and never at a cost to any send (I1 to I6).
 
-const BASE = "https://kestrel.test";
 const PUBLISHER = "publisher@example.com";
-
-const addresses = (n: number, tag = "n") =>
-  Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function dueSend(subject = "Owls in winter", fireAt = Date.now() - 1000) {
-  const { post } = await posts.createPost(env.DB, { subject, markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
 
 async function rows(sendId?: string) {
   const { results } = await env.DB.prepare(
@@ -65,38 +52,20 @@ async function rows(sendId?: string) {
   return results;
 }
 
-/** Sweep ticks, each on the next minute or the next halt retry, whichever is later. */
-async function ticks(n: number): Promise<void> {
-  for (let i = 0; i < n; i++) {
-    await toNextTick(env.DB);
-    await sweep(env as AppEnv);
-  }
-}
-
 let resend: ResendLikeProvider;
 let errors: MockInstance;
 let warnings: MockInstance;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   await updateSettings(env.DB, { notifications: { to: PUBLISHER } });
   clearFakeNotifications();
   // Only Date is faked, so `ticks` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
   vi.spyOn(providers, "getProvider").mockReturnValue(resend);
-  errors = vi.spyOn(console, "error").mockImplementation(() => {});
-  warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
-  vi.spyOn(console, "log").mockImplementation(() => {});
+  errors = vi.spyOn(console, "error");
+  warnings = vi.spyOn(console, "warn");
 });
 
 afterEach(() => {
@@ -107,7 +76,7 @@ afterEach(() => {
 describe("a send finishing", () => {
   it("tells the publisher once, with the record's headline numbers and a link to it", async () => {
     await seedConfirmed(addresses(3));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls in winter" });
 
     await ticks(4);
 
@@ -156,8 +125,9 @@ describe("a send finishing", () => {
 
 describe("a send that needs the publisher", () => {
   it("the provider refusing the account: told at once with its words and the advice, once however long it lasts", async () => {
+    allowErrorLogs("send.stuck");
     await seedConfirmed(addresses(5));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls in winter" });
     resend.refuse = "resend batch 401: API key is invalid";
 
     await ticks(1);
@@ -183,28 +153,56 @@ describe("a send that needs the publisher", () => {
   });
 
   it("a refusal that lifts and returns is a new event", async () => {
-    await seedConfirmed(addresses(1));
-    const send = await dueSend();
-    await env.DB.prepare(
-      "UPDATE sends SET status = 'sending', started_at = ?, halt_reason = 'account', halted_at = ? WHERE id = ?",
-    )
-      .bind(Date.now(), 1000, send.id)
-      .run();
-    await notifications.recordNotifications(env.DB, Date.now());
-    await notifications.recordNotifications(env.DB, Date.now());
-    await env.DB.prepare("UPDATE sends SET halted_at = ? WHERE id = ?").bind(2000, send.id).run();
-    await notifications.recordNotifications(env.DB, Date.now());
+    /** Answers one batch once `relapse` is set, then refuses again for that reason: the
+     *  account fixed long enough for a batch to land, then refused once more. */
+    class Relapsing extends ResendLikeProvider {
+      relapse: string | null = null;
+      override async sendBatch(
+        ...args: Parameters<ResendLikeProvider["sendBatch"]>
+      ): ReturnType<ResendLikeProvider["sendBatch"]> {
+        const result = await super.sendBatch(...args);
+        if (result.kind === "answered" && this.relapse) {
+          this.refuse = this.relapse;
+          this.relapse = null;
+        }
+        return result;
+      }
+    }
+    const relapsing = new Relapsing();
+    vi.spyOn(providers, "getProvider").mockReturnValue(relapsing);
+    // More than one batch, so the send is still going when the refusal returns.
+    await seedConfirmed(addresses(3 * relapsing.maxBatch));
+    const send = await dueSend({ subject: "Owls in winter" });
+    relapsing.refuse = "resend batch 401: API key is invalid";
+
+    await ticks(2);
+    const first = (await sends.getSend(env.DB, send.id))!.halted_at;
+    expect(first).not.toBeNull();
+    expect(relapsing.mailed).toHaveLength(0);
+
+    // The key is replaced: a batch is answered, which lifts the refusal, and the next is
+    // refused again.
+    relapsing.refuse = null;
+    relapsing.relapse = "resend batch 401: API key is invalid";
+    await ticks(1);
+    expect(relapsing.mailed).toHaveLength(relapsing.maxBatch);
+    const second = (await sends.getSend(env.DB, send.id))!.halted_at;
+    expect(second).toBeGreaterThan(first!);
 
     expect((await rows(send.id)).map((r) => [r.kind, r.episode])).toEqual([
-      ["refused", 1000],
-      ["refused", 2000],
+      ["refused", first],
+      ["refused", second],
+    ]);
+    expect(fakeNotifications().map((n) => n.subject)).toEqual([
+      'Problem with "Owls in winter": the provider is refusing your account',
+      'Problem with "Owls in winter": the provider is refusing your account',
     ]);
   });
 
   it("a send in flight past the threshold: told once, and not while a refusal already says why", async () => {
     await seedConfirmed(addresses(1));
-    const slow = await dueSend("Slow one");
-    const refused = await dueSend("Refused one");
+    const slow = await dueSend({ subject: "Slow one" });
+    const refused = await dueSend({ subject: "Refused one" });
     const long = Date.now() - STUCK_THRESHOLD_MS - 60_000;
     await env.DB.prepare(
       "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 1 WHERE id IN (?, ?)",
@@ -226,7 +224,7 @@ describe("a send that needs the publisher", () => {
 
   it("a wedged send awaiting Resolve: told once, naming how many recipients are unknown", async () => {
     await seedConfirmed(addresses(1));
-    const send = await dueSend("Wedged one");
+    const send = await dueSend({ subject: "Wedged one" });
     await env.DB.prepare(
       "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 0, c_in_flight = 4, locked_until = NULL WHERE id = ?",
     )
@@ -238,7 +236,7 @@ describe("a send that needs the publisher", () => {
     expect((await rows(send.id)).map((r) => r.kind)).toEqual(["wedged"]);
 
     // A run still holding the lease is finishing its last batch, not wedged.
-    const held = await dueSend("Held one");
+    const held = await dueSend({ subject: "Held one" });
     await env.DB.prepare(
       "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 0, c_in_flight = 4, locked_until = ? WHERE id = ?",
     )
@@ -249,8 +247,11 @@ describe("a send that needs the publisher", () => {
   });
 
   it("a missed fire time: told once, whether the send went out late or has not gone out", async () => {
+    allowErrorLogs("send.missed");
     await seedConfirmed(addresses(2));
-    const late = await dueSend("Late one", Date.now() - MISSED_THRESHOLD_MS - 5 * 60_000);
+    const late = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 5 * 60_000, {
+      subject: "Late one",
+    });
 
     await ticks(3);
     const subjects = fakeNotifications().map((n) => n.subject);
@@ -262,7 +263,9 @@ describe("a send that needs the publisher", () => {
     expect((await rows(late.id)).map((r) => r.kind).sort()).toEqual(["finished", "missed"]);
 
     // One the sweep cannot fire stays scheduled, and is reported as not gone out.
-    const stranded = await dueSend("Stranded", Date.now() - MISSED_THRESHOLD_MS - 60_000);
+    const stranded = await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 60_000, {
+      subject: "Stranded",
+    });
     await notifications.recordNotifications(env.DB, Date.now());
     expect((await rows(stranded.id)).map((r) => r.kind)).toEqual(["missed"]);
   });
@@ -278,14 +281,35 @@ describe("a send that needs the publisher", () => {
 describe("isolation", () => {
   it("a channel that fails leaves the send alone, shows on the settings surface, and retries next tick", async () => {
     await seedConfirmed(addresses(3));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls in winter" });
     failFakeNotify(1);
+    const surface = async () =>
+      (
+        (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as {
+          notificationStatus: Awaited<ReturnType<typeof notifications.notificationStatus>>;
+        }
+      ).notificationStatus;
 
-    await ticks(2);
-    const after = (await sends.getSend(env.DB, send.id))!;
-    expect(after.status).toBe("sent");
+    await ticks(1);
+    const failed = (await sends.getSend(env.DB, send.id))!;
+    expect(failed.status).toBe("sent");
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3 });
+    expect(fakeNotifications()).toHaveLength(0);
+    expect(await surface()).toMatchObject({
+      lastSent: null,
+      lastFailure: {
+        kind: "finished",
+        subject: "Owls in winter",
+        error: "fake notification failure",
+      },
+    });
+
+    await ticks(1);
     expect(fakeNotifications()).toHaveLength(1); // the retry got through
+    expect(await surface()).toMatchObject({
+      lastSent: { kind: "finished", subject: "Owls in winter" },
+      lastFailure: null,
+    });
     expect(logged(warnings)).toContainEqual(
       expect.objectContaining({ event: "notify.failed", sendId: send.id, kind: "finished" }),
     );
@@ -293,7 +317,7 @@ describe("isolation", () => {
 
   it("gives up after the cap and says so, never mailing the list or changing the record", async () => {
     await seedConfirmed(addresses(2));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls in winter" });
     failFakeNotify(100);
 
     await ticks(MAX_NOTIFY_ATTEMPTS + 3);
@@ -316,7 +340,31 @@ describe("isolation", () => {
     });
   });
 
+  it("logs what it tells the publisher without the publisher's address", async () => {
+    allowErrorLogs("notify.error");
+    const infos = vi.spyOn(console, "log");
+    await seedConfirmed(addresses(2));
+    await dueSend({ subject: "Owls in winter" });
+    failFakeNotify(1);
+    await ticks(3); // a failed try, then the retry that gets through
+    vi.spyOn(channel, "getNotifier").mockImplementation(() => {
+      throw new Error("no channel at all");
+    });
+    await dueSend({ subject: "Owls in spring" });
+    await ticks(2);
+
+    const lines = logged(infos, warnings, errors).filter((l) => l.event.startsWith("notify."));
+    expect(new Set(lines.map((l) => l.event))).toEqual(
+      new Set(["notify.failed", "notify.sent", "notify.error"]),
+    );
+    const local = PUBLISHER.split("@")[0];
+    for (const line of lines) {
+      expect(JSON.stringify(line).toLowerCase()).not.toContain(`${local}@`);
+    }
+  });
+
   it("a notifier that throws outright never stops a send finishing", async () => {
+    allowErrorLogs("notify.error");
     await seedConfirmed(addresses(2));
     const send = await dueSend();
     vi.spyOn(channel, "getNotifier").mockImplementation(() => {
@@ -331,9 +379,10 @@ describe("isolation", () => {
   });
 
   it("a tick with a backlog stays inside the subrequest budget", async () => {
+    allowErrorLogs("send.missed");
     await seedConfirmed(addresses(1));
     for (let i = 0; i < 25; i++) {
-      await dueSend(`Backlog ${i}`, Date.now() - MISSED_THRESHOLD_MS - 60_000);
+      await frozenSend(Date.now() - MISSED_THRESHOLD_MS - 60_000, { subject: `Backlog ${i}` });
     }
     const guard = guardD1(env.DB);
     const capped = { ...env, DB: guard.db } as AppEnv;
@@ -350,16 +399,16 @@ describe("isolation", () => {
         (resend.requests - mailedBefore) +
         (fakeNotifications().length - notifiedBefore);
       expect(spent).toBeLessThanOrEqual(limit);
+      // At least one notification every tick, however much the sends spent.
+      expect(fakeNotifications().length, `tick ${i}`).toBeGreaterThan(notifiedBefore);
     }
-    // At least one notification a tick, however much the sends spent.
-    expect(fakeNotifications().length).toBeGreaterThanOrEqual(6);
   });
 });
 
 describe("after the review", () => {
   it("a send that resumes after a long refusal is not then reported as stuck", async () => {
     await seedConfirmed(addresses(1));
-    const send = await dueSend("Resumed one");
+    const send = await dueSend({ subject: "Resumed one" });
     const long = Date.now() - STUCK_THRESHOLD_MS - 60 * 60_000;
     await env.DB.prepare(
       "UPDATE sends SET status = 'sending', started_at = ?, c_pending = 1, halt_reason = 'account', halted_at = ? WHERE id = ?",
@@ -380,7 +429,7 @@ describe("after the review", () => {
 
   it("a problem that clears before its notification gets through is dropped, not sent late", async () => {
     await seedConfirmed(addresses(2));
-    const send = await dueSend();
+    const send = await dueSend({ subject: "Owls in winter" });
     resend.refuse = "resend batch 401: API key is invalid";
     failFakeNotify(1);
     await ticks(1);
@@ -407,9 +456,9 @@ describe("after the review", () => {
 
     clearFakeNotifications();
     const test = async () =>
-      SELF.fetch(`${BASE}/api/settings/notifications/test`, {
+      SELF.fetch(`${base}/api/settings/notifications/test`, {
         method: "POST",
-        headers: await adminAuth(),
+        headers: AUTH,
       });
     expect((await test()).status).toBe(200);
     let status = await notifications.notificationStatus(env.DB);
@@ -428,7 +477,7 @@ describe("after the review", () => {
 
   it("deleting a draft whose canceled send has a notification deletes it too", async () => {
     await seedConfirmed(addresses(1));
-    const send = await dueSend("Canceled one", Date.now() + 24 * 60 * 60 * 1000);
+    const send = await frozenSend(Date.now() + 24 * 60 * 60 * 1000, { subject: "Canceled one" });
     await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
       .bind(Date.now() - MISSED_THRESHOLD_MS - 60_000, send.id)
       .run();
@@ -518,19 +567,17 @@ describe("the channel is deploy config", () => {
 
 describe("the settings surface", () => {
   const put = async (patch: unknown) =>
-    SELF.fetch(`${BASE}/api/settings`, {
+    SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
-      headers: { ...(await adminAuth()), "content-type": "application/json" },
+      headers: JSON_AUTH,
       body: JSON.stringify(patch),
     });
   const get = async () =>
-    (await (
-      await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() })
-    ).json()) as any;
+    (await (await SELF.fetch(`${base}/api/settings`, { headers: AUTH })).json()) as any;
   const test = async () =>
-    SELF.fetch(`${BASE}/api/settings/notifications/test`, {
+    SELF.fetch(`${base}/api/settings/notifications/test`, {
       method: "POST",
-      headers: await adminAuth(),
+      headers: AUTH,
     });
 
   it("stores the address as a preference, normalized, and reflects the channel read-only", async () => {
@@ -551,7 +598,7 @@ describe("the settings surface", () => {
   });
 
   it("changing the address asks nothing of scheduled sends: it is not an input to any email", async () => {
-    await dueSend("Scheduled one", Date.now() + 24 * 60 * 60 * 1000);
+    await frozenSend(Date.now() + 24 * 60 * 60 * 1000, { subject: "Scheduled one" });
     const res = await put({ notifications: { to: "other@example.com" } });
     expect(res.status).toBe(200);
     expect(((await res.json()) as any).remade).toEqual([]);

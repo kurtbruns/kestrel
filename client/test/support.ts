@@ -1,21 +1,14 @@
-// Support for client specs: a scripted fetch that stands in for the HTTP API, and a few
-// DOM helpers. The seam is fetch itself, so the real api() runs over the script (credential
-// attached, 401 routed, errors shaped) and a view test exercises the same code the browser
-// does, with only the network replaced. Imported by specs only; never part of the bundle.
+// Support for client specs: a scripted fetch that stands in for the HTTP API, the fixtures
+// several specs share, and a few DOM helpers. The seam is fetch itself, so the real api()
+// runs over the script (credential attached, 401 routed, errors shaped) and a view test
+// exercises the same code the browser does, with only the network replaced. The scripted
+// send server over it is `send_server.ts`. Imported by specs only; never part of the bundle.
 
-import { decodeSendCursor, encodeSendCursor } from "../../shared/cursor";
-import {
-  refusalAdvice,
-  type SendAction,
-  type SendCondition,
-  type SendFeedResponse,
-  type SendListResponse,
-  type SendPhase,
-  type SendResponse,
-  type SendSummary,
-  type SendView,
-} from "../../shared/sends";
+import { vi } from "vitest";
+import type { SendSummary } from "../../shared/sends";
+import type { DeploymentView, SettingsResponse, SettingsView } from "../../shared/settings";
 import { unmount } from "../lifecycle";
+import { appState } from "../state";
 
 /** One request the script saw. `url` is absolute against a placeholder origin. */
 export interface FakeCall {
@@ -124,9 +117,18 @@ export async function settle(rounds = 4): Promise<void> {
   }
 }
 
+// The sidebar brand as the page ships it, before any spec's settings repaint it.
+const BRAND = ["brandName", "brandTagline", "brandLogo"].map((id) => {
+  const el = document.getElementById(id);
+  return { id, html: el?.innerHTML ?? "", hidden: el?.hidden ?? false, cls: el?.className ?? "" };
+});
+
 /**
- * Tear down whatever is mounted and empty what it left in the shell, without replacing the
- * shell's root elements, which the shell module holds by reference.
+ * Tear down whatever is mounted and put the shell back as the page loads it, without
+ * replacing the shell's root elements, which the shell module holds by reference: the
+ * view and toast roots emptied, any dialog or stray frame a spec left on the body gone,
+ * the sidebar brand as shipped, and no settings payload (a view that saves settings
+ * writes it, and the brand and several views read it).
  */
 export function resetShell(): void {
   unmount();
@@ -136,9 +138,18 @@ export function resetShell(): void {
       el.innerHTML = "";
     }
   }
-  for (const modal of document.querySelectorAll(".modal, .modal-backdrop, dialog")) {
-    modal.remove();
+  for (const el of document.querySelectorAll(".modal, .modal-backdrop, dialog, body > iframe")) {
+    el.remove();
   }
+  for (const b of BRAND) {
+    const el = document.getElementById(b.id);
+    if (el) {
+      el.innerHTML = b.html;
+      el.hidden = b.hidden;
+      el.className = b.cls;
+    }
+  }
+  appState.appConfig = null;
 }
 
 // The same DOM and lifecycle helpers the modules use, re-exported so a spec reads like the
@@ -146,384 +157,124 @@ export function resetShell(): void {
 export { mount, mounted, unmount } from "../lifecycle";
 export { $, $$ } from "../ui/dom";
 
+/** Hide or show the tab the way the browser does: `document.hidden`, then the event. */
+export function setHidden(hidden: boolean): void {
+  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+/** Drop what `setHidden` set, quietly (no event), so the document reads as it loaded. */
+export function restoreHidden(): void {
+  delete (document as { hidden?: boolean }).hidden;
+}
+
+/** A clipboard that records what is copied; `vi.unstubAllGlobals()` in afterEach puts it back. */
+export function stubClipboard() {
+  const writeText = vi.fn(async (_text: string) => {});
+  vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+  return writeText;
+}
+
+/**
+ * What `GET /api/settings` answers, for a view that reads it: a publication on the dev fake
+ * transport, with a template the server would take and nothing scheduled. `settings` and
+ * `deployment` merge field by field over those defaults; the rest replaces.
+ */
+export function settingsResponse(
+  over: {
+    settings?: Partial<SettingsView>;
+    deployment?: Partial<DeploymentView>;
+  } & Partial<Omit<SettingsResponse, "settings" | "deployment">> = {},
+): SettingsResponse {
+  const { settings, deployment, ...rest } = over;
+  return {
+    settings: {
+      testRecipients: [],
+      publication: { name: "Birds Weekly", tagline: "", address: "", logoUrl: "" },
+      emailTemplate: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
+      confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
+      confirmationEmailDefault: {
+        subject: "Confirm your subscription",
+        body: "Click below to confirm.",
+        buttonLabel: "Confirm",
+        reassurance: "If this wasn't you, ignore this email.",
+      },
+      notifications: { to: "" },
+      ...settings,
+    },
+    deployment: {
+      provider: "fake",
+      fromAddress: "Birds <hello@birds.example>",
+      sendingDomain: "birds.example",
+      appOrigin: "https://app.birds.example",
+      archiveOrigin: "https://app.birds.example",
+      archiveBasePath: "/archive",
+      mediaPublicBase: "https://app.birds.example/media",
+      awsRegion: "",
+      accessConfigured: false,
+      authMode: "dev",
+      notifyChannel: "fake",
+      notifyFrom: "Birds <hello@birds.example>",
+      minLeadMs: 5 * 60 * 1000,
+      simulation: null,
+      build: {
+        version: "",
+        sha: "dev",
+        tag: "",
+        buildTime: "",
+        repoUrl: "",
+        commitUrl: "",
+        tagUrl: "",
+      },
+      ...deployment,
+    },
+    notificationStatus: { lastSent: null, lastFailure: null },
+    inUse: { sends: [], retry_after: null, identityFields: ["name"] },
+    ...rest,
+  };
+}
+
+/**
+ * A stored send row (`SendSummary`), for a spec's scripted sends: scheduled an hour from now,
+ * to ten recipients, nothing handed off or counted yet. A spec sets in `over` whatever it
+ * asserts on, so the value reads where the assertion is.
+ */
+export function sendSummary(over: Partial<SendSummary> = {}): SendSummary {
+  return {
+    id: "x1",
+    post_id: "p1",
+    status: "scheduled",
+    fire_at: Date.now() + 3_600_000,
+    subject: "Owls",
+    recipient_count: 10,
+    locked_until: null,
+    scheduled_at: Date.now(),
+    started_at: null,
+    completed_at: null,
+    audience_resolved_at: null,
+    remade_at: null,
+    tested_at: null,
+    halt_reason: null,
+    halt_cause: null,
+    halt_error: null,
+    halted_at: null,
+    halt_retries: 0,
+    halt_retry_at: null,
+    c_pending: 0,
+    c_in_flight: 0,
+    c_accepted: 0,
+    c_delivered: 0,
+    c_bounced: 0,
+    c_complained: 0,
+    c_skipped: 0,
+    c_unsent: 0,
+    rev: 1,
+    ...over,
+  };
+}
+
 /** Set a field's value the way typing would be seen by the app: value, then an input event. */
 export function typeInto(el: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   el.value = value;
   el.dispatchEvent(new Event("input", { bubbles: true }));
 }
-
-/** What a scripted send carries beyond its row: what the server would derive for it. */
-export interface SendExtras {
-  /** The phase, when not the one a spec's plain row implies (see `sendServer`). */
-  phase?: SendPhase;
-  /** Conditions beyond the ones a plain row implies (missed by the clock, refused by an
-   *  account halt): a wedge, a stuck send, a bounce spike, as `condition` builds them. */
-  conditions?: SendCondition[];
-  /** The actions, when not the ones the clock implies: a read whose clock disagrees with
-   *  the page's, or a server that withholds one. */
-  actions?: SendAction[];
-  eta_ms?: number | null;
-  /** The published post's page, which the server links once the send has started. */
-  archive?: string | null;
-}
-
-/**
- * A stored send row as the API carries it, a `SendView`, for a spec's scripted sends: the
- * facts carried over, the counts from the counters, the audience from `recipient_count`,
- * and plain derived fields (a phase from the status, no conditions or actions) that `over`
- * replaces where a spec needs them.
- */
-export function sendView(row: SendSummary, over: Partial<SendView> = {}): SendView {
-  const counts = {
-    pending: row.c_pending,
-    in_flight: row.c_in_flight,
-    accepted: row.c_accepted,
-    delivered: row.c_delivered,
-    bounced: row.c_bounced,
-    complained: row.c_complained,
-    skipped: row.c_skipped,
-    unsent: row.c_unsent,
-  };
-  return {
-    id: row.id,
-    post_id: row.post_id,
-    subject: row.subject,
-    status: row.status,
-    rev: row.rev,
-    as_of: Date.now(),
-    fire_at: row.fire_at,
-    scheduled_at: row.scheduled_at,
-    started_at: row.started_at,
-    completed_at: row.completed_at,
-    remade_at: row.remade_at,
-    tested_at: row.tested_at,
-    audience: {
-      count: row.recipient_count,
-      fixed: row.audience_resolved_at !== null,
-      fixed_at: row.audience_resolved_at,
-    },
-    counts,
-    dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: null },
-    delivery: {
-      confirmed: row.c_delivered + row.c_bounced + row.c_complained,
-      percent_of_accepted: 0,
-    },
-    provider: {
-      name: "fake",
-      halt:
-        row.status === "sending" && row.halt_reason
-          ? {
-              reason: row.halt_reason,
-              cause: row.halt_cause,
-              error: row.halt_error ?? "",
-              retries: row.halt_retries,
-              since: row.halted_at,
-              retry_at: row.halt_retry_at,
-            }
-          : null,
-    },
-    phase:
-      row.status === "sending"
-        ? "progressing"
-        : row.status === "sent"
-          ? row.c_accepted > 0
-            ? "settling"
-            : "complete"
-          : row.status,
-    conditions: [],
-    actions: [],
-    next_change_at: null,
-    links: {
-      self: `/api/sends/${row.id}`,
-      email_html: `/api/sends/${row.id}/email?format=html`,
-      email_text: `/api/sends/${row.id}/email?format=text`,
-      deliveries: `/api/sends/${row.id}/deliveries`,
-      deliveries_csv: `/api/sends/${row.id}/deliveries.csv`,
-      post: `/api/posts/${row.post_id}`,
-      archive:
-        row.status === "sending" || row.status === "sent"
-          ? `https://birds.example/${row.post_id}`
-          : null,
-    },
-    ...over,
-  };
-}
-
-/** The provider's words as a sentence, as the server ends them. */
-const words = (error: string | null) => {
-  const text = error?.trim() || "no detail given";
-  return /[.!?]$/.test(text) ? text : `${text}.`;
-};
-
-/** Conditions as the server words them, for a spec's scripted sends. */
-export const condition = {
-  wedged: (count: number, id = "x"): SendCondition => ({
-    kind: "wedged",
-    severity: "action",
-    since: null,
-    message: `The provider never answered for ${count} recipient${count === 1 ? "" : "s"}, so whether they were mailed is unknown.`,
-    action: { name: "resolve", method: "POST", path: `/api/sends/${id}/resolve` },
-    count,
-  }),
-  stuck: (): SendCondition => ({
-    kind: "stuck",
-    severity: "warn",
-    since: null,
-    message: "Still sending 31 minutes after it started; it may be retrying.",
-    action: null,
-  }),
-  refused: (error: string, retryAt: number | null): SendCondition => ({
-    kind: "refused",
-    severity: "action",
-    since: 1_000,
-    message: `The provider is refusing the account: ${error} Replace the provider's API key or credentials in the deployment's secrets.`,
-    action: null,
-    cause: "credentials",
-    error,
-    advice: "Replace the provider's API key or credentials in the deployment's secrets.",
-    retry_at: retryAt,
-  }),
-  bounceSpike: (bounced: number, rate: number): SendCondition => ({
-    kind: "bounce_spike",
-    severity: "warn",
-    since: null,
-    message: `${bounced} recipients bounced (${Math.round(100 * rate)}%), at or above the 5% at which providers put a sender under review.`,
-    action: null,
-    bounced,
-    rate,
-  }),
-};
-
-// The server's missed tolerance (MISSED_THRESHOLD_MS in src/lib/time.ts).
-const MISSED_MS = 5 * 60_000;
-
-/**
- * A scripted server's sends over one change sequence, answering `GET /api/sends` and
- * `GET /api/sends/feed` the way the Worker does, so a page's own reads and the layer's feed see
- * one world. `put` is any client's (or the sweep's) write: it moves the send past every
- * cursor issued so far. The clock's own changes need no write: a scheduled send reads `due`
- * from its fire time and missed past the tolerance, and the feed reports each crossing
- * after a cursor's read time. A plain row implies its phase: `progressing` while sending,
- * `settling` while sent with receipts outstanding (`c_accepted`), `complete` once none are;
- * the halt comes from its `halt_*` fields, `account` reading as refused.
- */
-export function sendServer(rows: SendSummary[] = []) {
-  const sends = new Map<string, { row: SendSummary; extras: SendExtras }>();
-  const removed = new Map<string, number>();
-  let seq = 0;
-  const put = (row: SendSummary, extras: SendExtras = {}) => {
-    seq += 1;
-    sends.set(row.id, { row: { ...row, rev: seq }, extras });
-  };
-  for (const row of rows) {
-    put(row);
-  }
-  const cursor = () => encodeSendCursor({ seq, at: Date.now() });
-  const derive = ({ row, extras }: { row: SendSummary; extras: SendExtras }, now: number) => {
-    const clock = row.status === "scheduled" && now >= row.fire_at;
-    const phase: SendPhase =
-      extras.phase ??
-      (row.status === "scheduled"
-        ? clock
-          ? "due"
-          : "scheduled"
-        : row.status === "sending"
-          ? "progressing"
-          : row.status === "sent"
-            ? row.c_accepted > 0
-              ? "settling"
-              : "complete"
-            : "canceled");
-    const conditions: SendCondition[] = [];
-    if (row.status === "scheduled" && now >= row.fire_at + MISSED_MS) {
-      conditions.push({
-        kind: "missed",
-        severity: "action",
-        since: row.fire_at + MISSED_MS,
-        message: "The fire time passed and the send has not started.",
-        action: null,
-      });
-    }
-    if (row.status === "sending" && row.halt_reason === "account") {
-      conditions.push({
-        kind: "refused",
-        severity: "action",
-        since: row.halted_at,
-        message: `The provider is refusing the account: ${words(row.halt_error)} ${refusalAdvice(row.halt_cause)} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
-        action: null,
-        cause: row.halt_cause,
-        error: row.halt_error ?? "",
-        advice: refusalAdvice(row.halt_cause),
-        retry_at: row.halt_retry_at,
-      });
-    }
-    conditions.push(...(extras.conditions ?? []));
-    // What the server would take now: the window's controls until the fire time, Resolve
-    // while wedged.
-    const actions: SendAction[] =
-      extras.actions ??
-      (row.status === "scheduled" && now < row.fire_at
-        ? [
-            { name: "cancel", method: "POST", path: `/api/sends/${row.id}/cancel` },
-            { name: "reschedule", method: "POST", path: `/api/sends/${row.id}/reschedule` },
-          ]
-        : conditions.some((c) => c.kind === "wedged")
-          ? [{ name: "resolve", method: "POST", path: `/api/sends/${row.id}/resolve` }]
-          : []);
-    return { phase, conditions, actions };
-  };
-  const view = (s: { row: SendSummary; extras: SendExtras }, now: number): SendView => {
-    const { phase, conditions, actions } = derive(s, now);
-    return sendView(s.row, {
-      as_of: now,
-      phase,
-      conditions,
-      actions,
-      next_change_at: nextChange(s, now),
-      dispatch: { done: 0, percent: 0, rate_per_min: null, eta_ms: s.extras.eta_ms ?? null },
-      ...(s.extras.archive === undefined
-        ? {}
-        : { links: { ...sendView(s.row).links, archive: s.extras.archive } }),
-    });
-  };
-  // When a send can next change with no one acting, by the Worker's rule in outline: now
-  // while due short of the tolerance or sending with nothing to wait for; a halted send at
-  // its retry (less the sweep's half-tick of slack); a scheduled one at its fire time.
-  const nextChange = (s: { row: SendSummary; extras: SendExtras }, now: number) => {
-    const { row } = s;
-    const { conditions } = derive(s, now);
-    const kinds = new Set(conditions.map((c) => c.kind));
-    if (row.status === "scheduled") {
-      return row.fire_at > now ? row.fire_at : kinds.has("missed") ? null : now;
-    }
-    if (row.status !== "sending" || kinds.has("wedged")) {
-      return null;
-    }
-    return row.halt_retry_at === null ? now : Math.max(now, row.halt_retry_at - 30_000);
-  };
-  const byFire = (dir: 1 | -1) => (a: { row: SendSummary }, b: { row: SendSummary }) =>
-    dir * (a.row.fire_at - b.row.fire_at);
-  const routes: FakeRoute[] = [
-    {
-      path: "/api/sends/feed",
-      reply: (req): SendFeedResponse | Response => {
-        const now = Date.now();
-        const raw = req.url.searchParams.get("since");
-        const since = raw === null ? null : decodeSendCursor(raw);
-        if (raw !== null && !since) {
-          return jsonResponse({ error: "bad_request", field: "since" }, 400);
-        }
-        const crossed = (t: number) => since !== null && since.at < t && t <= now;
-        const all = [...sends.values()].sort(byFire(1));
-        const reported = all.filter((s) => {
-          if (since) {
-            return (
-              s.row.rev > since.seq ||
-              (s.row.status === "scheduled" &&
-                (crossed(s.row.fire_at) || crossed(s.row.fire_at + MISSED_MS)))
-            );
-          }
-          const { phase } = derive(s, now);
-          return phase === "due" || s.row.status === "sending" || phase === "settling";
-        });
-        const changes = all.map((s) => nextChange(s, now));
-        const moving = changes.some((at) => at !== null && at <= now);
-        const settling = all.some((s) => derive(s, now).phase === "settling");
-        const ahead = changes.filter((at): at is number => at !== null && at > now);
-        const wait = moving || settling ? 3000 : 60_000;
-        return {
-          now,
-          sends: reported.map((s) => view(s, now)),
-          removed: since
-            ? [...removed].filter(([, rev]) => rev > since.seq).map(([id, rev]) => ({ id, rev }))
-            : [],
-          cursor: cursor(),
-          more: false,
-          conditions: all.flatMap((s) =>
-            derive(s, now).conditions.map((c) => ({
-              ...c,
-              send_id: s.row.id,
-              subject: s.row.subject,
-            })),
-          ),
-          read_again_at: Math.min(now + wait, ahead.length ? Math.min(...ahead) + 1000 : Infinity),
-        };
-      },
-    },
-    {
-      path: "/api/sends",
-      reply: (req): SendListResponse => {
-        const now = Date.now();
-        const q = req.url.searchParams;
-        const status = q.get("status");
-        const rows = [...sends.values()]
-          .filter((s) => !status || s.row.status === status)
-          .sort(byFire(q.get("sort") === "fire" && q.get("dir") === "asc" ? 1 : -1))
-          .map((s) => view(s, now));
-        return {
-          sends: rows,
-          page: { total: rows.length, limit: 50, offset: 0, sort: "fire", dir: "desc" },
-          cursor: cursor(),
-        };
-      },
-    },
-    {
-      // One send, as `GET /api/sends/:id` answers it: its view, its outcomes from the
-      // counters (the fake keeps no delivery rows; like the server's, a recipient not yet
-      // handed off counts as in flight), and where the read stood.
-      path: /^\/api\/sends\/(?!feed$)[^/]+$/,
-      reply: (req): SendResponse | Response => {
-        const id = req.url.pathname.split("/").pop() ?? "";
-        const s = sends.get(id);
-        if (!s) {
-          return jsonResponse({ error: "not_found" }, 404);
-        }
-        const r = s.row;
-        return {
-          send: view(s, Date.now()),
-          outcomes: {
-            recipients: r.recipient_count,
-            delivered: r.c_delivered,
-            bounced: r.c_bounced,
-            complained: r.c_complained,
-            unsent: r.c_unsent,
-            skipped: r.c_skipped,
-            accepted: r.c_accepted,
-            in_flight: r.c_pending + r.c_in_flight,
-          },
-          cursor: cursor(),
-        };
-      },
-    },
-  ];
-  return {
-    /** The feed, the list, and one send's read, for a spec's `fakeApi` beside its own. */
-    routes,
-    /** Write a send: a new one, or every field of one again (`extras` replaced, not merged). */
-    put,
-    /** Change some of a send's fields, as a write. */
-    edit(id: string, over: Partial<SendSummary>, extras: SendExtras = {}) {
-      const s = sends.get(id);
-      if (!s) {
-        throw new Error(`no send ${id}`);
-      }
-      put({ ...s.row, ...over }, extras);
-    },
-    /** Delete a send with its post: gone, and reported as removed after any earlier cursor. */
-    remove(id: string) {
-      seq += 1;
-      sends.delete(id);
-      removed.set(id, seq);
-    },
-    /** Where a read now stands, as a list route would hand it back (`GET /api/posts` carries one). */
-    cursor,
-  };
-}
-
-/** The `GET /api/sends/feed` reads a spec's fake has seen. */
-export const feedReads = (fake: FakeApi): FakeRequest[] =>
-  fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
-
-/** The `GET /api/sends` reads a spec's fake has seen. */
-export const listReads = (fake: FakeApi): FakeRequest[] =>
-  fake.calls.filter((c) => c.url.pathname === "/api/sends");

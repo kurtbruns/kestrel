@@ -11,6 +11,8 @@ import {
 } from "../src/providers/types";
 import { UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import { deliveryEvent, resetDatabase, seedDelivery } from "./support/fixtures";
+import { base } from "./support/http";
 import { neverAnswers } from "./support/provider_timeout";
 
 const WHSEC = `whsec_${btoa("kestrel-test-signing-key-0123456789")}`;
@@ -190,6 +192,35 @@ describe("ResendProvider.sendBatch", () => {
     ]);
   });
 
+  it("leaves a recipient retryable when its slot in `data` carries no id", async () => {
+    // One slot per request item and nothing refused, but b's slot is empty: Resend answered
+    // without saying it took b, so b is retried under the same key rather than settled.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      cannedResponse({ data: [{ id: "re_a" }, {}, { id: "re_c" }] }),
+    );
+    const recipients: Recipient[] = ["a", "b", "c"].map((x) => ({
+      email: `${x}@example.com`,
+      unsubscribeUrl: `https://app.test/u?t=${x}`,
+    }));
+    const result = await makeProvider().sendBatch(rendered, recipients, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
+    expect(result).toEqual({
+      kind: "answered",
+      results: [
+        { email: "a@example.com", accepted: true, providerId: "re_a" },
+        {
+          email: "b@example.com",
+          accepted: false,
+          retryable: true,
+          error: "resend batch: missing id in response",
+        },
+        { email: "c@example.com", accepted: true, providerId: "re_c" },
+      ],
+    });
+  });
+
   it("derives a stable Idempotency-Key per chunk (same recipients => same key)", async () => {
     const spy = vi
       .spyOn(globalThis, "fetch")
@@ -359,7 +390,7 @@ async function signedRequest(
   if (opts.tamper) {
     signature = `${signature.slice(0, -3)}AAA`;
   }
-  return new Request("https://kestrel.test/webhooks/resend", {
+  return new Request(`${base}/webhooks/resend`, {
     method: "POST",
     headers: {
       "svix-id": id,
@@ -371,52 +402,14 @@ async function signedRequest(
   });
 }
 
-async function seedDelivery(providerId: string, email: string): Promise<void> {
-  const now = Date.now();
-  // FKs are enforced in the test runtime, so a delivery needs a send, and a send
-  // needs a post. INSERT OR IGNORE keeps the shared parent rows idempotent.
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-wh','p-wh','sent',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-wh','p-wh','sending',?, '', '', '', ?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO deliveries (send_id, email, status, provider_id, attempts, updated_at) VALUES ('s-wh', ?, 'accepted', ?, 0, ?)",
-  )
-    .bind(email, providerId, now)
-    .run();
-}
-
-// The shared webhook-events applier records the provider outcome in the separate
-// `event` column and leaves the send-loop `status` untouched, so
-// a reconciled delivery reads its outcome from `event`, not `status`.
-async function deliveryEvent(providerId: string): Promise<string | undefined> {
-  const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = ?")
-    .bind(providerId)
-    .first<{ event: string | null }>();
-  return row?.event ?? undefined;
-}
-
 beforeEach(async () => {
   // Delete children before parents (FKs are enforced here).
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
 });
 
 describe("ResendProvider.parseWebhook", () => {
   it("verifies a valid signature and reconciles a hard bounce into a suppression", async () => {
-    await seedDelivery("re_bounce", "bad@example.com");
+    await seedDelivery("bad@example.com", "re_bounce");
     const req = await signedRequest({
       type: "email.bounced",
       data: {
@@ -446,7 +439,7 @@ describe("ResendProvider.parseWebhook", () => {
   });
 
   it("reconciles a complaint into a suppression", async () => {
-    await seedDelivery("re_spam", "angry@example.com");
+    await seedDelivery("angry@example.com", "re_spam");
     const req = await signedRequest({
       type: "email.complained",
       data: { email_id: "re_spam", to: ["angry@example.com"] },
@@ -464,7 +457,7 @@ describe("ResendProvider.parseWebhook", () => {
   });
 
   it("marks a delivery delivered without suppressing", async () => {
-    await seedDelivery("re_ok", "good@example.com");
+    await seedDelivery("good@example.com", "re_ok");
     const req = await signedRequest({
       type: "email.delivered",
       data: { email_id: "re_ok", to: ["good@example.com"] },
@@ -500,8 +493,68 @@ describe("ResendProvider.parseWebhook", () => {
     expect(result.events).toHaveLength(0);
   });
 
+  it.each(["svix-id", "svix-timestamp", "svix-signature"])(
+    "rejects a request missing its %s header with 400 and no events",
+    async (header) => {
+      const signed = await signedRequest({
+        type: "email.bounced",
+        data: { email_id: "re_x", to: ["x@example.com"], bounce: { type: "Permanent" } },
+      });
+      const headers = new Headers(signed.headers);
+      headers.delete(header);
+      const req = new Request(signed.url, { method: "POST", headers, body: await signed.text() });
+      const result = await makeProvider().parseWebhook(req, env);
+      expect(result.response.status).toBe(400);
+      expect(await result.response.text()).toBe("missing signature headers");
+      expect(result.events).toEqual([]);
+    },
+  );
+
+  it("rejects a timestamp too far in the future with 400, as it does a stale one", async () => {
+    const req = await signedRequest(
+      { type: "email.delivered", data: { email_id: "re_ok", to: ["good@example.com"] } },
+      { timestamp: String(Math.floor(Date.now() / 1000) + 3600) },
+    );
+    const result = await makeProvider().parseWebhook(req, env);
+    expect(result.response.status).toBe(400);
+    expect(await result.response.text()).toBe("stale timestamp");
+    expect(result.events).toEqual([]);
+  });
+
+  it("accepts a header carrying several signatures when one of them is valid", async () => {
+    // Svix sends one signature per active secret while a secret rotates, space-delimited.
+    const signed = await signedRequest({
+      type: "email.delivered",
+      data: { email_id: "re_ok", to: ["good@example.com"] },
+    });
+    const valid = signed.headers.get("svix-signature")!;
+    const other = `v1,${btoa("not the signature for this body, 32b")}`;
+    const headers = new Headers(signed.headers);
+    headers.set("svix-signature", `${other} v2,whatever ${valid}`);
+    const req = new Request(signed.url, { method: "POST", headers, body: await signed.text() });
+    const result = await makeProvider().parseWebhook(req, env);
+    expect(result.response.status).toBe(200);
+    expect(result.events).toEqual([
+      { type: "delivered", providerId: "re_ok", email: "good@example.com" },
+    ]);
+  });
+
+  it("accepts a signed event of a type it doesn't record, with no events", async () => {
+    // Opens, clicks, and delayed deliveries reach the endpoint too; only terminal outcomes
+    // touch the record, so these are acknowledged (or Resend would retry them) and dropped.
+    for (const type of ["email.opened", "email.clicked", "email.delivery_delayed", "email.sent"]) {
+      const req = await signedRequest({
+        type,
+        data: { email_id: "re_ok", to: ["good@example.com"] },
+      });
+      const result = await makeProvider().parseWebhook(req, env);
+      expect(result.response.status, type).toBe(200);
+      expect(result.events, type).toEqual([]);
+    }
+  });
+
   it("treats a Transient bounce as soft (no suppression)", async () => {
-    await seedDelivery("re_soft", "temp@example.com");
+    await seedDelivery("temp@example.com", "re_soft");
     const req = await signedRequest({
       type: "email.bounced",
       data: {
@@ -522,13 +575,15 @@ describe("ResendProvider.parseWebhook", () => {
 // --- the public route is reachable without auth (signature is the gate) ---
 
 describe("POST /webhooks/resend route", () => {
-  it("is public (not behind requireAuth): an unsigned POST is not 401", async () => {
-    const res = await SELF.fetch("https://kestrel.test/webhooks/resend", {
+  it("is public (not behind requireAuth): an unsigned POST reaches the provider", async () => {
+    const res = await SELF.fetch(`${base}/webhooks/resend`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ type: "email.delivered" }),
     });
-    // With the dev/fake provider active it acks 200; the point is it's not 401.
-    expect(res.status).not.toBe(401);
+    // The suite runs the dev fake provider, whose webhook acks anything with a 200 "ok":
+    // a 401 would mean requireAuth stopped it, a 404 that the route is gone.
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
   });
 });

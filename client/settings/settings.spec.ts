@@ -10,6 +10,8 @@ import {
   jsonResponse,
   mount,
   resetShell,
+  settingsResponse,
+  stubClipboard,
   typeInto,
   unmount,
 } from "../test/support";
@@ -22,47 +24,33 @@ const DEFAULT_COPY = {
   reassurance: "If this wasn't you, ignore this email.",
 };
 
-const settings = (over: Partial<SettingsView> = {}): SettingsView => ({
-  testRecipients: ["me@b.c"],
-  publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
-  emailTemplate: '<div>{{ .Post.Body }}<a href="{{ .Email.UnsubscribeURL }}">out</a></div>',
-  confirmationEmail: { subject: "", body: "", buttonLabel: "", reassurance: "" },
-  confirmationEmailDefault: DEFAULT_COPY,
-  notifications: { to: "" },
-  ...over,
-});
-
-const response = (over: Partial<SettingsResponse> = {}): SettingsResponse => ({
-  settings: settings(),
-  deployment: {
-    provider: "ses",
-    fromAddress: "Birds <hello@send.birds.example>",
-    sendingDomain: "send.birds.example",
-    appOrigin: "https://app.birds.example",
-    archiveOrigin: "https://app.birds.example",
-    archiveBasePath: "/archive",
-    mediaPublicBase: "https://app.birds.example/media",
-    awsRegion: "us-east-1",
-    accessConfigured: false,
-    authMode: "dev",
-    notifyChannel: "provider",
-    notifyFrom: "Birds <hello@send.birds.example>",
-    minLeadMs: 5 * 60 * 1000,
-    simulation: null,
-    build: {
-      version: "",
-      sha: "dev",
-      tag: "",
-      buildTime: "",
-      repoUrl: "",
-      commitUrl: "",
-      tagUrl: "",
+// Deployed on SES, with notifications through it; the template prints the name and logo.
+// `settings` merges field by field over this publication; the rest replaces.
+const response = (
+  over: { settings?: Partial<SettingsView> } & Partial<Omit<SettingsResponse, "settings">> = {},
+): SettingsResponse =>
+  settingsResponse({
+    deployment: {
+      provider: "ses",
+      fromAddress: "Birds <hello@send.birds.example>",
+      sendingDomain: "send.birds.example",
+      awsRegion: "us-east-1",
+      notifyChannel: "provider",
+      notifyFrom: "Birds <hello@send.birds.example>",
     },
-  },
-  notificationStatus: { lastSent: null, lastFailure: null },
-  inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
-  ...over,
-});
+    inUse: { sends: [], retry_after: null, identityFields: ["name", "logoUrl"] },
+    ...over,
+    settings: {
+      testRecipients: ["me@b.c"],
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
+      confirmationEmailDefault: DEFAULT_COPY,
+      ...over.settings,
+    },
+  });
+
+// The settings alone, as a write answers them.
+const settings = (over: Partial<SettingsView> = {}): SettingsView =>
+  response({ settings: over }).settings;
 
 const bar = () => $("#savebar");
 
@@ -72,7 +60,6 @@ describe("settings view", () => {
     resetShell();
     vi.useFakeTimers();
     location.hash = "#/settings";
-    appState.appConfig = null;
   });
   afterEach(() => {
     fake?.restore();
@@ -172,7 +159,7 @@ describe("settings view", () => {
         path: "/api/settings",
         reply: () =>
           response({
-            settings: settings({ publication: pub }),
+            settings: { publication: pub },
             inUse: { sends: [], retry_after: null, identityFields: ["name", "address"] },
           }),
       },
@@ -214,26 +201,20 @@ describe("settings view", () => {
       {
         method: "PUT",
         path: "/api/settings",
-        reply: (req) => {
-          const body = req.json() as { publication: { name: string }; testRecipients: string[] };
-          return {
-            settings: settings({
-              publication: {
-                name: body.publication.name.trim(),
-                tagline: "",
-                address: "",
-                logoUrl: "",
-              },
-              testRecipients: body.testRecipients.map((r) => r.toLowerCase()),
-              confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
-            }),
-            warnings: [],
-            remade: [],
-          };
-        },
+        // The server's own normalizing, which the client leaves to it: the name's inner
+        // whitespace collapsed, the tagline cleared, and the recipients in its order.
+        reply: () => ({
+          settings: settings({
+            publication: { name: "Birds Monthly", tagline: "", address: "", logoUrl: "" },
+            testRecipients: ["new@b.c", "me@b.c"],
+            confirmationEmail: { ...DEFAULT_COPY, subject: "Please confirm" },
+          }),
+          warnings: [],
+          remade: [],
+        }),
       },
     ]);
-    typeInto($<HTMLInputElement>("#setName"), "  Birds Monthly  ");
+    typeInto($<HTMLInputElement>("#setName"), "  Birds   Monthly  ");
     typeInto($<HTMLInputElement>("#recipInput"), "New@B.C");
     $("#recipAdd").click();
     $("#ceTabEdit").click();
@@ -242,13 +223,15 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const put = fake.calls.find((c) => c.method === "PUT");
     expect(put?.json()).toEqual({
-      publication: { name: "Birds Monthly", tagline: "Owls & more", address: "" },
+      publication: { name: "Birds   Monthly", tagline: "Owls & more", address: "" },
       testRecipients: ["me@b.c", "new@b.c"],
       confirmationEmail: { subject: "Please confirm", body: "", buttonLabel: "", reassurance: "" },
       notifications: { to: "" },
     });
-    expect($<HTMLInputElement>("#setTagline").value).toBe(""); // the server's result is the baseline now
-    expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["me@b.c", "new@b.c"]);
+    // The server's result is the baseline now, wherever it differs from what was sent.
+    expect($<HTMLInputElement>("#setName").value).toBe("Birds Monthly");
+    expect($<HTMLInputElement>("#setTagline").value).toBe("");
+    expect($$(".set-recip-chip").map((c) => c.textContent?.trim())).toEqual(["new@b.c", "me@b.c"]);
     expect($<HTMLInputElement>("#ceMessage").value).toBe(DEFAULT_COPY.body);
     expect($("#brandName").textContent).toBe("Birds Monthly");
     expect(appState.appConfig?.settings.publication.name).toBe("Birds Monthly");
@@ -264,7 +247,7 @@ describe("settings view", () => {
         path: "/api/settings",
         reply: () =>
           response({
-            settings: settings({ notifications: { to: "me@b.c" } }),
+            settings: { notifications: { to: "me@b.c" } },
             notificationStatus: {
               lastSent: { kind: "finished", subject: "Gulls", at: 1_800_000_000_000 },
               lastFailure: {
@@ -343,7 +326,7 @@ describe("settings view", () => {
     await open([
       {
         path: "/api/settings",
-        reply: () => response({ settings: settings({ notifications: { to: "me@b.c" } }) }),
+        reply: () => response({ settings: { notifications: { to: "me@b.c" } } }),
       },
     ]);
     typeInto($<HTMLInputElement>("#notifyTo"), "other@b.c");
@@ -455,8 +438,7 @@ describe("settings view", () => {
   });
 
   it("switches the embed snippet and copies it", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     await open();
     $("[data-embed='styled']").click();
     expect($("#embedCode").textContent).toContain('style="max-width:420px');

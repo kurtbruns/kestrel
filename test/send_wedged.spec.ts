@@ -2,9 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type SendFeedResponse, type SendView, STUCK_THRESHOLD_MS } from "../shared/sends";
-import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { Budget } from "../src/send/budget";
@@ -12,14 +10,15 @@ import { nextChangeAt } from "../src/send/feed";
 import { runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
 import { isWedged } from "../src/send/wedged";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
-import { adminAuth } from "./support/auth";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
-import { ResendLikeProvider } from "./support/resend_like";
+import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base } from "./support/http";
+import { allowErrorLogs } from "./support/log";
+import { NoKeyProvider, ResendLikeProvider } from "./support/resend_like";
 
 // Wedged has one definition (SPEC §12): sending, nothing left to hand off, recipients in
 // flight, and the lease released by the run that left them there. The watch, the feed, the
@@ -27,29 +26,7 @@ import { ResendLikeProvider } from "./support/resend_like";
 // and a run on a provider that dedupes under its key never leaves a batch it could re-send
 // looking wedged.
 
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 const AUDIENCE = ["ada@example.com", "grace@example.com", "linus@example.org"];
-
-class NoKeyProvider extends ResendLikeProvider {
-  override readonly idempotentRetry: boolean = false;
-  override readonly idempotencyWindowMs: number | undefined = undefined;
-}
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function scheduledSend(fireAt: number) {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
 
 async function progress(id: string): Promise<SendView> {
   const res = await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH });
@@ -65,14 +42,7 @@ async function row(id: string) {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -83,12 +53,13 @@ afterEach(() => {
 
 describe("a wedged send", () => {
   it("is left alone by the sweep: its rev, its phase, and the feed stay still until Resolve", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
 
     await sweep(env); // fires; the one batch's answer is lost, so its fate is unknown
     const wedged = await row(send.id);
@@ -126,12 +97,13 @@ describe("a wedged send", () => {
 
 describe("a wedged send a receipt with no provider id reaches", () => {
   it("keeps every unknown recipient, its count, and Resolve: a receipt that cannot name its message never settles one", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged", "send.stuck");
     vi.useFakeTimers({ toFake: ["Date"] });
     const provider = new NoKeyProvider();
     provider.loseAnswers = 1;
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     await sweep(env); // the one batch's answer is lost: three recipients of unknown fate
     const wedged = await row(send.id);
     expect(isWedged(wedged)).toBe(true);
@@ -174,7 +146,7 @@ describe("a wedged send a receipt with no provider id reaches", () => {
 describe("the one definition", () => {
   it("reads the same in the watch's predicate and in the SQL the feed, sweep, and notifications use", async () => {
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() + 3_600_000);
+    const send = await frozenSend(Date.now() + 3_600_000);
     const now = Date.now();
     const cases = [];
     for (const status of ["scheduled", "sending", "sent"]) {
@@ -206,7 +178,7 @@ describe("a run on a provider that dedupes under its key", () => {
     const provider = new ResendLikeProvider();
     vi.spyOn(providers, "getProvider").mockReturnValue(provider);
     await seedConfirmed(AUDIENCE);
-    const send = await scheduledSend(Date.now() - 1000);
+    const send = await frozenSend(Date.now() - 1000);
     // A first run fixes the audience and stops at once (its tick is over).
     await runSend(env, send.id, new Budget(10_000), new SendWindow(undefined, -1));
     // A run cut off mid-batch: every recipient handed off under one key, never answered,
@@ -244,7 +216,7 @@ describe("a run on a provider that dedupes under its key", () => {
 
 describe("the pace around a wedge and a cut-off run", () => {
   const NOW = 1_800_000_000_000;
-  const base = {
+  const inFlight = {
     status: "sending" as const,
     fire_at: NOW - 600_000,
     started_at: NOW - 60_000,
@@ -253,18 +225,21 @@ describe("the pace around a wedge and a cut-off run", () => {
   };
 
   it("never hurries for a wedged send, even one still carrying a past halt", () => {
-    expect(nextChangeAt({ ...base, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW)).toBe(
-      NOW - 60_000 + STUCK_THRESHOLD_MS,
-    );
+    expect(
+      nextChangeAt({ ...inFlight, locked_until: null, halt_retry_at: NOW - 300_000 }, NOW),
+    ).toBe(NOW - 60_000 + STUCK_THRESHOLD_MS);
   });
 
   it("waits for the retry of a halted send whose run was cut off, rather than reading it as moving", () => {
     const retry = NOW + 10 * 60_000;
     expect(
-      nextChangeAt({ ...base, c_pending: 3, locked_until: NOW - 1_000, halt_retry_at: retry }, NOW),
+      nextChangeAt(
+        { ...inFlight, c_pending: 3, locked_until: NOW - 1_000, halt_retry_at: retry },
+        NOW,
+      ),
     ).toBe(retry - 30_000);
     // With no halt, a cut-off run's expired lease is taken up at the next tick.
-    expect(nextChangeAt({ ...base, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
+    expect(nextChangeAt({ ...inFlight, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
       NOW,
     );
   });

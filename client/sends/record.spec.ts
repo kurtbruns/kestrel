@@ -1,55 +1,36 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeliveryOutcomes, Send, SendView } from "../../shared/sends";
+import type { DeliveryOutcomes, SendSummary, SendView } from "../../shared/sends";
+import { condition, feedReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
   $$,
-  condition,
   type FakeApi,
   fakeApi,
   jsonResponse,
   mount,
   resetShell,
-  sendServer,
-  sendView,
+  sendSummary,
   typeInto,
   unmount,
 } from "../test/support";
-import { clampPct, fmtDuration } from "./progress";
 import { renderSentRecord } from "./record";
 
-const send = (over: Partial<Send> = {}): Send => ({
-  id: "x1",
-  post_id: "p1",
-  status: "sent",
-  fire_at: 1_000_000,
-  rendered_html: "",
-  rendered_text: "",
-  subject: "Owls",
-  recipient_count: 10,
-  locked_until: null,
-  scheduled_at: 900_000,
-  started_at: 1_000_000,
-  completed_at: 1_001_000,
-  audience_resolved_at: 1_000_000,
-  remade_at: null,
-  tested_at: null,
-  halt_reason: null,
-  halt_cause: null,
-  halt_error: null,
-  halted_at: null,
-  halt_retries: 0,
-  halt_retry_at: null,
-  c_pending: 0,
-  c_in_flight: 0,
-  c_accepted: 0,
-  c_delivered: 8,
-  c_bounced: 1,
-  c_complained: 0,
-  c_skipped: 0,
-  c_unsent: 1,
-  rev: 1,
-  ...over,
-});
+// A send that went out to 10: 8 delivered, 1 bounced, 1 never handed off.
+const send = (over: Partial<SendSummary> = {}): SendSummary =>
+  sendSummary({
+    status: "sent",
+    subject: "Owls",
+    recipient_count: 10,
+    fire_at: 1_000_000,
+    scheduled_at: 900_000,
+    started_at: 1_000_000,
+    completed_at: 1_001_000,
+    audience_resolved_at: 1_000_000,
+    c_delivered: 8,
+    c_bounced: 1,
+    c_unsent: 1,
+    ...over,
+  });
 const outcomes = (over: Partial<DeliveryOutcomes> = {}): DeliveryOutcomes => ({
   recipients: 10,
   delivered: 8,
@@ -85,18 +66,6 @@ const rows = [
   },
 ];
 
-describe("clampPct / fmtDuration", () => {
-  it("clamps and rounds; coarsens durations", () => {
-    expect([clampPct(-5), clampPct(49.6), clampPct(120), clampPct(null)]).toEqual([0, 50, 100, 0]);
-    expect([
-      fmtDuration(45_000),
-      fmtDuration(600_000),
-      fmtDuration(7_200_000),
-      fmtDuration(null),
-    ]).toEqual(["45s", "10 min", "2 hr", "—"]);
-  });
-});
-
 describe("sent record", () => {
   let fake: FakeApi;
   beforeEach(() => {
@@ -112,12 +81,13 @@ describe("sent record", () => {
 
   // A sent send on the fake server: its read, the feed, and its outcomes all come from its
   // counters, and `receipt` moves them the way a delivery webhook does.
-  const sentSend = (over: Partial<Send> = {}) => {
+  const sentSend = (over: Partial<SendSummary> = {}) => {
     const server = sendServer([send(over)]);
     return {
       routes: server.routes,
-      receipt: (counts: Partial<Send>) => server.edit("x1", counts),
+      receipt: (counts: Partial<SendSummary>) => server.edit("x1", counts),
       remove: () => server.remove("x1"),
+      aheadOnce: server.aheadOnce,
     };
   };
   const SETTLING = { c_delivered: 5, c_bounced: 0, c_unsent: 0, c_accepted: 5 };
@@ -135,7 +105,7 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("h1").textContent).toBe("Owls");
     expect($$(".rec-tile")).toHaveLength(5);
     expect($(".rec-recon").textContent).toMatch(
@@ -150,13 +120,11 @@ describe("sent record", () => {
     expect($("#recPill").textContent).toBe("Complete");
     // Nothing moves: the record follows its send at the idle pace, reading the feed and
     // nothing else, never the send's whole record again.
-    const others = () => fake.calls.filter((c) => c.url.pathname !== "/api/sends/feed").length;
+    const others = () => fake.calls.length - feedReads(fake).length;
     const reads = others();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(others()).toBe(reads);
-    expect(
-      fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length,
-    ).toBeLessThanOrEqual(4);
+    expect(feedReads(fake)).toHaveLength(3); // the first, then one a minute
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -169,7 +137,7 @@ describe("sent record", () => {
     const sent = sentSend(SETTLING);
     fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recPill").textContent).toBe("Settling");
     expect($(".rec-meta").textContent).toMatch(/^Sent /);
     const card = $(".rec-card");
@@ -193,7 +161,7 @@ describe("sent record", () => {
     });
     fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const recon = () => $(".rec-recon").textContent ?? "";
     expect(recon()).toContain("1 accepted, awaiting a delivery receipt");
     expect(recon()).toContain(
@@ -221,7 +189,7 @@ describe("sent record", () => {
       }).routes,
     );
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recPill").textContent).toBe("Canceled");
     expect($(".rec-meta").textContent).toMatch(/^Canceled /);
     expect($(".rec-card").textContent).not.toMatch(/\bSent\b/);
@@ -234,8 +202,8 @@ describe("sent record", () => {
     const sent = sentSend(SETTLING);
     fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
-    await vi.advanceTimersByTimeAsync(11 * 60_000); // past the old poll's forty ticks
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(11 * 60_000);
     sent.receipt({ c_accepted: 4, c_complained: 1 }); // a late complaint
     await vi.advanceTimersByTimeAsync(3000);
     expect($(".rec-n.danger").textContent).toBe("1");
@@ -247,7 +215,7 @@ describe("sent record", () => {
     const sent = sentSend(SETTLING);
     fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".rec-card")).toBeTruthy();
     // A Resolve that put ambiguous recipients back to be handed off, say.
     sent.receipt({ status: "sending", completed_at: null, c_accepted: 4, c_pending: 1 });
@@ -260,35 +228,21 @@ describe("sent record", () => {
     const sent = sentSend(SETTLING);
     fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     sent.remove(); // deleted with its post
     await vi.advanceTimersByTimeAsync(3000);
     expect($("#app .error")).toBeTruthy(); // the re-read finds no send
-    const feeds = fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length;
+    const feeds = feedReads(fake).length;
     await vi.advanceTimersByTimeAsync(120_000);
-    expect(fake.calls.filter((c) => c.url.pathname === "/api/sends/feed")).toHaveLength(feeds);
+    expect(feedReads(fake)).toHaveLength(feeds);
   });
 
   it("re-reads the page and follows again when its cursor is ahead of the database", async () => {
     const sent = sentSend(SETTLING);
-    let ahead = true;
-    const feed = sent.routes.find((r) => r.path === "/api/sends/feed");
-    fake = fakeApi([
-      {
-        path: "/api/sends/feed",
-        reply: (req) => {
-          if (ahead) {
-            ahead = false; // a local reset, once
-            return jsonResponse({ error: "cursor_ahead", message: "reset" }, 409);
-          }
-          return feed?.reply(req);
-        },
-      },
-      ...sent.routes,
-      noRows,
-    ]);
+    sent.aheadOnce(); // a local reset
+    fake = fakeApi([...sent.routes, noRows]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const reads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/x1").length;
     expect(reads()).toBe(2); // its own read, then again after the refused cursor
     sent.receipt({ c_delivered: 6, c_accepted: 4 });
@@ -305,9 +259,9 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $(".rec-view-btn[data-view='all']").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const last = fake.calls.at(-1);
     expect(last?.url.searchParams.get("view")).toBe("all");
     expect($(".rec-view-btn[data-view='all']").getAttribute("aria-pressed")).toBe("true");
@@ -333,7 +287,7 @@ describe("sent record", () => {
     ]);
     const lists = () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"));
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery failures/);
     expect($(".rec-n.warn").textContent).toBe("0");
 
@@ -365,15 +319,15 @@ describe("sent record", () => {
     ]);
     const lists = () => fake.calls.filter((c) => c.url.pathname.endsWith("/deliveries"));
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $(".rec-view-btn[data-view='all']").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     typeInto($<HTMLInputElement>(".rec-people-search"), "x.y");
     await vi.advanceTimersByTimeAsync(250);
     $<HTMLButtonElement>(".th-sort[data-sort='email']").click(); // email asc → desc
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $<HTMLButtonElement>(".pager-next").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".pager-range").textContent).toBe("51–100 of 120");
     const read = lists().length;
 
@@ -416,15 +370,15 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     sent.receipt({ c_delivered: 6, c_accepted: 4 });
     await vi.advanceTimersByTimeAsync(3000); // the refresh's reload is now pending
     expect(failureReads).toBe(2);
     $(".rec-view-btn[data-view='delivered']").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
     release(); // the stale failures answer lands last
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/No delivery receipts confirmed yet/);
     expect(document.querySelector(".rec-people-table")).toBeNull();
     expect(fake.unhandled).toHaveLength(0);
@@ -459,11 +413,11 @@ describe("sent record", () => {
     let total = 120;
     const { moveCounts, lists } = settlingRecord((req) => pageOf(req, total));
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $<HTMLButtonElement>(".pager-next").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $<HTMLButtonElement>(".pager-next").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".pager-range").textContent).toBe("101–120 of 120");
 
     total = 60; // the view now holds fewer rows than the reader's page starts at
@@ -481,7 +435,7 @@ describe("sent record", () => {
       failing ? jsonResponse({ error: "boom" }, 500) : pageOf(req, 120),
     );
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($$(".rec-people-table tbody tr")).toHaveLength(2);
 
     failing = true;
@@ -491,7 +445,7 @@ describe("sent record", () => {
     expect(document.querySelector("#recRows .error, #recRows [role='alert']")).toBeNull();
 
     $<HTMLButtonElement>(".pager-next").click(); // the reader's own load does say it failed
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".rec-people-table")).toBeNull();
     expect($("#recRows").textContent).toMatch(/boom/);
     expect(fake.unhandled).toHaveLength(0);
@@ -511,15 +465,15 @@ describe("sent record", () => {
         : pageOf(req, 120);
     });
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $<HTMLButtonElement>(".pager-next").click(); // the reader's load, now pending
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     failing = true;
     moveCounts();
-    await vi.advanceTimersByTimeAsync(15000); // the refresh's reload fails
+    await vi.advanceTimersByTimeAsync(3000); // the layer's next read while it settles: its reload fails
     expect($("#recRows").textContent).toMatch(/boom/);
     release(); // the overtaken answer lands last and paints nothing
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#recRows").textContent).toMatch(/boom/);
     expect(fake.unhandled).toHaveLength(0);
   });
@@ -527,7 +481,7 @@ describe("sent record", () => {
   it("keeps keyboard focus on the same control across a refresh's repaint", async () => {
     const { moveCounts } = settlingRecord((req) => pageOf(req, 120));
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $<HTMLButtonElement>(".pager-next").focus();
     moveCounts();
     await vi.advanceTimersByTimeAsync(3000);
@@ -556,7 +510,7 @@ describe("sent record", () => {
     // happy-dom's replace() pushes an entry as assign() does, so the spec asserts the call.
     const replace = vi.spyOn(location, "replace");
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(replace).toHaveBeenCalledWith("#/edit/p1"); // so Back skips this send URL
     expect(location.hash).toBe("#/edit/p1");
     expect(fake.unhandled).toHaveLength(0);
@@ -582,8 +536,6 @@ describe("sent record", () => {
       },
     };
   };
-  const feedReads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed").length;
-
   it("opens the live watch for a send in flight, follows it through the feed, and flips to the record when it finishes", async () => {
     let status: "sending" | "sent" = "sending";
     const current = () =>
@@ -614,21 +566,19 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".watch-card")).toBeTruthy();
     expect($(".phase-pill").textContent).toBe("Sending");
     expect($$(".wbar")).toHaveLength(2);
     expect($(".wcounts").textContent).toMatch(/5.*Accepted/);
     // The watch keeps no poll of its own: the layer reads the feed from the page's cursor.
-    expect(feedReads()).toBe(1);
-    expect(
-      fake.calls.find((c) => c.url.pathname === "/api/sends/feed")?.url.searchParams.get("since"),
-    ).toBe("1.1");
+    expect(feedReads(fake)).toHaveLength(1);
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe("1.1");
     await vi.advanceTimersByTimeAsync(3000);
-    expect(feedReads()).toBe(2);
+    expect(feedReads(fake)).toHaveLength(2);
     status = "sent";
     await vi.advanceTimersByTimeAsync(3000);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".watch-card")).toBeNull();
     expect($(".rec-card")).toBeTruthy(); // the frozen record now
   });
@@ -659,7 +609,7 @@ describe("sent record", () => {
       feedOf(() => refused),
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".phase-pill").textContent).toBe("Needs attention");
     const alert = $("#watchBody .health.red");
     expect(alert.textContent).toContain("The provider is refusing this account");
@@ -707,7 +657,7 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
     await vi.advanceTimersByTimeAsync(3 * 60_000);
     expect($(".wbar-sub").textContent).toContain("next retry in 9 min");
@@ -742,7 +692,7 @@ describe("sent record", () => {
       });
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#watchBody .health.amber").textContent).toContain(
       "Still sending 31 minutes after it started",
     );
@@ -762,7 +712,7 @@ describe("sent record", () => {
       });
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".wbar-sub").textContent).not.toMatch(/\/min|ETA/);
     paused = false;
     await vi.advanceTimersByTimeAsync(3000);
@@ -779,7 +729,7 @@ describe("sent record", () => {
       });
     fake = watching(current);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".phase-pill").textContent).toBe("Sending");
     expect($(".wbar-sub").textContent).toMatch(
       /^Paused between ticks — it resumes on the next sweep\. · ~30\/min · ETA 2 min$/,
@@ -804,7 +754,7 @@ describe("sent record", () => {
       feedOf(() => wedged),
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $("#resolveBtn").click();
     expect($(".modal h3").textContent).toBe("Resolve 2 ambiguous deliveries");
   });
@@ -830,14 +780,17 @@ describe("sent record", () => {
       },
     ]);
     await mount((r, s) => renderSentRecord("x1", r, s));
-    await vi.advanceTimersByTimeAsync(10);
-    expect(feedReads()).toBe(1);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feedReads(fake)).toHaveLength(1);
     await vi.advanceTimersByTimeAsync(3000); // the next read is now pending
-    expect(feedReads()).toBe(2);
+    expect(feedReads(fake)).toHaveLength(2);
+    const calls = fake.calls.length;
     unmount(); // what navigating away does: the pending read is cut off with the mount
     release();
     await vi.advanceTimersByTimeAsync(9000);
-    expect(feedReads()).toBe(2); // no reschedule
-    expect(document.querySelector(".watch-card")).toBeNull(); // nothing painted back
+    // No reschedule, and the cut-off answer reached nothing that would read again (the
+    // send's own read, its recipients).
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(fake.calls).toHaveLength(calls);
   });
 });

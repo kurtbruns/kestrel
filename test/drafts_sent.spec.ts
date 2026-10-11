@@ -2,16 +2,12 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
 import { recomputeSendCounters } from "../src/db/sends";
-import { adminAuth } from "./support/auth";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
-// PR1 (#147/#148): the Drafts view scopes /api/posts to draft+scheduled via a comma status
+// The Drafts view scopes /api/posts to draft+scheduled via a comma status
 // list, and a sent post opens the read-only record view backed by GET /api/sends/:id
 // (outcome breakdown + published flag) and its CSV export.
 
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
 const uniq = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 async function createDraft(subject: string): Promise<string> {
@@ -119,15 +115,15 @@ async function seedSentSend(subject: string, slug: string, deliveries: SeedDeliv
   }
   // Seed the denormalized counters from the rows just as the real send path does at
   // completion (the exactness pass in completeSend), so the seeded row carries the same
-  // c_* counters production would — what GET /api/sends/:id's `progress` now reads (#166).
+  // c_* counters production would — what GET /api/sends/:id's `progress` reads.
   await recomputeSendCounters(env.DB, sendId);
   return { postId, sendId };
 }
 
-// #162: a post stays `scheduled` while its send is in flight, but it's no longer an
+// A post stays `scheduled` while its send is in flight, but it's no longer an
 // editable/cancelable draft — the list carries the active send's id + status so the
 // Drafts page can relabel/route it, and GET /api/posts points the editor at the live watch.
-describe("in-flight post routing (#162)", () => {
+describe("in-flight post routing", () => {
   it("surfaces a sending post as active and routes it to the watch, not the editor", async () => {
     const marker = `inflight-${uniq()}`;
     const postId = await createDraft(`${marker} post`);
@@ -249,7 +245,7 @@ describe("sent record view — GET /api/sends/:id", () => {
       accepted: o.accepted,
     });
     // The seed has 8 provider-accepted rows but only 5 confirmed-delivered — the exact gap
-    // the old "Delivered = provider-accepted" column got wrong (#90). `delivered` is 5.
+    // the old "Delivered = provider-accepted" column would get wrong. `delivered` is 5.
     expect(p.counts.delivered).toBe(5);
 
     expect(p.links.archive).toContain(slug);
@@ -298,12 +294,12 @@ describe("sent record view — GET /api/sends/:id", () => {
   });
 });
 
-// #164: the record view shows the per-recipient rows in-app, not just as the CSV — a
+// The record view shows the per-recipient rows in-app, not just as the CSV — a
 // paginated, filterable JSON endpoint read DIRECTLY off `deliveries` (the source of
 // truth), not the `c_*` counters. The default view is "failures" (bounced/complained/
 // unsent), and a bounce splits soft vs hard on the per-send `bounce_kind` frozen at
 // ingest (SPEC §8) — a fact of this send, not a read of the global suppression list.
-describe("per-recipient record — GET /api/sends/:id/deliveries (#164)", () => {
+describe("per-recipient record — GET /api/sends/:id/deliveries", () => {
   // Storage isn't isolated between tests in this file, and `suppressions.email` is a
   // global PK, so each record gets a unique address tag. The `fail/hard/soft/spam`
   // prefixes still sort the same way, so the default email-asc order is deterministic.

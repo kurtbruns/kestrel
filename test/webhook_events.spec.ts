@@ -1,42 +1,23 @@
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
-import { isSuppressed } from "../src/db/subscribers";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { audienceEmails, isSuppressed } from "../src/db/subscribers";
 import type { DeliveryEvent } from "../src/providers/types";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
+import {
+  deliveryEvent,
+  resetDatabase,
+  SEEDED_SEND_ID,
+  seedConfirmed,
+  seedDelivery,
+} from "./support/fixtures";
+import { logged } from "./support/log";
 
-// applyDeliveryEvents() is the ONLY thing that mutates state from provider
-// events, so the suppression rule (I1) is unit-tested here. The SES/Resend
-// adapters both echo the recipient address in every event, so an event keyed by
-// `provider_id` alone can't come through parseWebhook — it's constructed
-// directly to prove the service still recovers the address from the matched
-// delivery row and suppresses.
-
-/** Seed one accepted delivery (with its parent post + send, for the FK). */
-async function seedDelivery(email: string, providerId: string | null): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO posts (id, slug, status, created_at, updated_at) VALUES ('p-we','p-we','sent',?,?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT OR IGNORE INTO sends (id, post_id, status, fire_at, rendered_html, rendered_text, subject, scheduled_at) VALUES ('s-we','p-we','sent',?, '', '', '', ?)",
-  )
-    .bind(now, now)
-    .run();
-  await env.DB.prepare(
-    "INSERT INTO deliveries (send_id, email, status, provider_id, updated_at) VALUES ('s-we', ?, 'accepted', ?, ?)",
-  )
-    .bind(email, providerId, now)
-    .run();
-}
-
-async function deliveryEvent(providerId: string): Promise<string | null> {
-  const row = await env.DB.prepare("SELECT event FROM deliveries WHERE provider_id = ?")
-    .bind(providerId)
-    .first<{ event: string | null }>();
-  return row?.event ?? null;
-}
+// applyDeliveryEvents() is the ONLY thing that mutates state from provider events, so the
+// suppression rule (a deliverability rule apart from consent and unsubscribe, SPEC §7,
+// §10) is unit-tested here. The SES/Resend adapters both echo the recipient address in
+// every event, so an event keyed by `provider_id` alone can't come through parseWebhook;
+// it's constructed directly to prove the service still recovers the address from the
+// matched delivery row and suppresses.
 
 async function deliveryBounceKind(providerId: string): Promise<string | null> {
   const row = await env.DB.prepare("SELECT bounce_kind FROM deliveries WHERE provider_id = ?")
@@ -46,12 +27,7 @@ async function deliveryBounceKind(providerId: string): Promise<string | null> {
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    // A fresh send each test, so its counters start at zero.
-    env.DB.prepare("DELETE FROM sends WHERE id = 's-we'"),
-  ]);
+  await resetDatabase();
 });
 
 describe("applyDeliveryEvents: suppression address recovery", () => {
@@ -95,13 +71,19 @@ describe("applyDeliveryEvents: suppression address recovery", () => {
     expect(await deliveryBounceKind("msg-idonly-soft")).toBe("soft");
   });
 
-  it("records but does not suppress when a provider-id-only event matches no row", async () => {
+  it("counts but neither records nor suppresses a provider-id-only event that matches no row", async () => {
+    await seedDelivery("bystander@example.com", "msg-bystander");
+
     const applied = await applyDeliveryEvents(env.DB, [
       { type: "bounced", providerId: "msg-unknown", hard: true },
     ]);
 
-    // The event is counted, but there is no address to suppress.
+    // The event is counted, but there is no row to record it on and no address to suppress.
     expect(applied).toEqual({ applied: 1, suppressed: 0 });
+    expect(await deliveryEvent("msg-bystander")).toBeNull();
+    const { results: suppressions } = await env.DB.prepare("SELECT email FROM suppressions").all();
+    expect(suppressions).toEqual([]);
+    expect(await sendCounters()).toMatchObject({ c_bounced: 0 });
   });
 
   it("still suppresses from the event's own address when present (unchanged path)", async () => {
@@ -117,8 +99,10 @@ describe("applyDeliveryEvents: suppression address recovery", () => {
 
 async function sendCounters(): Promise<Record<string, number>> {
   const row = await env.DB.prepare(
-    "SELECT c_accepted, c_delivered, c_bounced, c_complained FROM sends WHERE id = 's-we'",
-  ).first<Record<string, number>>();
+    "SELECT c_accepted, c_delivered, c_bounced, c_complained FROM sends WHERE id = ?",
+  )
+    .bind(SEEDED_SEND_ID)
+    .first<Record<string, number>>();
   return row!;
 }
 
@@ -183,7 +167,7 @@ describe("applyDeliveryEvents: matching the right delivery", () => {
       ).first<{ status: string; event: string | null }>();
       expect(row).toEqual({ status, event: null });
       expect(await sendCounters()).toEqual(before);
-      expect(applied.suppressed).toBe(1); // from the event's own address (I1)
+      expect(applied.suppressed).toBe(1); // from the event's own address (SPEC §10)
       expect(await isSuppressed(env.DB, "open@example.com")).toBe(true);
     }
   });
@@ -237,12 +221,16 @@ describe("applyDeliveryEvents: a worse outcome is never replaced by a better one
 
 describe("applyDeliveryEvents: suppression casing", () => {
   it("suppresses subscriber bob@x.com on a Bob@X.com bounce", async () => {
+    await seedConfirmed("bob@x.com");
+    expect(await audienceEmails(env.DB)).toContain("bob@x.com");
+
     const applied = await applyDeliveryEvents(env.DB, [
       { type: "bounced", providerId: "msg-case", email: "Bob@X.com", hard: true },
     ]);
 
     expect(applied.suppressed).toBe(1);
     expect(await isSuppressed(env.DB, "bob@x.com")).toBe(true);
+    expect(await audienceEmails(env.DB)).not.toContain("bob@x.com");
   });
 
   it("suppresses the matched delivery's address over the event's", async () => {
@@ -254,5 +242,70 @@ describe("applyDeliveryEvents: suppression casing", () => {
 
     const rows = await env.DB.prepare("SELECT email FROM suppressions").all<{ email: string }>();
     expect(rows.results.map((r) => r.email)).toEqual(["carol@x.com"]);
+  });
+});
+
+describe("applyDeliveryEvents: what it logs", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("writes one receipt.applied line per send, and suppression.added only when it suppressed", async () => {
+    await seedDelivery("ok@example.com", "msg-log-ok");
+    await seedDelivery("hard@example.com", "msg-log-hard");
+    await seedDelivery("soft@example.com", "msg-log-soft");
+    await seedDelivery("cmp@example.com", "msg-log-cmp");
+    const printed = vi.spyOn(console, "log");
+
+    await applyDeliveryEvents(env.DB, [
+      { type: "delivered", providerId: "msg-log-ok" },
+      { type: "bounced", providerId: "msg-log-hard", hard: true },
+      { type: "bounced", providerId: "msg-log-soft", hard: false },
+      { type: "complained", providerId: "msg-log-cmp" },
+      // Already complained: counted as unchanged rather than recorded again.
+      { type: "delivered", providerId: "msg-log-cmp" },
+      // A test send's receipt: no delivery row, so it lands under no send.
+      { type: "delivered", providerId: "msg-test", email: "publisher@example.com" },
+    ]);
+
+    const lines = logged(printed);
+    expect(lines.filter((l) => l.event === "receipt.applied")).toEqual([
+      {
+        event: "receipt.applied",
+        level: "info",
+        sendId: SEEDED_SEND_ID,
+        matched: true,
+        delivered: 2,
+        bounced: 2,
+        complained: 1,
+        recorded: 4,
+        unchanged: 1,
+      },
+      {
+        event: "receipt.applied",
+        level: "info",
+        matched: false,
+        delivered: 1,
+        bounced: 0,
+        complained: 0,
+        recorded: 0,
+        unchanged: 1,
+      },
+    ]);
+    // The soft bounce is not a suppression, and the unmatched send suppressed no one.
+    expect(lines.filter((l) => l.event === "suppression.added")).toEqual([
+      {
+        event: "suppression.added",
+        level: "info",
+        sendId: SEEDED_SEND_ID,
+        matched: true,
+        source: "webhook",
+        count: 2,
+        bounce: 1,
+        complaint: 1,
+      },
+    ]);
+    // Counts only: no address reaches the log.
+    expect(JSON.stringify(lines)).not.toContain("@example.com");
   });
 });

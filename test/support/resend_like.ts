@@ -6,6 +6,9 @@
  * recipients here exactly as it would in production, where the plain fake would hide it.
  * A rate limit or an account refusal answers the whole batch as a halt, mailing no one,
  * as the real adapter reports them.
+ *
+ * Built on it, the providers with no idempotency key (`NoKeyProvider`, `SesLikeProvider`),
+ * so they mail and count the same way.
  */
 import type { AppEnv } from "../../src/env";
 import type {
@@ -117,4 +120,18 @@ export class ResendLikeProvider implements EmailProvider {
   async parseWebhook(_req: Request, _env: AppEnv): Promise<WebhookResult> {
     return { events: [], response: new Response("ok") };
   }
+}
+
+/**
+ * Resend's batches with no key behind them: a request whose answer is lost can't be re-sent
+ * safely, so the loop leaves its recipients in flight for Resolve (SPEC §12).
+ */
+export class NoKeyProvider extends ResendLikeProvider {
+  override readonly idempotentRetry: boolean = false;
+  override readonly idempotencyWindowMs: number | undefined = undefined;
+}
+
+/** SES-shaped: one recipient a request and no idempotency key. */
+export class SesLikeProvider extends NoKeyProvider {
+  override readonly maxBatch: number = 1;
 }

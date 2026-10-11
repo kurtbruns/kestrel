@@ -1,22 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PostListItem } from "../../shared/posts";
 import type { SendSummary } from "../../shared/sends";
-import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberCounts } from "../../shared/subscribers";
 import { appState } from "../state";
-import { confirmUnsubscribe } from "../subscribers/dialogs";
+import { condition, feedReads, listReads, sendServer } from "../test/send_server";
 import {
   $,
   $$,
-  condition,
   type FakeApi,
   type FakeRoute,
   fakeApi,
-  feedReads,
-  listReads,
   mount,
   resetShell,
-  sendServer,
+  sendSummary,
+  settingsResponse,
+  stubClipboard,
   unmount,
 } from "../test/support";
 import { renderDashboard } from "./dashboard";
@@ -38,61 +36,33 @@ const post = (over: Partial<PostListItem> = {}): PostListItem => ({
   author: "human",
   ...over,
 });
-const send = (over: Partial<SendSummary> = {}): SendSummary => ({
-  id: "x1",
-  post_id: "p3",
-  status: "sent",
-  fire_at: NOW - 3_600_000,
-  subject: "Waxwings",
-  recipient_count: 100,
-  locked_until: null,
-  scheduled_at: NOW - 7_200_000,
-  started_at: NOW - 3_600_000,
-  completed_at: NOW - 3_500_000,
-  audience_resolved_at: NOW - 3_600_000,
-  remade_at: null,
-  tested_at: null,
-  halt_reason: null,
-  halt_cause: null,
-  halt_error: null,
-  halted_at: null,
-  halt_retries: 0,
-  halt_retry_at: null,
-  c_pending: 0,
-  c_in_flight: 0,
-  c_accepted: 0,
-  c_delivered: 98,
-  c_bounced: 2,
-  c_complained: 0,
-  c_skipped: 0,
-  c_unsent: 0,
-  rev: 1,
-  ...over,
-});
+// A send that went out an hour ago: 98 delivered, 2 bounced.
+const send = (over: Partial<SendSummary> = {}): SendSummary =>
+  sendSummary({
+    post_id: "p3",
+    status: "sent",
+    fire_at: NOW - 3_600_000,
+    subject: "Waxwings",
+    recipient_count: 100,
+    scheduled_at: NOW - 7_200_000,
+    started_at: NOW - 3_600_000,
+    completed_at: NOW - 3_500_000,
+    audience_resolved_at: NOW - 3_600_000,
+    c_delivered: 98,
+    c_bounced: 2,
+    ...over,
+  });
 const counts: SubscriberCounts = { pending: 3, confirmed: 40, unsubscribed: 2, suppressed: 1 };
 const none: SubscriberCounts = { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 };
 
 // What the dashboard reads from the boot-time settings: the identity and the origins.
-const config = (): SettingsResponse =>
-  ({
-    settings: { publication: { name: "Birds Weekly", tagline: "Owls & more", logoUrl: "" } },
-    deployment: {
-      provider: "fake",
-      fromAddress: "Birds <hello@birds.example>",
-      appOrigin: "https://app.birds.example",
-      archiveOrigin: "https://birds.example",
-      archiveBasePath: "/archive",
-      build: {
-        version: "",
-        sha: "dev",
-        tag: "",
-        buildTime: "",
-        repoUrl: "",
-        commitUrl: "",
-        tagUrl: "",
-      },
+const config = () =>
+  settingsResponse({
+    settings: {
+      publication: { name: "Birds Weekly", tagline: "Owls & more", address: "", logoUrl: "" },
     },
-  }) as unknown as SettingsResponse;
+    deployment: { archiveOrigin: "https://birds.example" },
+  });
 
 // The dashboard's world: the posts and subscribers it reads once, and a stateful send server
 // that answers the sends list and the layer's feed over one change sequence, so every read
@@ -157,6 +127,7 @@ describe("dashboard", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -176,7 +147,7 @@ describe("dashboard", () => {
     srv.put(send(), { archive: "https://birds.example/archive/waxwings" });
     fake = world(posts, srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".dash-head h1").textContent).toBe("Birds Weekly");
     expect($(".dash-tagline").textContent).toBe("Owls & more");
     expect(document.querySelector(".health")).toBeNull(); // nothing wrong, nothing said
@@ -220,7 +191,7 @@ describe("dashboard", () => {
   it("reports Claude as connected once the service principal has authored a revision", async () => {
     fake = world([post({ author: "service" })], sendServer());
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".conn-status").textContent).toBe("Claude is connected.");
     // The same two links, same shape, once connected: the reference first, each with its glyph.
     expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
@@ -235,13 +206,17 @@ describe("dashboard", () => {
   });
 
   it("follows from its own list read: the layer's first read asks from that read's cursor", async () => {
-    fake = world([post()], sendServer([send()]));
+    const srv = sendServer([send()]);
+    // The clock stands still until the spec advances it, so this is the cursor the page's
+    // own read is handed.
+    const cursor = srv.cursor();
+    fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const [list] = listReads(fake);
     const [feed] = feedReads(fake);
     expect(listReads(fake)).toHaveLength(1);
-    expect(feed?.url.searchParams.get("since")).toBeTruthy();
+    expect(feed?.url.searchParams.get("since")).toBe(cursor);
     // The feed's first read comes after the page's own, never beside it.
     expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(list!));
   });
@@ -260,7 +235,7 @@ describe("dashboard", () => {
     });
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     const lines = $$(":scope > div > div", health).map((d) => d.textContent);
@@ -289,7 +264,7 @@ describe("dashboard", () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 20_000 })]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(countdown("p2").textContent).toBe("Sends in 20s");
     // The clock switches the card at the fire time, before any read says so.
     await vi.advanceTimersByTimeAsync(20_000);
@@ -313,15 +288,13 @@ describe("dashboard", () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 20_000 })]);
     fake = world([post()], srv);
     vi.setSystemTime(NOW + 25_000); // the server's clock, past the fire time
-    const route = srv.routes.find((r) => r.path === "/api/sends")!;
-    const reply = route.reply;
-    route.reply = (req) => {
+    srv.wrap("/api/sends", (req, reply) => {
       const out = reply(req);
       vi.setSystemTime(NOW); // the page's, behind it
       return out;
-    };
+    });
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(countdown("p2").textContent).toBe("Preparing to send…");
   });
 
@@ -329,7 +302,7 @@ describe("dashboard", () => {
     const srv = sendServer([scheduled({ fire_at: NOW - 10_000 })]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(countdown("p2").textContent).toBe("Preparing to send…");
     srv.edit("x2", { status: "sending", started_at: Date.now(), c_pending: 30, c_accepted: 10 });
     await vi.advanceTimersByTimeAsync(3000);
@@ -362,7 +335,7 @@ describe("dashboard", () => {
     );
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
@@ -381,7 +354,7 @@ describe("dashboard", () => {
     });
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const health = $(".health");
     expect(health.classList.contains("amber")).toBe(true);
     expect(health.textContent).toMatch(/10 recipients bounced \(10%\)/);
@@ -397,14 +370,14 @@ describe("dashboard", () => {
       },
     ]);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".setup-title").textContent).toBe("Set up your publication");
     expect(document.querySelector(".tiles")).toBeNull();
     expect($(".setup-url").textContent).toBe("https://app.birds.example/subscribe");
     expect($(".setup [data-nav='#/settings']").textContent).toBe("Settings");
     expect($(".pub-links a").textContent?.trim()).toBe("Connect Claude →");
     $(".setup [data-act='new-post']").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.find((c) => c.method === "POST")?.body).toBe("{}");
     expect(location.hash).toBe("#/edit/p9");
   });
@@ -412,7 +385,7 @@ describe("dashboard", () => {
   it("opens the post from a draft row or a scheduled card, the record from a sent row, and the watch from the active card", async () => {
     fake = world([post()], sendServer([send(), scheduled(), sending({ c_accepted: 50 })]));
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $("tr[data-id='p1'] td:last-child").click();
     expect(location.hash).toBe("#/edit/p1");
     $("tr[data-send='x1'] td:nth-child(2)").click();
@@ -430,7 +403,7 @@ describe("dashboard", () => {
     ]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(cards()).toEqual(["p4", "p2"]);
     expect($("#dashSent").textContent).toMatch(/No sends yet/);
     const before = listReads(fake).length;
@@ -449,17 +422,23 @@ describe("dashboard", () => {
   });
 
   it("reads about once a minute while nothing moves, and once just past the next fire time", async () => {
-    const fire = NOW + 2 * 3_600_000;
+    // Off the minute grid, so only the read the server arms for just past the fire time can
+    // see the send due: a read once a minute would land half a minute either side of it.
+    const fire = NOW + 5 * 60_000 + 30_000;
     fake = world([post()], sendServer([scheduled({ fire_at: fire })]));
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const lists = listReads(fake).length;
-    await vi.advanceTimersByTimeAsync(60 * 60_000);
-    expect(feedReads(fake)).toHaveLength(61); // the first, then one a minute
-    expect(listReads(fake).length).toBe(lists); // nothing changed, nothing re-read
-    await vi.advanceTimersByTimeAsync(60 * 60_000 + 1_000);
-    // The fire time: the read just past it sees the send due and re-reads the queue.
-    expect(listReads(fake).length).toBe(lists + 1);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(feedReads(fake)).toHaveLength(6); // the first, then one a minute
+    expect(listReads(fake)).toHaveLength(lists); // nothing changed, nothing re-read
+    await vi.advanceTimersByTimeAsync(fire + 999 - Date.now());
+    expect(feedReads(fake)).toHaveLength(6);
+    expect(listReads(fake)).toHaveLength(lists);
+    // A second past the fire time: that read sees the send due and re-reads the queue.
+    await vi.advanceTimersByTimeAsync(1);
+    expect(feedReads(fake)).toHaveLength(7);
+    expect(listReads(fake)).toHaveLength(lists + 1);
     expect(countdown("p2").textContent).toBe("Preparing to send…");
   });
 
@@ -471,7 +450,7 @@ describe("dashboard", () => {
     ]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(cards()).toEqual(["p2", "p5"]);
     // Claude moves one a day later, which changes no stage.
     srv.edit("x5", { fire_at: NOW + 3 * 86_400_000 });
@@ -495,7 +474,7 @@ describe("dashboard", () => {
     const srv = sendServer([sending({ c_pending: 50 })]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".health")).toBeNull();
     expect($("#dashActive .active-card").dataset.watch).toBe("x3");
     srv.edit(
@@ -533,15 +512,15 @@ describe("dashboard", () => {
     });
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".health.red").textContent).toBe(
       "⚠️Kinglets has 1 ambiguous delivery awaiting a decision; resolve it on its page.",
     );
     // A wedged send moves only when someone resolves it: the layer reads at the idle pace,
     // not every few seconds, and the line stays.
     const reads = feedReads(fake).length;
-    await vi.advanceTimersByTimeAsync(50_000);
-    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(1);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(feedReads(fake).length - reads).toBe(1);
     expect($(".health.red a").getAttribute("href")).toBe("#/sent/w1");
     // Resolve, on the send's page (another tab): shown within the minute.
     srv.edit("w1", { status: "sent", c_in_flight: 0, c_unsent: 1, completed_at: Date.now() });
@@ -556,7 +535,7 @@ describe("dashboard", () => {
     ]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const cell = () => $("#dashSent tr[data-send='x1'] td.delivered").textContent;
     expect(cell()).toBe("10");
     const before = listReads(fake).length;
@@ -570,7 +549,7 @@ describe("dashboard", () => {
     // Complete: back to the idle pace, one read a minute.
     const reads = feedReads(fake).length;
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(feedReads(fake).length - reads).toBeLessThanOrEqual(11);
+    expect(feedReads(fake).length - reads).toBe(10);
     // A receipt long after dispatch still shows, within the minute.
     srv.edit("x1", { c_delivered: 97, c_bounced: 3 });
     await vi.advanceTimersByTimeAsync(60_000);
@@ -581,7 +560,7 @@ describe("dashboard", () => {
     const srv = sendServer([sending({ c_pending: 60, c_accepted: 40 })]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("0");
     srv.edit("x3", { c_accepted: 6, c_delivered: 34 });
     await vi.advanceTimersByTimeAsync(3000);
@@ -589,10 +568,25 @@ describe("dashboard", () => {
     expect($("#dashActive .active-stat").textContent).toMatch(/34 confirmed/);
   });
 
+  it("reads the page again and follows from that read when its cursor is ahead of the database", async () => {
+    const srv = sendServer([sending({ c_pending: 60, c_accepted: 40 })]);
+    srv.aheadOnce(); // a local reset
+    fake = world([post()], srv);
+    await mount(renderDashboard);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listReads(fake)).toHaveLength(2); // its own read, then again after the refusal
+    expect(feedReads(fake)).toHaveLength(2); // refused, then from the fresh read
+    expect($$(".dash-head")).toHaveLength(1);
+    srv.edit("x3", { c_accepted: 6, c_delivered: 34 });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect($("#dashSent tr[data-send='x3'] td.delivered").textContent).toBe("34"); // following again
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("stops reading when the reader navigates away", async () => {
     fake = world([post()], sendServer([sending()]));
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(3000);
     expect(feedReads(fake)).toHaveLength(2);
     unmount(); // what navigating away does: the layer's follower leaves with the mount
@@ -608,83 +602,30 @@ describe("dashboard", () => {
     ]);
     fake = world([post()], srv);
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const n = $("#dashNotices .notice");
     expect(n.dataset.notice).toBe("applied|*");
     expect(n.textContent).toMatch(/was applied to 2 scheduled posts\. Send a fresh test email/);
     $(".notice-dismiss", n).click();
     expect(document.querySelector("#dashNotices .notice")).toBeNull();
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector("#dashNotices .notice")).toBeNull(); // dismissed stays dismissed
   });
 
   it("quick actions: add a subscriber, edit the publication, copy an origin", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     fake = world([post()], sendServer());
     await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $(".quick-actions [data-act='add-sub']").click();
     expect($("#addEmail")).toBeTruthy();
     $("#aCancel").click();
     $(".quick-actions [data-nav]").click();
     expect(location.hash).toBe("#/settings");
     $(".pub-card [data-copy]").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(writeText).toHaveBeenCalledWith("https://app.birds.example");
     expect($("#toasts").textContent).toMatch(/Copied/);
-    vi.unstubAllGlobals();
-  });
-});
-
-describe("confirmUnsubscribe", () => {
-  let fake: FakeApi;
-  beforeEach(() => {
-    resetShell();
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    fake?.restore();
-    vi.useRealTimers();
-  });
-  const sub = {
-    id: "s1",
-    email: "a@b.c",
-    status: "confirmed" as const,
-    confirm_token: null,
-    confirm_sent_at: 1,
-    confirm_attempt_at: 1,
-    unsub_token: "t",
-    created_at: 1,
-    confirmed_at: 2,
-    unsubscribed_at: null,
-  };
-
-  it("names the address, unsubscribes on confirm, and tells the caller", async () => {
-    fake = fakeApi([
-      { method: "POST", path: "/api/subscribers/s1/unsubscribe", reply: () => ({}) },
-    ]);
-    const onDone = vi.fn();
-    confirmUnsubscribe(sub, onDone);
-    expect($(".modal strong").textContent).toBe("a@b.c");
-    $("#uGo").click();
-    await vi.advanceTimersByTimeAsync(10);
-    expect(fake.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
-      "POST /api/subscribers/s1/unsubscribe",
-    ]);
-    expect(onDone).toHaveBeenCalledOnce();
-    expect($("#toasts").textContent).toMatch(/Unsubscribed a@b\.c/);
-    expect(document.querySelector(".modal")).toBeNull();
-  });
-
-  it("cancels without a call", () => {
-    fake = fakeApi([]);
-    const onDone = vi.fn();
-    confirmUnsubscribe(sub, onDone);
-    $("#uCancel").click();
-    expect(document.querySelector(".modal")).toBeNull();
-    expect(fake.calls).toEqual([]);
-    expect(onDone).not.toHaveBeenCalled();
   });
 });

@@ -9,6 +9,7 @@ describe("lifecycle", () => {
   });
   afterEach(() => {
     unmount();
+    vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
@@ -148,7 +149,6 @@ describe("lifecycle", () => {
     expect(report.mock.calls[0]?.[0]).toMatchObject({ message: "a paint bug" });
     expect(n).toBe(2); // the poll went on
     c.abort();
-    vi.unstubAllGlobals();
   });
 
   it("onAbort: runs on abort, or at once for a signal already aborted", () => {

@@ -39,6 +39,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - `kestrel init` on Windows no longer leaves an extra `claude` folder beside `.claude`, and `npm run check-context -- --merged` accepts a Windows path.
 - `npm run check-context` now prints commands that run as written (`npm run check-context -- --update`, `-- --merged`), where it printed a bare `kestrel` that isn't on the path.
 - `kestrel init` refuses before writing anything when a migration of the release's is already there, where it wrote the other files first.
+- The Worker no longer writes "using deprecated parameters for the initialization function" to its logs the first time it renders an email after starting, a plain-text line among the structured ones.
 
 ## [1.5.0] - 2026-10-09
 

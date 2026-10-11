@@ -8,12 +8,9 @@ import { type AppEnv, getConfig } from "../src/env";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import type { EmailProvider, SendBatchResult } from "../src/providers/types";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
+import { allowErrorLogs } from "./support/log";
 
 let seq = 0;
 const uniqueEmail = () => `person-${Date.now()}-${seq++}@example.com`;
@@ -435,7 +432,6 @@ describe("a confirmation the provider does not take is not treated as sent", () 
       },
     };
     vi.spyOn(providers, "getProvider").mockReturnValue(stub);
-    vi.spyOn(console, "error").mockImplementation(() => {});
     return { calls };
   }
 
@@ -498,6 +494,7 @@ describe("a confirmation the provider does not take is not treated as sent", () 
   });
 
   it("a failure before the provider is asked changes nothing", async () => {
+    allowErrorLogs("subscribe.failed", "request.error");
     const email = uniqueEmail();
     await addPending(email);
     await ageConfirmation(email, CONFIRM_COOLDOWN_MS);
@@ -599,11 +596,22 @@ describe("subscribers: admin + suppressions", () => {
   });
 
   it("GET /api/subscribers returns counts", async () => {
+    // A list of known shape, so each count is checked against what is really there; a
+    // suppression counts whether or not its address is on the list.
+    await resetDatabase();
+    await seedConfirmed(["c1@example.com", "c2@example.com", "c3@example.com"]);
+    await env.DB.prepare(
+      `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, unsubscribed_at)
+       VALUES ('id-p', 'p@example.com', 'pending', 'cfm-p', 'uns-p', 0, NULL),
+              ('id-u', 'u@example.com', 'unsubscribed', NULL, 'uns-u', 0, 0)`,
+    ).run();
+    await subs.addSuppression(env.DB, "c1@example.com", "manual");
+    await subs.addSuppression(env.DB, "elsewhere@example.com", "bounce");
+
     const res = await SELF.fetch(`${base}/api/subscribers`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.counts).toHaveProperty("confirmed");
-    expect(body.counts).toHaveProperty("suppressed");
+    expect(body.counts).toEqual({ confirmed: 3, pending: 1, unsubscribed: 1, suppressed: 2 });
   });
 
   it("suppression excludes a confirmed subscriber, and clearing restores them", async () => {

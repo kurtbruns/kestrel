@@ -9,6 +9,7 @@ import {
   mount,
   resetShell,
   settle,
+  stubClipboard,
   unmount,
 } from "../test/support";
 import { renderReference } from "./reference";
@@ -84,7 +85,9 @@ describe("reference room", () => {
   });
   afterEach(() => {
     fake?.restore();
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("renders each tier's resources as groups of collapsed rows, and a rail of tiers and resources", async () => {
@@ -181,38 +184,33 @@ describe("reference room", () => {
   });
 
   it("copies a code block's plain text, not its highlighted markup, and shows a check for a moment", async () => {
-    const writeText = vi.fn(async () => {});
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     fake = fakeApi([{ path: "/api/reference", reply: () => ({ groups }) }]);
     await mount(renderReference);
     await settle();
     vi.useFakeTimers();
-    try {
-      const create = $$("#api-admin-posts details.api-route")[1]!;
-      const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
-      const glyph = () => copy.querySelector("svg")?.outerHTML;
-      const resting = glyph();
-      expect(copy.textContent?.trim()).toBe("Copy");
-      expect(copy.getAttribute("aria-label")).toBe("Copy Request");
-      copy.click();
-      await vi.advanceTimersByTimeAsync(0);
-      expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
-      expect(copy.getAttribute("aria-label")).toBe("Copied");
-      expect(copy.classList.contains("copied")).toBe(true);
-      expect(glyph()).not.toBe(resting);
-      expect(copy.textContent?.trim()).toBe("Copy"); // the word stays; only the glyph changes
-      // A second copy mid-moment restarts it rather than being cut short by the first.
-      await vi.advanceTimersByTimeAsync(1000);
-      copy.click();
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(copy.getAttribute("aria-label")).toBe("Copied");
-      await vi.advanceTimersByTimeAsync(600);
-      expect(copy.getAttribute("aria-label")).toBe("Copy Request");
-      expect(copy.classList.contains("copied")).toBe(false);
-      expect(glyph()).toBe(resting);
-    } finally {
-      vi.useRealTimers();
-    }
+    const create = $$("#api-admin-posts details.api-route")[1]!;
+    const copy = $<HTMLButtonElement>(".api-ex button.api-copy", create);
+    const glyph = () => copy.querySelector("svg")?.outerHTML;
+    const resting = glyph();
+    expect(copy.textContent?.trim()).toBe("Copy");
+    expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+    copy.click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(writeText).toHaveBeenCalledWith(`{\n  "subject": "Owls"\n}`);
+    expect(copy.getAttribute("aria-label")).toBe("Copied");
+    expect(copy.classList.contains("copied")).toBe(true);
+    expect(glyph()).not.toBe(resting);
+    expect(copy.textContent?.trim()).toBe("Copy"); // the word stays; only the glyph changes
+    // A second copy mid-moment restarts it rather than being cut short by the first.
+    await vi.advanceTimersByTimeAsync(1000);
+    copy.click();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(copy.getAttribute("aria-label")).toBe("Copied");
+    await vi.advanceTimersByTimeAsync(600);
+    expect(copy.getAttribute("aria-label")).toBe("Copy Request");
+    expect(copy.classList.contains("copied")).toBe(false);
+    expect(glyph()).toBe(resting);
   });
 
   it("lists the body types a write accepts, and none for a route that takes no body", async () => {
@@ -284,7 +282,6 @@ describe("reference room", () => {
     $("#apiNav a[data-sec='admin-sends']").click();
     expect(scroll.mock.instances).toEqual([$("#api-public"), $("#api-admin-sends")]);
     expect(location.hash).toBe("#/reference");
-    scroll.mockRestore();
   });
 
   it("lights the rail for the last tier or resource heading scrolled under the bar, and stops following once the room is left", async () => {
@@ -327,7 +324,7 @@ describe("reference room", () => {
       .mockReturnValue(window.innerHeight + 500);
     scrollTo(["api-admin"]);
     expect(active()).toEqual(["public"]);
-    scrollY.mockRestore();
+    scrollY.mockRestore(); // back at the top, for what follows
     height.mockRestore();
     // A filtered-out heading is skipped, and with nothing left the rail lights nothing.
     $("#api-admin-sends").hidden = true;

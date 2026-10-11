@@ -45,7 +45,7 @@ describe("web version", () => {
   });
   afterEach(() => {
     fake?.restore();
-    appState.appConfig = null;
+    vi.restoreAllMocks();
   });
 
   it("restates the page's own policy inside the framed copy, and changes nothing else", () => {
@@ -193,7 +193,6 @@ describe("web version", () => {
       await settle();
       expect(replace).toHaveBeenCalledWith("https://newsletter.example.com/archive/herons");
       expect(document.querySelector(".web-frame")).toBeNull();
-      replace.mockRestore();
     });
   }
 
@@ -211,19 +210,40 @@ describe("web version", () => {
     expect(document.title).toBe("Kestrel");
   });
 
-  it("says what went wrong, with a retry, when the page can't be read", async () => {
-    location.hash = "#/web/post/gone";
+  it("says the page can't be read, with a retry that reads it again", async () => {
+    location.hash = "#/web/post/p1";
+    let down = true;
     fake = fakeApi([
       {
-        path: "/api/posts/gone/web",
-        reply: () => jsonResponse({ error: "post not found" }, 404),
+        path: "/api/posts/p1/web",
+        reply: () => (down ? jsonResponse({ error: "post not found" }, 404) : htmlReply()),
       },
+      { path: "/api/posts/p1", reply: postReply("draft") },
+    ]);
+    const webReads = () => fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/web");
+    await mount((r, s) => renderWebVersion("p1", r, s));
+    await settle();
+    expect(document.querySelector(".web-frame")).toBeNull();
+    expect(document.querySelectorAll(".web-error .error")).toHaveLength(1);
+    expect(webReads()).toHaveLength(1);
+    down = false;
+    $("[data-retry]").click();
+    await settle();
+    expect(webReads()).toHaveLength(2);
+    expect(document.querySelector(".web-error")).toBeNull();
+    expect($<HTMLIFrameElement>(".web-frame").srcdoc).toBe(framedCopy(page));
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  // Bug: apiText throws with only the status text, which HTTP/2 leaves empty, so the box says nothing.
+  it.fails("says what went wrong in the server's words when the page can't be read", async () => {
+    location.hash = "#/web/post/gone";
+    fake = fakeApi([
+      { path: "/api/posts/gone/web", reply: () => jsonResponse({ error: "post not found" }, 404) },
       { path: "/api/posts/gone", reply: () => jsonResponse({ error: "post not found" }, 404) },
     ]);
     await mount((r, s) => renderWebVersion("gone", r, s));
     await settle();
-    expect(document.querySelector(".web-frame")).toBeNull();
-    expect($(".web-error .error")).toBeTruthy();
-    expect($("[data-retry]")).toBeTruthy();
+    expect($(".web-error .error").textContent).toMatch(/post not found/);
   });
 });

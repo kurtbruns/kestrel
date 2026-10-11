@@ -13,11 +13,8 @@ import {
 } from "../src/lib/body";
 import { HttpError } from "../src/lib/errors";
 import type { RequestContext } from "../src/router";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
+import { AUTH, base, readJson } from "./support/http";
+import { allowErrorLogs } from "./support/log";
 
 function send(method: string, path: string, body: string, contentType = "application/json") {
   return SELF.fetch(`${base}${path}`, {
@@ -45,7 +42,8 @@ async function newDraft(markdown = "v1"): Promise<{ id: string; revision_id: str
   return { id: body.post.id, revision_id: body.revision_id };
 }
 
-function ctxFor(body: string, contentType: string | null = "application/json"): RequestContext {
+/** A context carrying only a POST request with this body: all the body readers look at. */
+function withBody(body: string, contentType: string | null = "application/json"): RequestContext {
   const req = new Request(base, { method: "POST", body });
   // A string body is typed text/plain by default; null stands for a client that sends none.
   if (contentType === null) {
@@ -68,40 +66,40 @@ async function refusal(p: Promise<unknown> | (() => unknown)): Promise<HttpError
 
 describe("readJsonObject", () => {
   it("returns a JSON object as parsed", async () => {
-    expect(await readJsonObject(ctxFor('{"a":1}'))).toEqual({ a: 1 });
+    expect(await readJsonObject(withBody('{"a":1}'))).toEqual({ a: 1 });
   });
 
   it("refuses an absent body unless it is optional", async () => {
-    expect((await refusal(readJsonObject(ctxFor("")))).status).toBe(400);
-    expect(await readJsonObject(ctxFor(""), { optional: true })).toEqual({});
+    expect((await refusal(readJsonObject(withBody("")))).status).toBe(400);
+    expect(await readJsonObject(withBody(""), { optional: true })).toEqual({});
   });
 
   it("refuses a body that doesn't say it is JSON (415), even when optional", async () => {
     for (const type of ["text/plain", "application/x-www-form-urlencoded", null]) {
-      const e = await refusal(readJsonObject(ctxFor('{"a":1}', type), { optional: true }));
+      const e = await refusal(readJsonObject(withBody('{"a":1}', type), { optional: true }));
       expect([e.status, e.code], String(type)).toEqual([415, "unsupported_media_type"]);
     }
   });
 
   it("takes an empty optional body with no content type as {}", async () => {
-    expect(await readJsonObject(ctxFor("", null), { optional: true })).toEqual({});
+    expect(await readJsonObject(withBody("", null), { optional: true })).toEqual({});
   });
 
   it("reads the declared type by its media type", async () => {
-    expect(await readJsonObject(ctxFor('{"a":1}', "Application/JSON; charset=utf-8"))).toEqual({
+    expect(await readJsonObject(withBody('{"a":1}', "Application/JSON; charset=utf-8"))).toEqual({
       a: 1,
     });
   });
 
   it("refuses a body that is not JSON, even when optional", async () => {
-    const e = await refusal(readJsonObject(ctxFor("{nope"), { optional: true }));
+    const e = await refusal(readJsonObject(withBody("{nope"), { optional: true }));
     expect(e.message).toMatch(/not valid JSON/);
   });
 
   it("refuses null, an array, and a scalar, naming which it got", async () => {
-    expect((await refusal(readJsonObject(ctxFor("null")))).message).toMatch(/not null/);
-    expect((await refusal(readJsonObject(ctxFor("[1]")))).message).toMatch(/not an array/);
-    expect((await refusal(readJsonObject(ctxFor('"x"')))).message).toMatch(/not string/);
+    expect((await refusal(readJsonObject(withBody("null")))).message).toMatch(/not null/);
+    expect((await refusal(readJsonObject(withBody("[1]")))).message).toMatch(/not an array/);
+    expect((await refusal(readJsonObject(withBody('"x"')))).message).toMatch(/not string/);
   });
 });
 
@@ -247,6 +245,7 @@ describe("other routes name the field they refuse", () => {
 
 describe("PUT /api/settings keeps a database failure out of the 400", () => {
   it("a failing settings read is a 500, not a bad request carrying the database's message", async () => {
+    allowErrorLogs("request.error");
     const broken = {
       ...env,
       DB: {

@@ -1,5 +1,5 @@
 /**
- * Operator adjudication of a wedged send (SPEC §12, issue #71).
+ * Operator adjudication of a wedged send (SPEC §12).
  *
  * On a non-idempotent provider a mid-batch transport error leaves recipients
  * `dispatched` — genuinely ambiguous — and the loop refuses to blind-retry them
@@ -21,27 +21,14 @@ import { runSend } from "../src/send/loop";
 import { resolveStuckSend } from "../src/send/resolve";
 import { freeze } from "../src/send/schedule";
 import { SES_DEPLOY } from "./support/deploy";
+import { resetDatabase, seedConfirmed } from "./support/fixtures";
+import { allowErrorLogs } from "./support/log";
 
 const config = () => getConfig(env);
 
 // A non-idempotent provider (SES) — the only kind that can wedge a send. Mirrors
 // the override in integration_delivery.spec.ts; no real network (fetch is mocked).
-const sesEnv = () =>
-  ({
-    ...env,
-    ...SES_DEPLOY,
-    AWS_ACCESS_KEY_ID: "AKIARESOLVETEST",
-    AWS_SECRET_ACCESS_KEY: "resolve-secret-key",
-  }) as unknown as AppEnv;
-
-async function seedConfirmed(email: string): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES (?, ?, 'confirmed', ?, ?, ?, ?)",
-  )
-    .bind(`id-${email}`, email, `cfm-${email}`, `uns-${email}`, now, now)
-    .run();
-}
+const sesEnv = () => ({ ...env, ...SES_DEPLOY }) as unknown as AppEnv;
 
 /** A send moved to `sending` (as the lease does) but with no deliveries yet. */
 async function sendingSend(): Promise<sends.SendRow> {
@@ -73,16 +60,7 @@ async function insertDelivery(
 }
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -229,12 +207,16 @@ describe("resolve a wedged send", () => {
   });
 
   it("rejects resolving a missing send", async () => {
-    await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toThrow();
+    await expect(resolveStuckSend(env, "nope", "unsent", "t")).rejects.toMatchObject({
+      status: 404,
+      code: "not_found",
+    });
   });
 });
 
 describe("a real SES transport error wedges the send, and resolve unwedges it", () => {
   it("stays sending on a mid-batch transport error, then completes via resolve", async () => {
+    allowErrorLogs("send.ambiguous");
     await seedConfirmed("a@example.com");
     const { post } = await posts.createPost(env.DB, { subject: "S", markdown: "# H\n\nb" }, "t");
     const send = await freeze(env, config(), post, Date.now() - 1000);
@@ -242,7 +224,7 @@ describe("a real SES transport error wedges the send, and resolve unwedges it", 
     // The outbound SES POST throws (request left, no response) — the ambiguous case.
     const spy = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("network down"));
     await runSend(sesEnv(), send.id);
-    spy.mockRestore();
+    expect(spy).toHaveBeenCalledTimes(1);
 
     // Wedged: sending, one dispatched row, nothing pending, nothing mailed.
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
@@ -250,8 +232,12 @@ describe("a real SES transport error wedges the send, and resolve unwedges it", 
     expect(await sends.countDeliveries(env.DB, send.id, "pending")).toBe(0);
     expect(await sends.countDeliveries(env.DB, send.id, "accepted")).toBe(0);
 
-    // Resuming does NOT clear it — a non-idempotent provider is never auto-retried.
+    // Resuming does NOT clear it — a non-idempotent provider is never auto-retried. The
+    // transport stays mocked, so a blind re-send would show as a second request here
+    // rather than failing on the real network and leaving the row looking the same.
+    spy.mockClear();
     await runSend(sesEnv(), send.id);
+    expect(spy).not.toHaveBeenCalled();
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sending");
     expect(await sends.countDeliveries(env.DB, send.id, "dispatched")).toBe(1);
 

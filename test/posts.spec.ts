@@ -1,11 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
+import { AUTH, adminAuth, base, readJson } from "./support/http";
 
 async function createPost(body: unknown): Promise<Response> {
   return SELF.fetch(`${base}/api/posts`, {
@@ -182,7 +178,8 @@ describe("posts + revisions", () => {
     const id = created.post.id;
     const rev1 = created.post.current_revision;
 
-    await put(id, { markdown: "v2", base_revision: rev1 }); // advance so rev1 is stale
+    // Advance so rev1 is stale; this save must land, or the 409 below proves nothing.
+    expect((await put(id, { markdown: "v2", base_revision: rev1 })).status).toBe(200);
     const stale = await put(id, { markdown: "nope", base_revision: rev1 });
     expect(stale.status).toBe(409);
 
@@ -245,7 +242,11 @@ describe("posts + revisions", () => {
       }),
     );
     const sendId = scheduled.send.id;
-    await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, { method: "POST", headers: AUTH });
+    const canceled = await SELF.fetch(`${base}/api/sends/${sendId}/cancel`, {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(canceled.status).toBe(200);
     // A delivery row would exist if the send had begun; insert one so the cascade
     // is exercised even though a cancel-before-fire normally leaves none.
     await env.DB.prepare(

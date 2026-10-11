@@ -3,6 +3,7 @@ import type { SendSummary } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { ViewHandle } from "../lifecycle";
 import { appState } from "../state";
+import { feedReads, sendServer } from "../test/send_server";
 import {
   $,
   type FakeApi,
@@ -13,7 +14,9 @@ import {
   mount,
   mounted,
   resetShell,
-  sendServer,
+  restoreHidden,
+  sendSummary,
+  setHidden,
   typeInto,
   unmount,
 } from "../test/support";
@@ -78,38 +81,9 @@ function draftServer(initial = draft()) {
   return server;
 }
 
-/** A scheduled send's row, as the send routes store it. */
-const sendRow = (over: Partial<SendSummary> = {}): SendSummary => ({
-  id: "s1",
-  post_id: "p1",
-  status: "scheduled",
-  fire_at: Date.now() + 3_600_000,
-  subject: "Owls",
-  recipient_count: 40,
-  locked_until: null,
-  scheduled_at: Date.now(),
-  started_at: null,
-  completed_at: null,
-  audience_resolved_at: null,
-  remade_at: null,
-  tested_at: null,
-  halt_reason: null,
-  halt_cause: null,
-  halt_error: null,
-  halted_at: null,
-  halt_retries: 0,
-  halt_retry_at: null,
-  c_pending: 0,
-  c_in_flight: 0,
-  c_accepted: 0,
-  c_delivered: 0,
-  c_bounced: 0,
-  c_complained: 0,
-  c_skipped: 0,
-  c_unsent: 0,
-  rev: 1,
-  ...over,
-});
+/** The post's scheduled send, as the send routes store it. */
+const sendRow = (over: Partial<SendSummary> = {}): SendSummary =>
+  sendSummary({ id: "s1", post_id: "p1", subject: "Owls", recipient_count: 40, ...over });
 
 /**
  * A scheduled post and its send on one fake server, so the post's read and the send
@@ -176,6 +150,7 @@ describe("editor view", () => {
   });
   afterEach(() => {
     fake?.restore();
+    restoreHidden();
     vi.restoreAllMocks();
     vi.useRealTimers();
   });
@@ -419,11 +394,6 @@ describe("editor view", () => {
 
   const reads = () =>
     fake.calls.filter((c) => c.method === "GET" && c.url.pathname === "/api/posts/p1");
-  const feedCalls = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
-  const setHidden = (hidden: boolean) => {
-    Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-    document.dispatchEvent(new Event("visibilitychange"));
-  };
 
   it("hands a scheduled post off to the live watch within a feed read of its send starting, with a toast, in place of its history entry", async () => {
     const linked = scheduledPost(Date.now() + 5_000);
@@ -441,38 +411,34 @@ describe("editor view", () => {
 
   it("follows its send through the layer, reading at once when a hidden tab is shown again", async () => {
     const linked = scheduledPost();
+    // The clock stands still until the spec advances it, so this is the cursor the send's
+    // read is handed.
+    const cursor = linked.sends.cursor();
     await open(linked.routes);
-    expect(feedCalls()).toHaveLength(1); // the layer's first read, from the send's cursor
-    try {
-      setHidden(true);
-      await vi.advanceTimersByTimeAsync(120_000); // a hidden tab reads nothing
-      expect(feedCalls()).toHaveLength(1);
-      linked.start();
-      setHidden(false);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(feedCalls()).toHaveLength(2);
-      expect(location.hash).toBe("#/sent/s1");
-    } finally {
-      delete (document as { hidden?: boolean }).hidden;
-    }
+    expect(feedReads(fake)).toHaveLength(1); // the layer's first read, from the send's cursor
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(cursor);
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(120_000); // a hidden tab reads nothing
+    expect(feedReads(fake)).toHaveLength(1);
+    linked.start();
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(location.hash).toBe("#/sent/s1");
     expect(reads()).toHaveLength(1); // no poll of the post of its own
   });
 
   it("reads a draft's freshness at once when a hidden tab is shown again", async () => {
     const server = draftServer();
     await open([{ path: "/api/posts/p1", reply: server.get }]);
-    try {
-      setHidden(true);
-      await vi.advanceTimersByTimeAsync(10000);
-      expect(reads()).toHaveLength(1);
-      server.elsewhere("service");
-      setHidden(false);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(reads()).toHaveLength(2);
-      expect($("#freshnessBanner").hidden).toBe(false);
-    } finally {
-      delete (document as { hidden?: boolean }).hidden;
-    }
+    setHidden(true);
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(reads()).toHaveLength(1);
+    server.elsewhere("service");
+    setHidden(false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads()).toHaveLength(2);
+    expect($("#freshnessBanner").hidden).toBe(false);
   });
 
   it("stops reading on a shown tab once the editor is torn down", async () => {
@@ -588,9 +554,9 @@ describe("editor view", () => {
     ]);
     expect(body().readOnly).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/Sends in 1h/);
-    expect(feedCalls()).toHaveLength(0);
+    expect(feedReads(fake)).toHaveLength(0);
     await vi.advanceTimersByTimeAsync(5_000); // the send read is tried again
-    expect(feedCalls()).toHaveLength(1); // and the editor follows from it
+    expect(feedReads(fake)).toHaveLength(1); // and the editor follows from it
     linked.cancel();
     await vi.advanceTimersByTimeAsync(60_000);
     expect(body().readOnly).toBe(false);
@@ -618,7 +584,7 @@ describe("editor view", () => {
 
   it("goes to Drafts when its post is deleted elsewhere", async () => {
     const linked = scheduledPost();
-    await open([...linked.routes, { path: "/api/posts", reply: () => ({ posts: [], page: {} }) }]);
+    await open(linked.routes);
     linked.sends.remove("s1");
     await vi.advanceTimersByTimeAsync(60_000);
     expect(location.hash).toBe("#/drafts");
@@ -926,6 +892,110 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says an autosave failed, and has a leave ask rather than flush again", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error", message: "disk full" }, 500),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(puts()).toHaveLength(1);
+    expect($("#toasts").textContent).toMatch(/Couldn't autosave — disk full/);
+    expect($("#saveStatus").textContent).not.toBe("Saved");
+    expect(handle().dirty()).toBe(true);
+    expect(handle().beforeLeave()).toBe("confirm"); // a silent flush would fail again
+  });
+
+  it("says a leave's save failed, since no one is left on the page to see it otherwise", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error", message: "disk full" }, 500),
+      },
+    ]);
+    typeInto(body(), "leaving");
+    expect(handle().beforeLeave()).toBe("leave");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(1);
+    expect($("#toasts").textContent).toMatch(/Couldn't save your changes — disk full/);
+  });
+
+  it("locks the draft when a save is refused because it left draft elsewhere", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () =>
+          jsonResponse({ error: "not_draft", message: "the post is no longer a draft" }, 409),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    const banner = $("#freshnessBanner");
+    expect(banner.hidden).toBe(false);
+    expect(banner.textContent).toMatch(/scheduled elsewhere/);
+    expect(document.querySelector("#freshKeep")).toBeNull(); // nothing to keep editing
+    expect($("#toasts").textContent).toBe(""); // a conflict, not an error
+    expect(handle().beforeLeave()).toBe("confirm");
+    typeInto(body(), "mine still");
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toHaveLength(1); // paused while the banner is up
+  });
+
+  it("reloads the other writer's version from the out-of-date banner, discarding the unsaved edit", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+    ]);
+    server.elsewhere("service");
+    await vi.advanceTimersByTimeAsync(10000); // the freshness poll finds Claude's save
+    expect($("#freshnessBanner").hidden).toBe(false);
+    typeInto(body(), "mine"); // held, since saving waits on the banner
+    const before = reads().length;
+    $("#freshReload").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reads()).toHaveLength(before + 1); // the view re-entered, reading the post again
+    expect(body().value).toBe("# Owls\n\nHoot.");
+    expect($("#freshnessBanner").hidden).toBe(true);
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(handle().dirty()).toBe(false);
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(puts()).toEqual([]); // the discarded edit is never saved
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says when only some of a test's addresses were sent", async () => {
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: (req) => ({ sent: (req.json() as { to: string }).to !== "you@b.c", warnings: [] }),
+      },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "me@b.c\nyou@b.c");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(2);
+    expect($("#toasts").textContent).toMatch(/Sent 1\/2 — some failed/);
+    expect($("#toasts").textContent).not.toMatch(/Test sent to/);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
     // A "now" before the picked fire time (2026-09-25 15:00 local), so the scheduled
     // banner never reads it as already missed, whenever the suite runs.
@@ -1056,37 +1126,33 @@ describe("editor view", () => {
     appState.appConfig = {
       deployment: { minLeadMs: 60_000 },
     } as unknown as SettingsResponse;
-    try {
-      const server = draftServer();
-      await open([
-        { path: "/api/posts/p1", reply: server.get },
-        { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-        { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
-        {
-          method: "POST",
-          path: "/api/posts/p1/send",
-          // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
-          reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
-        },
-      ]);
-      $("#scheduleBtn").click();
-      expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
-      // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
-      expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
-      $("#toSendNow").click();
-      await vi.advanceTimersByTimeAsync(0);
-      expect($(".modal .hint").textContent).toMatch(
-        /cancelable window of at least 1 minute, on the minute/,
-      );
-      $("#snGo").click();
-      await vi.advanceTimersByTimeAsync(0);
-      // A minute and a half out, not the lead's one minute: the time as rounded.
-      expect($("#toasts").textContent).toContain(
-        `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
-      );
-    } finally {
-      appState.appConfig = null;
-    }
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/send",
+        // 10:00:30 plus the lead, rounded up to the minute, as the server answers it.
+        reply: () => ({ send: { id: "s2", fire_at: new Date(2026, 8, 23, 10, 2).getTime() } }),
+      },
+    ]);
+    $("#scheduleBtn").click();
+    expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
+    // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
+    expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
+    $("#toSendNow").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($(".modal .hint").textContent).toMatch(
+      /cancelable window of at least 1 minute, on the minute/,
+    );
+    $("#snGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    // A minute and a half out, not the lead's one minute: the time as rounded.
+    expect($("#toasts").textContent).toContain(
+      `Sends at ${fmt(new Date(2026, 8, 23, 10, 2).getTime())}, cancelable until then.`,
+    );
   });
 
   it("uploads a picked image and inserts it at the caret", async () => {
@@ -1163,7 +1229,7 @@ describe("editor view", () => {
       },
     );
     await vi.advanceTimersByTimeAsync(3_000);
-    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/feed")).toBe(true);
+    expect(feedReads(fake)).toHaveLength(2); // at the fire time, then the one carrying the edit
     expect($<HTMLButtonElement>("#rescheduleSchedule").disabled).toBe(true);
     expect($<HTMLButtonElement>("#cancelSchedule").disabled).toBe(true);
     expect($("#schedWhen").textContent).toMatch(/· Preparing to send…$/);
@@ -1202,7 +1268,9 @@ describe("editor view", () => {
   });
 
   it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
-    const linked = scheduledPost(1_800_000_000_000, 1_790_000_000_000);
+    // Relative to now, so the send stays ahead of its fire time and the re-make behind it
+    // whatever day the suite runs.
+    const linked = scheduledPost(Date.now() + 86_400_000, Date.now() - 86_400_000);
     await open([
       ...linked.routes,
       {

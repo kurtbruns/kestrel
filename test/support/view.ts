@@ -5,6 +5,7 @@
 import type { SendSummary, SendView } from "../../shared/sends";
 import type { ProviderName } from "../../src/env";
 import { buildSendView } from "../../src/send/view";
+import { base } from "./http";
 
 export function viewOf(
   send: SendSummary,
@@ -22,7 +23,7 @@ export function viewOf(
   };
   return buildSendView(
     { ...row, post_slug: null },
-    { provider, archiveOrigin: "https://kestrel.test", archiveBasePath: "/" },
+    { provider, archiveOrigin: base, archiveBasePath: "/" },
     hasRetries,
     now,
   );

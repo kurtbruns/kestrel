@@ -11,7 +11,15 @@ import {
   type StageChange,
   stageOf,
 } from "./send_state";
-import { type FakeApi, fakeApi, jsonResponse, sendView } from "./test/support";
+import { feedReads, sendView } from "./test/send_server";
+import {
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  restoreHidden,
+  sendSummary,
+  setHidden,
+} from "./test/support";
 
 const NOW = 1_700_000_000_000;
 
@@ -23,36 +31,15 @@ function live(
   over: Partial<SendView> = {},
 ): SendView {
   return sendView(
-    {
+    sendSummary({
       id,
       post_id: `p-${id}`,
       status,
       fire_at: NOW - 30_000,
       subject: `Subject ${id}`,
-      recipient_count: 10,
-      locked_until: null,
       scheduled_at: NOW - 3_600_000,
-      started_at: null,
-      completed_at: null,
-      audience_resolved_at: null,
-      remade_at: null,
-      tested_at: null,
-      halt_reason: null,
-      halt_cause: null,
-      halt_error: null,
-      halted_at: null,
-      halt_retries: 0,
-      halt_retry_at: null,
-      c_pending: 0,
-      c_in_flight: 0,
-      c_accepted: 0,
-      c_delivered: 0,
-      c_bounced: 0,
-      c_complained: 0,
-      c_skipped: 0,
-      c_unsent: 0,
       rev: 0,
-    },
+    }),
     { phase, ...over },
   );
 }
@@ -129,7 +116,7 @@ function server() {
       },
     },
   ]);
-  const reads = () => fake.calls.filter((c) => c.url.pathname === "/api/sends/feed");
+  const reads = () => feedReads(fake);
   /** What a page's own GET /api/sends would have read: every send, and the cursor. */
   const list = (): ListRead => ({
     cursor: cursorNow(),
@@ -140,11 +127,6 @@ function server() {
     })),
   });
   return { state, fake, reads, write, remove, reset, list, cursorNow };
-}
-
-function setHidden(hidden: boolean): void {
-  Object.defineProperty(document, "hidden", { configurable: true, get: () => hidden });
-  document.dispatchEvent(new Event("visibilitychange"));
 }
 
 /** A follower of every send that only takes updates. */
@@ -190,6 +172,7 @@ describe("the send-state layer", () => {
       p.abort();
     }
     fake.restore();
+    restoreHidden();
     vi.useRealTimers();
   });
 
@@ -507,9 +490,13 @@ describe("the send-state layer", () => {
     followSends(joinedAt, on(), page().signal);
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(2); // no second read while one is out
+    // A change after the page joined: the held read answers past the page's cursor.
+    srv.write(live("x", "sending", "progressing"));
     srv.state.hold = null;
     release();
     await vi.advanceTimersByTimeAsync(0);
     expect(srv.reads()).toHaveLength(3);
+    // Its own read starts where the page's read stood, not where the held one ended.
+    expect(srv.reads()[2]?.url.searchParams.get("since")).toBe(joinedAt.cursor);
   });
 });

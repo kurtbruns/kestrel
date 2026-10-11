@@ -1,17 +1,15 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-
-const BASE = "https://kestrel.test";
+import { AUTH, base } from "./support/http";
 
 describe("GET /api/version", () => {
   it("requires auth (401 without a token)", async () => {
-    const res = await SELF.fetch(`${BASE}/api/version`);
+    const res = await SELF.fetch(`${base}/api/version`);
     expect(res.status).toBe(401);
   });
 
   it("reports the running build to an authed client", async () => {
-    const res = await SELF.fetch(`${BASE}/api/version`, { headers: await adminAuth() });
+    const res = await SELF.fetch(`${base}/api/version`, { headers: AUTH });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       version: string;

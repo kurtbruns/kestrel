@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocFragment, DocsResponse } from "../../shared/docs";
 import type { SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
@@ -11,6 +11,7 @@ import {
   mount,
   resetShell,
   settle,
+  stubClipboard,
   unmount,
 } from "../test/support";
 import { headingAnchor, renderDocs } from "./docs";
@@ -75,17 +76,31 @@ const config = (repoUrl: string): SettingsResponse =>
     },
   }) as unknown as SettingsResponse;
 
-// The module caches the guide after its first fetch (the bundle never changes at runtime),
-// so the tests below share one instance in order: the first fetches, the rest read the
-// cache. The two that need a fetch of their own load a fresh instance.
-async function freshDocs() {
+// The module caches the guide after its first fetch (the bundle never changes at runtime).
+// `beforeAll` fills this instance's cache once, so every test that reads it does so in any
+// order; a test that needs a fetch of its own loads a fresh instance. A fresh instance
+// comes with its own app state, so it is handed the same config the shared one reads. It
+// also has its own lifecycle, so a view it mounts itself (a link it follows) is not torn down
+// by resetShell's unmount; the room's DOM is still cleared with the shell.
+async function freshDocs(repoUrl = "https://github.com/x/kestrel") {
   vi.resetModules();
+  const fresh = await import("../state");
+  fresh.appState.appConfig = config(repoUrl);
   const mod = await import("./docs");
   return (slug?: string) => mount((r, s) => mod.renderDocs(slug, r, s));
 }
 
 describe("docs room", () => {
   let fake: FakeApi;
+  beforeAll(async () => {
+    resetShell();
+    appState.appConfig = config("https://github.com/x/kestrel");
+    const filling = fakeApi([{ path: "/api/docs", reply: () => guide }]);
+    await mount((r, s) => renderDocs(undefined, r, s));
+    await settle();
+    unmount();
+    filling.restore();
+  });
   beforeEach(() => {
     resetShell();
     location.hash = "#/docs";
@@ -94,11 +109,14 @@ describe("docs room", () => {
   afterEach(() => {
     fake?.restore();
     document.onscroll = null;
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders the index the landing lays out: its title and intro, each section's cards in reading order with blurbs from each doc's first paragraph, the numbered section numbered, and the project links in the rail", async () => {
+    const render = await freshDocs();
     fake = fakeApi([{ path: "/api/docs", reply: () => guide }]);
-    await mount((r, s) => renderDocs(undefined, r, s));
+    await render();
     await settle();
     expect($(".room-switch [aria-current='page']").textContent).toBe("Docs");
     expect($(".docs-index h1").textContent).toBe("Set up <and> run"); // a title is text
@@ -185,7 +203,6 @@ describe("docs room", () => {
     expect(scroll).toHaveBeenCalledWith({ block: "start" });
     // The address names the section without a hashchange, so the page isn't rendered again.
     expect(location.hash).toBe("#/docs/provision/steps");
-    scroll.mockRestore();
   });
 
   it("keeps Previous and Next within the doc's section: the last step has no Next into the reference", async () => {
@@ -201,7 +218,6 @@ describe("docs room", () => {
     await mount((r, s) => renderDocs("overview", r, s, "what-you-get"));
     expect(scroll).toHaveBeenCalledTimes(1);
     expect(scroll.mock.contexts[0]).toBe($("#doc-h-what-you-get"));
-    scroll.mockRestore();
   });
 
   it("opens a doc at its top when the route's anchor is a malformed escape", async () => {
@@ -210,7 +226,6 @@ describe("docs room", () => {
     await mount((r, s) => renderDocs("overview", r, s, "check%2"));
     expect($("#doc-h-what-you-get")).toBeTruthy();
     expect(top).toHaveBeenCalledWith(0, 0);
-    top.mockRestore();
   });
 
   it("derives a heading's anchor the way GitHub does", () => {
@@ -221,14 +236,12 @@ describe("docs room", () => {
 
   it("copies a code block", async () => {
     fake = fakeApi([]);
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { ...navigator, clipboard: { writeText } });
+    const writeText = stubClipboard();
     await mount((r, s) => renderDocs("overview", r, s));
     $("pre .code-copy").click();
     await settle();
     expect(writeText).toHaveBeenCalledWith("npm run dev");
     expect($("pre .code-copy").textContent).toBe("Copied");
-    vi.unstubAllGlobals();
   });
 
   it("heals an unknown slug to the index", async () => {

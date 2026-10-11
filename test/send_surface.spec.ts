@@ -11,37 +11,21 @@ import {
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
-import { getConfig } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
-import { freeze, onTheMinute } from "../src/send/schedule";
-import { adminAuth } from "./support/auth";
+import { onTheMinute } from "../src/send/schedule";
 import { has } from "./support/conditions";
+import { frozenSend, resetDatabase, setRow } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
 // The API-first send surface (SPEC §8, §12): conditions and actions derived once by the
 // server and carried by every route, a distinct code per refusal carrying the send as it
 // stands, actions safe to retry and carrying no precondition, the review window closing at
 // the fire time, and query values refused rather than dropped.
 
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-async function frozenSend(fireAt: number, subject = "Subj") {
-  const { post } = await posts.createPost(env.DB, { subject, markdown: "# Hi\n\nbody" }, "test");
-  return freeze(env, getConfig(env), post, fireAt);
-}
-
-async function setRow(id: string, fields: Record<string, number | string | null>): Promise<void> {
-  const cols = Object.keys(fields);
-  await env.DB.prepare(`UPDATE sends SET ${cols.map((c) => `${c} = ?`).join(", ")} WHERE id = ?`)
-    .bind(...cols.map((c) => fields[c] ?? null), id)
-    .run();
-}
-
-async function progress(id: string): Promise<SendView> {
+/** A send's view, as `GET /api/sends/:id` answers it. */
+async function readView(id: string): Promise<SendView> {
   return (await readJson(await SELF.fetch(`${base}/api/sends/${id}`, { headers: AUTH }))).send;
 }
 
@@ -53,15 +37,7 @@ const post = (path: string, body?: unknown, headers: Record<string, string> = {}
   });
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM subscribers"),
-    env.DB.prepare("DELETE FROM settings"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
 });
 
@@ -193,9 +169,21 @@ describe("conditions: one server rule for each kind", () => {
 });
 
 describe("every route reads a send the same way", () => {
-  it("carries the same conditions and actions on the list, the send, its progress, and the feed, and rolls every open condition into each feed read", async () => {
+  it("carries the same conditions and actions on the list, the send, and the feed, and rolls every open condition into each feed read", async () => {
+    const readList = async () =>
+      (await readJson(
+        await SELF.fetch(`${base}/api/sends`, { headers: AUTH }),
+      )) as SendListResponse;
+    const readFeed = async (since: string) =>
+      (await readJson(
+        await SELF.fetch(`${base}/api/sends/feed?since=${encodeURIComponent(since)}`, {
+          headers: AUTH,
+        }),
+      )) as SendFeedResponse;
+    // A cursor from before either send was made, so the feed reports both as changes.
+    const empty = (await readList()).cursor;
     const now = Date.now();
-    const wedged = await frozenSend(now - 120_000, "Wedged");
+    const wedged = await frozenSend(now - 120_000, { subject: "Wedged" });
     await setRow(wedged.id, {
       status: "sending",
       started_at: now - 100_000,
@@ -203,18 +191,18 @@ describe("every route reads a send the same way", () => {
       c_in_flight: 2,
       c_accepted: 8,
     });
-    const upcoming = await frozenSend(now + 3_600_000, "Upcoming");
-    const list = (await readJson(
-      await SELF.fetch(`${base}/api/sends`, { headers: AUTH }),
-    )) as SendListResponse;
-    const detail = await readJson(
-      await SELF.fetch(`${base}/api/sends/${wedged.id}`, { headers: AUTH }),
-    );
-    const prog = await progress(wedged.id);
-    const listed = list.sends.find((s) => s.id === wedged.id);
-    expect(listed?.conditions).toEqual(prog.conditions);
-    expect(detail.send.conditions).toEqual(prog.conditions);
-    expect(listed?.actions).toEqual([
+    const upcoming = await frozenSend(now + 3_600_000, { subject: "Upcoming" });
+    const list = await readList();
+    const reported = await readFeed(empty);
+    for (const send of [wedged, upcoming]) {
+      const one = await readView(send.id);
+      const listed = list.sends.find((s) => s.id === send.id);
+      const fed = reported.sends.find((s) => s.id === send.id);
+      expect([listed?.conditions, listed?.actions]).toEqual([one.conditions, one.actions]);
+      expect([fed?.conditions, fed?.actions]).toEqual([one.conditions, one.actions]);
+    }
+    expect((await readView(wedged.id)).conditions.map((c) => c.kind)).toEqual(["wedged"]);
+    expect(list.sends.find((s) => s.id === wedged.id)?.actions).toEqual([
       { name: "resolve", method: "POST", path: `/api/sends/${wedged.id}/resolve` },
     ]);
     expect(list.sends.find((s) => s.id === upcoming.id)?.actions.map((a) => a.name)).toEqual([
@@ -222,11 +210,7 @@ describe("every route reads a send the same way", () => {
       "reschedule",
     ]);
     // A feed read from now reports no send (nothing changed), but still every open problem.
-    const feed = (await readJson(
-      await SELF.fetch(`${base}/api/sends/feed?since=${encodeURIComponent(list.cursor)}`, {
-        headers: AUTH,
-      }),
-    )) as SendFeedResponse;
+    const feed = await readFeed(list.cursor);
     expect(feed.sends).toEqual([]);
     expect(feed.conditions.map((c) => [c.send_id, c.subject, c.kind])).toEqual([
       [wedged.id, "Wedged", "wedged"],
@@ -234,34 +218,34 @@ describe("every route reads a send the same way", () => {
   });
 
   it("clears remade once the scheduled send's frozen copy is tested", async () => {
-    const send = await frozenSend(Date.now() + 3_600_000, "Re-made");
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Re-made" });
     await setRow(send.id, { remade_at: Date.now() - 1000 });
-    expect(has(await progress(send.id), "remade")).toBe(true);
+    expect(has(await readView(send.id), "remade")).toBe(true);
     const test = await post(`/api/posts/${send.post_id}/test`, { to: "me@example.com" });
     expect(test.status).toBe(200);
     expect((await readJson(test)).frozen).toBe(true);
     expect((await sends.getSend(env.DB, send.id))?.tested_at).not.toBeNull();
-    expect(has(await progress(send.id), "remade")).toBe(false);
+    expect(has(await readView(send.id), "remade")).toBe(false);
   });
 });
 
 describe("a test racing a re-make", () => {
   it("does not mark the re-made copy tested when the test read the copy before the re-make", async () => {
-    const send = await frozenSend(Date.now() + 3_600_000, "Raced");
+    const send = await frozenSend(Date.now() + 3_600_000, { subject: "Raced" });
     const readAt = Date.now();
     await setRow(send.id, { remade_at: readAt + 5 }); // the re-make lands while the test is out
     await sends.markTested(env.DB, send.id, readAt, readAt + 10);
     expect((await sends.getSend(env.DB, send.id))?.tested_at).toBeNull();
-    expect(has(await progress(send.id), "remade")).toBe(true);
+    expect(has(await readView(send.id), "remade")).toBe(true);
     // A test that read the re-made copy does settle it.
     await sends.markTested(env.DB, send.id, readAt + 6, readAt + 20);
-    expect(has(await progress(send.id), "remade")).toBe(false);
+    expect(has(await readView(send.id), "remade")).toBe(false);
   });
 });
 
 describe("the review window closes at the fire time", () => {
   it("refuses cancel and reschedule once the send is due, before the sweep starts it, with window_closed and the send", async () => {
-    const send = await frozenSend(Date.now() - 5_000, "Due");
+    const send = await frozenSend(Date.now() - 5_000, { subject: "Due" });
     for (const [path, body] of [
       [`/api/sends/${send.id}/cancel`, undefined],
       [`/api/sends/${send.id}/reschedule`, { fire_at: Date.now() + 3_600_000 }],
@@ -281,19 +265,31 @@ describe("actions safe to retry, with no precondition", () => {
   it("answers a second cancel, and a move to the time the send already has, with 200 and changed false", async () => {
     const fireAt = onTheMinute(Date.now() + 3_600_000);
     const send = await frozenSend(fireAt);
+    // A no-op takes no number: a rev stamped on it would report a change the feed's
+    // followers never saw happen.
+    const rev = async () => (await sends.getSend(env.DB, send.id))?.rev;
+    const scheduled = await rev();
     const same = await post(`/api/sends/${send.id}/reschedule`, { fire_at: fireAt });
     expect(same.status).toBe(200);
-    expect(await readJson(same)).toMatchObject({ changed: false, send: { fire_at: fireAt } });
+    expect(await readJson(same)).toMatchObject({
+      changed: false,
+      send: { fire_at: fireAt, rev: scheduled },
+    });
     // The same minute with seconds on it is the same time as stored: still no change.
     const seconds = await post(`/api/sends/${send.id}/reschedule`, { fire_at: fireAt - 25_000 });
     expect(await readJson(seconds)).toMatchObject({ changed: false, send: { fire_at: fireAt } });
-    const before = (await sends.getSend(env.DB, send.id))?.rev;
+    expect(await rev()).toBe(scheduled);
     const first = await post(`/api/sends/${send.id}/cancel`);
     expect(await readJson(first)).toMatchObject({ changed: true, send: { status: "canceled" } });
+    const canceled = await rev();
+    expect(canceled).toBeGreaterThan(scheduled ?? 0);
     const again = await post(`/api/sends/${send.id}/cancel`);
     expect(again.status).toBe(200);
-    expect(await readJson(again)).toMatchObject({ changed: false, send: { status: "canceled" } });
-    expect((await sends.getSend(env.DB, send.id))?.rev).toBeGreaterThan(before ?? 0);
+    expect(await readJson(again)).toMatchObject({
+      changed: false,
+      send: { status: "canceled", rev: canceled },
+    });
+    expect(await rev()).toBe(canceled);
     // A canceled send is not moved: it is scheduled again instead.
     const moved = await post(`/api/sends/${send.id}/reschedule`, { fire_at: fireAt + 60_000 });
     expect(await readJson(moved)).toMatchObject({ error: "send_canceled" });

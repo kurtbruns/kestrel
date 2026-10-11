@@ -350,8 +350,12 @@ export function onceUntilRejected(init: () => Promise<void>): () => Promise<void
 }
 
 // initWasm is async (it instantiates the module), so it runs once per isolate, or again
-// after a failure, and callers just await inlineEmailCss.
-const inlinerReady = onceUntilRejected(() => initWasm(wasmModule));
+// after a failure, and callers just await inlineEmailCss. Its bindings take the module
+// wrapped in `{ module_or_path }` and warn on a bare one, but the package's declaration
+// still names only the bare form, hence the cast.
+const inlinerReady = onceUntilRejected(() =>
+  initWasm({ module_or_path: wasmModule } as unknown as Parameters<typeof initWasm>[0]),
+);
 
 /** Inline the `<style>` rules onto elements and keep un-inlinable `@media` rules in a
  *  `<style>` block. Deterministic: same input → same output (holds I5). */

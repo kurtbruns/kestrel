@@ -14,33 +14,22 @@ import worker from "../src/index";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { RECEIPTS_CRON, resetSimulation } from "../src/providers/simulate";
 import { freeze } from "../src/send/schedule";
-import { adminAuth } from "./support/auth";
+import { resetDatabase } from "./support/fixtures";
+import { AUTH } from "./support/http";
+import { fetchWith, withVars } from "./support/worker_env";
 
 // Locally, simulated receipts arrive on the dev ticker's own clock (SPEC §10), through the
 // scheduled handler with a cron value no deployed trigger can carry, and never because a
 // page read /progress. These pin that the receipts cron drains and never sweeps, that a
 // read settles nothing, and that the ticker sends the value the Worker listens for.
 
-const AUTH = await adminAuth();
-const base = "https://kestrel.test";
 const HOUR = 60 * 60 * 1000;
 
 /** The simulation on, with no faults, so every due receipt is a delivery. */
 const SIM = { SIMULATE_SENDS: "1:none" };
-const withVars = (vars: Record<string, string>): AppEnv =>
-  ({ ...env, ...vars }) as unknown as AppEnv;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   clearFakeOutbox();
   resetSimulation();
 });
@@ -53,7 +42,7 @@ async function scheduled(cron: string, e: AppEnv = env as AppEnv): Promise<void>
 }
 
 /** A scheduled send whose fire time has passed, to one confirmed reader: the sweep would fire it. */
-async function dueSend(): Promise<string> {
+async function dueSendToOneReader(): Promise<string> {
   const now = Date.now();
   await env.DB.prepare(
     "INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at) VALUES ('sub-r', 'r@example.com', 'confirmed', 'cfm-r', 'uns-r', ?, ?)",
@@ -93,7 +82,7 @@ const delivered = async (sendId: string) => (await sends.getSend(env.DB, sendId)
 describe("the receipts cron", () => {
   it("settles the simulated receipts that have come due and never runs the sweep", async () => {
     await settlingSend("s-settling", 3);
-    const due = await dueSend();
+    const due = await dueSendToOneReader();
     await scheduled(RECEIPTS_CRON, withVars(SIM));
     expect(await delivered("s-settling")).toBe(3);
     expect((await sends.getSend(env.DB, due))?.status).toBe("scheduled");
@@ -109,16 +98,7 @@ describe("the receipts cron", () => {
 describe("GET /api/sends/:id with the simulation on", () => {
   it("settles nothing: reading a send never changes it", async () => {
     await settlingSend("s-read", 3);
-    const ctx = createExecutionContext();
-    const res = await worker.fetch(
-      new Request(`${base}/api/sends/s-read`, { headers: AUTH }) as Request<
-        unknown,
-        IncomingRequestCfProperties
-      >,
-      withVars(SIM),
-      ctx,
-    );
-    await waitOnExecutionContext(ctx);
+    const res = await fetchWith(SIM, "/api/sends/s-read", { headers: AUTH });
     expect(res.status).toBe(200);
     const body = ((await res.json()) as { send: SendView }).send;
     expect([body.phase, body.delivery.confirmed]).toEqual(["settling", 0]);

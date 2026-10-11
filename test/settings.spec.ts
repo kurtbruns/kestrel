@@ -1,15 +1,28 @@
-import { SELF } from "cloudflare:test";
+import { createExecutionContext, SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it, vi } from "vitest";
-import { DEFAULT_CONFIRMATION_EMAIL, setPublicationLogo, updateSettings } from "../src/db/settings";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  BRANDING_LOGO_KEY,
+  DEFAULT_CONFIRMATION_EMAIL,
+  setPublicationLogo,
+  updateSettings,
+} from "../src/db/settings";
 import { confirmationEmail } from "../src/emails/system";
-import { adminAuth } from "./support/auth";
-import { logged } from "./support/log";
+import { type AppEnv, getConfig } from "../src/env";
+import type { RequestContext } from "../src/router";
+import * as settingsRoutes from "../src/routes/settings";
+import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { resetDatabase } from "./support/fixtures";
+import { AUTH, base, JSON_AUTH, PNG_1x1 } from "./support/http";
+import { allowErrorLogs, logged } from "./support/log";
 
-const BASE = "https://kestrel.test";
+// Each test starts from no settings row, so none sees a name, logo, or address another left.
+beforeEach(async () => {
+  await resetDatabase();
+});
 
 async function getSettings() {
-  const res = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
+  const res = await SELF.fetch(`${base}/api/settings`, { headers: AUTH });
   return {
     res,
     body: (await res.json()) as {
@@ -40,27 +53,20 @@ async function getSettings() {
   };
 }
 
-// A real 1x1 PNG for the logo-upload tests.
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
 async function putLogo(bytes: Uint8Array, type: string) {
   const fd = new FormData();
   fd.append("file", new File([bytes], "logo", { type }));
-  return SELF.fetch(`${BASE}/api/settings/logo`, {
+  return SELF.fetch(`${base}/api/settings/logo`, {
     method: "POST",
-    headers: { ...(await adminAuth()) },
+    headers: AUTH,
     body: fd,
   });
 }
 
 async function putSettings(patch: unknown) {
-  return SELF.fetch(`${BASE}/api/settings`, {
+  return SELF.fetch(`${base}/api/settings`, {
     method: "PUT",
-    headers: { ...(await adminAuth()), "content-type": "application/json" },
+    headers: JSON_AUTH,
     body: JSON.stringify(patch),
   });
 }
@@ -69,25 +75,25 @@ async function putSettings(patch: unknown) {
  *  the fake transport recorded for it. */
 async function subscribeAndGetConfirmation() {
   const email = `ce-${crypto.randomUUID()}@example.com`;
-  const sub = await SELF.fetch(`${BASE}/subscribe`, {
+  const sub = await SELF.fetch(`${base}/subscribe`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email }),
   });
   expect(sub.ok).toBe(true);
-  const outbox = (await (
-    await SELF.fetch(`${BASE}/api/dev/outbox`, { headers: await adminAuth() })
-  ).json()) as { messages: { to: string; subject: string; html: string; text: string }[] };
+  const outbox = (await (await SELF.fetch(`${base}/api/dev/outbox`, { headers: AUTH })).json()) as {
+    messages: { to: string; subject: string; html: string; text: string }[];
+  };
   return outbox.messages.find((m) => m.to === email);
 }
 
 describe("settings API is gated like the rest of the authoring API", () => {
   it("401s GET without a token", async () => {
-    const res = await SELF.fetch(`${BASE}/api/settings`);
+    const res = await SELF.fetch(`${base}/api/settings`);
     expect(res.status).toBe(401);
   });
   it("401s PUT without a token", async () => {
-    const res = await SELF.fetch(`${BASE}/api/settings`, {
+    const res = await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ testRecipients: ["x@example.com"] }),
@@ -125,6 +131,41 @@ describe("settings surface", () => {
     ]) {
       expect(keys).not.toContain(leaked);
     }
+    // A key renamed would slip past the list above, so look for the values themselves too.
+    expect(JSON.stringify(body)).not.toContain("test-dev-secret");
+  });
+
+  // The suite's own env carries no provider credential, so a deployed env's secrets are
+  // put in front of the handler directly: no value may surface under any key. Not through
+  // the router, because the Access vars make the env non-dev, where the suite's dev token
+  // no longer authenticates.
+  it("reflects no secret value of a deployed env, whatever its provider", async () => {
+    const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag-7f3e" };
+    for (const deploy of [SES_DEPLOY, RESEND_DEPLOY]) {
+      const e = { ...env, ...deploy, ...ACCESS } as unknown as AppEnv;
+      const req = new Request(`${base}/api/settings`);
+      const res = await settingsRoutes.get({
+        req,
+        env: e,
+        ctx: createExecutionContext(),
+        url: new URL(req.url),
+        params: {},
+        config: getConfig(e),
+      } as unknown as RequestContext);
+      expect(res.status).toBe(200);
+      const text = await res.text();
+      expect(text).toContain(`"provider":"${deploy.PROVIDER}"`);
+      for (const secret of [
+        "test-dev-secret",
+        SES_DEPLOY.AWS_ACCESS_KEY_ID,
+        SES_DEPLOY.AWS_SECRET_ACCESS_KEY,
+        RESEND_DEPLOY.RESEND_API_KEY,
+        RESEND_DEPLOY.RESEND_WEBHOOK_SECRET,
+        ACCESS.ACCESS_AUD,
+      ]) {
+        expect(text, deploy.PROVIDER).not.toContain(secret);
+      }
+    }
   });
 
   it("persists test recipients (normalized + deduped) and reflects them back", async () => {
@@ -147,7 +188,7 @@ describe("settings surface", () => {
   });
 });
 
-describe("publication identity (issue #81)", () => {
+describe("publication identity", () => {
   it("persists and normalizes name + tagline", async () => {
     const put = await putSettings({
       publication: { name: "  Field Notes  ", tagline: "Birding, weekly" },
@@ -162,9 +203,16 @@ describe("publication identity (issue #81)", () => {
     await putSettings({
       publication: { name: "The Hovering Hunter", tagline: "Notes from the field" },
     });
-    const html = await (await SELF.fetch(`${BASE}/`)).text();
+    const html = await (await SELF.fetch(`${base}/`)).text();
     expect(html).toContain("The Hovering Hunter");
     expect(html).toContain("Notes from the field");
+
+    // A name saved blank falls back to the From address's display name (wrangler.jsonc's
+    // "Newsletter <newsletter@send.example.com>"), never an empty title.
+    expect((await putSettings({ publication: { name: "   " } })).status).toBe(200);
+    const fallback = await (await SELF.fetch(`${base}/`)).text();
+    expect(fallback).not.toContain("The Hovering Hunter");
+    expect(fallback).toMatch(/<title>[^<]*Newsletter[^<]*<\/title>/);
   });
 });
 
@@ -222,8 +270,6 @@ describe("email template (wired to the render path)", () => {
     expect((await getSettings()).body.settings.publication.address).toBe(
       "123 Marsh Lane, Duluth, MN 55802",
     );
-    // Settings persist between tests in this file; don't leave an address set for them.
-    await env.DB.prepare("DELETE FROM settings").run();
   });
 
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
@@ -347,7 +393,7 @@ describe("confirmation email copy (SPEC §7)", () => {
 // The masthead renders directly (a pure function of copy + identity), so its
 // degrade-to-plain behavior is unit-tested without the subscribe round-trip.
 describe("confirmation email masthead (SPEC §7)", () => {
-  const link = "https://kestrel.test/confirm?token=abc123";
+  const link = `${base}/confirm?token=abc123`;
 
   it("degrades to no masthead when there is no identity, keeping the confirm link", () => {
     const r = confirmationEmail(link, DEFAULT_CONFIRMATION_EMAIL, {
@@ -406,11 +452,11 @@ describe("confirmation email masthead (SPEC §7)", () => {
   });
 });
 
-describe("publication logo (issue #81)", () => {
+describe("publication logo", () => {
   it("gates the logo routes like the rest of admin", async () => {
-    const post = await SELF.fetch(`${BASE}/api/settings/logo`, { method: "POST" });
+    const post = await SELF.fetch(`${base}/api/settings/logo`, { method: "POST" });
     expect(post.status).toBe(401);
-    const del = await SELF.fetch(`${BASE}/api/settings/logo`, { method: "DELETE" });
+    const del = await SELF.fetch(`${base}/api/settings/logo`, { method: "DELETE" });
     expect(del.status).toBe(401);
   });
 
@@ -421,18 +467,18 @@ describe("publication logo (issue #81)", () => {
     expect(body.settings.publication.logoUrl).toContain("/media/branding/logo?v=");
 
     // Served publicly, and hardened so a hostile SVG can't run script on direct nav.
-    const served = await SELF.fetch(`${BASE}/media/branding/logo`);
+    const served = await SELF.fetch(`${base}/media/branding/logo`);
     expect(served.status).toBe(200);
     expect(served.headers.get("x-content-type-options")).toBe("nosniff");
     expect(served.headers.get("content-security-policy")).toBe("sandbox");
 
-    const del = await SELF.fetch(`${BASE}/api/settings/logo`, {
+    const del = await SELF.fetch(`${base}/api/settings/logo`, {
       method: "DELETE",
-      headers: { ...(await adminAuth()) },
+      headers: AUTH,
     });
     expect(del.status).toBe(200);
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
+    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
   });
 
   it("refuses anything but a raster image with a 400 naming the formats, SVG included", async () => {
@@ -445,7 +491,7 @@ describe("publication logo (issue #81)", () => {
     }
     // Nothing was stored: no logo is set and none is served.
     expect((await getSettings()).body.settings.publication.logoUrl).toBe("");
-    expect((await SELF.fetch(`${BASE}/media/branding/logo`)).status).toBe(404);
+    expect((await SELF.fetch(`${base}/media/branding/logo`)).status).toBe(404);
     // A PNG still uploads, and so does one whose declared type carries case or parameters.
     expect((await putLogo(PNG_1x1, "image/png")).status).toBe(200);
     expect((await putLogo(PNG_1x1, "Image/PNG; x=y")).status).toBe(200);
@@ -483,19 +529,23 @@ describe("a corrupt settings row", () => {
     ["JSON that is not an object", "null"],
   ] as const) {
     it(`fails the API's reads and writes, keeps the reader pages up, and leaves the row as it is: ${what}`, async () => {
+      allowErrorLogs("settings.corrupt");
       await putSettings({ publication: { name: "Before" } });
       await env.DB.prepare("UPDATE settings SET data = ? WHERE id = 1").bind(data).run();
+      await env.MEDIA.delete(BRANDING_LOGO_KEY);
       const before = await readRow();
-      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+      const errors = vi.spyOn(console, "error");
       try {
-        const got = await SELF.fetch(`${BASE}/api/settings`, { headers: await adminAuth() });
+        const got = await SELF.fetch(`${base}/api/settings`, { headers: AUTH });
         expect(got.status).toBe(500);
         expect(((await got.json()) as { error: string }).error).toBe("settings_corrupt");
         expect((await putSettings({ publication: { name: "After" } })).status).toBe(500);
         expect((await putLogo(PNG_1x1, "image/png")).status).toBe(500);
+        // The refused upload stored no bytes: no logo object the row doesn't name.
+        expect(await env.MEDIA.head(BRANDING_LOGO_KEY)).toBeNull();
         // The reader pages only show the identity, so they stay up on the defaults.
         for (const path of ["/", "/archive", "/subscribe"]) {
-          const page = await SELF.fetch(`${BASE}${path}`, { headers: { accept: "text/html" } });
+          const page = await SELF.fetch(`${base}${path}`, { headers: { accept: "text/html" } });
           expect(page.status, path).toBe(200);
           expect(await page.text(), path).not.toContain("Before");
         }

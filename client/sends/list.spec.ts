@@ -1,188 +1,35 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendSummary, SendView } from "../../shared/sends";
+import type { SendListResponse, SendSummary } from "../../shared/sends";
+import { condition, feedReads, listReads, sendServer } from "../test/send_server";
 import {
   $,
   $$,
-  condition,
   type FakeApi,
   type FakeRoute,
   fakeApi,
-  feedReads,
-  listReads,
   mount,
   resetShell,
-  sendServer,
-  sendView,
+  sendSummary,
 } from "../test/support";
+import { toLocalInput } from "../ui/format";
 import { renderSent } from "./list";
-import { activeRowHtml, countdownHtml, countdowns, deliveredCell, needsOperator } from "./progress";
 
-const send = (over: Partial<SendSummary> = {}): SendSummary => ({
-  id: "x1",
-  post_id: "p1",
-  status: "sent",
-  fire_at: 1_000_000,
-  subject: "Owls & co",
-  recipient_count: 150,
-  locked_until: null,
-  scheduled_at: 900_000,
-  started_at: 1_000_000,
-  completed_at: 1_001_000,
-  audience_resolved_at: 1_000_000,
-  remade_at: null,
-  tested_at: null,
-  halt_reason: null,
-  halt_cause: null,
-  halt_error: null,
-  halted_at: null,
-  halt_retries: 0,
-  halt_retry_at: null,
-  c_pending: 0,
-  c_in_flight: 0,
-  c_accepted: 0,
-  c_delivered: 147,
-  c_bounced: 2,
-  c_complained: 1,
-  c_skipped: 0,
-  c_unsent: 0,
-  rev: 1,
-  ...over,
-});
-
-describe("deliveredCell", () => {
-  it("reports webhook-confirmed delivered and names the failures worst first", () => {
-    const m = deliveredCell(sendView(send()).counts).markup;
-    expect(m).toContain(`<span class="n">147</span>`);
-    expect(m).toMatch(/1 complained.*2 bounced/);
-    expect(
-      deliveredCell(sendView(send({ c_bounced: 0, c_complained: 0 })).counts).markup,
-    ).not.toContain("delivered-note");
+// A send that went out to 150: 147 delivered, 2 bounced, 1 complaint.
+const send = (over: Partial<SendSummary> = {}): SendSummary =>
+  sendSummary({
+    status: "sent",
+    fire_at: 1_000_000,
+    subject: "Owls & co",
+    recipient_count: 150,
+    scheduled_at: 900_000,
+    started_at: 1_000_000,
+    completed_at: 1_001_000,
+    audience_resolved_at: 1_000_000,
+    c_delivered: 147,
+    c_bounced: 2,
+    c_complained: 1,
+    ...over,
   });
-});
-
-const item = (s: SendSummary, over: Partial<SendView> = {}): SendView =>
-  sendView(s, { phase: "progressing", ...over });
-
-describe("the in-progress card", () => {
-  const sending = send({
-    status: "sending",
-    c_pending: 90,
-    c_accepted: 50,
-    c_delivered: 10,
-    c_bounced: 0,
-    c_complained: 0,
-    completed_at: null,
-  });
-  const card = (s: SendView) => {
-    const el = document.createElement("div");
-    el.innerHTML = activeRowHtml(s).markup;
-    return el;
-  };
-  const view = (over: Partial<SendView> = {}, eta_ms: number | null = null): SendView => {
-    const v = item(sending, over);
-    return { ...v, dispatch: { ...v.dispatch, eta_ms } };
-  };
-
-  it("reads the watch's numbers: accepted over the audience, and the server's time to finish while handing off", () => {
-    const el = card(view({}, 90_000));
-    expect($(".active-stat", el).textContent).toBe(
-      "Sending — 60 of 150 accepted · 10 confirmed · ~2 min left",
-    );
-    expect($<HTMLElement>(".active-fill", el).style.width).toBe("40%");
-    expect(el.querySelector(".active-stuck")).toBeNull();
-  });
-
-  it("gives no time to finish when the server gives none (it gives none while paused), and says when it has been in flight too long", () => {
-    const el = card(
-      view(
-        {
-          phase: "backing-off",
-          conditions: [condition.stuck()],
-        },
-        null,
-      ),
-    );
-    expect($(".active-stat", el).textContent).not.toMatch(/left/);
-    expect($(".active-stuck", el).textContent).toBe(
-      "Still sending 31 minutes after it started; it may be retrying.",
-    );
-  });
-
-  it("belongs to the attention block instead when the send needs the operator", () => {
-    expect(needsOperator(view())).toBe(false);
-    expect(needsOperator(view({ conditions: [condition.wedged(1)] }))).toBe(true);
-    expect(needsOperator(view({ conditions: [condition.refused("no", null)] }))).toBe(true);
-    expect(needsOperator(view({ conditions: [condition.stuck()] }))).toBe(false);
-  });
-});
-
-describe("the scheduled card's countdown", () => {
-  const NOW = 1_700_000_000_000;
-  const row = (fire_at: number, over: Partial<SendView> = {}) =>
-    item(send({ status: "scheduled", fire_at, started_at: null, completed_at: null }), {
-      phase: "scheduled",
-      ...over,
-    });
-  const words = (r: SendView) => {
-    const el = document.createElement("div");
-    el.innerHTML = countdownHtml(r).markup;
-    const c = new AbortController();
-    countdowns(el, c.signal)();
-    c.abort();
-    return el.querySelector("span")!;
-  };
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(NOW);
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it("counts down to the fire time, then says Preparing to send, never Sending now", () => {
-    expect(words(row(NOW + 90_000)).textContent).toBe("Sends in 1m 30s");
-    expect(words(row(NOW + 2 * 3_600_000)).textContent).toBe("Sends in 2h");
-    expect(words(row(NOW)).textContent).toBe("Preparing to send…");
-    expect(words(row(NOW - 50_000, { phase: "due" })).textContent).toBe("Preparing to send…");
-  });
-
-  it("says Preparing to send when the server reads the send due, whatever the page's clock says", () => {
-    expect(words(row(NOW + 4_000, { phase: "due" })).textContent).toBe("Preparing to send…");
-  });
-
-  it("says how late a send past the server's tolerance is, in the danger tone", () => {
-    const missed = words(
-      row(NOW - 12 * 60_000, {
-        phase: "due",
-        conditions: [
-          {
-            kind: "missed",
-            severity: "action",
-            since: NOW - 7 * 60_000,
-            message: "The fire time passed and the send has not started.",
-            action: null,
-          },
-        ],
-      }),
-    );
-    expect(missed.textContent).toBe("Missed its fire time · 12 min late");
-    expect(missed.classList.contains("countdown-missed")).toBe(true);
-    // Four minutes past with no flag from the server is still only preparing.
-    const due = words(row(NOW - 4 * 60_000, { phase: "due" }));
-    expect(due.textContent).toBe("Preparing to send…");
-    expect(due.classList.contains("countdown-missed")).toBe(false);
-  });
-
-  it("ticks once a second for the life of the mount", () => {
-    const el = document.createElement("div");
-    el.innerHTML = countdownHtml(row(NOW + 3_000)).markup;
-    const c = new AbortController();
-    countdowns(el, c.signal);
-    vi.advanceTimersByTime(1000);
-    expect(el.textContent).toBe("Sends in 2s");
-    vi.advanceTimersByTime(2000);
-    expect(el.textContent).toBe("Preparing to send…");
-    c.abort();
-  });
-});
 
 describe("sent view", () => {
   const NOW = 1_700_000_000_000;
@@ -236,7 +83,7 @@ describe("sent view", () => {
   it("renders the scheduled queue with a countdown, the in-flight card, and the sent table", async () => {
     fake = world(sendServer([scheduled(), sending(), send()]));
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(queue()).toEqual(["Waxwings"]);
     expect($(".sched-card .countdown").textContent).toMatch(/Sends in 2h/);
     expect($(".active-card .active-subj").textContent).toBe("Live one");
@@ -248,9 +95,13 @@ describe("sent view", () => {
   });
 
   it("follows from its own reads: the layer's first read asks from the earliest of their cursors", async () => {
-    fake = world(sendServer([scheduled(), send()]));
+    const srv = sendServer([scheduled(), send()]);
+    // The clock stands still until the spec advances it, so this is the cursor each of the
+    // page's own reads is handed.
+    const cursor = srv.cursor();
+    fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const lists = listReads(fake);
     expect(lists.map((c) => c.url.searchParams.get("status"))).toEqual([
       "scheduled",
@@ -258,7 +109,7 @@ describe("sent view", () => {
       "sent",
     ]);
     const [feed] = feedReads(fake);
-    expect(feed?.url.searchParams.get("since")).toBeTruthy();
+    expect(feed?.url.searchParams.get("since")).toBe(cursor);
     for (const c of lists) {
       expect(fake.calls.indexOf(feed!)).toBeGreaterThan(fake.calls.indexOf(c));
     }
@@ -266,22 +117,21 @@ describe("sent view", () => {
 
   it("catches a change made between its own reads, following from the earliest of them", async () => {
     const srv = sendServer([scheduled(), send()]);
-    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
-    fake = world(srv, [
-      {
-        path: "/api/sends",
-        reply: (req) => {
-          const out = lists.reply(req);
-          if (req.url.searchParams.get("status") === "scheduled") {
-            srv.edit("sch", { status: "canceled" }); // the other client, just after the queue's read
-          }
-          return out;
-        },
-      },
-    ]);
+    const cursors: string[] = [];
+    srv.wrap("/api/sends", (req, reply) => {
+      const out = reply(req) as SendListResponse;
+      cursors.push(out.cursor);
+      if (req.url.searchParams.get("status") === "scheduled") {
+        srv.edit("sch", { status: "canceled" }); // the other client, just after the queue's read
+      }
+      return out;
+    });
+    fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     // The queue's read predates the cancel; the layer's first read reports it.
+    expect(new Set(cursors).size).toBe(2);
+    expect(feedReads(fake)[0]?.url.searchParams.get("since")).toBe(cursors[0]);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
   });
 
@@ -300,7 +150,7 @@ describe("sent view", () => {
     );
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const cards = $$("#stuck .stuck-card");
     expect(cards).toHaveLength(1);
     expect(cards[0]!.textContent).toContain("Paused one");
@@ -316,7 +166,7 @@ describe("sent view", () => {
   it("opens the record on a row click and the editor on a scheduled card click", async () => {
     fake = world(sendServer([scheduled(), send()]));
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     $("tr[data-id='x1'] .delivered").click();
     expect(location.hash).toBe("#/sent/x1");
     $(".sched-card .muted").click();
@@ -336,20 +186,53 @@ describe("sent view", () => {
       },
     ]);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(feedReads(fake)).toHaveLength(1);
     $("[data-cancel='sch']").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
     expect($("#toasts").textContent).toMatch(/Canceled/);
     expect(feedReads(fake)).toHaveLength(2);
+  });
+
+  it("reschedules a scheduled send from its card, refreshes the queue, and has the layer read at once", async () => {
+    const srv = sendServer([scheduled(), send()]);
+    fake = world(srv, [
+      {
+        method: "POST",
+        path: "/api/sends/sch/reschedule",
+        reply: (req) => {
+          srv.edit("sch", {
+            fire_at: new Date((req.json() as { fire_at: string }).fire_at).getTime(),
+          });
+          return {};
+        },
+      },
+    ]);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(feedReads(fake)).toHaveLength(1);
+    $("[data-reschedule='sch']").click();
+    const when = $<HTMLInputElement>("#rsWhen");
+    expect(when.value).toBe(toLocalInput(new Date(NOW + 2 * 3_600_000))); // opens at its time
+    const moved = new Date(NOW + 3 * 86_400_000);
+    when.value = toLocalInput(moved);
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const posted = fake.calls.find((c) => c.url.pathname === "/api/sends/sch/reschedule");
+    expect(posted?.json()).toEqual({ fire_at: new Date(toLocalInput(moved)).toISOString() });
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toMatch(/Rescheduled/);
+    expect($(".sched-card .countdown").textContent).toBe("Sends in 3 days");
+    expect(feedReads(fake)).toHaveLength(2);
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("offers a scheduled card's Cancel and Reschedule only while the server would take them, hiding them at the fire time", async () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 5_000 })]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const controls = () => $<HTMLElement>("#scheduled [data-closes]");
     expect(controls().hidden).toBe(false);
     expect($("[data-cancel='sch']").textContent).toBe("Cancel");
@@ -386,7 +269,7 @@ describe("sent view", () => {
     const srv = sendServer([scheduled(), send()]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(queue()).toEqual(["Waxwings"]);
     srv.edit("sch", { fire_at: NOW + 3 * 86_400_000 }); // Claude moves it out
     srv.put(scheduled({ id: "s2", post_id: "p9", subject: "Rails", fire_at: NOW + 86_400_000 }));
@@ -403,10 +286,10 @@ describe("sent view", () => {
   it("reads about once a minute while nothing moves, and re-reads nothing while nothing changes", async () => {
     fake = world(sendServer([scheduled({ fire_at: NOW + 3_600_000 }), send()]));
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const lists = listReads(fake).length;
-    await vi.advanceTimersByTimeAsync(30 * 60_000);
-    expect(feedReads(fake)).toHaveLength(31);
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(feedReads(fake)).toHaveLength(6); // the first, then one a minute
     expect(listReads(fake)).toHaveLength(lists);
   });
 
@@ -414,7 +297,7 @@ describe("sent view", () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 30_000 }), send()]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(30_000);
     expect($(".sched-card .countdown").textContent).toBe("Preparing to send…");
     await vi.advanceTimersByTimeAsync(3_000); // the layer's read just past the fire time
@@ -428,23 +311,18 @@ describe("sent view", () => {
 
   it("paints only the latest queue read, so a slow one never puts a started send back", async () => {
     const srv = sendServer([scheduled({ fire_at: NOW + 30_000 }), send()]);
-    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
     let hold: Promise<void> | null = null;
     let release = () => {};
-    fake = world(srv, [
-      {
-        path: "/api/sends",
-        reply: async (req) => {
-          const out = lists.reply(req); // the world as it stands when the read arrives
-          if (hold && req.url.searchParams.get("status") === "scheduled") {
-            await hold;
-          }
-          return out;
-        },
-      },
-    ]);
+    srv.wrap("/api/sends", async (req, reply) => {
+      const out = reply(req); // the world as it stands when the read arrives
+      if (hold && req.url.searchParams.get("status") === "scheduled") {
+        await hold;
+      }
+      return out;
+    });
+    fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     hold = new Promise((r) => {
       release = r;
     });
@@ -454,7 +332,7 @@ describe("sent view", () => {
     await vi.advanceTimersByTimeAsync(3_000); // the start: its queue read lands first
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
     release(); // the older read, from before the start, lands last
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
     expect($(".active-card").dataset.watch).toBe("sch");
   });
@@ -466,7 +344,7 @@ describe("sent view", () => {
     ]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(queue()).toEqual(["Swifts"]);
     expect(records()).toEqual(["x1"]);
     srv.edit("fast", { status: "sent", completed_at: Date.now(), c_accepted: 150 });
@@ -483,11 +361,12 @@ describe("sent view", () => {
     ]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     const lists = listReads(fake).length;
     srv.edit("x1", { c_accepted: 0, c_delivered: 148, c_bounced: 2 });
     await vi.advanceTimersByTimeAsync(3000);
-    expect($("tr[data-id='x1'] .delivered").textContent).toBe("1482 bounced");
+    expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
+    expect($("tr[data-id='x1'] .delivered-note").textContent).toBe("2 bounced");
     expect(listReads(fake)).toHaveLength(lists);
   });
 
@@ -516,14 +395,14 @@ describe("sent view", () => {
       },
     ]);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     await vi.advanceTimersByTimeAsync(6000);
     const card = $("#stuck .stuck-card");
     expect(card.textContent).toMatch(/never answered for 1 recipient/);
     expect($("a", card).getAttribute("href")).toBe("#/sent/wedge");
     $<HTMLButtonElement>("[data-resolve='wedge']", card).click();
     $("#rUnsent").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector("#stuck .stuck-card")).toBeNull(); // at once, not at the next read
     expect(records()).toEqual(["wedge"]);
     expect(fake.unhandled).toEqual([]);
@@ -533,7 +412,7 @@ describe("sent view", () => {
     const srv = sendServer([sending()]);
     fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".active-card").dataset.watch).toBe("act");
     srv.edit(
       "act",
@@ -549,21 +428,35 @@ describe("sent view", () => {
     expect($(".active-card").dataset.watch).toBe("act");
   });
 
+  it("reads the page again and follows from those reads when its cursor is ahead of the database", async () => {
+    const srv = sendServer([
+      send({ c_accepted: 50, c_delivered: 100, c_bounced: 0, c_complained: 0 }),
+    ]);
+    srv.aheadOnce(); // a local reset
+    fake = world(srv);
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(listReads(fake)).toHaveLength(6); // its three reads, then all three again
+    expect(feedReads(fake)).toHaveLength(2); // refused, then from the fresh reads
+    srv.edit("x1", { c_accepted: 0, c_delivered: 148, c_bounced: 2 });
+    await vi.advanceTimersByTimeAsync(3000);
+    // Following again: the receipts reach the Delivered cell.
+    expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
+    expect($("tr[data-id='x1'] .delivered-note").textContent).toBe("2 bounced");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says so in place when the read of the sends in flight fails, and follows from its Retry", async () => {
     let down = true;
     const srv = sendServer([send()]);
-    const lists = srv.routes.find((r) => r.path === "/api/sends")!;
-    fake = world(srv, [
-      {
-        path: "/api/sends",
-        reply: (req) =>
-          down && req.url.searchParams.get("status") === "sending"
-            ? new Response(JSON.stringify({ error: "internal_error" }), { status: 500 })
-            : lists.reply(req),
-      },
-    ]);
+    srv.wrap("/api/sends", (req, reply) =>
+      down && req.url.searchParams.get("status") === "sending"
+        ? new Response(JSON.stringify({ error: "internal_error" }), { status: 500 })
+        : reply(req),
+    );
+    fake = world(srv);
     await mount(renderSent);
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#active").textContent).toMatch(/internal_error|Internal/i);
     expect(records()).toHaveLength(1); // the records stand on their own read
     // A report from the layer (a receipt on the record) leaves the error and its Retry.
@@ -574,7 +467,7 @@ describe("sent view", () => {
     down = false;
     srv.put(sending());
     $<HTMLButtonElement>("#active button").click();
-    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(0);
     expect($(".active-card").dataset.watch).toBe("act");
   });
 });

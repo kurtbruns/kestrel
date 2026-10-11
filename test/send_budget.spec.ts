@@ -17,36 +17,11 @@ import { Budget, D1_QUERY_LIMIT } from "../src/send/budget";
 import { MIN_RUN_COST, runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
 import { resolveStuckSend } from "../src/send/resolve";
-import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { toNextTick } from "./support/clock";
 import { guardD1 } from "./support/d1_guard";
-import { ResendLikeProvider } from "./support/resend_like";
-
-/** SES-shaped: one recipient a request and no idempotency key. */
-class SesLikeProvider extends ResendLikeProvider {
-  override readonly maxBatch: number = 1;
-  override readonly idempotentRetry: boolean = false;
-  override readonly idempotencyWindowMs: number | undefined = undefined;
-}
-
-const addresses = (n: number, tag = "r") =>
-  Array.from({ length: n }, (_, i) => `${tag}${String(i).padStart(3, "0")}@example.com`);
-
-async function seedConfirmed(emails: string[]): Promise<void> {
-  const now = Date.now();
-  await env.DB.prepare(
-    `INSERT INTO subscribers (id, email, status, confirm_token, unsub_token, created_at, confirmed_at)
-     SELECT 'id-' || value, value, 'confirmed', 'cfm-' || value, 'uns-' || value, ?, ? FROM json_each(?)`,
-  )
-    .bind(now, now, JSON.stringify(emails))
-    .run();
-}
-
-async function dueSend() {
-  const { post } = await posts.createPost(env.DB, { subject: "Subj", markdown: "hi" }, "test");
-  return freeze(env, getConfig(env), post, Date.now() - 1000);
-}
+import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
+import { allowErrorLogs } from "./support/log";
+import { NoKeyProvider, ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
 
 /** The test env with its D1 held to the 100-bind cap and counted. */
 function guarded() {
@@ -54,25 +29,10 @@ function guarded() {
   return { guard, env: { ...env, DB: guard.db } as AppEnv };
 }
 
-/** One sweep tick, on the next minute or the next halt retry, whichever is later. */
-async function tick(): Promise<void> {
-  await toNextTick(env.DB);
-  await sweep(env);
-}
-
 let resend: ResendLikeProvider;
 
 beforeEach(async () => {
-  await env.DB.batch([
-    env.DB.prepare("DELETE FROM deliveries"),
-    env.DB.prepare("DELETE FROM notifications"),
-    env.DB.prepare("DELETE FROM sends"),
-    env.DB.prepare("DELETE FROM images"),
-    env.DB.prepare("DELETE FROM post_revisions"),
-    env.DB.prepare("DELETE FROM posts"),
-    env.DB.prepare("DELETE FROM suppressions"),
-    env.DB.prepare("DELETE FROM subscribers"),
-  ]);
+  await resetDatabase();
   // Only Date is faked, so `tick` can move the clock past a halt's backoff.
   vi.useFakeTimers({ toFake: ["Date"] });
   resend = new ResendLikeProvider();
@@ -163,6 +123,8 @@ describe("a Resend batch interrupted after acceptance", () => {
       resend.loseAnswers = 1;
     },
     "the run is cut off while recording it": () => {
+      // The run dies on the write, which the loop reports as an unhandled send failure.
+      allowErrorLogs("send.error");
       const real = sends.settleDeliveries;
       let cut = false;
       vi.spyOn(sends, "settleDeliveries").mockImplementation(async (...args) => {
@@ -235,15 +197,14 @@ describe("a retryable answer to a handed-off batch", () => {
   });
 
   it("on a provider switched to one without idempotency, goes to Resolve instead of stalling", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     await seedConfirmed(addresses(3));
     const send = await dueSend();
     resend.loseAnswers = 1;
     await tick();
 
     // The operator moves the deployment to a provider that can't dedupe a re-send.
-    const plain = new (class extends ResendLikeProvider {
-      override readonly idempotentRetry: boolean = false;
-    })();
+    const plain = new NoKeyProvider();
     vi.mocked(providers.getProvider).mockReturnValue(plain);
     await tick();
 
@@ -254,16 +215,14 @@ describe("a retryable answer to a handed-off batch", () => {
   });
 
   it("on a provider without idempotency, leaves in-flight batches untouched and keeps delivering", async () => {
+    allowErrorLogs("send.ambiguous", "send.wedged");
     // SES-shaped: one recipient per request, no idempotency, so a request with no answer
     // leaves its recipient in flight for Resolve. That must neither stall the rest of
     // the send nor refresh the row, which would hide it from the stale-delivery flag.
     const emails = addresses(4);
     await seedConfirmed(emails);
     const send = await dueSend();
-    const ses = new (class extends ResendLikeProvider {
-      override readonly maxBatch: number = 1;
-      override readonly idempotentRetry: boolean = false;
-    })();
+    const ses = new SesLikeProvider();
     vi.mocked(providers.getProvider).mockReturnValue(ses);
 
     ses.loseAnswers = 1;
@@ -325,9 +284,10 @@ describe("lease ownership", () => {
     expect(await sends.openDeliveryCount(env.DB, send.id)).toBe(2);
     expect((await posts.getPost(env.DB, send.post_id))!.status).toBe("scheduled");
 
-    // The successor still owns the send and finishes it.
+    // The successor still owns the send: a third run stays out while its lease is live, and
+    // it can still renew that lease to carry on.
     const result = await runSend(env, send.id);
-    expect(result.leased).toBe(false); // its lease is live, so a third run stays out
+    expect(result.leased).toBe(false);
     expect(await sends.renewLease(env.DB, send.id, successor!, now + LEASE_TTL_MS)).toBe(true);
   });
 
@@ -447,6 +407,7 @@ describe("a one-recipient provider's groups", () => {
   });
 
   it("a run cut off after a group's requests leaves at most a group for Resolve, and re-mails no one", async () => {
+    allowErrorLogs("send.wedged");
     const emails = addresses(25);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -494,7 +455,6 @@ describe("a one-recipient provider's groups", () => {
   });
 
   it("starts requests no faster than the provider's rate", async () => {
-    vi.useRealTimers();
     const paced = new (class extends SesLikeProvider {
       readonly maxRequestRate = 50;
       readonly starts: number[] = [];
@@ -549,6 +509,7 @@ describe("a group whose requests are answered differently", () => {
   });
 
   it("records each answer, keeps the lost one for Resolve, and halts for the account", async () => {
+    allowErrorLogs("send.ambiguous");
     const emails = addresses(5);
     await seedConfirmed(emails);
     const send = await dueSend();
@@ -655,21 +616,20 @@ describe("the tick's clock", () => {
   });
 
   it("keeps one pace and one deadline across every send in the tick", async () => {
-    vi.useRealTimers();
     await seedConfirmed(addresses(30));
     const a = await dueSend();
     const b = await dueSend();
     const budget = new Budget(1000);
-    // 10 a second in a one-second window: at most eleven starts in all, fewer than A's
-    // thirty recipients, so A runs until the window closes and leaves B nothing to start.
-    const window = new SendWindow(10, 1000);
+    // 10 a second in a 300 ms window: at most four starts in all, fewer than A's thirty
+    // recipients, so A runs until the window closes and leaves B nothing to start.
+    const window = new SendWindow(10, 300);
 
     await runSend(env, a.id, budget, window);
     const afterA = ses.requests;
     await runSend(env, b.id, budget, window);
 
     expect(afterA).toBeGreaterThan(0);
-    expect(afterA).toBeLessThanOrEqual(11);
+    expect(afterA).toBeLessThanOrEqual(4);
     expect(ses.requests).toBe(afterA);
     expect(window.startsLeft()).toBe(0);
   });

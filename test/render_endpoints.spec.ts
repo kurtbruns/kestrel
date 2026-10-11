@@ -1,19 +1,9 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
-import { adminAuth } from "./support/auth";
-
-const AUTH = await adminAuth();
-const JSON_AUTH = { ...AUTH, "content-type": "application/json" };
-const base = "https://kestrel.test";
-const readJson = async (r: Response): Promise<any> => r.json();
-
-const PNG_1x1 = Uint8Array.from(
-  atob(
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M8AAAMBAQDJ/pLvAAAAAElFTkSuQmCC",
-  ),
-  (ch) => ch.charCodeAt(0),
-);
+import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
+import { sweep } from "../src/send/sweep";
+import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 
 async function draftWithImage(title: string): Promise<string> {
   const created = await readJson(
@@ -26,7 +16,13 @@ async function draftWithImage(title: string): Promise<string> {
   const id = created.post.id;
   const fd = new FormData();
   fd.append("file", new File([PNG_1x1], "cat.png", { type: "image/png" }));
-  await SELF.fetch(`${base}/api/posts/${id}/images`, { method: "POST", headers: AUTH, body: fd });
+  const upload = await SELF.fetch(`${base}/api/posts/${id}/images`, {
+    method: "POST",
+    headers: AUTH,
+    body: fd,
+  });
+  // Every caller asserts on the image's rewritten URL, so a failed upload must stop here.
+  expect(upload.status).toBe(201);
   return id;
 }
 
@@ -50,7 +46,7 @@ describe("preview + test endpoints", () => {
     expect(res.headers.get("content-type")).toContain("text/html");
     const html = await res.text();
     expect(html).toContain(`/media/posts/${id}/cat.png`);
-    expect(html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(html).not.toContain(UNSUB_SENTINEL);
     // The preview's link is a test's, so following it unsubscribes no one (SPEC §7).
     expect(html).toContain("/unsubscribe?test=1");
   });
@@ -80,7 +76,7 @@ describe("preview + test endpoints", () => {
     expect(msg.subject).toBe("Subject: Test Send");
     // Same render path as preview: resolved image URL present, sentinel substituted.
     expect(msg.html).toContain(`/media/posts/${id}/cat.png`);
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
     expect(msg.html).toContain("/unsubscribe?test=1");
   });
 
@@ -133,8 +129,8 @@ describe("preview + test endpoints", () => {
     const sentinel = `FROZEN-${crypto.randomUUID()}`;
     await env.DB.prepare("UPDATE sends SET rendered_html = ?, rendered_text = ? WHERE id = ?")
       .bind(
-        `<p>${sentinel}</p><a href="%%UNSUBSCRIBE_URL%%">u</a>`,
-        `${sentinel}\nUnsubscribe: %%UNSUBSCRIBE_URL%%`,
+        `<p>${sentinel}</p><a href="${UNSUB_SENTINEL}">u</a>`,
+        `${sentinel}\nUnsubscribe: ${UNSUB_SENTINEL}`,
         scheduled.send.id,
       )
       .run();
@@ -153,14 +149,14 @@ describe("preview + test endpoints", () => {
     ).messages.find((m: any) => m.to === to);
     expect(msg.html).toContain(sentinel);
     expect(msg.html).toContain("/unsubscribe?test=1"); // the placeholders are filled as at fire
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
 
     const page = await (
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { headers: AUTH })
     ).text();
     expect(page).toContain(sentinel);
     expect(page).toContain("/unsubscribe?test=1");
-    expect(page).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(page).not.toContain(UNSUB_SENTINEL);
     const action = await readJson(
       await SELF.fetch(`${base}/api/posts/${id}/preview`, { method: "POST", headers: AUTH }),
     );
@@ -257,7 +253,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(msg).toBeTruthy();
     // The sample body flows through the same render as a real send: sentinel
     // substituted, the test unsubscribe link present.
-    expect(msg.html).not.toContain("%%UNSUBSCRIBE_URL%%");
+    expect(msg.html).not.toContain(UNSUB_SENTINEL);
     expect(msg.html).toContain("/unsubscribe?test=1");
     // The sample subject line proves it rendered the synthetic post.
     expect(msg.subject).toContain("Template test");
@@ -322,6 +318,13 @@ describe("template test-send (POST /api/settings/template/test)", () => {
 });
 
 describe("web version (GET /api/posts/:id/web)", () => {
+  // A post page in the dev-shaped test env adds only the dev-only pill and its styles;
+  // strip both and what is left must be the web version, byte for byte.
+  const withoutPill = (html: string) =>
+    html
+      .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
+      .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
+
   it("requires auth", async () => {
     const id = await draftWithImage("Web Auth");
     expect((await SELF.fetch(`${base}/api/posts/${id}/web`)).status).toBe(401);
@@ -343,7 +346,7 @@ describe("web version (GET /api/posts/:id/web)", () => {
     expect(html).not.toContain(">Unsubscribe</a>");
     expect(html).not.toContain(">View in browser</a>");
     expect(html).toContain("Powered by Kestrel");
-    for (const s of ["%%UNSUBSCRIBE_URL%%", "%%SENT_TO%%"]) {
+    for (const s of [UNSUB_SENTINEL, SENTTO_SENTINEL]) {
       expect(html).not.toContain(s);
     }
     // A publisher's look, not a reader page: no dev-only dashboard pill.
@@ -375,17 +378,12 @@ describe("web version (GET /api/posts/:id/web)", () => {
       await env.DB.prepare("UPDATE sends SET fire_at = ? WHERE id = ?")
         .bind(Date.now() - 1000, scheduled.send.id)
         .run();
-      const { sweep } = await import("../src/send/sweep");
       await sweep(env);
       const slug = (await readJson(await SELF.fetch(`${base}/api/posts/${id}`, { headers: AUTH })))
         .post.slug;
       const web = await (await SELF.fetch(`${base}/api/posts/${id}/web`, { headers: AUTH })).text();
       const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
       // The post page adds only the dev-only pill (the test env is dev-shaped).
-      const withoutPill = (html: string) =>
-        html
-          .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
-          .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
       expect(archive).toContain('class="r-dev"');
       expect(withoutPill(archive)).toBe(web);
     } finally {
@@ -420,10 +418,6 @@ describe("web version (GET /api/posts/:id/web)", () => {
     const web = await res.text();
     expect(web).toContain(">Frozen</h1>");
     const archive = await (await SELF.fetch(`${base}/archive/${slug}`)).text();
-    const withoutPill = (html: string) =>
-      html
-        .replace(/<a class="r-dev"[\s\S]*?<\/a>/, "")
-        .replace(/<style>[^<]*\.r-dev[\s\S]*?<\/style>/, "");
     expect(withoutPill(archive)).toBe(web);
   });
 
