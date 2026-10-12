@@ -1,4 +1,4 @@
-# Try Kestrel on your computer
+# Try Kestrel locally first
 
 You can run Kestrel on your own computer to look around before you deploy it. It needs no Cloudflare account and no Git host. Email goes to a stand-in on your computer, so nothing reaches a real inbox.
 

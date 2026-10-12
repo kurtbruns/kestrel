@@ -56,7 +56,7 @@ Your instance's repository holds its configuration, its database migrations, and
     git push -u origin HEAD
     ```
 
-1. **(Optional)** Try Kestrel on your computer before you deploy it. Your instance is written and installed, so start at [Start the app](../guides/08-try-locally.md#2-start-the-app), and come back here when you're done. Email goes to a stand-in, so nothing reaches a real inbox.
+1. **(Optional)** Try Kestrel locally before you deploy it. Your instance is written and installed, so start at [Start the app](../guides/08-try-locally.md#2-start-the-app), and come back here when you're done. Email goes to a stand-in, so nothing reaches a real inbox.
 
 ## 2. Sign in to Cloudflare
 
