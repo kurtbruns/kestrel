@@ -105,4 +105,4 @@ When you're ready to deploy, this folder can be your instance's repository. You 
     git push -u origin HEAD
     ```
 
-Then check [what deploying needs](../get-started/02-deploy.md#before-you-begin), and [deploy the app](../get-started/02-deploy.md#2-sign-in-to-cloudflare) from signing in to Cloudflare onward.
+Then check [what deploying needs](../get-started/02-deploy.md#before-you-begin) and [choose your hostnames](../get-started/02-deploy.md#choose-your-hostnames). Then [deploy the app](../get-started/02-deploy.md#2-sign-in-to-cloudflare) from signing in to Cloudflare onward.
