@@ -67,8 +67,9 @@ export interface Modal {
   /**
    * Say why the dialog's act didn't go through, inside the dialog: beneath `field` when one
    * field is at fault (marked invalid, focused, and cleared as soon as it is edited),
-   * otherwise just above the actions. A toast can't carry it: toasts sit beneath the
-   * dialog's backdrop. A second call replaces the first.
+   * otherwise just above the actions, where the reader is looking; a toast at the foot of
+   * the screen would be far from the field and gone while the dialog stays open. A second
+   * call replaces the first.
    */
   error: (message: string, field?: HTMLInputElement | HTMLTextAreaElement) => void;
   /** Take the error away, as a new try begins. */

@@ -149,7 +149,7 @@ describe("modal", () => {
     m.close();
   });
 
-  it("says a failure inside the dialog, above its actions, since a toast would sit beneath its backdrop", () => {
+  it("says a failure inside the dialog, above its actions, where the reader is looking", () => {
     const m = modal(html`<p>Sure?</p><div class="actions"><button>Go</button></div>`, live);
     m.error("The server said no");
     const line = $(".modal .dialog-error", m.el);

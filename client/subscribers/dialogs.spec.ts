@@ -23,7 +23,7 @@ describe("addSubscriberModal", () => {
     typeInto($<HTMLInputElement>("#addEmail"), "nope");
     $("#aGo").click();
     expect(fake.calls).toHaveLength(0);
-    // On the field, inside the dialog: a toast would sit beneath the dialog's backdrop.
+    // On the field, inside the dialog, where the reader is looking.
     const input = $<HTMLInputElement>("#addEmail");
     expect(input.classList.contains("is-invalid")).toBe(true);
     const err = $(".modal .field-error");
