@@ -34,10 +34,11 @@ let exampleMenuDismissBound = false;
 // The one layout each post ships inside, authored as an HTML template with
 // logic-less {{ }} placeholders over a fixed variable context. Logic-less means a
 // token is only ever swapped for its value — nothing executes — which is why this
-// is a template editor, not a WYSIWYG. This pass is a MOCK: edits repaint the
-// preview only, nothing persists. The real layout engine (rendered once and frozen
-// per send, I3/I5) and saved template variables come later; conceptually both run
-// through the single render path (SPEC §5, I5) this preview stands in for.
+// is a template editor, not a WYSIWYG. Edits commit through the shared save bar. A
+// send renders the saved template through the single render path (SPEC §5, I5) and
+// freezes the result at schedule (I3); the sample here only fills the placeholders
+// with sample values in the browser, so it shows the layout, and a test email is the
+// real render.
 
 interface TemplateVar {
   token: string;
@@ -538,7 +539,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   const tplTestLbl = $("#tplTestLbl");
   const isDirty = () => tplEditor.value !== templateBaseline;
 
-  // Syntax-highlight overlay (issue #123): a transparent <textarea> over a highlighted
+  // Syntax-highlight overlay: a transparent <textarea> over a highlighted
   // <pre>, plus a line-number gutter, kept in scroll sync. Vanilla, no dependency.
   const tplHl = $("#tplHl");
   const tplHlCode = $("code", tplHl);

@@ -143,9 +143,9 @@ export async function getPost(c: RequestContext): Promise<Response> {
   // A post stays `scheduled` while its send is in flight (the post only flips to `sent`
   // on completion), so the active send may be `scheduled` OR `sending`. Split them: a
   // truly-scheduled send drives the editor's soft-lock banner; a `sending` one means the
-  // editor should redirect to the live watch instead of opening a locked draft (#162).
+  // editor should redirect to the live watch instead of opening a locked draft.
   const active = post.status === "scheduled" ? await getActiveSendForPost(c.env.DB, post.id) : null;
-  // A sent post no longer opens the editor (#147): the editor uses this send id to
+  // A sent post no longer opens the editor: the editor uses this send id to
   // redirect to the sent record view (#/sent/:id).
   const sent = post.status === "sent" ? await latestSentSendForPost(c.env.DB, post.id) : null;
   const body: PostResponse = {

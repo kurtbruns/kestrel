@@ -65,7 +65,7 @@
   --accent: #3355cc;
   --accent-on: #ffffff;
   --accent-soft: rgba(51, 85, 204, 0.12);
-  /* Syntax-highlight palette, shared by the template (issue #123) and post (issue #138)
+  /* Syntax-highlight palette, shared by the template and post
      editors — the HTML/CSS .cx-* tokens and the Markdown .cx-md-* tokens map onto it. */
   --syntax-bg: #fbfbfc;
   --syntax-fg: #3f3f46;
@@ -79,7 +79,7 @@
   --syntax-punctuation: #a1a1aa;
   --syntax-variable: #2d47b8;
   --syntax-variable-bg: rgba(51, 85, 204, 0.11);
-  /* Post editor's minimal scheme (issue #138): marks get the color, content keeps --syntax-fg.
+  /* Post editor's minimal scheme: marks get the color, content keeps --syntax-fg.
      Heading # is crimson; the emphasis asterisks are a magenta-pink kept clear of the heading
      crimson; block markers (>, list bullets, fence language) are a saturated, bright orange. */
   --syntax-heading: #be123c;
@@ -157,7 +157,7 @@
     --syntax-punctuation: #6a6a72;
     --syntax-variable: #a9bbf2;
     --syntax-variable-bg: rgba(120, 150, 240, 0.18);
-    /* Post editor minimal scheme (issue #138) — near-black/saturated hues lift to legible
+    /* Post editor minimal scheme — near-black/saturated hues lift to legible
        tints on the dark well; the heading crimson becomes a rose, emphasis a lighter pink. */
     --syntax-heading: #fb7185;
     --syntax-emphasis: #f472b6;
@@ -952,8 +952,8 @@ body.tool-mode .content {
 }
 
 /* --- Collapsed icon rail. Driven by data-nav="rail" on <html> (set from the viewport
-   width and the persisted collapse preference — see app.js and the <head> guard in
-   index.html), so the collapse toggle can pin it at any width in range. The rail is the
+   width and the collapse toggle's override for this load — see client/shell.ts and the
+   <head> guard in index.html), so the collapse toggle can pin it at any width in range. The rail is the
    default across the tablet range and small desktops; the nav keeps its one-click
    reach, labels move to hover/focus tooltips, and the secondary chrome (brand text,
    account, tool footer) folds down to its marks. The whole block is gated at ≥540 so a
@@ -1521,12 +1521,6 @@ td a:hover {
   color: var(--status-sending-fg);
   border-color: var(--status-sending-line);
 }
-.badge.canceled,
-.badge.failed {
-  background: var(--danger-bg);
-  color: var(--danger-fg);
-  border-color: var(--danger-line);
-}
 /* Subscriber consent states borrow a hue that matches the state's meaning: confirmed →
    the sent green, unsubscribed → the draft grey, suppressed → danger red (below). Pending
    awaits double-opt-in — a waiting/attention state — so it takes the amber `warn` scale,
@@ -1818,7 +1812,7 @@ body.web-mode .content {
   margin: 48px auto;
   padding: 0 16px;
 }
-/* Sent record view (#148): a read-only delivery record. The outcome tiles reuse the
+/* Sent record view: a read-only delivery record. The outcome tiles reuse the
    semantic feedback scales (--ok / --warn / --danger, DESIGN §3); a status badge, not
    a feedback color, still labels the send's lifecycle. */
 .rec-card {
@@ -1919,7 +1913,7 @@ body.web-mode .content {
   }
 }
 
-/* ---- per-recipient record (#164): the rows behind the outcome tiles ---- */
+/* ---- per-recipient record: the rows behind the outcome tiles ---- */
 .rec-people {
   margin-top: 26px;
 }
@@ -1986,7 +1980,7 @@ body.web-mode .content {
   font-size: 13px;
 }
 
-/* ---- live in-flight watch (#154): the `sending` state of the record view ---- */
+/* ---- live in-flight watch: the `sending` state of the record view ---- */
 /* The sending treatment is blue (--status-sending-*, DESIGN §3) — distinct from the
    action slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
 .rec-sw.sw-sending {
@@ -2153,7 +2147,7 @@ body.web-mode .content {
   }
 }
 
-/* ---- active-send row (Sent page "In progress") + dashboard widget (#154) ---- */
+/* ---- active-send row (Sent page "In progress") + dashboard widget ---- */
 /* An in-flight send as a card with a live mini dispatch bar; blue, so it reads as
    "sending" — distinct from the scheduled violet cards and the neutral sent rows. */
 .card.active-card {
@@ -2347,7 +2341,7 @@ body.web-mode .content {
 .composer-body {
   position: relative;
 }
-/* Post editor syntax-highlight overlay (issue #138): a transparent <textarea> layered over
+/* Post editor syntax-highlight overlay: a transparent <textarea> layered over
    a highlighted <pre> that shows the colored Markdown beneath the caret. The two share
    identical box + font metrics so the caret sits exactly on the colored text; the textarea
    is the only scroller and the <pre> is synced to it in script. Unlike the template editor
@@ -4072,10 +4066,9 @@ button.api-filter-clear svg {
    deploy / Copy-out), editable surfaces sit on cards and read-only
    facts on a recessed "sunken" card. Kestrel's own accents use the
    fixed --accent (a slate-blue), independent of the reader surface.
-   A sticky save bar collects the unsaved, persisted changes
-   (identity + test recipients); the logo and the email-template
-   mock are handled on their own and don't feed it. Theme follows
-   the OS via the tokens at the top of this file.
+   A sticky save bar collects every editable section's unsaved
+   changes; the logo saves on its own and doesn't feed it. Theme
+   follows the OS via the tokens at the top of this file.
    ============================================================ */
 .settings {
   max-width: 940px;
@@ -4227,22 +4220,12 @@ button.copied svg {
   background: currentColor;
   opacity: 0.85;
 }
+/* Set at deploy: a fact about where the value lives, not a warning, so it stays neutral
+   rather than borrowing the amber `warn` scale (DESIGN §3). */
 .set-chip.readonly {
-  color: var(--warn-fg);
-  border-color: color-mix(in srgb, var(--warn-fg) 30%, var(--line-soft));
-  background: color-mix(in srgb, var(--warn-fg) 9%, transparent);
-}
-/* A dashed "Mock" tag beside the Email-template chip — says the section is a
-   preview of a feature not wired to the backend yet. */
-.set-tag-mock {
-  font-size: 10px;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 3px 7px;
-  border-radius: 6px;
-  border: 1px dashed var(--line-soft);
   color: var(--muted);
+  border-color: var(--line);
+  background: var(--chip);
 }
 
 /* --- cards: editable surfaces raised, read-only facts recessed --- */
@@ -4431,7 +4414,7 @@ button.set-field-remove {
   align-items: flex-start;
   padding: 11px 16px;
   border-bottom: 1px solid var(--line-soft);
-  background: color-mix(in srgb, var(--warn-fg) 6%, transparent);
+  background: var(--chip);
   font-size: 12.5px;
   color: var(--muted);
   line-height: 1.5;
@@ -4441,7 +4424,7 @@ button.set-field-remove {
   height: 15px;
   flex: 0 0 auto;
   margin-top: 1px;
-  color: var(--warn-fg);
+  color: var(--muted);
 }
 .set-kv {
   display: grid;
@@ -4976,7 +4959,7 @@ button.set-embed-copy svg {
   color: var(--muted);
 }
 
-/* --- email template (mock): a standalone sample-email frame, then a card holding
+/* --- email template: a standalone sample-email frame, then a card holding
    the HTML template editor and a collapsible variable reference. The example
    templates are authored with a <style> block; the preview renders them in an
    isolated iframe, so a template's own styles apply as a mail client would show
@@ -5011,7 +4994,7 @@ button.set-embed-copy svg {
   font-size: 12px;
   color: var(--muted);
 }
-/* Syntax-highlight overlay editor (issue #123): a transparent <textarea> over a
+/* Syntax-highlight overlay editor: a transparent <textarea> over a
    highlighted <pre>, plus a line-number gutter. All three share identical font
    metrics so the caret sits exactly over the colored text; the textarea is the only
    scroller and the gutter + overlay are synced to it in script. */
@@ -5087,7 +5070,7 @@ button.set-embed-copy svg {
 .set-tpl-editor-wrap.show-lines .set-tpl-editor {
   left: 47px;
 }
-/* Syntax colors (issue #123). */
+/* Syntax colors. */
 .cx-tag {
   color: var(--syntax-tag);
 }
@@ -5117,7 +5100,7 @@ button.set-embed-copy svg {
   padding: 0 2px;
   font-weight: 600;
 }
-/* Markdown token classes (issue #138) — the minimal scheme: the MARK carries the color, the
+/* Markdown token classes — the minimal scheme: the MARK carries the color, the
    CONTENT keeps --syntax-fg and carries only weight/slant. So a bold word reads as weight, not
    as a hue that competes with a heading. Heading text is bold with a crimson # mark; emphasis
    asterisks are pink around plain weighted/slanted text; block markers (>, bullets, the fence
@@ -5329,7 +5312,7 @@ button.set-embed-copy svg {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 30%, var(--line-soft));
 }
-/* Required-token pills (issue #123 revisit): live green/red for the two tokens whose
+/* Required-token pills: live green/red for the two tokens whose
    absence blocks a save, shown upper-right of the editor toolbar. */
 .set-tpl-required {
   display: flex;
@@ -5462,7 +5445,7 @@ button.set-embed-copy svg {
 .set-tpl-varcard .set-tpl-vars-body {
   padding: 0;
 }
-/* The "this is a mock" note under the editor. */
+/* The note at the foot of a card: what the section is for, or where it is set. */
 .set-note {
   display: flex;
   align-items: flex-start;

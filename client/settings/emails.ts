@@ -26,7 +26,7 @@ export function templateSection(page: SettingsPage): Html {
         </div>
         <iframe class="set-email-frame" id="tplPreview" title="Sample email preview" scrolling="no"></iframe>
       </div>
-      <div class="row" style="margin-top:12px"><button type="button" class="primary" id="tplEditLink">Edit template →</button></div>
+      <div class="row" style="margin-top:12px"><button type="button" id="tplEditLink">Edit template →</button></div>
     </section>`;
 }
 

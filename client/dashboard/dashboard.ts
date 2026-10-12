@@ -271,7 +271,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // The notice slot (#dashNotices, DESIGN §2 home ⑥) sits above the Scheduled section: a
   // problem (the health block) outranks news, and the notices that exist are about
   // scheduled sends, so the eye lands on the queue right after reading one.
-  const quickHtml = html`<div class="row quick-actions"><button class="primary" data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
+  const quickHtml = html`<div class="row quick-actions"><button data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
   // No news is good news: the health block appears only when something needs attention
   // (SPEC §8 / §12, the only thing that ever surfaces loudly). The active-send widget sits

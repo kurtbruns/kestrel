@@ -9,7 +9,7 @@
 <script>
 // Sidebar mode guard — set the width-based data-nav on <html> before first paint so the
 // sidebar renders in its final width with no flash. The collapse toggle's override is
-// session-only (in-memory in client/main.ts), so a fresh load always starts from this
+// session-only (in-memory in client/shell.ts), so a fresh load always starts from this
 // default; keep this width formula in sync with computeNavMode() there.
 (() => {
   const w = window.innerWidth;
@@ -85,7 +85,7 @@
           <span>Kestrel</span>
         </a>
         <!-- Collapse ↔ expand, tucked into the end of the footer row (chevron
-             right-aligned). Flips <html data-nav> and persists the choice; hidden on
+             right-aligned). Flips <html data-nav> for this load only; hidden on
              mobile, where the sidebar is an off-canvas overlay. -->
         <button type="button" class="nav-collapse" id="navCollapse" aria-label="Collapse sidebar" aria-expanded="true">
           <svg class="nav-collapse-icon" aria-hidden="true"><use href="#i-chevron"/></svg>

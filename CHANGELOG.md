@@ -29,6 +29,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A new instance installs `@types/node` as a dev dependency, so `npm run typecheck` no longer ends with Wrangler's "Action required: Install @types/node". The Node types stay out of the type check, so the Worker's own types still apply. An existing instance can silence the notice with `npm i -D @types/node`.
 - The operator's Claude context now names `--env production` on every Wrangler command that creates or binds a resource, not only deploying and migrating, since without it Wrangler offers to bind the new resource in the development settings. It bears on safety: it keeps a binding to a production resource out of the development settings. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
 - A send held because no email provider is connected reads once on the dashboard and the Sent page, one red message with the not-connected state instead of two, and its advice, there and on the send's page, links to Connect an email provider and says "then deploy" rather than "then deploy again". In the local not-connected preview it says to restart `npm run dev` without `SIMULATE_SENDS=not-connected`, which the settings API now reports as `deployment.notConnectedPreview`.
+- The editor offers one Primary action per page: the dashboard's Quick actions New post and Settings' Edit template are now ordinary buttons, beside the page's own New post and the save bar's Save.
+- The "Read-only · set at deploy" tag in Settings, and the note under it, are neutral grey rather than amber, since a value set at deploy is not a warning.
 
 ### Fixed
 
@@ -39,6 +41,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - `/health` no longer answers ok on a database that hasn't run every migration the release ships, as after a skipped Apply the schema step or a deploy made before its migration. It answers `500` `schema_behind` naming the missing migrations and the command that applies them, the editor says the same in place of the app, the public pages say the newsletter is temporarily unavailable, and nothing is sent until they're applied; your own `local_` migrations don't count. An error nothing handled on a public page now shows a plain error page rather than a raw JSON body (SPEC §5, §9).
 - The Send now dialog counts who the send will reach, confirmed subscribers less suppressed addresses, rather than every confirmed subscriber (SPEC §6).
 - `kestrel init` ends by pointing to the setup guide on getkestrel.dev, and a new instance's `.dev.vars.example` links the Configuration reference there, instead of paths that don't exist in an instance.
+- The Resolve dialog says Assume sent records the recipients as accepted by your provider, with delivery still waiting on a receipt, rather than as delivered (SPEC §12).
+- Dialogs keep keyboard focus inside them, start it on their first control, and return it to whatever opened them when they close; the ⋯ row menus on Drafts and Subscribers open with focus on their first item and move with the arrow keys, Home, and End, and Escape closes them.
 
 ## [1.7.0] - 2026-10-12
 

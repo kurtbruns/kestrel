@@ -168,7 +168,7 @@ export async function renderEditor(
   const { post, markdown, scheduled } = data;
 
   // The editor now only ever mounts a draft or a scheduled (frozen) post, so `locked`
-  // means scheduled — signaled by the scheduled banner, not a status pill (#147).
+  // means scheduled — signaled by the scheduled banner, not a status pill.
   const locked = post.status !== "draft";
   // The revision this editor is based on, for optimistic concurrency (SPEC §4).
   // Advanced on each successful save; carried on every save so the server rejects
@@ -268,7 +268,7 @@ export async function renderEditor(
   const toolbarEl = $(".toolbar", root);
   const previewFrame = $<HTMLIFrameElement>("#previewFrame");
 
-  // Syntax-highlight overlay (issue #138): a transparent <textarea> over a highlighted
+  // Syntax-highlight overlay: a transparent <textarea> over a highlighted
   // <pre>, kept in scroll sync — the template editor's scaffolding, tokenizing Markdown.
   // Prose soft-wraps, so both layers share pre-wrap and identical metrics (the caret lands
   // on the colored text); that wrapping is also why there's no line-number gutter — a

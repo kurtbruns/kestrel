@@ -89,6 +89,34 @@ describe("modal", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("starts focus on its first control, keeps Tab inside, and hands focus back on close", async () => {
+    const opener = document.createElement("button");
+    $("#app").appendChild(opener);
+    opener.focus();
+    const m = modal(html`<button id="a">Cancel</button><button id="b">Go</button>`, live);
+    await Promise.resolve();
+    expect(document.activeElement?.id).toBe("a");
+    const tab = (shiftKey: boolean) => {
+      const e = new KeyboardEvent("keydown", { key: "Tab", shiftKey, cancelable: true });
+      document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(tab(true)).toBe(true); // Shift+Tab from the first wraps to the last
+    expect(document.activeElement?.id).toBe("b");
+    expect(tab(false)).toBe(true); // Tab from the last wraps to the first
+    expect(document.activeElement?.id).toBe("a");
+    m.close();
+    expect(document.activeElement).toBe(opener);
+  });
+
+  it("leaves focus where its caller put it", async () => {
+    const m = modal(html`<button id="a">Cancel</button><input id="f" />`, live);
+    $<HTMLInputElement>("#f", m.el).focus();
+    await Promise.resolve();
+    expect(document.activeElement?.id).toBe("f");
+    m.close();
+  });
+
   it("never shows for a view that has already ended", () => {
     const view = new AbortController();
     view.abort();
@@ -117,6 +145,33 @@ describe("openMenu", () => {
     view.abort();
     expect(document.querySelector(".menu")).toBeNull();
     expect(document.querySelector(".menu-overlay")).toBeNull();
+  });
+
+  it("is reachable by keyboard: arrows move, Escape closes and returns to the ⋯", () => {
+    const b = anchor();
+    b.focus();
+    openMenu(
+      b,
+      [
+        { label: "Edit", onClick: () => {} },
+        { label: "Delete", danger: true, onClick: () => {} },
+      ],
+      live,
+    );
+    const key = (k: string) =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }),
+      );
+    expect(document.activeElement?.textContent).toBe("Edit");
+    key("ArrowDown");
+    expect(document.activeElement?.textContent).toBe("Delete");
+    key("ArrowDown"); // wraps
+    expect(document.activeElement?.textContent).toBe("Edit");
+    key("End");
+    expect(document.activeElement?.textContent).toBe("Delete");
+    key("Escape");
+    expect(document.querySelector(".menu")).toBeNull();
+    expect(document.activeElement).toBe(b);
   });
 
   it("lets go of a view it no longer belongs to", () => {

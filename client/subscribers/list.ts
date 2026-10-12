@@ -136,7 +136,7 @@ function renderSubTable(
       (s) =>
         html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act">${
           s.status === "confirmed"
-            ? html`<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions">⋯</button>`
+            ? html`<button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button>`
             : null
         }</td></tr>`,
     )}</tbody></table></div>`,

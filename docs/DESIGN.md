@@ -107,9 +107,9 @@ Every token has a light and a dark value; a color defined in only one theme is a
 | post `sending` | `--status-sending` | blue |
 | post `sent` · subscriber `confirmed` | `--status-sent` | green |
 | subscriber `pending` | `--warn` | amber |
-| post `canceled` · subscriber `suppressed` | `--danger` | red |
+| subscriber `suppressed` | `--danger` | red |
 
-The four lifecycle hues (draft gray, scheduled violet, sending blue, sent green) are *facts*, kept distinct from the `danger`/`warn`/`ok` feedback scales — a `scheduled` badge is neither good nor bad. Reusing a feedback scale is allowed only when the state genuinely carries that reading: `canceled`/`suppressed` → `danger`, and `pending` (awaiting double-opt-in) → `warn` amber — the same "one red, one amber" economy as above, not a conflation. The rule this encodes: `pending` takes `warn`, **never** `--status-sending` — a token doing double duty is exactly the drift this section exists to catch.
+The four lifecycle hues (draft gray, scheduled violet, sending blue, sent green) are *facts*, kept distinct from the `danger`/`warn`/`ok` feedback scales — a `scheduled` badge is neither good nor bad. Reusing a feedback scale is allowed only when the state genuinely carries that reading: `suppressed` → `danger`, and `pending` (awaiting double-opt-in) → `warn` amber — the same "one red, one amber" economy as above, not a conflation. The rule this encodes: `pending` takes `warn`, **never** `--status-sending` — a token doing double duty is exactly the drift this section exists to catch.
 
 The **in-use chip** on the template surfaces (the Template page's head and the Settings template section: "In use by 2 scheduled posts") wears `--status-scheduled`, the same reading as the scheduled badge: being frozen into a scheduled send is a lifecycle fact, not a warning, and the chip adds no token. With nothing scheduled it is the neutral chip.
 
