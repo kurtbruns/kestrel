@@ -12,7 +12,7 @@ import type {
 import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
-import { ApiError, api, apiText } from "../api";
+import { ApiError, api, apiText, describeError } from "../api";
 import {
   connectProviderLink,
   earliestFireAt,
@@ -42,14 +42,14 @@ import {
 import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
-import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
+import { busy, fieldError, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
 import { trackSaves } from "./pending_save";
 import { type Author, type Conflict, conflictFromError, RevisionTracker } from "./revisions";
 import { previewOpensWebVersion, webVersionHash } from "./web";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = describeError;
 
 const TOOLBAR: [IconName, string][][] = [
   [
@@ -203,7 +203,7 @@ export async function renderEditor(
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
-        <div><label for="f-subject">Subject</label><input id="f-subject" value="${post.subject}" placeholder="Untitled" aria-describedby="f-subject-error"${ro}><div class="field-error" id="f-subject-error" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span>Add a subject before you schedule.</span></div></div>
+        <div><label for="f-subject">Subject</label><input id="f-subject" value="${post.subject}" placeholder="Untitled"${ro}></div>
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
@@ -311,18 +311,17 @@ export async function renderEditor(
   // touch, and screen readers. Instead Schedule stays live and we validate on click:
   // an empty subject puts the input into an error state with the reason directly
   // beneath it (DESIGN §5), tied by aria-describedby and announced (role=alert).
-  const subjectErrEl = $("#f-subject-error");
+  let clearSubjectErr: (() => void) | null = null;
   function clearSubjectError() {
-    subjectEl.classList.remove("is-invalid");
-    subjectErrEl.hidden = true;
+    clearSubjectErr?.();
+    clearSubjectErr = null;
   }
   // Gates both send paths (the scheduled send and the in-modal Send now both open
   // from Schedule): true when a subject is present; otherwise shows the error, moves
   // focus to the field, and returns false so the modal never opens.
   function validateSubject() {
     if (subjectEl.value.trim() === "") {
-      subjectEl.classList.add("is-invalid");
-      subjectErrEl.hidden = false;
+      clearSubjectErr = fieldError(subjectEl, "Add a subject before you schedule.");
       subjectEl.focus();
       return false;
     }
@@ -353,7 +352,7 @@ export async function renderEditor(
       reflect();
       markEdited(); // the checkbox changes what a save sends without an input event
       if (autoEl.checked) {
-        saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`));
+        saveDraft(true).catch(() => {}) /* the save cue says why */;
       } else {
         slugEl.focus();
         slugEl.select();
@@ -389,7 +388,7 @@ export async function renderEditor(
   // so a navigation or the re-auth wall ends it. Declared before any path that can save
   // (the Preview tab saves first), since saveDraft cancels it.
   const mine = createAutosave(() => {
-    saveDraft(true).catch((e) => toast(`Couldn’t autosave: ${message(e)}`));
+    saveDraft(true).catch(() => {}); // the save cue says why
   });
   onAbort(signal, () => mine.cancel());
 
@@ -554,6 +553,12 @@ export async function renderEditor(
   // either way the leave guard prompts instead of silently flushing.
   let saveFailed = false;
   let conflicted = false;
+  // Why the last save failed, in the publisher's words, kept on the save cue until a save
+  // succeeds: a toast would be gone in seconds and leave the cue reading like ordinary
+  // typing. A failed save tries again on its own, spaced out, so a dropped connection
+  // recovers without another edit.
+  let saveError: string | null = null;
+  let retryDelay = 0;
   // The save row is a draft's; a scheduled post renders none.
   const saveBtn = locked ? null : $<HTMLButtonElement>("#saveBtn");
   const saveStatus = locked ? null : $("#saveStatus");
@@ -573,6 +578,9 @@ export async function renderEditor(
     } else if (saving) {
       saveStatus.className = "save-status is-saving";
       saveStatus.textContent = "Saving…";
+    } else if (saveError && editorDirty) {
+      saveStatus.className = "save-status is-error";
+      saveStatus.textContent = `Not saved: ${saveError}`;
     } else if (editorDirty) {
       saveStatus.className = "save-status is-dirty";
       saveStatus.textContent = "Unsaved changes";
@@ -653,6 +661,8 @@ export async function renderEditor(
       revisions.saved(u.current_revision); // our save is now the newest; poll against it
       dirty.markSaved(sent);
       saveFailed = false;
+      saveError = null;
+      retryDelay = 0;
       if (!silent) {
         toast("Saved");
       }
@@ -670,6 +680,17 @@ export async function renderEditor(
         return "refused";
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
+      saveError = describeError(e);
+      retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
+      at(
+        Date.now() + retryDelay,
+        () => {
+          if (saveError && !conflicted) {
+            saveDraft(true).catch(() => {}); // a failure says so on the cue again
+          }
+        },
+        signal,
+      );
       throw e;
     } finally {
       saving = false;
@@ -686,9 +707,7 @@ export async function renderEditor(
         freshnessEl.scrollIntoView({ block: "nearest" });
         return;
       }
-      busy(saveBtn, "Saving…", () => saveDraft(false).catch((e) => toast(message(e)))).finally(
-        refreshDirty,
-      );
+      busy(saveBtn, "Saving…", () => saveDraft(false).catch(() => {})).finally(refreshDirty);
     };
   }
   // Save draft follows the banner: unavailable while it asks for a decision, and says why.
@@ -776,8 +795,9 @@ export async function renderEditor(
       el.addEventListener("input", markEdited);
     }
     for (const el of [subjectEl, slugEl]) {
-      el.addEventListener("blur", () =>
-        saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`)),
+      el.addEventListener(
+        "blur",
+        () => saveDraft(true).catch(() => {}) /* the save cue says why */,
       );
       // Enter commits a one-line field the way leaving it does, but not the Enter that ends
       // an IME composition, which Safari reports with isComposing false and keyCode 229.
@@ -786,7 +806,7 @@ export async function renderEditor(
           e.preventDefault();
           saveDraft(true)
             .then(applyHeld) // Enter commits the slug, so show what it saved as
-            .catch((err) => toast(`Couldn’t save: ${message(err)}`));
+            .catch(() => {}); // the save cue says why
         }
       });
     }
@@ -897,7 +917,7 @@ export async function renderEditor(
   // it in flight and doesn't send it twice.
   $<HTMLAnchorElement>("#webLink").addEventListener("click", () => {
     if (!locked) {
-      saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`));
+      saveDraft(true).catch(() => {}) /* the save cue says why */;
     }
   });
 
@@ -1206,32 +1226,52 @@ export async function renderEditor(
           if (!locked) {
             await saveDraft(true);
           }
+          // One request per address, each on its own, so one that fails doesn't stop the
+          // rest, and the dialog can name exactly the ones to try again.
           let sent = 0;
+          const failed: string[] = [];
+          let reason: string | null = null;
           let lastWarnings: string[] | null = null;
           for (const addr of addrs) {
-            const r = await api<TestSendResponse>(`/api/posts/${id}/test`, {
-              method: "POST",
-              json: { to: addr },
-            });
-            if (r.sent) {
-              sent++;
+            try {
+              const r = await api<TestSendResponse>(`/api/posts/${id}/test`, {
+                method: "POST",
+                json: { to: addr },
+              });
+              if (r.sent) {
+                sent++;
+              } else {
+                failed.push(addr);
+              }
+              lastWarnings = r.warnings;
+            } catch (e) {
+              if (isNotFound(e)) {
+                throw e;
+              }
+              failed.push(addr);
+              reason = describeError(e);
             }
-            lastWarnings = r.warnings;
           }
           showWarnings(lastWarnings);
-          m.close();
           // A test of a scheduled post settles its re-made condition on the server; read the
           // feed now so the banner's line goes with it rather than at the next idle read.
-          if (locked) {
+          if (locked && sent > 0) {
             readSendsNow();
           }
-          toast(
-            withNoProviderNote(
-              sent === addrs.length
-                ? `Test sent to ${sent} address${sent === 1 ? "" : "es"}`
-                : `Sent ${sent} of ${addrs.length}; the rest failed`,
-            ),
-          );
+          if (failed.length) {
+            // The dialog stays open with only the addresses that didn't get it, so Send again
+            // tries those and no one gets a second copy.
+            to.value = failed.join("\n");
+            const which = failed.join(", ");
+            m.error(
+              sent
+                ? `Sent to ${sent} of ${addrs.length}. Not sent to ${which}${reason ? `: ${reason}` : "."} Send again to try those.`
+                : `Not sent${reason ? `: ${reason}` : "."} Send again to try.`,
+            );
+            return;
+          }
+          m.close();
+          toast(withNoProviderNote(`Test sent to ${sent} address${sent === 1 ? "" : "es"}`));
         } catch (e) {
           if (isNotFound(e)) {
             m.close();

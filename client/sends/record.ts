@@ -10,7 +10,7 @@ import type {
   SendResponse,
   SendView,
 } from "../../shared/sends";
-import { ApiError, api, apiFile } from "../api";
+import { ApiError, api, apiFile, describeError } from "../api";
 import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
@@ -22,7 +22,7 @@ import { busy, renderError, toast } from "../ui/widgets";
 import { openResolveModal } from "./dialogs";
 import { can, clampPct, conditionOf, fmtDuration, has } from "./progress";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = describeError;
 
 /**
  * A sent post is a frozen record (I3), not an editable object, so it opens this instead

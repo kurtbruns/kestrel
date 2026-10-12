@@ -5,7 +5,7 @@ import type { PostListItem, PostListResponse } from "../../shared/posts";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { derivePublication, type Publication } from "../brand";
 import {
   CONNECT_PROVIDER_HREF,
@@ -199,7 +199,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     first = s;
     counts = subs.counts;
   } catch (e) {
-    renderError(root, e instanceof Error ? e.message : String(e), remount);
+    renderError(root, describeError(e), remount);
     return;
   }
   let sends = first.sends;

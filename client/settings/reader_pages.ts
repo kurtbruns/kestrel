@@ -15,7 +15,7 @@ import {
   readerPagePath,
 } from "../../shared/reader_pages";
 import type { DeploymentView } from "../../shared/settings";
-import { apiText } from "../api";
+import { apiText, describeError } from "../api";
 import { onAbort } from "../lifecycle";
 import { $, $$ } from "../ui/dom";
 import { framedCopy } from "../ui/email_frame";
@@ -185,7 +185,7 @@ export function mountReaderPages(
       // rather than show it under the wrong name, and the error takes its place.
       frame.srcdoc = "";
       stage.hidden = true;
-      errorEl.textContent = `Couldn’t load this page: ${e instanceof Error ? e.message : String(e)}`;
+      errorEl.textContent = `Couldn’t load this page: ${describeError(e)}`;
       errorEl.hidden = false;
     }
   };

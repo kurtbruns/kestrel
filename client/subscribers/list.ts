@@ -1,7 +1,7 @@
 // The subscribers list: the by-status composition and the filterable roster.
 
 import type { SubscriberListItem, SubscriberListResponse } from "../../shared/subscribers";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
@@ -83,7 +83,7 @@ export async function renderSubscribers(
       renderSubTable(listEl, data.subscribers, state, load, signal);
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {
-      renderError(listEl, e instanceof Error ? e.message : String(e), load);
+      renderError(listEl, describeError(e), load);
     }
   }
 

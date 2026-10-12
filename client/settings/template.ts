@@ -9,7 +9,7 @@ import type {
   SettingsSavedResponse,
   TemplateTestResponse,
 } from "../../shared/settings";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -24,7 +24,7 @@ import { savebar } from "../ui/savebar";
 import { busy, modal, renderError, toast } from "../ui/widgets";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = describeError;
 
 // The Template page's "Start from example" menu binds its outside-click dismissal
 // exactly once for the app's lifetime (see renderTemplate); this guards against

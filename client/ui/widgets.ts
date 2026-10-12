@@ -76,7 +76,57 @@ export interface Modal {
   clearError: () => void;
 }
 
-let dialogErrorSeq = 0;
+let fieldErrorSeq = 0;
+// The clear function of the error each field shows now, so a second error replaces the first.
+const fieldErrors = new WeakMap<HTMLElement, () => void>();
+
+/** The one look of a field or dialog error: an icon and the reason, announced as an alert. */
+function errorLine(message: string): HTMLElement {
+  const line = document.createElement("div");
+  line.className = "field-error";
+  line.id = `field-error-${++fieldErrorSeq}`;
+  line.setAttribute("role", "alert");
+  const ico = document.createElement("span");
+  ico.className = "field-error-ico";
+  ico.setAttribute("aria-hidden", "true");
+  ico.textContent = "!";
+  const text = document.createElement("span");
+  text.textContent = message;
+  line.append(ico, text);
+  return line;
+}
+
+/**
+ * Say why a field's value is refused, beneath the field (DESIGN §5): the field is marked
+ * invalid and described by the reason, and both go as soon as the field is edited.
+ * Returns the function that takes the error away sooner; a second call on the same
+ * field replaces the first.
+ */
+export function fieldError(
+  field: HTMLInputElement | HTMLTextAreaElement,
+  message: string,
+): () => void {
+  fieldErrors.get(field)?.();
+  const line = errorLine(message);
+  const describedBy = field.getAttribute("aria-describedby");
+  field.after(line);
+  field.setAttribute("aria-describedby", describedBy ? `${describedBy} ${line.id}` : line.id);
+  field.classList.add("is-invalid");
+  const clear = () => {
+    line.remove();
+    field.classList.remove("is-invalid");
+    if (describedBy === null) {
+      field.removeAttribute("aria-describedby");
+    } else {
+      field.setAttribute("aria-describedby", describedBy);
+    }
+    field.removeEventListener("input", clear);
+    fieldErrors.delete(field);
+  };
+  field.addEventListener("input", clear);
+  fieldErrors.set(field, clear);
+  return clear;
+}
 
 /**
  * A modal over a backdrop; a click outside or Escape closes it. The content is markup.
@@ -109,56 +159,28 @@ export function modal(content: Html, signal: AbortSignal): Modal {
       trapTab(dialog, e);
     }
   };
-  let errorLine: HTMLElement | null = null;
-  let errorField: HTMLInputElement | HTMLTextAreaElement | null = null;
-  let fieldDescribedBy: string | null = null;
+  // One error at a time: a field's (from fieldError) or the dialog's own line.
+  let clearCurrent: (() => void) | null = null;
   const clearError = () => {
-    errorLine?.remove();
-    errorLine = null;
-    if (errorField) {
-      errorField.classList.remove("is-invalid");
-      if (fieldDescribedBy === null) {
-        errorField.removeAttribute("aria-describedby");
-      } else {
-        errorField.setAttribute("aria-describedby", fieldDescribedBy);
-      }
-      errorField.removeEventListener("input", clearError);
-      errorField = null;
-    }
+    clearCurrent?.();
+    clearCurrent = null;
   };
   const error = (message: string, field?: HTMLInputElement | HTMLTextAreaElement) => {
     clearError();
-    const line = document.createElement("div");
-    line.className = field ? "field-error" : "field-error dialog-error";
-    line.id = `dialog-error-${++dialogErrorSeq}`;
-    line.setAttribute("role", "alert");
-    const ico = document.createElement("span");
-    ico.className = "field-error-ico";
-    ico.setAttribute("aria-hidden", "true");
-    ico.textContent = "!";
-    const text = document.createElement("span");
-    text.textContent = message;
-    line.append(ico, text);
     if (field) {
-      field.after(line);
-      errorField = field;
-      fieldDescribedBy = field.getAttribute("aria-describedby");
-      field.setAttribute(
-        "aria-describedby",
-        fieldDescribedBy ? `${fieldDescribedBy} ${line.id}` : line.id,
-      );
-      field.classList.add("is-invalid");
-      field.addEventListener("input", clearError);
+      clearCurrent = fieldError(field, message);
       field.focus();
-    } else {
-      const actions = dialog.querySelector(".actions");
-      if (actions) {
-        actions.before(line);
-      } else {
-        dialog.append(line);
-      }
+      return;
     }
-    errorLine = line;
+    const line = errorLine(message);
+    line.classList.add("dialog-error");
+    const actions = dialog.querySelector(".actions");
+    if (actions) {
+      actions.before(line);
+    } else {
+      dialog.append(line);
+    }
+    clearCurrent = () => line.remove();
   };
   const close = () => {
     // A click on the backdrop has already dropped focus to the page body, so that counts as

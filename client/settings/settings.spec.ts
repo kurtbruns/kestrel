@@ -395,6 +395,26 @@ describe("settings view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says a failed test notification in its status row only, not in a toast as well", async () => {
+    await open([
+      {
+        path: "/api/settings",
+        reply: () => response({ settings: { notifications: { to: "me@b.c" } } }),
+      },
+      {
+        method: "POST",
+        path: "/api/settings/notifications/test",
+        reply: () =>
+          jsonResponse({ error: "notify_failed", message: "The channel refused it." }, 502),
+      },
+    ]);
+    $<HTMLButtonElement>("#notifyTest").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#notifyStatus .set-pill.danger").textContent).toBe("Not delivered");
+    expect($("#notifyStatus").textContent).toMatch(/The channel refused it\./);
+    expect($("#toasts").textContent).toBe("");
+  });
+
   it("puts the notifications address back on discard", async () => {
     await open([
       {
@@ -836,7 +856,7 @@ describe("settings view", () => {
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : response()),
       },
     ]);
-    expect($("#settingsBody .error").textContent).toMatch(/down/);
+    expect($("#settingsBody .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");

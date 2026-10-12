@@ -2517,6 +2517,13 @@ body.web-mode .content {
 .actions-bar > .row:only-child {
   margin-left: auto;
 }
+/* The save side takes the room left over and lets a long cue (why a save failed) wrap
+   inside it, so the test and schedule buttons keep their place at the right. */
+.actions-bar > .row:first-child:not(:only-child) {
+  flex: 1 1 16rem;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
 /* The autosave cue (DESIGN §5, §6), beside Save draft. The editor's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
    dot). The dot is a reinforcement, never the whole signal — the text label carries
@@ -2526,6 +2533,7 @@ body.web-mode .content {
 .save-status {
   display: inline-flex;
   align-items: center;
+  min-width: 0;
   gap: 7px;
   font-size: 13px;
   color: var(--muted);
@@ -2536,9 +2544,13 @@ body.web-mode .content {
 .save-status.is-dirty {
   color: var(--fg);
 }
+.save-status.is-error {
+  color: var(--danger-fg);
+}
 .save-status.is-dirty::before,
 .save-status.is-saving::before,
-.save-status.is-saved::before {
+.save-status.is-saved::before,
+.save-status.is-error::before {
   content: "";
   width: 8px;
   height: 8px;
@@ -2554,6 +2566,9 @@ body.web-mode .content {
 }
 .save-status.is-saved::before {
   background: var(--ok-fg);
+}
+.save-status.is-error::before {
+  background: var(--danger-fg);
 }
 @keyframes save-pulse {
   0%,

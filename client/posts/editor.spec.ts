@@ -717,7 +717,7 @@ describe("editor view", () => {
         reply: () => (failures-- > 0 ? jsonResponse({ error: "down" }, 500) : draft()),
       },
     ]);
-    expect($("#app .error").textContent).toMatch(/down/);
+    expect($("#app .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($<HTMLInputElement>("#f-subject").value).toBe("Owls");
@@ -1336,10 +1336,41 @@ describe("editor view", () => {
     typeInto(body(), "mine");
     await vi.advanceTimersByTimeAsync(5000);
     expect(puts()).toHaveLength(1);
-    expect($("#toasts").textContent).toMatch(/Couldn’t autosave: disk full/);
-    expect($("#saveStatus").textContent).not.toBe("Saved");
+    // Said on the save cue, which keeps it until a save succeeds, not in a passing toast.
+    expect($("#saveStatus").textContent).toBe("Not saved: disk full");
+    expect($("#saveStatus").classList.contains("is-error")).toBe(true);
+    expect($("#toasts").textContent).toBe("");
     expect(handle().dirty()).toBe(true);
     expect(handle().beforeLeave()).toBe("confirm"); // a silent flush would fail again
+  });
+
+  it("tries a failed save again on its own, spaced out, and clears the error once one lands", async () => {
+    const server = draftServer();
+    let failures = 2;
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) =>
+          failures-- > 0 ? jsonResponse({ error: "internal_error" }, 503) : server.put(req),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(puts()).toHaveLength(1);
+    expect($("#saveStatus").textContent).toBe(
+      "Not saved: Something went wrong on the server. Try again in a moment.",
+    );
+    await vi.advanceTimersByTimeAsync(5000); // the first retry, with no edit in between
+    expect(puts()).toHaveLength(2);
+    expect($("#saveStatus").classList.contains("is-error")).toBe(true);
+    await vi.advanceTimersByTimeAsync(5000); // spaced out: the next is twice as far off
+    expect(puts()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(puts()).toHaveLength(3);
+    expect($("#saveStatus").textContent).toBe("Saved");
+    expect(handle().dirty()).toBe(false);
   });
 
   it("says a leave's save failed, since no one is left on the page to see it otherwise", async () => {
@@ -1422,8 +1453,10 @@ describe("editor view", () => {
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toHaveLength(2);
-    expect($("#toasts").textContent).toMatch(/Sent 1 of 2; the rest failed/);
-    expect($("#toasts").textContent).not.toMatch(/Test sent to/);
+    // The dialog stays open on the address that didn't get it, so Send again tries only that one.
+    expect($(".modal .dialog-error").textContent).toContain("Sent to 1 of 2. Not sent to you@b.c.");
+    expect($<HTMLTextAreaElement>("#testTo").value).toBe("you@b.c");
+    expect($("#toasts").textContent).toBe("");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -1451,10 +1484,13 @@ describe("editor view", () => {
     ]);
     $("#scheduleBtn").click();
     expect($("#f-subject").classList.contains("is-invalid")).toBe(true);
-    expect($("#f-subject-error").hidden).toBe(false);
+    expect($("#f-subject + .field-error").textContent).toContain(
+      "Add a subject before you schedule.",
+    );
     expect(document.querySelector(".modal")).toBeNull();
     typeInto($<HTMLInputElement>("#f-subject"), "Owls");
-    expect($("#f-subject-error").hidden).toBe(true);
+    expect(document.querySelector("#f-subject + .field-error")).toBeNull();
+    expect($("#f-subject").classList.contains("is-invalid")).toBe(false);
     $("#scheduleBtn").click();
     const when = $<HTMLInputElement>("#schWhen");
     expect(when.value).not.toBe("");

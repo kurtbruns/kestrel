@@ -2,7 +2,7 @@
 // (the list, the watch) and rescheduling (the list's scheduled card, the editor's banner).
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
-import { ApiError, api } from "../api";
+import { ApiError, api, describeError } from "../api";
 import { earliestFireAt, minLeadText, notConnectedRescheduleLine } from "../deployment";
 import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
@@ -10,7 +10,7 @@ import { toLocalInput } from "../ui/format";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = describeError;
 
 /**
  * The one manual step for a wedged send: decide whether the ambiguous batch went out or

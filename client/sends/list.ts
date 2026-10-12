@@ -4,7 +4,7 @@
 
 import { earlierCursor } from "../../shared/cursor";
 import type { SendListResponse, SendView } from "../../shared/sends";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import {
   connectProviderLink,
   heldSendsHtml,
@@ -45,7 +45,7 @@ import {
   sendsNow,
 } from "./progress";
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+const message = describeError;
 
 /** A scheduled card's Reschedule and Cancel: offered while the server would take them, and
  *  hidden at the fire time, when the review window closes (SPEC §6), by the countdown's

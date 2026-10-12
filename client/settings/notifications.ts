@@ -125,7 +125,8 @@ export function mountNotifications(root: HTMLElement, page: SettingsPage): Secti
           }),
         );
       } catch (err) {
-        toast(message(err));
+        // The outcome's home is the channel's status row, as it is for every notification;
+        // a toast would say it a second time.
         setHtml(
           status,
           notificationStatusHtml({

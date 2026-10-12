@@ -47,6 +47,43 @@ export class ApiError extends Error {
 
 const REAUTH_MESSAGE = "Not authorized. Sign in again.";
 
+// A server message written as a bare code ("internal_error") or a bare noun ("post"), with
+// no space in it, is a word for a program, not a person.
+const isBareWord = (m: string) => /^[a-z_]+$/i.test(m.trim());
+
+/**
+ * What to tell the publisher about a failure, in their words: the server's own message when
+ * it wrote one for people, otherwise a plain sentence for what happened. A dropped
+ * connection, a server error with no message, and a 404 naming only what it couldn't find
+ * would otherwise reach the page as "Failed to fetch", "internal_error", or "post".
+ */
+export function describeError(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (!isBareWord(e.message) && !/^Request failed \(HTTP \d+\)$/.test(e.message)) {
+      return e.message;
+    }
+    if (e.status === 404) {
+      return "It isn’t there any more. It may have been deleted elsewhere.";
+    }
+    if (e.status >= 500) {
+      return "Something went wrong on the server. Try again in a moment.";
+    }
+    if (e.status === 429) {
+      return "Too many requests at once. Try again in a moment.";
+    }
+    return "The server couldn’t do that. Reload the page and try again.";
+  }
+  // fetch rejects with a TypeError when the request never got an answer: offline, a
+  // dropped connection, the server unreachable. Its text differs by browser.
+  if (e instanceof TypeError && /fetch|network|load failed/i.test(e.message)) {
+    return "Couldn’t reach Kestrel. Check your connection and try again.";
+  }
+  if (e instanceof Error) {
+    return e.message;
+  }
+  return String(e);
+}
+
 async function send(path: string, opts: ApiOptions): Promise<Response> {
   const headers: Record<string, string> = { ...authHeaders(), ...(opts.headers ?? {}) };
   let body = opts.body;

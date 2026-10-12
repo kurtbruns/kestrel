@@ -3,7 +3,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SubscribeAction, SubscribeResponse, Subscriber } from "../../shared/subscribers";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { notConnectedAddLine, providerNotConnected } from "../deployment";
 import { $ } from "../ui/dom";
 import { html } from "../ui/html";
@@ -47,7 +47,7 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         toast(addedMessage(addr, r.action));
         onDone();
       } catch (e) {
-        m.error(e instanceof Error ? e.message : String(e));
+        m.error(describeError(e));
       }
     });
 }
@@ -83,7 +83,7 @@ export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: 
         toast(`Unsubscribed ${sub.email}`);
         onDone();
       } catch (e) {
-        m.error(e instanceof Error ? e.message : String(e));
+        m.error(describeError(e));
       }
     });
 }

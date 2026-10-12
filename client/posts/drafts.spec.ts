@@ -113,7 +113,7 @@ describe("drafts view", () => {
     ]);
     await mount(renderDrafts);
     await settle();
-    expect($("#list .error").textContent).toMatch(/down/);
+    expect($("#list .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await settle();
     expect($$("tr[data-id]")).toHaveLength(2);
@@ -250,7 +250,7 @@ describe("drafts view", () => {
     fake = fakeApi(post.routes);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#list .error").textContent).toMatch(/down/);
+    expect($("#list .error").textContent).toMatch(/went wrong on the server/);
     expect(feedReads(fake)).toEqual([]);
     post.recover();
     $("[data-retry]").click();

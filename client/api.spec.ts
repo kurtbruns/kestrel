@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { ApiError, api, apiFile, apiText } from "./api";
+import { ApiError, api, apiFile, apiText, describeError } from "./api";
 import { setToken } from "./auth";
 import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test/support";
 
@@ -113,5 +113,35 @@ describe("api", () => {
     await expect(apiText("/text")).rejects.toMatchObject(expected);
     await expect(apiFile("/file")).rejects.toMatchObject(expected);
     await expect(apiText("/named")).rejects.toMatchObject({ status: 503, message: "Busy" });
+  });
+});
+
+describe("describeError", () => {
+  it("keeps a server message written for people", () => {
+    expect(describeError(new ApiError("Add a subject before you schedule.", 400))).toBe(
+      "Add a subject before you schedule.",
+    );
+  });
+
+  it("puts a bare code, a bare noun, and a dropped connection into the publisher's words", () => {
+    expect(describeError(new ApiError("internal_error", 500))).toBe(
+      "Something went wrong on the server. Try again in a moment.",
+    );
+    expect(describeError(new ApiError("Request failed (HTTP 502)", 502))).toBe(
+      "Something went wrong on the server. Try again in a moment.",
+    );
+    expect(describeError(new ApiError("post", 404))).toBe(
+      "It isn’t there any more. It may have been deleted elsewhere.",
+    );
+    expect(describeError(new TypeError("Failed to fetch"))).toBe(
+      "Couldn’t reach Kestrel. Check your connection and try again.",
+    );
+    expect(describeError(new TypeError("Load failed"))).toBe(
+      "Couldn’t reach Kestrel. Check your connection and try again.",
+    );
+  });
+
+  it("leaves a programming error's own text alone rather than blaming the connection", () => {
+    expect(describeError(new TypeError("x is undefined"))).toBe("x is undefined");
   });
 });

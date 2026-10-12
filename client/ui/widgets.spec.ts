@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetShell } from "../test/support";
 import { $ } from "./dom";
 import { html } from "./html";
-import { modal, openMenu, toast } from "./widgets";
+import { fieldError, modal, openMenu, toast } from "./widgets";
 
 // The signal of a view that stays mounted throughout.
 const live = new AbortController().signal;
@@ -253,5 +253,28 @@ describe("openMenu", () => {
     expect(document.querySelector(".menu")?.textContent).toBe("Two");
     second.abort();
     expect(document.querySelector(".menu")).toBeNull();
+  });
+});
+
+describe("fieldError", () => {
+  beforeEach(() => {
+    resetShell();
+  });
+
+  it("marks the field, describes it by the reason, replaces a second error, and clears on edit", () => {
+    const input = document.createElement("input");
+    input.setAttribute("aria-describedby", "hint");
+    $("#app").appendChild(input);
+    fieldError(input, "Too short");
+    fieldError(input, "Not an address");
+    const lines = $("#app").querySelectorAll(".field-error");
+    expect(lines.length).toBe(1);
+    expect(lines[0]?.textContent).toBe("!Not an address");
+    expect(input.classList.contains("is-invalid")).toBe(true);
+    expect(input.getAttribute("aria-describedby")).toBe(`hint ${lines[0]?.id}`);
+    input.dispatchEvent(new Event("input"));
+    expect($("#app").querySelector(".field-error")).toBeNull();
+    expect(input.classList.contains("is-invalid")).toBe(false);
+    expect(input.getAttribute("aria-describedby")).toBe("hint");
   });
 });

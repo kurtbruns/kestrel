@@ -433,7 +433,7 @@ describe("reference room", () => {
     ]);
     await mount(renderReference);
     await settle();
-    expect($("#apiContent .error").textContent).toMatch(/down/);
+    expect($("#apiContent .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await settle();
     expect($$(".api-section")).toHaveLength(2);

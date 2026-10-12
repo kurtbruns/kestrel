@@ -263,7 +263,7 @@ describe("docs room", () => {
       },
     ]);
     await render("verify");
-    expect($(".room-main .error").textContent).toMatch(/down/);
+    expect($(".room-main .error").textContent).toMatch(/went wrong on the server/);
     $("[data-retry]").click();
     await settle();
     expect($("#docsMain h1").textContent).toBe("Verify");

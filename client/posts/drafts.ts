@@ -1,7 +1,7 @@
 // The drafts list (draft + scheduled), kept current with its posts' sends.
 
 import type { PostListResponse, PostSavedResponse } from "../../shared/posts";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { followSends } from "../send_state";
 import { $, $$ } from "../ui/dom";
@@ -38,7 +38,7 @@ export function createNewPost(btn: HTMLButtonElement): Promise<void> {
       const { post } = await api<PostSavedResponse>("/api/posts", { method: "POST", json: {} });
       location.hash = `#/edit/${post.id}`;
     } catch (err) {
-      toast(err instanceof Error ? err.message : String(err));
+      toast(describeError(err));
     }
   });
 }
@@ -153,9 +153,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
     } catch (e) {
       if (!background && mine === latest) {
         // Until the list has first answered, Retry is that first read, which starts following.
-        renderError(listEl, e instanceof Error ? e.message : String(e), () =>
-          following ? reload() : void firstLoad(),
-        );
+        renderError(listEl, describeError(e), () => (following ? reload() : void firstLoad()));
       }
       return null;
     }
@@ -228,7 +226,7 @@ function confirmDelete(pid: string, reload: () => unknown, signal: AbortSignal):
         toast("Draft deleted");
         reload();
       } catch (e) {
-        m.error(e instanceof Error ? e.message : String(e));
+        m.error(describeError(e));
       }
     });
 }

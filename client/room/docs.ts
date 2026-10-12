@@ -1,7 +1,7 @@
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
 import type { DocFragment, DocsLanding, DocsResponse } from "../../shared/docs";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $, $$ } from "../ui/dom";
@@ -53,7 +53,7 @@ export async function renderDocs(
       docsCache = await api<DocsResponse>("/api/docs", { signal });
     } catch (e) {
       if (!signal.aborted) {
-        renderError($(".room-main", root), e instanceof Error ? e.message : String(e), () =>
+        renderError($(".room-main", root), describeError(e), () =>
           mount((r, s) => renderDocs(slug, r, s, anchor)),
         );
       }

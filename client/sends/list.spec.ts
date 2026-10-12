@@ -535,13 +535,13 @@ describe("sent view", () => {
     fake = world(srv);
     await mount(renderSent);
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#active").textContent).toMatch(/internal_error|Internal/i);
+    expect($("#active").textContent).toMatch(/went wrong on the server/);
     expect(records()).toHaveLength(1); // the records stand on their own read
     // A report from the layer (a receipt on the record) leaves the error and its Retry.
     srv.edit("x1", { c_delivered: 148 });
     await vi.advanceTimersByTimeAsync(60_000);
     expect($("tr[data-id='x1'] .delivered .n").textContent).toBe("148");
-    expect($("#active").textContent).toMatch(/internal_error|Internal/i);
+    expect($("#active").textContent).toMatch(/went wrong on the server/);
     down = false;
     srv.put(sending());
     $<HTMLButtonElement>("#active button").click();

@@ -3,6 +3,7 @@
 // every section wears.
 
 import type { ConfirmationEmailCopy, SettingsResponse, SettingsView } from "../../shared/settings";
+import { describeError } from "../api";
 import { type Html, html } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
 
@@ -50,7 +51,7 @@ export interface SectionHandle {
   reset?(): void;
 }
 
-export const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+export const message = describeError;
 
 // A bare attribute is markup, not text: spelled once as markup so it can be interpolated.
 export const HIDDEN = html` hidden`;

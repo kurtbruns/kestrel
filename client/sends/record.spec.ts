@@ -478,7 +478,7 @@ describe("sent record", () => {
     $<HTMLButtonElement>(".pager-next").click(); // the reader's own load does say it failed
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".rec-people-table")).toBeNull();
-    expect($("#recRows").textContent).toMatch(/boom/);
+    expect($("#recRows").textContent).toMatch(/went wrong on the server/);
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -502,10 +502,10 @@ describe("sent record", () => {
     failing = true;
     moveCounts();
     await vi.advanceTimersByTimeAsync(3000); // the layer's next read while it settles: its reload fails
-    expect($("#recRows").textContent).toMatch(/boom/);
+    expect($("#recRows").textContent).toMatch(/went wrong on the server/);
     release(); // the overtaken answer lands last and paints nothing
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#recRows").textContent).toMatch(/boom/);
+    expect($("#recRows").textContent).toMatch(/went wrong on the server/);
     expect(fake.unhandled).toHaveLength(0);
   });
 

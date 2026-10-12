@@ -341,7 +341,7 @@ Every message has exactly one home, chosen by how long it lives and what the rea
 | --- | --- | --- |
 | **Toast** | The result of an act the reader just took, including a failure with nothing standing to fix. | About three and a half seconds. |
 | **Save bar** | An explicit-save surface's unsaved edits, and why the last save didn't go through. | While there are unsaved edits. |
-| **Save cue** | The editor's autosave state: Unsaved, Saving…, Saved. | Continuous. |
+| **Save cue** | The editor's save state: Unsaved, Saving…, Saved, or why the last save failed. | Continuous; a failure stays until a save succeeds. |
 | **Banner** | A standing state of the screen's subject, with its actions: the editor's `scheduled` and `conflict` banners. | While the state holds. |
 | **Field error** | Why one field's value is refused, beneath the field, on a page or in a dialog. | Until the value changes. |
 | **Dialog error** | Why a dialog's act didn't go through, when no one field is at fault, just above its buttons. | Until the next try. |
@@ -352,6 +352,8 @@ Every message has exactly one home, chosen by how long it lives and what the rea
 **Choosing a home.**
 
 - A toast is never the only record of something that lasts. If the reader could come back later and need to know it, it belongs in a banner, attention, or the page itself.
+- **A toast carries a failure only when nothing standing is left to fix**: an act with no surface of its own (New post, a row or card action, a copy the browser refused, the save a leave makes after the page is gone). A failure with a home (a field, a dialog, the save bar, the save cue, a channel's status row) says so there and nowhere else.
+- **Errors are in the publisher's words.** The server's message stands when it was written for people; a bare code, a bare "not found", or a dropped connection is said plainly instead ("Couldn’t reach Kestrel. Check your connection and try again.").
 - **A dialog says its own errors.** A toast at the foot of the screen is far from the field it's about, and gone in a few seconds while the dialog stays open. The error goes under the field at fault, which is marked invalid and focused, and clears as soon as it's edited; otherwise just above the dialog's buttons.
 - **A surface with a save bar says why a save failed in the bar**, where it stays until the next save. A toast would sit over the bar and vanish while the edits it's about are still unsaved.
 - A refusal about one field goes on that field. Disabling the act instead is allowed only when the reason is visible beside it.
@@ -375,7 +377,7 @@ Every surface that edits something saves one of two ways, and commits to it whol
 
 **Explicit save** (Settings, the Template page). Edits accumulate against the last saved state, and the reader commits or discards them on purpose through the **save bar**, which slides up from the bottom of the screen with **Discard** and **Save changes** while there are unsaved edits, and away once they're saved, with a toast saying so. If a save doesn't go through, the bar says why (§5). The logo is the one exception: it saves the moment it's picked, so whatever kept it from saving shows under its tile.
 
-**Autosave** (the post editor). The draft saves as you type, after a short pause and never more than half a minute late, with the **save cue** beside Save draft. Save draft and ⌘S save at once. Its Unsaved reads in the same amber as the save bar, so the two models feel like one app, and the state is in its words, never the dot's color alone. The editor needs continuous saving and conflict handling the save bar has no words for, so it never uses the bar.
+**Autosave** (the post editor). The draft saves as you type, after a short pause and never more than half a minute late, with the **save cue** beside Save draft. Save draft and ⌘S save at once. A save that fails turns the cue red, "Not saved:" and the reason, which stays until a save succeeds, and the editor tries again on its own, a little further apart each time, so a dropped connection recovers without another edit. Its Unsaved reads in the same amber as the save bar, so the two models feel like one app, and the state is in its words, never the dot's color alone. The editor needs continuous saving and conflict handling the save bar has no words for, so it never uses the bar.
 
 **Read-only** surfaces pick neither, because there's nothing to save. The send page is the example: the record is frozen (I3), and the watch only observes.
 

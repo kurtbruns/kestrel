@@ -7,7 +7,7 @@ import type {
   ReferenceResource,
   ReferenceResponse,
 } from "../../shared/reference";
-import { api } from "../api";
+import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { codeBlock, wireCopy } from "../ui/copy";
@@ -220,9 +220,7 @@ export async function renderReference(root: HTMLElement, signal: AbortSignal): P
   try {
     ({ groups } = await api<ReferenceResponse>("/api/reference", { signal }));
   } catch (e) {
-    renderError(contentEl, e instanceof Error ? e.message : String(e), () =>
-      mount(renderReference),
-    );
+    renderError(contentEl, describeError(e), () => mount(renderReference));
     return;
   }
 
