@@ -15,11 +15,11 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "get-started/verify",
       "get-started/go-live",
       "guides/connect-claude",
+      "guides/try-locally",
       "guides/ses",
       "guides/notifications",
       "guides/rate-limit",
       "guides/upgrade",
-      "guides/try-locally",
       "reference/configuration",
       "reference/sending-domain-dns",
     ]);
@@ -79,7 +79,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     }
     const start = docs.find((d) => d.slug === "deploy");
     expect(start?.html).toContain('href="#/docs/resend"');
-    expect(start?.html).toContain('href="#/docs/ses"');
+    expect(start?.html).toContain('href="#/docs/configuration"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
   });

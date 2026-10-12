@@ -17,11 +17,11 @@ Follow these steps, from an empty repository to a live newsletter. Each one ends
 Each one stands on its own. Pick the ones you need.
 
 - [Connect Claude to the API](guides/01-connect-claude.md)
+- [Try Kestrel on your computer](guides/08-try-locally.md)
 - [Use Amazon SES instead of Resend](guides/02-ses.md)
 - [Notifications through Cloudflare's email](guides/03-notifications.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
 - [Upgrade to a new release](guides/07-upgrade.md)
-- [Try Kestrel on your computer](guides/08-try-locally.md)
 
 ## Reference
 
