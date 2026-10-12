@@ -83,6 +83,9 @@ export function createRouter({
   const lead = `${formatLead(minLeadMs)} on this deployment (\`deployment.minLeadMs\` in \`GET /api/settings\`); a deployment sets it with \`MIN_LEAD_SECONDS\`, never below ${formatLead(MIN_LEAD_FLOOR_MS)}`;
   // What every send route says of conditions and actions: one server rule, one wording.
   const conditionsText = `\`conditions\` is what is wrong with the send, or worth knowing, now (SPEC §8, §12), derived by the server from the send and the same on every route, most severe first: \`missed\` (still scheduled ${MISSED_THRESHOLD_MS / 60_000} minutes past its fire time: the sweep is not running), \`stuck\` (still sending ${STUCK_THRESHOLD_MS / 60_000} minutes after it started, whatever the cause), \`wedged\` (\`count\` recipients whose delivery is unknown, settled by Resolve), \`refused\` (the provider refusing the account, with its \`cause\`, its own words as \`error\`, the \`advice\` for the fix, which is outside this API, and \`retry_at\`; the send resumes on its own once the account is fixed, having consumed no one), \`provider_unavailable\` (an outage or a rate limit, retried on its own at \`retry_at\`), \`bounce_spike\` (a send finished within ${BOUNCE_SPIKE_RECENT_MS / 86_400_000} days whose confirmed bounces reached ${BOUNCE_SPIKE_RATE * 100}% of its audience at fire, at least ${BOUNCE_SPIKE_MIN}; \`bounced\` and \`rate\`), and \`remade\` (a template or identity change re-made the scheduled email after its last test, \`tested_at\`; a test of the post clears it). Each has a \`severity\` (\`action\`: a person must act; \`warn\`: worth a look; \`info\`), \`since\` (null when the record does not say), a \`message\` to show or relay as it stands, and the \`action\` that settles it, if any. \`actions\` is exactly what the server would accept on the send now, each \`{name, method, path}\`: \`cancel\` and \`reschedule\` while it is scheduled and its fire time is still ahead, \`resolve\` while it is wedged.`;
+  // What every route that would send says while the deployment has no provider: one code.
+  const notConnected =
+    "Refused with 409 `provider_not_connected` while no email provider is connected (SPEC §9), since nothing can be sent.";
   const actionText =
     "An act carries no precondition on the send you read: it applies to the send as it stands, within the rules above, and the answer shows the result. An `If-Match` header is ignored. Every refusal carries the send as it stands in `send`, in the `GET /api/sends` row shape.";
   // One send as every send route carries it, for the examples.
@@ -260,7 +263,7 @@ export function createRouter({
       summary:
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
       description:
-        "`inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
+        "`deployment.provider` is `resend` or `ses`; `fake`, a stand-in that records a send and delivers nothing (local development, a demo); or `none` while no email provider is connected (SPEC §9), when everything that would send is refused with 409 `provider_not_connected`. `inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
       example: {
         response: {
           settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },
@@ -342,8 +345,7 @@ export function createRouter({
       resource: "settings",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
-      description:
-        "Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see `PUT /api/settings`).",
+      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). ${notConnected}`,
       example: {
         request: { to: "you@example.com" },
         response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
@@ -357,8 +359,7 @@ export function createRouter({
       resource: "settings",
       summary:
         "Send a sample notification to the saved notifications address, through the live channel (SPEC §8).",
-      description:
-        "Takes no body and goes only to `settings.notifications.to`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 `notify_failed` carrying its words.",
+      description: `Takes no body and goes only to \`settings.notifications.to\`, so it cannot mail an arbitrary address; 400 when none is set. A channel that refuses (an unverified Cloudflare destination, say) is a 502 \`notify_failed\` carrying its words. Through the newsletter's provider, ${notConnected.charAt(0).toLowerCase()}${notConnected.slice(1)}`,
       example: { response: { to: "you@example.com", channel: "cloudflare" } },
       handler: settingsRoutes.notificationTest,
     },
@@ -555,7 +556,8 @@ export function createRouter({
       summary:
         "Send a test to one address through the same per-recipient path as a real send (I5).",
       description:
-        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` condition.",
+        "Once the post is scheduled this sends its frozen copy, exactly as it will fire, and once sent the record's; a draft's test is a live render (SPEC §5). The response's `frozen` says which. A test of a scheduled send's frozen copy is recorded as its `tested_at`, which clears the send's `remade` condition. " +
+        notConnected,
       example: {
         request: { to: "you@example.com" },
         response: {
@@ -608,7 +610,7 @@ export function createRouter({
       description:
         "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise: " +
         lead +
-        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, and 409 `settings_changed` when a template or identity save kept landing while it froze (try again).",
+        ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
       example: {
         request: { fire_at: "2026-01-16T09:00:00Z" },
         response: { send: scheduledExample, cursor: "57.1768467610000" },
@@ -644,7 +646,7 @@ export function createRouter({
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
         ", and worth raising only once the send carries the `stuck` condition. `account` is the provider refusing the account itself, retried " +
         retrySchedule(HALT_BACKOFF_MS.account) +
-        "; `cause` names what (`credentials`, `sender`, `quota`, or `suspended`). Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
+        "; `cause` names what (`credentials`, `sender`, `quota`, `suspended`, or `not_connected`, a deployment with no provider connected). Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
         conditionsText +
         " An unknown `status`, `failures`, `sort`, or `dir`, or a `limit` or `offset` that is not a whole number, is a 400 naming the field.",
       query: [
@@ -907,6 +909,7 @@ export function createRouter({
       accepts: JSON_BODY,
       resource: "subscribers",
       summary: "Add a subscriber via the normal double opt-in (never an auto-confirm).",
+      description: `${notConnected} Nothing is stored then, since the confirmation could not go.`,
       example: { request: { email: "reader@example.com" } },
       handler: subscriberRoutes.create,
     },
@@ -1023,7 +1026,8 @@ export function createRouter({
       path: "/subscribe",
       access: "public",
       resource: "subscriptions",
-      summary: "The public subscribe form (HTML).",
+      summary:
+        "The public subscribe form (HTML); while no email provider is connected, a page saying signups aren't open yet (SPEC §9).",
       handler: publicRoutes.subscribeForm,
     },
     {
@@ -1033,7 +1037,7 @@ export function createRouter({
       resource: "subscriptions",
       summary: "Request a subscription; starts the double opt-in (confirmation email).",
       description:
-        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal.",
+        "Answers the same way whatever the address's state (new, pending, confirmed, unsubscribed, or suppressed), and before any confirmation is sent, so neither the reply nor its timing reveals list membership. A confirmation goes out only if one is due: never to a confirmed or suppressed address, and at most one per address per cooldown. A confirmation the email provider refuses is logged and changes nothing, so submitting again is safe; the authed `POST /api/subscribers` reports the refusal. While no email provider is connected every request is refused alike, 409 `provider_not_connected` (as JSON, or the page saying signups aren't open yet), and nothing is stored (SPEC §9).",
       example: {
         request: { email: "you@example.com" },
         response: { status: "check_inbox" },

@@ -9,7 +9,7 @@ import { newToken } from "../lib/ids";
 import { log } from "../lib/log";
 import { CONFIRM_COOLDOWN_MS, CONFIRM_LINK_TTL_MS } from "../lib/time";
 import { unwrap } from "../lib/unwrap";
-import { getProvider } from "../providers";
+import { getProvider, requireConnectedProvider } from "../providers";
 import type { RenderedEmail, SendBatchResult } from "../providers/types";
 import { resolveBranding } from "../render/template_engine";
 import type { RequestContext } from "../router";
@@ -33,7 +33,8 @@ export type SubscriptionOutcome =
 
 /**
  * Subscribe `email` through double opt-in, sending it a confirmation if one is due. Never
- * confirms anyone (I1). A confirmation the provider refuses changes nothing: a new address
+ * confirms anyone (I1). Refused outright while no provider is connected (SPEC §9), before
+ * anything is stored: an address whose confirmation cannot go would only sit pending. A confirmation the provider refuses changes nothing: a new address
  * leaves no row, and an existing one keeps the last link that did arrive. One whose fate is
  * unknown (no answer, or a halt after which it may have gone) is treated as sent, so its
  * link works if it arrived and the cooldown still holds.
@@ -42,6 +43,7 @@ export async function requestSubscription(
   c: RequestContext,
   email: string,
 ): Promise<SubscriptionOutcome> {
+  requireConnectedProvider(c.config);
   const db = c.env.DB;
   const existing = await subscribers.getByEmail(db, email);
   if (existing?.status === "confirmed") {

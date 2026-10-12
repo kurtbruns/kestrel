@@ -383,6 +383,79 @@ describe("dashboard", () => {
     expect(location.hash).toBe("#/edit/p9");
   });
 
+  // SPEC §9, DESIGN §2: a deployment with no provider connected says so where the
+  // developer lands, as a standing state, and its checklist puts connecting one first.
+  const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
+  describe("while no email provider is connected", () => {
+    const withProvider = (provider: "none" | "fake" | "resend") => {
+      const c = config();
+      c.deployment = { ...c.deployment, provider };
+      appState.appConfig = c;
+    };
+    it("puts connecting one in place of the sending-domain step, ahead of writing, and keeps the subscribe link closed", async () => {
+      withProvider("none");
+      fake = world([], sendServer(), none);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(steps()).toEqual([
+        "Name your publication",
+        "Connect an email provider",
+        "Write your first post",
+        "Share your subscribe link",
+      ]);
+      expect($(".setup-connect button").dataset.nav).toBe("#/docs/resend");
+      expect($(".setup-connect button").textContent).toBe("Connect an email provider");
+      expect($(".setup-subscribe").textContent).toMatch(
+        /Signups open once an email provider is connected/,
+      );
+      expect(document.querySelector(".setup-url")).toBeNull();
+      expect(document.querySelector(".setup-subscribe [data-copy]")).toBeNull();
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("raises an amber line in the health block on a populated dashboard, linking to connect one", async () => {
+      withProvider("none");
+      fake = world([post()], sendServer(), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      // In the health block's own warning treatment (DESIGN §2), with nothing wrong on a send.
+      const block = $("#dashHealth .health");
+      expect(block.classList.contains("amber")).toBe(true);
+      const line = $(".dash-not-connected", block);
+      expect(line.textContent).toBe(
+        "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
+      );
+      expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+      expect(line.querySelector("button")).toBeNull(); // not a Notice: nothing to dismiss
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("shows neither once a provider is set, nor on local development's stand-in", async () => {
+      for (const provider of ["resend", "fake"] as const) {
+        withProvider(provider);
+        fake = world([], sendServer(), none);
+        await mount(renderDashboard);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(steps(), provider).toEqual([
+          "Name your publication",
+          "Confirm your sending domain",
+          "Write your first post",
+          "Share your subscribe link",
+        ]);
+        expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
+        unmount();
+        fake.restore();
+        fake = world([post()], sendServer(), counts);
+        await mount(renderDashboard);
+        await vi.advanceTimersByTimeAsync(0);
+        expect(document.querySelector(".dash-not-connected"), provider).toBeNull();
+        expect(document.querySelector("#dashHealth .health"), provider).toBeNull();
+        unmount();
+        fake.restore();
+      }
+    });
+  });
+
   it("opens the post from a draft row or a scheduled card, the record from a sent row, and the watch from the active card", async () => {
     fake = world([post()], sendServer([send(), scheduled(), sending({ c_accepted: 50 })]));
     await mount(renderDashboard);

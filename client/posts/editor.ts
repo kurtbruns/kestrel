@@ -13,7 +13,15 @@ import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../..
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { earliestFireAt, minLeadText, postArchiveUrl, withNoProviderNote } from "../deployment";
+import {
+  earliestFireAt,
+  minLeadText,
+  notConnectedScheduleLine,
+  notConnectedTestLine,
+  postArchiveUrl,
+  providerNotConnected,
+  withNoProviderNote,
+} from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
@@ -1158,9 +1166,19 @@ export async function renderEditor(
     const lead = locked
       ? "Delivers the frozen copy that will send, exactly as it will fire, so you can check it in a client. One address per line."
       : "Delivers the rendered email to real inboxes so you can check it in a client. One address per line.";
+    // While no provider is connected the server would refuse a test, so the dialog leaves
+    // out the recipients and keeps only the standing line (DESIGN §2).
+    const notConnected = providerNotConnected();
     const m = modal(
-      html`<h3>Send a test</h3><p class="hint">${lead}</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}${notConnected ? null : html`<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p>`}<div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
     );
+    const go = $<HTMLButtonElement>("#tGo", m.el);
+    $("#tCancel", m.el).onclick = m.close;
+    go.disabled = notConnected;
+    if (notConnected) {
+      $("#tCancel", m.el).focus();
+      return;
+    }
     const to = $<HTMLTextAreaElement>("#testTo", m.el);
     to.focus();
     // Pre-fill with saved defaults (don't clobber anything already typed).
@@ -1175,8 +1193,6 @@ export async function renderEditor(
         }
       })
       .catch(() => {});
-    const go = $<HTMLButtonElement>("#tGo", m.el);
-    $("#tCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, "Sending…", async () => {
         const { valid: addrs, invalid } = parseAddresses(to.value);
@@ -1238,7 +1254,10 @@ export async function renderEditor(
       }
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
+      // While no provider is connected the server would refuse both views, so the dialog
+      // drops the picker and the Send now row and leaves only the standing line (DESIGN §2).
+      const notConnected = providerNotConnected();
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1317,6 +1336,13 @@ export async function renderEditor(
         box.setAttribute("aria-labelledby", "schHead");
         $("#schCancel", box).onclick = m.close;
         $("#schGo", box).onclick = doSchedule;
+        // The server would refuse a schedule; the standing line above says why and where to
+        // fix it, and the picker and Send now row are left out of the view.
+        $<HTMLButtonElement>("#schGo", box).disabled = notConnected;
+        if (notConnected) {
+          $("#schCancel", box).focus();
+          return;
+        }
         $("#toSendNow", box).onclick = showSendNow;
         $("#schWhen", box).focus();
       }
@@ -1329,6 +1355,7 @@ export async function renderEditor(
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
+        $<HTMLButtonElement>("#snGo", box).disabled = providerNotConnected();
         $("#toSchedule", box).onclick = () => {
           setHtml(box, scheduleView);
           wireSchedule();

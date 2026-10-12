@@ -11,7 +11,7 @@ import type {
   SendView,
 } from "../../shared/sends";
 import { ApiError, api, apiFile } from "../api";
-import { noEmailProvider } from "../deployment";
+import { noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
@@ -103,6 +103,9 @@ function nextRetry(retryAt: number | null): string {
 /** The phase's one-line gloss, said for the cause when the phase has more than one. */
 function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;
+  if (has(prog, "refused") && halt?.cause === "not_connected") {
+    return `No email provider is connected — nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
+  }
   if (has(prog, "refused") && halt) {
     return `The provider is refusing this account — nothing more goes out until it is fixed; ${nextRetry(halt.retry_at)}.`;
   }
@@ -196,10 +199,15 @@ function watchBodyHtml(prog: SendView): Html {
   const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
     ? "No email provider configured, so nothing is delivered"
-    : `Provider: ${prog.provider?.name || "—"}`;
+    : providerNotConnected()
+      ? "No email provider connected"
+      : `Provider: ${prog.provider?.name || "—"}`;
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");
+  // No provider connected is held the same way but is no provider's refusal (SPEC §9): its
+  // own headline, and the fix said once, with no provider's words to quote.
+  const unconnected = refused?.cause === "not_connected";
   // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
   // page's card give the same condition, in the server's words.
   const stuck = conditionOf(prog, "stuck");
@@ -207,7 +215,7 @@ function watchBodyHtml(prog: SendView): Html {
     ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
     ${
       refused
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>The provider is refusing this account</strong><div>${refused.error}</div><div>${refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once this is fixed the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div>${refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">

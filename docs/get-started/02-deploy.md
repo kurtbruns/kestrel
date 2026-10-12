@@ -88,7 +88,6 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
         }
       ],
       "vars": {
-        "PROVIDER": "fake",                                        // ← leave as is for now
         "APP_ORIGIN": "https://newsletter.example.com",            // ← your app's hostname
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",                      // ← your sending hostname
@@ -100,7 +99,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     What each one does:
 
     - **`routes`** puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - **`PROVIDER`** stays `fake` until you connect Resend in [step 4](04-resend.md). The `fake` transport delivers nothing, so don't schedule a post before then.
+    - **No `PROVIDER` yet.** You add it when you connect Resend in [step 4](04-resend.md). Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused.
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
@@ -159,7 +158,7 @@ This deploys the release your instance runs, with your settings. The output ends
     401
     ```
 
-1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page.
+1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until you connect Resend.
 
 If every request instead answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing or malformed. Fix it in `wrangler.jsonc`, commit, and deploy again.
 

@@ -1,4 +1,6 @@
-/** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. */
+/** Public, token-scoped reader routes: subscribe, confirm, unsubscribe. While no email
+ *  provider is connected (SPEC §9), the subscribe page says signups aren't open yet and a
+ *  subscribe request is refused, the same way for every address. */
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { PublicSubscribeResponse } from "../../shared/subscribers";
@@ -130,6 +132,23 @@ export function subscribeNotAnEmailPage(c: RequestContext, identity: ReaderIdent
   return subscribePage(c, identity, main, 400);
 }
 
+/**
+ * The subscribe page while no email provider is connected (SPEC §9): no form, since an
+ * address taken now could not be sent its confirmation. Every request gets it alike, so it
+ * says nothing about the list (§7).
+ */
+export function subscribeNotOpenPage(
+  c: RequestContext,
+  identity: ReaderIdentity,
+  status = 200,
+): Response {
+  const main =
+    `<p class="r-ey">Newsletter</p>` +
+    `<h1 class="r-h1">Signups aren’t open yet</h1>` +
+    `<p class="r-lead">This newsletter isn’t taking subscribers yet. Please check back soon.</p>`;
+  return subscribePage(c, identity, main, status);
+}
+
 /** The one answer every subscribe request gets, whatever the address's state (SPEC §7). */
 export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdentity): Response {
   const main =
@@ -139,10 +158,29 @@ export function subscribeCheckInboxPage(c: RequestContext, identity: ReaderIdent
 }
 
 export async function subscribeForm(c: RequestContext): Promise<Response> {
-  return subscribeFormPage(c, await readerIdentity(c, c.config));
+  const identity = await readerIdentity(c, c.config);
+  return c.config.provider === "none"
+    ? subscribeNotOpenPage(c, identity)
+    : subscribeFormPage(c, identity);
 }
 
 export async function subscribe(c: RequestContext): Promise<Response> {
+  if (c.config.provider === "none") {
+    // Refused before the address is read, so no address is stored or even looked at, and
+    // every request gets the same answer (SPEC §7, §9). Logged, so the operator can see
+    // readers arriving before signups are open.
+    log.warn("subscribe.not_connected");
+    if (!wantsHtml(c)) {
+      return json(
+        {
+          error: "provider_not_connected",
+          message: "This newsletter isn't taking subscribers yet.",
+        },
+        409,
+      );
+    }
+    return subscribeNotOpenPage(c, await readerIdentity(c, c.config), 409);
+  }
   const raw = await readEmail(c);
   const email = raw ? normalizeEmail(raw) : "";
   if (!email || !isValidEmail(email)) {

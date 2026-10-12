@@ -265,6 +265,33 @@ describe("template view", () => {
     expect(bar().classList.contains("show")).toBe(false);
   });
 
+  it("the test dialog carries a standing line to connect a provider while no provider is connected (DESIGN §2)", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open();
+    $("#tplTest").click();
+    const line = $(".modal .not-connected");
+    expect(line.textContent).toMatch(/^No email provider connected/);
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
+    expect(document.querySelector(".modal #tplTestTo")).toBeNull();
+    $("#ttCancel").click();
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    $("#tplTest").click();
+    expect(document.querySelector(".modal .not-connected")).toBeNull();
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(false);
+    expect(document.querySelector(".modal #tplTestTo")).not.toBeNull();
+  });
+
+  it("says nothing of saving first while no provider is connected, since nothing will be sent", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open();
+    typeInto(editor(), `${TEMPLATE}<!-- v2 -->`);
+    $("#tplTest").click();
+    expect($(".modal").textContent).not.toMatch(/Unsaved changes/);
+    expect($("#ttGo").textContent).toBe("Send test");
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
+  });
+
   it("save & send test: saves the edits first, then posts the test to the pre-filled recipients", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

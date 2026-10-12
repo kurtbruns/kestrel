@@ -7,6 +7,7 @@ import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
+import { CONNECT_PROVIDER_HREF, connectProviderLink, providerNotConnected } from "../deployment";
 import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -49,7 +50,9 @@ interface HealthAlert {
 // within a read of its condition and stays until the condition clears, and the dashboard
 // keeps no rule of its own: the bounce spike included, which the server reads off each
 // recently sent send. Only the loud kinds are lines here; a re-made send's note and a
-// provider outage short of the stuck threshold are shown where the send is.
+// provider outage short of the stuck threshold are shown where the send is. The one line
+// not about a send is the deployment's: no email provider connected (SPEC §9), an amber
+// standing state with no time, read from the deployment reflection, gone once one is set.
 function computeHealth(live: SendView[]): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -119,6 +122,12 @@ function computeHealth(live: SendView[]): HealthAlert[] {
     alerts.push({
       level: "amber",
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
+    });
+  }
+  if (providerNotConnected()) {
+    alerts.push({
+      level: "amber",
+      text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
     });
   }
   return alerts;
@@ -496,15 +505,31 @@ function apiConnectCard(connected: boolean): Html {
   </div>`;
 }
 
+/**
+ * The first-run checklist, in the order the steps depend on each other. Writing a post
+ * comes late because its New post creates a draft, which ends the first-run page; sharing
+ * comes last so a visitor finds a post in the archive. While no provider is connected,
+ * connecting one replaces the sending-domain step (Connect Resend verifies the domain) and
+ * the subscribe step says signups wait for it (the page is closed).
+ */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
+  const notConnected = providerNotConnected();
   return html`<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
+      ${
+        notConnected
+          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect an email provider</button></li>`
+          : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
+      }
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
-      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>
-      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>
+      ${
+        notConnected
+          ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`
+          : html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>`
+      }
     </ol>
   </div>`;
 }

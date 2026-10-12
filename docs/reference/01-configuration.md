@@ -12,7 +12,7 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 | Var | What it is | Default |
 | --- | --- | --- |
-| `PROVIDER` | the email provider: `fake`, `resend`, or `ses` | required |
+| `PROVIDER` | the email provider: `resend` or `ses`, or `fake` for local development | none: no provider connected |
 | `APP_ORIGIN` | the origin the app is served from: scheme and host, no path | required |
 | `ARCHIVE_BASE_PATH` | the path the archive lives under | `/archive` |
 | `FROM_ADDRESS` | the `From:` of every email | required with a real provider |
@@ -27,7 +27,9 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 ### `PROVIDER`
 
-`fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and so does a new deployment until its provider is connected. Never schedule a real post on it.
+Until it's set, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. [Connect Resend](../get-started/04-resend.md) sets it.
+
+`fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and names it on purpose in the top level of `wrangler.jsonc`. Never set it on a deployment that has readers: every subscriber would be recorded as sent the post, and never get it.
 
 ### `FROM_ADDRESS` and `SENDING_DOMAIN`
 
@@ -129,7 +131,7 @@ When declared, notifications go through Cloudflare's email instead of your provi
 
 The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly:
 
-- `PROVIDER` must be exactly `fake`, `resend`, or `ses`. A misspelling, or `SES`, is refused, never taken for `fake`.
+- `PROVIDER`, when set, must be exactly `resend`, `ses`, `fake`, or `none`. A misspelling, or `SES`, is refused, never taken for another.
 - `APP_ORIGIN` must be a plain `http` or `https` origin, with no path. So must `ARCHIVE_ORIGIN`, when set. `MEDIA_PUBLIC_BASE`, when set, must be a plain `http` or `https` URL, and may have a path. A trailing slash is dropped from each.
 - A real provider needs `FROM_ADDRESS`, and every secret the table marks for it. SES also needs `AWS_REGION`.
 - With a real provider, none of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com`, the template's placeholder.

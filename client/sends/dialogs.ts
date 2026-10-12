@@ -3,7 +3,7 @@
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
 import { ApiError, api } from "../api";
-import { earliestFireAt, minLeadText } from "../deployment";
+import { earliestFireAt, minLeadText, notConnectedRescheduleLine } from "../deployment";
 import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
@@ -69,6 +69,7 @@ export function openRescheduleModal(
   const m = modal(
     html`<h3 id="rsHead">Reschedule this post</h3>
       <p class="hint">Move when it sends (at least ${minLeadText()} out). The content stays frozen and the cancelable window is kept — only the time changes.</p>
+      ${notConnectedRescheduleLine()}
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
   );

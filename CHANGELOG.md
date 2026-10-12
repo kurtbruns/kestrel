@@ -10,10 +10,21 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.6.0.** If your `production` block in `wrangler.jsonc` sets `PROVIDER` to `resend` or `ses`, nothing changes. If it still sets `fake` (Get started's Deploy step until Connect Resend), delete that line before you deploy, so the instance runs with no provider connected rather than recording sends it never delivers, and [connect Resend](docs/get-started/04-resend.md) when you're ready. If it sets no `PROVIDER` at all, the instance used to run on `fake` and now refuses to send; connect a provider first if it has readers. A send already scheduled on such an instance is held, with no one marked sent, until a provider is connected; it then goes out at its first retry after that, which may be long after its fire time, and it can't be canceled meanwhile, since it is already sending. A local development config that leaves `PROVIDER` unset needs `"PROVIDER": "fake"` in its top-level `vars`, as a new instance's has.
+
+### Breaking
+
+- An unset `PROVIDER` now means no email provider is connected, not the `fake` stand-in. Such a deployment runs, and refuses everything that would send with a 409 `provider_not_connected`: scheduling, send now, a test email, a test notification through the provider, and adding a subscriber; its public subscribe page says signups aren't open yet instead of taking an address it can't confirm. A send scheduled before is held, consuming no one, as a `refused` condition with the new cause `not_connected` and advice to connect a provider. `fake` now runs only where it is named, as local development and a demo do, and a new instance's production settings ship without `PROVIDER` until Connect Resend sets it (SPEC §9).
+
 ### Added
 
 - Reader pages, post pages included, show the publication's logo as the browser tab's icon when one is set; with no logo, the browser's default icon stays (SPEC §5).
 - A setup guide, **Try Kestrel on your computer**, runs a new instance locally with the demo publication, with no Cloudflare account or Git host, and shows how the folder becomes your instance's repository when you deploy.
+
+### Changed
+
+- The dashboard's first-run checklist orders its steps by what each needs first: name the publication, connect a provider (or confirm the sending domain), write the first post, then share the subscribe link. Writing used to come second, and starting a draft ends the checklist, so the steps after it were lost.
+- While no email provider is connected, the editor says so wherever a send would be refused, each time with a "Connect an email provider" link to the setup step: the dashboard's health block and the Sent page carry an amber warning that nothing can be sent yet, the first-run checklist asks you to connect a provider in place of confirming the sending domain and says signups open once one is, Settings' Email provider row reads "No email provider connected" and its Ways to subscribe says signups aren't open yet, and the Send-a-test, Schedule, and Add subscriber dialogs say so in amber before you commit, with their act disabled and nothing to fill in (no recipients, time picker, Send now, or address), until a provider is set. A send held for want of a provider says no provider is connected, on its page, in the dashboard's attention line, and in the notification, rather than that the provider is refusing the account. Local development keeps its "nothing is delivered" wording.
 
 ## [1.6.0] - 2026-10-11
 

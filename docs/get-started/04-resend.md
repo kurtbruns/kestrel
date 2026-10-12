@@ -78,11 +78,11 @@ The webhook tells the app when an address bounces or complains, and the app stop
     npx wrangler secret put RESEND_WEBHOOK_SECRET --env production
     ```
 
-## 5. Switch the provider and deploy
+## 5. Set the provider and deploy
 
-Store both secrets before you switch. With `PROVIDER` set to `resend` and a secret missing, every request answers `500` and names the missing secret.
+Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` connects Resend. Store both secrets before you set it. With `PROVIDER` set to `resend` and a secret missing, every request answers `500` and names the missing secret.
 
-1. In `wrangler.jsonc`, in the `production` block's `vars`, change `PROVIDER` from `fake` to `resend`:
+1. In `wrangler.jsonc`, in the `production` block's `vars`, add `PROVIDER` set to `resend`:
 
     ```jsonc
     "PROVIDER": "resend",
@@ -125,7 +125,9 @@ Store both secrets before you switch. With `PROVIDER` set to `resend` and a secr
 
     Any other answer, such as a redirect to your Cloudflare login, means Access covers the webhook. Remove that path from your Access application.
 
-1. In the editor, **Settings → Email sender** shows Resend as the email provider, and your From address.
+1. In the editor, **Settings → Email sender** shows Resend as the email provider, and your From address, where it said **No email provider connected** before.
+
+1. In a browser, `https://newsletter.example.com/subscribe` shows the subscribe form, where it said signups aren't open yet.
 
 The test sends in the next step prove the rest.
 

@@ -3,12 +3,14 @@
 // Secrets never come down this wire (see routes/settings.ts).
 
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
-import type { SimulationProfile } from "../../shared/settings";
+import type { DeploymentView, SimulationProfile } from "../../shared/settings";
+import { connectProviderLink } from "../deployment";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, monogram, type SettingsPage, secHead } from "./page";
 
 const PROVIDER_LABELS: Record<string, string> = {
+  none: "No email provider connected",
   fake: "Fake (dev, dead-end)",
   ses: "Amazon SES",
   resend: "Resend",
@@ -17,6 +19,17 @@ const PROVIDER_LABELS: Record<string, string> = {
 /** The provider a deployment sends through, as Settings names it. */
 export function providerLabel(provider: string): string {
   return PROVIDER_LABELS[provider] || provider;
+}
+
+/**
+ * The Email provider row's value: the provider's name, the simulation a local server runs
+ * in its place, or, while none is connected (SPEC §9), the state and the step that ends it.
+ */
+function providerValue(d: DeploymentView): Html {
+  if (d.provider === "none") {
+    return html`${providerLabel(d.provider)}. ${connectProviderLink("set-link")} to start sending.`;
+  }
+  return html`${providerLabel(d.provider)}${d.simulation ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>` : null}`;
 }
 
 /** The provider a local send simulation models, as the Email provider row names it. */
@@ -55,7 +68,7 @@ export function senderSection(page: SettingsPage): Html {
         <div class="set-kv" style="border-top:1px solid var(--line)">
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.fromAddress}</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sendingDomain}</span></div>
-          <div class="set-kv-k">Email provider</div><div class="set-kv-v">${providerLabel(d.provider)}${d.simulation ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>` : null}</div>
+          <div class="set-kv-k">Email provider</div><div class="set-kv-v" id="providerValue">${providerValue(d)}</div>
         </div>
       </div>
     </section>`;

@@ -5,7 +5,7 @@
 import { earlierCursor } from "../../shared/cursor";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import { api } from "../api";
-import { noEmailProvider } from "../deployment";
+import { connectProviderLink, noEmailProvider, providerNotConnected } from "../deployment";
 import { mount } from "../lifecycle";
 import {
   followSends,
@@ -73,6 +73,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     root,
     html`<h1>Sent</h1>
     ${noEmailProvider() ? html`<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : null}
+    ${providerNotConnected() ? html`<div class="health amber sent-not-connected"><span class="health-dot">⚠️</span><div><span>No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span></div></div>` : null}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>

@@ -4,19 +4,31 @@
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SubscribeAction, SubscribeResponse, Subscriber } from "../../shared/subscribers";
 import { api } from "../api";
+import { notConnectedAddLine, providerNotConnected } from "../deployment";
 import { $ } from "../ui/dom";
 import { html } from "../ui/html";
 import { busy, modal, toast } from "../ui/widgets";
 
-/** Add subscriber → the normal double opt-in (never an auto-confirm). */
+/**
+ * Add subscriber → the normal double opt-in (never an auto-confirm). While no provider is
+ * connected the confirmation can't go and the server would refuse, so the dialog says so
+ * before the publisher types anything: the standing line, no address field, its act
+ * disabled (DESIGN §2).
+ */
 export function addSubscriberModal(onDone?: () => void): void {
+  const notConnected = providerNotConnected();
   const m = modal(
-    html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p><label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com"><div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
+    html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p>${notConnectedAddLine()}${notConnected ? null : html`<label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com">`}<div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
   );
-  const input = $<HTMLInputElement>("#addEmail", m.el);
   const go = $<HTMLButtonElement>("#aGo", m.el);
-  input.focus();
   $("#aCancel", m.el).onclick = m.close;
+  go.disabled = notConnected;
+  if (notConnected) {
+    $("#aCancel", m.el).focus();
+    return;
+  }
+  const input = $<HTMLInputElement>("#addEmail", m.el);
+  input.focus();
   go.onclick = () =>
     busy(go, "Adding…", async () => {
       const addr = normalizeEmail(input.value);

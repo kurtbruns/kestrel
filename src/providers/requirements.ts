@@ -1,17 +1,23 @@
 /**
  * What each transport needs from deploy config (SPEC §9): the names `PROVIDER` may hold,
- * and the vars and secrets a real transport cannot run without. `getConfig` validates
+ * and the vars and secrets a real transport cannot run without. `none`, which an unset
+ * `PROVIDER` also means, is no transport at all: the deployment runs not connected and
+ * refuses to send (SPEC §9). `getConfig` validates
  * against these, so a provider declares its needs beside its adapter and a deployment
  * missing one fails at the first request instead of at its first send.
  */
 import type { AppEnv } from "../env";
 
-export const PROVIDER_NAMES = ["fake", "ses", "resend"] as const;
+export const PROVIDER_NAMES = ["none", "fake", "ses", "resend"] as const;
 
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
 
-/** A transport that reaches real inboxes, as opposed to the in-memory `fake`. */
-export type RealProviderName = Exclude<ProviderName, "fake">;
+/** A transport that reaches real inboxes, as opposed to the in-memory `fake` or none. */
+export type RealProviderName = Exclude<ProviderName, "fake" | "none">;
+
+export function isRealProvider(name: ProviderName): name is RealProviderName {
+  return name === "ses" || name === "resend";
+}
 
 /**
  * Required per real transport. SES needs `SNS_TOPIC_ARN` because its webhook refuses every

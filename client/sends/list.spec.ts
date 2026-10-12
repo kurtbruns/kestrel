@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SendListResponse, SendSummary } from "../../shared/sends";
+import { appState } from "../state";
 import { condition, feedReads, listReads, sendServer } from "../test/send_server";
 import {
   $,
@@ -10,6 +11,7 @@ import {
   mount,
   resetShell,
   sendSummary,
+  settingsResponse,
 } from "../test/support";
 import { toLocalInput } from "../ui/format";
 import { renderSent } from "./list";
@@ -226,6 +228,38 @@ describe("sent view", () => {
     expect($(".sched-card .countdown").textContent).toBe("Sends in 3 days");
     expect(feedReads(fake)).toHaveLength(2);
     expect(fake.unhandled).toEqual([]);
+  });
+
+  // SPEC §9, DESIGN §2: a deployment with no provider says so in the health block's warning
+  // treatment, and a send scheduled before stays movable, with a line saying it is held.
+  it("warns that nothing can be sent while no provider is connected, and says a moved send is held", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    fake = world(sendServer([scheduled()]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    const warning = $(".sent-not-connected");
+    expect(warning.classList.contains("health")).toBe(true);
+    expect(warning.classList.contains("amber")).toBe(true);
+    expect(warning.textContent?.replace("⚠️", "")).toBe(
+      "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
+    );
+    expect($<HTMLAnchorElement>("a", warning).getAttribute("href")).toBe("#/docs/resend");
+    $("[data-reschedule='sch']").click();
+    expect($(".modal .not-connected").textContent).toBe(
+      "No email provider connected, so this send is held when it fires, until one is. Connect an email provider to send it.",
+    );
+    expect($<HTMLButtonElement>("#rsGo").disabled).toBe(false); // the server still takes a move
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("says nothing of a provider once one is set", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "resend" } });
+    fake = world(sendServer([scheduled()]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".sent-not-connected")).toBeNull();
+    $("[data-reschedule='sch']").click();
+    expect(document.querySelector(".modal .not-connected")).toBeNull();
   });
 
   it("offers a scheduled card's Cancel and Reschedule only while the server would take them, hiding them at the fire time", async () => {

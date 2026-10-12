@@ -42,7 +42,8 @@
 
   // ARCHIVE_ORIGIN and MEDIA_PUBLIC_BASE default to the app's own origin; set them only to
   // put the archive on a website's apex or serve images from their own domain (the guide's
-  // configuration reference says what each needs).
+  // configuration reference says what each needs). PROVIDER is `fake` here, a stand-in that
+  // delivers nothing, so local development never reaches a real inbox.
   "vars": {
     "PROVIDER": "fake",
     "APP_ORIGIN": "http://localhost:8787",
@@ -71,10 +72,10 @@
         }
       ],
       "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "kestrel-media-production" }],
-      // PROVIDER starts on `fake`: the setup guide's provider step switches it once the
-      // provider's secrets are set.
+      // No PROVIDER yet: the app runs but sends nothing until the setup guide's provider
+      // step sets one, once its secrets are stored. Never `fake` here, which records every
+      // send as delivered and mails no one.
       "vars": {
-        "PROVIDER": "fake",
         "APP_ORIGIN": "https://newsletter.example.com",
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",

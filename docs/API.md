@@ -82,6 +82,7 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
 | Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
+| Fix the deployment, outside this API | 409 | `provider_not_connected` (no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized`, `forbidden` |
 
 ## Adding to the API

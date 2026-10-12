@@ -101,6 +101,7 @@ describe("settings view", () => {
   it("renders the identity, the sender and instance reflections, the recipients, the subscribe embed, and the confirmation preview", async () => {
     await open();
     expect($<HTMLInputElement>("#setName").value).toBe("Birds Weekly");
+    expect(document.querySelector(".set-sub-not-connected")).toBeNull(); // signups are open
     expect($<HTMLInputElement>("#setTagline").value).toBe("Owls & more");
     // Nothing scheduled: the note says where the identity shows up, and no more.
     expect($(".set-note span").textContent).toBe("Shown in every email.");
@@ -180,6 +181,29 @@ describe("settings view", () => {
     await open([{ path: "/api/settings", reply: () => local }]);
     expect(row("Minimum lead")).toBe("1 minute");
     expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
+  });
+
+  it("says no email provider is connected and points to connecting one, on a deployment partway through setup", async () => {
+    const notConnected = response();
+    notConnected.deployment = { ...notConnected.deployment, provider: "none" };
+    await open([{ path: "/api/settings", reply: () => notConnected }]);
+    const value = $("#providerValue");
+    expect(value.textContent?.trim()).toBe(
+      "No email provider connected. Connect an email provider to start sending.",
+    );
+    expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/resend");
+    // Ways to subscribe keeps the address and the code, and says signups are closed.
+    const closed = $(".set-sub-not-connected");
+    expect(closed.classList.contains("amber")).toBe(true);
+    expect(closed.textContent?.replace("⚠️", "")).toBe(
+      "No email provider connected, so signups aren’t open yet: the page below says so, and the form takes no address. Connect an email provider to open signups.",
+    );
+    expect($("#embedCode").textContent).toContain("/subscribe");
+    // Notifications would go through that provider, once there is one.
+    const sentThrough = $$(".set-kv-k").find((k) => k.textContent === "Sent through");
+    expect(sentThrough?.nextElementSibling?.textContent).toBe(
+      "Your email provider, once one is connected",
+    );
   });
 
   it("offers the mailing address as an Add row until one is added, with Remove to take it back", async () => {

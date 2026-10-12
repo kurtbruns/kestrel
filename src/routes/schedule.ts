@@ -6,6 +6,7 @@ import { getActiveSendForPost, type SendRow } from "../db/sends";
 import { fieldError, readJsonObject } from "../lib/body";
 import { HttpError, json, notFound } from "../lib/errors";
 import { unwrap } from "../lib/unwrap";
+import { requireConnectedProvider } from "../providers";
 import type { RequestContext } from "../router";
 import { param } from "../router";
 import { viewWithCursor } from "../send/describe";
@@ -83,6 +84,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
 
   const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
+  requireConnectedProvider(c.config);
   const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs, true);
   const send = await freeze(c.env, c.config, post, fireAt);
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
@@ -104,6 +106,7 @@ export async function sendNow(c: RequestContext): Promise<Response> {
     return repeatAnswer(c, active.id);
   }
 
+  requireConnectedProvider(c.config);
   // The soonest time the lead allows, through the same gate as a schedule, so it lands on
   // the minute at or after it like any other fire time.
   const now = Date.now();

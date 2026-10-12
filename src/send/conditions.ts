@@ -115,7 +115,12 @@ export function sendConditions(send: SendSummary, now: number): SendCondition[] 
         kind: "refused",
         severity: "action",
         since: send.halted_at,
-        message: `The provider is refusing the account: ${sentence(send.halt_error)} ${advice} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
+        // No provider connected (SPEC §9) is held like a refusal but is no provider's doing,
+        // so it is said as what it is, with the fix once.
+        message:
+          send.halt_cause === "not_connected"
+            ? `No email provider is connected, so this send is held where it is. ${advice} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`
+            : `The provider is refusing the account: ${sentence(send.halt_error)} ${advice} No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.`,
         action: null,
         cause: send.halt_cause,
         error: send.halt_error ?? "",
