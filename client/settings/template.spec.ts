@@ -273,11 +273,13 @@ describe("template view", () => {
     expect(line.textContent).toMatch(/^No email provider connected/);
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
     expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
+    expect(document.querySelector(".modal #tplTestTo")).toBeNull();
     $("#ttCancel").click();
     appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
     $("#tplTest").click();
     expect(document.querySelector(".modal .not-connected")).toBeNull();
     expect($<HTMLButtonElement>("#ttGo").disabled).toBe(false);
+    expect(document.querySelector(".modal #tplTestTo")).not.toBeNull();
   });
 
   it("save & send test: saves the edits first, then posts the test to the pre-filled recipients", async () => {

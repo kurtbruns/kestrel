@@ -1231,7 +1231,7 @@ describe("editor view", () => {
 
   // DESIGN §2: no provider is a standing state, so the dialog says so every time it opens
   // and points to the step that connects one, rather than letting the server refuse.
-  it("carries a standing line to connect a provider while none is connected, and won't send", async () => {
+  it("carries a standing line to connect a provider while none is connected, with no recipients, and won't send", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
@@ -1245,6 +1245,7 @@ describe("editor view", () => {
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
     expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
+    expect(document.querySelector(".modal #testTo")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 

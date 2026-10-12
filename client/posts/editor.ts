@@ -1166,9 +1166,19 @@ export async function renderEditor(
     const lead = locked
       ? "Delivers the frozen copy that will send, exactly as it will fire, so you can check it in a client. One address per line."
       : "Delivers the rendered email to real inboxes so you can check it in a client. One address per line.";
+    // While no provider is connected the server would refuse a test, so the dialog leaves
+    // out the recipients and keeps only the standing line (DESIGN §2).
+    const notConnected = providerNotConnected();
     const m = modal(
-      html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}${notConnected ? null : html`<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p>`}<div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
     );
+    const go = $<HTMLButtonElement>("#tGo", m.el);
+    $("#tCancel", m.el).onclick = m.close;
+    go.disabled = notConnected;
+    if (notConnected) {
+      $("#tCancel", m.el).focus();
+      return;
+    }
     const to = $<HTMLTextAreaElement>("#testTo", m.el);
     to.focus();
     // Pre-fill with saved defaults (don't clobber anything already typed).
@@ -1183,10 +1193,6 @@ export async function renderEditor(
         }
       })
       .catch(() => {});
-    const go = $<HTMLButtonElement>("#tGo", m.el);
-    // The server would refuse it; the standing line above says why and where to fix it.
-    go.disabled = providerNotConnected();
-    $("#tCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, "Sending…", async () => {
         const { valid: addrs, invalid } = parseAddresses(to.value);

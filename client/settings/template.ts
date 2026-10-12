@@ -749,15 +749,25 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // render unsaved editor content, which would test something that won't ship.
   tplTestEl.onclick = () => {
     const dirty = isDirty();
+    // While no provider is connected the server would refuse a test, so the dialog leaves
+    // out the recipients and keeps only the standing line (DESIGN §2).
+    const notConnected = providerNotConnected();
     const m = modal(
       html`<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${notConnectedTestLine()}${
         dirty
           ? html`<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
           : null
-      }<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p><div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
+      }${notConnected ? null : html`<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p>`}<div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
         dirty ? "Save & send test" : "Send test"
       }</button></div>`,
     );
+    const go = $<HTMLButtonElement>("#ttGo", m.el);
+    $("#ttCancel", m.el).onclick = m.close;
+    go.disabled = notConnected;
+    if (notConnected) {
+      $("#ttCancel", m.el).focus();
+      return;
+    }
     const to = $<HTMLTextAreaElement>("#tplTestTo", m.el);
     to.focus();
     // Pre-fill from the saved default test recipients (don't clobber typed input).
@@ -767,10 +777,6 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       hint.textContent = "Pre-filled from your default test recipients (Settings).";
       hint.hidden = false;
     }
-    const go = $<HTMLButtonElement>("#ttGo", m.el);
-    // The server would refuse it; the standing line above says why and where to fix it.
-    go.disabled = providerNotConnected();
-    $("#ttCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, isDirty() ? "Saving…" : "Sending…", async () => {
         const { valid: addrs, invalid } = parseAddresses(to.value);
