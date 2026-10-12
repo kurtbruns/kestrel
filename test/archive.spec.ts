@@ -1062,8 +1062,16 @@ describe("the publication logo as the tab icon (SPEC §5)", () => {
     }
   });
 
-  it("links the current logo in every reader page's head, post pages included, never in the frozen email (I3)", async () => {
+  it("links the current logo in every reader page's head, post pages included, never in the frozen or sent email (I3)", async () => {
+    // A logo set before the send, so the render had one to leak if it ever carried the icon.
+    await setPublicationLogo(env.DB, { version: 1, contentType: "image/png", key: newLogoKey(1) });
     const post = await publish("A Post", 1_000);
+    const send = (await latestSentSendForPost(env.DB, post.id))!;
+    for (const html of [send.rendered_html, fakeOutbox()[0]!.html]) {
+      expect(html).not.toContain('rel="icon"');
+    }
+
+    // A new logo after the send: every page, the post page too, links the current one.
     const key = newLogoKey(2);
     await setPublicationLogo(env.DB, { version: 2, contentType: "image/png", key });
     const icon = `<link rel="icon" href="${getConfig(env).mediaPublicBase}/${key}">`;
@@ -1072,7 +1080,5 @@ describe("the publication logo as the tab icon (SPEC §5)", () => {
       expect(iconsOf(page), path).toEqual([icon]);
       expect(headOf(page), path).toContain(icon);
     }
-    const send = (await latestSentSendForPost(env.DB, post.id))!;
-    expect(send.rendered_html).not.toContain('rel="icon"');
   });
 });
