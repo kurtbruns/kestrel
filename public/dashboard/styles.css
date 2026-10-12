@@ -2609,6 +2609,18 @@ body.web-mode .content {
   margin: 0 0 14px;
   line-height: 1.5;
 }
+/* A dialog's not-connected line (DESIGN §2) takes the health block's amber warning, so it
+   reads as the reason the dialog's action is off rather than as one more hint. */
+.modal .hint.not-connected {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.modal .hint.not-connected a {
+  color: inherit;
+}
 .modal .actions {
   display: flex;
   justify-content: flex-end;

@@ -1248,7 +1248,10 @@ export async function renderEditor(
       }
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
+      // While no provider is connected the server would refuse both views, so the dialog
+      // drops the picker and the Send now row and leaves only the standing line (DESIGN §2).
+      const notConnected = providerNotConnected();
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1327,10 +1330,14 @@ export async function renderEditor(
         box.setAttribute("aria-labelledby", "schHead");
         $("#schCancel", box).onclick = m.close;
         $("#schGo", box).onclick = doSchedule;
+        // The server would refuse a schedule; the standing line above says why and where to
+        // fix it, and the picker and Send now row are left out of the view.
+        $<HTMLButtonElement>("#schGo", box).disabled = notConnected;
+        if (notConnected) {
+          $("#schCancel", box).focus();
+          return;
+        }
         $("#toSendNow", box).onclick = showSendNow;
-        // The server would refuse both; the standing line above says why and where to fix it.
-        $<HTMLButtonElement>("#schGo", box).disabled = providerNotConnected();
-        $<HTMLButtonElement>("#toSendNow", box).disabled = providerNotConnected();
         $("#schWhen", box).focus();
       }
 

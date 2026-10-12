@@ -1482,7 +1482,7 @@ describe("editor view", () => {
 
   // DESIGN §2: the schedule dialog says no provider is connected before the publisher picks
   // a time, rather than refusing after they confirm.
-  it("carries a standing line in the schedule dialog while no provider is connected, with Schedule and Send now disabled", async () => {
+  it("carries a standing line in the schedule dialog while no provider is connected, with Schedule disabled and no picker or Send now", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
     const server = draftServer();
     await open([{ path: "/api/posts/p1", reply: server.get }]);
@@ -1493,7 +1493,8 @@ describe("editor view", () => {
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
-    expect($<HTMLButtonElement>("#toSendNow").disabled).toBe(true);
+    expect(document.querySelector(".modal #schWhen")).toBeNull();
+    expect(document.querySelector(".modal #toSendNow")).toBeNull();
     expect(fake.unhandled).toEqual([]);
   });
 
