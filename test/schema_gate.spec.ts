@@ -83,7 +83,7 @@ describe("the schema gate (SPEC §9)", () => {
     expect(await res.json()).toEqual({
       error: "schema_behind",
       missing: [LATEST],
-      message: `The database is missing a migration this release needs (${LATEST}). Apply it: npx wrangler d1 migrations apply DB --remote --env production for the deployed app, or --local --env production under a local wrangler dev. If it says there is nothing to apply, run npm run sync-migrations first, which copies the release's migrations into migrations/.`,
+      message: `The database is missing a migration this release needs (${LATEST}). Apply it: npx wrangler d1 migrations apply DB --remote --env production for the deployed app, or --local --env production under a local wrangler dev. If it finds nothing to apply in an instance, run npm run sync-migrations first, which copies the release's migrations into migrations/.`,
     });
   });
 
@@ -108,7 +108,9 @@ describe("the schema gate (SPEC §9)", () => {
     for (const url of ["http://localhost:8787/health", "https://newsletter.example.com/health"]) {
       // The suite's env is dev-shaped: local development's own database.
       const dev = (await readJson(await fetchOn(fresh(), url))).message;
-      expect(dev, url).toMatch(/Apply it: npx wrangler d1 migrations apply DB --local$/);
+      expect(dev, url).toBe(
+        `The database is missing a migration this release needs (${LATEST}). Apply it: npx wrangler d1 migrations apply DB --local. If it finds nothing to apply in an instance, run npm run sync-migrations first, which copies the release's migrations into migrations/.`,
+      );
       // Any other env can't tell deployed from a local `wrangler dev`, so it names both.
       const other = (await readJson(await fetchOn(fresh(undefined, VARS_DEPLOYED), url))).message;
       expect(other, url).toContain(

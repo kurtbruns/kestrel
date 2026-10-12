@@ -22,6 +22,9 @@ export interface SchemaGap {
   message: string;
 }
 
+const SYNC_HINT =
+  "If it finds nothing to apply in an instance, run npm run sync-migrations first, which copies the release's migrations into migrations/.";
+
 /**
  * What to run, in words. A dev-shaped server is local development on its own local database,
  * so it gets the one command. Any other can't tell a deployed Worker from a local
@@ -29,17 +32,14 @@ export interface SchemaGap {
  * under the route's host), so it names both, the deployed one first, and never presents a
  * command that acts on the live database as the local fix. An instance gets a new release's
  * migrations into its folder only through `sync-migrations`, and skipping that leaves
- * `apply` with nothing to do, so the deployed form says so.
+ * `apply` with nothing to do, locally as much as deployed, so both forms say so. Kestrel's own
+ * repository has no such step, which the hint's "in an instance" leaves out.
  */
 function remedy(devMode: boolean, them: string): string {
-  if (devMode) {
-    return `Apply ${them}: npx wrangler d1 migrations apply DB --local`;
-  }
-  return (
-    `Apply ${them}: npx wrangler d1 migrations apply DB --remote --env production for the deployed app, ` +
-    "or --local --env production under a local wrangler dev. " +
-    "If it says there is nothing to apply, run npm run sync-migrations first, which copies the release's migrations into migrations/."
-  );
+  const command = devMode
+    ? "npx wrangler d1 migrations apply DB --local"
+    : "npx wrangler d1 migrations apply DB --remote --env production for the deployed app, or --local --env production under a local wrangler dev";
+  return `Apply ${them}: ${command}. ${SYNC_HINT}`;
 }
 
 // The databases seen with every migration, so the read happens once per isolate.
