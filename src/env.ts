@@ -8,10 +8,10 @@
  * generated. `AppEnv` is what handlers receive.
  *
  * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
- * (an unknown provider, a missing origin, a real provider without its credentials or still
- * on the template's example.com placeholders, a minimum lead under the sweep's one-minute
- * tick or over a day, one half of the Access pair without the other) throws a `ConfigError`
- * naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
+ * (an unknown provider, a missing origin, a real provider without its credentials, a setting
+ * still on the template's example.com placeholders on anything but the fake transport, a
+ * minimum lead under the sweep's one-minute tick or over a day, one half of the Access pair
+ * without the other) throws a `ConfigError` naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
  * (SPEC §9): the app runs and refuses to send.
  */
 
@@ -269,7 +269,10 @@ export function getConfig(env: AppEnv): Config {
   const mediaPublicBase =
     readBaseUrl("MEDIA_PUBLIC_BASE", env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`;
   if (isRealProvider(provider)) {
-    requireRealProviderConfig(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
+    requireRealProviderConfig(provider, env);
+  }
+  if (provider !== "fake") {
+    refusePlaceholders(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
   }
   const { accessTeamDomain, accessAud } = readAccess(env);
   // Belt-and-suspenders: only honor the dev credential when the env is unambiguously
@@ -362,49 +365,69 @@ function readProvider(v: string | undefined): ProviderName {
   return raw;
 }
 
-/**
- * What a real transport needs before it may run: its credentials, a `From:`, and no
- * example.com placeholder left from the template, whose links and images would otherwise
- * go out in every email and, as archive URLs are permanent (I3), stay wrong forever.
- */
-function requireRealProviderConfig(
-  provider: RealProviderName,
-  env: AppEnv,
-  origins: { appOrigin: string; archiveOrigin: string; mediaPublicBase: string },
-): void {
+/** What a real transport needs before it may run: its credentials and a `From:` address. */
+function requireRealProviderConfig(provider: RealProviderName, env: AppEnv): void {
   for (const name of [...REQUIRED_VARS[provider], "FROM_ADDRESS"] as const) {
     const value = env[name];
     if (typeof value !== "string" || value.trim() === "") {
       throw new ConfigError(name, `is not set; PROVIDER "${provider}" needs it`);
     }
   }
+  if (!addressDomain(env.FROM_ADDRESS)) {
+    throw new ConfigError(
+      "FROM_ADDRESS",
+      `must be an email address, optionally with a name, not "${env.FROM_ADDRESS}"`,
+    );
+  }
+}
+
+/**
+ * No setting may stay on the template's example.com placeholder anywhere but the fake
+ * transport (SPEC §9). Not connected too: every link the app builds would name the
+ * placeholder, and archive URLs, once mailed, are permanent (I3), so the mistake is caught
+ * at the deploy that carried it rather than at the provider step after it. A derived origin
+ * is checked under the setting it came from, which is refused first.
+ */
+function refusePlaceholders(
+  provider: Exclude<ProviderName, "fake">,
+  env: AppEnv,
+  origins: { appOrigin: string; archiveOrigin: string; mediaPublicBase: string },
+): void {
   const hosts: [string, string][] = [
     ["APP_ORIGIN", new URL(origins.appOrigin).hostname],
     ["ARCHIVE_ORIGIN", new URL(origins.archiveOrigin).hostname],
     ["MEDIA_PUBLIC_BASE", new URL(origins.mediaPublicBase).hostname],
-    ["FROM_ADDRESS", emailDomain("FROM_ADDRESS", env.FROM_ADDRESS)],
   ];
-  if (orUndefined(env.SENDING_DOMAIN)) {
+  if (orUndefined(env.SENDING_DOMAIN?.trim())) {
     hosts.push(["SENDING_DOMAIN", env.SENDING_DOMAIN.trim()]);
   }
+  // Not connected, a From the app cannot parse is left for the provider step to refuse;
+  // only its domain, when it has one, is checked here.
+  const from = orUndefined(env.FROM_ADDRESS?.trim());
+  const fromDomain = from && addressDomain(from);
+  if (fromDomain) {
+    hosts.push(["FROM_ADDRESS", fromDomain]);
+  }
+  const why =
+    provider === "none"
+      ? "replace it with your own domain"
+      : `PROVIDER "${provider}" sends real email`;
   for (const [name, host] of hosts) {
     if (isPlaceholderHost(host)) {
-      throw new ConfigError(
-        name,
-        `is still on the template's example.com placeholder; PROVIDER "${provider}" sends real email`,
-      );
+      throw new ConfigError(name, `is still on the template's example.com placeholder; ${why}`);
     }
   }
 }
 
-/** The domain of a `From:` value, `Name <local@domain>` or a bare address. */
-function emailDomain(name: string, from: string): string {
+/** The domain of a `From:` value, `Name <local@domain>` or a bare address, or `undefined`
+ *  when it holds no address. */
+function addressDomain(from: string): string | undefined {
   // The address is the last `<…>`, so a display name that itself contains angle brackets
   // is not mistaken for it.
   const address = /<([^<>]*)>\s*$/.exec(from)?.[1] ?? from;
   const at = address.lastIndexOf("@");
   if (at < 1 || at === address.length - 1) {
-    throw new ConfigError(name, `must be an email address, optionally with a name, not "${from}"`);
+    return undefined;
   }
   return address.slice(at + 1).trim();
 }

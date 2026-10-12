@@ -15,8 +15,8 @@
   // The top level is the DEVELOPMENT environment, which `npm run dev` runs. Its mail
   // transport is an in-memory stand-in, so local dev can never reach a real inbox. The
   // `production` environment below must REDECLARE every binding and var, because wrangler
-  // does not inherit them. Fill in its values as the setup guide says; a real provider
-  // refuses to start while an origin or FROM_ADDRESS is still on example.com.
+  // does not inherit them. Fill in its values as the setup guide says; the app refuses to
+  // start while an origin or a sending setting is still on example.com, provider or not.
   // ---------------------------------------------------------------------------
 
   // The send sweep, once a minute. `npm run dev` runs it locally, where wrangler never

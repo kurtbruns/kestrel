@@ -14,7 +14,7 @@ import * as devRoutes from "../src/routes/dev";
 import * as renderRoutes from "../src/routes/render_actions";
 import { freeze } from "../src/send/schedule";
 import { sweep } from "../src/send/sweep";
-import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
+import { NOT_CONNECTED_DEPLOY, RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
@@ -44,13 +44,13 @@ describe("getConfig — self-contained defaults", () => {
   it("uses explicit overrides when set (the apex / media-domain opt-in)", () => {
     const config = getConfig(
       varsOnly({
-        ARCHIVE_ORIGIN: "https://example.com",
-        MEDIA_PUBLIC_BASE: "https://media.example.com",
+        ARCHIVE_ORIGIN: "https://birds.example",
+        MEDIA_PUBLIC_BASE: "https://media.birds.example",
         ARCHIVE_BASE_PATH: "/archive",
       }),
     );
-    expect(config.archiveOrigin).toBe("https://example.com");
-    expect(config.mediaPublicBase).toBe("https://media.example.com");
+    expect(config.archiveOrigin).toBe("https://birds.example");
+    expect(config.mediaPublicBase).toBe("https://media.birds.example");
     expect(config.archiveBasePath).toBe("/archive");
   });
 
@@ -173,20 +173,59 @@ describe("getConfig — deploy config is validated", () => {
     expect(getConfig(varsOnly({ ...RESEND_DEPLOY })).provider).toBe("resend");
   });
 
-  it("refuses the template's example.com placeholders with a real provider", () => {
-    refuses({ ...SES_DEPLOY, APP_ORIGIN: "https://newsletter.example.com" }, "APP_ORIGIN");
-    refuses({ ...SES_DEPLOY, ARCHIVE_ORIGIN: "https://example.com" }, "ARCHIVE_ORIGIN");
-    refuses(
-      { ...RESEND_DEPLOY, MEDIA_PUBLIC_BASE: "https://media.example.com" },
-      "MEDIA_PUBLIC_BASE",
-    );
-    refuses(
-      { ...SES_DEPLOY, FROM_ADDRESS: "Newsletter <newsletter@send.example.com>" },
-      "FROM_ADDRESS",
-    );
-    refuses({ ...SES_DEPLOY, SENDING_DOMAIN: "send.example.com" }, "SENDING_DOMAIN");
+  // Each setting on its own placeholder, one at a time, the rest real.
+  const PLACEHOLDERS: [string, string][] = [
+    ["APP_ORIGIN", "https://newsletter.example.com"],
+    ["ARCHIVE_ORIGIN", "https://example.com"],
+    ["MEDIA_PUBLIC_BASE", "https://media.example.com"],
+    ["SENDING_DOMAIN", "send.example.com"],
+    ["SENDING_DOMAIN", " Send.Example.com. "],
+    ["FROM_ADDRESS", "Newsletter <newsletter@send.example.com>"],
+    ["FROM_ADDRESS", "newsletter@example.com"],
+  ];
+
+  it("refuses each setting still on the template's example.com placeholder while no provider is connected (SPEC §9)", () => {
+    for (const [name, value] of PLACEHOLDERS) {
+      refuses({ ...NOT_CONNECTED_DEPLOY, [name]: value }, name);
+      refuses({ ...NOT_CONNECTED_DEPLOY, PROVIDER: "none", [name]: value }, name);
+    }
+    expect(getConfig(varsOnly({ ...NOT_CONNECTED_DEPLOY })).provider).toBe("none");
+  });
+
+  it("refuses each setting still on the template's example.com placeholder with a real provider (SPEC §9)", () => {
+    for (const [name, value] of PLACEHOLDERS) {
+      refuses({ ...SES_DEPLOY, [name]: value }, name);
+      refuses({ ...RESEND_DEPLOY, [name]: value }, name);
+    }
     refuses({ ...SES_DEPLOY, FROM_ADDRESS: "no address here" }, "FROM_ADDRESS");
-    refuses({ ...SES_DEPLOY, SENDING_DOMAIN: " send.example.com " }, "SENDING_DOMAIN");
+  });
+
+  it("refuses the production template's vars as shipped, naming the app's origin first", () => {
+    refuses(
+      {
+        PROVIDER: undefined,
+        APP_ORIGIN: "https://newsletter.example.com",
+        SENDING_DOMAIN: "send.example.com",
+        FROM_ADDRESS: "Newsletter <newsletter@send.example.com>",
+      },
+      "APP_ORIGIN",
+    );
+  });
+
+  it("leaves a From it can't read to the provider step while no provider is connected", () => {
+    const config = getConfig(varsOnly({ ...NOT_CONNECTED_DEPLOY, FROM_ADDRESS: "no address" }));
+    expect(config.provider).toBe("none");
+  });
+
+  it("leaves a domain that only ends in example.com alone", () => {
+    const config = getConfig(
+      varsOnly({
+        ...NOT_CONNECTED_DEPLOY,
+        APP_ORIGIN: "https://newsletter.myexample.com",
+        FROM_ADDRESS: "News <news@send.notexample.com>",
+      }),
+    );
+    expect(config.appOrigin).toBe("https://newsletter.myexample.com");
   });
 
   it("takes the From address from the last angle brackets, not a bracketed display name", () => {
@@ -211,10 +250,14 @@ describe("getConfig — deploy config is validated", () => {
       varsOnly({
         PROVIDER: "fake",
         APP_ORIGIN: "https://newsletter.example.com",
+        ARCHIVE_ORIGIN: "https://example.com",
+        MEDIA_PUBLIC_BASE: "https://media.example.com",
+        SENDING_DOMAIN: "send.example.com",
         FROM_ADDRESS: "Newsletter <newsletter@send.example.com>",
       }),
     );
     expect(config.provider).toBe("fake");
+    expect(config.appOrigin).toBe("https://newsletter.example.com");
   });
 
   it("resolves the minimum lead from MIN_LEAD_SECONDS, five minutes when unset (SPEC §6)", () => {
@@ -365,6 +408,17 @@ describe("a refused config, on each surface", () => {
       expect(body).toContain("This page is temporarily unavailable");
       expect(body).not.toContain("ACCESS_AUD");
     }
+  });
+
+  it("serves nothing while no provider is connected and the app's origin is the template's placeholder (SPEC §9)", async () => {
+    allowErrorLogs("config.invalid");
+    const shipped = { PROVIDER: "", APP_ORIGIN: "https://newsletter.example.com" };
+    const page = await fetchWith(shipped, "/archive");
+    expect(page.status).toBe(503);
+    expect(await page.text()).not.toContain("example.com");
+    const api = await fetchWith(shipped, "/api/whoami", { headers: AUTH });
+    expect(api.status).toBe(500);
+    expect(await api.json()).toMatchObject({ error: "invalid_config", variable: "APP_ORIGIN" });
   });
 
   it("still logs the variable when a reader page is what found it", async () => {

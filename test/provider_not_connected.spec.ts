@@ -20,6 +20,7 @@ import * as scheduleRoutes from "../src/routes/schedule";
 import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
 import { condition } from "./support/conditions";
+import { NOT_CONNECTED_DEPLOY } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { base, readJson } from "./support/http";
 import { logged } from "./support/log";
@@ -27,7 +28,7 @@ import { viewOf } from "./support/view";
 import { fetchWith, withVars } from "./support/worker_env";
 
 /** The suite's env with no provider named, as the production template ships. */
-const NOT_CONNECTED = { PROVIDER: "", APP_ORIGIN: "https://newsletter.birds.example" };
+const NOT_CONNECTED = { ...NOT_CONNECTED_DEPLOY, APP_ORIGIN: "https://newsletter.birds.example" };
 
 /**
  * A handler's context under `vars`. Called directly rather than through the router: off the
@@ -85,9 +86,9 @@ afterEach(() => {
 describe("which provider a deployment runs on (SPEC §9)", () => {
   it("reads an unset, blank, or `none` PROVIDER as not connected, on any origin", () => {
     for (const vars of [
-      { PROVIDER: "", APP_ORIGIN: "https://newsletter.birds.example" },
-      { PROVIDER: "none", APP_ORIGIN: "https://newsletter.birds.example" },
-      { PROVIDER: "", APP_ORIGIN: "http://localhost:8787" },
+      NOT_CONNECTED,
+      { ...NOT_CONNECTED, PROVIDER: "none" },
+      { ...NOT_CONNECTED, APP_ORIGIN: "http://localhost:8787" },
     ]) {
       expect(getConfig(withVars(vars)).provider, JSON.stringify(vars)).toBe("none");
     }
@@ -101,7 +102,7 @@ describe("which provider a deployment runs on (SPEC §9)", () => {
   });
 
   it("is never local development, so the dev routes and the dev token are off", () => {
-    const config = getConfig(withVars({ PROVIDER: "", APP_ORIGIN: "http://localhost:8787" }));
+    const config = getConfig(withVars({ ...NOT_CONNECTED, APP_ORIGIN: "http://localhost:8787" }));
     expect(config.devMode).toBe(false);
     expect(config.devAuthSecret).toBeUndefined();
     expect(config.simulation).toBeNull();
@@ -336,7 +337,7 @@ describe("a send scheduled before the provider was disconnected", () => {
 describe("the dev routes while not connected", () => {
   it("are not registered, even on a localhost origin with the dev secret set", async () => {
     const vars = {
-      PROVIDER: "",
+      ...NOT_CONNECTED,
       APP_ORIGIN: "http://localhost:8787",
       DEV_AUTH_SECRET: "test-dev-secret",
     };

@@ -136,7 +136,7 @@ The app checks its configuration on every request. It refuses to run on one that
 - `PROVIDER`, when set, must be exactly `resend`, `ses`, `fake`, or `none`. A misspelling, or `SES`, is refused, never taken for another.
 - `APP_ORIGIN` must be a plain `http` or `https` origin, with no path. So must `ARCHIVE_ORIGIN`, when set. `MEDIA_PUBLIC_BASE`, when set, must be a plain `http` or `https` URL, and may have a path. A trailing slash is dropped from each.
 - A real provider needs `FROM_ADDRESS`, and every secret the table marks for it. SES also needs `AWS_REGION`.
-- With a real provider, none of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com`, the template's placeholder.
+- None of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com` or a name under it, the template's placeholder. That holds with no provider connected too, since every link the app builds would name it. Only `fake` allows it.
 - `SUBREQUEST_BUDGET`, `MIN_LEAD_SECONDS`, and `SES_MAX_SEND_RATE` must be whole numbers above zero. `MIN_LEAD_SECONDS` must also be within its bounds. Any other value is refused, never adjusted. The one exception is a `SUBREQUEST_BUDGET` below 30, which is raised to 30.
 - In local development, `SIMULATE_SENDS` must be `off`, or the provider a local send models, `resend`, `ses`, or `1` for a generic one, optionally followed by `:none` for no injected failures. A deployed instance ignores it.
 - `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set together or not at all. With only one, the app could verify no sign-in and would let no one into the editor, so it refuses and names the missing one.

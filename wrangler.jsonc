@@ -24,9 +24,9 @@
   // can never reach a real inbox. The named `production` environment below (and any
   // other you add, such as a staging) must REDECLARE bindings and vars — wrangler
   // does not inherit them.
-  // Placeholder ids/domains are filled per-deployment; this is a generic template. A
-  // real provider refuses to start while any origin or FROM_ADDRESS is still on
-  // example.com (getConfig), so the placeholders can't ship by accident.
+  // Placeholder ids/domains are filled per-deployment; this is a generic template. Every
+  // provider but the fake refuses to start while an origin or a sending setting is still
+  // on example.com (getConfig), so the placeholders can't ship by accident.
   // ---------------------------------------------------------------------------
 
   "triggers": { "crons": ["* * * * *"] },

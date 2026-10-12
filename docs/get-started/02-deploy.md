@@ -125,6 +125,8 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
+    Change every `example.com` value, even before you connect a provider. The app refuses to run while any of them is still on `example.com`, since every link it builds would point there.
+
     Every other setting has a working default. [Configuration](../reference/01-configuration.md) lists them all, and what the app refuses.
 
 1. Check the file. This regenerates the binding types, and fails if the configuration doesn't parse:
@@ -182,6 +184,6 @@ This deploys the release your instance runs, with your settings. The output ends
 
 1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until step 3, Connect an email provider.
 
-If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing or malformed. Fix it in `wrangler.jsonc`, commit, and deploy again.
+If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 
 Next, [lock the dashboard with Access](03-access.md).
