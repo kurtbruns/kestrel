@@ -3016,15 +3016,10 @@ textarea.is-invalid {
   color: var(--warn-fg);
   border-color: var(--warn-line);
 }
-.banner-info {
-  background: var(--banner-bg);
-  color: var(--fg);
-  border-color: var(--banner-line);
-}
 
 /* --- Notice (DESIGN §2, home ⑥): an event the reader could not otherwise know happened,
-   shown once and cleared by the reader, asking nothing. It wears the banner's `info` tone
-   (the same tokens as .banner-info, so the tint has one definition) but is its own class:
+   shown once and cleared by the reader, asking nothing. It wears the calm banner tint, whose
+   one definition is the --banner-bg / --banner-line tokens, but is a class of its own:
    its layout is prose plus one control, not a status line with an actions row, so it never
    wraps the dismiss beneath the text the way the banner wraps its buttons. Padding is a
    full 1rem because it is a sentence or two, not a status line. Removed on dismiss with
