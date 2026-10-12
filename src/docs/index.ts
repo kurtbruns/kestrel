@@ -31,6 +31,7 @@ import ses from "../../docs/guides/02-ses.md";
 import notifications from "../../docs/guides/03-notifications.md";
 import rateLimit from "../../docs/guides/05-rate-limit.md";
 import upgrade from "../../docs/guides/07-upgrade.md";
+import tryLocally from "../../docs/guides/08-try-locally.md";
 import readme from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
@@ -51,6 +52,7 @@ const PAGES: Record<string, string> = {
   "guides/03-notifications.md": notifications,
   "guides/05-rate-limit.md": rateLimit,
   "guides/07-upgrade.md": upgrade,
+  "guides/08-try-locally.md": tryLocally,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
 };

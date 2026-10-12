@@ -22,6 +22,7 @@ Each one stands on its own. Pick the ones you need.
 - [Notifications through Cloudflare's email](guides/03-notifications.md)
 - [Rate-limit the subscribe form](guides/05-rate-limit.md)
 - [Upgrade to a new release](guides/07-upgrade.md)
+- [Try Kestrel on your computer](guides/08-try-locally.md)
 
 ## Reference
 

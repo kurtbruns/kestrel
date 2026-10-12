@@ -16,7 +16,7 @@ The setup guide is the documentation for deploying and running your own instance
 - **For running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is a separate set of docs.
 - **Followed by humans and robots alike.** Every page is a complete by-hand procedure that Claude can also follow step by step. Claude is the recommended way through, and any skill that automates a step follows the page rather than replacing it.
 - **Run from the reader's instance repository.** `kestrel init` writes it: the instance's configuration, its migrations, and the Kestrel release it runs, installed from npm as `@kurtbruns/kestrel`. Deploys and upgrades happen from it, through its npm scripts and plain wrangler commands (`npx wrangler deploy --env production`), never through a checkout of Kestrel's source. Changing Kestrel's code for one instance is not covered.
-- **Local development is optional.** The guide offers it once as an optional checkpoint after `init`, and once as an optional dry run when upgrading. The README covers running Kestrel's own source, for working on Kestrel.
+- **Local development is optional.** The Try Kestrel on your computer guide covers it, from an empty folder with no Cloudflare account or Git host; Deploy points to it as an optional checkpoint after `init`, and upgrading offers it once as an optional dry run. The README covers running Kestrel's own source, for working on Kestrel.
 - **One environment on the main path: production.** A new instance proves itself with test sends while its list is empty. Staging is a possible guide, not yet in the guide.
 
 ## Where it lives
@@ -29,7 +29,7 @@ The setup guide is the documentation for deploying and running your own instance
 ## Structure
 
 - **Get started:** the main path, numbered: Overview, Deploy the app, Lock the dashboard with Access, Connect Resend, Verify it works, Go live.
-- **Guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, rate limiting, upgrading. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
+- **Guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, rate limiting, upgrading, trying Kestrel on your computer. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
 - **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
 

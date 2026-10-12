@@ -20,6 +20,7 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
       "guides/notifications",
       "guides/rate-limit",
       "guides/upgrade",
+      "guides/try-locally",
       "reference/configuration",
       "reference/sending-domain-dns",
     ]);

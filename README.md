@@ -12,7 +12,7 @@ Kestrel installs from npm as [`@kurtbruns/kestrel`](https://www.npmjs.com/packag
 npx @kurtbruns/kestrel init
 ```
 
-[Get started](docs/get-started/01-overview.md) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one. The same guide is in the editor's **Docs** tab.
+To look around first, [Try Kestrel on your computer](docs/guides/08-try-locally.md) runs it with demo content and no Cloudflare account. [Get started](docs/get-started/01-overview.md) takes you from an empty repository to a live newsletter, and [Upgrade to a new release](docs/guides/07-upgrade.md) moves an instance to a newer one. The same guide is in the editor's **Docs** tab.
 
 ## Work on Kestrel
 

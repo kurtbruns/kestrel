@@ -13,6 +13,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Added
 
 - Reader pages, post pages included, show the publication's logo as the browser tab's icon when one is set; with no logo, the browser's default icon stays (SPEC §5).
+- A setup guide, **Try Kestrel on your computer**, runs a new instance locally with the demo publication, with no Cloudflare account or Git host, and shows how the folder becomes your instance's repository when you deploy.
 
 ## [1.6.0] - 2026-10-11
 
