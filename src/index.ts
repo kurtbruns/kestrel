@@ -6,6 +6,9 @@
  *                   dispatched by the URLPattern router (see app.ts / router.ts)
  *   - scheduled() → the reconciling send sweep, once a minute (see send/sweep.ts); in
  *                   local dev, also the simulated receipts on the dev ticker's own clock
+ *
+ * Both refuse to run on a refused configuration or on a database behind this release's
+ * migrations (SPEC §9; see schema.ts), answering every request before any route is matched.
  */
 
 import { createRouter, isReaderPath } from "./app";
@@ -16,6 +19,7 @@ import { errorText, log, newRun, withRun } from "./lib/log";
 import { unavailablePage } from "./lib/page";
 import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./providers/simulate";
 import type { Router } from "./router";
+import { databaseSite, schemaGap } from "./schema";
 import { sweep } from "./send/sweep";
 
 // The archive route is config-driven (ARCHIVE_BASE_PATH), whether the dev routes exist
@@ -66,6 +70,11 @@ export default {
       }
       throw err;
     }
+    // A database behind the release would fail the sweep's own queries every minute; the gap
+    // is logged once, and the sweep resumes on the tick after the migrations are applied.
+    if (await schemaGap(appEnv.DB, config.devMode ? "dev" : "remote")) {
+      return;
+    }
     if (controller.cron === RECEIPTS_CRON) {
       // The dev ticker's receipts tick: settle the simulated receipts that have come due and
       // nothing else, never the sweep. A no-op wherever the simulation is off.
@@ -102,6 +111,17 @@ async function handleFetch(
       return unavailablePage();
     }
     return json({ error: "invalid_config", message: err.message, variable: err.variable }, 500);
+  }
+  // The same two answers for a database behind the release (SPEC §9): the machine-facing
+  // paths name the migrations and the command that applies them, and a reader is told only
+  // that the page is unavailable.
+  const url = new URL(request.url);
+  const gap = await schemaGap(appEnv.DB, databaseSite(getConfig(appEnv).devMode, url.hostname));
+  if (gap) {
+    if (isReaderPath(url.pathname)) {
+      return unavailablePage();
+    }
+    return json({ error: "schema_behind", ...gap }, 500);
   }
   return router.handle(request, appEnv, ctx);
 }

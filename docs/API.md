@@ -82,12 +82,16 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
 | Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
-| Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9) |
+| Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9), `schema_behind` (500: the database hasn't run every migration this release ships, with them as `missing` and what to run as `command`, below; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized` (with `reason: "access_not_configured"` when the deployment has no Access yet, below), `forbidden` |
 
 A deployment with no Access configured can authenticate no request at all (SPEC §11), so its admin 401 says so: `{ "error": "unauthorized", "reason": "access_not_configured" }`. Signing in again cannot help; setting up Access can. A 401 under a configured Access, and one in local development, carries no `reason`, and the field never says anything else about the request.
 
 While the configuration is refused, every request is answered before any route is matched, so before authentication, and the answer says nothing about the request itself. Under `/api`, at `/health`, and under `/webhooks/`, it is `invalid_config` naming the `variable`. Every other path is one a reader may open, and answers a plain HTML page with status 503 and a `Retry-After` of five minutes, saying it is temporarily unavailable, which names no setting.
+
+A database behind the release is answered the same way, once the configuration is accepted: under `/api`, at `/health`, and under `/webhooks/`, `schema_behind`, as in `{"error":"schema_behind","missing":["0003_post_slug_auto.sql"],"command":"npx wrangler d1 migrations apply DB --remote --env production","message":"…"}`, and the same 503 page everywhere else. `missing` lists only the release's own migrations, never an instance's own. `command` is for the database the server is bound to: `--remote --env production` deployed, `--local` on a local dev server, and `--local --env production` on a local `wrangler dev --env production`. So `/health` answers `200` only when the configuration is accepted and the database has every migration the release needs.
+
+An error nothing handled answers `500` `internal_error` on the API. On a reader page it answers a plain HTML page saying something went wrong, never a JSON body.
 
 ## Adding to the API
 

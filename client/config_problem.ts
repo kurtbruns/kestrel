@@ -1,15 +1,19 @@
-// The wall a refused deploy configuration lands on (SPEC §9): while the Worker refuses its
-// configuration, every API call answers `invalid_config` naming the variable, so the editor
-// shows that once, full page, with where to fix it, instead of failing call by call.
+// The wall a refused deployment lands on (SPEC §9): while the Worker refuses its
+// configuration, every API call answers `invalid_config` naming the variable, and while its
+// database is behind the release, `schema_behind` naming the migrations and the command that
+// applies them, so the editor shows that once, full page, with the fix, instead of failing
+// call by call.
 
 import { unmount } from "./lifecycle";
 import { app } from "./shell";
 import { $ } from "./ui/dom";
 import { type Html, html, setHtml } from "./ui/html";
 
-/** What the API says of a refused configuration: the variable, and its words about it. */
+/** What the API says of a refused deployment: its words about it, and the variable to fix
+ *  when it is a setting. A database behind the release names no variable: its words name the
+ *  migrations and the command. */
 export interface ConfigRefusal {
-  variable: string;
+  variable?: string;
   message: string;
 }
 
@@ -19,6 +23,9 @@ export function configRefusal(data: unknown): ConfigRefusal | null {
     return null;
   }
   const d = data as { error?: unknown; variable?: unknown; message?: unknown };
+  if (d.error === "schema_behind" && typeof d.message === "string") {
+    return { message: d.message };
+  }
   if (d.error !== "invalid_config" || typeof d.variable !== "string") {
     return null;
   }
@@ -85,9 +92,16 @@ export function showConfigProblem(refusal: ConfigRefusal): void {
   }
   unmount();
   document.body.classList.add("signed-out");
+  const { variable } = refusal;
+  // A setting links to its reference; a database behind the release has its command in the
+  // server's words already, and the reference has nothing to add.
+  const heading = variable ? "A setting needs fixing" : "The database needs updating";
+  const reference: Html | string = variable
+    ? html`<p class="hint"><a href="${referenceUrl(variable)}" target="_blank" rel="noopener">${variable} in the Configuration reference <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p>`
+    : "";
   setHtml(
     app,
-    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">A setting needs fixing</h2><p>Kestrel won't run until it's fixed, and nothing is sent in the meantime.</p><p class="config-wall-problem">${refusal.message}</p><p class="hint"><a href="${referenceUrl(refusal.variable)}" target="_blank" rel="noopener">${refusal.variable} in the Configuration reference <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="config-reload" class="primary">Reload</button></div>`,
+    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">${heading}</h2><p>Kestrel won't run until it's fixed, and nothing is sent in the meantime.</p><p class="config-wall-problem">${refusal.message}</p>${reference}<button id="config-reload" class="primary">Reload</button></div>`,
   );
   $("#config-reload", app).onclick = () => location.reload();
   $<HTMLElement>(".config-wall h2", app).focus();

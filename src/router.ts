@@ -13,14 +13,24 @@
  * Middleware run in order; the first one to return a `Response` short-circuits
  * (this is how auth returns 401 before the handler runs). Handlers and middleware
  * share a `RequestContext`. All errors funnel through `toErrorResponse`, so
- * handlers can just `throw new HttpError(...)`.
+ * handlers can just `throw new HttpError(...)`. The one exception is an error nothing
+ * handled on a page a reader opens (`readerPage`), which is logged the same way and answered
+ * with an HTML page rather than the API's JSON body.
  */
 import type { Access, QueryParam, Resource, RouteExample } from "../shared/reference";
 import { requireAuth } from "./auth/middleware";
 import type { AppEnv, Config } from "./env";
 import { getConfig } from "./env";
 import { mediaTypeOf } from "./lib/body";
-import { badRequest, HttpError, json, toErrorResponse, unsupportedMediaType } from "./lib/errors";
+import {
+  badRequest,
+  HttpError,
+  json,
+  logUncaught,
+  toErrorResponse,
+  unsupportedMediaType,
+} from "./lib/errors";
+import { serverErrorPage } from "./lib/page";
 
 export interface Principal {
   /** `human` = a person, with an email (an Access login, or the editor's local dev token);
@@ -210,6 +220,10 @@ interface CompiledRoute {
 export class Router {
   private compiled: CompiledRoute[] = [];
 
+  /** `readerPage` says whether a path is one a reader opens in a browser, where an error
+   *  nothing handled is answered with a page rather than JSON. */
+  constructor(private readonly readerPage: (pathname: string) => boolean = () => false) {}
+
   /** Register a route from its manifest entry; the `access` tier decides the gate. */
   register(def: RouteDef): this {
     const gate = gateFor(def);
@@ -256,6 +270,10 @@ export class Router {
         }
         return guard(route.def.access, await route.def.handler(c));
       } catch (err) {
+        if (!(err instanceof HttpError) && this.readerPage(url.pathname)) {
+          logUncaught(err);
+          return guard(route.def.access, serverErrorPage());
+        }
         return guard(route.def.access, toErrorResponse(err));
       }
     }

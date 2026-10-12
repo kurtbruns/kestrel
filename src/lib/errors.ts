@@ -46,15 +46,20 @@ export function json(data: unknown, status = 200, headers?: HeadersInit): Respon
   return Response.json(data, { status, headers });
 }
 
-/** Turn any thrown value into a JSON error response. */
-export function toErrorResponse(err: unknown): Response {
-  if (err instanceof HttpError) {
-    return json({ ...err.details, error: err.code, message: err.message }, err.status);
-  }
+/** Log a thrown value nothing handled, as the one `request.error` line it earns (SPEC §12). */
+export function logUncaught(err: unknown): void {
   log.error("request.error", {
     name: err instanceof Error ? err.name : typeof err,
     error: errorText(err),
     stack: err instanceof Error ? err.stack : undefined,
   });
+}
+
+/** Turn any thrown value into a JSON error response. */
+export function toErrorResponse(err: unknown): Response {
+  if (err instanceof HttpError) {
+    return json({ ...err.details, error: err.code, message: err.message }, err.status);
+  }
+  logUncaught(err);
   return json({ error: "internal_error" }, 500);
 }

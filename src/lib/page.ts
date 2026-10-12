@@ -400,6 +400,24 @@ export function unavailablePage(): Response {
   return res;
 }
 
+/**
+ * What a reader gets when a reader route fails on something nothing handled (SPEC §12): a
+ * plain 500 page saying something went wrong, never the API's JSON error body. Like
+ * `unavailablePage` it reads nothing, not even the publication's identity, since the failure
+ * may be the database itself, and it is never cached.
+ */
+export function serverErrorPage(): Response {
+  return messagePage({
+    identity: { name: "" },
+    homeUrl: null,
+    title: "Something went wrong",
+    eyebrow: "Error",
+    headline: "Something went wrong",
+    ledeHtml: "This page couldn't be shown just now. Please try again a little later.",
+    status: 500,
+  });
+}
+
 /** A reader page's closing link into the archive, never an admin path (§11). */
 export function archiveLink(url: string, label: string): string {
   return `<a class="r-arch" href="${escapeHtmlAttr(url)}">${escapeHtml(label)} &rarr;</a>`;

@@ -113,6 +113,8 @@ The output ends with your app's hostname.
     {"status":"ok","service":"kestrel"}
     ```
 
+    If it answers `500` with `{"error":"schema_behind","missing":[…],…}` instead, the release was deployed before its database changes: the public pages say the newsletter is temporarily unavailable and nothing is sent. Apply them as in section 4; the app answers as soon as they're applied, with no new deploy.
+
 1. Reload the editor. The foot of the **Docs** tab's contents list shows the new version, which links to its release page.
 
 1. Send yourself a test email, as in [Verify it works](../get-started/05-verify.md#1-send-yourself-a-test-email). Don't send a real post to check an upgrade: on a live instance, it goes to your whole list.

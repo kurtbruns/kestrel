@@ -67,9 +67,10 @@ function retrySchedule(steps: readonly number[]): string {
 }
 
 /**
- * Whether a path belongs to the reader surface, for the one answer given before any route
- * is matched: the refusal while deploy config is refused (SPEC §9), when no router can be
- * built. The paths a reader never opens keep their JSON: the API (the admin surface, which
+ * Whether a path belongs to the reader surface, for the answers given in its own form rather
+ * than the API's JSON: the refusal given before any route is matched, while deploy config is
+ * refused or the database is behind the release (SPEC §9), and the page for an error nothing
+ * handled on a reader route (SPEC §12). The paths a reader never opens keep their JSON: the API (the admin surface, which
  * names the setting to fix, and the dev tooling), the liveness probe, and the provider
  * webhooks. Every other path, a reader route below or no route at all, is a page a person
  * may have opened, so it gets a page that names nothing.
@@ -173,7 +174,7 @@ export function createRouter({
     ],
     next_change_at: 1768554000000,
   });
-  const r = new Router();
+  const r = new Router(isReaderPath);
 
   const manifest: RouteDef[] = [
     // --- system ---
@@ -182,7 +183,10 @@ export function createRouter({
       path: "/health",
       access: "public",
       resource: "system",
-      summary: "Liveness probe.",
+      summary:
+        "Health check: ok once the configuration is accepted and the database has run every migration this release ships.",
+      description:
+        "Answered before any route while either is not so (SPEC §9): `500` `invalid_config` naming the setting, or `500` `schema_behind` with the `missing` migrations and the `command` that applies them.",
       handler: () => json({ status: "ok", service: "kestrel" }),
     },
     {

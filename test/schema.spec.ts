@@ -1,5 +1,17 @@
 import { env } from "cloudflare:workers";
+import type { D1Migration } from "@cloudflare/vitest-pool-workers";
 import { describe, expect, it } from "vitest";
+import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
+
+// The migrations folder as vitest.config.ts read it, the same files the setup applied.
+const FOLDER = (env as unknown as { TEST_MIGRATIONS: D1Migration[] }).TEST_MIGRATIONS;
+
+describe("the migrations the schema gate expects (SPEC §9)", () => {
+  it("are exactly the files in migrations/, in order, so a new migration can't be left out", () => {
+    // Each by its file name, as wrangler records it in `d1_migrations`.
+    expect([...SHIPPED_MIGRATIONS]).toEqual(FOLDER.map((m) => m.name));
+  });
+});
 
 // The exact set, not a containment check: a table a migration adds or drops has to be
 // named here, so the list can't silently fall behind the schema.

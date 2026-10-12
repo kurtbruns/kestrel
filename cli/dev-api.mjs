@@ -137,7 +137,13 @@ async function devToken(base, tag) {
     );
   }
   if (!res.ok) {
-    fail(tag, `could not mint a dev token: ${res.status} ${res.statusText}`);
+    // A refused deployment (a setting, or a database behind the release) says what to do.
+    const { message } = await res.json().catch(() => ({}));
+    fail(
+      tag,
+      `could not mint a dev token: ${res.status} ${res.statusText}`,
+      ...(typeof message === "string" ? [message] : []),
+    );
   }
   const { token, runId } = await res.json();
   return { token, runId: typeof runId === "string" && runId ? runId : undefined };

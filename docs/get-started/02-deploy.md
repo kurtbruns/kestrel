@@ -199,4 +199,6 @@ This deploys the release your instance runs, with your settings. The output ends
 
 If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing, malformed, or still on `example.com`. Fix it in `wrangler.jsonc`, commit, and deploy again.
 
+If the public pages say the same, but `/health` answers `500` with `{"error":"schema_behind","missing":[…],…}`, the database hasn't run the migrations it lists, most often because step 5 was skipped or its prompt answered no. Run step 5's command, which the body's `message` repeats; the app answers as soon as it finishes, with no new deploy.
+
 Next, [lock the dashboard with Access](03-access.md).

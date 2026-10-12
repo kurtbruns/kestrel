@@ -134,8 +134,31 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect(document.body.classList.contains("signed-out")).toBe(false);
   });
 
-  it("reads only an invalid_config body that names its variable", () => {
+  it("takes over the editor while the database is behind the release, naming the migration and the command", async () => {
+    const behind = {
+      error: "schema_behind",
+      missing: ["0003_post_slug_auto.sql"],
+      command: "npx wrangler d1 migrations apply DB --remote --env production",
+      message:
+        "The database is missing a migration this release needs (0003_post_slug_auto.sql). Apply it: npx wrangler d1 migrations apply DB --remote --env production",
+    };
+    fake = fakeApi([{ path: "/api/posts", reply: () => jsonResponse(behind, 500) }]);
+    const err = await api("/api/posts").catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 500, code: "schema_behind", message: behind.message });
+    const wall = $("#app .config-wall");
+    expect($("h2", wall).textContent).toBe("The database needs updating");
+    expect($(".config-wall-problem", wall).textContent).toBe(behind.message);
+    // No setting to look up, so no link to the Configuration reference.
+    expect(wall.querySelector("a")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("reads only an invalid_config body that names its variable, or a schema_behind one with its words", () => {
     expect(configRefusal(REFUSED)).toEqual({ variable: "ACCESS_AUD", message: REFUSED.message });
+    expect(configRefusal({ error: "schema_behind", message: "behind" })).toEqual({
+      message: "behind",
+    });
+    expect(configRefusal({ error: "schema_behind" })).toBeNull();
     expect(configRefusal({ error: "invalid_config" })).toBeNull();
     expect(configRefusal({ error: "conflict", variable: "X" })).toBeNull();
     expect(configRefusal(null)).toBeNull();

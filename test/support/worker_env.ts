@@ -15,15 +15,22 @@ export const withVars = (vars: Record<string, string>): AppEnv =>
 
 /** A request to the Worker under `vars`, waiting for its background work, so nothing it
  *  left to `waitUntil` lands on the next test. */
-export async function fetchWith(
+export function fetchWith(
   vars: Record<string, string>,
   path: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  return fetchOn(withVars(vars), path, init);
+}
+
+/** A request to the Worker under the env `e` (one with another D1 handle, say), waiting for
+ *  its background work as `fetchWith` does. `path` may be a full URL, for another host. */
+export async function fetchOn(e: AppEnv, path: string, init: RequestInit = {}): Promise<Response> {
   const ctx = createExecutionContext();
+  const url = path.startsWith("http") ? path : `${base}${path}`;
   const res = await worker.fetch(
-    new Request(`${base}${path}`, init) as Request<unknown, IncomingRequestCfProperties>,
-    withVars(vars),
+    new Request(url, init) as Request<unknown, IncomingRequestCfProperties>,
+    e,
     ctx,
   );
   await waitOnExecutionContext(ctx);
