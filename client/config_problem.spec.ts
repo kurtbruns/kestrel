@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import reference from "../docs/reference/01-configuration.md?raw";
 import { api } from "./api";
 import {
@@ -8,7 +8,18 @@ import {
   referenceUrl,
   showConfigProblem,
 } from "./config_problem";
-import { $, type FakeApi, fakeApi, jsonResponse, resetShell } from "./test/support";
+import { renderDrafts } from "./posts/drafts";
+import { sendServer } from "./test/send_server";
+import {
+  $,
+  $$,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  mount,
+  resetShell,
+  settle,
+} from "./test/support";
 
 /** GitHub's heading id, which the Docs tab and the project's site use too. */
 function githubSlug(heading: string): string {
@@ -33,13 +44,26 @@ const REFUSED = {
   variable: "ACCESS_AUD",
 };
 
+/** Serve the editor from another address, as a deployment or a local dev server would. */
+function servedFrom(url: string): void {
+  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(url);
+}
+
+const DEPLOYED = "https://newsletter.example.com/dashboard/";
+
 describe("the refused-configuration wall (SPEC §9)", () => {
   let fake: FakeApi | undefined;
+  let started: string;
+  beforeEach(() => {
+    started = location.href;
+    servedFrom(DEPLOYED);
+  });
   afterEach(() => {
     fake?.restore();
     fake = undefined;
     resetShell();
     document.body.classList.remove("signed-out");
+    servedFrom(started);
   });
 
   it("takes over the editor on any call the configuration refuses, naming the variable and the fix", async () => {
@@ -49,18 +73,88 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect(document.body.classList.contains("signed-out")).toBe(true);
     const wall = $("#app .config-wall");
     expect($(".config-wall-problem", wall).textContent).toBe(`ACCESS_AUD: ${REFUSED.message}`);
-    // A secret is fixed by storing it, not by a deploy.
+    // A secret is fixed by storing it, not by a deploy, and readers are told the page is down.
     expect(wall.textContent).toContain("npx wrangler secret put ACCESS_AUD --env production");
+    expect(wall.textContent).toContain("Readers see a page saying");
     expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#secrets`);
+    // Focus lands on the wall, so a screen reader starts there.
+    expect(document.activeElement).toBe($("h2", wall));
     expect(fake.unhandled).toEqual([]);
   });
 
   it("tells a var's fix from a secret's", () => {
     showConfigProblem({ variable: "APP_ORIGIN", message: "APP_ORIGIN is not set" });
     const wall = $("#app .config-wall");
-    expect(wall.textContent).toContain("wrangler.jsonc");
+    expect(wall.textContent).toContain("block in wrangler.jsonc, deploy again");
     expect(wall.textContent).not.toContain("secret put");
     expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#vars`);
+  });
+
+  it("gives local development's fix when the editor is served from this machine", () => {
+    for (const url of [
+      "http://localhost:8787/dashboard/",
+      "http://127.0.0.1:8787/dashboard/",
+      "http://[::1]:8787/dashboard/",
+      "http://kestrel.localhost:8787/dashboard/",
+    ]) {
+      resetShell();
+      servedFrom(url);
+      showConfigProblem({ variable: REFUSED.variable, message: REFUSED.message });
+      const text = $("#app .config-wall").textContent ?? "";
+      expect(text, url).toContain(
+        "Fix it in .dev.vars, or in the top-level vars in wrangler.jsonc, then restart npm run dev and reload this page.",
+      );
+      expect(text, url).not.toContain("secret put");
+      expect(text, url).not.toContain("--env production");
+      expect(text, url).not.toContain("Readers see");
+    }
+  });
+
+  it("draws the wall once, however many calls in flight it fails", async () => {
+    fake = fakeApi([{ path: "/api/posts", reply: () => jsonResponse(REFUSED, 500) }]);
+    const first = api("/api/posts").catch(() => undefined);
+    await first;
+    const wall = $("#app .config-wall");
+    await Promise.all([1, 2, 3, 4].map(() => api("/api/posts").catch(() => undefined)));
+    expect($$("#app .config-wall")).toHaveLength(1);
+    // The same element: the later failures left it alone rather than drawing it again.
+    expect($("#app .config-wall")).toBe(wall);
+  });
+
+  it("tears down a mounted view when one of its later calls finds the configuration refused", async () => {
+    fake = fakeApi([
+      ...sendServer().routes,
+      {
+        path: "/api/posts",
+        reply: () => ({
+          posts: [],
+          page: { total: 0, limit: 50, offset: 0, sort: "", dir: "desc" },
+          cursor: "0.0",
+        }),
+      },
+      { method: "POST", path: "/api/posts", reply: () => jsonResponse(REFUSED, 500) },
+    ]);
+    location.hash = "#/drafts";
+    await mount(renderDrafts);
+    await settle();
+    expect($("h1").textContent).toBe("Drafts");
+    const view = $("h1").closest("#app > *");
+    expect(view?.isConnected).toBe(true);
+    $("#newPost").click();
+    await settle();
+    // Unmounted: the view's root is gone from the page and nothing of it is left.
+    expect(view?.isConnected).toBe(false);
+    expect(document.querySelector("#app h1")).toBeNull();
+    expect($$("#app .config-wall")).toHaveLength(1);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("marks the reference link as opening a new tab for a screen reader, not with the arrow", () => {
+    showConfigProblem({ variable: "APP_ORIGIN", message: "APP_ORIGIN is not set" });
+    const link = $("#app .config-wall a");
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect($("[aria-hidden='true']", link).textContent).toBe("↗");
+    expect($(".visually-hidden", link).textContent).toBe(" (opens in a new tab)");
   });
 
   it("leaves any other failure to the view that made the call", async () => {
@@ -79,12 +173,17 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     expect(configRefusal(null)).toBeNull();
   });
 
-  it("links each variable to a heading the Configuration reference has", () => {
+  it("links each variable to a part of the Configuration reference that covers it", () => {
     for (const [variable, anchor] of Object.entries(REFERENCE_ANCHORS)) {
       expect(HEADINGS.has(anchor), `${variable} → #${anchor}`).toBe(true);
     }
-    // One with no heading of its own lands on the list of everything the app refuses.
+    // A setting with no heading of its own is named in the list of what the app refuses.
+    const refusals = reference.slice(reference.indexOf("## What the app refuses"));
+    expect(refusals).toContain("`SIMULATE_SENDS`");
     expect(referenceUrl("SIMULATE_SENDS")).toBe(`${CONFIGURATION_REFERENCE}#what-the-app-refuses`);
-    expect(HEADINGS.has("what-the-app-refuses")).toBe(true);
+    // One the editor doesn't know yet lands on that list too.
+    expect(referenceUrl("SOME_NEW_SETTING")).toBe(
+      `${CONFIGURATION_REFERENCE}#what-the-app-refuses`,
+    );
   });
 });

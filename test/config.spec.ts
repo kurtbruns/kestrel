@@ -330,11 +330,40 @@ describe("a refused config, on each surface", () => {
       expect(res.status, `${method} ${path}`).toBe(503);
       expect(res.headers.get("content-type"), path).toBe("text/html; charset=utf-8");
       expect(res.headers.get("cache-control"), path).toBe("no-store");
+      expect(res.headers.get("retry-after"), path).toBe("300");
       const body = await res.text();
       expect(body, path).toContain("This page is temporarily unavailable");
+      // No way home: `/` is this same page until the configuration is fixed.
+      expect(body, path).not.toContain('class="r-brand"');
       for (const detail of ["ACCESS", "invalid_config", "team.cloudflareaccess.com"]) {
         expect(body, `${path}: ${detail}`).not.toContain(detail);
       }
+    }
+  });
+
+  // The line is drawn on the path as written: only `/api` itself and what is under it, the
+  // probe exactly, and what is under `/webhooks/` keep the JSON. A look-alike, a doubled
+  // slash, or an encoded letter is not one of those paths, so it gets the page.
+  it.each([
+    ["/api", "json"],
+    ["/apifoo", "page"],
+    ["/healthz", "page"],
+    ["/health/", "page"],
+    ["/webhooks", "page"],
+    ["//api/x", "page"],
+    ["/%61pi/whoami", "page"],
+  ])("answers %s with the %s", async (path, answer) => {
+    allowErrorLogs("config.invalid");
+    const res = await fetchWith(REFUSED, path, { headers: AUTH });
+    const body = await res.text();
+    if (answer === "json") {
+      expect(res.status).toBe(500);
+      expect(JSON.parse(body)).toMatchObject({ error: "invalid_config", variable: "ACCESS_AUD" });
+    } else {
+      expect(res.status).toBe(503);
+      expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+      expect(body).toContain("This page is temporarily unavailable");
+      expect(body).not.toContain("ACCESS_AUD");
     }
   });
 

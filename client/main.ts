@@ -8,14 +8,13 @@
 
 import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
-import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
+import { probeSession, renderIdentity } from "./auth";
 import { renderSidebarBrand } from "./brand";
-import { configRefusal, showConfigProblem } from "./config_problem";
 import { startDevReload } from "./dev_reload";
 import { installRoomBar } from "./room/shell";
 import { adoptLinkedRoute, installRouter, route } from "./router";
 import { installShell } from "./shell";
-import { appState, type Session } from "./state";
+import { appState } from "./state";
 import { installTooltips } from "./ui/widgets";
 
 async function boot(): Promise<unknown> {
@@ -25,45 +24,9 @@ async function boot(): Promise<unknown> {
   installTooltips();
   installRoomBar();
   installRouter();
-  // Mint a dev token into localStorage. Returns false in prod, where the endpoint
-  // 404s (or is unreachable) and the Access cookie authenticates instead.
-  async function mintDevToken(): Promise<boolean> {
-    try {
-      const r = await fetch("/api/dev/token?kind=human");
-      if (r.ok) {
-        setToken(((await r.json()) as { token: string }).token);
-        return true;
-      }
-    } catch {
-      /* prod: endpoint is absent; the Access cookie authenticates instead */
-    }
-    return false;
-  }
-  // Probe identity. A network error or an opaque Access redirect can't be recovered
-  // here, so surface it as a null result (→ re-login screen).
-  async function whoami(): Promise<Response | null> {
-    try {
-      return await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
-    } catch {
-      return null;
-    }
-  }
-
-  if (!appState.token) {
-    await mintDevToken();
-  }
-  let res = await whoami();
-  // Stale stored token in dev: clear it, mint a fresh one, and probe again so a
-  // leftover credential self-heals. In Access mode the re-mint fails, `res` stays
-  // unauthorized, and we drop through to showReauth() below.
-  if (!res?.ok && appState.token) {
-    setToken("");
-    if (await mintDevToken()) {
-      res = await whoami();
-    }
-  }
-  if (res?.ok) {
-    appState.session = (await res.json()) as Session;
+  const session = await probeSession();
+  if (session) {
+    appState.session = session;
     document.body.classList.remove("signed-out");
     renderIdentity();
     // Load the publication identity for the sidebar brand. Non-fatal: on failure the
@@ -84,13 +47,7 @@ async function boot(): Promise<unknown> {
     adoptLinkedRoute();
     return route();
   }
-  // A refused deploy configuration answers the probe like every other call: say what to
-  // fix rather than send the publisher to a sign-in that cannot help.
-  const refusal = res ? configRefusal(await res.json().catch(() => null)) : null;
-  if (refusal) {
-    return showConfigProblem(refusal);
-  }
-  // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.
-  return showReauth();
+  // probeSession has already put up the wall it landed on.
+  return undefined;
 }
 boot();

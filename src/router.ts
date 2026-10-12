@@ -23,7 +23,8 @@ import { mediaTypeOf } from "./lib/body";
 import { badRequest, HttpError, json, toErrorResponse, unsupportedMediaType } from "./lib/errors";
 
 export interface Principal {
-  /** `human` = interactive login (Access, has email); `service` = token (Claude / bearer). */
+  /** `human` = a person, with an email (an Access login, or the editor's local dev token);
+   *  `service` = a token with no email (Claude or automation, through Access or the dev token). */
   kind: "human" | "service";
   email?: string;
   /** How this request authenticated: a Cloudflare Access assertion, or the local dev token.

@@ -85,7 +85,7 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized`, `forbidden` |
 
-While the configuration is refused, every request is answered before any route is matched, so before authentication, and the answer says nothing about the request itself. Under `/api`, at `/health`, and under `/webhooks/`, it is `invalid_config` naming the `variable`. Every other path is one a reader may open, and answers a plain HTML page with status 503 saying it is temporarily unavailable, which names no setting.
+While the configuration is refused, every request is answered before any route is matched, so before authentication, and the answer says nothing about the request itself. Under `/api`, at `/health`, and under `/webhooks/`, it is `invalid_config` naming the `variable`. Every other path is one a reader may open, and answers a plain HTML page with status 503 and a `Retry-After` of five minutes, saying it is temporarily unavailable, which names no setting.
 
 ## Adding to the API
 

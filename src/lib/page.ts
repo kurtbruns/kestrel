@@ -260,7 +260,9 @@ function readerBannerStyle(banner?: ReaderBanner): string {
  *  pages (§11). */
 export function readerPage(opts: {
   identity: ReaderIdentity;
-  homeUrl: string;
+  /** Where the brand links. Null for a page with no way home, whose masthead is left out
+   *  when the brand and the call to action are both empty. */
+  homeUrl: string | null;
   title: string;
   mainHtml: string;
   /** When set, the masthead shows the subscribe CTA linking here. Omitted on the
@@ -287,11 +289,19 @@ export function readerPage(opts: {
   // The brand shows only what the publication has, never a made-up name: a logo alone
   // still needs a link name, and with nothing at all the way home reads "Archive".
   const label = text ? "" : logo ? ' aria-label="Home"' : "";
-  const brand = `<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}"${label}>${logo || text ? `${logo}${text}` : "Archive"}</a>`;
+  const brand =
+    opts.homeUrl === null
+      ? logo || text
+        ? `<span class="r-brand">${logo}${text}</span>`
+        : ""
+      : `<a class="r-brand" href="${escapeHtmlAttr(opts.homeUrl)}"${label}>${logo || text ? `${logo}${text}` : "Archive"}</a>`;
   const cta = opts.subscribeUrl
     ? `<span class="r-cta"><a class="r-sub" href="${escapeHtmlAttr(opts.subscribeUrl)}">Subscribe here &rarr;</a></span>`
     : "";
-  const masthead = `<header class="r-mast"><div class="r-mast-in">\n${brand}\n${cta}\n</div></header>\n`;
+  const masthead =
+    brand || cta
+      ? `<header class="r-mast"><div class="r-mast-in">\n${brand}\n${cta}\n</div></header>\n`
+      : "";
   const banner = opts.banner
     ? `<div class="r-banner" role="note"><div class="r-banner-in"><span class="r-banner-tag">${escapeHtml(opts.banner.tag)}</span><span class="r-banner-text">${escapeHtml(opts.banner.text)}</span></div></div>`
     : "";
@@ -332,7 +342,7 @@ export function pageTitle(page: string, name: string): string {
  *  `ledeHtml` and `afterHtml` are markup, so the caller escapes what it interpolates. */
 export interface MessagePageOptions {
   identity: ReaderIdentity;
-  homeUrl: string;
+  homeUrl: string | null;
   /** The page's own name; the publication name is appended for the tab title. */
   title: string;
   eyebrow: string;
@@ -374,15 +384,20 @@ export function messagePage(opts: MessagePageOptions): Response {
  * fixed.
  */
 export function unavailablePage(): Response {
-  return messagePage({
+  const res = messagePage({
     identity: { name: "" },
-    homeUrl: "/",
+    // No way home: `/` is this same page until the configuration is fixed.
+    homeUrl: null,
     title: "Temporarily unavailable",
     eyebrow: "Unavailable",
     headline: "This page is temporarily unavailable",
     ledeHtml: "The newsletter can't be reached right now. Please try again a little later.",
     status: 503,
   });
+  // A client that honors it waits five minutes rather than retrying a page that can't
+  // change until the operator acts.
+  res.headers.set("retry-after", "300");
+  return res;
 }
 
 /** A reader page's closing link into the archive, never an admin path (§11). */

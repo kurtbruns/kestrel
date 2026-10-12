@@ -5,7 +5,7 @@
 import { unmount } from "./lifecycle";
 import { app } from "./shell";
 import { $ } from "./ui/dom";
-import { html, setHtml } from "./ui/html";
+import { type Html, html, setHtml } from "./ui/html";
 
 /** What the API says of a refused configuration: the variable, and its words about it. */
 export interface ConfigRefusal {
@@ -59,6 +59,7 @@ export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   AWS_SECRET_ACCESS_KEY: "secrets",
   SNS_TOPIC_ARN: "secrets",
   SES_CONFIGURATION_SET: "secrets",
+  SIMULATE_SENDS: "what-the-app-refuses",
 };
 
 /** The section of the reference listing everything the app refuses, for a variable with no
@@ -70,21 +71,45 @@ export function referenceUrl(variable: string): string {
   return `${CONFIGURATION_REFERENCE}#${REFERENCE_ANCHORS[variable] ?? REFUSALS_ANCHOR}`;
 }
 
+/** Whether the editor is served from this machine, as `npm run dev` serves it, where the fix
+ *  is a local file and a restart rather than a deploy or a stored secret. */
+function isLocalHost(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "[::1]" ||
+    hostname.endsWith(".localhost")
+  );
+}
+
+/** How to fix the setting where this editor runs: a local file and a restart in local
+ *  development; once deployed, a stored secret, or a var in `wrangler.jsonc` and a deploy. */
+function fixFor(variable: string): Html {
+  if (isLocalHost(location.hostname)) {
+    return html`Fix it in <code>.dev.vars</code>, or in the top-level <code>vars</code> in <code>wrangler.jsonc</code>, then restart <code>npm run dev</code> and reload this page.`;
+  }
+  return REFERENCE_ANCHORS[variable] === "secrets"
+    ? html`It's a secret: store it with <code>npx wrangler secret put ${variable} --env production</code>, naming your environment. A secret takes effect as soon as you store it, so then reload this page.`
+    : html`Fix it in your environment's block in <code>wrangler.jsonc</code>, deploy again, then reload this page.`;
+}
+
 /**
  * Replace the app with the explanation: the variable, the server's words about it, how to
  * fix it, and the reference. The mounted view is torn down first, so nothing keeps calling
  * an API that can only refuse, and the publication chrome hides, as on the sign-in wall.
+ * Every call in flight fails the same way, so a wall already up is left as it is.
  */
 export function showConfigProblem(refusal: ConfigRefusal): void {
+  if (app.querySelector(".config-wall")) {
+    return;
+  }
   unmount();
   document.body.classList.add("signed-out");
-  const secret = REFERENCE_ANCHORS[refusal.variable] === "secrets";
-  const fix = secret
-    ? html`It's a secret: store it with <code>npx wrangler secret put ${refusal.variable} --env production</code>, naming your environment. A secret takes effect as soon as you store it.`
-    : html`Fix it in your environment's block in <code>wrangler.jsonc</code>, then deploy again.`;
+  const local = isLocalHost(location.hostname);
   setHtml(
     app,
-    html`<div class="card auth-wall config-wall" role="alert"><h2>The configuration needs a fix</h2><p>Kestrel is refusing this deployment's configuration, so nothing works and nothing is sent until it's fixed. Readers see a page saying the newsletter is temporarily unavailable.</p><p class="config-wall-problem"><code>${refusal.variable}</code>: ${refusal.message}</p><p class="hint">${fix} Then reload this page.</p><p class="hint"><a href="${referenceUrl(refusal.variable)}" target="_blank" rel="noopener">${refusal.variable} in the Configuration reference ↗</a>. It's on the project's site, since the editor's own Docs can't load until the configuration is fixed.</p><button id="config-reload" class="primary">Reload</button></div>`,
+    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">The configuration needs a fix</h2><p>Kestrel is refusing ${local ? "this" : "this deployment's"} configuration, so nothing works and nothing is sent until it's fixed.${local ? null : " Readers see a page saying the newsletter is temporarily unavailable."}</p><p class="config-wall-problem"><code>${refusal.variable}</code>: ${refusal.message}</p><p class="hint">${fixFor(refusal.variable)}</p><p class="hint"><a href="${referenceUrl(refusal.variable)}" target="_blank" rel="noopener">${refusal.variable} in the Configuration reference <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>. It's on the project's site, since the editor's own Docs can't load until the configuration is fixed.</p><button id="config-reload" class="primary">Reload</button></div>`,
   );
   $("#config-reload", app).onclick = () => location.reload();
+  $<HTMLElement>(".config-wall h2", app).focus();
 }

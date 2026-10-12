@@ -1,9 +1,10 @@
-// Auth on the client: the dev token, the bearer header, the identity chip, and the
-// re-auth wall a dead session lands on.
+// Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
+// and the re-auth wall a dead session lands on.
 
+import { configRefusal, showConfigProblem } from "./config_problem";
 import { unmount } from "./lifecycle";
 import { app, identity } from "./shell";
-import { appState, TOKEN_KEY } from "./state";
+import { appState, type Session, TOKEN_KEY } from "./state";
 import { $ } from "./ui/dom";
 import { html, setHtml } from "./ui/html";
 
@@ -69,4 +70,60 @@ export function showReauth(): void {
     html`<div class="card auth-wall"><h2>Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth">Sign in</button></div>`,
   );
   $("#reauth", app).onclick = () => location.reload();
+}
+
+// Mint a dev token into localStorage. Returns false when deployed, where the endpoint 404s
+// (or is unreachable) and the Access cookie authenticates instead.
+async function mintDevToken(): Promise<boolean> {
+  try {
+    const r = await fetch("/api/dev/token?kind=human");
+    if (r.ok) {
+      setToken(((await r.json()) as { token: string }).token);
+      return true;
+    }
+  } catch {
+    /* deployed: the endpoint is absent; the Access cookie authenticates instead */
+  }
+  return false;
+}
+
+// Probe identity. A network error or an opaque Access redirect can't be recovered here, so
+// it surfaces as a null result (the sign-in wall).
+async function whoami(): Promise<Response | null> {
+  try {
+    return await fetch("/api/whoami", { headers: authHeaders(), redirect: "manual" });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The boot probe: who is signed in, minting a dev token first in local development. Answers
+ * the session, or null once it has put up the wall the probe landed on: the refused
+ * configuration's when the server names a setting to fix (SPEC §9), since signing in again
+ * cannot help with that, and the sign-in wall otherwise.
+ */
+export async function probeSession(): Promise<Session | null> {
+  if (!appState.token) {
+    await mintDevToken();
+  }
+  let res = await whoami();
+  // Stale stored token in dev: clear it, mint a fresh one, and probe again so a leftover
+  // credential self-heals. In Access mode the re-mint fails and `res` stays as it was.
+  if (!res?.ok && appState.token) {
+    setToken("");
+    if (await mintDevToken()) {
+      res = await whoami();
+    }
+  }
+  if (res?.ok) {
+    return (await res.json()) as Session;
+  }
+  const refusal = res ? configRefusal(await res.json().catch(() => null)) : null;
+  if (refusal) {
+    showConfigProblem(refusal);
+  } else {
+    showReauth();
+  }
+  return null;
 }
