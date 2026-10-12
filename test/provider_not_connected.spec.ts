@@ -73,7 +73,7 @@ async function sendCount(): Promise<number> {
 const REFUSED = { status: 409, code: "provider_not_connected" };
 
 /** What the `not_connected` cause advises, said once wherever the held send is described. */
-const ADVICE = "Connect an email provider (the setup guide walks through it), then deploy again.";
+const ADVICE = "Connect an email provider (the setup guide walks through it), then deploy.";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -374,12 +374,17 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
     expect(config.provider).toBe("none");
     expect(config.devMode).toBe(true);
     expect(config.simulation).toBeNull();
+    expect(config.notConnectedPreview).toBe(true);
     // A deployment with no provider and no NOTIFY binding notifies through the provider.
     expect(config.notifyChannel).toBe("provider");
   });
 
   it("is never honored outside local dev, and takes no fault suffix", () => {
-    expect(getConfig(withVars({ ...RESEND_DEPLOY, ...PREVIEW })).provider).toBe("resend");
+    const deployed = getConfig(withVars({ ...RESEND_DEPLOY, ...PREVIEW }));
+    expect(deployed.provider).toBe("resend");
+    expect(deployed.notConnectedPreview).toBe(false);
+    // A real deployment with no provider is not connected, but never the preview.
+    expect(getConfig(withVars(NOT_CONNECTED)).notConnectedPreview).toBe(false);
     expect(
       getConfig(
         withVars({
@@ -397,6 +402,7 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
   it("reflects not connected, refuses what would send, and closes signups, through the real routes", async () => {
     const settings = await readJson(await fetchWith(PREVIEW, "/api/settings", { headers: AUTH }));
     expect(settings.deployment.provider).toBe("none");
+    expect(settings.deployment.notConnectedPreview).toBe(true);
     expect(settings.deployment.notifyChannel).toBe("provider");
 
     const { post } = await posts.createPost(env.DB, { subject: "Hi", markdown: "Hi" }, "test");

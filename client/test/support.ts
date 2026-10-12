@@ -220,6 +220,7 @@ export function settingsResponse(
       notifyFrom: "Birds <hello@birds.example>",
       minLeadMs: 5 * 60 * 1000,
       simulation: null,
+      notConnectedPreview: false,
       build: {
         version: "",
         sha: "dev",

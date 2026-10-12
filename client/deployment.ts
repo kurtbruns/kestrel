@@ -2,7 +2,7 @@
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
 import { archivePostUrl } from "../shared/archive_url";
-import { DEFAULT_MIN_LEAD_MS, formatLead } from "../shared/sends";
+import { DEFAULT_MIN_LEAD_MS, formatLead, NOT_CONNECTED_ADVICE } from "../shared/sends";
 import { appState } from "./state";
 import { type Html, html } from "./ui/html";
 
@@ -80,13 +80,67 @@ export function providerNotConnected(): boolean {
   return appState.appConfig?.deployment.provider === "none";
 }
 
+/**
+ * True when this is local development's preview of the not-connected state
+ * (`SIMULATE_SENDS=not-connected`, SPEC §10) rather than a deployment partway through setup,
+ * as the reflection says. Its way out is a restart, not a deploy.
+ */
+export function notConnectedPreview(): boolean {
+  return providerNotConnected() && appState.appConfig?.deployment.notConnectedPreview === true;
+}
+
 /** The setup step that connects a provider: Get started's Connect an email provider, whose first
  *  paragraph sends an SES operator to the SES guide instead. */
 export const CONNECT_PROVIDER_HREF = "#/docs/resend";
 
 /** The one link every not-connected line carries, worded for any provider. */
 export function connectProviderLink(cls = ""): Html {
-  return html`<a class="${cls}" href="${CONNECT_PROVIDER_HREF}">Connect an email provider</a>`;
+  return html`<a class="${cls}" href="${CONNECT_PROVIDER_HREF}">${NOT_CONNECTED_ADVICE.step}</a>`;
+}
+
+/**
+ * What to do about a send held for want of a provider (SPEC §9), as a page says it: the
+ * shared advice (`refusalAdvice`) with its step as the link every not-connected line
+ * carries, in place of the guide's mention. In the local preview there is nothing to
+ * deploy, so it names the restart that ends the state instead.
+ */
+export function heldAdviceHtml(): Html {
+  return notConnectedPreview()
+    ? html`Restart <code>npm run dev</code> without <code>SIMULATE_SENDS=not-connected</code> to send.`
+    : html`${connectProviderLink()}${NOT_CONNECTED_ADVICE.after}`;
+}
+
+/**
+ * The one line for sends held while no provider is connected (DESIGN §2): the state, the
+ * held sends (`which`, a link to one or to the list of several), the reassurance every
+ * refused send carries (SPEC §12), and the fix, once. The dashboard's health block and the
+ * Sent page's attention card both say it, in place of the state's line and the send's own.
+ */
+export function heldSendsHtml(which: Html, count: number): Html {
+  const one = count === 1;
+  return html`No email provider connected, so nothing can be sent and ${which} ${one ? "is" : "are"} held, with no one marked unsent; ${one ? "it goes out at its" : "they go out at their"} first retry once one is connected. ${heldAdviceHtml()}`;
+}
+
+/**
+ * A page's standing not-connected warning (DESIGN §2): the health block's amber treatment,
+ * not a Notice and not dismissible, since the state holds every time the page is read.
+ * `cls` names the surface's line; null when a provider is connected.
+ */
+export function notConnectedWarning(cls: string, words: Html): Html | null {
+  return providerNotConnected()
+    ? html`<div class="health amber ${cls}" role="status"><span class="health-dot">⚠️</span><div><span>${words}</span></div></div>`
+    : null;
+}
+
+/**
+ * A scheduled send's line while no provider is connected: its window is real and still
+ * cancelable, so the countdown stays, but at the fire time it is held, not sent. Read from
+ * the deployment reflection, not from the send, which carries no condition until it fires.
+ */
+export function heldWhenFiresHtml(): Html | null {
+  return providerNotConnected()
+    ? html`<div class="sched-held">Will be held: no email provider is connected.</div>`
+    : null;
 }
 
 /**

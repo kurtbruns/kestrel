@@ -286,7 +286,7 @@ export function createRouter({
       summary:
         "Runtime preferences, a read-only reflection of deploy config (no secrets), and `inUse`: the scheduled sends a template or identity change would re-make.",
       description:
-        "`deployment.provider` is `resend` or `ses`; `fake`, a stand-in that records a send and delivers nothing (local development, a demo); or `none` while no email provider is connected (SPEC §9), when everything that would send is refused with 409 `provider_not_connected`. `inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
+        "`deployment.provider` is `resend` or `ses`; `fake`, a stand-in that records a send and delivers nothing (local development, a demo); or `none` while no email provider is connected (SPEC §9), when everything that would send is refused with 409 `provider_not_connected`. `deployment.notConnectedPreview` is true when that `none` is local development previewing the state (SPEC §10), whose way out is a restart rather than a deploy; it is false once deployed. `inUse.sends` is every scheduled send, soonest first; `inUse.retry_after` is the moment after which a save is no longer refused for the minimum lead (null when none is inside it); `inUse.identityFields` is the identity fields the current template renders, the only ones whose change reaches the email.",
       example: {
         response: {
           settings: { emailTemplate: "…", publication: { name: "Marsh Lane" } },

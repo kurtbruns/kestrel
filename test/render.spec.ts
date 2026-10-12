@@ -30,6 +30,7 @@ const config: Config = {
   devMode: false,
   devShaped: false,
   simulation: null,
+  notConnectedPreview: false,
   subrequestBudget: 50,
   minLeadMs: 5 * 60 * 1000,
   notifyChannel: "fake",

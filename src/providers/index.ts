@@ -36,7 +36,7 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
  * Refuse an act that would send while no provider is connected (SPEC §9): scheduling, send
  * now, a test, a test notification through the provider, a confirmation email. One code
  * for all of them, since the remedy is the same and is outside the API: connect a provider
- * and deploy again.
+ * and deploy.
  */
 export function requireConnectedProvider(config: Config): void {
   if (config.provider === "none") {

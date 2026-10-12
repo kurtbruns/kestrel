@@ -32,10 +32,23 @@ export type HaltCause =
   | "not_connected";
 
 /**
+ * The advice for a send held for want of a provider (SPEC §9), in its parts: the setup step,
+ * which a page makes the link every not-connected line carries, and what follows it. The
+ * guide's mention stands in for that link where there is none (an email, the API's words).
+ * "Deploy" is the step's own last one.
+ */
+export const NOT_CONNECTED_ADVICE = {
+  step: "Connect an email provider",
+  guide: " (the setup guide walks through it)",
+  after: ", then deploy.",
+} as const;
+
+/**
  * What to do about the provider refusing the account, by what the refusal is about
  * (SPEC §12). The fix is always outside the app: nothing in it can change a credential or
  * the provider's view of the account (SPEC §9). One wording for the watch and the notification
- * that tells the publisher, so the two never advise differently.
+ * that tells the publisher, so the two never advise differently. Plain text: a page that
+ * links the not-connected step builds it from `NOT_CONNECTED_ADVICE`.
  */
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
@@ -48,7 +61,7 @@ export function refusalAdvice(cause: HaltCause | null): string {
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
     case "not_connected":
-      return "Connect an email provider (the setup guide walks through it), then deploy again.";
+      return `${NOT_CONNECTED_ADVICE.step}${NOT_CONNECTED_ADVICE.guide}${NOT_CONNECTED_ADVICE.after}`;
     default:
       return "Fix the account with the provider.";
   }

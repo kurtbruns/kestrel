@@ -252,6 +252,50 @@ describe("sent view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  // A held send is the not-connected state showing on a send: one card, not the amber line
+  // and the send's own card, with the fix a link (or, in the local preview, the restart).
+  const held = (id: string, subject: string) =>
+    sending({
+      id,
+      subject,
+      halt_reason: "account",
+      halt_cause: "not_connected",
+      halt_error: "No email provider is connected to this deployment.",
+    });
+  it("says held sends and the state that holds them once, with the fix a link", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    fake = world(sendServer([held("h1", "Swifts")]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLElement>(".sent-not-connected").hidden).toBe(true);
+    const cards = $$("#stuck .stuck-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.textContent?.replace("⚠️", "")).toBe(
+      "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect an email provider, then deploy.",
+    );
+    expect($$<HTMLAnchorElement>("a", cards[0]!).map((a) => a.getAttribute("href"))).toEqual([
+      "#/sent/h1",
+      "#/docs/resend",
+    ]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("names every held send, and in the local preview the restart", async () => {
+    appState.appConfig = settingsResponse({
+      deployment: { provider: "none", notConnectedPreview: true },
+    });
+    fake = world(sendServer([held("h1", "Swifts"), held("h2", "Terns"), held("h3", "Gulls")]));
+    await mount(renderSent);
+    await vi.advanceTimersByTimeAsync(0);
+    const cards = $$("#stuck .stuck-card");
+    expect(cards).toHaveLength(1);
+    expect(cards[0]?.textContent?.replace("⚠️", "")).toMatch(
+      /and (Swifts|Terns|Gulls), (Swifts|Terns|Gulls) and (Swifts|Terns|Gulls) are held, with no one marked unsent; they go out at their first retry once one is connected\. Restart npm run dev without SIMULATE_SENDS=not-connected to send\.$/,
+    );
+    expect($$("a", cards[0]!)).toHaveLength(3);
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("says nothing of a provider once one is set", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "resend" } });
     fake = world(sendServer([scheduled()]));

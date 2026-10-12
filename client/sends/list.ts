@@ -5,7 +5,13 @@
 import { earlierCursor } from "../../shared/cursor";
 import type { SendListResponse, SendView } from "../../shared/sends";
 import { api } from "../api";
-import { connectProviderLink, noEmailProvider, providerNotConnected } from "../deployment";
+import {
+  connectProviderLink,
+  heldSendsHtml,
+  noEmailProvider,
+  notConnectedWarning,
+  providerNotConnected,
+} from "../deployment";
 import { mount } from "../lifecycle";
 import {
   followSends,
@@ -73,7 +79,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     root,
     html`<h1>Sent</h1>
     ${noEmailProvider() ? html`<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : null}
-    ${providerNotConnected() ? html`<div class="health amber sent-not-connected"><span class="health-dot">⚠️</span><div><span>No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span></div></div>` : null}
+    ${notConnectedWarning("sent-not-connected", html`No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.`)}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>
     <div id="active"></div>
@@ -132,18 +138,36 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   function renderStuck(live: SendView[]) {
     // A refused send carries no control: the fix is in the provider's account or the
     // deployment's secrets, and the send resumes on its own once it lands. Each card is the
-    // server's words for its condition.
-    const refused = live.flatMap((s) => {
+    // server's words for its condition. A send held for want of a provider (SPEC §9) is the
+    // deployment's state showing on a send, so while the deployment is not connected the
+    // held sends and the state are one card in place of the state's amber line, with the
+    // fix once, as a link (DESIGN §2).
+    const allRefused = live.flatMap((s) => {
       const c = conditionOf(s, "refused");
       return c ? [{ s, c }] : [];
     });
+    const held = providerNotConnected()
+      ? allRefused.filter((r) => r.c.cause === "not_connected")
+      : [];
+    const refused = allRefused.filter((r) => !held.includes(r));
+    const notConnectedLine = root.querySelector<HTMLElement>(".sent-not-connected");
+    if (notConnectedLine) {
+      notConnectedLine.hidden = held.length > 0;
+    }
+    const heldNames = held.map(
+      ({ s }, i) =>
+        html`${i === 0 ? "" : i === held.length - 1 ? " and " : ", "}<a href="#/sent/${s.id}">${s.subject}</a>`,
+    );
+    const heldCard = held.length
+      ? html`<div class="card stuck-card sent-held"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div>${heldSendsHtml(html`${heldNames}`, held.length)}</div></div></div>`
+      : null;
     const wedged = live.flatMap((s) => {
       const c = conditionOf(s, "wedged");
       return c ? [{ s, c }] : [];
     });
     setHtml(
       stuckEl,
-      html`${refused.map(
+      html`${heldCard}${refused.map(
         ({ s, c }) =>
           html`<div class="card stuck-card"><div class="stuck-head"><span class="stuck-dot">⚠️</span><div><strong><a href="#/sent/${s.id}">${s.subject}</a></strong><div class="muted">${c.message}</div></div></div></div>`,
       )}${wedged.map(({ s, c }) => {

@@ -97,6 +97,9 @@ function deploymentView(cfg: Config, principal: Principal): DeploymentView {
     // Which provider the local send simulation models, so a dev tool can check it before a
     // demo; null in every deployed env.
     simulation: cfg.simulation,
+    // Whether `provider: "none"` is local dev's preview of not connected, so the editor
+    // words its way out as a restart rather than a deploy; false in every deployed env.
+    notConnectedPreview: cfg.notConnectedPreview,
   };
 }
 

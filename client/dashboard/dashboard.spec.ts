@@ -430,6 +430,59 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
+    it("says a scheduled send will be held, beside the countdown it keeps", async () => {
+      withProvider("none");
+      fake = world([post()], sendServer([scheduled()]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      const card = $("#dashScheduled .sched-card[data-post='p2']");
+      expect(countdown("p2").textContent).toMatch(/^Sends in/);
+      expect($(".sched-held", card).textContent).toBe(
+        "Will be held: no email provider is connected.",
+      );
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    // A held send is the deployment's state showing on a send: one line, not two.
+    const held = (id: string, subject: string) =>
+      sending({
+        id,
+        subject,
+        c_pending: 40,
+        halt_reason: "account",
+        halt_cause: "not_connected",
+        halt_error: "no email provider is connected",
+        halted_at: NOW - 60_000,
+      });
+    it("says a held send and the state that holds it in one red line, the fix a link", async () => {
+      withProvider("none");
+      fake = world([post()], sendServer([held("h1", "Swifts")]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      const block = $("#dashHealth .health");
+      expect(block.classList.contains("red")).toBe(true);
+      expect($$(":scope > div > div", block).map((d) => d.textContent)).toEqual([
+        "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect an email provider, then deploy.",
+      ]);
+      const links = $$<HTMLAnchorElement>("a", block).map((a) => a.getAttribute("href"));
+      expect(links).toEqual(["#/sent/h1", "#/docs/resend"]);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("counts several held sends, and in the local preview names the restart instead", async () => {
+      withProvider("none");
+      appState.appConfig!.deployment.notConnectedPreview = true; // SIMULATE_SENDS=not-connected
+      fake = world([post()], sendServer([held("h1", "Swifts"), held("h2", "Terns")]), counts);
+      await mount(renderDashboard);
+      await vi.advanceTimersByTimeAsync(0);
+      expect($(".dash-not-connected").textContent).toBe(
+        "No email provider connected, so nothing can be sent and 2 sends are held, with no one marked unsent; they go out at their first retry once one is connected. Restart npm run dev without SIMULATE_SENDS=not-connected to send.",
+      );
+      expect($("#dashHealth .health a").getAttribute("href")).toBe("#/sent");
+      expect($$("#dashHealth .health > div > div")).toHaveLength(1);
+      expect(fake.unhandled).toEqual([]);
+    });
+
     it("shows neither once a provider is set, nor on local development's stand-in", async () => {
       for (const provider of ["resend", "fake"] as const) {
         withProvider(provider);
@@ -445,10 +498,11 @@ describe("dashboard", () => {
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
         unmount();
         fake.restore();
-        fake = world([post()], sendServer(), counts);
+        fake = world([post()], sendServer([scheduled()]), counts);
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
         expect(document.querySelector(".dash-not-connected"), provider).toBeNull();
+        expect(document.querySelector(".sched-held"), provider).toBeNull();
         expect(document.querySelector("#dashHealth .health"), provider).toBeNull();
         unmount();
         fake.restore();

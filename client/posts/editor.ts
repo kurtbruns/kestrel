@@ -14,10 +14,13 @@ import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
 import {
+  connectProviderLink,
   earliestFireAt,
+  heldWhenFiresHtml,
   minLeadText,
   notConnectedScheduleLine,
   notConnectedTestLine,
+  notConnectedWarning,
   postArchiveUrl,
   providerNotConnected,
   withNoProviderNote,
@@ -202,7 +205,7 @@ export async function renderEditor(
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><span id="schedWhen"></span><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}</div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="editorNotices"></div>
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
@@ -240,6 +243,7 @@ export async function renderEditor(
         <input type="file" id="imgInput" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
       </div>
       <div id="warnings"></div>
+      ${locked ? null : notConnectedWarning("editor-not-connected", html`No email provider connected: you can write and preview, not send. ${connectProviderLink()}.`)}
 
       <div class="actions-bar">
         ${

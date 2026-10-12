@@ -2197,6 +2197,23 @@ body.web-mode .content {
   font-size: 12.5px;
   color: var(--warn-fg);
 }
+/* A scheduled send while no provider is connected (DESIGN §2): the countdown stays, and a
+   line beneath it in the same amber says the send will be held when it fires. */
+.sched-held {
+  margin-top: 4px;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--warn-fg);
+}
+/* The editor's scheduled banner stacks its line and the held line on the left. */
+.banner-scheduled .sched-main {
+  display: flex;
+  flex-direction: column;
+}
+/* A draft's not-connected line sits above its actions bar, which keeps its own top gap. */
+.health.editor-not-connected {
+  margin: 16px 0 0;
+}
 
 /* Composer: GitHub-style Write/Preview tabs + a formatting toolbar */
 .composer {

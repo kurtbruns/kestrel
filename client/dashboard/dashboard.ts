@@ -7,7 +7,13 @@ import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
-import { CONNECT_PROVIDER_HREF, connectProviderLink, providerNotConnected } from "../deployment";
+import {
+  CONNECT_PROVIDER_HREF,
+  connectProviderLink,
+  heldSendsHtml,
+  heldWhenFiresHtml,
+  providerNotConnected,
+} from "../deployment";
 import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -53,6 +59,7 @@ interface HealthAlert {
 // provider outage short of the stuck threshold are shown where the send is. The one line
 // not about a send is the deployment's: no email provider connected (SPEC §9), an amber
 // standing state with no time, read from the deployment reflection, gone once one is set.
+// When that state is holding a send, the two are said as one red line instead of two.
 function computeHealth(live: SendView[]): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -84,18 +91,30 @@ function computeHealth(live: SendView[]): HealthAlert[] {
   }
   // The provider refusing the account stops every send it touches until the operator
   // fixes the account (SPEC §12): one red line, in the server's words for it.
-  const refused = live.flatMap((s) => {
+  // A send held for want of a provider (SPEC §9) is the deployment's state showing on a
+  // send, so while the deployment is not connected the two are one line: the state, the
+  // held sends, and the fix once, as a link. Red, since a send is waiting on the operator.
+  const notConnected = providerNotConnected();
+  const allRefused = live.flatMap((s) => {
     const c = conditionOf(s, "refused");
     return c ? [{ s, c }] : [];
   });
+  const held = notConnected ? allRefused.filter((r) => r.c.cause === "not_connected") : [];
+  const refused = allRefused.filter((r) => !held.includes(r));
+  // One send links to its watch; several, to the Sent page that lists them all.
+  const which = (sends: { s: SendView }[]) =>
+    sends.length === 1 && sends[0]
+      ? html`<a href="#/sent/${sends[0].s.id}">${sends[0].s.subject}</a>`
+      : html`<a href="#/sent">${sends.length} sends</a>`;
+  if (held.length) {
+    alerts.push({
+      level: "red",
+      text: html`<span class="dash-not-connected">${heldSendsHtml(which(held), held.length)}</span>`,
+    });
+  }
   const [firstRefused] = refused;
   if (firstRefused) {
-    // One send links to its watch; several, to the Sent page that lists them all.
-    const which =
-      refused.length === 1
-        ? html`<a href="#/sent/${firstRefused.s.id}">${firstRefused.s.subject}</a>`
-        : html`<a href="#/sent">${refused.length} sends</a>`;
-    alerts.push({ level: "red", text: html`${which}: ${firstRefused.c.message}` });
+    alerts.push({ level: "red", text: html`${which(refused)}: ${firstRefused.c.message}` });
   }
   // A healthy in-progress send is NOT surfaced here: the active-send widget below is its
   // home (a bar and a Watch link). The health line is loud-only, so it keeps just the
@@ -124,7 +143,7 @@ function computeHealth(live: SendView[]): HealthAlert[] {
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
     });
   }
-  if (providerNotConnected()) {
+  if (notConnected && !held.length) {
     alerts.push({
       level: "amber",
       text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
@@ -428,9 +447,10 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   if (!scheduled.length) {
     return html`<p class="muted">Nothing scheduled.</p>`;
   }
+  const held = heldWhenFiresHtml();
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div></div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {

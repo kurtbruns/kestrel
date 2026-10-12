@@ -19,6 +19,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Added
 
 - Local development can run as a deployment with no email provider connected: `SIMULATE_SENDS=not-connected` refuses every send, closes signups, and holds a due send, which goes out at its next retry once the switch is off, with local sign-in still on, so the editor's not-connected state can be seen without deploying. A deployed instance ignores it (SPEC §10).
+- While no email provider is connected, the editor says so where sending would otherwise look possible: a draft's page notes it can be written and previewed but not sent, and a scheduled send's dashboard card and editor banner say it will be held when it fires. `kestrel dev` prints a line naming what `SIMULATE_SENDS` makes of the run, `not-connected` or a simulated provider, since wrangler shows the variable only as "(hidden)".
 
 ### Changed
 
@@ -27,6 +28,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Deploy the app's step 3 creates the database and the image bucket with `--env production --binding … --update-config`, so Wrangler writes the new database's id into the `production` block itself, with no id to copy and no prompt to decline. The prompt's default, Yes, added a second binding to the production database in the development settings.
 - A new instance installs `@types/node` as a dev dependency, so `npm run typecheck` no longer ends with Wrangler's "Action required: Install @types/node". The Node types stay out of the type check, so the Worker's own types still apply. An existing instance can silence the notice with `npm i -D @types/node`.
 - The operator's Claude context now names `--env production` on every Wrangler command that creates or binds a resource, not only deploying and migrating, since without it Wrangler offers to bind the new resource in the development settings. It bears on safety: it keeps a binding to a production resource out of the development settings. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, replace that line by hand.
+- A send held because no email provider is connected reads once on the dashboard and the Sent page, one red message with the not-connected state instead of two, and its advice, there and on the send's page, links to Connect an email provider and says "then deploy" rather than "then deploy again". In the local not-connected preview it says to restart `npm run dev` without `SIMULATE_SENDS=not-connected`, which the settings API now reports as `deployment.notConnectedPreview`.
 
 ### Fixed
 

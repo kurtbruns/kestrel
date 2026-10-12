@@ -94,6 +94,8 @@ export interface DeploymentView {
   minLeadMs: number;
   /** The local send simulation standing in for a provider, or null: always null once deployed. */
   simulation: SimulationView | null;
+  /** True when `provider` is `none` because local dev previews the not-connected state (`SIMULATE_SENDS=not-connected`), whose way out is a restart, not a deploy: always false once deployed. */
+  notConnectedPreview: boolean;
 }
 
 /** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */

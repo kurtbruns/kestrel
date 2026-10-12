@@ -25,7 +25,9 @@
  * Per-run settings. `SIMULATE_SENDS`, `MIN_LEAD_SECONDS`, and `SUBREQUEST_BUDGET` set in the
  * shell are forwarded over `.dev.vars`, so `SIMULATE_SENDS=ses kestrel dev` picks a
  * simulation profile for one run without editing a file. A `.dev.vars` missing a setting that
- * `.dev.vars.example` gives a value is named, rather than left to differ quietly.
+ * `.dev.vars.example` gives a value is named, rather than left to differ quietly. What
+ * `SIMULATE_SENDS` makes of this run (a simulated provider, or not connected) is said in one
+ * line, since wrangler prints the variable only as "(hidden)".
  *
  * Arguments after the command go to `wrangler dev` (`--remote`, for instance), except `--port`,
  * which is refused in favor of PORT. This repository's `npm run dev` (scripts/dev.mjs) adds
@@ -120,6 +122,45 @@ function checkDevVars(fromShell) {
 }
 
 /**
+ * The line that says what stands in for a provider this run, from `SIMULATE_SENDS` as the
+ * Worker will read it (the shell's value over `.dev.vars`'s), or null for the plain fake.
+ * Wrangler prints the variable as "(hidden)", so without this a forgotten `not-connected`
+ * in the shell looks like a broken app. The values mirror the Worker's reading of the
+ * variable (src/env.ts), which stays the authority: a value it would refuse is named as such
+ * here rather than called a simulation.
+ */
+export function simulationLine(value) {
+  const v = (value ?? "").trim().toLowerCase();
+  if (["", "0", "off", "false", "no"].includes(v)) {
+    return null;
+  }
+  if (v === "not-connected") {
+    return "[dev] running not connected: sends, tests and signups are refused (unset SIMULATE_SENDS to send)";
+  }
+  const [name = "", faults = "realistic", ...rest] = v.split(":");
+  const known =
+    ["generic", "resend", "ses", "1", "on", "true", "yes"].includes(name) &&
+    ["realistic", "none"].includes(faults) &&
+    rest.length === 0;
+  return known
+    ? `[dev] simulating a provider for list sends (SIMULATE_SENDS=${v}); nothing is delivered`
+    : `[dev] SIMULATE_SENDS=${value.trim()} isn't a value the app accepts, so it will refuse to run: use off, resend, ses, or generic (optionally with :none), or not-connected`;
+}
+
+/**
+ * SIMULATE_SENDS as this run will have it: the shell's value when it sets a non-empty one
+ * (`off` included, which overrides `.dev.vars` like any other), else `.dev.vars`'s in `dir`.
+ * An empty shell value falls through, as it is not forwarded to wrangler (see `devCommand`).
+ */
+export function effectiveSimulateSends(shell, dir) {
+  if (shell?.trim()) {
+    return shell;
+  }
+  const local = join(dir, ".dev.vars");
+  return existsSync(local) ? parseEnv(readFileSync(local, "utf8")).SIMULATE_SENDS : undefined;
+}
+
+/**
  * `kestrel dev [wrangler dev args]`. `onStop` runs when the server stops, for whatever the
  * caller started beside it.
  */
@@ -175,6 +216,10 @@ export async function devCommand(argv, { onStop = () => {} } = {}) {
 
   if (!isRemote) {
     checkDevVars(fromShell);
+    const line = simulationLine(effectiveSimulateSends(process.env.SIMULATE_SENDS, process.cwd()));
+    if (line) {
+      console.log(line);
+    }
   }
 
   // The Worker reports this ID beside the dev token, and seed and reset with no target given

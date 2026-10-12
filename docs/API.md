@@ -50,7 +50,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 | Send | One dispatch of a post: the frozen email, the fire time, and the record | The one shape is the send's view. Its email and its rows have routes of their own. |
 | Delivery | One recipient's row in a send's record | Paged. Read from the rows, so it is heavier than the view. |
 | Subscriber | An address, its consent state, and its suppression | Paged. |
-| Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only. |
+| Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.notConnectedPreview`), so a client can say how to leave it. |
 
 ## Reading and following
 

@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { DeliveryOutcomes, SendSummary, SendView } from "../../shared/sends";
+import {
+  type DeliveryOutcomes,
+  refusalAdvice,
+  type SendSummary,
+  type SendView,
+} from "../../shared/sends";
+import { appState } from "../state";
 import { condition, feedReads, sendServer, sendView } from "../test/send_server";
 import {
   $,
@@ -10,6 +16,7 @@ import {
   mount,
   resetShell,
   sendSummary,
+  settingsResponse,
   typeInto,
   unmount,
 } from "../test/support";
@@ -642,6 +649,65 @@ describe("sent record", () => {
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
+  });
+
+  // A send held for want of a provider (SPEC §9): the advice's step is the link every
+  // not-connected line carries, and the local preview names its restart instead.
+  it("advises connecting a provider as a link, or the restart in the local preview", async () => {
+    const advice = refusalAdvice("not_connected");
+    const held = sendView(send({ status: "sending", completed_at: null }), {
+      phase: "needs-attention",
+      provider: {
+        name: "none",
+        halt: {
+          reason: "account",
+          cause: "not_connected",
+          error: "no email provider is connected",
+          retries: 1,
+          since: 1_000,
+          retry_at: null,
+        },
+      },
+      conditions: [
+        {
+          kind: "refused",
+          severity: "action",
+          since: 1_000,
+          message: `No email provider is connected, so this send is held where it is. ${advice}`,
+          action: null,
+          cause: "not_connected",
+          error: "no email provider is connected",
+          advice,
+          retry_at: null,
+        },
+      ],
+    });
+    for (const [preview, words] of [
+      [false, "Connect an email provider, then deploy."],
+      [true, "Restart npm run dev without SIMULATE_SENDS=not-connected to send."],
+    ] as const) {
+      const label = preview ? "preview" : "deployed";
+      appState.appConfig = settingsResponse({
+        deployment: { provider: "none", notConnectedPreview: preview },
+      });
+      fake = fakeApi([
+        {
+          path: "/api/sends/x1",
+          reply: () => ({ send: held, outcomes: outcomes({ accepted: 0 }), cursor: "1.1" }),
+        },
+        feedOf(() => held),
+      ]);
+      await mount((r, s) => renderSentRecord("x1", r, s));
+      await vi.advanceTimersByTimeAsync(0);
+      const alert = $("#watchBody .health.red");
+      expect($("strong", alert).textContent).toBe("No email provider is connected");
+      expect($(".refused-advice", alert).textContent, label).toBe(words);
+      expect(alert.textContent).not.toContain("setup guide");
+      const link = alert.querySelector("a");
+      expect(link?.getAttribute("href") ?? null, label).toBe(preview ? null : "#/docs/resend");
+      unmount();
+      fake.restore();
+    }
   });
 
   it("counts a halt's next retry down on the clock while no report arrives", async () => {

@@ -213,6 +213,12 @@ export interface Config {
    */
   simulation: SimulationView | null;
   /**
+   * True when local dev runs as a deployment with no provider (`SIMULATE_SENDS=not-connected`,
+   * SPEC §10): `provider` is then `none`, and the way out is a restart, not a deploy. Like
+   * `simulation`, only ever true in a dev-shaped env, so never once deployed.
+   */
+  notConnectedPreview: boolean;
+  /**
    * How many subrequests (D1 statements plus outbound requests) one invocation of the
    * send path may make: the send loop stops starting batches before it would pass this,
    * and the next sweep tick continues. D1 statements are held to Cloudflare's own cap of
@@ -345,6 +351,7 @@ export function getConfig(env: AppEnv): Config {
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
     simulation: local === "not-connected" ? null : local,
+    notConnectedPreview,
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
       readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,

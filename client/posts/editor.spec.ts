@@ -486,6 +486,44 @@ describe("editor view", () => {
     expect($<HTMLElement>("#schedControls").hidden).toBe(true);
   });
 
+  // DESIGN §2: while no provider is connected, a scheduled send's window is real, but the
+  // send is held when it fires, and the banner says so beside the countdown it keeps.
+  it("says a scheduled send will be held while no provider is connected, and keeps the countdown", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    const linked = scheduledPost(Date.now() + 65_000);
+    await open(linked.routes);
+    expect($("#schedWhen").textContent).toMatch(/Sends in 1m 05s/);
+    expect($(".banner-scheduled .sched-held").textContent).toBe(
+      "Will be held: no email provider is connected.",
+    );
+    expect(document.querySelector(".editor-not-connected")).toBeNull(); // the draft's line
+    unmount();
+    fake.restore();
+    appState.appConfig = settingsResponse({ deployment: { provider: "resend" } });
+    await open(scheduledPost(Date.now() + 65_000).routes);
+    expect(document.querySelector(".sched-held")).toBeNull();
+  });
+
+  it("notes above a draft's actions that it can be written and previewed, not sent, while no provider is connected", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+    const note = $(".editor-not-connected");
+    expect(note.classList.contains("health")).toBe(true);
+    expect(note.classList.contains("amber")).toBe(true);
+    expect(note.textContent).toBe(
+      "⚠️No email provider connected: you can write and preview, not send. Connect an email provider.",
+    );
+    expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/resend");
+    expect(note.nextElementSibling?.classList.contains("actions-bar")).toBe(true);
+    for (const provider of ["resend", "fake"] as const) {
+      unmount();
+      fake.restore();
+      appState.appConfig = settingsResponse({ deployment: { provider } });
+      await open([{ path: "/api/posts/p1", reply: () => draft() }]);
+      expect(document.querySelector(".editor-not-connected"), provider).toBeNull();
+    }
+  });
+
   it("shows a move, a re-make, and a cancel made elsewhere, in place", async () => {
     const linked = scheduledPost(Date.now() + 3_600_000);
     await open(linked.routes);

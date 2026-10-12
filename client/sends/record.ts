@@ -11,7 +11,7 @@ import type {
   SendView,
 } from "../../shared/sends";
 import { ApiError, api, apiFile } from "../api";
-import { noEmailProvider, providerNotConnected } from "../deployment";
+import { heldAdviceHtml, noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
@@ -206,7 +206,8 @@ function watchBodyHtml(prog: SendView): Html {
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");
   // No provider connected is held the same way but is no provider's refusal (SPEC §9): its
-  // own headline, and the fix said once, with no provider's words to quote.
+  // own headline, and the fix said once, with no provider's words to quote: the step as the
+  // link every not-connected line carries (or, in the local preview, the restart).
   const unconnected = refused?.cause === "not_connected";
   // In flight too long (SPEC §12): the amber the dashboard's health line and the Sent
   // page's card give the same condition, in the server's words.
@@ -215,7 +216,7 @@ function watchBodyHtml(prog: SendView): Html {
     ${stuck ? html`<div class="health amber" role="status"><span class="health-dot">⚠️</span><div>${stuck.message}</div></div>` : null}
     ${
       refused
-        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div>${refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
+        ? html`<div class="health red" role="alert"><span class="health-dot">⚠️</span><div><strong>${unconnected ? "No email provider is connected" : "The provider is refusing this account"}</strong>${unconnected ? null : html`<div>${refused.error}</div>`}<div class="refused-advice">${unconnected ? heldAdviceHtml() : refused.advice}</div><div>${refused.since === null ? null : `Since ${fmt(refused.since)}. `}No one has been marked unsent, and once ${unconnected ? "one is connected" : "this is fixed"} the send resumes at its next retry${refused.retry_at === null ? "" : `, ${fmt(refused.retry_at)}`}.</div></div></div>`
         : null
     }
     <div class="wbars">
