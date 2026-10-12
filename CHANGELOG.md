@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.7.0] - 2026-10-12
+
 **Upgrading from 1.6.0.** If your `production` block in `wrangler.jsonc` sets `PROVIDER` to `resend` or `ses`, nothing changes. If it still sets `fake` (as Get started's Deploy step set it until you connected a provider), delete that line before you deploy, so the instance runs with no provider connected rather than recording sends it never delivers, and [connect an email provider](docs/get-started/04-resend.md) when you're ready. If it sets no `PROVIDER` at all, the instance used to run on `fake` and now refuses to send; connect a provider first if it has readers. A send already scheduled on such an instance is held, with no one marked sent, until a provider is connected; it then goes out at its first retry after that, which may be long after its fire time, and it can't be canceled meanwhile, since it is already sending. A local development config that leaves `PROVIDER` unset needs `"PROVIDER": "fake"` in its top-level `vars`, as a new instance's has. If only one of the `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` secrets is stored (`npx wrangler secret list --env production` shows which), store the other before you deploy: this release refuses that configuration, and until both are stored its public pages say the newsletter is temporarily unavailable and nothing is sent. If any of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` in your `production` block is still on `example.com` (the template's placeholder), replace it with your own before you deploy, whatever `PROVIDER` says: this release refuses it on every provider but `fake`, and until it's fixed the public pages say the newsletter is temporarily unavailable.
 
 ### Breaking
@@ -309,7 +311,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.7.0
 [1.6.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.4.0
