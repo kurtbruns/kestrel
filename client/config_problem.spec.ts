@@ -138,7 +138,6 @@ describe("the refused-configuration wall (SPEC §9)", () => {
     const behind = {
       error: "schema_behind",
       missing: ["0003_post_slug_auto.sql"],
-      command: "npx wrangler d1 migrations apply DB --remote --env production",
       message:
         "The database is missing a migration this release needs (0003_post_slug_auto.sql). Apply it: npx wrangler d1 migrations apply DB --remote --env production",
     };

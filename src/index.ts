@@ -19,7 +19,7 @@ import { errorText, log, newRun, withRun } from "./lib/log";
 import { unavailablePage } from "./lib/page";
 import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./providers/simulate";
 import type { Router } from "./router";
-import { databaseSite, schemaGap } from "./schema";
+import { schemaGap } from "./schema";
 import { sweep } from "./send/sweep";
 
 // The archive route is config-driven (ARCHIVE_BASE_PATH), whether the dev routes exist
@@ -72,7 +72,7 @@ export default {
     }
     // A database behind the release would fail the sweep's own queries every minute; the gap
     // is logged once, and the sweep resumes on the tick after the migrations are applied.
-    if (await schemaGap(appEnv.DB, config.devMode ? "dev" : "remote")) {
+    if (await schemaGap(appEnv.DB, config.devMode)) {
       return;
     }
     if (controller.cron === RECEIPTS_CRON) {
@@ -116,7 +116,7 @@ async function handleFetch(
   // paths name the migrations and the command that applies them, and a reader is told only
   // that the page is unavailable.
   const url = new URL(request.url);
-  const gap = await schemaGap(appEnv.DB, databaseSite(getConfig(appEnv).devMode, url.hostname));
+  const gap = await schemaGap(appEnv.DB, getConfig(appEnv).devMode);
   if (gap) {
     if (isReaderPath(url.pathname)) {
       return unavailablePage();

@@ -186,7 +186,7 @@ export function createRouter({
       summary:
         "Health check: ok once the configuration is accepted and the database has run every migration this release ships.",
       description:
-        "Answered before any route while either is not so (SPEC §9): `500` `invalid_config` naming the setting, or `500` `schema_behind` with the `missing` migrations and the `command` that applies them.",
+        "Answered before any route while either is not so (SPEC §9): `500` `invalid_config` naming the setting, or `500` `schema_behind` with the `missing` migrations and a `message` saying what to run.",
       handler: () => json({ status: "ok", service: "kestrel" }),
     },
     {

@@ -1,52 +1,54 @@
 /**
  * The schema gate (SPEC §9): whether the database has run every migration this release
- * ships, checked before the app touches it, and the command that closes the gap when not.
+ * ships, checked before the app touches it, and what to run when it hasn't.
  *
  * Running on a schema behind the code fails on whatever the release touches, as raw
  * `no such table` errors in the logs, so the app refuses instead, as it does a refused
  * configuration: `index.ts` answers every request from here, and skips the sweep. The check
  * is one read of `d1_migrations` (`db/migrations.ts`). Once a database has every migration it
- * is remembered for the isolate's life, since a schema never goes backwards under a running
- * release; while it is behind, every request reads again, so applying the migrations ends
- * the refusal without a redeploy.
+ * is remembered for the isolate's life: a running release never sees its schema go backwards
+ * on its own, and Upgrade's Go back deploys the old release before it restores the database.
+ * While it is behind, every request reads again, so applying the migrations ends the
+ * refusal without a redeploy.
  */
 
 import { missingMigrations } from "./db/migrations";
 import { errorText, log } from "./lib/log";
 
-/** Where the database the Worker is bound to lives, which decides the command that migrates
- *  it: a dev-shaped local server's own, a local `wrangler dev --env production`'s, or the
- *  deployed one. */
-export type DatabaseSite = "dev" | "local" | "remote";
-
-/** What the gate reports while the database is behind: the shipped migrations it has not run,
- *  the command that applies them, and both in one sentence. */
+/** What the gate reports while the database is behind: the shipped migrations it has not
+ *  run, and a sentence naming them and what to run. */
 export interface SchemaGap {
   missing: string[];
-  command: string;
   message: string;
 }
 
-/** The command that applies the migrations to the database at `site`. Deployed, it names
- *  `production`, the environment the setup guide creates; an operator with another applies
- *  it with that environment's name. */
-export function migrateCommand(site: DatabaseSite): string {
-  switch (site) {
-    case "dev":
-      return "npx wrangler d1 migrations apply DB --local";
-    case "local":
-      return "npx wrangler d1 migrations apply DB --local --env production";
-    case "remote":
-      return "npx wrangler d1 migrations apply DB --remote --env production";
+/**
+ * What to run, in words. A dev-shaped server is local development on its own local database,
+ * so it gets the one command. Any other can't tell a deployed Worker from a local
+ * `wrangler dev` of the same settings (under `wrangler dev`, a config with routes is served
+ * under the route's host), so it names both, the deployed one first, and never presents a
+ * command that acts on the live database as the local fix. An instance gets a new release's
+ * migrations into its folder only through `sync-migrations`, and skipping that leaves
+ * `apply` with nothing to do, so the deployed form says so.
+ */
+function remedy(devMode: boolean, them: string): string {
+  if (devMode) {
+    return `Apply ${them}: npx wrangler d1 migrations apply DB --local`;
   }
+  return (
+    `Apply ${them}: npx wrangler d1 migrations apply DB --remote --env production for the deployed app, ` +
+    "or --local --env production under a local wrangler dev. " +
+    "If it says there is nothing to apply, run npm run sync-migrations first, which copies the release's migrations into migrations/."
+  );
 }
 
 // The databases seen with every migration, so the read happens once per isolate.
 const current = new WeakSet<D1Database>();
 
-// The last gap logged, so a database left behind logs its cause once per isolate rather
-// than on every request and every sweep tick.
+// The last gap and the last failed check logged, so a database left behind, or one the check
+// can't read, logs its cause once per isolate rather than on every request and sweep tick.
 let reportedGap: string | undefined;
+let reportedUnchecked: string | undefined;
 
 /**
  * The gap between this release's migrations and the database's, or undefined when there is
@@ -54,10 +56,7 @@ let reportedGap: string | undefined;
  * the request goes ahead, since a D1 that can't be reached is not a schema that is behind,
  * and the route's own query will fail or succeed on its own terms.
  */
-export async function schemaGap(
-  db: D1Database,
-  site: DatabaseSite,
-): Promise<SchemaGap | undefined> {
+export async function schemaGap(db: D1Database, devMode: boolean): Promise<SchemaGap | undefined> {
   if (current.has(db)) {
     return undefined;
   }
@@ -65,15 +64,19 @@ export async function schemaGap(
   try {
     missing = await missingMigrations(db);
   } catch (err) {
-    log.warn("schema.unchecked", { error: errorText(err) });
+    const error = errorText(err);
+    if (reportedUnchecked !== error) {
+      reportedUnchecked = error;
+      log.warn("schema.unchecked", { error });
+    }
     return undefined;
   }
+  reportedUnchecked = undefined;
   if (missing.length === 0) {
     current.add(db);
     reportedGap = undefined;
     return undefined;
   }
-  const command = migrateCommand(site);
   const key = missing.join(",");
   if (reportedGap !== key) {
     reportedGap = key;
@@ -82,19 +85,6 @@ export async function schemaGap(
   const n = missing.length;
   return {
     missing,
-    command,
-    message: `The database is missing ${n === 1 ? "a migration" : `${n} migrations`} this release needs (${missing.join(", ")}). Apply ${n === 1 ? "it" : "them"}: ${command}`,
+    message: `The database is missing ${n === 1 ? "a migration" : `${n} migrations`} this release needs (${missing.join(", ")}). ${remedy(devMode, n === 1 ? "it" : "them")}`,
   };
-}
-
-/** Where the database is, from what the Worker can see: a dev-shaped instance is local
- *  development; any other answering on a loopback host is `wrangler dev` with a deployed
- *  environment's settings, on its local database; everything else is deployed. */
-export function databaseSite(devMode: boolean, hostname: string): DatabaseSite {
-  if (devMode) {
-    return "dev";
-  }
-  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
-    ? "local"
-    : "remote";
 }

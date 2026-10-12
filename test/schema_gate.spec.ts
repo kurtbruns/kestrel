@@ -4,14 +4,14 @@ import {
   waitOnExecutionContext,
 } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SHIPPED_MIGRATIONS } from "../src/db/migrations";
 import type { AppEnv } from "../src/env";
 import worker from "../src/index";
 import { guardD1 } from "./support/d1_guard";
 import { dueSend, resetDatabase } from "./support/fixtures";
 import { AUTH, readJson } from "./support/http";
-import { allowErrorLogs } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { fetchOn } from "./support/worker_env";
 
 // The schema gate (SPEC §9): a database that hasn't run every migration this release ships
@@ -57,6 +57,7 @@ const VARS_DEPLOYED = { DEV_AUTH_SECRET: "" };
 describe("the schema gate (SPEC §9)", () => {
   beforeEach(resetDatabase);
   afterEach(async () => {
+    vi.restoreAllMocks();
     // Put the record back as the setup file left it.
     await env.DB.batch([
       env.DB.prepare("DELETE FROM d1_migrations WHERE name LIKE 'local_%'"),
@@ -74,17 +75,15 @@ describe("the schema gate (SPEC §9)", () => {
     expect(await res.json()).toEqual({ status: "ok", service: "kestrel" });
   });
 
-  it("/health names the missing migration and the command that applies it to the deployed database", async () => {
+  it("/health names the missing migration and both forms of the command outside local development", async () => {
     allowErrorLogs("schema.behind");
     await unapply(LATEST);
     const res = await fetchOn(fresh(undefined, VARS_DEPLOYED), "/health");
     expect(res.status).toBe(500);
-    const command = "npx wrangler d1 migrations apply DB --remote --env production";
     expect(await res.json()).toEqual({
       error: "schema_behind",
       missing: [LATEST],
-      command,
-      message: `The database is missing a migration this release needs (${LATEST}). Apply it: ${command}`,
+      message: `The database is missing a migration this release needs (${LATEST}). Apply it: npx wrangler d1 migrations apply DB --remote --env production for the deployed app, or --local --env production under a local wrangler dev. If it says there is nothing to apply, run npm run sync-migrations first, which copies the release's migrations into migrations/.`,
     });
   });
 
@@ -103,17 +102,46 @@ describe("the schema gate (SPEC §9)", () => {
     expect(res.status).toBe(200);
   });
 
-  it("tells a local server its local command: --local, and the environment's name when it isn't dev", async () => {
+  it("gives local development its --local command alone, and anything else both forms, whatever the request's host", async () => {
     allowErrorLogs("schema.behind");
     await unapply(LATEST);
-    // The suite's env is dev-shaped: local development's own database.
-    const dev = await readJson(await fetchOn(fresh(), "http://localhost:8787/health"));
-    expect(dev.command).toBe("npx wrangler d1 migrations apply DB --local");
-    // `wrangler dev --env production` on this machine: the production settings' local database.
-    const local = await readJson(
-      await fetchOn(fresh(undefined, VARS_DEPLOYED), "http://localhost:8787/health"),
-    );
-    expect(local.command).toBe("npx wrangler d1 migrations apply DB --local --env production");
+    for (const url of ["http://localhost:8787/health", "https://newsletter.example.com/health"]) {
+      // The suite's env is dev-shaped: local development's own database.
+      const dev = (await readJson(await fetchOn(fresh(), url))).message;
+      expect(dev, url).toMatch(/Apply it: npx wrangler d1 migrations apply DB --local$/);
+      // Any other env can't tell deployed from a local `wrangler dev`, so it names both.
+      const other = (await readJson(await fetchOn(fresh(undefined, VARS_DEPLOYED), url))).message;
+      expect(other, url).toContain(
+        "npx wrangler d1 migrations apply DB --remote --env production for the deployed app",
+      );
+      expect(other, url).toContain("or --local --env production under a local wrangler dev");
+    }
+  });
+
+  it("lets the request through, logging once, when the check can't read the database at all", async () => {
+    const warn = vi.spyOn(console, "warn");
+    const real = env.DB;
+    const unreachable = {
+      prepare: (sql: string) =>
+        sql.includes("d1_migrations")
+          ? ({
+              all: () => Promise.reject(new Error("D1_ERROR: network connection lost")),
+            } as unknown as D1PreparedStatement)
+          : real.prepare(sql),
+      batch: (s: D1PreparedStatement[]) => real.batch(s),
+    } as unknown as D1Database;
+    expect((await fetchOn(fresh(unreachable), "/health")).status).toBe(200);
+    expect((await fetchOn(fresh(unreachable), "/")).status).toBe(200);
+    expect(logged(warn).filter((l) => l.event === "schema.unchecked")).toHaveLength(1);
+  });
+
+  it("reads a current database once per isolate, not on every request", async () => {
+    const guarded = guardD1(env.DB);
+    const e = fresh(guarded.db);
+    expect((await fetchOn(e, "/health")).status).toBe(200);
+    expect(guarded.statements).toBe(1);
+    expect((await fetchOn(e, "/health")).status).toBe(200);
+    expect(guarded.statements).toBe(1);
   });
 
   it("answers the API with the same refusal before authentication, for the editor to show", async () => {

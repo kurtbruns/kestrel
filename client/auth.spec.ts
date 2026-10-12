@@ -76,6 +76,23 @@ describe("the boot probe", () => {
     expect(document.querySelector("#app #reauth")).toBeNull();
   });
 
+  it("shows a database behind the release as the refusal wall, never the Access-locked or sign-in wall (SPEC §9)", async () => {
+    const behind = {
+      error: "schema_behind",
+      missing: ["0003_post_slug_auto.sql"],
+      message: "The database is missing a migration this release needs (0003_post_slug_auto.sql).",
+    };
+    fake = fakeApi([
+      { path: "/api/dev/token", reply: () => jsonResponse(behind, 500) },
+      { path: "/api/whoami", reply: () => jsonResponse(behind, 500) },
+    ]);
+    expect(await probeSession()).toBeNull();
+    expect($("#app .config-wall h2").textContent).toBe("The database needs updating");
+    expect($("#app .config-wall .config-wall-problem").textContent).toBe(behind.message);
+    expect(document.querySelector("#app .access-wall")).toBeNull();
+    expect(document.querySelector("#app #reauth")).toBeNull();
+  });
+
   it("sends anything else that fails to the sign-in wall", async () => {
     fake = fakeApi([
       { path: "/api/dev/token", reply: () => jsonResponse({ error: "not_found" }, 404) },
