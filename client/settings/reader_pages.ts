@@ -40,6 +40,10 @@ const JOURNEY_ICONS: Record<ReaderJourneyId, IconName> = {
 /** The width a preview is framed at: the page as a reader's window shows it, or a phone. */
 type PreviewWidth = "desktop" | "phone";
 
+/** A peer's mark: a dot drawn in CSS rather than a "·" glyph, which sits wherever the font
+ *  puts it, so the circle's own centering places it exactly. */
+const PEER_DOT = html`<span class="set-rp-dot"></span>`;
+
 /** One row of the outline: a step's number, a peer's dot, or an off-path page's branch. */
 function outlineRow(j: ReaderJourney, s: ReaderPageState, mark: Html | string): Html {
   return html`<li><button type="button" class="set-rp-item${s.offPath ? " off" : ""}" data-journey="${j.id}" data-state="${s.id}" aria-current="false"><span class="set-rp-mark" aria-hidden="true">${mark}</span>${s.label}</button></li>`;
@@ -56,7 +60,7 @@ function outline(): Html {
     return html`<div class="set-rp-journey" data-journey="${j.id}">
       <h3 class="set-rp-jhead" id="rpJourney-${j.id}">${icon(JOURNEY_ICONS[j.id])}${j.label}</h3>
       <ul class="set-rp-list${steps ? " steps" : ""}" aria-labelledby="rpJourney-${j.id}">
-        ${states.filter((s) => !s.offPath).map((s, i) => outlineRow(j, s, steps ? String(i + 1) : "·"))}
+        ${states.filter((s) => !s.offPath).map((s, i) => outlineRow(j, s, steps ? String(i + 1) : PEER_DOT))}
       </ul>
       <ul class="set-rp-list" aria-label="${j.label}, off the main path">
         ${states.filter((s) => s.offPath).map((s) => outlineRow(j, s, icon("branch")))}

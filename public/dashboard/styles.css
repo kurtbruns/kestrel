@@ -5430,6 +5430,12 @@ button.set-field-remove {
   border-style: dashed;
   background: transparent;
 }
+.set-rp-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: currentColor;
+}
 .set-rp-mark svg {
   width: 11px;
   height: 11px;

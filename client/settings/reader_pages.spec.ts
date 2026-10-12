@@ -74,7 +74,9 @@ describe("reader pages section (SPEC §5)", () => {
     );
     const marks = (journey: string) =>
       $$(`.set-rp-journey[data-journey="${journey}"] .set-rp-item`).map((b) => ({
-        mark: $(".set-rp-mark", b).textContent?.trim(),
+        mark: $(".set-rp-mark", b).querySelector(".set-rp-dot")
+          ? "dot"
+          : $(".set-rp-mark", b).textContent?.trim(),
         off: b.classList.contains("off"),
       }));
     expect(marks("confirm")).toEqual([
@@ -85,9 +87,9 @@ describe("reader pages section (SPEC §5)", () => {
     ]);
     // Reading's pages are peers, so they carry no numbers.
     expect(marks("reading")).toEqual([
-      { mark: "·", off: false },
-      { mark: "·", off: false },
-      { mark: "·", off: false },
+      { mark: "dot", off: false },
+      { mark: "dot", off: false },
+      { mark: "dot", off: false },
       { mark: "", off: true },
       { mark: "", off: true },
       { mark: "", off: true },
@@ -99,6 +101,18 @@ describe("reader pages section (SPEC §5)", () => {
       );
     expect(threaded("confirm")).toEqual(["ready", "confirmed"]);
     expect(threaded("reading")).toEqual([]);
+  });
+
+  it("marks a Reading peer with a drawn dot, not a text glyph", async () => {
+    await open();
+    const peers = $$('.set-rp-journey[data-journey="reading"] .set-rp-item:not(.off) .set-rp-mark');
+    expect(peers.length).toBeGreaterThan(0);
+    for (const mark of peers) {
+      // An empty element the circle centers exactly; a "·" sits wherever the font puts it.
+      expect(mark.children).toHaveLength(1);
+      expect(mark.firstElementChild?.classList.contains("set-rp-dot")).toBe(true);
+      expect(mark.textContent).toBe("");
+    }
   });
 
   it("opens on the subscribe form, framed so no form on it submits", async () => {
