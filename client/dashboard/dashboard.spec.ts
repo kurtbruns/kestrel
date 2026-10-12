@@ -308,7 +308,7 @@ describe("dashboard", () => {
     srv.edit("x2", { status: "sending", started_at: Date.now(), c_pending: 30, c_accepted: 10 });
     await vi.advanceTimersByTimeAsync(3000);
     expect(cards()).toEqual([]);
-    expect($("#dashActive .active-stat").textContent).toMatch(/^Sending — 10 of 40 accepted/);
+    expect($("#dashActive .active-stat").textContent).toMatch(/^Sending: 10 of 40 accepted/);
     expect(document.body.textContent).not.toMatch(/Sending now/);
   });
 

@@ -31,6 +31,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - A send held because no email provider is connected reads once on the dashboard and the Sent page, one red message with the not-connected state instead of two, and its advice, there and on the send's page, links to Connect an email provider and says "then deploy" rather than "then deploy again". In the local not-connected preview it says to restart `npm run dev` without `SIMULATE_SENDS=not-connected`, which the settings API now reports as `deployment.notConnectedPreview`.
 - The editor offers one Primary action per page: the dashboard's Quick actions New post and Settings' Edit template are now ordinary buttons, beside the page's own New post and the save bar's Save.
 - The "Read-only · set at deploy" tag in Settings, and the note under it, are neutral grey rather than amber, since a value set at deploy is not a warning.
+- The editor's wording uses typographic apostrophes and no em dashes, so the embeddable form's "We’ll email you a link" now matches the hosted subscribe page.
 
 ### Fixed
 
@@ -43,6 +44,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - `kestrel init` ends by pointing to the setup guide on getkestrel.dev, and a new instance's `.dev.vars.example` links the Configuration reference there, instead of paths that don't exist in an instance.
 - The Resolve dialog says Assume sent records the recipients as accepted by your provider, with delivery still waiting on a receipt, rather than as delivered (SPEC §12).
 - Dialogs keep keyboard focus inside them, start it on their first control, and return it to whatever opened them when they close; the ⋯ row menus on Drafts and Subscribers open with focus on their first item and move with the arrow keys, Home, and End, and Escape closes them. The session-expired wall moves focus to its heading like the other walls, and stays put when more requests fail behind it.
+- An error in a dialog, such as a test with no recipients, an address that isn't one, or a reschedule the server refused, shows inside the dialog, under the field at fault, instead of in a toast that sat dimmed behind it. Settings shows any failed save in the save bar, and a logo that couldn't be saved says why under its tile.
 
 ## [1.7.0] - 2026-10-12
 

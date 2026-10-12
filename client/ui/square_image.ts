@@ -45,13 +45,13 @@ export async function squareImage(file: Blob, size: number): Promise<SquaredImag
     canvas.height = size;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
-      throw new Error("This browser can't prepare the image.");
+      throw new Error("This browser can’t prepare the image.");
     }
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(bitmap, x, y, side, side, 0, 0, size, size);
     const png = await new Promise<Blob>((resolve, reject) =>
       canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error("This browser can't prepare the image."))),
+        (b) => (b ? resolve(b) : reject(new Error("This browser can’t prepare the image."))),
         "image/png",
       ),
     );

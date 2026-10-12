@@ -191,7 +191,7 @@ function renderDocPage(
   const cur = docs[at];
   if (!cur) {
     // A stale or renamed deep link shouldn't masquerade as a doc — heal to the index.
-    toast(`No doc named “${slug}” — showing the index.`);
+    toast(`No doc named “${slug}”, so here’s the index.`);
     history.replaceState(history.state, "", "#/docs");
     renderDocsIndex(root, landing, docs);
     return;
@@ -353,7 +353,7 @@ function renderDocPage(
           btn.textContent = "Copy";
         }, 1500);
       } catch {
-        toast("Couldn't copy to clipboard");
+        toast("Couldn’t copy to clipboard");
       }
     });
     pre.appendChild(btn);

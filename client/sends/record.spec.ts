@@ -822,7 +822,7 @@ describe("sent record", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect($(".phase-pill").textContent).toBe("Sending");
     expect($(".wbar-sub").textContent).toMatch(
-      /^Paused between ticks — it resumes on the next sweep\. · ~30\/min · ETA 2 min$/,
+      /^Paused between ticks\. It resumes on the next sweep\. · ~30\/min · ETA 2 min$/,
     );
     between = false;
     await vi.advanceTimersByTimeAsync(3000);

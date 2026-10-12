@@ -37,7 +37,7 @@ export async function copyWith(button: HTMLElement, text: string): Promise<void>
   try {
     await navigator.clipboard.writeText(text);
   } catch {
-    toast("Couldn't copy to clipboard");
+    toast("Couldn’t copy to clipboard");
     return;
   }
   const prior = pending.get(button);

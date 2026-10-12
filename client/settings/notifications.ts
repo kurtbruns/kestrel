@@ -23,7 +23,7 @@ function notifyChannelLabel(
 ): string {
   switch (channel) {
     case "cloudflare":
-      return "Cloudflare Email, separate from your newsletter's provider";
+      return "Cloudflare Email, separate from your newsletter’s provider";
     case "provider":
       return provider === "none"
         ? "Your email provider, once one is connected"
@@ -79,7 +79,7 @@ export function notificationsSection(page: SettingsPage): Html {
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notifyFrom}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notificationStatus)}</div>
         </div>
-        <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notifyChannel === "provider" ? "Notifications go through your newsletter's own provider, so one about the provider refusing your account cannot reach you; Cloudflare's email avoids that. " : ""}See the <a class="set-link" href="#/docs/notifications">setup guide</a>.</span></div>
+        <div class="set-note">${icon("readonly")}<span>The channel and its sender are set at deploy. ${d.notifyChannel === "provider" ? "Notifications go through your newsletter’s own provider, so one about the provider refusing your account cannot reach you; Cloudflare’s email avoids that. " : ""}See the <a class="set-link" href="#/docs/notifications">setup guide</a>.</span></div>
       </div>
     </section>`;
 }

@@ -45,7 +45,7 @@ export class ApiError extends Error {
   }
 }
 
-const REAUTH_MESSAGE = "Not authorized — please sign in again.";
+const REAUTH_MESSAGE = "Not authorized. Sign in again.";
 
 async function send(path: string, opts: ApiOptions): Promise<Response> {
   const headers: Record<string, string> = { ...authHeaders(), ...(opts.headers ?? {}) };

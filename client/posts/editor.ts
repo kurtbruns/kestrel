@@ -140,7 +140,7 @@ export async function renderEditor(
     // A Retry can only fail again for a post that isn't there (gone since the last read,
     // or a link to one that never was), so it goes to Drafts instead.
     if (isNotFound(e)) {
-      removed("There's no post here. It may have been deleted.");
+      removed("There’s no post here. It may have been deleted.");
       return;
     }
     renderError(root, message(e), remount);
@@ -214,7 +214,7 @@ export async function renderEditor(
         <div>
           <div class="label-row">
             <label for="f-slug">Slug</label>
-            ${infoTip("The web address of this post's archive page.")}
+            ${infoTip("The web address of this post’s archive page.")}
           </div>
           <input id="f-slug" value="${post.slug}"${ro}>
           ${locked ? null : html`<label class="slug-auto-toggle"><input type="checkbox" id="f-slug-auto">Auto-generate from subject</label>`}
@@ -360,7 +360,7 @@ export async function renderEditor(
       reflect();
       markEdited(); // the checkbox changes what a save sends without an input event
       if (autoEl.checked) {
-        saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`));
+        saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`));
       } else {
         slugEl.focus();
         slugEl.select();
@@ -396,7 +396,7 @@ export async function renderEditor(
   // so a navigation or the re-auth wall ends it. Declared before any path that can save
   // (the Preview tab saves first), since saveDraft cancels it.
   const mine = createAutosave(() => {
-    saveDraft(true).catch((e) => toast(`Couldn't autosave — ${message(e)}`));
+    saveDraft(true).catch((e) => toast(`Couldn’t autosave: ${message(e)}`));
   });
   onAbort(signal, () => mine.cancel());
 
@@ -745,13 +745,13 @@ export async function renderEditor(
       .catch((e) => {
         if (isNotFound(e)) {
           // The reader has left, and their edits with the page: say what happened to them.
-          toast("This post was deleted elsewhere, so your last edits weren't saved.");
+          toast("This post was deleted elsewhere, so your last edits weren’t saved.");
           return;
         }
         toast(
           e instanceof ApiError && e.status === 409
-            ? "Changed elsewhere — your edits weren't saved"
-            : `Couldn't save your changes — ${message(e)}`,
+            ? "Changed elsewhere, so your edits weren’t saved"
+            : `Couldn’t save your changes: ${message(e)}`,
         );
       });
     trackSaves(saveChain);
@@ -784,7 +784,7 @@ export async function renderEditor(
     }
     for (const el of [subjectEl, slugEl]) {
       el.addEventListener("blur", () =>
-        saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`)),
+        saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`)),
       );
       // Enter commits a one-line field the way leaving it does, but not the Enter that ends
       // an IME composition, which Safari reports with isComposing false and keyCode 229.
@@ -793,7 +793,7 @@ export async function renderEditor(
           e.preventDefault();
           saveDraft(true)
             .then(applyHeld) // Enter commits the slug, so show what it saved as
-            .catch((err) => toast(`Couldn't save — ${message(err)}`));
+            .catch((err) => toast(`Couldn’t save: ${message(err)}`));
         }
       });
     }
@@ -831,7 +831,7 @@ export async function renderEditor(
       const who = friendlyAuthor(conflict.author);
       setHtml(
         freshnessEl,
-        html`<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? html` — last edited by <strong>${who}</strong>` : null}. Saving is paused until you choose: Reload to load that version (discards your unsaved edits), or Keep editing to keep yours, and your next save overwrites that version.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`,
+        html`<span><span aria-hidden="true">⚠️</span> This draft was changed elsewhere${who ? html`, last edited by <strong>${who}</strong>` : null}. Saving is paused until you choose: Reload to load that version (discards your unsaved edits), or Keep editing to keep yours, and your next save overwrites that version.</span><span class="row"><button type="button" class="ghost" id="freshReload">Reload</button><button type="button" class="ghost" id="freshKeep">Keep editing</button></span>`,
       );
     }
     freshnessEl.hidden = false;
@@ -904,7 +904,7 @@ export async function renderEditor(
   // it in flight and doesn't send it twice.
   $<HTMLAnchorElement>("#webLink").addEventListener("click", () => {
     if (!locked) {
-      saveDraft(true).catch((e) => toast(`Couldn't save — ${message(e)}`));
+      saveDraft(true).catch((e) => toast(`Couldn’t save: ${message(e)}`));
     }
   });
 
@@ -1200,14 +1200,15 @@ export async function renderEditor(
       .catch(() => {});
     go.onclick = () =>
       busy(go, "Sending…", async () => {
+        m.clearError();
         const { valid: addrs, invalid } = parseAddresses(to.value);
         const notAddresses = invalidAddressesMessage(invalid);
         if (notAddresses) {
-          toast(notAddresses);
+          m.error(notAddresses, to);
           return;
         }
         if (!addrs.length) {
-          toast("Enter at least one email address");
+          m.error("Enter at least one email address", to);
           return;
         }
         try {
@@ -1241,7 +1242,7 @@ export async function renderEditor(
             foundGone(e);
             return;
           }
-          toast(message(e));
+          m.error(message(e));
         }
       });
   };
@@ -1278,10 +1279,11 @@ export async function renderEditor(
 
       const doSchedule = () =>
         busy($<HTMLButtonElement>("#schGo", box), "Scheduling…", async () => {
-          const v = $<HTMLInputElement>("#schWhen", box).value;
-          const t = v ? new Date(v).getTime() : Number.NaN;
+          m.clearError();
+          const whenEl = $<HTMLInputElement>("#schWhen", box);
+          const t = whenEl.value ? new Date(whenEl.value).getTime() : Number.NaN;
           if (Number.isNaN(t)) {
-            toast("Pick a valid date & time");
+            m.error("Pick a valid date & time", whenEl);
             return;
           }
           try {
@@ -1307,12 +1309,13 @@ export async function renderEditor(
               foundGone(e);
               return;
             }
-            toast(message(e));
+            m.error(message(e));
           }
         });
 
       const doSendNow = () =>
         busy($<HTMLButtonElement>("#snGo", box), "Queuing…", async () => {
+          m.clearError();
           try {
             // As in doSchedule: a refused save must not become a frozen send.
             if ((await saveDraft(true)) === "refused") {
@@ -1333,7 +1336,7 @@ export async function renderEditor(
               foundGone(e);
               return;
             }
-            toast(message(e));
+            m.error(message(e));
           }
         });
 

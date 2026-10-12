@@ -18,7 +18,7 @@ import { busy, modal, toast } from "../ui/widgets";
 export function addSubscriberModal(onDone: () => void, signal: AbortSignal): void {
   const notConnected = providerNotConnected();
   const m = modal(
-    html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p>${notConnectedAddLine()}${notConnected ? null : html`<label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com">`}<div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
+    html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won’t receive posts until they confirm.</p>${notConnectedAddLine()}${notConnected ? null : html`<label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com">`}<div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
     signal,
   );
   const go = $<HTMLButtonElement>("#aGo", m.el);
@@ -32,9 +32,10 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
   input.focus();
   go.onclick = () =>
     busy(go, "Adding…", async () => {
+      m.clearError();
       const addr = normalizeEmail(input.value);
       if (!isValidEmail(addr)) {
-        toast("Enter a valid email");
+        m.error("Enter a valid email address", input);
         return;
       }
       try {
@@ -46,7 +47,7 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         toast(addedMessage(addr, r.action));
         onDone();
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e));
+        m.error(e instanceof Error ? e.message : String(e));
       }
     });
 }
@@ -75,13 +76,14 @@ export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: 
   $("#uCancel", m.el).onclick = m.close;
   go.onclick = () =>
     busy(go, "Unsubscribing…", async () => {
+      m.clearError();
       try {
         await api(`/api/subscribers/${sub.id}/unsubscribe`, { method: "POST" });
         m.close();
         toast(`Unsubscribed ${sub.email}`);
         onDone();
       } catch (e) {
-        toast(e instanceof Error ? e.message : String(e));
+        m.error(e instanceof Error ? e.message : String(e));
       }
     });
 }

@@ -181,7 +181,7 @@ describe("template view", () => {
     $("#savebarSave").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($(".modal .hint").textContent).toMatch(
-      /This template is used by 1 post that's already scheduled/,
+      /This template is used by 1 post that’s already scheduled/,
     );
     $("#rmGo").click();
     await vi.advanceTimersByTimeAsync(0);

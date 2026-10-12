@@ -36,7 +36,7 @@ export function showAccessLocked(): void {
   document.body.classList.add("signed-out");
   setHtml(
     app,
-    html`<div class="card auth-wall access-wall"><h2 tabindex="-1">The editor is locked until you set up Access</h2><p>Until Cloudflare Access is in front of the editor, the app can't tell who is asking, so it lets no one in. On a new deployment, that's expected. Your public pages work as usual.</p><p class="hint"><a href="${ACCESS_GUIDE}" target="_blank" rel="noopener">Lock the dashboard with Access <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="access-reload" class="primary">Reload</button></div>`,
+    html`<div class="card auth-wall access-wall"><h2 tabindex="-1">The editor is locked until you set up Access</h2><p>Until Cloudflare Access is in front of the editor, the app can’t tell who is asking, so it lets no one in. On a new deployment, that’s expected. Your public pages work as usual.</p><p class="hint"><a href="${ACCESS_GUIDE}" target="_blank" rel="noopener">Lock the dashboard with Access <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="access-reload" class="primary">Reload</button></div>`,
   );
   $("#access-reload", app).onclick = () => location.reload();
   $<HTMLElement>(".access-wall h2", app).focus();

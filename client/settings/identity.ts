@@ -10,7 +10,7 @@ import { icon } from "../ui/icons";
 import { squareImage } from "../ui/square_image";
 import { busy, toast } from "../ui/widgets";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
-import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
+import { remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 
 /** The note under the card: where the identity shows up (the sample email shows which
  *  fields) and, only while posts are scheduled, that a save reaches them too (SPEC §9).
@@ -205,13 +205,8 @@ export function mountIdentity(
     page.changed();
     toast(savedToast(done, r.remade));
   };
-  const logoFailed = (err: unknown) => {
-    if (isRemakeTooClose(err)) {
-      showLogoError(message(err));
-    } else {
-      toast(message(err));
-    }
-  };
+  // The logo has no save bar, so whatever kept it from saving is said under its tile.
+  const logoFailed = (err: unknown) => showLogoError(message(err));
   logoInput.onchange = async () => {
     const file = logoInput.files?.[0];
     logoInput.value = "";

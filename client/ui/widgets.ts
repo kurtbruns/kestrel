@@ -64,7 +64,18 @@ export const badge = (status: string): Html => html`<span class="badge ${status}
 export interface Modal {
   el: HTMLElement;
   close: () => void;
+  /**
+   * Say why the dialog's act didn't go through, inside the dialog: beneath `field` when one
+   * field is at fault (marked invalid, focused, and cleared as soon as it is edited),
+   * otherwise just above the actions. A toast can't carry it: toasts sit beneath the
+   * dialog's backdrop. A second call replaces the first.
+   */
+  error: (message: string, field?: HTMLInputElement | HTMLTextAreaElement) => void;
+  /** Take the error away, as a new try begins. */
+  clearError: () => void;
 }
+
+let dialogErrorSeq = 0;
 
 /**
  * A modal over a backdrop; a click outside or Escape closes it. The content is markup.
@@ -92,6 +103,57 @@ export function modal(content: Html, signal: AbortSignal): Modal {
       trapTab(dialog, e);
     }
   };
+  let errorLine: HTMLElement | null = null;
+  let errorField: HTMLInputElement | HTMLTextAreaElement | null = null;
+  let fieldDescribedBy: string | null = null;
+  const clearError = () => {
+    errorLine?.remove();
+    errorLine = null;
+    if (errorField) {
+      errorField.classList.remove("is-invalid");
+      if (fieldDescribedBy === null) {
+        errorField.removeAttribute("aria-describedby");
+      } else {
+        errorField.setAttribute("aria-describedby", fieldDescribedBy);
+      }
+      errorField.removeEventListener("input", clearError);
+      errorField = null;
+    }
+  };
+  const error = (message: string, field?: HTMLInputElement | HTMLTextAreaElement) => {
+    clearError();
+    const line = document.createElement("div");
+    line.className = field ? "field-error" : "field-error dialog-error";
+    line.id = `dialog-error-${++dialogErrorSeq}`;
+    line.setAttribute("role", "alert");
+    const ico = document.createElement("span");
+    ico.className = "field-error-ico";
+    ico.setAttribute("aria-hidden", "true");
+    ico.textContent = "!";
+    const text = document.createElement("span");
+    text.textContent = message;
+    line.append(ico, text);
+    if (field) {
+      field.after(line);
+      errorField = field;
+      fieldDescribedBy = field.getAttribute("aria-describedby");
+      field.setAttribute(
+        "aria-describedby",
+        fieldDescribedBy ? `${fieldDescribedBy} ${line.id}` : line.id,
+      );
+      field.classList.add("is-invalid");
+      field.addEventListener("input", clearError);
+      field.focus();
+    } else {
+      const actions = dialog.querySelector(".actions");
+      if (actions) {
+        actions.before(line);
+      } else {
+        dialog.append(line);
+      }
+    }
+    errorLine = line;
+  };
   const close = () => {
     const hadFocus = back.contains(document.activeElement);
     back.remove();
@@ -103,7 +165,7 @@ export function modal(content: Html, signal: AbortSignal): Modal {
   };
   if (signal.aborted) {
     // The view is already gone, so the dialog is never shown.
-    return { el: back, close };
+    return { el: back, close, error, clearError };
   }
   document.body.appendChild(back);
   back.addEventListener("click", (e) => {
@@ -120,7 +182,7 @@ export function modal(content: Html, signal: AbortSignal): Modal {
       focusables(dialog)[0]?.focus();
     }
   });
-  return { el: back, close };
+  return { el: back, close, error, clearError };
 }
 
 const FOCUSABLE =

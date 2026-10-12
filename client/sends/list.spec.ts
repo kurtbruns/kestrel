@@ -383,7 +383,7 @@ describe("sent view", () => {
     srv.edit("sch", { status: "sending", started_at: Date.now(), c_pending: 140, c_accepted: 10 });
     await vi.advanceTimersByTimeAsync(3_000);
     expect($("#scheduled").textContent).toMatch(/Nothing scheduled/);
-    expect($(".active-card .active-stat").textContent).toMatch(/^Sending — 10 of 150 accepted/);
+    expect($(".active-card .active-stat").textContent).toMatch(/^Sending: 10 of 150 accepted/);
     expect(document.body.textContent).not.toMatch(/Sending now/);
   });
 

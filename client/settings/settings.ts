@@ -34,7 +34,7 @@ import {
   secHead,
 } from "./page";
 import { mountReaderPages, readerPagesSection } from "./reader_pages";
-import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
+import { remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 import { mountSubscribe, subscribeSection } from "./subscribe";
 
 /** One group of sections, kept together by whom they serve: no heading of its own, since
@@ -65,7 +65,7 @@ const sameCopy = (a: ConfirmationEmailCopy, b: ConfirmationEmailCopy) =>
 export async function renderSettings(root: HTMLElement, signal: AbortSignal): Promise<void> {
   setHtml(
     root,
-    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication's identity, the ways readers subscribe and the pages they land on, the email each post is sent inside, and where Kestrel tells you about your sends. Facts set when Kestrel was deployed come last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
+    html`<div class="settings"><div class="page-head"><h1>Settings</h1><p class="set-lede set-page-lede">Your publication’s identity, the ways readers subscribe and the pages they land on, the email each post is sent inside, and where Kestrel tells you about your sends. Facts set when Kestrel was deployed come last, read-only.</p></div><div id="settingsBody" class="muted">Loading…</div></div>`,
   );
   const body = $("#settingsBody", root);
   let data: SettingsResponse;
@@ -197,13 +197,10 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       page.changed(); // clean now: slides the bar away
       toast(savedToast("Settings saved", r.remade));
     } catch (err) {
-      // A failed save leaves the edits in place (still dirty, so the bar stays up). A send
-      // about to fire is the bar's blocking error, naming when to try again (DESIGN §5).
-      if (isRemakeTooClose(err)) {
-        bar.showError(message(err));
-      } else {
-        toast(message(err));
-      }
+      // A failed save leaves the edits in place (still dirty, so the bar stays up), and the
+      // bar says why, as on the Template page: a toast would sit over the bar and vanish
+      // while the edits it is about are still unsaved (DESIGN §5).
+      bar.showError(message(err));
     }
   }
   function discardSettings() {

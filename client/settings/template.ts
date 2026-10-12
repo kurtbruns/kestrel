@@ -55,9 +55,9 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
     vars: [
       {
         token: "{{ .Post.Body }}",
-        desc: "Your post's Markdown, rendered to HTML.",
+        desc: "Your post’s Markdown, rendered to HTML.",
       },
-      { token: "{{ .Post.Subject }}", desc: "The post's subject line." },
+      { token: "{{ .Post.Subject }}", desc: "The post’s subject line." },
     ],
   },
   {
@@ -79,9 +79,9 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
   {
     group: "Email",
     vars: [
-      { token: "{{ .Email.SentTo }}", desc: "The recipient's address (filled per send)." },
+      { token: "{{ .Email.SentTo }}", desc: "The recipient’s address (filled per send)." },
       { token: "{{ .Email.UnsubscribeURL }}", desc: "Their one-click unsubscribe link." },
-      { token: "{{ .Email.ViewInBrowserURL }}", desc: "The web version's permanent URL." },
+      { token: "{{ .Email.ViewInBrowserURL }}", desc: "The web version’s permanent URL." },
     ],
   },
   {
@@ -786,14 +786,15 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     }
     go.onclick = () =>
       busy(go, isDirty() ? "Saving…" : "Sending…", async () => {
+        m.clearError();
         const { valid: addrs, invalid } = parseAddresses(to.value);
         const notAddresses = invalidAddressesMessage(invalid);
         if (notAddresses) {
-          toast(notAddresses);
+          m.error(notAddresses, to);
           return;
         }
         if (!addrs.length) {
-          toast("Enter at least one email address");
+          m.error("Enter at least one email address", to);
           return;
         }
         // Honest unsaved-changes handling: persist first so the test renders what ships.
@@ -829,7 +830,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
             ),
           );
         } catch (e) {
-          toast(message(e));
+          m.error(message(e));
         }
       });
   };

@@ -71,7 +71,7 @@ describe("copy (DESIGN §1)", () => {
     setHtml(root, copyButton("x", "Copy x"));
     const b = $<HTMLButtonElement>(".copy-btn", root);
     await copyWith(b, "x");
-    expect($("#toasts").textContent).toMatch(/Couldn't copy to clipboard/);
+    expect($("#toasts").textContent).toMatch(/Couldn’t copy to clipboard/);
     expect(b.getAttribute("aria-label")).toBe("Copy x");
     expect(b.classList.contains("copied")).toBe(false);
   });

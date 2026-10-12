@@ -76,7 +76,7 @@ export async function renderSubscribers(
       setHtml(
         $("#subCounts"),
         html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          "Pending: subscribed but hasn't clicked the confirmation email. Confirmed: consented — receives sends. Unsubscribed: opted out. Suppressed: bounced or complained — never mailed, whatever the consent state.",
+          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, and receives sends. Unsubscribed: opted out. Suppressed: bounced or complained, and never mailed, whatever the consent state.",
           { below: true },
         )}</div>`,
       );
@@ -102,9 +102,9 @@ const SUPPRESSION_LABELS: Record<string, string> = {
   manual: "blocked",
 };
 const SUPPRESSION_TIPS: Record<string, string> = {
-  bounce: "Hard bounce — mail to this address failed, so it won't be mailed again.",
-  complaint: "Marked as spam — won't be mailed again, whatever the consent state.",
-  manual: "Manually blocked — won't be mailed.",
+  bounce: "Hard bounce: mail to this address failed, so it won’t be mailed again.",
+  complaint: "Marked as spam, so it won’t be mailed again, whatever the consent state.",
+  manual: "Manually blocked, so it won’t be mailed.",
 };
 function suppressionFlag(s: SubscriberListItem): Html | null {
   if (!s.suppressed) {
@@ -113,7 +113,7 @@ function suppressionFlag(s: SubscriberListItem): Html | null {
   const reason = s.suppression_reason ?? "";
   const label = SUPPRESSION_LABELS[reason] || "suppressed";
   const base =
-    SUPPRESSION_TIPS[reason] || "Suppressed — won't be mailed, whatever the consent state.";
+    SUPPRESSION_TIPS[reason] || "Suppressed, so it won’t be mailed, whatever the consent state.";
   const tip = s.suppression_detail ? `${base} (${s.suppression_detail})` : base;
   return html` <span class="badge suppressed row-flag" title="${tip}">${label}</span>`;
 }

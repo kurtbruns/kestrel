@@ -219,7 +219,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       root,
       html`<div class="dash-head"><div><h1>${pub.name}</h1>${
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
-      }<p class="muted">Let's get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
+      }<p class="muted">Let’s get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
     wireDashActions(root, remount, signal);
     return;
@@ -257,8 +257,8 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const archiveBase =
     (deployment?.archiveOrigin || location.origin) + (deployment?.archiveBasePath || "");
   const pubCardHtml = html`<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code>${copyButton(appOrigin, "Copy the publication's address")}</div>
-    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code>${copyButton(archiveBase, "Copy the archive's address")}</div>
+    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code>${copyButton(appOrigin, "Copy the publication’s address")}</div>
+    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code>${copyButton(archiveBase, "Copy the archive’s address")}</div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 
@@ -542,7 +542,7 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
       ${
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect an email provider</button></li>`
-          : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
+          : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address. The setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
       }
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       ${

@@ -2870,6 +2870,11 @@ textarea.is-invalid {
 .field-error .field-error-ico {
   font-weight: 700;
 }
+/* A dialog's own error, when no one field is at fault: just above its actions, since a
+   toast would sit beneath the dialog's backdrop (DESIGN §5). */
+.modal .dialog-error {
+  margin-top: 12px;
+}
 /* Label + info icon grouped at the top of the slug field. */
 .label-row {
   display: flex;

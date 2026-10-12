@@ -478,6 +478,25 @@ describe("settings view", () => {
     expect($<HTMLInputElement>("#setName").value).toBe("Renamed");
   });
 
+  it("says why any save failed in the bar, not in a toast that would cover it (DESIGN §5)", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () =>
+          jsonResponse({ error: "internal_error", message: "Database unavailable" }, 500),
+      },
+    ]);
+    typeInto($<HTMLInputElement>("#setName"), "Renamed");
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(bar().classList.contains("is-error")).toBe(true);
+    expect($(".savebar-msg").textContent).toMatch(/Database unavailable/);
+    expect($("#toasts").textContent).toBe("");
+    expect($<HTMLInputElement>("#setName").value).toBe("Renamed");
+  });
+
   it("validates a recipient before adding it, and removes one from its chip", async () => {
     await open();
     const input = $<HTMLInputElement>("#recipInput");
@@ -523,7 +542,7 @@ describe("settings view", () => {
     );
     // The reader learns what happens next in their own words, as on the hosted page.
     expect($("#embedCode").textContent).toContain(
-      "We'll email you a link to confirm. Unsubscribe anytime.",
+      "We’ll email you a link to confirm. Unsubscribe anytime.",
     );
     expect($(".set-pf-fine").textContent).toBe(
       "We’ll email you a link to confirm. Unsubscribe anytime.",
@@ -758,9 +777,12 @@ describe("settings view", () => {
     vi.mocked(squareImage).mockRejectedValue(new UnreadableImage());
     pickLogo();
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#toasts").textContent).toBe(
+    // Under the tile, the logo's own error home, since it has no save bar.
+    expect($("#logoError").hidden).toBe(false);
+    expect($("#logoError").textContent).toContain(
       "Couldn’t read that image. Pick a PNG, JPEG, WebP, or GIF.",
     );
+    expect($("#toasts").textContent).toBe("");
     expect(logoPosts()).toHaveLength(0);
   });
 

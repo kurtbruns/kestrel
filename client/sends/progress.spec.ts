@@ -127,7 +127,7 @@ describe("the in-progress card", () => {
   it("reads the watch's numbers: accepted over the audience, and the server's time to finish while handing off", () => {
     const el = card(view({}, 90_000));
     expect($(".active-stat", el).textContent).toBe(
-      "Sending — 60 of 150 accepted · 10 confirmed · ~2 min left",
+      "Sending: 60 of 150 accepted · 10 confirmed · ~2 min left",
     );
     expect($<HTMLElement>(".active-fill", el).style.width).toBe("40%");
     expect(el.querySelector(".active-stuck")).toBeNull();

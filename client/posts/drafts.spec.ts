@@ -95,7 +95,7 @@ describe("drafts view", () => {
     ]);
     await mount(renderDrafts);
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#list").textContent).toMatch(/create your first draft/);
+    expect($("#list").textContent).toMatch(/Create your first draft/);
     typeInto($<HTMLInputElement>(".lt-search"), "zzz");
     await vi.advanceTimersByTimeAsync(300);
     expect($("#list").textContent).toMatch(/No drafts match/);

@@ -101,7 +101,7 @@ export function showConfigProblem(refusal: ConfigRefusal): void {
     : "";
   setHtml(
     app,
-    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">${heading}</h2><p>Kestrel won't run until it's fixed, and nothing is sent in the meantime.</p><p class="config-wall-problem">${refusal.message}</p>${reference}<button id="config-reload" class="primary">Reload</button></div>`,
+    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">${heading}</h2><p>Kestrel won’t run until it’s fixed, and nothing is sent in the meantime.</p><p class="config-wall-problem">${refusal.message}</p>${reference}<button id="config-reload" class="primary">Reload</button></div>`,
   );
   $("#config-reload", app).onclick = () => location.reload();
   $<HTMLElement>(".config-wall h2", app).focus();

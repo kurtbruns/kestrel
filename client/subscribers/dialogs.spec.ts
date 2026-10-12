@@ -23,7 +23,17 @@ describe("addSubscriberModal", () => {
     typeInto($<HTMLInputElement>("#addEmail"), "nope");
     $("#aGo").click();
     expect(fake.calls).toHaveLength(0);
-    expect($("#toasts").textContent).toMatch(/valid email/);
+    // On the field, inside the dialog: a toast would sit beneath the dialog's backdrop.
+    const input = $<HTMLInputElement>("#addEmail");
+    expect(input.classList.contains("is-invalid")).toBe(true);
+    const err = $(".modal .field-error");
+    expect(err.textContent).toContain("Enter a valid email address");
+    expect(input.getAttribute("aria-describedby")).toBe(err.id);
+    expect($("#toasts").textContent).toBe("");
+    // Editing the field takes the error away.
+    typeInto(input, "nope@example.com");
+    expect(document.querySelector(".modal .field-error")).toBeNull();
+    expect(input.classList.contains("is-invalid")).toBe(false);
   });
 
   // DESIGN §2: adding sends a confirmation, so with no provider connected the dialog says

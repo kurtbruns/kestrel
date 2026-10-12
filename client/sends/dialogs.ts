@@ -26,15 +26,16 @@ export function openResolveModal(
   const noun = n === 1 ? "delivery" : "deliveries";
   const m = modal(
     html`<h3>Resolve ${n} ambiguous ${noun}</h3>
-      <p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so there's no way to know whether it was accepted. To avoid mailing anyone twice, the send won't retry ${n === 1 ? "it" : "them"} on its own — so it can't finish until you decide. Neither choice re-sends this post.</p>
-      <p class="hint"><strong>Assume not sent</strong> — recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>
-      <p class="hint"><strong>Assume sent</strong> — recorded as accepted by your provider, with delivery still waiting on its receipt. Choose this only if you've confirmed it in your provider's console.</p>
+      <p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so there’s no way to know whether it was accepted. To avoid mailing anyone twice, the send won’t retry ${n === 1 ? "it" : "them"} on its own, so it can’t finish until you decide. Neither choice re-sends this post.</p>
+      <p class="hint"><strong>Assume not sent</strong>: recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>
+      <p class="hint"><strong>Assume sent</strong>: recorded as accepted by your provider, with delivery still waiting on its receipt. Choose this only if you’ve confirmed it in your provider’s console.</p>
       <div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rUnsent">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
     signal,
   );
   $("#rCancel", m.el).onclick = m.close;
   const doResolve = (btn: HTMLButtonElement, resolution: StuckResolution, verb: string) =>
     busy(btn, "Resolving…", async () => {
+      m.clearError();
       try {
         const res = await api<ResolveResponse>(`/api/sends/${send.id}/resolve`, {
           method: "POST",
@@ -44,7 +45,7 @@ export function openResolveModal(
         toast(res.completed ? "Send completed" : `Marked ${verb}`);
         reload();
       } catch (e) {
-        toast(message(e));
+        m.error(message(e));
       }
     });
   const unsent = $<HTMLButtonElement>("#rUnsent", m.el);
@@ -71,7 +72,7 @@ export function openRescheduleModal(
   const cur = toLocalInput(new Date(currentFireAt));
   const m = modal(
     html`<h3 id="rsHead">Reschedule this post</h3>
-      <p class="hint">Move when it sends (at least ${minLeadText()} out). The content stays frozen and the cancelable window is kept — only the time changes.</p>
+      <p class="hint">Move when it sends (at least ${minLeadText()} out). The content stays frozen and the cancelable window is kept. Only the time changes.</p>
       ${notConnectedRescheduleLine()}
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
@@ -84,10 +85,11 @@ export function openRescheduleModal(
   $("#rsCancel", box).onclick = m.close;
   go.onclick = () =>
     busy(go, "Rescheduling…", async () => {
+      m.clearError();
       const v = when.value;
       const t = v ? new Date(v).getTime() : Number.NaN;
       if (Number.isNaN(t)) {
-        toast("Pick a valid date & time");
+        m.error("Pick a valid date & time", when);
         return;
       }
       try {
@@ -108,7 +110,7 @@ export function openRescheduleModal(
           readSendsNow();
           return;
         }
-        toast(message(e));
+        m.error(message(e));
       }
     });
   when.focus();

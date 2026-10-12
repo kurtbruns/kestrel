@@ -117,6 +117,20 @@ describe("modal", () => {
     m.close();
   });
 
+  it("says a failure inside the dialog, above its actions, since a toast would sit beneath its backdrop", () => {
+    const m = modal(html`<p>Sure?</p><div class="actions"><button>Go</button></div>`, live);
+    m.error("The server said no");
+    const line = $(".modal .dialog-error", m.el);
+    expect(line.textContent).toBe("!The server said no");
+    expect(line.getAttribute("role")).toBe("alert");
+    expect(line.nextElementSibling?.classList.contains("actions")).toBe(true);
+    m.error("Still no"); // a second call replaces the first
+    expect(m.el.querySelectorAll(".field-error").length).toBe(1);
+    m.clearError();
+    expect(m.el.querySelector(".field-error")).toBeNull();
+    m.close();
+  });
+
   it("never shows for a view that has already ended", () => {
     const view = new AbortController();
     view.abort();

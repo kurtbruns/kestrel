@@ -111,7 +111,7 @@ function confirmRemake(
         <div><dt>Stays</dt><dd>${one ? "its content and fire time" : "their content and fire times"}</dd></div>
         <div><dt>Next</dt><dd>send yourself a fresh test${one ? "" : " of each"}</dd></div>
         </dl>
-        <p class="hint">To leave scheduled emails as they are while future posts change, you'd need a second template, which Kestrel doesn't offer yet.</p>
+        <p class="hint">To leave scheduled emails as they are while future posts change, you’d need a second template, which Kestrel doesn’t offer yet.</p>
         <div class="actions"><button type="button" id="rmCancel">Cancel</button><button type="button" class="primary" id="rmGo">${verb.action} and apply</button></div>`,
       signal,
     );
@@ -159,7 +159,7 @@ export const REMAKE_TEMPLATE: RemakeVerb = {
   action: "Save",
   gerund: "Saving",
   lead: (n) =>
-    `This template is used by ${n} post${n === 1 ? " that's" : "s that are"} already scheduled.`,
+    `This template is used by ${n} post${n === 1 ? " that’s" : "s that are"} already scheduled.`,
 };
 
 /** The identity surface's lead, for the action the page commits with. */
@@ -167,7 +167,7 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
   action,
   gerund,
   lead: (n) =>
-    `Your name, tagline, address, and logo ride inside every email, including ${n} post${n === 1 ? " that's" : "s that are"} already scheduled.`,
+    `Your name, tagline, address, and logo ride inside every email, including ${n} post${n === 1 ? " that’s" : "s that are"} already scheduled.`,
 });
 
 /**

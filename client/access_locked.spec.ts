@@ -37,7 +37,7 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
     expect(document.body.classList.contains("signed-out")).toBe(true);
     const wall = $("#app .access-wall");
     expect($("h2", wall).textContent).toBe("The editor is locked until you set up Access");
-    expect(wall.textContent).toContain("can't tell who is asking, so it lets no one in");
+    expect(wall.textContent).toContain("can’t tell who is asking, so it lets no one in");
     // The editor's Docs tab is behind the same 401, so the guide is the published one.
     const link = $("a", wall);
     expect(link.getAttribute("href")).toBe(ACCESS_GUIDE);

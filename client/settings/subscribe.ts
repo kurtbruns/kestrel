@@ -35,7 +35,7 @@ export function buildEmbed(mode: EmbedMode, name: string, appOrigin: string): st
       `    <input type="email" name="email" required placeholder="you@example.com" aria-label="Email address" style="flex:1 1 220px;padding:11px 13px;border:1px solid #d6d3cc;border-radius:9px;background:#fff;color:#1b1a17;font:inherit">\n` +
       `    <button type="submit" style="padding:11px 20px;border:1px solid #1b1a17;border-radius:9px;background:#1b1a17;color:#fbfbfa;font:inherit;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap">Subscribe</button>\n` +
       `  </div>\n` +
-      `  <p style="margin:12px 0 0;font-size:12.5px;color:#6b6a63">We'll email you a link to confirm. Unsubscribe anytime.</p>\n` +
+      `  <p style="margin:12px 0 0;font-size:12.5px;color:#6b6a63">We’ll email you a link to confirm. Unsubscribe anytime.</p>\n` +
       `</form>`
     );
   }
@@ -104,7 +104,7 @@ export function subscribeSection(page: SettingsPage): Html {
         "link",
         "Share the page",
         html`<span id="subscribePageLine"></span>`,
-        html`<div class="set-way-body set-way-addr"><code class="set-addr">${subscribeUrl}</code>${copyButton(subscribeUrl, "Copy the subscribe page's address")}<a class="ghost-link" href="${subscribeUrl}" target="_blank" rel="noopener">Open&nbsp;↗</a></div>`,
+        html`<div class="set-way-body set-way-addr"><code class="set-addr">${subscribeUrl}</code>${copyButton(subscribeUrl, "Copy the subscribe page’s address")}<a class="ghost-link" href="${subscribeUrl}" target="_blank" rel="noopener">Open&nbsp;↗</a></div>`,
       )}
       ${way(
         "code",

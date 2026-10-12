@@ -182,7 +182,7 @@ export function activeRowHtml(s: SendView): Html {
       <div class="active-main">
         <a class="card-link active-subj" href="#/sent/${s.id}">${s.subject || html`<em>untitled</em>`}</a>
         <div class="active-bar"><div class="active-fill" style="width:${clampPct(pct)}%"></div></div>
-        <div class="muted active-stat">Sending — ${accepted.toLocaleString()} of ${total.toLocaleString()} accepted${
+        <div class="muted active-stat">Sending: ${accepted.toLocaleString()} of ${total.toLocaleString()} accepted${
           confirmed ? ` · ${confirmed.toLocaleString()} confirmed` : ""
         }${eta}</div>
         ${stuck ? html`<div class="active-stuck">${stuck.message}</div>` : null}

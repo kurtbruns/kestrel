@@ -260,7 +260,7 @@ describe("web version", () => {
     await mount((r, s) => renderWebVersion("gone", r, s));
     await settle();
     expect($(".web-error .error span").textContent).toBe(
-      "There's no post here. It may have been deleted.",
+      "There’s no post here. It may have been deleted.",
     );
     expect(fake.unhandled).toEqual([]);
   });

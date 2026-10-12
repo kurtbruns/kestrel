@@ -186,7 +186,7 @@ export async function renderWebVersion(
       // The API names only what it didn't find ("post"), which says nothing on its own.
       const notFound = e instanceof ApiError && e.status === 404;
       const msg = notFound
-        ? "There's no post here. It may have been deleted."
+        ? "There’s no post here. It may have been deleted."
         : e instanceof Error
           ? e.message
           : String(e);

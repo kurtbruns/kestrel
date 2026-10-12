@@ -49,7 +49,7 @@ export function renderIdentity(): void {
   } else {
     setHtml(
       identity,
-      html`<span class="who dev" title="Local dev — auth is bypassed on localhost">Local dev</span>`,
+      html`<span class="who dev" title="Local dev: sign-in is skipped on localhost">Local dev</span>`,
     );
   }
 }

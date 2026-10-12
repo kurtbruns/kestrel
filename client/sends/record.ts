@@ -88,9 +88,9 @@ const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
 const PHASE_BLURB: Partial<Record<SendPhase, string>> = {
   progressing: "Handing recipients to the provider.",
   retrying: "Some recipients hit a transient error and will be retried.",
-  "backing-off": "Some recipients hit a transient error — they are retried on the next sweep.",
+  "backing-off": "Some recipients hit a transient error. They’re retried on the next sweep.",
   "needs-attention": "Some deliveries are stuck and need a decision.",
-  settling: "Dispatch complete — waiting on delivery receipts.",
+  settling: "Dispatch complete, waiting on delivery receipts.",
 };
 /** When a halted send's next retry is due, relative to now (SPEC §12). */
 function nextRetry(retryAt: number | null): string {
@@ -104,18 +104,18 @@ function nextRetry(retryAt: number | null): string {
 function phaseBlurb(prog: SendView): string {
   const halt = prog.provider.halt;
   if (has(prog, "refused") && halt?.cause === "not_connected") {
-    return `No email provider is connected — nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
+    return `No email provider is connected, so nothing goes out until one is; ${nextRetry(halt.retry_at)}.`;
   }
   if (has(prog, "refused") && halt) {
-    return `The provider is refusing this account — nothing more goes out until it is fixed; ${nextRetry(halt.retry_at)}.`;
+    return `The provider is refusing this account, so nothing more goes out until it’s fixed; ${nextRetry(halt.retry_at)}.`;
   }
   if (prog.phase === "backing-off" && halt?.reason === "unavailable") {
-    return `The provider is unavailable — ${nextRetry(halt.retry_at)}.`;
+    return `The provider is unavailable; ${nextRetry(halt.retry_at)}.`;
   }
   // A send too large for one tick waits for the next with nothing in flight. The server
   // reads that as progressing, since nothing failed; the line says why the bar is still.
   if (prog.phase === "progressing" && prog.counts.in_flight === 0 && prog.counts.pending > 0) {
-    return "Paused between ticks — it resumes on the next sweep.";
+    return "Paused between ticks. It resumes on the next sweep.";
   }
   return PHASE_BLURB[prog.phase] || "";
 }
@@ -220,13 +220,13 @@ function watchBodyHtml(prog: SendView): Html {
         : null
     }
     <div class="wbars">
-      ${progressBar("sending", "Dispatch — provider-accepted", acceptedTotal, prog.audience.count, dispatchSub)}
+      ${progressBar("sending", "Dispatch: provider-accepted", acceptedTotal, prog.audience.count, dispatchSub)}
       ${deliveryBar(
-        "Delivery — webhook-confirmed",
+        "Delivery: webhook-confirmed",
         prog.delivery.confirmed,
         acceptedTotal,
         prog.audience.count,
-        "Delivery lags acceptance — grey is accepted-but-unconfirmed, green fills in as receipts arrive.",
+        "Delivery lags acceptance: grey is accepted but unconfirmed, and green fills in as receipts arrive.",
       )}
     </div>
     ${watchCountsHtml(c)}
@@ -253,7 +253,7 @@ function watchHtml(send: SendView): Html {
         <div class="rec-meta" id="watchMeta">${watchMetaHtml(send)}</div>
       </div>
       <div id="watchBody">${watchBodyHtml(prog)}</div>
-      <p class="rec-note muted">This view updates live while the send is in flight. Delivery receipts keep arriving after dispatch finishes — the record stays accurate as they settle.</p>
+      <p class="rec-note muted">This view updates live while the send is in flight. Delivery receipts keep arriving after dispatch finishes, and the record stays accurate as they settle.</p>
     </div>`;
 }
 
@@ -373,7 +373,7 @@ function outcomeReconHtml(outcomes: DeliveryOutcomes): string {
   // claim a count; a clean send says nothing about suppression at all.
   const suppression =
     outcomes.bounced || outcomes.complained
-      ? " Hard bounces and spam complaints are suppressed automatically, so those addresses won't be mailed again."
+      ? " Hard bounces and spam complaints are suppressed automatically, so those addresses won’t be mailed again."
       : "";
   return `${reconciled}${suppression}`;
 }
@@ -401,10 +401,10 @@ function deliveryOutcome(r: DeliveryRecord): Outcome {
   }
   if (r.event === "bounced") {
     if (r.bounce_kind === "hard") {
-      return { label: "Hard bounce", sw: "warn", hint: "permanent — suppressed the address" };
+      return { label: "Hard bounce", sw: "warn", hint: "permanent, so the address is suppressed" };
     }
     if (r.bounce_kind === "soft") {
-      return { label: "Soft bounce", sw: "warn", hint: "transient — counted, not suppressed" };
+      return { label: "Soft bounce", sw: "warn", hint: "transient, so counted but not suppressed" };
     }
     return { label: "Bounce", sw: "warn" };
   }
@@ -441,7 +441,7 @@ function deliveryEmpty(dstate: DeliveryListState): string {
     return "No recipients match that address.";
   }
   if (dstate.view === "failures") {
-    return "No delivery failures — every recipient was accepted or delivered.";
+    return "No delivery failures. Every recipient was accepted or delivered.";
   }
   if (dstate.view === "delivered") {
     return "No delivery receipts confirmed yet.";
@@ -515,7 +515,7 @@ function renderFrozenRecord(
         <div class="watch-title"><h1>${send.subject || html`<em>untitled</em>`}</h1><span id="recPill">${phasePill(send.phase)}</span></div>
         <div class="rec-meta">Sent ${fmt(sentAt)} · ${total.toLocaleString()} recipients</div>
       </div>
-      <p class="rec-tiles-cap muted">Delivery outcomes — these keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
+      <p class="rec-tiles-cap muted">Delivery outcomes keep updating as receipts arrive; the audience at fire and the published post are fixed.</p>
       <div class="rec-tiles">${outcomeTilesHtml(outcomes)}</div>
       <p class="rec-recon muted">${outcomeReconHtml(outcomes)}</p>
       <div class="rec-actions">
@@ -535,7 +535,7 @@ function renderFrozenRecord(
         <div id="recRows" class="muted">Loading…</div>
         <div id="recPager"></div>
       </div>
-      <p class="rec-note muted">This is the record of what went out — the published post is the exact frozen copy readers received, and nothing here is editable.</p>
+      <p class="rec-note muted">This is the record of what went out: the published post is the exact frozen copy readers received, and nothing here is editable.</p>
     </div>`,
   );
 

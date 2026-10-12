@@ -703,7 +703,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()).toHaveLength(1);
     expect($("#toasts").textContent).toBe(
-      "This post was deleted elsewhere, so your last edits weren't saved.",
+      "This post was deleted elsewhere, so your last edits weren’t saved.",
     );
     expect(location.hash).toBe("#/sent");
   });
@@ -1315,8 +1315,10 @@ describe("editor view", () => {
     $("#tGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.filter((c) => c.url.pathname === "/api/posts/p1/test")).toEqual([]);
-    expect($("#toasts").textContent).toMatch(/Not an email address: typo@gmail/);
-    expect(document.querySelector(".modal")).not.toBeNull(); // left open to fix the typo
+    // Said under the recipients, inside the dialog left open to fix the typo.
+    expect($(".modal .field-error").textContent).toMatch(/Not an email address: typo@gmail/);
+    expect($<HTMLTextAreaElement>("#testTo").classList.contains("is-invalid")).toBe(true);
+    expect($("#toasts").textContent).toBe("");
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -1333,7 +1335,7 @@ describe("editor view", () => {
     typeInto(body(), "mine");
     await vi.advanceTimersByTimeAsync(5000);
     expect(puts()).toHaveLength(1);
-    expect($("#toasts").textContent).toMatch(/Couldn't autosave — disk full/);
+    expect($("#toasts").textContent).toMatch(/Couldn’t autosave: disk full/);
     expect($("#saveStatus").textContent).not.toBe("Saved");
     expect(handle().dirty()).toBe(true);
     expect(handle().beforeLeave()).toBe("confirm"); // a silent flush would fail again
@@ -1353,7 +1355,7 @@ describe("editor view", () => {
     expect(handle().beforeLeave()).toBe("leave");
     await vi.advanceTimersByTimeAsync(0);
     expect(puts()).toHaveLength(1);
-    expect($("#toasts").textContent).toMatch(/Couldn't save your changes — disk full/);
+    expect($("#toasts").textContent).toMatch(/Couldn’t save your changes: disk full/);
   });
 
   it("locks the draft when a save is refused because it left draft elsewhere", async () => {
