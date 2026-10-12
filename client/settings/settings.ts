@@ -11,14 +11,14 @@ import type {
   SettingsSavedResponse,
   SettingsView,
 } from "../../shared/settings";
-import { api } from "../api";
+import { ApiError, api } from "../api";
 import { renderSidebarBrand } from "../brand";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { savebar } from "../ui/savebar";
-import { renderError, toast } from "../ui/widgets";
+import { fieldError, renderError, toast } from "../ui/widgets";
 import { confirmationSection, mountConfirmation } from "./confirmation";
 import { instanceSection, senderSection } from "./deploy";
 import { mountRecipients, mountTemplate, recipientsSection, templateSection } from "./emails";
@@ -199,8 +199,16 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     } catch (err) {
       // A failed save leaves the edits in place (still dirty, so the bar stays up), and the
       // bar says why, as on the Template page: a toast would sit over the bar and vanish
-      // while the edits it is about are still unsaved (DESIGN §5).
-      bar.showError(message(err));
+      // while the edits it is about are still unsaved (DESIGN §5). A refusal naming a field
+      // on the page says why under that field, focuses it, and the bar points there.
+      const input = err instanceof ApiError ? fieldInput(root, err.field) : null;
+      if (input && err instanceof ApiError) {
+        fieldError(input, message(err));
+        input.focus();
+        bar.showError("Not saved: fix the field marked above.");
+      } else {
+        bar.showError(message(err));
+      }
     }
   }
   function discardSettings() {
@@ -212,4 +220,30 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
   }
 
   page.changed();
+}
+
+// The input each settings field the API can name is edited in, by its wire name.
+const FIELD_INPUTS: Record<string, string> = {
+  "publication.name": "#setName",
+  "publication.tagline": "#setTagline",
+  "publication.address": "#setAddress",
+  testRecipients: "#recipInput",
+  "notifications.to": "#notifyTo",
+  "confirmationEmail.subject": "#ceSubject",
+  "confirmationEmail.body": "#ceMessage",
+  "confirmationEmail.buttonLabel": "#ceButton",
+  "confirmationEmail.reassurance": "#ceFooter",
+};
+
+/** The input a refusal's `field` names, when the page shows it; null otherwise. */
+function fieldInput(
+  root: HTMLElement,
+  field: string | null,
+): HTMLInputElement | HTMLTextAreaElement | null {
+  const sel = field ? FIELD_INPUTS[field] : undefined;
+  const el = sel ? root.querySelector(sel) : null;
+  return (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) &&
+    !el.closest("[hidden]")
+    ? el
+    : null;
 }

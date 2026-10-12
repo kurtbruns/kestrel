@@ -1,5 +1,6 @@
 /** Small HTTP error + JSON helpers used across routes. */
 
+import type { ApiErrorBody } from "../../shared/errors";
 import { errorText, log } from "./log";
 
 export class HttpError extends Error {
@@ -58,8 +59,10 @@ export function logUncaught(err: unknown): void {
 /** Turn any thrown value into a JSON error response. */
 export function toErrorResponse(err: unknown): Response {
   if (err instanceof HttpError) {
-    return json({ ...err.details, error: err.code, message: err.message }, err.status);
+    const body: ApiErrorBody = { ...err.details, error: err.code, message: err.message };
+    return json(body, err.status);
   }
   logUncaught(err);
-  return json({ error: "internal_error" }, 500);
+  const body: ApiErrorBody = { error: "internal_error" };
+  return json(body, 500);
 }

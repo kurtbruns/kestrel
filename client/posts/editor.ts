@@ -17,12 +17,14 @@ import {
   connectProviderLink,
   earliestFireAt,
   heldWhenFiresHtml,
+  isTooSoon,
   minLeadText,
   notConnectedScheduleLine,
   notConnectedTestLine,
   notConnectedWarning,
   postArchiveUrl,
   providerNotConnected,
+  tooSoonText,
   withNoProviderNote,
 } from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
@@ -687,8 +689,20 @@ export async function renderEditor(
         return "refused";
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
-      saveError = describeError(e);
-      if (!retryArmed) {
+      // A refusal naming the subject or slug is said under that field, and the cue points
+      // there; the server will refuse the same value again, so it is not retried.
+      const named =
+        e instanceof ApiError ? { subject: subjectEl, slug: slugEl }[e.field ?? ""] : undefined;
+      if (named) {
+        fieldError(named, describeError(e));
+        saveError = "fix the field marked above.";
+      } else {
+        saveError = describeError(e);
+      }
+      // Only a failure that can pass on its own is tried again: no answer, the server's
+      // own trouble, or too many requests at once.
+      const transient = !(e instanceof ApiError) || e.status >= 500 || e.status === 429;
+      if (transient && !retryArmed) {
         retryArmed = true;
         retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
         at(
@@ -1314,7 +1328,7 @@ export async function renderEditor(
       // While no provider is connected the server would refuse both views, so the dialog
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Need it sooner? The soonest is ${minLeadText()} out, still cancelable.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView, signal);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1335,6 +1349,10 @@ export async function renderEditor(
           const t = whenEl.value ? new Date(whenEl.value).getTime() : Number.NaN;
           if (Number.isNaN(t)) {
             m.error("Pick a valid date & time", whenEl);
+            return;
+          }
+          if (isTooSoon(t)) {
+            m.error(tooSoonText(true), whenEl);
             return;
           }
           try {
@@ -1358,6 +1376,15 @@ export async function renderEditor(
             if (isNotFound(e)) {
               m.close();
               foundGone(e);
+              return;
+            }
+            // The server's clock is the authority on the lead; its refusal is said the same
+            // way as the editor's own check, under the picker.
+            if (e instanceof ApiError && e.field === "fire_at") {
+              m.error(
+                e.code === "fire_at_too_soon" ? tooSoonText(true) : message(e),
+                $<HTMLInputElement>("#schWhen", box),
+              );
               return;
             }
             m.error(message(e));

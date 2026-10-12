@@ -5,6 +5,7 @@
 // fetch, so a spec stands in for the API by scripting fetch and the real functions run
 // over it.
 
+import type { ApiErrorBody } from "../shared/errors";
 import { accessNotConfigured, showAccessLocked } from "./access_locked";
 import { authHeaders, showReauth } from "./auth";
 import { configRefusal, showConfigProblem } from "./config_problem";
@@ -40,8 +41,15 @@ export class ApiError extends Error {
   /** The API's error code (`error` on the body), such as `cursor_ahead`, or null when the
    *  body carried none. */
   get code(): string | null {
-    const d = this.data as { error?: unknown } | null;
+    const d = this.data as Partial<ApiErrorBody> | null;
     return typeof d?.error === "string" ? d.error : null;
+  }
+
+  /** The request field a refusal is about (`field` on the body), dotted for a nested one,
+   *  or null when the refusal names none. */
+  get field(): string | null {
+    const d = this.data as Partial<ApiErrorBody> | null;
+    return typeof d?.field === "string" ? d.field : null;
   }
 }
 

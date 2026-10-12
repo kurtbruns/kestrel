@@ -51,6 +51,21 @@ export function minLeadText(): string {
 }
 
 /**
+ * Why a picked time is refused for being too soon, in the publisher's words (SPEC §6): the
+ * lead is what keeps a window to cancel in. Where the dialog offers Send now, it says that
+ * is the way to the soonest send.
+ */
+export function tooSoonText(offersSendNow: boolean): string {
+  const why = `Pick a time at least ${minLeadText()} from now, so there’s a window to cancel in.`;
+  return offersSendNow ? `${why} For the soonest send, use Send now below.` : why;
+}
+
+/** Whether a picked time is inside the minimum lead, checked before asking the server. */
+export function isTooSoon(fireAt: number, now = Date.now()): boolean {
+  return fireAt < now + minLeadMs();
+}
+
+/**
  * The earliest time a send-time picker offers: one lead out, plus the minute the picker
  * can't show (it reads to the minute) and the moment the publisher spends choosing, so the
  * time it proposes is still outside the lead when it reaches the server.

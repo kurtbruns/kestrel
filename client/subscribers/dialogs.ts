@@ -3,7 +3,7 @@
 
 import { isValidEmail, normalizeEmail } from "../../shared/email";
 import type { SubscribeAction, SubscribeResponse, Subscriber } from "../../shared/subscribers";
-import { api, describeError } from "../api";
+import { ApiError, api, describeError } from "../api";
 import { notConnectedAddLine, providerNotConnected } from "../deployment";
 import { $ } from "../ui/dom";
 import { html } from "../ui/html";
@@ -47,7 +47,8 @@ export function addSubscriberModal(onDone: () => void, signal: AbortSignal): voi
         toast(addedMessage(addr, r.action));
         onDone();
       } catch (e) {
-        m.error(describeError(e));
+        // A refusal about the address goes under it; anything else, above the buttons.
+        m.error(describeError(e), e instanceof ApiError && e.field === "email" ? input : undefined);
       }
     });
 }

@@ -179,9 +179,20 @@ describe("settings surface", () => {
     expect(body.settings.testRecipients).toEqual(["you@example.com", "team@example.com"]);
   });
 
-  it("rejects an invalid address with 400", async () => {
+  it("rejects an invalid address with a 400 that names the field, so a client can mark it", async () => {
     const res = await putSettings({ testRecipients: ["not-an-email"] });
     expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: "bad_request",
+      message: "not a valid email address: not-an-email",
+      field: "testRecipients",
+    });
+  });
+
+  it("names the nested field of a refused value, as the API names it", async () => {
+    const res = await putSettings({ notifications: { to: "nope" } });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { field?: string }).field).toBe("notifications.to");
   });
 
   it("rejects a non-list testRecipients with 400", async () => {

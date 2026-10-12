@@ -498,6 +498,33 @@ describe("settings view", () => {
     expect($<HTMLInputElement>("#setName").value).toBe("Renamed");
   });
 
+  it("marks the input a refused save names, and the bar points there", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "PUT",
+        path: "/api/settings",
+        reply: () =>
+          jsonResponse(
+            {
+              error: "bad_request",
+              message: "not a valid email address: nope",
+              field: "notifications.to",
+            },
+            400,
+          ),
+      },
+    ]);
+    typeInto($<HTMLInputElement>("#notifyTo"), "nope");
+    $("#savebarSave").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const input = $<HTMLInputElement>("#notifyTo");
+    expect(input.classList.contains("is-invalid")).toBe(true);
+    expect($("#notifyTo + .field-error").textContent).toContain("not a valid email address: nope");
+    expect(document.activeElement).toBe(input);
+    expect($(".savebar-msg").textContent).toBe("Not saved: fix the field marked above.");
+  });
+
   it("says why any save failed in the bar, not in a toast that would cover it (DESIGN §5)", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

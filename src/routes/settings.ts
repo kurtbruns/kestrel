@@ -45,11 +45,19 @@ import {
   newLogoKey,
   publicationLogoUrl,
   resolveConfirmationEmail,
+  SettingsFieldError,
   type SettingsPatch,
   withPublicationLogo,
 } from "../db/settings";
 import type { Config } from "../env";
-import { type JsonObject, optObject, optString, optStringList, readJsonObject } from "../lib/body";
+import {
+  fieldError,
+  type JsonObject,
+  optObject,
+  optString,
+  optStringList,
+  readJsonObject,
+} from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
 import { unwrap } from "../lib/unwrap";
@@ -240,6 +248,9 @@ export async function update(c: RequestContext): Promise<Response> {
   try {
     applyPatch(current, patch);
   } catch (e) {
+    if (e instanceof SettingsFieldError) {
+      throw fieldError(e.field, e.message);
+    }
     throw badRequest(e instanceof Error ? e.message : "invalid settings");
   }
   const { settings, remade } = await saveSettingsRemaking(

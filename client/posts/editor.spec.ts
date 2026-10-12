@@ -1506,6 +1506,80 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says a time inside the minimum lead under the picker, in words, before asking the server (SPEC §6)", async () => {
+    const server = draftServer(draft({ subject: "Owls" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+    ]);
+    $("#scheduleBtn").click();
+    const when = $<HTMLInputElement>("#schWhen");
+    when.value = toLocalInput(new Date(Date.now() + 60_000)); // inside the 5-minute default
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
+    expect(when.classList.contains("is-invalid")).toBe(true);
+    expect($(".modal .field-error").textContent).toContain(
+      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. For the soonest send, use Send now below.",
+    );
+  });
+
+  it("says the server's own minimum-lead refusal the same way, not in the API's words", async () => {
+    const server = draftServer(draft({ subject: "Owls" }));
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
+      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 3 } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/schedule",
+        // The server's clock disagrees with the page's.
+        reply: () =>
+          jsonResponse(
+            {
+              error: "fire_at_too_soon",
+              message:
+                "fire_at must be at least 5 minutes in the future, this deployment's minimum lead; use POST /api/posts/:id/send for the soonest send",
+              field: "fire_at",
+            },
+            400,
+          ),
+      },
+    ]);
+    $("#scheduleBtn").click();
+    $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
+    $("#schGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const err = $(".modal .field-error");
+    expect(err.textContent).toContain("Pick a time at least 5 minutes from now");
+    expect(err.textContent).not.toContain("POST /api");
+    expect($<HTMLInputElement>("#schWhen").classList.contains("is-invalid")).toBe(true);
+  });
+
+  it("marks the field a refused save names, and doesn't retry a value the server will refuse again", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () =>
+          jsonResponse(
+            { error: "bad_request", message: "That address is taken.", field: "slug" },
+            400,
+          ),
+      },
+    ]);
+    typeInto(body(), "mine");
+    await vi.advanceTimersByTimeAsync(5000);
+    expect($("#saveStatus").textContent).toBe("Not saved: fix the field marked above.");
+    expect($("#f-slug").classList.contains("is-invalid")).toBe(true);
+    expect($("#f-slug + .field-error").textContent).toContain("That address is taken.");
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(puts()).toHaveLength(1);
+  });
+
   it("refuses to schedule without a subject, then schedules at the picked time and re-mounts scheduled", async () => {
     // A "now" before the picked fire time (2026-09-25 15:00 local), so the scheduled
     // banner never reads it as already missed, whenever the suite runs.
@@ -1581,7 +1655,7 @@ describe("editor view", () => {
     const intoView = vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});
     typeInto(body(), "mine, not theirs");
     $("#scheduleBtn").click();
-    $<HTMLInputElement>("#schWhen").value = "2026-09-25T15:00";
+    $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     // The save was refused, so nothing was frozen; the dialog is gone and the

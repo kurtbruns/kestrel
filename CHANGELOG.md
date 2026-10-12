@@ -34,6 +34,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The editor's wording uses typographic apostrophes and no em dashes, so the embeddable form's "We’ll email you a link" now matches the hosted subscribe page.
 - A re-made scheduled email now says so in the post's scheduled banner and on the dashboard's scheduled card, until you send a test of it. It is the same fact Claude sees, in place of a notice you could dismiss without testing (SPEC §8).
 - A failed editor save stays on the save cue, in red with the reason, until a save succeeds, and the editor tries again on its own, so it no longer disappears with a toast while the cue reads like ordinary typing. Errors read in plain words rather than codes like "internal_error" or the browser's "Failed to fetch", a test sent to several addresses names the ones that didn't get it and leaves only those in the dialog to try again, and a failed test notification is said once, in its status row.
+- Picking a send time inside the minimum lead says so under the picker, in plain words with Send now as the way to the soonest send, rather than showing the API's message; the Schedule dialog's Send now prompt says the soonest send is one lead out and still cancelable, instead of calling it skipping the review window. When the server refuses a value in a form (Settings, the editor's subject or slug, a send time, a subscriber's address), the field it names is marked and focused.
 
 ### Fixed
 

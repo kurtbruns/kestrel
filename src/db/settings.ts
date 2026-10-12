@@ -383,6 +383,18 @@ export async function updateSettings(db: D1Database, patch: SettingsPatch): Prom
   return updateSettingsWith(db, (current) => applyPatch(current, patch));
 }
 
+/** A value applyPatch refuses, naming the request field it came from (dotted, as the API
+ *  names it), so the route's 400 carries `field` and a client can mark that input. */
+export class SettingsFieldError extends Error {
+  constructor(
+    readonly field: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "SettingsFieldError";
+  }
+}
+
 /** Merge a validated patch onto the current settings (pure; throws on invalid input). */
 export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSettings {
   const next: AppSettings = {
@@ -398,23 +410,36 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
   if (patch.publication !== undefined) {
     const p = patch.publication;
     if (p.name !== undefined) {
-      next.publication.name = normalizeText(p.name, "name", MAX_NAME);
+      next.publication.name = normalizeText(p.name, "name", MAX_NAME, "publication.name");
     }
     if (p.tagline !== undefined) {
-      next.publication.tagline = normalizeText(p.tagline, "tagline", MAX_TAGLINE);
+      next.publication.tagline = normalizeText(
+        p.tagline,
+        "tagline",
+        MAX_TAGLINE,
+        "publication.tagline",
+      );
     }
     if (p.address !== undefined) {
-      next.publication.address = normalizeText(p.address, "address", MAX_ADDRESS);
+      next.publication.address = normalizeText(
+        p.address,
+        "address",
+        MAX_ADDRESS,
+        "publication.address",
+      );
     }
   }
   if (patch.emailTemplate !== undefined) {
     // Structural validation (required variables, warnings) is the route's job; here
     // we only enforce the type + storage cap. "" resets to the built-in default.
     if (typeof patch.emailTemplate !== "string") {
-      throw new Error("emailTemplate must be a string");
+      throw new SettingsFieldError("emailTemplate", "emailTemplate must be a string");
     }
     if (patch.emailTemplate.length > MAX_TEMPLATE) {
-      throw new Error(`emailTemplate must be ${MAX_TEMPLATE} characters or fewer`);
+      throw new SettingsFieldError(
+        "emailTemplate",
+        `emailTemplate must be ${MAX_TEMPLATE} characters or fewer`,
+      );
     }
     next.emailTemplate = patch.emailTemplate;
   }
@@ -424,16 +449,27 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     // value to reject — the confirm link and layout are never the operator's to break.
     const c = patch.confirmationEmail;
     if (c.subject !== undefined) {
-      next.confirmationEmail.subject = normalizeText(c.subject, "subject", MAX_CE_SUBJECT);
+      next.confirmationEmail.subject = normalizeText(
+        c.subject,
+        "subject",
+        MAX_CE_SUBJECT,
+        "confirmationEmail.subject",
+      );
     }
     if (c.body !== undefined) {
-      next.confirmationEmail.body = normalizeText(c.body, "message", MAX_CE_BODY);
+      next.confirmationEmail.body = normalizeText(
+        c.body,
+        "message",
+        MAX_CE_BODY,
+        "confirmationEmail.body",
+      );
     }
     if (c.buttonLabel !== undefined) {
       next.confirmationEmail.buttonLabel = normalizeText(
         c.buttonLabel,
         "button label",
         MAX_CE_BUTTON,
+        "confirmationEmail.buttonLabel",
       );
     }
     if (c.reassurance !== undefined) {
@@ -441,6 +477,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
         c.reassurance,
         "reassurance line",
         MAX_CE_REASSURANCE,
+        "confirmationEmail.reassurance",
       );
     }
   }
@@ -453,11 +490,11 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
 /** One address, trimmed and lowercased, or "" to turn notifications off. */
 function normalizeNotifyTo(raw: unknown): string {
   if (typeof raw !== "string") {
-    throw new Error("notifications address must be a string");
+    throw new SettingsFieldError("notifications.to", "notifications address must be a string");
   }
   const email = normalizeEmail(raw);
   if (email && !isValidEmail(email)) {
-    throw new Error(`not a valid email address: ${raw}`);
+    throw new SettingsFieldError("notifications.to", `not a valid email address: ${raw}`);
   }
   return email;
 }
@@ -478,9 +515,9 @@ export async function setPublicationLogo(
   return updateSettingsWith(db, (current) => withPublicationLogo(current, logo));
 }
 
-function normalizeText(v: unknown, what: string, max: number): string {
+function normalizeText(v: unknown, what: string, max: number, field: string): string {
   if (typeof v !== "string") {
-    throw new Error(`${what} must be a string`);
+    throw new SettingsFieldError(field, `${what} must be a string`);
   }
   return v.trim().slice(0, max);
 }
@@ -488,20 +525,23 @@ function normalizeText(v: unknown, what: string, max: number): string {
 /** Trim, lowercase, validate, dedupe (order-preserving), and cap the list. */
 function normalizeRecipients(input: unknown): string[] {
   if (!Array.isArray(input)) {
-    throw new Error("testRecipients must be a list of email addresses");
+    throw new SettingsFieldError(
+      "testRecipients",
+      "testRecipients must be a list of email addresses",
+    );
   }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of input) {
     if (typeof raw !== "string") {
-      throw new Error("each test recipient must be a string");
+      throw new SettingsFieldError("testRecipients", "each test recipient must be a string");
     }
     const email = normalizeEmail(raw);
     if (!email) {
       continue;
     }
     if (!isValidEmail(email)) {
-      throw new Error(`not a valid email address: ${raw}`);
+      throw new SettingsFieldError("testRecipients", `not a valid email address: ${raw}`);
     }
     if (seen.has(email)) {
       continue;
@@ -510,7 +550,10 @@ function normalizeRecipients(input: unknown): string[] {
     out.push(email);
   }
   if (out.length > MAX_TEST_RECIPIENTS) {
-    throw new Error(`at most ${MAX_TEST_RECIPIENTS} test recipients`);
+    throw new SettingsFieldError(
+      "testRecipients",
+      `at most ${MAX_TEST_RECIPIENTS} test recipients`,
+    );
   }
   return out;
 }

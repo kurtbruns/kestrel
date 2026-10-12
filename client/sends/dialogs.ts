@@ -3,7 +3,13 @@
 
 import type { ResolveResponse, SendSummary, StuckResolution } from "../../shared/sends";
 import { ApiError, api, describeError } from "../api";
-import { earliestFireAt, minLeadText, notConnectedRescheduleLine } from "../deployment";
+import {
+  earliestFireAt,
+  isTooSoon,
+  minLeadText,
+  notConnectedRescheduleLine,
+  tooSoonText,
+} from "../deployment";
 import { readSendsNow } from "../send_state";
 import { $ } from "../ui/dom";
 import { toLocalInput } from "../ui/format";
@@ -92,6 +98,10 @@ export function openRescheduleModal(
         m.error("Pick a valid date & time", when);
         return;
       }
+      if (isTooSoon(t)) {
+        m.error(tooSoonText(false), when);
+        return;
+      }
       try {
         await api(`/api/sends/${sendId}/reschedule`, {
           method: "POST",
@@ -108,6 +118,10 @@ export function openRescheduleModal(
           m.close();
           toast("This post was deleted elsewhere.");
           readSendsNow();
+          return;
+        }
+        if (e instanceof ApiError && e.field === "fire_at") {
+          m.error(e.code === "fire_at_too_soon" ? tooSoonText(false) : message(e), when);
           return;
         }
         m.error(message(e));
