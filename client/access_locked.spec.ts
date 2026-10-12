@@ -59,6 +59,19 @@ describe("the locked editor, before Access is set up (SPEC §11)", () => {
     expect($("#app .auth-wall h2").textContent).toBe("Session expired");
     expect($("#app #reauth").textContent).toBe("Sign in");
     expect(document.querySelector("#app .access-wall")).toBeNull();
+    expect(document.activeElement).toBe($("#app .auth-wall h2"));
+  });
+
+  it("draws the session-expired wall once, however many calls fail", async () => {
+    fake = fakeApi([
+      { path: "/api/posts", reply: () => jsonResponse({ error: "unauthorized" }, 401) },
+    ]);
+    await api("/api/posts").catch(() => {});
+    const wall = $("#app .auth-wall");
+    $<HTMLButtonElement>("#reauth", wall).focus();
+    await api("/api/posts").catch(() => {});
+    expect($("#app .auth-wall")).toBe(wall);
+    expect(document.activeElement).toBe($("#reauth", wall));
   });
 
   it("takes over from a mounted view whose call finds no Access, once however many calls fail", async () => {

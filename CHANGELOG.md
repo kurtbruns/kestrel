@@ -42,7 +42,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The Send now dialog counts who the send will reach, confirmed subscribers less suppressed addresses, rather than every confirmed subscriber (SPEC §6).
 - `kestrel init` ends by pointing to the setup guide on getkestrel.dev, and a new instance's `.dev.vars.example` links the Configuration reference there, instead of paths that don't exist in an instance.
 - The Resolve dialog says Assume sent records the recipients as accepted by your provider, with delivery still waiting on a receipt, rather than as delivered (SPEC §12).
-- Dialogs keep keyboard focus inside them, start it on their first control, and return it to whatever opened them when they close; the ⋯ row menus on Drafts and Subscribers open with focus on their first item and move with the arrow keys, Home, and End, and Escape closes them.
+- Dialogs keep keyboard focus inside them, start it on their first control, and return it to whatever opened them when they close; the ⋯ row menus on Drafts and Subscribers open with focus on their first item and move with the arrow keys, Home, and End, and Escape closes them. The session-expired wall moves focus to its heading like the other walls, and stays put when more requests fail behind it.
 
 ## [1.7.0] - 2026-10-12
 

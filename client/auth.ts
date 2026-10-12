@@ -60,6 +60,11 @@ export function renderIdentity(): void {
  * shouldn't happen, but a reload re-mints, so the same affordance is safe.
  */
 export function showReauth(): void {
+  // Every call in flight fails the same way, so a wall already up is left as it is: drawn
+  // again, it would take focus back from wherever the reader had moved it.
+  if (app.querySelector(".reauth-wall")) {
+    return;
+  }
   // A dead token means every background poll (and a pending editor autosave) now 401s —
   // which is what routed us here. Tear the view down so a walled tab goes quiet instead of
   // re-hitting the API on its timers until reload.
@@ -68,9 +73,11 @@ export function showReauth(): void {
   document.body.classList.add("signed-out");
   setHtml(
     app,
-    html`<div class="card auth-wall"><h2>Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth">Sign in</button></div>`,
+    html`<div class="card auth-wall reauth-wall"><h2 tabindex="-1">Session expired</h2><p class="hint">Your access session ended. Sign in again to continue.</p><button id="reauth" class="primary">Sign in</button></div>`,
   );
   $("#reauth", app).onclick = () => location.reload();
+  // Focus starts on the heading, as on the other walls, so a screen reader begins there.
+  $<HTMLElement>(".reauth-wall h2", app).focus();
 }
 
 // Mint a dev token into localStorage. Returns false when deployed, where the endpoint 404s
