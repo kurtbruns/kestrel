@@ -2,7 +2,7 @@
   "name": "@kurtbruns/kestrel",
   "version": "1.6.0",
   "type": "module",
-  "description": "Newsletter app: write in Markdown, preview, schedule with a review window, and send to a double opt-in list. Cloudflare Worker + D1 + R2 + SES/Resend.",
+  "description": "An open-source, self-hosted newsletter app where you own the list and the archive. Work in the editor, or just ask Claude. Runs on Cloudflare Workers.",
   "license": "MIT",
   "engines": {
     "node": ">=22"
