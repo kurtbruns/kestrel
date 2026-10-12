@@ -1827,8 +1827,7 @@ describe("editor view", () => {
       },
     ]);
     expect($("#schedRemade").hidden).toBe(false);
-    // Its Send test is the editor's own test dialog.
-    $("#schedRemadeTest").click();
+    $("#testBtn").click();
     await vi.advanceTimersByTimeAsync(0);
     typeInto($<HTMLTextAreaElement>("#testTo"), "me@example.com");
     $("#tGo").click();

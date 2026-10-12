@@ -32,7 +32,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The editor offers one Primary action per page: the dashboard's Quick actions New post and Settings' Edit template are now ordinary buttons, beside the page's own New post and the save bar's Save.
 - The "Read-only · set at deploy" tag in Settings, and the note under it, are neutral grey rather than amber, since a value set at deploy is not a warning.
 - The editor's wording uses typographic apostrophes and no em dashes, so the embeddable form's "We’ll email you a link" now matches the hosted subscribe page.
-- A re-made scheduled email now says so in the post's scheduled banner, with Send test beside it, and on the dashboard's scheduled card, until you send a test of it. It is the same fact Claude sees, in place of a notice you could dismiss without testing (SPEC §8).
+- A re-made scheduled email now says so in the post's scheduled banner and on the dashboard's scheduled card, until you send a test of it. It is the same fact Claude sees, in place of a notice you could dismiss without testing (SPEC §8).
 
 ### Fixed
 

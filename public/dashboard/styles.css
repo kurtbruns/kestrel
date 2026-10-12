@@ -2201,6 +2201,10 @@ body.web-mode .content {
 .banner-scheduled .sched-main {
   display: flex;
   flex-direction: column;
+  /* Takes the room and wraps its own lines (the re-made line is a sentence), so Reschedule
+     and Cancel stay at the right rather than dropping below; on a phone the row still wraps. */
+  flex: 1 1 18rem;
+  min-width: 0;
 }
 /* A draft's not-connected line sits above its actions bar, which keeps its own top gap. */
 .health.editor-not-connected {

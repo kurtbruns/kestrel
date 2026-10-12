@@ -199,7 +199,7 @@ export async function renderEditor(
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span> <button type="button" class="ghost" id="schedRemadeTest">Send test</button></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -961,14 +961,14 @@ export async function renderEditor(
     // --- re-made since its last test (SPEC §8): the server's condition, in the banner ---
     // A template or identity change re-made the frozen email, so an earlier test no longer
     // shows what will go out. The server says so until a test of the re-made copy lands,
-    // the same fact Claude reads, and the banner carries it with the test it asks for.
+    // the same fact Claude reads. The banner only says so: Send test email is in the actions
+    // bar below, and a second one here would crowd the banner's own controls.
     const remadeEl = $("#schedRemade");
     const paintRemade = () => {
       const remade = conditionOf(current, "remade");
       remadeEl.hidden = !remade;
       $("#schedRemadeMsg").textContent = remade?.message ?? "";
     };
-    $("#schedRemadeTest").onclick = () => $("#testBtn").click();
     paintRemade();
 
     // --- following the send (DESIGN §4) ---
