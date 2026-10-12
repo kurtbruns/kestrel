@@ -1,5 +1,8 @@
-# Copy to `.dev.vars` (gitignored) for local development.
-# For deployed environments, set these with `wrangler secret put <NAME> --env <env>`.
+# Copy to `.dev.vars` (gitignored) for local development: `npm run dev` reads it, and
+# nothing in it is ever deployed. It holds only what local development uses. A deployed
+# environment's secrets (Access, and the email provider's keys) are stored with
+# `npx wrangler secret put NAME --env production` instead; the Configuration reference
+# (docs/reference/01-configuration.md) lists them. Restart `npm run dev` after a change.
 
 # --- Admin API auth ---
 # Local dev authenticates with a JWT signed by DEV_AUTH_SECRET (the app verifies it
@@ -9,21 +12,6 @@
 # the dev auth path stays fail-closed. In a deployed environment leave it unset; Access
 # is the only gate.
 DEV_AUTH_SECRET="dev-insecure-do-not-deploy"
-
-# --- Cloudflare Access (JWT validation; the deployed gate — optional locally) ---
-ACCESS_TEAM_DOMAIN=""       # e.g. your-team.cloudflareaccess.com
-ACCESS_AUD=""               # the Access application's AUD tag
-ACCESS_ALLOWED_EMAILS=""    # optional CSV allowlist of human admin emails, e.g. you@example.com
-
-# --- Amazon SES (SigV4 over HTTPS via aws4fetch) ---
-AWS_ACCESS_KEY_ID=""
-AWS_SECRET_ACCESS_KEY=""
-SES_CONFIGURATION_SET=""   # config set that publishes bounce/complaint to SNS
-SNS_TOPIC_ARN=""           # the topic the SES webhook accepts; every other topic is refused
-
-# --- Resend (alternate transport) ---
-RESEND_API_KEY=""
-RESEND_WEBHOOK_SECRET=""   # Svix signing secret for webhook verification
 
 # --- Minimum lead ---
 # How long every send stays visible and cancelable before it fires (docs/SPEC.md §6).

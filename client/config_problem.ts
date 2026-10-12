@@ -1,6 +1,6 @@
 // The wall a refused deploy configuration lands on (SPEC §9): while the Worker refuses its
 // configuration, every API call answers `invalid_config` naming the variable, so the editor
-// shows that once, full page, with what to fix, instead of failing call by call.
+// shows that once, full page, with where to fix it, instead of failing call by call.
 
 import { unmount } from "./lifecycle";
 import { app } from "./shell";
@@ -35,8 +35,8 @@ export function configRefusal(data: unknown): ConfigRefusal | null {
  */
 export const CONFIGURATION_REFERENCE = "https://getkestrel.dev/docs/configuration/";
 
-/** Each variable's heading in the Configuration reference, by its GitHub-style anchor. A
- *  secret's is the Secrets table, which is also how the wall tells a secret from a var. */
+/** Each variable's heading in the Configuration reference, by its GitHub-style anchor; a
+ *  secret's is the Secrets table. */
 export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   PROVIDER: "provider",
   APP_ORIGIN: "vars",
@@ -71,31 +71,10 @@ export function referenceUrl(variable: string): string {
   return `${CONFIGURATION_REFERENCE}#${REFERENCE_ANCHORS[variable] ?? REFUSALS_ANCHOR}`;
 }
 
-/** Whether the editor is served from this machine, as `npm run dev` serves it, where the fix
- *  is a local file and a restart rather than a deploy or a stored secret. */
-function isLocalHost(hostname: string): boolean {
-  return (
-    hostname === "localhost" ||
-    hostname === "127.0.0.1" ||
-    hostname === "[::1]" ||
-    hostname.endsWith(".localhost")
-  );
-}
-
-/** How to fix the setting where this editor runs: a local file and a restart in local
- *  development; once deployed, a stored secret, or a var in `wrangler.jsonc` and a deploy. */
-function fixFor(variable: string): Html {
-  if (isLocalHost(location.hostname)) {
-    return html`Fix it in <code>.dev.vars</code>, or in the top-level <code>vars</code> in <code>wrangler.jsonc</code>, then restart <code>npm run dev</code> and reload this page.`;
-  }
-  return REFERENCE_ANCHORS[variable] === "secrets"
-    ? html`It's a secret: store it with <code>npx wrangler secret put ${variable} --env production</code>, naming your environment. A secret takes effect as soon as you store it, so then reload this page.`
-    : html`Fix it in your environment's block in <code>wrangler.jsonc</code>, deploy again, then reload this page.`;
-}
-
 /**
- * Replace the app with the explanation: the variable, the server's words about it, how to
- * fix it, and the reference. The mounted view is torn down first, so nothing keeps calling
+ * Replace the app with the explanation: the server's words about what's wrong, which name
+ * the variable, and the reference, which says how to set it wherever the editor runs.
+ * The how-to lives in the reference, not here, so it can't drift from it. The mounted view is torn down first, so nothing keeps calling
  * an API that can only refuse, and the publication chrome hides, as on the sign-in wall.
  * Every call in flight fails the same way, so a wall already up is left as it is.
  */
@@ -105,10 +84,9 @@ export function showConfigProblem(refusal: ConfigRefusal): void {
   }
   unmount();
   document.body.classList.add("signed-out");
-  const local = isLocalHost(location.hostname);
   setHtml(
     app,
-    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">The configuration needs a fix</h2><p>Kestrel is refusing ${local ? "this" : "this deployment's"} configuration, so nothing works and nothing is sent until it's fixed.${local ? null : " Readers see a page saying the newsletter is temporarily unavailable."}</p><p class="config-wall-problem"><code>${refusal.variable}</code>: ${refusal.message}</p><p class="hint">${fixFor(refusal.variable)}</p><p class="hint"><a href="${referenceUrl(refusal.variable)}" target="_blank" rel="noopener">${refusal.variable} in the Configuration reference <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a>. It's on the project's site, since the editor's own Docs can't load until the configuration is fixed.</p><button id="config-reload" class="primary">Reload</button></div>`,
+    html`<div class="card auth-wall config-wall" role="alert"><h2 tabindex="-1">A setting needs fixing</h2><p>Kestrel won't run until it's fixed, and nothing is sent in the meantime.</p><p class="config-wall-problem">${refusal.message}</p><p class="hint"><a href="${referenceUrl(refusal.variable)}" target="_blank" rel="noopener">${refusal.variable} in the Configuration reference <span aria-hidden="true">↗</span><span class="visually-hidden"> (opens in a new tab)</span></a></p><button id="config-reload" class="primary">Reload</button></div>`,
   );
   $("#config-reload", app).onclick = () => location.reload();
   $<HTMLElement>(".config-wall h2", app).focus();

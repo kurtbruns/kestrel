@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import reference from "../docs/reference/01-configuration.md?raw";
 import { api } from "./api";
 import {
@@ -44,70 +44,38 @@ const REFUSED = {
   variable: "ACCESS_AUD",
 };
 
-/** Serve the editor from another address, as a deployment or a local dev server would. */
-function servedFrom(url: string): void {
-  (window as unknown as { happyDOM: { setURL(url: string): void } }).happyDOM.setURL(url);
-}
-
-const DEPLOYED = "https://newsletter.example.com/dashboard/";
-
 describe("the refused-configuration wall (SPEC §9)", () => {
   let fake: FakeApi | undefined;
-  let started: string;
-  beforeEach(() => {
-    started = location.href;
-    servedFrom(DEPLOYED);
-  });
   afterEach(() => {
     fake?.restore();
     fake = undefined;
     resetShell();
     document.body.classList.remove("signed-out");
-    servedFrom(started);
   });
 
-  it("takes over the editor on any call the configuration refuses, naming the variable and the fix", async () => {
+  it("takes over the editor on any call the configuration refuses, saying what's wrong and linking to the fix", async () => {
     fake = fakeApi([{ path: "/api/posts", reply: () => jsonResponse(REFUSED, 500) }]);
     const err = await api("/api/posts").catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 500, code: "invalid_config", message: REFUSED.message });
     expect(document.body.classList.contains("signed-out")).toBe(true);
     const wall = $("#app .config-wall");
-    expect($(".config-wall-problem", wall).textContent).toBe(`ACCESS_AUD: ${REFUSED.message}`);
-    // A secret is fixed by storing it, not by a deploy, and readers are told the page is down.
-    expect(wall.textContent).toContain("npx wrangler secret put ACCESS_AUD --env production");
-    expect(wall.textContent).toContain("Readers see a page saying");
+    expect($("h2", wall).textContent).toBe("A setting needs fixing");
+    // The server's words name the variable, so the wall shows them as they are.
+    expect($(".config-wall-problem", wall).textContent).toBe(REFUSED.message);
+    // Where to fix it is the reference's job, for a deployment and local development alike.
     expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#secrets`);
+    expect(wall.textContent).not.toContain("secret put");
+    expect(wall.textContent).not.toContain(".dev.vars");
     // Focus lands on the wall, so a screen reader starts there.
     expect(document.activeElement).toBe($("h2", wall));
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("tells a var's fix from a secret's", () => {
+  it("links a var to its own heading in the reference", () => {
     showConfigProblem({ variable: "APP_ORIGIN", message: "APP_ORIGIN is not set" });
     const wall = $("#app .config-wall");
-    expect(wall.textContent).toContain("block in wrangler.jsonc, deploy again");
-    expect(wall.textContent).not.toContain("secret put");
+    expect($(".config-wall-problem", wall).textContent).toBe("APP_ORIGIN is not set");
     expect($("a", wall).getAttribute("href")).toBe(`${CONFIGURATION_REFERENCE}#vars`);
-  });
-
-  it("gives local development's fix when the editor is served from this machine", () => {
-    for (const url of [
-      "http://localhost:8787/dashboard/",
-      "http://127.0.0.1:8787/dashboard/",
-      "http://[::1]:8787/dashboard/",
-      "http://kestrel.localhost:8787/dashboard/",
-    ]) {
-      resetShell();
-      servedFrom(url);
-      showConfigProblem({ variable: REFUSED.variable, message: REFUSED.message });
-      const text = $("#app .config-wall").textContent ?? "";
-      expect(text, url).toContain(
-        "Fix it in .dev.vars, or in the top-level vars in wrangler.jsonc, then restart npm run dev and reload this page.",
-      );
-      expect(text, url).not.toContain("secret put");
-      expect(text, url).not.toContain("--env production");
-      expect(text, url).not.toContain("Readers see");
-    }
   });
 
   it("draws the wall once, however many calls in flight it fails", async () => {

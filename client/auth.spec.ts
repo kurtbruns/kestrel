@@ -38,9 +38,7 @@ describe("the boot probe", () => {
       { path: "/api/whoami", reply: () => jsonResponse(REFUSED, 500) },
     ]);
     expect(await probeSession()).toBeNull();
-    expect($("#app .config-wall .config-wall-problem").textContent).toBe(
-      `APP_ORIGIN: ${REFUSED.message}`,
-    );
+    expect($("#app .config-wall .config-wall-problem").textContent).toBe(REFUSED.message);
     expect(document.querySelector("#app #reauth")).toBeNull();
     expect(calls()).toEqual(["GET /api/dev/token", "GET /api/whoami"]);
   });

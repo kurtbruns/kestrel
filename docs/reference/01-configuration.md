@@ -2,9 +2,11 @@
 
 Every deploy-time setting: what it does, its default, and what the app refuses. Each environment's settings live in its block under `env` in `wrangler.jsonc`, and its secrets in Cloudflare.
 
-- **Vars** are public values in the block's `vars`, safe to commit.
+- **Vars** are public values in the block's `vars`, safe to commit. A change takes effect when you deploy.
 - **Secrets** are stored with `npx wrangler secret put NAME --env production`, and never committed. A secret takes effect as soon as you store it, with no redeploy.
 - **Bindings and triggers** connect the Worker to its database, its image bucket, and its schedule.
+
+In local development, `npm run dev` reads the top level of `wrangler.jsonc` and `.dev.vars`, which you copy from `.dev.vars.example`. Restart it after you change either.
 
 None of these can be read or changed from inside the app, by the editor or by Claude. Settings in the editor shows the public ones, read-only.
 
