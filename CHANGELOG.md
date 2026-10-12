@@ -17,6 +17,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 ### Fixed
 
 - An `ACCESS_TEAM_DOMAIN` stored with `https://` or a trailing slash no longer fails every sign-in with a `401` that says nothing of why: the app reads it as the bare hostname. A value that still isn't a hostname, such as one with a path or a port, is refused, naming `ACCESS_TEAM_DOMAIN`, like any other setting the app can't run on (SPEC §9).
+- The **Use Amazon SES instead of Resend** guide now says which provider switch can mail someone twice: moving to SES leaves an unanswered request's recipients for Resolve, while moving to Resend, from SES or another Resend account, can deliver the post to them again. It also shows the `production` vars as they end up, so `AWS_REGION` isn't pasted twice, puts Access covering the SES webhook first among the reasons a subscription stays pending, and gives the IAM user, configuration set, and SNS topic distinct names.
 
 ## [1.7.0] - 2026-10-12
 

@@ -89,17 +89,17 @@ When AWS grants access, the **Account dashboard** shows your daily quota and you
 
 SES reports what happens to each email through SNS, the AWS notification service. A configuration set says which events to report, and an SNS topic carries them to the app.
 
-1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-production`, and choose **Create set**.
+1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-mail`, and choose **Create set**.
 
 1. On the set's **Event destinations** tab, choose **Add destination**. Select **Hard bounces**, **Complaints**, and **Deliveries**, and choose **Next**.
 
-1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-events`, and keep **Event publishing** enabled. Choose **Next**.
+1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-sns`, and keep **Event publishing** enabled. Choose **Next**.
 
-1. For **SNS topic**, choose **Create SNS topic**. Make it a **Standard** topic named `kestrel-production`. Choose **Next**, then **Add destination**.
+1. For **SNS topic**, choose **Create SNS topic**. Make it a **Standard** topic named `kestrel-events`. Choose **Next**, then **Add destination**.
 
-1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-production`, and save.
+1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-mail`, and save.
 
-1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-production`.
+1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`.
 
 1. Let SES publish to the topic. Choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
@@ -112,7 +112,7 @@ SES reports what happens to each email through SNS, the AWS notification service
       "Condition": {
         "StringEquals": {
           "AWS:SourceAccount": "REPLACE_WITH_ACCOUNT_ID",
-          "AWS:SourceArn": "arn:aws:ses:us-east-1:REPLACE_WITH_ACCOUNT_ID:configuration-set/kestrel-production"
+          "AWS:SourceArn": "arn:aws:ses:us-east-1:REPLACE_WITH_ACCOUNT_ID:configuration-set/kestrel-mail"
         }
       }
     }
@@ -126,7 +126,7 @@ You subscribe the app to the topic in section 8, once it runs on SES.
 
 The app sends through an IAM user whose key can only send email. That limits the harm if the key ever leaks.
 
-1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-production`, and leave console access off.
+1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
 
 1. When asked for permissions, choose **Attach policies directly**, and create a policy with this JSON:
 
@@ -151,7 +151,7 @@ The app sends through an IAM user whose key can only send email. That limits the
 
 ## 7. Switch the provider and deploy
 
-Store every secret before you switch. With `PROVIDER` set to `ses` and a secret missing, every request answers `500` and names the missing secret.
+Store the secrets before you switch. With `PROVIDER` set to `ses` and a required secret missing, the app refuses to run, and sends nothing, until you store it. `/health` and the editor's **A setting needs fixing** page name the missing secret, and reader pages say the newsletter is temporarily unavailable. `SES_CONFIGURATION_SET` is the one optional secret.
 
 1. Store the access key ID, and paste it at the prompt:
 
@@ -171,19 +171,25 @@ Store every secret before you switch. With `PROVIDER` set to `ses` and a secret 
     npx wrangler secret put SNS_TOPIC_ARN --env production
     ```
 
-1. Store the configuration set's name, `kestrel-production`. The app names it on every email, so SES reports on each one even without the default:
+1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names it on every email, so SES reports on each one even without the default:
 
     ```bash
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, in the `production` block's `vars`, set these values, adding `PROVIDER` if it isn't there yet:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Set `PROVIDER` to `ses` (add it if your block doesn't have one), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE` and [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget). Your other values stay as they are. The block ends up like this:
 
     ```jsonc
-    "PROVIDER": "ses",
-    "AWS_REGION": "us-east-1",     // ← your SES region
-    "SES_MAX_SEND_RATE": "1",      // ← your maximum send rate; 1 in the sandbox
-    "SUBREQUEST_BUDGET": "10000",
+    "vars": {
+      "APP_ORIGIN": "https://newsletter.example.com",
+      "ARCHIVE_BASE_PATH": "/archive",
+      "SENDING_DOMAIN": "send.example.com",
+      "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
+      "PROVIDER": "ses",             // ← set to ses
+      "AWS_REGION": "us-east-1",     // ← change: your SES region
+      "SES_MAX_SEND_RATE": "1",      // ← new: your maximum send rate; 1 in the sandbox
+      "SUBREQUEST_BUDGET": "10000"   // ← new: the Workers Paid limit
+    }
     ```
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
@@ -217,7 +223,13 @@ SNS delivers events only to a subscriber that has confirmed. The app confirms on
 
 1. Reload the subscription. Its status changes to **Confirmed**, with nothing for you to click.
 
-If it stays **Pending confirmation**, the app refused the request. Check that `SNS_TOPIC_ARN` matches the topic's ARN, and that the deploy in section 7 finished. Then delete the subscription, and create it again.
+If it stays **Pending confirmation**, the request never reached the app, or the app refused it. Check, in this order:
+
+- **Access covers `/webhooks/ses`.** If your Access application covers more than `/dashboard` and `/api`, SNS gets the login page instead of the app. Remove that path from your Access application, so only `dashboard` and `api` remain.
+- **`SNS_TOPIC_ARN` matches the topic's ARN.**
+- **The deploy in section 7 finished.**
+
+Then delete the subscription, and create it again.
 
 ## Check it
 
@@ -255,6 +267,9 @@ Next, [verify it works](../get-started/05-verify.md).
 
 Change `PROVIDER`, or move to another account with the same provider, only while no send is sending. The dashboard lists any send in progress.
 
-When a request to a provider gets no answer, Kestrel can't know whether those recipients were mailed. Resend accepts the same request again without mailing anyone twice, because Kestrel sends it under the same key. A different provider, or another account, has never seen that key, so it delivers the post again. That's at most the recipients of the one unanswered request, but each of them gets the post twice.
+When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. What happens to them depends on the provider you move to:
 
-To have another provider finish a halted send, accept that risk. Otherwise, fix the old account, and let the send resume there.
+- **To SES,** from Resend or another SES account, no one is mailed twice. SES can't tell a repeated request from a new one, so Kestrel never repeats an unanswered request to it. Those recipients wait for you to decide whether they were mailed, with **Resolve** on the send's page.
+- **To Resend,** from SES or another Resend account, those recipients can get the post twice. Kestrel repeats an unanswered request under the key Kestrel gave it, and Resend sends a request only once per key. But only the account that took the key knows it, so the new account delivers the post again. That's at most the recipients of one unanswered request.
+
+To have Resend finish a send that halted on another provider or account, accept that risk. Otherwise, fix the old account, and let the send resume there.
