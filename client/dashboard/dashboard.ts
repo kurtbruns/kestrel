@@ -505,8 +505,13 @@ function apiConnectCard(connected: boolean): Html {
   </div>`;
 }
 
-/** The first-run checklist. While no provider is connected it leads the sending steps with
- *  connecting one, and the subscribe step says signups wait for it (the page is closed). */
+/**
+ * The first-run checklist, in the order the steps depend on each other. Writing a post
+ * comes late because its New post creates a draft, which ends the first-run page; sharing
+ * comes last so a visitor finds a post in the archive. While no provider is connected,
+ * connecting one replaces the sending-domain step (Connect Resend verifies the domain) and
+ * the subscribe step says signups wait for it (the page is closed).
+ */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
   const notConnected = providerNotConnected();
@@ -514,13 +519,12 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
-      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       ${
         notConnected
           ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect an email provider</button></li>`
-          : null
+          : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
       }
-      <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>
+      <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       ${
         notConnected
           ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`

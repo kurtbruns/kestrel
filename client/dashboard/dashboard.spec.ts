@@ -385,24 +385,22 @@ describe("dashboard", () => {
 
   // SPEC §9, DESIGN §2: a deployment with no provider connected says so where the
   // developer lands, as a standing state, and its checklist puts connecting one first.
+  const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
   describe("while no email provider is connected", () => {
     const withProvider = (provider: "none" | "fake" | "resend") => {
       const c = config();
       c.deployment = { ...c.deployment, provider };
       appState.appConfig = c;
     };
-    const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
-
-    it("leads the first-run checklist's sending steps with connecting one, and keeps the subscribe link closed", async () => {
+    it("puts connecting one in place of the sending-domain step, ahead of writing, and keeps the subscribe link closed", async () => {
       withProvider("none");
       fake = world([], sendServer(), none);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
       expect(steps()).toEqual([
         "Name your publication",
-        "Write your first post",
         "Connect an email provider",
-        "Confirm your sending domain",
+        "Write your first post",
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/resend");
@@ -438,7 +436,12 @@ describe("dashboard", () => {
         fake = world([], sendServer(), none);
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
-        expect(steps(), provider).not.toContain("Connect an email provider");
+        expect(steps(), provider).toEqual([
+          "Name your publication",
+          "Confirm your sending domain",
+          "Write your first post",
+          "Share your subscribe link",
+        ]);
         expect($(".setup-url").textContent, provider).toBe("https://app.birds.example/subscribe");
         unmount();
         fake.restore();

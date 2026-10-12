@@ -23,7 +23,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- While no email provider is connected, the editor says so wherever a send would be refused, each time with a "Connect an email provider" link to the setup step: the dashboard's health block and the Sent page carry an amber warning that nothing can be sent yet, the first-run checklist leads with connecting a provider and says signups open once one is, Settings' Email provider row reads "No email provider connected", and the Send-a-test and Schedule dialogs say so in amber before you commit, with Send and Schedule disabled and nothing to fill in (no recipients, time picker, or Send now), until a provider is set. Local development keeps its "nothing is delivered" wording.
+- The dashboard's first-run checklist orders its steps by what each needs first: name the publication, connect a provider (or confirm the sending domain), write the first post, then share the subscribe link. Writing used to come second, and starting a draft ends the checklist, so the steps after it were lost.
+- While no email provider is connected, the editor says so wherever a send would be refused, each time with a "Connect an email provider" link to the setup step: the dashboard's health block and the Sent page carry an amber warning that nothing can be sent yet, the first-run checklist asks you to connect a provider in place of confirming the sending domain and says signups open once one is, Settings' Email provider row reads "No email provider connected", and the Send-a-test and Schedule dialogs say so in amber before you commit, with Send and Schedule disabled and nothing to fill in (no recipients, time picker, or Send now), until a provider is set. Local development keeps its "nothing is delivered" wording.
 
 ## [1.6.0] - 2026-10-11
 
