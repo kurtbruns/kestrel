@@ -9,22 +9,22 @@ In this guide, you choose your hostnames, create your instance's repository, cre
 - A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
 - [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
 - A GitHub account, or another Git host, for your instance's repository.
-- An account with an email provider. [Resend](https://resend.com/signup) is a good default, and the one these guides walk through.
+- A provider for sending email. [Resend](https://resend.com/signup) is a good default, and the one these guides walk through.
 
 ## Choose your hostnames
 
-Kestrel uses two hostnames, because the app and the mail do different jobs:
+Kestrel uses two hostnames: one for the app, and one your email is sent from.
 
 | Hostname | What it's for |
 | --- | --- |
 | `newsletter.example.com` | the editor, the API, and the public pages readers see |
-| `send.example.com` | the address your mail comes from, and its SPF, DKIM, and DMARC records |
+| `send.example.com` | the address your email comes from, and its SPF, DKIM, and DMARC records |
 
 These guides put the app on a subdomain, which leaves any website you already have on `example.com` untouched. If `example.com` has no website of its own, the app can live there instead. Use `example.com` wherever these guides say `newsletter.example.com`.
 
 It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
 
-Throughout these guides, replace `example.com`, `newsletter.example.com`, and `send.example.com` with your own names. Replace any value written as `REPLACE_WITH_…` too.
+Throughout these guides, replace the example names with your own, and any value written as `REPLACE_WITH_…`.
 
 ## 1. Create your instance's repository
 
