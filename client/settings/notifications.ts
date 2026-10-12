@@ -25,7 +25,9 @@ function notifyChannelLabel(
     case "cloudflare":
       return "Cloudflare Email, separate from your newsletter's provider";
     case "provider":
-      return `Your email provider (${provider})`;
+      return provider === "none"
+        ? "Your email provider, once one is connected"
+        : `Your email provider (${providerLabel(provider)})`;
     default:
       return "No email provider configured, so nothing is delivered";
   }
@@ -73,7 +75,7 @@ export function notificationsSection(page: SettingsPage): Html {
           <div class="row"><button type="button" class="ghost" id="notifyTest">Send a test notification</button><span class="field-hint" id="notifyTestHint"></span></div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notifyChannel, providerLabel(d.provider))}</div>
+          <div class="set-kv-k">Sent through</div><div class="set-kv-v">${notifyChannelLabel(d.notifyChannel, d.provider)}</div>
           <div class="set-kv-k">From address</div><div class="set-kv-v"><span class="mono">${d.notifyFrom}</span></div>
           <div class="set-kv-k">Last notification</div><div class="set-kv-v" id="notifyStatus">${notificationStatusHtml(page.data.notificationStatus)}</div>
         </div>

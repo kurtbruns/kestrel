@@ -54,6 +54,7 @@ import { badRequest, HttpError, json } from "../lib/errors";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
 import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
+import { requireConnectedProvider } from "../providers";
 import {
   DEFAULT_EMAIL_TEMPLATE,
   type IdentityField,
@@ -172,6 +173,10 @@ export async function notificationTest(c: RequestContext): Promise<Response> {
   const { to } = (await getSettings(c.env.DB)).notifications;
   if (!to) {
     throw badRequest("set a notifications address first", { field: "notifications.to" });
+  }
+  if (c.config.notifyChannel === "provider") {
+    // Through the newsletter's provider, which is not there yet: refused like any test.
+    requireConnectedProvider(c.config);
   }
   const notifier = getNotifier(c.config, c.env);
   try {

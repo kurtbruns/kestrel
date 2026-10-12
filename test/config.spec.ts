@@ -128,8 +128,8 @@ describe("getConfig — deploy config is validated", () => {
     }
   });
 
-  it("defaults an unset PROVIDER to the fake", () => {
-    expect(getConfig(varsOnly({ PROVIDER: undefined })).provider).toBe("fake");
+  it("reads an unset PROVIDER as no provider connected, never the fake (SPEC §9)", () => {
+    expect(getConfig(varsOnly({ PROVIDER: undefined })).provider).toBe("none");
   });
 
   it("refuses a missing or malformed APP_ORIGIN", () => {

@@ -182,6 +182,22 @@ describe("settings view", () => {
     expect(row("Email provider")).toBe("Fake (dev, dead-end)Simulating Amazon SES, no failures");
   });
 
+  it("says no email provider is connected and points to Connect Resend, on a deployment partway through setup", async () => {
+    const notConnected = response();
+    notConnected.deployment = { ...notConnected.deployment, provider: "none" };
+    await open([{ path: "/api/settings", reply: () => notConnected }]);
+    const value = $("#providerValue");
+    expect(value.textContent?.trim()).toBe(
+      "No email provider connected. Connect Resend to start sending.",
+    );
+    expect($<HTMLAnchorElement>("a", value).getAttribute("href")).toBe("#/docs/resend");
+    // Notifications would go through that provider, once there is one.
+    const sentThrough = $$(".set-kv-k").find((k) => k.textContent === "Sent through");
+    expect(sentThrough?.nextElementSibling?.textContent).toBe(
+      "Your email provider, once one is connected",
+    );
+  });
+
   it("offers the mailing address as an Add row until one is added, with Remove to take it back", async () => {
     await open();
     expect($("#addrAdd").hidden).toBe(false);

@@ -1,6 +1,9 @@
-/** Provider factory: pick the transport adapter from Config. */
+/** Provider factory: pick the transport adapter from Config, and refuse what would send
+ *  while no provider is connected. */
 import type { AppEnv, Config } from "../env";
+import { refusal } from "../lib/errors";
 import { FakeProvider } from "./fake";
+import { NotConnectedProvider } from "./none";
 import { ResendProvider } from "./resend";
 import { SesProvider } from "./ses";
 import { SimProvider } from "./simulate";
@@ -8,6 +11,8 @@ import type { EmailProvider, PerRecipientResult, Recipient, SendBatchResult } fr
 
 export function getProvider(config: Config, env: AppEnv): EmailProvider {
   switch (config.provider) {
+    case "none":
+      return new NotConnectedProvider();
     case "fake":
       // Local dev: the send simulation stands in for a real provider on list sends (SPEC
       // §10). `simulation` is only ever set in a dev-shaped env (getConfig), so a deployed
@@ -24,6 +29,22 @@ export function getProvider(config: Config, env: AppEnv): EmailProvider {
       const unknown: never = config.provider;
       throw new Error(`no transport for provider "${String(unknown)}"`);
     }
+  }
+}
+
+/**
+ * Refuse an act that would send while no provider is connected (SPEC §9): scheduling, send
+ * now, a test, a test notification through the provider, a confirmation email. One code
+ * for all of them, since the remedy is the same and is outside the API: connect a provider
+ * and deploy again.
+ */
+export function requireConnectedProvider(config: Config): void {
+  if (config.provider === "none") {
+    throw refusal(
+      409,
+      "provider_not_connected",
+      "No email provider is connected, so nothing can be sent yet. Connect one (the setup guide's Connect Resend step), then try again.",
+    );
   }
 }
 

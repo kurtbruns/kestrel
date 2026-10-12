@@ -265,6 +265,21 @@ describe("template view", () => {
     expect(bar().classList.contains("show")).toBe(false);
   });
 
+  it("the test dialog carries a standing Connect Resend line while no provider is connected (DESIGN §2)", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open();
+    $("#tplTest").click();
+    const line = $(".modal .not-connected");
+    expect(line.textContent).toMatch(/^No email provider connected/);
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
+    $("#ttCancel").click();
+    appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
+    $("#tplTest").click();
+    expect(document.querySelector(".modal .not-connected")).toBeNull();
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(false);
+  });
+
   it("save & send test: saves the edits first, then posts the test to the pre-filled recipients", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

@@ -10,7 +10,7 @@ import type {
   TemplateTestResponse,
 } from "../../shared/settings";
 import { api } from "../api";
-import { withNoProviderNote } from "../deployment";
+import { notConnectedTestLine, providerNotConnected, withNoProviderNote } from "../deployment";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
@@ -750,7 +750,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   tplTestEl.onclick = () => {
     const dirty = isDirty();
     const m = modal(
-      html`<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${
+      html`<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${notConnectedTestLine()}${
         dirty
           ? html`<p class="hint" style="color:var(--warn-fg)"><strong>Unsaved changes:</strong> sending will save your template first, so the test reflects what will actually ship.</p>`
           : null
@@ -768,6 +768,8 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       hint.hidden = false;
     }
     const go = $<HTMLButtonElement>("#ttGo", m.el);
+    // The server would refuse it; the standing line above says why and where to fix it.
+    go.disabled = providerNotConnected();
     $("#ttCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, isDirty() ? "Saving…" : "Sending…", async () => {

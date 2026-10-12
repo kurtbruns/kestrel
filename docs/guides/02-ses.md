@@ -177,7 +177,7 @@ Store every secret before you switch. With `PROVIDER` set to `ses` and a secret 
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, in the `production` block's `vars`, change these values:
+1. In `wrangler.jsonc`, in the `production` block's `vars`, set these values, adding `PROVIDER` if it isn't there yet:
 
     ```jsonc
     "PROVIDER": "ses",

@@ -23,7 +23,7 @@ import { fieldError, type JsonObject, optString, readJsonObject } from "../lib/b
 import { badRequest, json, notFound } from "../lib/errors";
 import { POST_PAGE_SECURITY_HEADERS } from "../lib/page_headers";
 import { fakeNotifications } from "../notify/fake";
-import { getProvider, perRecipient } from "../providers";
+import { getProvider, perRecipient, requireConnectedProvider } from "../providers";
 import { fakeOutbox } from "../providers/fake";
 import {
   type RenderedEmail,
@@ -158,6 +158,7 @@ export async function test(c: RequestContext): Promise<Response> {
   if (!isValidEmail(to)) {
     throw fieldError("to", "to must be an email address");
   }
+  requireConnectedProvider(c.config);
 
   // When the copy was read, so the test marks the send tested only if no re-make replaced
   // that copy while the provider was answering.
@@ -307,6 +308,7 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   if (recipients.length > MAX_TEMPLATE_TEST_RECIPIENTS) {
     throw badRequest(`at most ${MAX_TEMPLATE_TEST_RECIPIENTS} recipients per test`);
   }
+  requireConnectedProvider(c.config);
 
   const result = await render(sampleRenderInput(), c.config, resolveBranding(settings, c.config));
   const provider = getProvider(c.config, c.env);

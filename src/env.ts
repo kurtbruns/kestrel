@@ -10,7 +10,8 @@
  * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
  * (an unknown provider, a missing origin, a real provider without its credentials or still
  * on the template's example.com placeholders, a minimum lead under the sweep's one-minute
- * tick or over a day) throws a `ConfigError` naming the variable.
+ * tick or over a day) throws a `ConfigError` naming the variable. A `PROVIDER` left unset
+ * is not a mistake but the not-connected state (SPEC §9): the app runs and refuses to send.
  */
 
 import {
@@ -28,9 +29,11 @@ import {
 } from "../shared/settings";
 import {
   isProviderName,
+  isRealProvider,
   PROVIDER_NAMES,
   type ProviderName,
   REQUIRED_VARS,
+  type RealProviderName,
 } from "./providers/requirements";
 
 export type { ProviderName };
@@ -130,6 +133,8 @@ export type AppEnv = Env & Secrets & OptionalVars & OptionalBindings;
 export type NotifyChannel = "fake" | "cloudflare" | "provider";
 
 export interface Config {
+  /** The transport, or `none` when no provider is connected (SPEC §9): the app then runs
+   *  and refuses everything that would send. */
   provider: ProviderName;
   /** Origin the app is served from (API + reader routes). */
   appOrigin: string;
@@ -186,7 +191,7 @@ export interface Config {
   /**
    * The local send simulation that stands in for a provider on list sends (SPEC §10), or
    * null for the plain fake. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
-   * it is structurally null once deployed (a real provider is configured there) and can
+   * it is structurally null once deployed (no deployed env is dev-shaped) and can
    * never pace or fabricate events against a real inbox.
    */
   simulation: SimulationView | null;
@@ -262,7 +267,7 @@ export function getConfig(env: AppEnv): Config {
   const archiveOrigin = readOrigin("ARCHIVE_ORIGIN", env.ARCHIVE_ORIGIN) ?? appOrigin;
   const mediaPublicBase =
     readBaseUrl("MEDIA_PUBLIC_BASE", env.MEDIA_PUBLIC_BASE) ?? `${appOrigin}/media`;
-  if (provider !== "fake") {
+  if (isRealProvider(provider)) {
     requireRealProviderConfig(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
   }
   const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
@@ -302,7 +307,7 @@ export function getConfig(env: AppEnv): Config {
     devMode,
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
-    // Only ever read in a dev-shaped env; a deployed env runs a real provider, so the
+    // Only ever read in a dev-shaped env; a deployed env is never dev-shaped, so the
     // simulation can never engage there whatever the var says.
     simulation: devShaped ? readSimulation(env.SIMULATE_SENDS) : null,
     subrequestBudget: Math.max(
@@ -318,13 +323,14 @@ export function getConfig(env: AppEnv): Config {
   };
 }
 
-/** `PROVIDER` as one of the known names, exactly as spelled. Unset means the fake (the
- *  development config); anything else unknown is an error, never a quiet fake that would
- *  record every recipient accepted and mail no one. */
+/** `PROVIDER` as one of the known names, exactly as spelled. Unset means `none`, not
+ *  connected (SPEC §9), on every host alike: the fake runs only where it is named, since a
+ *  deployment that fell back to it would record every recipient accepted and mail no one.
+ *  Anything else unknown is an error. */
 function readProvider(v: string | undefined): ProviderName {
   const raw = orUndefined(v);
   if (raw === undefined) {
-    return "fake";
+    return "none";
   }
   if (!isProviderName(raw)) {
     throw new ConfigError("PROVIDER", `must be one of ${PROVIDER_NAMES.join(", ")}, not "${raw}"`);
@@ -338,7 +344,7 @@ function readProvider(v: string | undefined): ProviderName {
  * go out in every email and, as archive URLs are permanent (I3), stay wrong forever.
  */
 function requireRealProviderConfig(
-  provider: Exclude<ProviderName, "fake">,
+  provider: RealProviderName,
   env: AppEnv,
   origins: { appOrigin: string; archiveOrigin: string; mediaPublicBase: string },
 ): void {

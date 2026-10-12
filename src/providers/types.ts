@@ -114,7 +114,7 @@ export interface ProviderTraits {
 }
 
 export interface EmailProvider extends ProviderTraits {
-  readonly name: "fake" | "ses" | "resend";
+  readonly name: "none" | "fake" | "ses" | "resend";
 
   /** Throws only when the request got no answer at all, whose fate is then unknown. */
   sendBatch(

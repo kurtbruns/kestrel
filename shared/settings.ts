@@ -65,9 +65,16 @@ export interface SimulationView {
   faults: SimulationFaults;
 }
 
+/**
+ * The email provider a deployment sends through (SPEC §9): `none` while none is connected,
+ * when every send is refused; `fake`, named for local development, the tests, or a demo,
+ * which records a send and delivers nothing; or a real provider.
+ */
+export type DeploymentProvider = "none" | "fake" | "ses" | "resend";
+
 /** The deploy-time configuration, reflected read-only: origins, provider, and whether Access gates the surface. Never a secret. */
 export interface DeploymentView {
-  provider: string;
+  provider: DeploymentProvider;
   fromAddress: string;
   sendingDomain: string;
   appOrigin: string;

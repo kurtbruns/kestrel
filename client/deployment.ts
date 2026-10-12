@@ -60,21 +60,45 @@ export function earliestFireAt(now = Date.now()): Date {
 }
 
 /**
- * True when no real email provider is configured — internally the dev `fake` transport,
- * which records a send but never delivers. Read from the same read-only deployment
- * reflection the sidebar and Settings already consume (appConfig.deployment), fetched
- * once at boot. Dev-only by construction: deployed environments require SES/Resend, so
- * this is structurally absent in production. The user-facing copy avoids the internal
- * "fake transport" term (see docs/DESIGN.md §2).
+ * True when the deployment sends through the `fake` stand-in, which records a send but
+ * never delivers: local development, the tests, or a hosted demo, each of which names it on
+ * purpose (SPEC §9). This is the developer's "nothing is delivered" voice. A deployment
+ * partway through setup is the other state, not connected (`providerNotConnected`). Read
+ * from the read-only deployment reflection fetched once at boot; the copy avoids the
+ * internal "fake transport" term (docs/DESIGN.md §2).
  */
 export function noEmailProvider(): boolean {
-  return (appState.appConfig?.deployment.provider || "") === "fake";
+  return appState.appConfig?.deployment.provider === "fake";
 }
 
 /**
- * Suffix a send/test/schedule confirmation so it never reads as a real send when no
- * provider is set up. Tense-neutral ("nothing is delivered") so it fits a test that
- * already ran, a send now queued, and a schedule that will fire later alike.
+ * True when no email provider is connected (SPEC §9): a deployment whose `PROVIDER` is not
+ * set yet, which refuses every send. The operator's voice: name the state and point to the
+ * step that ends it, Connect Resend (`CONNECT_PROVIDER_HREF`).
+ */
+export function providerNotConnected(): boolean {
+  return appState.appConfig?.deployment.provider === "none";
+}
+
+/** The setup step that connects a provider: Get started's Connect Resend. */
+export const CONNECT_PROVIDER_HREF = "#/docs/resend";
+
+/**
+ * The standing line a Send-a-test dialog carries while no provider is connected
+ * (DESIGN §2): not a Notice and not dismissible, since the state holds every time the
+ * dialog opens, and gone once a provider is set. Null otherwise.
+ */
+export function notConnectedTestLine(): Html | null {
+  return providerNotConnected()
+    ? html`<p class="hint not-connected">No email provider connected, so a test can’t be sent yet. <a href="${CONNECT_PROVIDER_HREF}">Connect Resend</a> to send one.</p>`
+    : null;
+}
+
+/**
+ * Suffix a send/test/schedule confirmation so it never reads as a real send on the `fake`
+ * stand-in. Tense-neutral ("nothing is delivered") so it fits a test that already ran, a
+ * send now queued, and a schedule that will fire later alike. A not-connected deployment
+ * refuses those acts, so it never gets this far.
  */
 export function withNoProviderNote(msg: string): string {
   return noEmailProvider() ? `${msg} (no email provider configured, so nothing is delivered)` : msg;

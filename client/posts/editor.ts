@@ -13,7 +13,14 @@ import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../..
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText } from "../api";
-import { earliestFireAt, minLeadText, postArchiveUrl, withNoProviderNote } from "../deployment";
+import {
+  earliestFireAt,
+  minLeadText,
+  notConnectedTestLine,
+  postArchiveUrl,
+  providerNotConnected,
+  withNoProviderNote,
+} from "../deployment";
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
@@ -1159,7 +1166,7 @@ export async function renderEditor(
       ? "Delivers the frozen copy that will send, exactly as it will fire, so you can check it in a client. One address per line."
       : "Delivers the rendered email to real inboxes so you can check it in a client. One address per line.";
     const m = modal(
-      html`<h3>Send a test</h3><p class="hint">${lead}</p><label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p><div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
     );
     const to = $<HTMLTextAreaElement>("#testTo", m.el);
     to.focus();
@@ -1176,6 +1183,8 @@ export async function renderEditor(
       })
       .catch(() => {});
     const go = $<HTMLButtonElement>("#tGo", m.el);
+    // The server would refuse it; the standing line above says why and where to fix it.
+    go.disabled = providerNotConnected();
     $("#tCancel", m.el).onclick = m.close;
     go.onclick = () =>
       busy(go, "Sending…", async () => {

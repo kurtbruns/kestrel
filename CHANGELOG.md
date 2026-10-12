@@ -10,10 +10,20 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.6.0.** If your `production` block in `wrangler.jsonc` sets `PROVIDER` to `resend` or `ses`, nothing changes. If it still sets `fake` (Get started's Deploy step until Connect Resend), delete that line before you deploy, so the instance runs with no provider connected rather than recording sends it never delivers, and [connect Resend](docs/get-started/04-resend.md) when you're ready. If it sets no `PROVIDER` at all, the instance used to run on `fake` and now refuses to send; connect a provider first if it has readers. A send already scheduled on such an instance is held, with no one marked sent, until a provider is connected. A local development config that leaves `PROVIDER` unset needs `"PROVIDER": "fake"` in its top-level `vars`, as a new instance's has.
+
+### Breaking
+
+- An unset `PROVIDER` now means no email provider is connected, not the `fake` stand-in. Such a deployment runs, and refuses everything that would send with a 409 `provider_not_connected`: scheduling, send now, a test email, a test notification through the provider, and adding a subscriber; its public subscribe page says signups aren't open yet instead of taking an address it can't confirm. `fake` now runs only where it is named, as local development and a demo do, and a new instance's production settings ship without `PROVIDER` until Connect Resend sets it (SPEC §9).
+
 ### Added
 
 - Reader pages, post pages included, show the publication's logo as the browser tab's icon when one is set; with no logo, the browser's default icon stays (SPEC §5).
 - A setup guide, **Try Kestrel on your computer**, runs a new instance locally with the demo publication, with no Cloudflare account or Git host, and shows how the folder becomes your instance's repository when you deploy.
+
+### Changed
+
+- While no email provider is connected, the editor says so and points to the next step: Settings' Email provider row reads "No email provider connected" with a link to Connect Resend, the Sent page says nothing can be sent yet, and both Send-a-test dialogs carry a standing line linking to Connect Resend, their Send disabled, until a provider is set. Local development keeps its "nothing is delivered" wording.
 
 ## [1.6.0] - 2026-10-11
 

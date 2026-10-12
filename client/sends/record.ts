@@ -11,7 +11,7 @@ import type {
   SendView,
 } from "../../shared/sends";
 import { ApiError, api, apiFile } from "../api";
-import { noEmailProvider } from "../deployment";
+import { noEmailProvider, providerNotConnected } from "../deployment";
 import { every, mount } from "../lifecycle";
 import { followSend } from "../send_state";
 import { $, $$ } from "../ui/dom";
@@ -196,7 +196,9 @@ function watchBodyHtml(prog: SendView): Html {
   const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
     ? "No email provider configured, so nothing is delivered"
-    : `Provider: ${prog.provider?.name || "—"}`;
+    : providerNotConnected()
+      ? "No email provider connected"
+      : `Provider: ${prog.provider?.name || "—"}`;
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");

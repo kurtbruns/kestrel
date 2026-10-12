@@ -19,6 +19,7 @@ import {
   restoreHidden,
   sendSummary,
   setHidden,
+  settingsResponse,
   typeInto,
   unmount,
 } from "../test/support";
@@ -1226,6 +1227,42 @@ describe("editor view", () => {
     expect($("#warnings").textContent).toMatch(/Warnings: An image has no alt text\./);
     expect(document.querySelector(".modal")).toBeNull();
     expect(fake.unhandled).toEqual([]);
+  });
+
+  // DESIGN §2: no provider is a standing state, so the dialog says so every time it opens
+  // and points to the step that connects one, rather than letting the server refuse.
+  it("carries a standing Connect Resend line while no provider is connected, and won't send", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open([
+      { path: "/api/posts/p1", reply: () => draft() },
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: ["me@b.c"] } }) },
+    ]);
+    $("#testBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    const line = $(".modal .not-connected");
+    expect(line.textContent).toBe(
+      "No email provider connected, so a test can’t be sent yet. Connect Resend to send one.",
+    );
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("carries no such line once a provider is set, nor on the local stand-in", async () => {
+    for (const provider of ["resend", "fake"] as const) {
+      appState.appConfig = settingsResponse({ deployment: { provider } });
+      await open([
+        { path: "/api/posts/p1", reply: () => draft() },
+        { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      ]);
+      $("#testBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(document.querySelector(".modal .not-connected"), provider).toBeNull();
+      expect($<HTMLButtonElement>("#tGo").disabled, provider).toBe(false);
+      $("#tCancel").click();
+      unmount();
+      fake.restore();
+    }
   });
 
   it("names a test recipient that isn't an address and sends nothing, instead of testing fewer people", async () => {
