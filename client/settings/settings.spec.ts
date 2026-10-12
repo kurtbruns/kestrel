@@ -20,7 +20,7 @@ import { renderSettings } from "./settings";
 
 // The browser's canvas, which squares a picked logo, doesn't exist under happy-dom: the
 // stand-in answers as `squareImage` would for a source of the given size, and every other
-// part of the upload (the preview dialog, the upload, the page's update) runs for real.
+// part of the upload (the upload itself, its toast, the page's update) runs for real.
 vi.mock("../ui/square_image", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../ui/square_image")>()),
   squareImage: vi.fn(),
@@ -29,7 +29,6 @@ const SQUARED_PNG = new Blob(["squared"], { type: "image/png" });
 function pickedImage(width: number, height: number) {
   vi.mocked(squareImage).mockResolvedValue({
     png: SQUARED_PNG,
-    url: "blob:squared",
     width,
     height,
   });
@@ -568,8 +567,6 @@ describe("settings view", () => {
     pickedImage(512, 512);
     input.dispatchEvent(new Event("change"));
     await vi.advanceTimersByTimeAsync(0);
-    $("#lgGo").click();
-    await vi.advanceTimersByTimeAsync(0);
     expect(
       fake.calls.some((c) => c.method === "POST" && c.url.pathname === "/api/settings/logo"),
     ).toBe(true);
@@ -603,7 +600,7 @@ describe("settings view", () => {
   const logoPosts = () =>
     fake.calls.filter((c) => c.method === "POST" && c.url.pathname === "/api/settings/logo");
 
-  it("shows a picked logo squared at each size it appears, and uploads the squared PNG", async () => {
+  it("uploads a picked logo squared, and says when it was cropped to its center", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },
       {
@@ -616,39 +613,14 @@ describe("settings view", () => {
     pickLogo();
     await vi.advanceTimersByTimeAsync(0);
     expect(vi.mocked(squareImage).mock.calls[0]?.[1]).toBe(256);
-    const shown = $$<HTMLImageElement>(".logo-pv img").map((img) => [
-      img.getAttribute("width"),
-      img.nextElementSibling?.textContent,
-    ]);
-    expect(shown).toEqual([
-      ["44", "Emails"],
-      ["64", "Your public pages"],
-      ["36", "Dashboard"],
-    ]);
-    expect($("#lgCropped").textContent).toMatch(/edges outside it are cropped/);
-    expect(document.querySelector("#lgSoft")).toBeNull(); // 600 px across is sharp enough
-    expect(logoPosts()).toHaveLength(0); // nothing is saved until the publisher says so
-    $("#lgGo").click();
-    await vi.advanceTimersByTimeAsync(0);
     const sent = logoPosts()[0]?.form?.get("file");
     expect(sent instanceof File && [sent.name, sent.type, sent.size]).toEqual([
       "logo.png",
       "image/png",
       SQUARED_PNG.size,
     ]);
-  });
-
-  it("says when a picked logo is too small to look sharp, and uploads nothing when canceled", async () => {
-    await open();
-    pickedImage(120, 120);
-    pickLogo();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector("#lgCropped")).toBeNull(); // already square
-    expect($("#lgSoft").textContent).toMatch(/120 px across/);
-    $("#lgCancel").click();
-    await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector(".modal")).toBeNull();
-    expect(logoPosts()).toHaveLength(0);
+    expect(document.querySelector(".modal")).toBeNull(); // no step between the pick and the save
+    expect($("#toasts").textContent).toBe("Logo updated, cropped to its center square");
   });
 
   it("says so when a picked file can't be read as an image", async () => {
@@ -656,7 +628,6 @@ describe("settings view", () => {
     vi.mocked(squareImage).mockRejectedValue(new UnreadableImage());
     pickLogo();
     await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector(".modal")).toBeNull();
     expect($("#toasts").textContent).toBe(
       "Couldn’t read that image. Pick a PNG, JPEG, WebP, or GIF.",
     );
@@ -701,8 +672,6 @@ describe("settings view", () => {
     expect($("#logoShape").hidden).toBe(false);
     pickedImage(512, 512);
     pickLogo();
-    await vi.advanceTimersByTimeAsync(0);
-    $("#lgGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($("#logoShape").hidden).toBe(true); // the square that replaced it
   });

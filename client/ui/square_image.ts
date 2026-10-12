@@ -1,5 +1,5 @@
 // An image file made square: the largest centered square, scaled to a fixed size and
-// encoded as PNG in the browser, so what is uploaded is exactly what was previewed.
+// encoded as PNG in the browser, so a logo of any shape uploads as the square it is shown as.
 
 /** The largest centered square of a `width` × `height` image, as a source rectangle. */
 export function centerSquare(
@@ -18,11 +18,10 @@ export class UnreadableImage extends Error {
   }
 }
 
-/** An image squared to `size` × `size`: the PNG, a URL that shows it, and the source's own
- *  dimensions, so a caller can say when the source was too small or was cropped. */
+/** An image squared to `size` × `size`: the PNG, and the source's own dimensions, so a
+ *  caller can say when the source was cropped. */
 export interface SquaredImage {
   png: Blob;
-  url: string;
   width: number;
   height: number;
 }
@@ -32,7 +31,6 @@ export interface SquaredImage {
  * PNG keeps transparency and shows in every mail client, which WebP doesn't. An animated
  * GIF keeps its first frame. Rejects with `UnreadableImage` when the file isn't an image the
  * browser can decode, and with a plain Error when the browser can't make the PNG.
- * The caller revokes `url` once the preview is gone.
  */
 export async function squareImage(file: Blob, size: number): Promise<SquaredImage> {
   // Upright as the photo was taken: a phone JPEG's EXIF rotation applied, said outright
@@ -57,7 +55,7 @@ export async function squareImage(file: Blob, size: number): Promise<SquaredImag
         "image/png",
       ),
     );
-    return { png, url: URL.createObjectURL(png), width: bitmap.width, height: bitmap.height };
+    return { png, width: bitmap.width, height: bitmap.height };
   } finally {
     bitmap.close();
   }

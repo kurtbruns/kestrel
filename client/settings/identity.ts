@@ -7,8 +7,8 @@ import { $ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
+import { squareImage } from "../ui/square_image";
 import { busy, toast } from "../ui/widgets";
-import { LOGO_SIZE, previewLogo } from "./logo_crop";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 
@@ -32,6 +32,10 @@ function identityNote(inUse: InUseView): string {
   return `${shown} ${reach}${wait}`;
 }
 
+/** The side of the square PNG a logo uploads as: sharp at 3× the largest place it shows
+ *  (the reader pages' 64 px), and small for any inbox. */
+const LOGO_SIZE = 256;
+
 // The logo tile's background image is set from the DOM (applyLogoUi), not written into
 // the markup: a URL has no place inside a style attribute the tag would escape as text.
 export function identitySection(page: SettingsPage): Html {
@@ -54,7 +58,7 @@ export function identitySection(page: SettingsPage): Html {
               <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? null : HIDDEN}>Remove</button>
             </div>
             <div class="set-logo-notes">
-              <p class="field-hint">Shown as a square. Pick an image at least ${String(LOGO_SIZE)}&nbsp;×&nbsp;${String(LOGO_SIZE)}&nbsp;px; you’ll see how it’s cropped before it’s saved.</p>
+              <p class="field-hint">Shown as a square. Pick an image at least ${String(LOGO_SIZE)}&nbsp;×&nbsp;${String(LOGO_SIZE)}&nbsp;px; a wider or taller one is cropped to its center square.</p>
               <p class="set-field-warn" id="logoShape" hidden>Your logo isn’t square, so emails show it stretched. Replace it to have it cropped square.</p>
               <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
             </div>
@@ -212,25 +216,23 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
     }
     showLogoError("");
     try {
-      // Squared and previewed first: what uploads is the PNG the publisher saw, whatever
-      // the size or shape of the file they picked.
-      const png = await previewLogo(file);
-      if (!png) {
-        return;
-      }
+      // Squared before it uploads: every surface shows the logo square, and an email
+      // stretches one that isn't. The tile shows the result; Replace is the way back.
+      const squared = await squareImage(file, LOGO_SIZE);
+      const cropped = squared.width !== squared.height;
       // The logo is part of the identity, so an upload that reaches scheduled emails
       // asks first (withRemakeConfirm); the file is held and re-sent with the ids.
       const r = await withRemakeConfirm(
         (ack) => {
           const fd = new FormData();
-          fd.append("file", new File([png], "logo.png", { type: "image/png" }));
+          fd.append("file", new File([squared.png], "logo.png", { type: "image/png" }));
           const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
           return api<LogoResponse>(`/api/settings/logo${q}`, { method: "POST", body: fd });
         },
         remakeIdentity("Upload", "Uploading"),
       );
       if (r) {
-        logoSaved(r, "Logo updated");
+        logoSaved(r, cropped ? "Logo updated, cropped to its center square" : "Logo updated");
       }
     } catch (err) {
       logoFailed(err);
