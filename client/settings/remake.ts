@@ -1,4 +1,4 @@
-// The re-make confirmation (SPEC §6, §9; DESIGN §5): the in-use chip, the applied
+// The re-make confirmation (SPEC §6, §9; DESIGN §4): the in-use chip, the applied
 // notice, and the confirm-then-save flow the Template and Settings pages share.
 
 import type { InUseView, RemakeRequiredError, ScheduledSendRef } from "../../shared/settings";
@@ -86,7 +86,7 @@ export async function withRemakeConfirm<T>(
   }
 }
 
-// The confirmation itself (DESIGN §5): one sentence on what the save reaches, the
+// The confirmation itself (DESIGN §4): one sentence on what the save reaches, the
 // scheduled posts by name, three short facts the publisher scans (what changes, what
 // stays, what's next), and the alternative (a second template, which Kestrel does not
 // offer yet).
@@ -171,7 +171,7 @@ export const remakeIdentity = (action: string, gerund: string): RemakeVerb => ({
 });
 
 /**
- * The standing in-use chip (DESIGN §3): the state a template or identity change would
+ * The standing in-use chip (DESIGN §8): the state a template or identity change would
  * reach, read from GET /api/settings `inUse`.
  */
 export function inUseChip(inUse: InUseView | null | undefined): Html {
@@ -195,7 +195,7 @@ const fmtAt = (ms: number) =>
   ).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 
 /**
- * The applied-change notice (SPEC §8; DESIGN §2 home ⑥): a template or identity change
+ * The applied-change notice (SPEC §8; DESIGN §5): a template or identity change
  * re-made the scheduled emails at `at`. One text for both surfaces; `n` is how many posts
  * it names (the dashboard's aggregate) or 1 for the post's own. It states the event and
  * the next step: the window is the review (SPEC §6), and a cleared notice can afford to
@@ -208,7 +208,7 @@ export function appliedNoticeHtml(at: number, n: number, onPost: boolean): Html 
 
 /**
  * After a save that applied to scheduled emails, the toast says how many and that a
- * test is needed again (DESIGN §2); with none, the plain confirmation.
+ * test is needed again (DESIGN §4); with none, the plain confirmation.
  */
 export function savedToast(what: string, remade: readonly unknown[] | null | undefined): string {
   const n = (remade || []).length;

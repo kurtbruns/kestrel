@@ -1,18 +1,18 @@
 #!/usr/bin/env node
 /*
- * Lint the admin SPA's design tokens (DESIGN §3).
+ * Lint the admin SPA's design tokens (DESIGN §8).
  *
  * This is a framework-free app with a bundler but no CSS compiler: a `var(--typo)`
  * silently falls back to nothing, and nothing catches a mistyped or renamed token. Two
- * rules from DESIGN §3 are stated there but nothing enforced them — this script does:
+ * rules from DESIGN §8 are stated there but nothing enforced them — this script does:
  *
  *   1. Every `var(--x)` with no fallback (styles.css or the client source) resolves to a token
  *      declared somewhere — a `:root` theme token or a component-scoped one. This is
  *      what makes a token *rename* safe: drop a definition without updating a
  *      reference and it becomes a build failure here, not a silent wrong color in the
  *      browser. `var(--x, fallback)` is a deliberate optional hook and is exempt.
- *   2. Every color-valued token has BOTH a light and a dark value — "a color defined
- *      in only one theme is a bug" (DESIGN §3). Non-color tokens (the z-index ladder,
+ *   2. Every color-valued token has BOTH a light and a dark value, as DESIGN §8
+ *      requires: a color defined in only one theme is a bug. Non-color tokens (the z-index ladder,
  *      font stacks) are theme-independent and exempt by their value shape; a token
  *      that only aliases another (`var(--x)`) tracks that token across themes and so
  *      needs no dark value of its own.

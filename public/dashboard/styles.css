@@ -5,7 +5,7 @@
    different values on purpose; don't assume they share meaning. */
 :root {
   color-scheme: light dark;
-  /* Layering — one named z-index ladder (DESIGN §4). Every fixed or floating surface
+  /* Layering — one named z-index ladder (DESIGN §9). Every fixed or floating surface
      references a rung by token, never a bare literal; the order encodes the intent.
      z-index is theme-independent, so it lives only here (not the dark block). */
   --z-content: 1;
@@ -22,11 +22,11 @@
   --bg: #fbfbfa;
   --card: #fff;
   --hover: #efefef;
-  /* Neutral ink — the strong near-black/near-white neutral (DESIGN §3). A text token
+  /* Neutral ink — the strong near-black/near-white neutral (DESIGN §8). A text token
      for headings and strong labels; never a button fill (Primary is --accent). */
   --ink: #18181b;
   --ink-on: #ffffff;
-  /* Semantic feedback — one {fg, bg, line} scale each for danger / warn / ok (DESIGN §3).
+  /* Semantic feedback — one {fg, bg, line} scale each for danger / warn / ok (DESIGN §8).
      fg is the saturated hue (text on the soft bg, or a solid fill paired with an on-color);
      bg is the soft tint behind a notice; line is its border. There is one red, not two —
      the old --danger vs --b-bad-* split is collapsed here. Kept distinct from the
@@ -48,7 +48,7 @@
   --status-draft-fg: #52525b;
   --status-draft-line: #d4d4d8;
   /* Scheduled is a violet, deliberately off the slate-blue action accent (--accent)
-     so the "scheduled" status never reads as the primary action (DESIGN §3); the fill
+     so the "scheduled" status never reads as the primary action (DESIGN §8); the fill
      backs the scheduled pill, banner, and cards, and the line borders them. */
   --status-scheduled-bg: #ece6f9;
   --status-scheduled-fg: #6743ac;
@@ -90,7 +90,7 @@
   /* Code surface — inline `code` chip and the fenced-block band. A hair off the editor well
      (--syntax-bg), lighter than the neutral --chip, so code reads as code without a heavy box. */
   --syntax-code-bg: #f2f2f4;
-  /* HTTP method badges in the API reference (DESIGN §3). A self-contained palette like
+  /* HTTP method badges in the API reference (DESIGN §8). A self-contained palette like
      --syntax-*: verb colors are a naming convention, not feedback or lifecycle, so they
      borrow no semantic scale. The badge tints each over a wash of itself (.api-method). */
   --method-get: #166534;
@@ -595,7 +595,7 @@ body.nav-resizing .sidebar {
   margin: 10px 2px 0;
   line-height: 1.5;
 }
-/* The connected state: an inline status line reusing the --ok feedback scale (DESIGN §3),
+/* The connected state: an inline status line reusing the --ok feedback scale (DESIGN §8),
    not a notification — a quiet confirmation the agent has edited here. */
 .conn-status {
   display: flex;
@@ -1185,7 +1185,7 @@ button:hover {
 button:active {
   transform: translateY(0.5px);
 }
-/* --- Buttons: five roles (DESIGN §1), chosen by importance and consequence, one
+/* --- Buttons: five roles (DESIGN §7), chosen by importance and consequence, one
    class each. The bare `button` above is the neutral default (Ghost's card-filled
    end); the classes below step up to Primary / Secondary or down to the quiet Ghost,
    plus Danger and the square Icon. Exactly one solid brand-blue action — Primary — is
@@ -1194,7 +1194,7 @@ button:active {
 
 /* One box height across the label roles, so a row that mixes them (the editor's
    Save draft / Send test email / Schedule, a modal's Cancel + confirm) aligns:
-   roles differ by treatment — fill, weight, font-size — never by height (DESIGN §1).
+   roles differ by treatment — fill, weight, font-size — never by height (DESIGN §7).
    A smaller-font role (Secondary, Ghost) grows to this floor with its label centered
    rather than sitting a few pixels short of the Primary beside it. The bare `button`
    default already meets it; the square Icon role and the segmented toggle Control keep
@@ -1526,7 +1526,7 @@ td a:hover {
 /* Subscriber consent states borrow a hue that matches the state's meaning: confirmed →
    the sent green, unsubscribed → the draft grey, suppressed → danger red (below). Pending
    awaits double-opt-in — a waiting/attention state — so it takes the amber `warn` scale,
-   NOT `--status-sending`: the send "sending" badge is blue (DESIGN §3), and a pending subscriber
+   NOT `--status-sending`: the send "sending" badge is blue (DESIGN §8), and a pending subscriber
    must never read as a send in flight. (The two coincided only while `--status-sending` was
    amber; when it went blue for the dispatch treatment, this pill must stay amber.) */
 .badge.confirmed {
@@ -1748,7 +1748,7 @@ body.web-mode .content {
   margin: 0;
   padding: 0;
 }
-/* The page sits under one strip that says where the post stands (DESIGN §7). The strip is
+/* The page sits under one strip that says where the post stands (DESIGN §3). The strip is
    the editor's, above the frame, and the frame is as tall as the post, so the window scrolls
    and the strip goes up with the page like the test pages' strip. It wears the brand accent
    like the reader surface's dev pill, its tag as the pill's inverted chip, and its content
@@ -1815,7 +1815,7 @@ body.web-mode .content {
   padding: 0 16px;
 }
 /* Sent record view: a read-only delivery record. The outcome tiles reuse the
-   semantic feedback scales (--ok / --warn / --danger, DESIGN §3); a status badge, not
+   semantic feedback scales (--ok / --warn / --danger, DESIGN §8); a status badge, not
    a feedback color, still labels the send's lifecycle. */
 .rec-card {
   display: flex;
@@ -1930,7 +1930,7 @@ body.web-mode .content {
   margin: 0;
   font-size: 15px;
 }
-/* The view toggle (Failures / Delivered / All) is a Control, not a button (DESIGN §1):
+/* The view toggle (Failures / Delivered / All) is a Control, not a button (DESIGN §7):
    the same segmented, aria-pressed pill group as the Template preview-width toggle, its
    active segment in the Secondary palette. It switches what you're looking at; it never
    commits an action. */
@@ -1983,7 +1983,7 @@ body.web-mode .content {
 }
 
 /* ---- live in-flight watch: the `sending` state of the record view ---- */
-/* The sending treatment is blue (--status-sending-*, DESIGN §3) — distinct from the
+/* The sending treatment is blue (--status-sending-*, DESIGN §8) — distinct from the
    action slate-blue — carried by the phase pill, the dispatch bar, and the swatch. */
 .rec-sw.sw-sending {
   background: var(--status-sending-fg);
@@ -2193,7 +2193,7 @@ body.web-mode .content {
   font-size: 12.5px;
   color: var(--warn-fg);
 }
-/* A scheduled send while no provider is connected (DESIGN §2): the countdown stays, and a
+/* A scheduled send while no provider is connected (DESIGN §4): the countdown stays, and a
    line beneath it in the same amber says the send will be held when it fires. */
 .sched-held {
   margin-top: 4px;
@@ -2418,7 +2418,7 @@ body.web-mode .content {
   background: #fff;
   display: block;
 }
-/* A scheduled post's Edit tab (DESIGN §7): the text stays fully legible, selectable, and
+/* A scheduled post's Edit tab (DESIGN §3): the text stays fully legible, selectable, and
    copyable (the fields are readonly, not disabled, since a disabled textarea cannot even be
    selected), on the recessed surface Settings uses for a read-only card (`.set-card.sunken`);
    the caret is hidden because the field is not for typing. The way out is the composer's
@@ -2478,7 +2478,7 @@ body.web-mode .content {
 }
 /* The locked composer's foot: where a draft's foot offers images, a scheduled post's says
    the way out, "Cancel the schedule to edit", with the read-only lock Settings uses. It is
-   a hint, not a control (Cancel stays on the banner, DESIGN §7), so no pointer and no hover
+   a hint, not a control (Cancel stays on the banner, DESIGN §3), so no pointer and no hover
    lift. `.nudge` pulses it once, in the read-only note's tint, when an edit is attempted,
    so the refusal is seen where the keystroke landed; reduced-motion holds the tint instead. */
 .composer-foot-lock {
@@ -2517,7 +2517,7 @@ body.web-mode .content {
 .actions-bar > .row:only-child {
   margin-left: auto;
 }
-/* The autosave cue (DESIGN §2, home ⑤), beside Save draft. Model B's save lifecycle:
+/* The autosave cue (DESIGN §5, §6), beside Save draft. The editor's save lifecycle:
    Unsaved (amber --warn dot) · Saving… (pulsing --accent dot) · Saved (green --ok
    dot). The dot is a reinforcement, never the whole signal — the text label carries
    each state too, so the cue survives a reader who can't tell the dot's color. The
@@ -2653,7 +2653,7 @@ body.web-mode .content {
   margin: 0 0 14px;
   line-height: 1.5;
 }
-/* A dialog's not-connected line (DESIGN §2) takes the health block's amber warning, so it
+/* A dialog's not-connected line (DESIGN §4) takes the health block's amber warning, so it
    reads as the reason the dialog's action is off rather than as one more hint. */
 .modal .hint.not-connected {
   color: var(--warn-fg);
@@ -2695,7 +2695,7 @@ body.web-mode .content {
   border-top: 0;
   justify-content: flex-start;
 }
-/* Link — a text-link-styled action (DESIGN §1), not one of the button roles. Reserved
+/* Link — a text-link-styled action (DESIGN §7), not one of the button roles. Reserved
    for a deliberately subordinate choice, like the in-modal Send now that sits below
    the Schedule Primary: it must read as clearly demoted, so it is a link, not a Ghost
    button that would compete with Cancel. Still a real <button>, so it's keyboard- and
@@ -2716,12 +2716,12 @@ button.linkbtn:hover {
 
 .countdown {
   font-variant-numeric: tabular-nums;
-  /* The scheduled violet (DESIGN §3), so the fire-time countdown on the scheduled
+  /* The scheduled violet (DESIGN §8), so the fire-time countdown on the scheduled
      cards (Sent page + dashboard) carries the same "scheduled" cue as the pill. */
   color: var(--status-scheduled-fg);
 }
 /* Past the server's missed tolerance the countdown says how late the send is, in the
-   danger tone: a missed fire time needs a look (DESIGN §9). */
+   danger tone: a missed fire time needs a look (DESIGN §4). */
 .countdown.countdown-missed {
   color: var(--danger-fg);
 }
@@ -2852,7 +2852,7 @@ td.act {
   color: var(--muted);
   margin-top: 4px;
 }
-/* --- Field validation (DESIGN §2, home ④): an error about one field lives on that
+/* --- Field validation (DESIGN §5): an error about one field lives on that
    field — the input goes to an invalid state and the reason sits directly beneath it,
    tied by aria-describedby. This replaces the old disable-the-button + `title` tooltip,
    which never reached keyboard, touch, or screen-reader users. --- */
@@ -2873,7 +2873,7 @@ textarea.is-invalid {
   font-weight: 700;
 }
 /* A dialog's own error, when no one field is at fault: just above its actions, where the
-   reader is looking rather than in a toast at the foot of the screen (DESIGN §2). */
+   reader is looking rather than in a toast at the foot of the screen (DESIGN §5). */
 .modal .dialog-error {
   margin-top: 12px;
 }
@@ -2985,7 +2985,7 @@ textarea.is-invalid {
 #f-slug.slug-auto {
   color: var(--muted);
 }
-/* --- Editor-state banner (DESIGN §2, home ③): one persistent, in-flow notice at the
+/* --- Editor-state banner (DESIGN §5): one persistent, in-flow notice at the
    top of the editor, in three variants. `scheduled` marks a frozen/soft-locked post
    (SPEC §6); `conflict` warns the draft changed elsewhere (another tab, or Claude) —
    its two actions are equal-weight Ghost, since both choices lose something; `info` is
@@ -3019,7 +3019,7 @@ textarea.is-invalid {
   border-color: var(--warn-line);
 }
 
-/* --- Notice (DESIGN §2, home ⑥): an event the reader could not otherwise know happened,
+/* --- Notice (DESIGN §5): an event the reader could not otherwise know happened,
    shown once and cleared by the reader, asking nothing. It wears the calm banner tint, whose
    one definition is the --banner-bg / --banner-line tokens, but is a class of its own:
    its layout is prose plus one control, not a status line with an actions row, so it never
@@ -4096,7 +4096,7 @@ button.api-filter-clear svg {
   margin-bottom: 34px;
 }
 
-/* --- copying text out of the app (DESIGN §1, ui/copy.ts) ---
+/* --- copying text out of the app (DESIGN §7, ui/copy.ts) ---
    A labelled block (a code block, or the API reference's query and content-type tables):
    its label line, then the block. The Copy is a control outside the five roles: the word
    and its glyph, no fill or border, quiet on the line it shares; the glyph turns to a
@@ -4158,7 +4158,7 @@ button.copied svg {
   flex: 0 0 auto;
 }
 
-/* --- groups: the sections kept together by whom they serve (DESIGN §5). A group has no
+/* --- groups: the sections kept together by whom they serve (DESIGN §3). A group has no
    heading, since each section's title already says what it is; a wider gap than the one
    between sections is all that separates one group from the next. --- */
 .set-group + .set-group {
@@ -4209,7 +4209,7 @@ button.copied svg {
   background: var(--accent-soft);
 }
 /* In use by scheduled posts (SPEC §9): the scheduled violet, a lifecycle fact and not a
-   warning, the same reading as the scheduled badge (DESIGN §3). Adds no token. */
+   warning, the same reading as the scheduled badge (DESIGN §8). Adds no token. */
 .set-chip.inuse {
   color: var(--status-scheduled-fg);
   border-color: var(--status-scheduled-line);
@@ -4223,7 +4223,7 @@ button.copied svg {
   opacity: 0.85;
 }
 /* Set at deploy: a fact about where the value lives, not a warning, so it stays neutral
-   rather than borrowing the amber `warn` scale (DESIGN §3). */
+   rather than borrowing the amber `warn` scale (DESIGN §8). */
 .set-chip.readonly {
   color: var(--muted);
   border-color: var(--line);
@@ -4770,7 +4770,7 @@ button.set-field-remove {
   flex: 1;
 }
 
-/* --- ways to subscribe (DESIGN §5): one card, the two ways as bands in reading order,
+/* --- ways to subscribe (DESIGN §3): one card, the two ways as bands in reading order,
    the page then the form, split by a full-width rule like the other cards' bands. Each
    band has the same head (a glyph, a title, one line) so they read as two options. The
    card folds by the section's own width, since the sidebar decides how wide Settings is. --- */
@@ -5712,7 +5712,7 @@ button.set-embed-copy svg {
    icon rail — and collapses to edge-to-edge once the sidebar becomes the off-canvas
    mobile drawer. The post editor keeps its own autosave + conflict model, so it does
    NOT use this bar. Its Save is a Primary button — now brand-blue --accent app-wide
-   (DESIGN §1), so the bar needs no primary override of its own. --- */
+   (DESIGN §7), so the bar needs no primary override of its own. --- */
 .savebar {
   position: fixed;
   /* Clears the full 240px sidebar; narrowed to the rail / drawer in the rules below. */

@@ -268,7 +268,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const claudeConnected = posts.some((p) => p.author === "service");
   const apiCardHtml = apiConnectCard(claudeConnected);
 
-  // The notice slot (#dashNotices, DESIGN §2 home ⑥) sits above the Scheduled section: a
+  // The notice slot (#dashNotices, DESIGN §5) sits above the Scheduled section: a
   // problem (the health block) outranks news, and the notices that exist are about
   // scheduled sends, so the eye lands on the queue right after reading one.
   const quickHtml = html`<div class="row quick-actions"><button data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
@@ -317,7 +317,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const tickCountdowns = countdowns(root, signal);
   tickCountdowns();
 
-  // From here the send-state layer keeps the send sections current (docs/DESIGN.md §9),
+  // From here the send-state layer keeps the send sections current (docs/DESIGN.md §4),
   // following every send from where the page's own read stood. Each report repaints what it
   // carries directly (the health block, the active-send widget, a listed send's Delivered).
   // A stage change, or any change to a scheduled or due send (a cancel, a move, a re-make,

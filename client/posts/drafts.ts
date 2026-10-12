@@ -160,7 +160,7 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
       return null;
     }
   }
-  // Follow the listed posts' sends from the first read of the list that answers (DESIGN §9):
+  // Follow the listed posts' sends from the first read of the list that answers (DESIGN §4):
   // a send that starts or is canceled, or moves, re-reads the list, whichever client made the
   // change, so a post that has gone out stops reading scheduled. A send's progress alone
   // (counts moving while it sends) changes nothing Drafts shows, so it reads nothing.

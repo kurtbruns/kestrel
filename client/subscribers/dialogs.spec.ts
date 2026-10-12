@@ -36,7 +36,7 @@ describe("addSubscriberModal", () => {
     expect(input.classList.contains("is-invalid")).toBe(false);
   });
 
-  // DESIGN §2: adding sends a confirmation, so with no provider connected the dialog says
+  // DESIGN §4: adding sends a confirmation, so with no provider connected the dialog says
   // so before anything is typed, rather than refusing after.
   it("says a confirmation can't be sent while no provider is connected, with no field and its act disabled", () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });

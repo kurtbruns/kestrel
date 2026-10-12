@@ -11,7 +11,7 @@ const live = new AbortController().signal;
 const showing = (): string[] =>
   [...$("#toasts").querySelectorAll(".toast:not(.leaving)")].map((t) => t.textContent ?? "");
 
-describe("toast (DESIGN §2)", () => {
+describe("toast (DESIGN §5)", () => {
   beforeEach(() => {
     resetShell();
     vi.useFakeTimers();

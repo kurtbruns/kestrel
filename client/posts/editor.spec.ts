@@ -486,7 +486,7 @@ describe("editor view", () => {
     expect($<HTMLElement>("#schedControls").hidden).toBe(true);
   });
 
-  // DESIGN §2: while no provider is connected, a scheduled send's window is real, but the
+  // DESIGN §4: while no provider is connected, a scheduled send's window is real, but the
   // send is held when it fires, and the banner says so beside the countdown it keeps.
   it("says a scheduled send will be held while no provider is connected, and keeps the countdown", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
@@ -1267,7 +1267,7 @@ describe("editor view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  // DESIGN §2: no provider is a standing state, so the dialog says so every time it opens
+  // DESIGN §4: no provider is a standing state, so the dialog says so every time it opens
   // and points to the step that connects one, rather than letting the server refuse.
   it("carries a standing line to connect a provider while none is connected, with no recipients, and won't send", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
@@ -1521,7 +1521,7 @@ describe("editor view", () => {
     expect(handle().dirty()).toBe(true);
   });
 
-  // DESIGN §2: the schedule dialog says no provider is connected before the publisher picks
+  // DESIGN §4: the schedule dialog says no provider is connected before the publisher picks
   // a time, rather than refusing after they confirm.
   it("carries a standing line in the schedule dialog while no provider is connected, with Schedule disabled and no picker or Send now", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });

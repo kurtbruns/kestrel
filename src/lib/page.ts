@@ -18,7 +18,7 @@ import { PAGE_SECURITY_HEADERS } from "./page_headers";
 const READER_BG_LIGHT = "#fbfbfa";
 const READER_BG_DARK = "#12110f";
 
-/* The app's brand accent (DESIGN.md §3), mirrored here for the publisher-only chrome the
+/* The app's brand accent (DESIGN.md §8), mirrored here for the publisher-only chrome the
    reader surface carries: the dev pill and the test pages' strip. Only the publisher ever
    sees them, and they are the app speaking, not the publication, so they wear the app's
    action color, matching a Primary action, rather than the reader ink; keep these values in

@@ -230,7 +230,7 @@ describe("sent view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  // SPEC §9, DESIGN §2: a deployment with no provider says so in the health block's warning
+  // SPEC §9, DESIGN §4: a deployment with no provider says so in the health block's warning
   // treatment, and a send scheduled before stays movable, with a line saying it is held.
   it("warns that nothing can be sent while no provider is connected, and says a moved send is held", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });

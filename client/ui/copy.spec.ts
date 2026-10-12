@@ -3,7 +3,7 @@ import { $, resetShell, stubClipboard } from "../test/support";
 import { codeBlock, copyButton, copyFace, copyWith, wireCopy } from "./copy";
 import { html, setHtml } from "./html";
 
-describe("copy (DESIGN §1)", () => {
+describe("copy (DESIGN §7)", () => {
   let root: HTMLElement;
   beforeEach(() => {
     resetShell();

@@ -59,7 +59,7 @@ export async function renderSentRecord(
 
   // A scheduled send is still cancel-to-edit: its home is the editor, not this record. The
   // editor takes this page's history entry, so Back goes where the reader came from, never
-  // to this URL that would only hand them to the editor again (DESIGN §9).
+  // to this URL that would only hand them to the editor again (DESIGN §4).
   if (send.status === "scheduled") {
     location.replace(`#/edit/${send.post_id}`);
     return;
@@ -72,7 +72,7 @@ export async function renderSentRecord(
 }
 
 // Phase → { label, tone } for the derived-phase pill. Tones reuse the status/semantic
-// palettes: sending = blue (the in-flight treatment, DESIGN §3), ok = green, warn/danger
+// palettes: sending = blue (the in-flight treatment, DESIGN §8), ok = green, warn/danger
 // as usual, scheduled = violet.
 const PHASE_META: Record<SendPhase, { label: string; tone: string }> = {
   scheduled: { label: "Scheduled", tone: "scheduled" },
@@ -676,7 +676,7 @@ function renderFrozenRecord(
     });
 
   // The record keeps absorbing delivery receipts after dispatch (§6), and follows them
-  // through the send-state layer at the server's pace (DESIGN §9): closely while they
+  // through the send-state layer at the server's pace (DESIGN §4): closely while they
   // arrive, easing off as they slow, then about once a minute, for as long as the page is
   // open, since a complaint can land long after the last delivery. Each report carries the
   // send's counters, which give every tile, so a read that brings nothing costs nothing

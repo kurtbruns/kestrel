@@ -1,4 +1,4 @@
-// The dismissible notice (DESIGN §2).
+// The dismissible notice (DESIGN §5).
 
 import { type Html, html, setHtml } from "./html";
 import { icon } from "./icons";

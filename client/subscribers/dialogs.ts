@@ -13,7 +13,7 @@ import { busy, modal, toast } from "../ui/widgets";
  * Add subscriber → the normal double opt-in (never an auto-confirm). While no provider is
  * connected the confirmation can't go and the server would refuse, so the dialog says so
  * before the publisher types anything: the standing line, no address field, its act
- * disabled (DESIGN §2).
+ * disabled (DESIGN §4).
  */
 export function addSubscriberModal(onDone: () => void, signal: AbortSignal): void {
   const notConnected = providerNotConnected();

@@ -265,7 +265,7 @@ describe("template view", () => {
     expect(bar().classList.contains("show")).toBe(false);
   });
 
-  it("the test dialog carries a standing line to connect a provider while no provider is connected (DESIGN §2)", async () => {
+  it("the test dialog carries a standing line to connect a provider while no provider is connected (DESIGN §4)", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
     await open();
     $("#tplTest").click();

@@ -62,7 +62,7 @@ export function untilStr(fireAt: number, due = false): string {
   if (due || d <= 0) {
     // From the fire time the send waits for the sweep's tick on that minute (a fire time is
     // on the minute, SPEC §6), a few seconds; nothing is sending yet, and the card leaves the
-    // queue once something is (docs/DESIGN.md §9).
+    // queue once something is (docs/DESIGN.md §4).
     return "Preparing to send…";
   }
   const s = Math.floor(d / 1000);

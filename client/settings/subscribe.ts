@@ -125,7 +125,7 @@ export function subscribeSection(page: SettingsPage): Html {
 }
 
 /** The embed's one act, copying the snippet, as a Secondary button rather than the quiet
- *  Copy a code block wears, since here copying is what the band is for (DESIGN §1). */
+ *  Copy a code block wears, since here copying is what the band is for (DESIGN §7). */
 function embedCopy(mode: EmbedMode, code: string): Html {
   const variant = mode === "styled" ? "Styled" : "Plain";
   return html`<button type="button" class="secondary set-embed-copy" data-copy="${code}" data-copy-word="Copy HTML" aria-label="Copy HTML, ${variant} form">${copyFace(false, "Copy HTML")}</button>`;

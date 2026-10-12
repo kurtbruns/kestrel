@@ -459,7 +459,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   };
   let templateBaseline = s.emailTemplate || "";
   const defaultRecipients = Array.isArray(s.testRecipients) ? s.testRecipients : [];
-  // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §3).
+  // Standing: whether scheduled posts are using this template (SPEC §9, DESIGN §8).
   setHtml($("#tplInUse"), inUseChip(data.inUse));
 
   setHtml(
@@ -754,7 +754,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // render unsaved editor content, which would test something that won't ship.
   tplTestEl.onclick = () => {
     // While no provider is connected the server would refuse a test, so the dialog leaves
-    // out the recipients and keeps only the standing line (DESIGN §2), and says nothing of
+    // out the recipients and keeps only the standing line (DESIGN §4), and says nothing of
     // saving first, since nothing will be sent.
     const notConnected = providerNotConnected();
     const dirty = !notConnected && isDirty();

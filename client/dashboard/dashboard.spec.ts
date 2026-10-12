@@ -383,7 +383,7 @@ describe("dashboard", () => {
     expect(location.hash).toBe("#/edit/p9");
   });
 
-  // SPEC §9, DESIGN §2: a deployment with no provider connected says so where the
+  // SPEC §9, DESIGN §4: a deployment with no provider connected says so where the
   // developer lands, as a standing state, and its checklist puts connecting one first.
   const steps = () => $$(".setup-steps li strong").map((s) => s.textContent);
   describe("while no email provider is connected", () => {
@@ -418,7 +418,7 @@ describe("dashboard", () => {
       fake = world([post()], sendServer(), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      // In the health block's own warning treatment (DESIGN §2), with nothing wrong on a send.
+      // In the health block's own warning treatment (DESIGN §4), with nothing wrong on a send.
       const block = $("#dashHealth .health");
       expect(block.classList.contains("amber")).toBe(true);
       const line = $(".dash-not-connected", block);

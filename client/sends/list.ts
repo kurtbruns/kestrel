@@ -1,6 +1,6 @@
 // The sent list: scheduled sends with their countdowns, the sends in progress and any that
 // need the operator, and the record of what has gone out, kept current by the send-state
-// layer (docs/DESIGN.md §9).
+// layer (docs/DESIGN.md §4).
 
 import { earlierCursor } from "../../shared/cursor";
 import type { SendListResponse, SendView } from "../../shared/sends";
@@ -141,7 +141,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     // server's words for its condition. A send held for want of a provider (SPEC §9) is the
     // deployment's state showing on a send, so while the deployment is not connected the
     // held sends and the state are one card in place of the state's amber line, with the
-    // fix once, as a link (DESIGN §2).
+    // fix once, as a link (DESIGN §4).
     const allRefused = live.flatMap((s) => {
       const c = conditionOf(s, "refused");
       return c ? [{ s, c }] : [];

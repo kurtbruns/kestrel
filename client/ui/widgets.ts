@@ -11,12 +11,12 @@ import { icon } from "./icons";
 const TOAST_MS = 3600;
 // Matches the .toast.leaving transition in styles.css, so removal trails the collapse.
 const TOAST_LEAVE_MS = 300;
-// More than this at once is a wall, not a confirmation (DESIGN §2).
+// More than this at once is a wall, not a confirmation (DESIGN §5).
 const MAX_TOASTS = 3;
 const toastTimers = new WeakMap<HTMLElement, number>();
 
 /**
- * A transient confirmation in the app-wide toast region (DESIGN §2). The same message
+ * A transient confirmation in the app-wide toast region (DESIGN §5). The same message
  * already showing has its time restarted rather than a second copy stacked beneath it,
  * and past MAX_TOASTS the oldest leaves early, so a burst never builds a tower.
  */

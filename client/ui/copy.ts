@@ -1,4 +1,4 @@
-// Copying text out of the app, one way everywhere (DESIGN §1): a quiet Copy and its glyph,
+// Copying text out of the app, one way everywhere (DESIGN §7): a quiet Copy and its glyph,
 // which says it worked where it sits, the glyph turning to a check for a moment while the
 // word stays, never with a toast. A code block wears it on its label line (`codeBlock`);
 // a single value (an address) wears it beside the value; either copies the plain text.

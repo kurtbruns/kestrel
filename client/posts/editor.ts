@@ -176,7 +176,7 @@ export async function renderEditor(
   const revisions = new RevisionTracker(post.current_revision);
   // A scheduled post keeps its formatting toolbar in view, greyed. The buttons take
   // aria-disabled rather than disabled so a click still reaches applyFormat, whose locked
-  // branch nudges the foot line, the way out (DESIGN §7).
+  // branch nudges the foot line, the way out (DESIGN §3).
   const toolbarHtml = TOOLBAR.map(
     (group, i) =>
       html`${i ? html`<span class="sep"></span>` : null}${group.map(
@@ -185,9 +185,9 @@ export async function renderEditor(
       )}`,
   );
   // readonly, not disabled: a scheduled post's text can still be read, selected, and
-  // copied; only a change is refused (DESIGN §7).
+  // copied; only a change is refused (DESIGN §3).
   const ro = locked ? READONLY : null;
-  // The notice slot (#editorNotices, DESIGN §2 home ⑥) sits between the scheduled banner
+  // The notice slot (#editorNotices, DESIGN §5) sits between the scheduled banner
   // and the conflict banner, so the top of the editor reads state, then event, then
   // decision. Empty, it has no height; notice() renders into it.
 
@@ -317,7 +317,7 @@ export async function renderEditor(
   // Schedule and hung the reason in a `title` on the row — invisible to keyboard,
   // touch, and screen readers. Instead Schedule stays live and we validate on click:
   // an empty subject puts the input into an error state with the reason directly
-  // beneath it (DESIGN §2, home ④), tied by aria-describedby and announced (role=alert).
+  // beneath it (DESIGN §5), tied by aria-describedby and announced (role=alert).
   const subjectErrEl = $("#f-subject-error");
   function clearSubjectError() {
     subjectEl.classList.remove("is-invalid");
@@ -455,7 +455,7 @@ export async function renderEditor(
   }
   // A scheduled post opens on Preview: the preview is the copy that will send, and the
   // Edit tab is read-only, so it is somewhere the publisher goes deliberately and finds
-  // the way out written on it (DESIGN §7).
+  // the way out written on it (DESIGN §3).
   if (locked) {
     showPreview();
   }
@@ -463,7 +463,7 @@ export async function renderEditor(
   // --- the lock's nudge ---
   // A scheduled post refuses edits at the browser (readonly) and at the API (SPEC §6). When
   // one is attempted anyway, the foot's "Cancel the schedule to edit" pulses once, so the
-  // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §7).
+  // way out is seen where the keystroke landed rather than announced elsewhere (DESIGN §3).
   const lockFoot = locked ? $("#lockFoot") : null;
   let nudgeTimer: number | undefined;
   function nudge() {
@@ -911,7 +911,7 @@ export async function renderEditor(
   if (locked && scheduled) {
     // The send as last reported: this page's read of it (or, until that succeeds, what the
     // post's read says of it), then each read of the send-state layer that found it
-    // changed, whichever client changed it (DESIGN §9).
+    // changed, whichever client changed it (DESIGN §4).
     let current: BannerSend = sendRead?.send ?? {
       ...scheduled,
       phase: "scheduled",
@@ -981,7 +981,7 @@ export async function renderEditor(
     };
     showRemade();
 
-    // --- following the send (DESIGN §9) ---
+    // --- following the send (DESIGN §4) ---
     // A move, a re-make, or a cancel made elsewhere (by Claude or another tab) shows in
     // place, and when the send starts this page hands off to its send page, which is the
     // send's home from then on, saying why the page changed.
@@ -1166,12 +1166,12 @@ export async function renderEditor(
   // per-recipient path as a real send (I5).
   $<HTMLButtonElement>("#testBtn").onclick = () => {
     // A scheduled post's test is its frozen copy, exactly as it will fire (SPEC §5);
-    // the dialog is where that is said (DESIGN §7).
+    // the dialog is where that is said (DESIGN §3).
     const lead = locked
       ? "Delivers the frozen copy that will send, exactly as it will fire, so you can check it in a client. One address per line."
       : "Delivers the rendered email to real inboxes so you can check it in a client. One address per line.";
     // While no provider is connected the server would refuse a test, so the dialog leaves
-    // out the recipients and keeps only the standing line (DESIGN §2).
+    // out the recipients and keeps only the standing line (DESIGN §4).
     const notConnected = providerNotConnected();
     const m = modal(
       html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}${notConnected ? null : html`<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p>`}<div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
@@ -1262,7 +1262,7 @@ export async function renderEditor(
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
       // While no provider is connected the server would refuse both views, so the dialog
-      // drops the picker and the Send now row and leaves only the standing line (DESIGN §2).
+      // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
       const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView, signal);
@@ -1301,7 +1301,7 @@ export async function renderEditor(
             });
             m.close();
             // Stay on the post, re-rendered in its scheduled state: the window is the
-            // review and this page is the review surface (SPEC §6, DESIGN §7).
+            // review and this page is the review surface (SPEC §6, DESIGN §3).
             toast(withNoProviderNote(`Scheduled for ${fmt(t)}. Send yourself a test.`));
             remount();
           } catch (e) {
@@ -1415,7 +1415,7 @@ function movedOn(send: SendView, remount: () => void): boolean {
 }
 
 /**
- * The scheduled banner's words for where its send stands (DESIGN §9), in the cards' own
+ * The scheduled banner's words for where its send stands (DESIGN §4), in the cards' own
  * formats: the fire time and a countdown while the window is open; from the fire time, the
  * same line with "Preparing to send…" in place of the countdown; past the server's missed
  * tolerance, how late it is, in the danger tone.
@@ -1448,7 +1448,7 @@ function sendHome(data: PostResponse): string | null {
 }
 
 /**
- * Move to a send's new home in place of this page's history entry (DESIGN §9): the
+ * Move to a send's new home in place of this page's history entry (DESIGN §4): the
  * editor URL the reader opened has become the send page, so Back goes where they came
  * from rather than to an editor that would only hand them forward again.
  */

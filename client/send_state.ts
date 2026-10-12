@@ -1,6 +1,6 @@
 // The send-state layer: one shared read of the send feed (GET /api/sends/feed), which pages
 // follow instead of polling, so every page tells the same story about a send and keeps up
-// with it, whichever client changed it (docs/DESIGN.md §9). The server says when to read
+// with it, whichever client changed it (docs/DESIGN.md §4). The server says when to read
 // again; the layer keeps to it.
 
 import { earlierCursor } from "../shared/cursor";

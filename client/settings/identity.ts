@@ -189,7 +189,7 @@ export function mountIdentity(
     }
   });
   // A refused logo change (a scheduled send about to fire) is said beneath the tile,
-  // field validation's home (DESIGN §2, ④): the logo has no save bar state of its own.
+  // field validation's home (DESIGN §5): the logo has no save bar state of its own.
   const logoError = $("#logoError", root);
   const logoErrorText = $("span:last-of-type", logoError);
   const showLogoError = (msg: string) => {

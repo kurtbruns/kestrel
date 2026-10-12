@@ -65,7 +65,7 @@ export function earliestFireAt(now = Date.now()): Date {
  * purpose (SPEC §9). This is the developer's "nothing is delivered" voice. A deployment
  * partway through setup is the other state, not connected (`providerNotConnected`). Read
  * from the read-only deployment reflection fetched once at boot; the copy avoids the
- * internal "fake transport" term (docs/DESIGN.md §2).
+ * internal "fake transport" term (docs/DESIGN.md §4).
  */
 export function noEmailProvider(): boolean {
   return appState.appConfig?.deployment.provider === "fake";
@@ -112,7 +112,7 @@ export function heldAdviceHtml(): Html {
 }
 
 /**
- * The one line for sends held while no provider is connected (DESIGN §2): the state, the
+ * The one line for sends held while no provider is connected (DESIGN §4): the state, the
  * held sends (`which`, a link to one or to the list of several), the reassurance every
  * refused send carries (SPEC §12), and the fix, once. The dashboard's health block and the
  * Sent page's attention card both say it, in place of the state's line and the send's own.
@@ -123,7 +123,7 @@ export function heldSendsHtml(which: Html, count: number): Html {
 }
 
 /**
- * A page's standing not-connected warning (DESIGN §2): the health block's amber treatment,
+ * A page's standing not-connected warning (DESIGN §4): the health block's amber treatment,
  * not a Notice and not dismissible, since the state holds every time the page is read.
  * `cls` names the surface's line; null when a provider is connected.
  */
@@ -145,7 +145,7 @@ export function heldWhenFiresHtml(): Html | null {
 }
 
 /**
- * The standing line a dialog carries while no provider is connected (DESIGN §2): not a
+ * The standing line a dialog carries while no provider is connected (DESIGN §4): not a
  * Notice and not dismissible, since the state holds every time the dialog opens, and gone
  * once a provider is set. `why` says what the state stops; `after` ends the sentence the
  * link starts. Null otherwise.
