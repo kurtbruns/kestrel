@@ -10,6 +10,8 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+## [1.6.0] - 2026-10-11
+
 **Upgrading from 1.5.0.** One database migration: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. Existing posts keep their slugs and read as set by hand; tick *Auto-generate from subject* on a draft to have its slug follow the subject again. On npm 12, to end `npm install` without the blocked-install-scripts warning, add this to your `package.json` (a new instance has it already): `"allowScripts": { "esbuild": true, "fsevents": true, "workerd": true }`.
 
 ### Breaking
@@ -285,7 +287,8 @@ The first tagged release: a self-contained newsletter app on a Cloudflare Worker
 - A build-version stamp: every instance reports its version, commit, and build time, read-only in the editor and at `GET /api/version`.
 - This changelog and a semantic-versioning release process.
 
-[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/kurtbruns/kestrel/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.6.0
 [1.5.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.5.0
 [1.4.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kurtbruns/kestrel/releases/tag/v1.3.0
