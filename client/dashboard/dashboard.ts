@@ -27,7 +27,6 @@ import {
   needsOperator,
   sendsNow,
 } from "../sends/progress";
-import { appliedNoticeHtml } from "../settings/remake";
 import { appState } from "../state";
 import { addSubscriberModal } from "../subscribers/dialogs";
 import { copyButton, copyFace, wireCopy } from "../ui/copy";
@@ -35,7 +34,6 @@ import { $, $$ } from "../ui/dom";
 import { fmt } from "../ui/format";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { notice } from "../ui/notice";
 import { badge, renderError } from "../ui/widgets";
 
 // The post-login landing and the brand's target (the default route). Built entirely
@@ -268,9 +266,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   const claudeConnected = posts.some((p) => p.author === "service");
   const apiCardHtml = apiConnectCard(claudeConnected);
 
-  // The notice slot (#dashNotices, DESIGN §5) sits above the Scheduled section: a
-  // problem (the health block) outranks news, and the notices that exist are about
-  // scheduled sends, so the eye lands on the queue right after reading one.
   const quickHtml = html`<div class="row quick-actions"><button data-act="new-post">New post</button><button data-act="add-sub">Add subscriber</button><button data-nav="#/settings">Edit publication</button></div>`;
 
   // No news is good news: the health block appears only when something needs attention
@@ -286,7 +281,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported)))}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
-    <div id="dashNotices"></div>
     <div class="dash-cols">
       <section class="dash-section"><h2>Scheduled</h2><div id="dashScheduled">${dashScheduledHtml(scheduledOf(sends))}</div></section>
       <section class="dash-section"><h2>Drafts</h2>${draftsHtml}</section>
@@ -313,7 +307,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   wireDashSentRows(root);
   wireDashActiveCards(root);
   wireDashScheduledCards(root);
-  paintAppliedNotice(root, scheduledOf(sends));
   const tickCountdowns = countdowns(root, signal);
   tickCountdowns();
 
@@ -322,7 +315,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
   // carries directly (the health block, the active-send widget, a listed send's Delivered).
   // A stage change, or any change to a scheduled or due send (a cancel, a move, a re-make,
   // a new schedule, the fire time passing, a miss), reads the sends again for the queue,
-  // the notice, and the Sent table, whoever made it: a send that went due to sent between
+  // and the Sent table, whoever made it: a send that went due to sent between
   // two reads lands straight in the Sent table, and the other client's move shows within
   // one idle read.
   let reading = 0;
@@ -336,7 +329,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       sends = fresh.sends;
       setHtml($("#dashScheduled", root), dashScheduledHtml(scheduledOf(sends)));
       wireDashScheduledCards(root);
-      paintAppliedNotice(root, scheduledOf(sends));
       tickCountdowns(); // the fresh cards are empty until the next tick
       setHtml($("#dashSent", root), dashSentHtml(sends));
       wireDashSentRows(root);
@@ -422,26 +414,9 @@ function patchDelivered(root: HTMLElement, sends: SendView[]): void {
   }
 }
 
-// The dashboard's applied-change notice (SPEC §8): one aggregate over every scheduled
-// send a template or identity change re-made. Every re-make touches every scheduled
-// send, so the re-made ones always share one remade_at (a send scheduled since has
-// none), and the notice is always one moment and N posts. Its members are the sends
-// by id and remade_at, the same record each post page uses, so clearing it here
-// clears them there, and clearing every post hides it here. Re-painted with the
-// queue: notice() keeps one aggregate per slot, replaces it when the set changes (a
-// re-made send fired or was canceled), and clears it when the set is empty.
-function paintAppliedNotice(root: HTMLElement, scheduled: SendView[]): void {
-  const slot = $("#dashNotices", root);
-  const remade = scheduled.flatMap((s) => (s.remade_at ? [{ id: s.id, at: s.remade_at }] : []));
-  const at = remade.length ? Math.max(...remade.map((r) => r.at)) : 0;
-  notice(slot, {
-    kind: "applied",
-    members: remade.map((r) => ({ subject: r.id, version: r.at })),
-    markup: appliedNoticeHtml(at, remade.length, false),
-  });
-}
 /** The dashboard's scheduled cards are read-only summaries: the whole card links into the
- *  editor, where the schedule is actually managed. The Sent page keeps the one-call cancel
+ *  editor, where the schedule is actually managed. A send the server reports as re-made
+ *  since its last test says so, and the editor, where the test is, says what to do. The Sent page keeps the one-call cancel
  *  the review window needs (SPEC §8). */
 function dashScheduledHtml(scheduled: SendView[]): Html {
   if (!scheduled.length) {
@@ -450,7 +425,7 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   const held = heldWhenFiresHtml();
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}</div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Re-made since its last test</div>` : null}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {

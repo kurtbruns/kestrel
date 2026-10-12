@@ -28,8 +28,7 @@ import {
 import { at, every, mount, onAbort, poll, type ViewHandle } from "../lifecycle";
 import { followSend, readSendsNow, type StageChange } from "../send_state";
 import { openRescheduleModal } from "../sends/dialogs";
-import { can, has } from "../sends/progress";
-import { appliedNoticeHtml } from "../settings/remake";
+import { can, conditionOf, has } from "../sends/progress";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
 import {
@@ -43,7 +42,6 @@ import {
 import { highlightMarkdown } from "../ui/highlight";
 import { type Html, html, setHtml } from "../ui/html";
 import { type IconName, icon } from "../ui/icons";
-import { notice } from "../ui/notice";
 import { busy, infoTip, modal, renderError, toast } from "../ui/widgets";
 import { createAutosave } from "./autosave";
 import { DirtyTracker } from "./dirty";
@@ -187,10 +185,6 @@ export async function renderEditor(
   // readonly, not disabled: a scheduled post's text can still be read, selected, and
   // copied; only a change is refused (DESIGN §3).
   const ro = locked ? READONLY : null;
-  // The notice slot (#editorNotices, DESIGN §5) sits between the scheduled banner
-  // and the conflict banner, so the top of the editor reads state, then event, then
-  // decision. Empty, it has no height; notice() renders into it.
-
   // The web version's address (SPEC §5), whole, so it opens as its own page. It differs
   // from this one only in the hash, which is what keeps a save safe when the link opens in
   // place (below).
@@ -205,8 +199,7 @@ export async function renderEditor(
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}</div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
-    <div id="editorNotices"></div>
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span> <button type="button" class="ghost" id="schedRemadeTest">Send test</button></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -965,21 +958,18 @@ export async function renderEditor(
     paintBanner();
     every(1000, paintBanner, signal);
 
-    // --- the applied-change notice (SPEC §8): an event, read once and cleared ---
-    // The same record as the dashboard's aggregate (kind "applied", the send id, its
-    // remade_at), so clearing it here clears it there once every member is, and a later
-    // change, here or while the page is open, shows it again on its own.
-    const showRemade = () => {
-      if (current.remade_at) {
-        notice($("#editorNotices"), {
-          kind: "applied",
-          subject: current.id,
-          version: current.remade_at,
-          markup: appliedNoticeHtml(current.remade_at, 1, true),
-        });
-      }
+    // --- re-made since its last test (SPEC §8): the server's condition, in the banner ---
+    // A template or identity change re-made the frozen email, so an earlier test no longer
+    // shows what will go out. The server says so until a test of the re-made copy lands,
+    // the same fact Claude reads, and the banner carries it with the test it asks for.
+    const remadeEl = $("#schedRemade");
+    const paintRemade = () => {
+      const remade = conditionOf(current, "remade");
+      remadeEl.hidden = !remade;
+      $("#schedRemadeMsg").textContent = remade?.message ?? "";
     };
-    showRemade();
+    $("#schedRemadeTest").onclick = () => $("#testBtn").click();
+    paintRemade();
 
     // --- following the send (DESIGN §4) ---
     // A move, a re-make, or a cancel made elsewhere (by Claude or another tab) shows in
@@ -1002,7 +992,7 @@ export async function renderEditor(
               return;
             }
             paintBanner();
-            showRemade();
+            paintRemade();
           },
           removed,
           // The layer's cursor ran ahead of the database: read the post and its send again.
@@ -1022,7 +1012,7 @@ export async function renderEditor(
           if (!movedOn(read.send, remount)) {
             current = read.send;
             paintBanner();
-            showRemade();
+            paintRemade();
             follow(read);
           }
           return false;
@@ -1230,6 +1220,11 @@ export async function renderEditor(
           }
           showWarnings(lastWarnings);
           m.close();
+          // A test of a scheduled post settles its re-made condition on the server; read the
+          // feed now so the banner's line goes with it rather than at the next idle read.
+          if (locked) {
+            readSendsNow();
+          }
           toast(
             withNoProviderNote(
               sent === addrs.length

@@ -528,7 +528,7 @@ describe("editor view", () => {
     const linked = scheduledPost(Date.now() + 3_600_000);
     await open(linked.routes);
     expect($("#schedWhen").textContent).toMatch(/Sends in 1h/);
-    expect(document.querySelector("#editorNotices .notice")).toBeNull();
+    expect($("#schedRemade").hidden).toBe(true);
 
     linked.move(Date.now() + 2 * 3_600_000); // Claude moves it
     await vi.advanceTimersByTimeAsync(60_000); // within one idle read
@@ -536,7 +536,8 @@ describe("editor view", () => {
 
     linked.remake(Date.now());
     await vi.advanceTimersByTimeAsync(60_000);
-    expect($("#editorNotices .notice").textContent).toMatch(/was applied to this post/);
+    expect($("#schedRemade").hidden).toBe(false);
+    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
 
     linked.cancel();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -1811,7 +1812,35 @@ describe("editor view", () => {
     expect($<HTMLElement>("#rescheduleSchedule").hidden).toBe(true);
   });
 
-  it("a scheduled post: the applied notice shows once, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
+  it("says a re-made send needs a test in its banner, and the line goes once a test lands (SPEC §8)", async () => {
+    const linked = scheduledPost(Date.now() + 86_400_000, Date.now() - 60_000);
+    await open([
+      ...linked.routes,
+      { path: "/api/settings", reply: () => ({ settings: { testRecipients: [] } }) },
+      {
+        method: "POST",
+        path: "/api/posts/p1/test",
+        reply: () => {
+          linked.sends.edit("s1", { tested_at: Date.now() }); // the server settles the condition
+          return { sent: true, warnings: [] };
+        },
+      },
+    ]);
+    expect($("#schedRemade").hidden).toBe(false);
+    // Its Send test is the editor's own test dialog.
+    $("#schedRemadeTest").click();
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto($<HTMLTextAreaElement>("#testTo"), "me@example.com");
+    $("#tGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).toBeNull();
+    // The feed is read at once after the test, not at the next idle read.
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#schedRemade").hidden).toBe(true);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("a scheduled post: the re-made line shows, an attempted edit nudges the foot, and Cancel returns it to a draft", async () => {
     // Relative to now, so the send stays ahead of its fire time and the re-make behind it
     // whatever day the suite runs.
     const linked = scheduledPost(Date.now() + 86_400_000, Date.now() - 86_400_000);
@@ -1826,7 +1855,7 @@ describe("editor view", () => {
         },
       },
     ]);
-    expect($("#editorNotices .notice").textContent).toMatch(/was applied to this post/);
+    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
     body().dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     await vi.advanceTimersByTimeAsync(16);
     expect($("#lockFoot").classList.contains("nudge")).toBe(true);

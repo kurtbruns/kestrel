@@ -594,7 +594,11 @@ describe("dashboard", () => {
     srv.edit("x6", { remade_at: Date.now() });
     await vi.advanceTimersByTimeAsync(60_000);
     expect(cards()).toEqual(["p6", "p5"]);
-    expect($("#dashNotices .notice").textContent).toMatch(/was applied to 2 scheduled posts/);
+    expect(
+      $$("#dashScheduled .sched-remade-mark").map(
+        (m) => m.closest<HTMLElement>(".sched-card")?.dataset.post,
+      ),
+    ).toEqual(["p6", "p5"]);
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -722,7 +726,7 @@ describe("dashboard", () => {
     expect(feedReads(fake)).toHaveLength(2);
   });
 
-  it("paints one applied-change notice over the re-made scheduled sends, which a dismiss clears", async () => {
+  it("marks each scheduled card the server reports as re-made since its last test, until a test lands (SPEC §8)", async () => {
     const srv = sendServer([
       scheduled({ remade_at: NOW - 500 }),
       scheduled({ id: "x4", post_id: "p5", fire_at: NOW + 120_000, remade_at: NOW - 500 }),
@@ -731,14 +735,15 @@ describe("dashboard", () => {
     fake = world([post()], srv);
     await mount(renderDashboard);
     await vi.advanceTimersByTimeAsync(0);
-    const n = $("#dashNotices .notice");
-    expect(n.dataset.notice).toBe("applied|*");
-    expect(n.textContent).toMatch(/was applied to 2 scheduled posts\. Send a fresh test email/);
-    $(".notice-dismiss", n).click();
-    expect(document.querySelector("#dashNotices .notice")).toBeNull();
-    await mount(renderDashboard);
-    await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector("#dashNotices .notice")).toBeNull(); // dismissed stays dismissed
+    const marked = () =>
+      $$("#dashScheduled .sched-remade-mark").map(
+        (m) => m.closest<HTMLElement>(".sched-card")?.dataset.post,
+      );
+    expect(marked()).toEqual(["p2", "p5"]);
+    expect($("#dashScheduled .sched-remade-mark").textContent).toBe("Re-made since its last test");
+    srv.edit("x4", { tested_at: Date.now() }); // a test of the re-made copy, sent from the post
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(marked()).toEqual(["p2"]);
   });
 
   it("quick actions: add a subscriber, edit the publication, copy an origin", async () => {

@@ -188,24 +188,6 @@ export function inUseChip(inUse: InUseView | null | undefined): Html {
     : html`<span class="set-chip inuse"><span class="set-chip-dot"></span>In use by ${n} scheduled post${n === 1 ? "" : "s"}</span>`;
 }
 
-// "Sep 20 at 4:12 PM": the moment a notice names, read as a clause rather than a stamp.
-const fmtAt = (ms: number) =>
-  `${new Date(ms).toLocaleString(undefined, { month: "short", day: "numeric" })} at ${new Date(
-    ms,
-  ).toLocaleString(undefined, { hour: "numeric", minute: "2-digit" })}`;
-
-/**
- * The applied-change notice (SPEC §8; DESIGN §5): a template or identity change
- * re-made the scheduled emails at `at`. One text for both surfaces; `n` is how many posts
- * it names (the dashboard's aggregate) or 1 for the post's own. It states the event and
- * the next step: the window is the review (SPEC §6), and a cleared notice can afford to
- * say so.
- */
-export function appliedNoticeHtml(at: number, n: number, onPost: boolean): Html {
-  const who = onPost ? "this post" : `${n} scheduled post${n === 1 ? "" : "s"}`;
-  return html`A template or identity change made <strong>${fmtAt(at)}</strong> was applied to ${who}. Send a fresh test email to review the changes.`;
-}
-
 /**
  * After a save that applied to scheduled emails, the toast says how many and that a
  * test is needed again (DESIGN §4); with none, the plain confirmation.

@@ -225,6 +225,21 @@ export function sendServer(rows: SendSummary[] = []) {
         retry_at: row.halt_retry_at,
       });
     }
+    if (
+      row.status === "scheduled" &&
+      row.remade_at !== null &&
+      (row.tested_at === null || row.tested_at < row.remade_at)
+    ) {
+      conditions.push({
+        kind: "remade",
+        severity: "info",
+        since: row.remade_at,
+        message:
+          "A template or identity change re-made this email after its last test. Send a new test to check the copy that will go out.",
+        action: null,
+        tested_at: row.tested_at,
+      });
+    }
     conditions.push(...(extras.conditions ?? []));
     // What the server would take now: the window's controls until the fire time, Resolve
     // while wedged.

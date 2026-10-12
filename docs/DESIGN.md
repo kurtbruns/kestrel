@@ -113,10 +113,9 @@ The landing page, ordered by urgency:
 2. **Health block**, only when something needs attention (§4).
 3. **Active sends**: a card per send in flight, with a small dispatch bar and counts, linking to its watch.
 4. **Subscribers**: four count tiles (Confirmed, Pending, Unsubscribed, Suppressed), each a link into Subscribers filtered to that state.
-5. **Notice slot**, for an applied-change notice (§4).
-6. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page.
-7. **Sent**: the latest five sends that have started, with Delivered (§8) and Archive ↗.
-8. **Quick actions**, **Publication** addresses with Copy, and **API access**, which invites the publisher to connect Claude or says Claude is connected.
+5. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page. A send re-made since its last test says so on its card (§4).
+6. **Sent**: the latest five sends that have started, with Delivered (§8) and Archive ↗.
+7. **Quick actions**, **Publication** addresses with Copy, and **API access**, which invites the publisher to connect Claude or says Claude is connected.
 
 **First run.** With no posts and no subscribers, the body is a setup checklist instead of a wall of zero tiles: name the publication; connect a provider, or once one is connected, confirm the sending domain; write the first post; share the subscribe link. Writing comes after the provider because a first post ends the first-run page, and a step left below it would never be seen.
 
@@ -130,7 +129,6 @@ The editor opens only a draft or a scheduled post (§2), and carries no status p
 
 - **Head**: ← Drafts, and **Web version ↗**.
 - **Scheduled banner**, for a scheduled post (§4).
-- **Notice slot**, for this post's applied-change notice.
 - **Conflict banner**, when another writer has saved (§5).
 - **Subject** and **Slug**. The slug follows the subject until set by hand, and the field only ever shows a slug the server answered with (SPEC §4), so it may lag a subject edit until the save, but never shows an address the post won't get.
 - **Composer**: **Edit | Preview** tabs, a formatting toolbar, the Markdown, and a foot that takes images ("Paste, drop, or click to add images"). An image is uploaded to the post and referenced by name, never as a URL (SPEC §4).
@@ -241,7 +239,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 **Email template** shows the in-use chip, a read-only sample, and **Edit template →**, which goes to the Template page.
 
-**Notifications** (SPEC §8) has one field, the address, and **Send a test notification**, a check rather than the section's purpose, so it isn't Primary. The test goes to the saved address only, so while the field is blank or unsaved the button is disabled with a line saying why. Beneath, the deploy-time channel shows read-only: how notifications are sent, their From, and the **last notification**, as a "Delivered" or "Not delivered" pill with the channel's own words. A failed channel is a standing state, not an event, so it stays in its row until a later notification gets through, and is never a toast or a notice. When the channel is the newsletter's own provider, the section's note names the one notification it can't carry: the provider refusing the account.
+**Notifications** (SPEC §8) has one field, the address, and **Send a test notification**, a check rather than the section's purpose, so it isn't Primary. The test goes to the saved address only, so while the field is blank or unsaved the button is disabled with a line saying why. Beneath, the deploy-time channel shows read-only: how notifications are sent, their From, and the **last notification**, as a "Delivered" or "Not delivered" pill with the channel's own words. A failed channel is a standing state, not an event, so it stays in its row until a later notification gets through, and is never a toast. When the channel is the newsletter's own provider, the section's note names the one notification it can't carry: the provider refusing the account.
 
 **Email sender** and **Instance** reflect deploy configuration read-only (§1.7), with the guide that changes them. While a local server simulates a provider (SPEC §10), the provider row carries a neutral pill naming it ("Simulating Amazon SES").
 
@@ -296,7 +294,7 @@ A change to the template, or to an identity field the template shows, while post
 
 - **The confirmation** is a dialog: one sentence on what the save reaches, the sends by subject and fire time, and three facts in a label column (what changes: the look; what stays: the content and fire time; what's next: a fresh test), so the consequence is scanned rather than read. The alternative, a second template, is named in muted text as not yet offered. Its Primary is "Save and apply". Declining leaves the edits unsaved.
 - **A save refused because a send is about to fire** shows where that surface's errors live (the save bar, or under the logo), naming when to try again.
-- **Afterwards**, the toast says how many emails changed and that each needs a test again. A **notice** (§5) records the event: on the post's page, and on the dashboard as one line covering every re-made send. Clearing it on either clears it on both, and a later re-make shows it again. The scheduled banner stays about time and the window, since a past event isn't a state, and the lists carry no mark.
+- **Afterwards**, the toast says how many emails changed and that each needs a test again. Then each re-made send carries the server's `remade` condition until a test of the re-made copy is sent: a line in the post's scheduled banner with **Send test** beside it, and a "Re-made since its last test" mark on the dashboard's scheduled card. It is the same fact Claude reads, so it can't be dismissed without testing; it goes when the test lands. The Sent queue's card carries no mark, since the editor is where the test is.
 
 ### Attention
 
@@ -321,7 +319,7 @@ Two states have no real provider (SPEC §9), and each is worded for who meets it
 
 **Local development** (and the tests, and a hosted demo) sends through a stand-in that records a send but delivers nothing. A confirmation like "Test sent to 2 addresses" would read exactly like a real send, so send-action toasts end with "(no email provider configured, so nothing is delivered)", and the Sent page carries a muted line saying the same. The copy never says "fake transport".
 
-**A deployment partway through setup is not connected.** It refuses every send, so there's nothing to confirm; the operator needs the way out. Every mention names the state ("No email provider connected"), says what it stops, and links **Connect an email provider** to the guide. It is a standing state, true every time the reader looks, so it is never a notice and never dismissible. It shows wherever a send would be refused, before the publisher tries:
+**A deployment partway through setup is not connected.** It refuses every send, so there's nothing to confirm; the operator needs the way out. Every mention names the state ("No email provider connected"), says what it stops, and links **Connect an email provider** to the guide. It is a standing state, true every time the reader looks, so it is never dismissible. It shows wherever a send would be refused, before the publisher tries:
 
 - **Dashboard and Sent**: an amber line, the one health line with no send behind it. The first-run checklist's provider step replaces the sending-domain step, and its subscribe-link step says signups open once a provider is connected.
 - **A draft's page**: the same amber line above the actions, "No email provider connected: you can write and preview, not send", so the publisher knows before opening a dialog.
@@ -347,14 +345,13 @@ Every message has exactly one home, chosen by how long it lives and what the rea
 | **Banner** | A standing state of the screen's subject, with its actions: the editor's `scheduled` and `conflict` banners. | While the state holds. |
 | **Field error** | Why one field's value is refused, beneath the field, on a page or in a dialog. | Until the value changes. |
 | **Dialog error** | Why a dialog's act didn't go through, when no one field is at fault, just above its buttons. | Until the next try. |
-| **Notice** | An event, with a time, that the reader couldn't otherwise know happened. | Until the reader clears it. |
 | **Attention** | A condition someone must act on (§4). | Until the condition clears. |
 | **Standing line** | Why an act is unavailable, such as no provider connected (§4). | Every time it's shown, while it's true. |
 | **Wall** | A state in which nothing in the app can work (§2). | Until reload. |
 
 **Choosing a home.**
 
-- A toast is never the only record of something that lasts. If the reader could come back later and need to know it, it belongs in a banner, a notice, attention, or the page itself.
+- A toast is never the only record of something that lasts. If the reader could come back later and need to know it, it belongs in a banner, attention, or the page itself.
 - **A dialog says its own errors.** A toast at the foot of the screen is far from the field it's about, and gone in a few seconds while the dialog stays open. The error goes under the field at fault, which is marked invalid and focused, and clears as soon as it's edited; otherwise just above the dialog's buttons.
 - **A surface with a save bar says why a save failed in the bar**, where it stays until the next save. A toast would sit over the bar and vanish while the edits it's about are still unsaved.
 - A refusal about one field goes on that field. Disabling the act instead is allowed only when the reason is visible beside it.
@@ -366,12 +363,7 @@ Every message has exactly one home, chosen by how long it lives and what the rea
 
 **A post deleted elsewhere** isn't a banner. Whatever read or write finds it gone toasts once that the post was deleted elsewhere and goes to Drafts.
 
-**Notices.** A notice is the one thing in the app that ends because it was read. To earn a notice, a message must be an event, with a time, that the reader couldn't otherwise know happened; today only a re-make qualifies (§4), and that's the rule working.
-
-- **Form**: a calm, neutral banner tone, never an alarm; text that wraps; links allowed, buttons not, since an actionable notice is something else. Its one control is a dismiss (Icon role), pinned right.
-- **Lifetime**: a notice is identified by kind, subject, and version, so clearing one records exactly that event and a newer version shows again. A notice covering several sends is hidden once each is cleared.
-- **Memory**: dismissal is remembered per browser, as a convenience that's safe to lose; the fact itself always lives in the API.
-- **Not built**, because each is the start of a notification system: dismiss-all, a notice history, per-user state on the server, timers, and notices with buttons.
+**No dismissible notices.** A message that the reader clears, and that the server never hears of, would let the editor and Claude disagree about what is true. The one candidate there was, a re-made send, is a condition the server already reports and settles (§4), so the app has no notice home. A new message that seems to need one is first a question for the server: is it a condition of something?
 
 **Emailed notifications aren't a home.** The notifications that tell the publisher about a send (SPEC §8) arrive in their inbox and have no echo in the app, since what they report already stands where it's managed. The one trace is the channel's own state, in Settings.
 
@@ -480,7 +472,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 - **Focus.** One focus ring everywhere, on `:focus-visible`. A dialog keeps focus inside it, starts on the caller's chosen field or else its first control, and returns focus to whatever opened it. A wall moves focus to its heading. A row menu opens with focus on its first item.
 - **Keyboard.** Escape closes a dialog or menu. A menu moves with the arrow keys, Home, and End. ⌘S saves the view where it saves; ⌘B, ⌘I, and ⌘K format in the composer. A clickable row or card always contains a real link to the same place.
 - **Names.** Every icon-only control has an `aria-label`. A ↗ link says it opens a new tab. An info tip is reachable by keyboard and touch.
-- **Live regions.** Toasts are announced politely. The conflict banner, field errors, and dialog errors are alerts, and a field's error is tied to the field so a screen reader reads it with the field. A notice repainted with the same content is left alone, so a refresh never re-announces it or pulls focus off its dismiss.
+- **Live regions.** Toasts are announced politely. The conflict banner, field errors, and dialog errors are alerts, and a field's error is tied to the field so a screen reader reads it with the field.
 - **Not by color alone** (§8).
 - **Motion.** Under reduced motion, transitions and animations are off; the locked composer's pulse becomes a steady tint.
 
@@ -497,7 +489,7 @@ Each of these was decided, not forgotten. Adding one is a design change, and mos
 - **Open and click analytics.** The record is about delivery.
 - **A WYSIWYG editor.** The post is Markdown and the template is logic-less HTML; the toolbar inserts Markdown rather than hiding it.
 - **Editing deploy configuration** (§1.7).
-- **Server-side "seen" state, saved layout preferences, and in-app themes.** Dismissals and toggles are per browser or per load, and light and dark follow the system.
+- **Server-side "seen" state, saved layout preferences, and in-app themes.** Toggles are per browser or per load, and light and dark follow the system.
 - **Emailing the publisher about a bounce spike.** It shows on the dashboard only (SPEC appendix).
 - **Clearing a suppression, or unsubscribing a pending subscriber, from the editor.** The API offers both; the editor doesn't yet. When clearing a suppression is added, it must be a confirmed act, never a toggle (SPEC §7).
 
