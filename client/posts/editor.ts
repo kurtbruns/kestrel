@@ -1372,6 +1372,7 @@ export async function renderEditor(
         try {
           const s = await api<SubscriberListResponse>(
             "/api/subscribers?status=confirmed&suppressed=hide&limit=1",
+            { signal },
           );
           const n = s.page.total;
           const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile

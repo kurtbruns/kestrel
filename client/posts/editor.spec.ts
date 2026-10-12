@@ -1566,12 +1566,12 @@ describe("editor view", () => {
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
       {
         path: "/api/subscribers",
-        // 42 confirmed, 2 of them suppressed: only the filtered roster's total is the audience.
+        // 42 confirmed, 5 suppressed (not all of them confirmed): only the filtered roster's total is the audience.
         reply: (req) =>
           req.url.searchParams.get("status") === "confirmed" &&
           req.url.searchParams.get("suppressed") === "hide"
-            ? { counts: { confirmed: 42, suppressed: 2 }, page: { total: 40 } }
-            : { counts: { confirmed: 42, suppressed: 2 }, page: { total: 99 } },
+            ? { counts: { confirmed: 42, suppressed: 5 }, page: { total: 40 } }
+            : { counts: { confirmed: 42, suppressed: 5 }, page: { total: 99 } },
       },
       {
         method: "POST",

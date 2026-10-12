@@ -2,7 +2,8 @@
 # nothing in it is ever deployed. It holds only what local development uses. A deployed
 # environment's secrets (Access, and the email provider's keys) are stored with
 # `npx wrangler secret put NAME --env production` instead; the Configuration reference
-# lists them: https://getkestrel.dev/docs/configuration/#secrets Restart `npm run dev` after a change.
+# lists them: https://getkestrel.dev/docs/configuration/#secrets
+# Restart `npm run dev` after a change.
 
 # --- Admin API auth ---
 # Local dev authenticates with a JWT signed by DEV_AUTH_SECRET (the app verifies it
