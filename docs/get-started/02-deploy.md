@@ -2,7 +2,29 @@
 
 Kestrel runs as one Cloudflare Worker, with a D1 database for posts and subscribers and an R2 bucket for images.
 
-In this guide, you create your instance's repository, create the database and the bucket, and point Kestrel's production settings at them and at your hostname. Then you deploy, and check that the app answers on your hostname. You need what the [Overview](01-overview.md#before-you-begin) lists.
+In this guide, you choose your hostnames, create your instance's repository, create the database and the bucket, and point Kestrel's production settings at them and at your hostname. Then you deploy, and check that the app answers on your hostname.
+
+## Before you begin
+
+- A [Cloudflare account](https://dash.cloudflare.com/sign-up), with your domain's DNS on Cloudflare. Your app's hostname and its login both live there.
+- [Node.js](https://nodejs.org/) 22 or later, and [Git](https://git-scm.com/).
+- A GitHub account, or another Git host, for your instance's repository.
+- A provider for sending email. [Resend](https://resend.com/signup) is a good default, and the one these guides walk through.
+
+## Choose your hostnames
+
+Kestrel uses two hostnames: one for the app, and one your email is sent from.
+
+| Hostname | What it's for |
+| --- | --- |
+| `newsletter.example.com` | the editor, the API, and the public pages readers see |
+| `send.example.com` | the address your email comes from, and its SPF, DKIM, and DMARC records |
+
+These guides put the app on a subdomain, which leaves any website you already have on `example.com` untouched. If `example.com` has no website of its own, the app can live there instead. Use `example.com` wherever these guides say `newsletter.example.com`.
+
+It's recommended to send from a subdomain rather than from `example.com` itself. Your apex domain carries the reputation of your regular email, and a newsletter shouldn't put that at risk. Avoid `mail.` as the sending name too, since mail servers read it as an inbound host. [Sending-domain DNS](../reference/02-sending-domain-dns.md#choose-your-sending-name) explains both.
+
+Throughout these guides, replace the example names with your own, and any value written as `REPLACE_WITH_…`.
 
 ## 1. Create your instance's repository
 
@@ -34,7 +56,7 @@ Your instance's repository holds its configuration, its database migrations, and
     git push -u origin HEAD
     ```
 
-1. **(Optional)** Try Kestrel on your computer before you deploy it. Your instance is written and installed, so start at [Start the app](../guides/08-try-locally.md#2-start-the-app). Email goes to a stand-in, so nothing reaches a real inbox.
+1. **(Optional)** Try Kestrel locally before you deploy it. Your instance is written and installed, so start at [Start the app](../guides/08-try-locally.md#2-start-the-app), and come back here when you're done. Email goes to a stand-in, so nothing reaches a real inbox.
 
 ## 2. Sign in to Cloudflare
 
@@ -99,7 +121,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     What each one does:
 
     - **`routes`** puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - **No `PROVIDER` yet.** You add it when you connect Resend in [step 4](04-resend.md). Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused.
+    - **No `PROVIDER` yet.** You add it when you connect Resend in [step 3](04-resend.md). Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused.
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 

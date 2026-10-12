@@ -48,7 +48,7 @@ export function refusalAdvice(cause: HaltCause | null): string {
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
     case "not_connected":
-      return "Connect an email provider (the setup guide's Connect Resend step), then deploy again.";
+      return "Connect an email provider (the setup guide walks through it), then deploy again.";
     default:
       return "Fix the account with the provider.";
   }

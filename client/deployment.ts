@@ -80,7 +80,7 @@ export function providerNotConnected(): boolean {
   return appState.appConfig?.deployment.provider === "none";
 }
 
-/** The setup step that connects a provider: Get started's Connect Resend, whose first
+/** The setup step that connects a provider: Get started's Connect an email provider, whose first
  *  paragraph sends an SES operator to the SES guide instead. */
 export const CONNECT_PROVIDER_HREF = "#/docs/resend";
 

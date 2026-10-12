@@ -1,4 +1,4 @@
-# Try Kestrel on your computer
+# Try Kestrel locally first
 
 You can run Kestrel on your own computer to look around before you deploy it. It needs no Cloudflare account and no Git host. Email goes to a stand-in on your computer, so nothing reaches a real inbox.
 
@@ -75,7 +75,7 @@ The demo fills the editor with posts, subscribers, and sends that already went o
 
 ## Check it
 
-1. The app answers:
+1. The app answers. If `npm run dev` picked another port, use the one on its `Ready on` line here and below:
 
     ```bash
     curl http://localhost:8787/health
@@ -89,7 +89,9 @@ The demo fills the editor with posts, subscribers, and sends that already went o
 
 ## Keep the folder for your instance
 
-When you're ready to deploy, this folder can be your instance's repository. Its `.gitignore` already keeps your local settings, the local database, and the installed packages out of it.
+If you came here from Deploy the app, your folder is already a repository: go back to [Sign in to Cloudflare](../get-started/02-deploy.md#2-sign-in-to-cloudflare).
+
+When you're ready to deploy, this folder can be your instance's repository. You need [Git](https://git-scm.com/) and a GitHub account for this part. The folder's `.gitignore` already keeps your local settings, the local database, and the installed packages out of it.
 
 1. On GitHub, [create a new repository](https://github.com/new) named `newsletter`. It can be private. Leave it empty, with no README, license, or `.gitignore`.
 
@@ -103,4 +105,4 @@ When you're ready to deploy, this folder can be your instance's repository. Its 
     git push -u origin HEAD
     ```
 
-Then [deploy the app](../get-started/02-deploy.md#2-sign-in-to-cloudflare), from signing in to Cloudflare onward.
+Then check [what deploying needs](../get-started/02-deploy.md#before-you-begin) and [choose your hostnames](../get-started/02-deploy.md#choose-your-hostnames). Then [deploy the app](../get-started/02-deploy.md#2-sign-in-to-cloudflare) from signing in to Cloudflare onward.

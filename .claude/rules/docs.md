@@ -16,7 +16,7 @@ The setup guide is the documentation for deploying and running your own instance
 - **For running your own instance.** Deploying, configuring, and upgrading it. How a publisher writes and sends posts is a separate set of docs.
 - **Followed by humans and robots alike.** Every page is a complete by-hand procedure that Claude can also follow step by step. Claude is the recommended way through, and any skill that automates a step follows the page rather than replacing it.
 - **Run from the reader's instance repository.** `kestrel init` writes it: the instance's configuration, its migrations, and the Kestrel release it runs, installed from npm as `@kurtbruns/kestrel`. Deploys and upgrades happen from it, through its npm scripts and plain wrangler commands (`npx wrangler deploy --env production`), never through a checkout of Kestrel's source. Changing Kestrel's code for one instance is not covered.
-- **Local development is optional.** The Try Kestrel on your computer guide covers it, from an empty folder with no Cloudflare account or Git host; Deploy points to it as an optional checkpoint after `init`, and upgrading offers it once as an optional dry run. The README covers running Kestrel's own source, for working on Kestrel.
+- **Local development is optional.** The Try Kestrel locally first guide covers it, from an empty folder with no Cloudflare account or Git host; Deploy points to it as an optional checkpoint after `init`, and upgrading offers it once as an optional dry run. The README covers running Kestrel's own source, for working on Kestrel.
 - **One environment on the main path: production.** A new instance proves itself with test sends while its list is empty. Staging is a possible guide, not yet in the guide.
 
 ## Where it lives
@@ -28,15 +28,15 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## Structure
 
-- **Get started:** the main path, numbered: Overview, Deploy the app, Lock the dashboard with Access, Connect Resend, Verify it works, Go live.
-- **Guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, rate limiting, upgrading, trying Kestrel on your computer. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
+- **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect an email provider (it walks through Resend), Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
+- **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, SES, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
 - **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
 
 ## Main path defaults
 
-- **Email provider:** Resend. The SES guide replaces step 4.
-- **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; the Overview says so in one sentence.
+- **Email provider:** Resend. The SES guide replaces step 3, Connect an email provider.
+- **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; Deploy the app says so in one sentence, in its Choose your hostnames section.
 - **Sending hostname:** `send.example.com`. Phrase it as a recommendation ("It's recommended to send from a subdomain…"), not a prohibition.
 
 ## Page anatomy
@@ -45,7 +45,7 @@ After Linode's guides:
 
 1. `# Title`: sentence case, a short noun or imperative phrase.
 2. **Intro:** what this page does, then "In this guide, you…". One or two short paragraphs.
-3. `## Before you begin`: only where a page has prerequisites of its own. List what the reader needs as noun phrases.
+3. `## Before you begin`: only where a page has prerequisites of its own. List what the reader needs as noun phrases. Deploy the app also carries an unnumbered `## Choose your hostnames` after it, since the whole path uses those names.
 4. `## 1. Verb phrase` sections: one or two sentences of why, then numbered steps.
 5. `## Check it`: a checklist the reader, or Claude, can verify. Prefer a check with a concrete result (a URL that answers, a command's output) over "it looks right". A page whose sections are themselves the checks, such as Verify it works, ends with one line instead, rather than restating them.
 6. **End** by pointing to the next page.

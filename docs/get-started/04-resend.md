@@ -1,6 +1,6 @@
-# Connect Resend
+# Connect an email provider
 
-Kestrel sends your posts through an email provider. The provider only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. These guides use Resend. To use Amazon SES instead, follow [Use Amazon SES instead of Resend](../guides/02-ses.md) in place of this page.
+Kestrel sends your posts through an email provider. The provider only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. This page connects Resend. To use Amazon SES instead, follow [Use Amazon SES instead of Resend](../guides/02-ses.md) in place of this page.
 
 In this guide, you verify your sending hostname with Resend and add a DMARC record. Then you give the app an API key and a webhook for bounces and complaints, switch it to Resend, and deploy.
 

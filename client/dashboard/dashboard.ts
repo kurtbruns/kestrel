@@ -509,7 +509,7 @@ function apiConnectCard(connected: boolean): Html {
  * The first-run checklist, in the order the steps depend on each other. Writing a post
  * comes late because its New post creates a draft, which ends the first-run page; sharing
  * comes last so a visitor finds a post in the archive. While no provider is connected,
- * connecting one replaces the sending-domain step (Connect Resend verifies the domain) and
+ * connecting one replaces the sending-domain step (connecting Resend verifies the domain) and
  * the subscribe step says signups wait for it (the page is closed).
  */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {

@@ -9,18 +9,17 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
   it("renders the guide in the README's order with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.section}/${d.slug}`)).toEqual([
-      "get-started/overview",
       "get-started/deploy",
       "get-started/access",
       "get-started/resend",
       "get-started/verify",
       "get-started/go-live",
       "guides/connect-claude",
+      "guides/try-locally",
       "guides/ses",
       "guides/notifications",
       "guides/rate-limit",
       "guides/upgrade",
-      "guides/try-locally",
       "reference/configuration",
       "reference/sending-domain-dns",
     ]);
@@ -78,9 +77,9 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
         expect(slugs, `${d.slug} links to ${slug}`).toContain(slug);
       }
     }
-    const start = docs.find((d) => d.slug === "overview");
-    expect(start?.html).toContain('href="#/docs/deploy"');
-    expect(start?.html).toContain('href="#/docs/ses"');
+    const start = docs.find((d) => d.slug === "deploy");
+    expect(start?.html).toContain('href="#/docs/resend"');
+    expect(start?.html).toContain('href="#/docs/configuration"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
   });
@@ -110,7 +109,7 @@ describe("docs API serves the setup content when authed", () => {
     // Markdown was rendered (the doc's H1) and the exact operator facts survive: each
     // provider's real webhook path (from src/routes/webhooks.ts).
     const resend = body.docs.find((d) => d.slug === "resend");
-    expect(resend?.html).toContain("Connect Resend");
+    expect(resend?.html).toContain("Connect an email provider");
     expect(resend?.html).toContain("/webhooks/resend");
     const ses = body.docs.find((d) => d.slug === "ses");
     expect(ses?.html).toContain("/webhooks/ses");

@@ -27,7 +27,7 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 
 ### `PROVIDER`
 
-Until it's set, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. [Connect Resend](../get-started/04-resend.md) sets it.
+Until it's set, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. [Connect an email provider](../get-started/04-resend.md) sets it.
 
 `fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and names it on purpose in the top level of `wrangler.jsonc`. Never set it on a deployment that has readers: every subscriber would be recorded as sent the post, and never get it.
 

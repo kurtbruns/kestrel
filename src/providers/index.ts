@@ -43,7 +43,7 @@ export function requireConnectedProvider(config: Config): void {
     throw refusal(
       409,
       "provider_not_connected",
-      "No email provider is connected, so nothing can be sent yet. Connect one (the setup guide's Connect Resend step), then try again.",
+      "No email provider is connected, so nothing can be sent yet. Connect one (the setup guide walks through it), then try again.",
     );
   }
 }
