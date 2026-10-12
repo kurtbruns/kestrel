@@ -3,8 +3,10 @@
  * method. Cloudflare's own email is the channel when the `NOTIFY` binding is declared,
  * because it does not depend on the newsletter's provider, and so still arrives when that
  * provider is refusing the account; the provider is the fallback when it is not. The
- * choice is deploy config (`getConfig`), never a preference, and a dev-shaped env always
- * gets the in-memory fake, so development can never reach a real inbox.
+ * choice is deploy config (`getConfig`), never a preference, and a dev-shaped env gets the
+ * in-memory fake, so development can never reach a real inbox. The one exception, local dev's
+ * not-connected preview, gets the provider channel over the not-connected adapter, which
+ * carries nothing, as a deployment with no provider does.
  *
  * A channel only ever sends one message to one address, the publisher's. It is never
  * handed a subscriber, a send's audience, or a delivery row.

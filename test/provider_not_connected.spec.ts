@@ -1,7 +1,8 @@
 // A deployment with no email provider connected (SPEC §9): `PROVIDER` unset or `none`. The
 // app runs, and refuses everything that would send with one named refusal; the public
 // subscribe page says signups aren't open; a send scheduled before is held, consuming no
-// one. The fake runs only where it is named.
+// one. The fake runs only where it is named. Local dev previews the same state through
+// `SIMULATE_SENDS=not-connected`, on the same code.
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,9 +21,9 @@ import * as scheduleRoutes from "../src/routes/schedule";
 import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
 import { condition } from "./support/conditions";
-import { NOT_CONNECTED_DEPLOY } from "./support/deploy";
+import { NOT_CONNECTED_DEPLOY, RESEND_DEPLOY } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
-import { base, readJson } from "./support/http";
+import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 import { logged } from "./support/log";
 import { viewOf } from "./support/view";
 import { fetchWith, withVars } from "./support/worker_env";
@@ -354,5 +355,69 @@ describe("the provider webhooks while not connected", () => {
       const res = await fetchWith(NOT_CONNECTED, path, { method: "POST", body: "{}" });
       expect(res.status, path).toBe(404);
     }
+  });
+});
+
+describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC §10)", () => {
+  const PREVIEW = { SIMULATE_SENDS: "not-connected" };
+
+  it("runs as not connected while local sign-in and the dev routes stay on", () => {
+    const config = getConfig(withVars(PREVIEW));
+    expect(config.provider).toBe("none");
+    expect(config.devMode).toBe(true);
+    expect(config.simulation).toBeNull();
+    // A deployment with no provider and no NOTIFY binding notifies through the provider.
+    expect(config.notifyChannel).toBe("provider");
+  });
+
+  it("is never honored outside local dev, and takes no fault suffix", () => {
+    expect(getConfig(withVars({ ...RESEND_DEPLOY, ...PREVIEW })).provider).toBe("resend");
+    expect(
+      getConfig(withVars({ ...PREVIEW, APP_ORIGIN: "https://demo.birds.example" })).provider,
+    ).toBe("fake");
+    expect(() => getConfig(withVars({ SIMULATE_SENDS: "not-connected:none" }))).toThrow(
+      expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_SENDS" }),
+    );
+  });
+
+  it("reflects not connected, refuses what would send, and closes signups, through the real routes", async () => {
+    const settings = await readJson(await fetchWith(PREVIEW, "/api/settings", { headers: AUTH }));
+    expect(settings.deployment.provider).toBe("none");
+    expect(settings.deployment.notifyChannel).toBe("provider");
+
+    const { post } = await posts.createPost(env.DB, { subject: "Hi", markdown: "Hi" }, "test");
+    const scheduled = await fetchWith(PREVIEW, `/api/posts/${post.id}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: Date.now() + 86_400_000 }),
+    });
+    expect(scheduled.status).toBe(409);
+    expect((await readJson(scheduled)).error).toBe("provider_not_connected");
+    expect(await sendCount()).toBe(0);
+
+    await updateSettings(env.DB, { notifications: { to: "me@birds.example" } });
+    const notified = await fetchWith(PREVIEW, "/api/settings/notifications/test", {
+      method: "POST",
+      headers: AUTH,
+    });
+    expect(notified.status).toBe(409);
+    expect(fakeOutbox()).toHaveLength(0);
+
+    const page = await (await fetchWith(PREVIEW, "/subscribe")).text();
+    expect(page).toContain("Signups aren’t open yet");
+  });
+
+  it("holds a due send, and it goes out once the preview is turned off", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await seedConfirmed(["a@birds.example", "b@birds.example"]);
+    const send = await dueSend();
+    await tick(withVars(PREVIEW));
+    const held = (await sends.getSend(env.DB, send.id))!;
+    expect(held.halt_cause).toBe("not_connected");
+    expect(held.c_accepted).toBe(0);
+    expect(fakeOutbox()).toHaveLength(0);
+    await tick(withVars({ SIMULATE_SENDS: "off" }));
+    expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
+    expect(fakeOutbox()).toHaveLength(2);
   });
 });

@@ -33,6 +33,8 @@ MIN_LEAD_SECONDS="60"
 #            SUBREQUEST_BUDGET, as SES is on Workers Free
 #   1        a generic provider paced to be watched: small, slow batches
 # Add ":none" (e.g. "ses:none") for a clean run with no failures, or set "off" for the
-# plain instant fake. For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
+# plain instant fake. "not-connected" runs the app as a deployment with no email provider
+# yet: every send refused, signups closed, a due send held until you switch it back.
+# For one run, set it in the shell instead: SIMULATE_SENDS=ses npm run dev
 # Only honored in a dev-shaped env (fake transport, no Access, APP_ORIGIN on localhost).
 SIMULATE_SENDS="resend"

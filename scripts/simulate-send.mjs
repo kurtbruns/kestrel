@@ -76,7 +76,7 @@ async function main() {
       JSON.stringify(settings.body),
     );
   }
-  const { minLeadMs, simulation } = settings.body.deployment;
+  const { minLeadMs, simulation, provider } = settings.body.deployment;
 
   // The simulation is the server's to run, fixed when it starts.
   const wanted = flags.profile === "1" ? "generic" : flags.profile;
@@ -84,6 +84,13 @@ async function main() {
     fail(
       TAG,
       `--profile must be one of ${Object.keys(PROFILES).join(", ")}, not "${flags.profile}"`,
+    );
+  }
+  if (provider === "none") {
+    fail(
+      TAG,
+      "this dev server runs not connected (SIMULATE_SENDS=not-connected), so it refuses every send.",
+      `Restart it with a profile: SIMULATE_SENDS=${wanted ?? "resend"} npm run dev`,
     );
   }
   if (!simulation) {

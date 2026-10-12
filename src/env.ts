@@ -65,10 +65,11 @@ export interface Secrets {
   RESEND_API_KEY?: string;
   RESEND_WEBHOOK_SECRET?: string;
   /**
-   * The local send simulation (SPEC §10): which provider it models, `resend`, `ses`, or
-   * `generic` (`1`), optionally with `:none` for no injected failures; `off` or unset for
-   * the plain, instant fake. Honored only in a dev-shaped env, so never in a deployed one.
-   * `.dev.vars.example` ships it on.
+   * What stands in for the provider in local dev (SPEC §10): the send simulation, naming the
+   * provider it models, `resend`, `ses`, or `generic` (`1`), optionally with `:none` for no
+   * injected failures; `not-connected` to run as a deployment with no provider (SPEC §9);
+   * `off` or unset for the plain, instant fake. Honored only in a dev-shaped env, so never
+   * in a deployed one. `.dev.vars.example` ships it on.
    */
   SIMULATE_SENDS?: string;
 }
@@ -135,7 +136,8 @@ export type NotifyChannel = "fake" | "cloudflare" | "provider";
 
 export interface Config {
   /** The transport, or `none` when no provider is connected (SPEC §9): the app then runs
-   *  and refuses everything that would send. */
+   *  and refuses everything that would send. Local dev's `SIMULATE_SENDS=not-connected`
+   *  sets it too, so the preview of that state runs the same code as the real one. */
   provider: ProviderName;
   /** Origin the app is served from (API + reader routes). */
   appOrigin: string;
@@ -191,7 +193,7 @@ export interface Config {
   devRunId?: string;
   /**
    * The local send simulation that stands in for a provider on list sends (SPEC §10), or
-   * null for the plain fake. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
+   * null for the plain fake and the not-connected preview. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
    * it is structurally null once deployed (no deployed env is dev-shaped) and can
    * never pace or fabricate events against a real inbox.
    */
@@ -290,9 +292,23 @@ export function getConfig(env: AppEnv): Config {
   const devShaped = provider === "fake" && !accessTeamDomain && isLoopbackOrigin(appOrigin);
   const devAuthSecret = devShaped ? orUndefined(env.DEV_AUTH_SECRET) : undefined;
   const devMode = devAuthSecret !== undefined;
-  const notifyChannel: NotifyChannel = devShaped ? "fake" : env.NOTIFY ? "cloudflare" : "provider";
+  // Only ever read in a dev-shaped env; a deployed env is never dev-shaped, so neither the
+  // simulation nor the not-connected preview can engage there whatever the var says.
+  const local = devShaped ? readSimulateSends(env.SIMULATE_SENDS) : null;
+  const notConnectedPreview = local === "not-connected";
+  // The preview runs as a deployment with no provider and no `NOTIFY` binding does: the
+  // provider channel, over the not-connected adapter, which carries nothing.
+  const notifyChannel: NotifyChannel = notConnectedPreview
+    ? "provider"
+    : devShaped
+      ? "fake"
+      : env.NOTIFY
+        ? "cloudflare"
+        : "provider";
   return {
-    provider,
+    // The preview changes the provider alone, after `devShaped` was decided on the fake, so
+    // local sign-in stays on while every send path takes the real not-connected route.
+    provider: notConnectedPreview ? "none" : provider,
     appOrigin,
     archiveOrigin,
     archiveBasePath: normalizeBasePath(env.ARCHIVE_BASE_PATH),
@@ -311,9 +327,7 @@ export function getConfig(env: AppEnv): Config {
     devMode,
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
-    // Only ever read in a dev-shaped env; a deployed env is never dev-shaped, so the
-    // simulation can never engage there whatever the var says.
-    simulation: devShaped ? readSimulation(env.SIMULATE_SENDS) : null,
+    simulation: local === "not-connected" ? null : local,
     subrequestBudget: Math.max(
       MIN_SUBREQUEST_BUDGET,
       readPositiveInt("SUBREQUEST_BUDGET", env.SUBREQUEST_BUDGET) ?? DEFAULT_SUBREQUEST_BUDGET,
@@ -542,15 +556,18 @@ const SIMULATION_OFF = new Set(["", "0", "off", "false", "no"]);
 const SIMULATION_GENERIC = new Set(["1", "on", "true", "yes"]);
 
 /**
- * `SIMULATE_SENDS` as a profile and fault level, or null for the plain fake: `off` (or
- * unset), a profile (`generic`, or `1`, `resend`, `ses`), and optionally `:realistic` (the
- * default) or `:none`. Anything else is refused rather than read as off, so a typo can't
- * quietly turn the simulation off or pick the wrong provider.
+ * `SIMULATE_SENDS` as a profile and fault level, `not-connected`, or null for the plain
+ * fake: `off` (or unset), `not-connected`, or a profile (`generic`, or `1`, `resend`, `ses`)
+ * and optionally `:realistic` (the default) or `:none`. Anything else is refused rather than
+ * read as off, so a typo can't quietly turn the simulation off or pick the wrong provider.
  */
-function readSimulation(v: string | undefined): SimulationView | null {
+function readSimulateSends(v: string | undefined): SimulationView | "not-connected" | null {
   const raw = (v ?? "").trim().toLowerCase();
   if (SIMULATION_OFF.has(raw)) {
     return null;
+  }
+  if (raw === "not-connected") {
+    return "not-connected";
   }
   const [name = "", faults = "realistic", ...rest] = raw.split(":");
   const profile = SIMULATION_GENERIC.has(name) ? "generic" : name;
@@ -561,7 +578,7 @@ function readSimulation(v: string | undefined): SimulationView | null {
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, or one of ${SIMULATION_PROFILES.join(", ")} (or 1), optionally followed by :${SIMULATION_FAULTS.join(" or :")}, not "${v?.trim()}"`,
+      `must be off, not-connected, or one of ${SIMULATION_PROFILES.join(", ")} (or 1), optionally followed by :${SIMULATION_FAULTS.join(" or :")}, not "${v?.trim()}"`,
     );
   }
   return { profile: profile as SimulationProfile, faults: faults as SimulationFaults };
