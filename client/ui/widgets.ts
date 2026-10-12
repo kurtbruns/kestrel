@@ -97,6 +97,11 @@ export function modal(content: Html, signal: AbortSignal): Modal {
   // close() takes both listeners with it however the dialog closes (a button, the
   // backdrop, Escape, the view ending), and each lives exactly as long as the dialog.
   const onKey = (e: KeyboardEvent) => {
+    // With dialogs stacked (a confirmation over the dialog that asked for it), only the top
+    // one answers the keyboard: Escape closes it alone, and Tab stays inside it.
+    if (back !== [...document.querySelectorAll(".modal-backdrop")].pop()) {
+      return;
+    }
     if (e.key === "Escape") {
       close();
     } else if (e.key === "Tab") {
@@ -155,7 +160,10 @@ export function modal(content: Html, signal: AbortSignal): Modal {
     errorLine = line;
   };
   const close = () => {
-    const hadFocus = back.contains(document.activeElement);
+    // A click on the backdrop has already dropped focus to the page body, so that counts as
+    // focus lost with the dialog too.
+    const active = document.activeElement;
+    const hadFocus = back.contains(active) || !active || active === document.body;
     back.remove();
     document.removeEventListener("keydown", onKey);
     signal.removeEventListener("abort", close);

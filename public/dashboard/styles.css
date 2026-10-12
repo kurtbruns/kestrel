@@ -12,8 +12,10 @@
   --z-header: 10;
   --z-menu: 20;
   --z-bar: 30;
-  --z-toast: 40;
-  --z-modal: 50;
+  --z-modal: 40;
+  /* Toasts above modals: a toast raised while a dialog is open (an autosave that failed,
+     a send that started) must not sit dimmed beneath its backdrop. */
+  --z-toast: 50;
   --fg: #18181b;
   --muted: #52525b;
   --line: #e4e4e7;

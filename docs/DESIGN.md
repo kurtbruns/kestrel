@@ -129,10 +129,10 @@ Stacking is a single named ladder, and every fixed or floating surface reference
 | 2nd | `--z-header` | Sticky headers and the side rail. |
 | 3rd | `--z-menu` | Popovers and menus. |
 | 4th | `--z-bar` | Fixed bars — the save bar. |
-| 5th | `--z-toast` | Toasts. |
-| 6th | `--z-modal` | Modals and their backdrop overlay. |
+| 5th | `--z-modal` | Modals and their backdrop overlay. |
+| 6th | `--z-toast` | Toasts. |
 
-The order encodes the intent: a menu opens over the content and headers; a fixed bar sits above the content it's saving; a toast confirms above that bar; a modal takes the whole screen and sits above everything. Because features reference the rung and not a number, the ladder is the one place stacking is reasoned about — a new floating surface picks the rung whose meaning fits and inherits a consistent order, instead of guessing a literal that happens to be higher than its neighbor today.
+The order encodes the intent: a menu opens over the content and headers; a fixed bar sits above the content it's saving; a modal takes the whole screen; and a toast sits above everything, so one raised while a dialog is open (an autosave that failed, a send that started) is never dimmed beneath its backdrop. A dialog still says its own errors inside it (§2, home ④), since a toast at the foot of the screen is far from the field it would be about. Because features reference the rung and not a number, the ladder is the one place stacking is reasoned about — a new floating surface picks the rung whose meaning fits and inherits a consistent order, instead of guessing a literal that happens to be higher than its neighbor today.
 
 A modal and a menu belong to the page that opened them. Leaving the page, by Back, a link, or a changed URL, closes any that page left open, so neither ever sits over a page it wasn't opened for, where its confirm would act on a post or send no longer on screen. Only the surface goes: a save, a schedule, or any other write already started from it still lands, and its toast still says so. A save left waiting on the re-make confirmation (§5) is not made, since nobody confirmed it, and a toast on the next page says "Not saved: the change needed your confirmation".
 

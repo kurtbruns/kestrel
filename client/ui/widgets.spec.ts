@@ -109,6 +109,38 @@ describe("modal", () => {
     expect(document.activeElement).toBe(opener);
   });
 
+  it("lets only the top dialog of a stack answer Tab and Escape", async () => {
+    const lower = modal(html`<button id="l1">Lower</button>`, live);
+    const upper = modal(html`<button id="u1">One</button><button id="u2">Two</button>`, live);
+    await Promise.resolve();
+    $<HTMLButtonElement>("#u1").focus();
+    const tab = () => {
+      const e = new KeyboardEvent("keydown", { key: "Tab", cancelable: true });
+      document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    // Not the last control, so Tab moves on naturally: the lower dialog must not pull focus.
+    expect(tab()).toBe(false);
+    expect(document.activeElement?.id).toBe("u1");
+    pressEscape();
+    expect(upper.el.isConnected).toBe(false);
+    expect(lower.el.isConnected).toBe(true);
+    lower.close();
+  });
+
+  it("hands focus back when closed by a click on the backdrop", async () => {
+    const opener = document.createElement("button");
+    $("#app").appendChild(opener);
+    opener.focus();
+    const m = modal(html`<button>Cancel</button>`, live);
+    await Promise.resolve();
+    // A click on the backdrop drops focus to the body before the dialog closes.
+    (document.activeElement as HTMLElement).blur();
+    m.el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(m.el.isConnected).toBe(false);
+    expect(document.activeElement).toBe(opener);
+  });
+
   it("leaves focus where its caller put it", async () => {
     const m = modal(html`<button id="a">Cancel</button><input id="f" />`, live);
     $<HTMLInputElement>("#f", m.el).focus();
@@ -185,6 +217,29 @@ describe("openMenu", () => {
     expect(document.activeElement?.textContent).toBe("Delete");
     key("Escape");
     expect(document.querySelector(".menu")).toBeNull();
+    expect(document.activeElement).toBe(b);
+  });
+
+  it("returns focus to the ⋯ after a pick opens a dialog and the dialog closes", async () => {
+    const b = anchor();
+    b.focus();
+    let dialog: ReturnType<typeof modal> | undefined;
+    openMenu(
+      b,
+      [
+        {
+          label: "Delete",
+          onClick: () => {
+            dialog = modal(html`<button>Cancel</button>`, live);
+          },
+        },
+      ],
+      live,
+    );
+    $<HTMLButtonElement>(".menu-item").click();
+    await Promise.resolve();
+    expect(dialog?.el.contains(document.activeElement)).toBe(true);
+    dialog?.close();
     expect(document.activeElement).toBe(b);
   });
 

@@ -1192,6 +1192,7 @@ export async function renderEditor(
         const defaults = s.settings.testRecipients || [];
         if (defaults.length && !to.value.trim()) {
           to.value = defaults.join("\n");
+          m.clearError(); // an empty-field error raised before the defaults arrived no longer holds
           const hint = $("#testDefaultsHint", m.el);
           hint.textContent = "Pre-filled from your default test recipients (Settings).";
           hint.hidden = false;
