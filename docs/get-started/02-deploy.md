@@ -78,19 +78,27 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
 
 ## 3. Create the database and the image bucket
 
+Each command creates the resource and writes its id or name into the `production` block of `wrangler.jsonc`, under the binding the app already uses, so there's nothing to copy.
+
 1. Create the database:
 
     ```bash
-    npx wrangler d1 create kestrel-production
+    npx wrangler d1 create kestrel-production --env production --binding DB --update-config
     ```
 
-    It prints the new database's settings, including a `database_id`. Copy the id for the next section. If Wrangler offers to add the database to your configuration for you, decline: you add it to the production settings yourself, below.
+    It prints the new database's settings, then fills in the `database_id` of the production `DB` binding with the database's real id, in place of `REPLACE_WITH_PRODUCTION_D1_ID`.
 
 1. Create the bucket for images:
 
     ```bash
-    npx wrangler r2 bucket create kestrel-media-production
+    npx wrangler r2 bucket create kestrel-media-production --env production --binding MEDIA --update-config
     ```
+
+    The production `MEDIA` binding already names this bucket, so it stays as it is.
+
+Wrangler rewrites the whole of `wrangler.jsonc` in its own layout when it saves: tabs, and one value per line. Your comments and settings stay; only the spacing changes.
+
+Name `--env production` on every Wrangler command that creates or binds a resource. Without it, Wrangler writes to the top level, which is local development.
 
 ## 4. Configure production
 
@@ -105,7 +113,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
         {
           "binding": "DB",
           "database_name": "kestrel-production",
-          "database_id": "REPLACE_WITH_PRODUCTION_D1_ID", // ← the id from section 3
+          "database_id": "…", // already filled in by section 3; leave it
           "migrations_dir": "migrations"
         }
       ],
@@ -135,6 +143,8 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     ```bash
     npm run typecheck
     ```
+
+    Wrangler prints the binding types it generated and ends with a reminder to run it again whenever you change `wrangler.jsonc`. The type check that follows prints nothing when it passes.
 
 1. Commit your settings and push them to your repository. An upgrade changes only the release your instance runs, so your settings stay as they are:
 

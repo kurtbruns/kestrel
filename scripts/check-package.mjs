@@ -193,7 +193,18 @@ if (/install scripts blocked/.test(`${install.stdout}${install.stderr}`)) {
     "the instance's npm install blocked install scripts: add them to template/package.json's allowScripts",
   );
 }
-step("npm", ["run", "typecheck"]);
+// The typecheck is a Deploy step a newcomer runs by hand, so it must also end without wrangler
+// asking for anything: "Action required" reads like a failure.
+console.log("[check-package] $ npm run typecheck");
+const typecheck = spawnSync("npm", ["run", "typecheck"], { cwd: instance, encoding: "utf8" });
+process.stdout.write(typecheck.stdout);
+process.stderr.write(typecheck.stderr);
+if (typecheck.status !== 0) {
+  fail(`npm run typecheck exited ${typecheck.status}`);
+}
+if (/Action required/.test(`${typecheck.stdout}${typecheck.stderr}`)) {
+  fail("the instance's typecheck ends with wrangler's \"Action required\"");
+}
 // Again without skipLibCheck, so Kestrel's own declaration is checked too.
 step("npx", ["--no", "--", "tsc", "--skipLibCheck", "false"]);
 step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundle"]);

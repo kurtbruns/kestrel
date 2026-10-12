@@ -88,9 +88,13 @@ export function initCommand(argv) {
     copyFileSync(from, join(root, to));
   }
   // The instance pins this exact release, and the tools at the versions it was tested with.
+  // @types/node is there only so `wrangler types` finds Node types installed (the Worker has
+  // nodejs_compat) and stops ending the typecheck with "Action required"; the scaffold's
+  // tsconfig lists no `types`, so they never enter the program and the Worker's types win.
   const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
   pkg.name = packageName(root);
   pkg.dependencies[PACKAGE.name] = PACKAGE.version;
+  pkg.devDependencies["@types/node"] = PACKAGE.devDependencies["@types/node"];
   pkg.devDependencies.typescript = PACKAGE.devDependencies.typescript;
   pkg.devDependencies.wrangler = PACKAGE.peerDependencies.wrangler;
   writeFileSync(join(root, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);

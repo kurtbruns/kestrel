@@ -24,6 +24,9 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - A new instance's `production` settings declare `"PROVIDER": ""`, which means no provider connected, so wrangler no longer warns on every production command that `PROVIDER` is missing there. Connect an email provider, and the SES guide's switch step, now say to change it rather than add it.
 - The operator's Claude context (`.claude/CLAUDE.md` in a new instance) carries a new safety caution: `PROVIDER` stays empty in production until the provider step and is never `fake`, whatever a wrangler warning suggests, so an instance's Claude doesn't "fix" the warning by copying the development value into production. An instance made before this release can merge the line by hand.
+- Deploy the app's step 3 creates the database and the image bucket with `--env production --binding … --update-config`, so Wrangler writes the new database's id into the `production` block itself, with no id to copy and no prompt to decline. The prompt's default, Yes, added a second binding to the production database in the development settings.
+- A new instance installs `@types/node` as a dev dependency, so `npm run typecheck` no longer ends with Wrangler's "Action required: Install @types/node". The Node types stay out of the type check, so the Worker's own types still apply.
+- A new instance's Claude context (`.claude/CLAUDE.md`) names `--env production` on every Wrangler command that creates or binds a resource, not only deploying and migrating, since without it Wrangler offers to bind the new resource in the development settings.
 
 ### Fixed
 
