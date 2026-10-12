@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { effectiveSimulateSends, simulationLine } from "../../cli/dev.mjs";
+import { SIMULATION_FAULTS, SIMULATION_PROFILES } from "../../shared/settings.ts";
 
 describe("simulationLine", () => {
   it("says a not-connected run refuses what would send, and how to leave it", () => {
@@ -20,6 +21,21 @@ describe("simulationLine", () => {
 
   it("names a simulation profile", () => {
     for (const value of ["ses:none", "resend", "1", "generic:realistic"]) {
+      expect(simulationLine(value), value).toBe(
+        `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
+      );
+    }
+  });
+
+  // cli/ is plain Node and keeps its own copy of what the Worker accepts, so a profile or
+  // fault added only to shared/ would print "isn't a value the app accepts" for a run the
+  // Worker simulates. Every pairing the Worker reads has to get the simulating line.
+  it("names every profile and fault the Worker accepts", () => {
+    const values = SIMULATION_PROFILES.flatMap((profile) => [
+      profile,
+      ...SIMULATION_FAULTS.map((faults) => `${profile}:${faults}`),
+    ]);
+    for (const value of values) {
       expect(simulationLine(value), value).toBe(
         `[dev] simulating a provider for list sends (SIMULATE_SENDS=${value}); nothing is delivered`,
       );

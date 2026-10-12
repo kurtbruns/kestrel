@@ -1366,10 +1366,14 @@ export async function renderEditor(
           wireSchedule();
         };
         $("#snGo", box).focus();
-        // Fill the real confirmed-subscriber count once known; the copy reads sensibly until then.
+        // Fill the count once known; the copy reads sensibly until then. A send reaches the
+        // confirmed addresses that aren't suppressed (SPEC §6), so ask the server for that set's
+        // total rather than the confirmed count, which still includes the suppressed ones.
         try {
-          const s = await api<SubscriberListResponse>("/api/subscribers");
-          const n = s.counts.confirmed;
+          const s = await api<SubscriberListResponse>(
+            "/api/subscribers?status=confirmed&suppressed=hide&limit=1",
+          );
+          const n = s.page.total;
           const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
           if (whoEl) {
             whoEl.textContent = `${n} confirmed subscriber${n === 1 ? "" : "s"}`;

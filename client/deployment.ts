@@ -94,8 +94,9 @@ export function notConnectedPreview(): boolean {
 export const CONNECT_PROVIDER_HREF = "#/docs/resend";
 
 /** The one link every not-connected line carries, worded for any provider. */
-export function connectProviderLink(cls = ""): Html {
-  return html`<a class="${cls}" href="${CONNECT_PROVIDER_HREF}">${NOT_CONNECTED_ADVICE.step}</a>`;
+export function connectProviderLink(cls?: string): Html {
+  const classAttr = cls ? html` class="${cls}"` : null;
+  return html`<a${classAttr} href="${CONNECT_PROVIDER_HREF}">${NOT_CONNECTED_ADVICE.step}</a>`;
 }
 
 /**

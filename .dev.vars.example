@@ -2,7 +2,7 @@
 # nothing in it is ever deployed. It holds only what local development uses. A deployed
 # environment's secrets (Access, and the email provider's keys) are stored with
 # `npx wrangler secret put NAME --env production` instead; the Configuration reference
-# (docs/reference/01-configuration.md) lists them. Restart `npm run dev` after a change.
+# lists them: https://getkestrel.dev/docs/configuration/#secrets Restart `npm run dev` after a change.
 
 # --- Admin API auth ---
 # Local dev authenticates with a JWT signed by DEV_AUTH_SECRET (the app verifies it
@@ -14,7 +14,8 @@
 DEV_AUTH_SECRET="dev-insecure-do-not-deploy"
 
 # --- Minimum lead ---
-# How long every send stays visible and cancelable before it fires (docs/SPEC.md §6).
+# How long every send stays visible and cancelable before it fires
+# (https://getkestrel.dev/docs/configuration/#min_lead_seconds).
 # Deployed environments default to 300 (five minutes); local dev uses the one-minute floor
 # that every environment shares, so a send scheduled a minute out behaves exactly as it
 # would deployed. Not a secret: a deployed environment sets it in its `vars` in

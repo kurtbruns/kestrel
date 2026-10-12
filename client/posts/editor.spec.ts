@@ -1557,14 +1557,22 @@ describe("editor view", () => {
     }
   });
 
-  it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {
+  it("sends now from the schedule dialog's demoted link, naming the audience: confirmed, less the suppressed (SPEC §6)", async () => {
     const server = draftServer();
     // Now plus the lead, rounded up to the minute, as the server answers it.
     const fireAt = Math.ceil((Date.now() + 5 * 60_000) / 60_000) * 60_000;
     await open([
       { path: "/api/posts/p1", reply: server.get },
       { method: "PUT", path: "/api/posts/p1", reply: (req) => server.put(req) },
-      { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 42 } }) },
+      {
+        path: "/api/subscribers",
+        // 42 confirmed, 2 of them suppressed: only the filtered roster's total is the audience.
+        reply: (req) =>
+          req.url.searchParams.get("status") === "confirmed" &&
+          req.url.searchParams.get("suppressed") === "hide"
+            ? { counts: { confirmed: 42, suppressed: 2 }, page: { total: 40 } }
+            : { counts: { confirmed: 42, suppressed: 2 }, page: { total: 99 } },
+      },
       {
         method: "POST",
         path: "/api/posts/p1/send",
@@ -1574,7 +1582,7 @@ describe("editor view", () => {
     $("#scheduleBtn").click();
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#snWho").textContent).toBe("42 confirmed subscribers");
+    expect($("#snWho").textContent).toBe("40 confirmed subscribers");
     $("#toSchedule").click();
     expect($("#schGo")).toBeTruthy(); // back to the schedule view, re-wired
     $("#toSendNow").click();

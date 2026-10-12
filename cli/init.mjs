@@ -113,7 +113,8 @@ export function initCommand(argv) {
       "  npm install",
       "  cp .dev.vars.example .dev.vars",
       "  npm run dev",
-      "Then commit, and follow the setup guide (node_modules/@kurtbruns/kestrel/docs/README.md) to deploy.",
+      "Then commit, and follow the setup guide to deploy: https://getkestrel.dev/docs/",
+      "(offline: node_modules/@kurtbruns/kestrel/docs/README.md)",
     ].join("\n"),
   );
 }
