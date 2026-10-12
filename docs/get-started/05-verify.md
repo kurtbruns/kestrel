@@ -33,7 +33,7 @@ Inboxes trust mail that passes DKIM and DMARC for the domain it's from. Passing 
 
     With Amazon SES and no custom MAIL FROM domain, SPF passes for `amazonses.com` instead. That's expected, and DMARC still passes.
 
-If a check fails, compare your DNS records with the ones in [Connect Resend](04-resend.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
+If a check fails, compare your DNS records with the ones in [Connect an email provider](04-resend.md#1-verify-your-sending-hostname). [Sending-domain DNS](../reference/02-sending-domain-dns.md#verify-alignment) explains each result.
 
 ## 3. Set up your notifications
 
@@ -82,7 +82,7 @@ When an address bounces or marks your mail as spam, your provider tells the app 
 
 1. In the editor, **Subscribers** lists both addresses as **Pending**, each with a **Suppressed** flag. The app never mails a suppressed address again.
 
-If an address has no flag, the webhook isn't reaching the app. Check its URL and signing secret in [Connect Resend](04-resend.md#4-add-the-webhook).
+If an address has no flag, the webhook isn't reaching the app. Check its URL and signing secret in [Connect an email provider](04-resend.md#4-add-the-webhook).
 
 ## 7. Read the logs
 

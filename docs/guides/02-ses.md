@@ -2,7 +2,7 @@
 
 Amazon SES costs less than Resend for a large list, but takes more setup. AWS reviews your account before it lets you send to anyone but yourself. Kestrel also needs Cloudflare's Workers Paid plan to send through SES at a useful pace.
 
-In this guide, you verify your sending hostname with SES, ask AWS for production access, and route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, switch it to SES, and deploy. Follow it in place of [Connect Resend](../get-started/04-resend.md).
+In this guide, you verify your sending hostname with SES, ask AWS for production access, and route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, switch it to SES, and deploy. Follow it in place of [Connect an email provider](../get-started/04-resend.md).
 
 ## Before you begin
 

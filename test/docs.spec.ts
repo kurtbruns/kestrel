@@ -109,7 +109,7 @@ describe("docs API serves the setup content when authed", () => {
     // Markdown was rendered (the doc's H1) and the exact operator facts survive: each
     // provider's real webhook path (from src/routes/webhooks.ts).
     const resend = body.docs.find((d) => d.slug === "resend");
-    expect(resend?.html).toContain("Connect Resend");
+    expect(resend?.html).toContain("Connect an email provider");
     expect(resend?.html).toContain("/webhooks/resend");
     const ses = body.docs.find((d) => d.slug === "ses");
     expect(ses?.html).toContain("/webhooks/ses");

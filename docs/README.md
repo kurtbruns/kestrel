@@ -8,7 +8,7 @@ Follow these steps, from an empty repository to a live newsletter. Each one ends
 
 1. [Deploy the app](get-started/02-deploy.md)
 1. [Lock the dashboard with Access](get-started/03-access.md)
-1. [Connect Resend](get-started/04-resend.md)
+1. [Connect an email provider](get-started/04-resend.md)
 1. [Verify it works](get-started/05-verify.md)
 1. [Go live](get-started/06-go-live.md)
 

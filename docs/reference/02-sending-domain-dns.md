@@ -1,6 +1,6 @@
 # Sending-domain DNS
 
-Inboxes decide whether to trust your mail by checking records in the DNS of the domain it comes from. This page explains the records that [Connect Resend](../get-started/04-resend.md) and [Use Amazon SES instead of Resend](../guides/02-ses.md) have you add. It covers what each one proves, how to check them, and when to tighten DMARC.
+Inboxes decide whether to trust your mail by checking records in the DNS of the domain it comes from. This page explains the records that [Connect an email provider](../get-started/04-resend.md) and [Use Amazon SES instead of Resend](../guides/02-ses.md) have you add. It covers what each one proves, how to check them, and when to tighten DMARC.
 
 ## Why all three
 
