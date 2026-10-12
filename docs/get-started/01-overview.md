@@ -1,8 +1,8 @@
 # Overview
 
-Kestrel is a newsletter app you run yourself. You write a post in Markdown, preview it exactly as the email, and send it to a list you own. It runs on Cloudflare Workers, and an email provider delivers the mail.
+Get started puts your own instance of Kestrel on your Cloudflare account and connects it to an email provider. Its five steps after this page take you from an empty repository to a newsletter that's ready for its first subscriber. Each step ends with a check, so you know it worked before you move on.
 
-In this guide, you deploy your own instance of Kestrel to your Cloudflare account and connect it to an email provider. You go from an empty repository to a newsletter that's ready for its first subscriber. Each step ends with a check, so you know it worked before you move on.
+In this guide, you check what you need, and choose the two hostnames the steps use.
 
 You run every step from your instance's repository, a small repository of your own. It holds your instance's configuration and names the release of Kestrel it runs, which installs from npm as `@kurtbruns/kestrel`. You return to it to deploy changes and upgrade to new releases. You don't need to run Kestrel on your computer to deploy it, but you can [try it there first](../guides/08-try-locally.md), with demo content.
 
