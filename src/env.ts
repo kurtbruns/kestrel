@@ -181,6 +181,12 @@ export interface Config {
    */
   devMode: boolean;
   /**
+   * Fake transport, no Access, and a loopback `APP_ORIGIN`: the shape in which the dev
+   * credential may be honored, whether or not its secret is present. Outside it, with no
+   * Access configured, no admin request can authenticate, so the 401 says why (SPEC §11).
+   */
+  devShaped: boolean;
+  /**
    * Local-dev admin-token secret, resolved ONLY in a dev-shaped env (see `devMode`).
    * Undefined in any deployed env, which disables the dev credential path entirely:
    * Access is then the only door.
@@ -325,6 +331,7 @@ export function getConfig(env: AppEnv): Config {
     // dev credential path is live (dev-shaped AND the secret resolved). Never true in a
     // deployed env, so the reader surface stays clean of any admin link there.
     devMode,
+    devShaped,
     devAuthSecret,
     devRunId: devMode ? orUndefined(env.DEV_RUN_ID) : undefined,
     simulation: local === "not-connected" ? null : local,

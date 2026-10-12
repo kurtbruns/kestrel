@@ -8,7 +8,7 @@ import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import type { Principal, RequestContext } from "../src/router";
 import * as settingsRoutes from "../src/routes/settings";
-import { SES_DEPLOY } from "./support/deploy";
+import { NOT_CONNECTED_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { adminAuth, base, DEV_SECRET, readJson } from "./support/http";
 import { fetchWith, withVars } from "./support/worker_env";
 
@@ -182,6 +182,49 @@ describe("dev credential is inert in a deployed-shaped env", () => {
       email: "human@example.com",
       via: "dev",
     });
+  });
+});
+
+// Before Access is set up on a deployment, no admin request can authenticate, and the 401
+// says so, so the editor can show that state rather than a session that ended (SPEC §11).
+// Under a configured Access, or in local development, a 401 says nothing more.
+describe("the admin 401 says when no Access is configured", () => {
+  const ACCESS = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag" };
+
+  it("names access_not_configured on a deployment with no Access, and nothing else", async () => {
+    // Not connected is the newcomer's case, right after Deploy; a real provider is the same.
+    for (const [name, vars] of Object.entries({ NOT_CONNECTED_DEPLOY, SES_DEPLOY })) {
+      for (const path of ["/api/whoami", "/api/settings", "/api/posts"]) {
+        const res = await fetchWith(vars, path);
+        expect(res.status, `${name} ${path}`).toBe(401);
+        expect(await res.json(), `${name} ${path}`).toEqual({
+          error: "unauthorized",
+          reason: "access_not_configured",
+        });
+      }
+    }
+    // A credential the deployment can't honor is answered the same way: there is no door.
+    const token = await mintDevToken(DEV_SECRET, { email: "human@example.com" });
+    const bearer = await fetchWith(SES_DEPLOY, "/api/whoami", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(await bearer.json()).toEqual({ error: "unauthorized", reason: "access_not_configured" });
+  });
+
+  it("stays a plain 401 once Access is configured", async () => {
+    const res = await fetchWith({ ...SES_DEPLOY, ...ACCESS }, "/api/whoami");
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
+  });
+
+  it("stays a plain 401 in a dev-shaped env, with or without the dev secret", async () => {
+    const res = await SELF.fetch(`${base}/api/whoami`);
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "unauthorized" });
+    // Local dev missing `.dev.vars`: Access is not what it lacks.
+    const noSecret = await fetchWith({ DEV_AUTH_SECRET: "" }, "/api/whoami");
+    expect(noSecret.status).toBe(401);
+    expect(await noSecret.json()).toEqual({ error: "unauthorized" });
   });
 });
 

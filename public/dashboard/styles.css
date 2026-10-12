@@ -900,8 +900,10 @@ body.nav-resizing .sidebar {
   margin-top: 12px;
 }
 /* The refused-configuration wall says more than the sign-in wall, so it reads as text: left
-   aligned, a little wider, with the variable and the server's words set apart. */
-.config-wall {
+   aligned, a little wider, with the variable and the server's words set apart. The locked
+   editor, before Access is set up, reads the same way. */
+.config-wall,
+.access-wall {
   max-width: 560px;
   text-align: left;
 }
@@ -918,7 +920,8 @@ body.nav-resizing .sidebar {
   white-space: nowrap;
   border: 0;
 }
-.config-wall h2:focus {
+.config-wall h2:focus,
+.access-wall h2:focus {
   outline: none;
 }
 .config-wall-problem {

@@ -1,9 +1,11 @@
 // The one network seam: every call to the HTTP API goes through api(), apiText(), or
-// apiFile(), which attach the credential, route a 401 to re-auth and a refused deploy
-// configuration to its wall, and turn any other failure into one ApiError carrying the
-// server's message. They call the global fetch, so a spec
-// stands in for the API by scripting fetch and the real functions run over it.
+// apiFile(), which attach the credential, route a 401 to re-auth (or to the locked editor,
+// before Access is set up) and a refused deploy configuration to its wall, and turn any
+// other failure into one ApiError carrying the server's message. They call the global
+// fetch, so a spec stands in for the API by scripting fetch and the real functions run
+// over it.
 
+import { accessNotConfigured, showAccessLocked } from "./access_locked";
 import { authHeaders, showReauth } from "./auth";
 import { configRefusal, showConfigProblem } from "./config_problem";
 
@@ -59,8 +61,15 @@ async function send(path: string, opts: ApiOptions): Promise<Response> {
     signal: opts.signal,
   });
   if (res.status === 401) {
-    showReauth();
-    throw new ApiError(REAUTH_MESSAGE, 401);
+    // A deployment with no Access can authenticate no one, which signing in again can't
+    // fix, so the 401 says so and the editor shows that instead (SPEC §11).
+    const data: unknown = await res.json().catch(() => null);
+    if (accessNotConfigured(data)) {
+      showAccessLocked();
+    } else {
+      showReauth();
+    }
+    throw new ApiError(REAUTH_MESSAGE, 401, data);
   }
   return res;
 }

@@ -1,6 +1,7 @@
 // Auth on the client: the boot probe, the dev token, the bearer header, the identity chip,
 // and the re-auth wall a dead session lands on.
 
+import { accessNotConfigured, showAccessLocked } from "./access_locked";
 import { configRefusal, showConfigProblem } from "./config_problem";
 import { unmount } from "./lifecycle";
 import { app, identity } from "./shell";
@@ -100,8 +101,9 @@ async function whoami(): Promise<Response | null> {
 /**
  * The boot probe: who is signed in, minting a dev token first in local development. Answers
  * the session, or null once it has put up the wall the probe landed on: the refused
- * configuration's when the server names a setting to fix (SPEC §9), since signing in again
- * cannot help with that, and the sign-in wall otherwise.
+ * configuration's when the server names a setting to fix (SPEC §9), the locked editor's when
+ * the deployment has no Access yet (SPEC §11), since signing in again cannot help with
+ * either, and the sign-in wall otherwise.
  */
 export async function probeSession(): Promise<Session | null> {
   if (!appState.token) {
@@ -119,9 +121,12 @@ export async function probeSession(): Promise<Session | null> {
   if (res?.ok) {
     return (await res.json()) as Session;
   }
-  const refusal = res ? configRefusal(await res.json().catch(() => null)) : null;
+  const data: unknown = res ? await res.json().catch(() => null) : null;
+  const refusal = configRefusal(data);
   if (refusal) {
     showConfigProblem(refusal);
+  } else if (accessNotConfigured(data)) {
+    showAccessLocked();
   } else {
     showReauth();
   }

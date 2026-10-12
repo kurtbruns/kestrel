@@ -83,7 +83,9 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
 | Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
 | Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9) |
-| Sign in, or stop | 401, 403 | `unauthorized`, `forbidden` |
+| Sign in, or stop | 401, 403 | `unauthorized` (with `reason: "access_not_configured"` when the deployment has no Access yet, below), `forbidden` |
+
+A deployment with no Access configured can authenticate no request at all (SPEC §11), so its admin 401 says so: `{ "error": "unauthorized", "reason": "access_not_configured" }`. Signing in again cannot help; setting up Access can. A 401 under a configured Access, and one in local development, carries no `reason`, and the field never says anything else about the request.
 
 While the configuration is refused, every request is answered before any route is matched, so before authentication, and the answer says nothing about the request itself. Under `/api`, at `/health`, and under `/webhooks/`, it is `invalid_config` naming the `variable`. Every other path is one a reader may open, and answers a plain HTML page with status 503 and a `Retry-After` of five minutes, saying it is temporarily unavailable, which names no setting.
 
