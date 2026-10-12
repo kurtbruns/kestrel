@@ -16,6 +16,7 @@ import { ApiError, api, apiText } from "../api";
 import {
   earliestFireAt,
   minLeadText,
+  notConnectedScheduleLine,
   notConnectedTestLine,
   postArchiveUrl,
   providerNotConnected,
@@ -1247,7 +1248,7 @@ export async function renderEditor(
       }
       const minStr = toLocalInput(earliestFireAt());
       const def = toLocalInput(new Date(Date.now() + 24 * 3600 * 1000));
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p><label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}"><div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div><div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`;
       const m = modal(scheduleView);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1327,6 +1328,9 @@ export async function renderEditor(
         $("#schCancel", box).onclick = m.close;
         $("#schGo", box).onclick = doSchedule;
         $("#toSendNow", box).onclick = showSendNow;
+        // The server would refuse both; the standing line above says why and where to fix it.
+        $<HTMLButtonElement>("#schGo", box).disabled = providerNotConnected();
+        $<HTMLButtonElement>("#toSendNow", box).disabled = providerNotConnected();
         $("#schWhen", box).focus();
       }
 
@@ -1338,6 +1342,7 @@ export async function renderEditor(
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
         $("#snGo", box).onclick = doSendNow;
+        $<HTMLButtonElement>("#snGo", box).disabled = providerNotConnected();
         $("#toSchedule", box).onclick = () => {
           setHtml(box, scheduleView);
           wireSchedule();

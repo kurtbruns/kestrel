@@ -406,6 +406,7 @@ describe("dashboard", () => {
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/resend");
+      expect($(".setup-connect button").textContent).toBe("Connect an email provider");
       expect($(".setup-subscribe").textContent).toMatch(
         /Signups open once an email provider is connected/,
       );
@@ -414,14 +415,17 @@ describe("dashboard", () => {
       expect(fake.unhandled).toEqual([]);
     });
 
-    it("carries a standing line on a populated dashboard, linking to Connect Resend", async () => {
+    it("raises an amber line in the health block on a populated dashboard, linking to connect one", async () => {
       withProvider("none");
       fake = world([post()], sendServer(), counts);
       await mount(renderDashboard);
       await vi.advanceTimersByTimeAsync(0);
-      const line = $(".dash-not-connected");
+      // In the health block's own warning treatment (DESIGN §2), with nothing wrong on a send.
+      const block = $("#dashHealth .health");
+      expect(block.classList.contains("amber")).toBe(true);
+      const line = $(".dash-not-connected", block);
       expect(line.textContent).toBe(
-        "No email provider connected, so nothing can be sent yet. Connect Resend to start sending.",
+        "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
       );
       expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
       expect(line.querySelector("button")).toBeNull(); // not a Notice: nothing to dismiss
@@ -442,6 +446,7 @@ describe("dashboard", () => {
         await mount(renderDashboard);
         await vi.advanceTimersByTimeAsync(0);
         expect(document.querySelector(".dash-not-connected"), provider).toBeNull();
+        expect(document.querySelector("#dashHealth .health"), provider).toBeNull();
         unmount();
         fake.restore();
       }

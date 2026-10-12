@@ -4,7 +4,7 @@
 
 import { DEFAULT_MIN_LEAD_MS, formatLead } from "../../shared/sends";
 import type { DeploymentView, SimulationProfile } from "../../shared/settings";
-import { CONNECT_PROVIDER_HREF } from "../deployment";
+import { connectProviderLink } from "../deployment";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { chip, monogram, type SettingsPage, secHead } from "./page";
@@ -27,7 +27,7 @@ export function providerLabel(provider: string): string {
  */
 function providerValue(d: DeploymentView): Html {
   if (d.provider === "none") {
-    return html`${providerLabel(d.provider)}. <a class="set-link" href="${CONNECT_PROVIDER_HREF}">Connect Resend</a> to start sending.`;
+    return html`${providerLabel(d.provider)}. ${connectProviderLink("set-link")} to start sending.`;
   }
   return html`${providerLabel(d.provider)}${d.simulation ? html`<span class="set-pill">Simulating ${SIMULATION_LABELS[d.simulation.profile]}${d.simulation.faults === "none" ? ", no failures" : ""}</span>` : null}`;
 }

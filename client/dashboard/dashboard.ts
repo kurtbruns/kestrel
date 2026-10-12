@@ -7,7 +7,7 @@ import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
-import { CONNECT_PROVIDER_HREF, providerNotConnected } from "../deployment";
+import { CONNECT_PROVIDER_HREF, connectProviderLink, providerNotConnected } from "../deployment";
 import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -50,7 +50,9 @@ interface HealthAlert {
 // within a read of its condition and stays until the condition clears, and the dashboard
 // keeps no rule of its own: the bounce spike included, which the server reads off each
 // recently sent send. Only the loud kinds are lines here; a re-made send's note and a
-// provider outage short of the stuck threshold are shown where the send is.
+// provider outage short of the stuck threshold are shown where the send is. The one line
+// not about a send is the deployment's: no email provider connected (SPEC §9), an amber
+// standing state with no time, read from the deployment reflection, gone once one is set.
 function computeHealth(live: SendView[]): HealthAlert[] {
   const alerts: HealthAlert[] = [];
   // Missed only past the server's tolerance: an ordinary slow tick is never a miss (§12).
@@ -120,6 +122,12 @@ function computeHealth(live: SendView[]): HealthAlert[] {
     alerts.push({
       level: "amber",
       text: html`<a href="#/sent/${firstSpike.s.id}">${firstSpike.s.subject}</a>: ${firstSpike.c.message}`,
+    });
+  }
+  if (providerNotConnected()) {
+    alerts.push({
+      level: "amber",
+      text: html`<span class="dash-not-connected">No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.</span>`,
     });
   }
   return alerts;
@@ -256,7 +264,6 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
-    ${notConnectedLineHtml()}
     <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported)))}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
@@ -498,17 +505,6 @@ function apiConnectCard(connected: boolean): Html {
   </div>`;
 }
 
-/**
- * The standing line a populated dashboard carries while no email provider is connected
- * (SPEC §9, DESIGN §2): a state, not an event, so never a Notice and never dismissed. It
- * goes when a provider is set; local development's stand-in never shows it. Null otherwise.
- */
-function notConnectedLineHtml(): Html | null {
-  return providerNotConnected()
-    ? html`<p class="muted dash-not-connected">No email provider connected, so nothing can be sent yet. <a href="${CONNECT_PROVIDER_HREF}">Connect Resend</a> to start sending.</p>`
-    : null;
-}
-
 /** The first-run checklist. While no provider is connected it leads the sending steps with
  *  connecting one, and the subscribe step says signups wait for it (the page is closed). */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
@@ -521,7 +517,7 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
       ${
         notConnected
-          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Resend</button></li>`
+          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect an email provider</button></li>`
           : null
       }
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>

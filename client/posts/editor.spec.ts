@@ -1231,7 +1231,7 @@ describe("editor view", () => {
 
   // DESIGN §2: no provider is a standing state, so the dialog says so every time it opens
   // and points to the step that connects one, rather than letting the server refuse.
-  it("carries a standing Connect Resend line while no provider is connected, and won't send", async () => {
+  it("carries a standing line to connect a provider while none is connected, and won't send", async () => {
     appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
     await open([
       { path: "/api/posts/p1", reply: () => draft() },
@@ -1241,7 +1241,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so a test can’t be sent yet. Connect Resend to send one.",
+      "No email provider connected, so a test can’t be sent yet. Connect an email provider to send one.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
     expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
@@ -1478,6 +1478,43 @@ describe("editor view", () => {
     // Our edit is still here, unsaved and undisturbed: the banner decides what happens to it.
     expect(body().value).toBe("mine, not theirs");
     expect(handle().dirty()).toBe(true);
+  });
+
+  // DESIGN §2: the schedule dialog says no provider is connected before the publisher picks
+  // a time, rather than refusing after they confirm.
+  it("carries a standing line in the schedule dialog while no provider is connected, with Schedule and Send now disabled", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    const server = draftServer();
+    await open([{ path: "/api/posts/p1", reply: server.get }]);
+    $("#scheduleBtn").click();
+    const line = $(".modal .not-connected");
+    expect(line.textContent).toBe(
+      "No email provider connected, so this can’t be scheduled yet. Connect an email provider to schedule it.",
+    );
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
+    expect($<HTMLButtonElement>("#toSendNow").disabled).toBe(true);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("schedules as usual once a provider is set, and on the local stand-in", async () => {
+    for (const provider of ["resend", "fake"] as const) {
+      appState.appConfig = settingsResponse({ deployment: { provider } });
+      const server = draftServer();
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        { path: "/api/subscribers", reply: () => ({ counts: { confirmed: 1 } }) },
+      ]);
+      $("#scheduleBtn").click();
+      expect(document.querySelector(".modal .not-connected"), provider).toBeNull();
+      expect($<HTMLButtonElement>("#schGo").disabled, provider).toBe(false);
+      $("#toSendNow").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($<HTMLButtonElement>("#snGo").disabled, provider).toBe(false);
+      $("#snCancel").click();
+      unmount();
+      fake.restore();
+    }
   });
 
   it("sends now from the schedule dialog's demoted link, naming the confirmed count", async () => {

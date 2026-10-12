@@ -74,24 +74,49 @@ export function noEmailProvider(): boolean {
 /**
  * True when no email provider is connected (SPEC §9): a deployment whose `PROVIDER` is not
  * set yet, which refuses every send. The operator's voice: name the state and point to the
- * step that ends it, Connect Resend (`CONNECT_PROVIDER_HREF`).
+ * step that ends it, labelled "Connect an email provider" (`connectProviderLink`).
  */
 export function providerNotConnected(): boolean {
   return appState.appConfig?.deployment.provider === "none";
 }
 
-/** The setup step that connects a provider: Get started's Connect Resend. */
+/** The setup step that connects a provider: Get started's Connect Resend, whose first
+ *  paragraph sends an SES operator to the SES guide instead. */
 export const CONNECT_PROVIDER_HREF = "#/docs/resend";
 
+/** The one link every not-connected line carries, worded for any provider. */
+export function connectProviderLink(cls = ""): Html {
+  return html`<a class="${cls}" href="${CONNECT_PROVIDER_HREF}">Connect an email provider</a>`;
+}
+
 /**
- * The standing line a Send-a-test dialog carries while no provider is connected
- * (DESIGN §2): not a Notice and not dismissible, since the state holds every time the
- * dialog opens, and gone once a provider is set. Null otherwise.
+ * The standing line a dialog carries while no provider is connected (DESIGN §2): not a
+ * Notice and not dismissible, since the state holds every time the dialog opens, and gone
+ * once a provider is set. `why` says what the state stops; `after` ends the sentence the
+ * link starts. Null otherwise.
  */
-export function notConnectedTestLine(): Html | null {
+function notConnectedLine(why: string, after: string): Html | null {
   return providerNotConnected()
-    ? html`<p class="hint not-connected">No email provider connected, so a test can’t be sent yet. <a href="${CONNECT_PROVIDER_HREF}">Connect Resend</a> to send one.</p>`
+    ? html`<p class="hint not-connected">No email provider connected, so ${why}. ${connectProviderLink()}${after}.</p>`
     : null;
+}
+
+/** The Send-a-test dialogs' standing line; their Send is disabled beside it. */
+export function notConnectedTestLine(): Html | null {
+  return notConnectedLine("a test can’t be sent yet", " to send one");
+}
+
+/** The Schedule dialog's standing line; its Schedule and Send now are disabled beside it. */
+export function notConnectedScheduleLine(): Html | null {
+  return notConnectedLine("this can’t be scheduled yet", " to schedule it");
+}
+
+/**
+ * The Reschedule dialog's line. Moving a send already scheduled is still accepted (it sends
+ * nothing), so its control stays live; the line says the send is held when it fires.
+ */
+export function notConnectedRescheduleLine(): Html | null {
+  return notConnectedLine("this send is held when it fires, until one is", " to send it");
 }
 
 /**
