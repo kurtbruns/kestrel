@@ -28,15 +28,15 @@ The setup guide is the documentation for deploying and running your own instance
 
 ## Structure
 
-- **Get started:** the main path, numbered: Overview, Deploy the app, Lock the dashboard with Access, Connect Resend, Verify it works, Go live.
+- **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect Resend, Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
 - **Guides:** picked from, not read in order: Connect Claude, SES, notifications through Cloudflare's email, rate limiting, upgrading, trying Kestrel on your computer. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
 - **Reference:** the detail and the why: configuration, sending-domain DNS.
 - Previous and Next stay within a section.
 
 ## Main path defaults
 
-- **Email provider:** Resend. The SES guide replaces step 4.
-- **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; the Overview says so in one sentence.
+- **Email provider:** Resend. The SES guide replaces step 3, Connect Resend.
+- **App hostname:** a subdomain, `newsletter.example.com`. The apex works when it has no website of its own; Deploy the app says so in one sentence, where the reader chooses their hostnames.
 - **Sending hostname:** `send.example.com`. Phrase it as a recommendation ("It's recommended to send from a subdomain…"), not a prohibition.
 
 ## Page anatomy

@@ -20,7 +20,6 @@
  */
 
 import { Lexer, type Token, type Tokens } from "marked";
-import overview from "../../docs/get-started/01-overview.md";
 import deploy from "../../docs/get-started/02-deploy.md";
 import access from "../../docs/get-started/03-access.md";
 import resend from "../../docs/get-started/04-resend.md";
@@ -41,7 +40,6 @@ import { sanitizeEmailHtml } from "../render/sanitize";
 
 // Each page's Markdown by its path under docs/, the path the README links it by.
 const PAGES: Record<string, string> = {
-  "get-started/01-overview.md": overview,
   "get-started/02-deploy.md": deploy,
   "get-started/03-access.md": access,
   "get-started/04-resend.md": resend,

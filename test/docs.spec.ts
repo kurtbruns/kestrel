@@ -9,7 +9,6 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
   it("renders the guide in the README's order with titles from each doc's H1 and an HTML fragment", () => {
     const { docs } = renderDocs();
     expect(docs.map((d) => `${d.section}/${d.slug}`)).toEqual([
-      "get-started/overview",
       "get-started/deploy",
       "get-started/access",
       "get-started/resend",
@@ -78,8 +77,8 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
         expect(slugs, `${d.slug} links to ${slug}`).toContain(slug);
       }
     }
-    const start = docs.find((d) => d.slug === "overview");
-    expect(start?.html).toContain('href="#/docs/deploy"');
+    const start = docs.find((d) => d.slug === "deploy");
+    expect(start?.html).toContain('href="#/docs/resend"');
     expect(start?.html).toContain('href="#/docs/ses"');
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
