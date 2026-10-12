@@ -193,9 +193,9 @@ export interface Config {
   devRunId?: string;
   /**
    * The local send simulation that stands in for a provider on list sends (SPEC §10), or
-   * null for the plain fake and the not-connected preview. Only ever set in a dev-shaped env, from `SIMULATE_SENDS`, so
-   * it is structurally null once deployed (no deployed env is dev-shaped) and can
-   * never pace or fabricate events against a real inbox.
+   * null for the plain fake and the not-connected preview. Only ever set in a dev-shaped
+   * env, from `SIMULATE_SENDS`, so it is structurally null once deployed (no deployed env
+   * is dev-shaped) and can never pace or fabricate events against a real inbox.
    */
   simulation: SimulationView | null;
   /**
@@ -578,7 +578,7 @@ function readSimulateSends(v: string | undefined): SimulationView | "not-connect
   ) {
     throw new ConfigError(
       "SIMULATE_SENDS",
-      `must be off, not-connected, or one of ${SIMULATION_PROFILES.join(", ")} (or 1), optionally followed by :${SIMULATION_FAULTS.join(" or :")}, not "${v?.trim()}"`,
+      `must be off, one of ${SIMULATION_PROFILES.join(", ")} (or 1) optionally followed by :${SIMULATION_FAULTS.join(" or :")}, or not-connected, not "${v?.trim()}"`,
     );
   }
   return { profile: profile as SimulationProfile, faults: faults as SimulationFaults };

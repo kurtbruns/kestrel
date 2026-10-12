@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- Local development can run as a deployment with no email provider connected: `SIMULATE_SENDS=not-connected` refuses every send, closes signups, and holds a due send until it is switched back, with local sign-in still on, so the editor's not-connected state can be seen without deploying. A deployed instance ignores it (SPEC §10).
+- Local development can run as a deployment with no email provider connected: `SIMULATE_SENDS=not-connected` refuses every send, closes signups, and holds a due send, which goes out at its next retry once the switch is off, with local sign-in still on, so the editor's not-connected state can be seen without deploying. A deployed instance ignores it (SPEC §10).
 
 ## [1.7.0] - 2026-10-12
 

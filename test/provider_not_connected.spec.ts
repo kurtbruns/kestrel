@@ -14,6 +14,7 @@ import { updateSettings } from "../src/db/settings";
 import { type AppEnv, getConfig } from "../src/env";
 import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../src/lib/time";
 import { composeNotification } from "../src/notify/compose";
+import { clearFakeNotifications, fakeNotifications } from "../src/notify/fake";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import type { RequestContext } from "../src/router";
 import * as renderRoutes from "../src/routes/render_actions";
@@ -77,6 +78,7 @@ const ADVICE = "Connect an email provider (the setup guide walks through it), th
 beforeEach(async () => {
   await resetDatabase();
   clearFakeOutbox();
+  clearFakeNotifications();
 });
 
 afterEach(() => {
@@ -401,7 +403,7 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
       headers: AUTH,
     });
     expect(notified.status).toBe(409);
-    expect(fakeOutbox()).toHaveLength(0);
+    expect(fakeNotifications()).toHaveLength(0);
 
     const page = await (await fetchWith(PREVIEW, "/subscribe")).text();
     expect(page).toContain("Signups aren’t open yet");
