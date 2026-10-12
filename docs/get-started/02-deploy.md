@@ -125,7 +125,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 
-    Change every `example.com` value, even before you connect a provider. The app refuses to run while any of them is still on `example.com`, since every link it builds would point there.
+    Change every `example.com` value, the route included, even before you connect a provider. The app checks its settings but can't see the route: it refuses to run while `APP_ORIGIN`, `SENDING_DOMAIN`, or `FROM_ADDRESS`, or `ARCHIVE_ORIGIN` or `MEDIA_PUBLIC_BASE` if you set them, is still on `example.com`, since its links and the address your email comes from would name a domain that isn't yours.
 
     Every other setting has a working default. [Configuration](../reference/01-configuration.md) lists them all, and what the app refuses.
 

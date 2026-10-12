@@ -198,6 +198,12 @@ describe("getConfig — deploy config is validated", () => {
       refuses({ ...RESEND_DEPLOY, [name]: value }, name);
     }
     refuses({ ...SES_DEPLOY, FROM_ADDRESS: "no address here" }, "FROM_ADDRESS");
+    // The reason names the provider, which a not-connected deployment has none of.
+    expect(() =>
+      getConfig(varsOnly({ ...SES_DEPLOY, SENDING_DOMAIN: "send.example.com" })),
+    ).toThrow(
+      `SENDING_DOMAIN is still on the template's example.com placeholder; PROVIDER "ses" sends real email`,
+    );
   });
 
   it("refuses the production template's vars as shipped, naming the app's origin first", () => {
@@ -418,7 +424,12 @@ describe("a refused config, on each surface", () => {
     expect(await page.text()).not.toContain("example.com");
     const api = await fetchWith(shipped, "/api/whoami", { headers: AUTH });
     expect(api.status).toBe(500);
-    expect(await api.json()).toMatchObject({ error: "invalid_config", variable: "APP_ORIGIN" });
+    expect(await api.json()).toMatchObject({
+      error: "invalid_config",
+      variable: "APP_ORIGIN",
+      message:
+        "APP_ORIGIN is still on the template's example.com placeholder; replace it with your own domain",
+    });
   });
 
   it("still logs the variable when a reader page is what found it", async () => {
