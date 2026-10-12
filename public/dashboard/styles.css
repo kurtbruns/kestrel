@@ -2871,7 +2871,7 @@ textarea.is-invalid {
   font-weight: 700;
 }
 /* A dialog's own error, when no one field is at fault: just above its actions, since a
-   toast would sit beneath the dialog's backdrop (DESIGN §5). */
+   toast would sit beneath the dialog's backdrop (DESIGN §2). */
 .modal .dialog-error {
   margin-top: 12px;
 }
