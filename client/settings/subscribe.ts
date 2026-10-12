@@ -96,7 +96,7 @@ export function subscribeSection(page: SettingsPage): Html {
         // Signups are closed while no provider is connected (SPEC §9): the page says so and
         // a form takes no address. The address and the code stay, ready for when they open.
         page.data.deployment.provider === "none"
-          ? html`<div class="health amber set-sub-not-connected" role="status"><span class="health-dot">⚠️</span><div>No email provider connected, so signups aren’t open yet: the page below says so, and the form takes no address. ${connectProviderLink()} to open signups.</div></div>`
+          ? html`<div class="health amber set-sub-not-connected" role="status"><span class="health-dot">⚠️</span><div><span>No email provider connected, so signups aren’t open yet: the page below says so, and the form takes no address. ${connectProviderLink()} to open signups.</span></div></div>`
           : null
       }
       <div class="set-card">
