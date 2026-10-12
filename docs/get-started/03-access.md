@@ -59,7 +59,7 @@ The app verifies each login against your team domain, and checks that it was iss
 
 1. Find the application's audience tag. Under **Access controls → Applications**, select **Configure** on your application. On the **Additional settings** tab, copy the **Application Audience (AUD) Tag**.
 
-1. Store the team domain as a secret. The command prompts you for the value. Enter it without `https://`:
+1. Store the team domain as a secret. The command prompts you for the value. Enter the hostname alone, without `https://`. If you paste it with `https://` or a trailing slash, the app drops them. Anything else that isn't a hostname is refused, naming `ACCESS_TEAM_DOMAIN`:
 
     ```bash
     npx wrangler secret put ACCESS_TEAM_DOMAIN --env production

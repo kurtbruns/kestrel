@@ -85,7 +85,7 @@ Used only with the `NOTIFY` binding. It must be an address on a domain set up fo
 
 | Secret | What it is | Needed for |
 | --- | --- | --- |
-| `ACCESS_TEAM_DOMAIN` | your Zero Trust team domain, such as `your-team.cloudflareaccess.com` | every deployment |
+| `ACCESS_TEAM_DOMAIN` | your Zero Trust team domain, such as `your-team.cloudflareaccess.com`; an `https://` or trailing slash is dropped | every deployment |
 | `ACCESS_AUD` | the Access application's audience tag | every deployment |
 | `ACCESS_ALLOWED_EMAILS` | a comma-separated list of the people allowed to sign in | optional |
 | `RESEND_API_KEY` | the Resend API key | Resend |
@@ -139,7 +139,7 @@ The app checks its configuration on every request. It refuses to run on one that
 - None of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com` or a name under it, the template's placeholder. That holds with no provider connected too, since every link the app builds would name it. Only `fake` allows it.
 - `SUBREQUEST_BUDGET`, `MIN_LEAD_SECONDS`, and `SES_MAX_SEND_RATE` must be whole numbers above zero. `MIN_LEAD_SECONDS` must also be within its bounds. Any other value is refused, never adjusted. The one exception is a `SUBREQUEST_BUDGET` below 30, which is raised to 30.
 - In local development, `SIMULATE_SENDS` must be `off`, `not-connected` to run as a deployment with no email provider yet, or the provider a local send models, `resend`, `ses`, or `1` for a generic one, optionally followed by `:none` for no injected failures. A deployed instance ignores it.
-- `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set together or not at all. With only one, the app could verify no sign-in and would let no one into the editor, so it refuses and names the missing one.
+- `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` are set together or not at all. With only one, the app could verify no sign-in and would let no one into the editor, so it refuses and names the missing one. `ACCESS_TEAM_DOMAIN` must be your team's hostname, such as `your-team.cloudflareaccess.com`. An `https://` or `http://` in front and a trailing slash are dropped, but anything else, such as a path or a port, is refused, since it would fail every sign-in.
 
 Until it's fixed, no sends go out, and each place says what its reader can act on:
 

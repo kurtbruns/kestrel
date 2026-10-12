@@ -194,10 +194,11 @@ describe("the auth mode follows how the request signed in", () => {
 
   /** An Access deployment whose team serves a key this spec holds, so a request can carry
    *  an assertion the app verifies for real. A team domain of its own per test, since the
-   *  app caches a team's keys for the life of the isolate. */
-  async function accessDeployment() {
+   *  app caches a team's keys for the life of the isolate. `stored` is the team domain as
+   *  the operator entered it, which may carry a scheme or a trailing slash. */
+  async function accessDeployment(stored: (team: string) => string = (team) => team) {
     const team = `team-${crypto.randomUUID()}.cloudflareaccess.com`;
-    const vars = { ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: "aud-tag" };
+    const vars = { ACCESS_TEAM_DOMAIN: stored(team), ACCESS_AUD: "aud-tag" };
     const { publicKey, privateKey } = await generateKeyPair("RS256");
     const jwk = { ...(await exportJWK(publicKey)), kid: "k1", alg: "RS256", use: "sig" };
     const realFetch = globalThis.fetch;
@@ -236,6 +237,18 @@ describe("the auth mode follows how the request signed in", () => {
     expect(await service.json()).toEqual({
       principal: { kind: "service" },
       auth: { mode: "access" },
+    });
+  });
+
+  // Access issues for the bare host, so a team domain stored as a URL must still verify.
+  it("verifies a sign-in when the team domain was stored with its scheme and a trailing slash", async () => {
+    const { vars, assertion } = await accessDeployment((team) => `https://${team}/`);
+    const who = await fetchWith(vars, "/api/whoami", {
+      headers: await assertion({ email: "you@example.com" }),
+    });
+    expect(who.status).toBe(200);
+    expect(await who.json()).toMatchObject({
+      principal: { kind: "human", email: "you@example.com" },
     });
   });
 

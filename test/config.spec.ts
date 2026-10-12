@@ -325,6 +325,46 @@ describe("getConfig — deploy config is validated", () => {
     const neither = getConfig(varsOnly({}));
     expect([neither.accessTeamDomain, neither.accessAud]).toEqual([undefined, undefined]);
   });
+
+  it("reads the team domain as a bare host, with or without its scheme and trailing slash", () => {
+    const teamDomain = (value: string) =>
+      getConfig(varsOnly({ ACCESS_TEAM_DOMAIN: value, ACCESS_AUD: "aud-tag" })).accessTeamDomain;
+    for (const value of [
+      "team.cloudflareaccess.com",
+      " team.cloudflareaccess.com ",
+      "https://team.cloudflareaccess.com",
+      "http://team.cloudflareaccess.com",
+      "team.cloudflareaccess.com/",
+      "https://team.cloudflareaccess.com/",
+      "HTTPS://Team.CloudflareAccess.com/",
+    ]) {
+      expect(teamDomain(value), value).toBe("team.cloudflareaccess.com");
+    }
+  });
+
+  it("refuses a team domain that is not a hostname, without repeating the secret", () => {
+    for (const value of [
+      "https://",
+      "team",
+      "team.cloudflareaccess.com/cdn-cgi/access",
+      "team.cloudflareaccess.com:443",
+      "ftp://team.cloudflareaccess.com",
+      "https://https://team.cloudflareaccess.com",
+      "team .cloudflareaccess.com",
+      "-team.cloudflareaccess.com",
+      "team..cloudflareaccess.com",
+    ]) {
+      refuses({ ACCESS_TEAM_DOMAIN: value, ACCESS_AUD: "aud-tag" }, "ACCESS_TEAM_DOMAIN");
+    }
+    let message = "";
+    try {
+      getConfig(varsOnly({ ACCESS_TEAM_DOMAIN: "team.secret-host.com/x", ACCESS_AUD: "aud-tag" }));
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toMatch(/ACCESS_TEAM_DOMAIN must be your team's hostname/);
+    expect(message).not.toContain("secret-host");
+  });
 });
 
 // While a setting is refused, the admin surface names it and a reader is told only that the

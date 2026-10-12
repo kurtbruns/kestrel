@@ -345,6 +345,7 @@ export function getConfig(env: AppEnv): Config {
  * The Access pair, both or neither. One without the other can verify no sign-in, and it
  * also takes the env out of dev shape, so it would turn every door off at once: every admin
  * request a 401 that says nothing of why. Refused instead, naming the half that is missing.
+ * The team domain comes back as a bare host (`readTeamDomain`).
  */
 function readAccess(env: AppEnv): { accessTeamDomain?: string; accessAud?: string } {
   const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN?.trim());
@@ -361,7 +362,34 @@ function readAccess(env: AppEnv): { accessTeamDomain?: string; accessAud?: strin
       "is not set, but ACCESS_AUD is; Access needs both to verify a sign-in",
     );
   }
-  return { accessTeamDomain, accessAud };
+  return {
+    accessTeamDomain: accessTeamDomain && readTeamDomain(accessTeamDomain),
+    accessAud,
+  };
+}
+
+/** A hostname: dot-separated labels of letters, digits, and inner hyphens, at least two. */
+const HOSTNAME = /^(?!-)[a-z0-9-]{1,63}(?<!-)(\.(?!-)[a-z0-9-]{1,63}(?<!-))+$/;
+
+/**
+ * The team domain as the bare host the issuer is built on (`https://<host>`). Pasting it
+ * with its scheme or a trailing slash is the natural mistake, and kept as typed it would
+ * fail every sign-in as a 401 that names nothing, so those are dropped and the case folded.
+ * Anything still not a hostname (a path, a port, a stray character) is refused. The value
+ * is a secret, so the refusal never repeats it.
+ */
+function readTeamDomain(raw: string): string {
+  const host = raw
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  if (!HOSTNAME.test(host)) {
+    throw new ConfigError(
+      "ACCESS_TEAM_DOMAIN",
+      "must be your team's hostname, like yourteam.cloudflareaccess.com",
+    );
+  }
+  return host;
 }
 
 /** `PROVIDER` as one of the known names, exactly as spelled. Unset means `none`, not
