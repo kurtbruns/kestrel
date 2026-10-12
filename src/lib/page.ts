@@ -212,6 +212,15 @@ export interface ReaderIdentity {
   logoUrl?: string;
 }
 
+/** The tab icon for a reader page: the publication's logo, already a square (the upload
+ *  crops it), at its own upload's address, so a new logo is a new URL. Absent with no
+ *  logo, leaving the browser's default; the reader surface wears the publication's
+ *  identity, never the app's mark. Browser-only chrome: a post page gets it through the
+ *  head anchor at serve time, never in the frozen render or an email (I3). */
+export function readerIconLink(logoUrl?: string): string {
+  return logoUrl ? `<link rel="icon" href="${escapeHtmlAttr(logoUrl)}">` : "";
+}
+
 /** The pill's stylesheet, emitted beside it and only when it is, so a deployed page
  *  carries neither the link nor its styles. */
 function devDashboardStyle(url?: string): string {
@@ -292,7 +301,7 @@ export function readerPage(opts: {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(opts.title)}</title>
-${FRAUNCES_FONT_LINKS}
+${readerIconLink(logoUrl)}${FRAUNCES_FONT_LINKS}
 <style>${READER_STYLE}</style>${readerBannerStyle(opts.banner)}${devDashboardStyle(opts.devDashboardUrl)}
 </head>
 <body>

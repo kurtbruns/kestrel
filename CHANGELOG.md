@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- Reader pages, post pages included, show the publication's logo as the browser tab's icon when one is set; with no logo, the browser's default icon stays (SPEC §5).
+
 ## [1.6.0] - 2026-10-11
 
 **Upgrading from 1.5.0.** One database migration: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. Existing posts keep their slugs and read as set by hand; tick *Auto-generate from subject* on a draft to have its slug follow the subject again. On npm 12, to end `npm install` without the blocked-install-scripts warning, add this to your `package.json` (a new instance has it already): `"allowScripts": { "esbuild": true, "fsevents": true, "workerd": true }`.
