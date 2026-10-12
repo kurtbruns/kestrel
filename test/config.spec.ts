@@ -3,9 +3,9 @@
 // archive URL and the route registered to serve it.
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_MIN_LEAD_MS, MIN_LEAD_CEILING_MS, MIN_LEAD_FLOOR_MS } from "../shared/sends";
-import { createRouter } from "../src/app";
+import { createRouter, isReaderPath } from "../src/app";
 import * as posts from "../src/db/posts";
 import { type AppEnv, ConfigError, getConfig } from "../src/env";
 import { clearFakeOutbox } from "../src/providers/fake";
@@ -17,7 +17,7 @@ import { sweep } from "../src/send/sweep";
 import { RESEND_DEPLOY, SES_DEPLOY } from "./support/deploy";
 import { resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
-import { allowErrorLogs } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith, withVars } from "./support/worker_env";
 
 /** Vars alone, no bindings, for the pure getConfig tests: unlike `withVars` it starts from
@@ -89,6 +89,7 @@ describe("getConfig — the dev-mode reader-surface gate", () => {
         DEV_AUTH_SECRET: "s",
         APP_ORIGIN: LOCAL,
         ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com",
+        ACCESS_AUD: "aud-tag",
       }),
     );
     expect(config.devMode).toBe(false);
@@ -256,11 +257,111 @@ describe("getConfig — deploy config is validated", () => {
     expect(message).toMatch(/in seconds/);
   });
 
-  it("answers every request with a 500 that names the variable", async () => {
+  it("refuses half an Access config, naming the half that is missing", () => {
+    refuses({ ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "ACCESS_AUD");
+    refuses({ ACCESS_AUD: "aud-tag" }, "ACCESS_TEAM_DOMAIN");
+    refuses({ ...RESEND_DEPLOY, ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" }, "ACCESS_AUD");
+    refuses(
+      { ...RESEND_DEPLOY, ACCESS_AUD: "aud-tag", ACCESS_TEAM_DOMAIN: " " },
+      "ACCESS_TEAM_DOMAIN",
+    );
+    // Both, or neither, runs.
+    const both = getConfig(
+      varsOnly({ ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag" }),
+    );
+    expect([both.accessTeamDomain, both.accessAud]).toEqual([
+      "team.cloudflareaccess.com",
+      "aud-tag",
+    ]);
+    const neither = getConfig(varsOnly({}));
+    expect([neither.accessTeamDomain, neither.accessAud]).toEqual([undefined, undefined]);
+  });
+});
+
+// While a setting is refused, the admin surface names it and a reader is told only that the
+// page is unavailable (SPEC §9).
+describe("a refused config, on each surface", () => {
+  const REFUSED = { ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com" };
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("answers the API and the machine paths with a 500 that names the variable", async () => {
     allowErrorLogs("config.invalid");
-    const res = await fetchWith({ PROVIDER: "SES" }, "/health");
-    expect(res.status).toBe(500);
-    expect(await res.json()).toMatchObject({ error: "invalid_config", variable: "PROVIDER" });
+    for (const [method, path] of [
+      ["GET", "/api/whoami"],
+      ["GET", "/api/settings"],
+      ["GET", "/api/docs"],
+      ["GET", "/api/dev/token"],
+      ["GET", "/health"],
+      ["POST", "/webhooks/resend"],
+    ] as const) {
+      const res = await fetchWith(REFUSED, path, { method, headers: AUTH });
+      expect(res.status, `${method} ${path}`).toBe(500);
+      expect(await res.json(), `${method} ${path}`).toMatchObject({
+        error: "invalid_config",
+        variable: "ACCESS_AUD",
+        message: expect.stringContaining("ACCESS_AUD"),
+      });
+    }
+  });
+
+  it("answers every reader page with a plain 503 that names no setting", async () => {
+    allowErrorLogs("config.invalid");
+    for (const [method, path, init] of [
+      ["GET", "/", {}],
+      ["GET", "/archive", {}],
+      ["GET", "/archive/spring-migration", {}],
+      ["GET", "/subscribe", {}],
+      [
+        "POST",
+        "/subscribe",
+        {
+          body: "email=reader%40example.com",
+          headers: { "content-type": "application/x-www-form-urlencoded" },
+        },
+      ],
+      ["GET", "/confirm?token=abc", {}],
+      ["GET", "/unsubscribe?token=abc", {}],
+      ["GET", "/media/logo.png", {}],
+      ["GET", "/no-such-page", {}],
+    ] as const) {
+      const res = await fetchWith(REFUSED, path, { method, ...init });
+      expect(res.status, `${method} ${path}`).toBe(503);
+      expect(res.headers.get("content-type"), path).toBe("text/html; charset=utf-8");
+      expect(res.headers.get("cache-control"), path).toBe("no-store");
+      const body = await res.text();
+      expect(body, path).toContain("This page is temporarily unavailable");
+      for (const detail of ["ACCESS", "invalid_config", "team.cloudflareaccess.com"]) {
+        expect(body, `${path}: ${detail}`).not.toContain(detail);
+      }
+    }
+  });
+
+  it("still logs the variable when a reader page is what found it", async () => {
+    allowErrorLogs("config.invalid");
+    const spy = vi.spyOn(console, "error");
+    // A value of its own, since the cause is logged once per isolate.
+    const provider = `sendgrid-${crypto.randomUUID()}`;
+    expect((await fetchWith({ PROVIDER: provider }, "/")).status).toBe(503);
+    expect(logged(spy).filter((l) => l.event === "config.invalid")).toEqual([
+      expect.objectContaining({ variable: "PROVIDER", message: expect.stringContaining(provider) }),
+    ]);
+  });
+
+  // The pre-route answer draws the reader line by path; it has to agree with the manifest's.
+  it("counts every public route but the probe and the dev tooling as a reader page, and nothing else", () => {
+    for (const route of createRouter({
+      archiveBasePath: "/archive",
+      devMode: true,
+      minLeadMs: DEFAULT_MIN_LEAD_MS,
+    }).routes) {
+      const { access, path } = route.def;
+      const reader = access === "public" && path !== "/health" && !path.startsWith("/api/");
+      expect(isReaderPath(path.replace(/[{:(].*$/, "x")), `${route.def.method} ${path}`).toBe(
+        reader,
+      );
+    }
   });
 });
 

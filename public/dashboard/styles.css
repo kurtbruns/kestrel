@@ -899,6 +899,18 @@ body.nav-resizing .sidebar {
 .auth-wall button {
   margin-top: 12px;
 }
+/* The refused-configuration wall says more than the sign-in wall, so it reads as text: left
+   aligned, a little wider, with the variable and the server's words set apart. */
+.config-wall {
+  max-width: 560px;
+  text-align: left;
+}
+.config-wall-problem {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bg);
+  overflow-wrap: anywhere;
+}
 
 /* The routed view. Capped for readability and centered in the space beside the
    sidebar; the editor gets a slightly narrower canvas to match its old width. */

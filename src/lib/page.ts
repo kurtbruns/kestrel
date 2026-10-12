@@ -366,6 +366,25 @@ export function messagePage(opts: MessagePageOptions): Response {
   });
 }
 
+/**
+ * What a reader gets while the deployment's configuration is refused (SPEC §9): a plain 503
+ * that says the page is unavailable for now. It names no setting and reads nothing, not even
+ * the publication's identity, since the app is not running; the setting to fix is the admin
+ * surface's to say. Never cached, so the real page returns as soon as the configuration is
+ * fixed.
+ */
+export function unavailablePage(): Response {
+  return messagePage({
+    identity: { name: "" },
+    homeUrl: "/",
+    title: "Temporarily unavailable",
+    eyebrow: "Unavailable",
+    headline: "This page is temporarily unavailable",
+    ledeHtml: "The newsletter can't be reached right now. Please try again a little later.",
+    status: 503,
+  });
+}
+
 /** A reader page's closing link into the archive, never an admin path (§11). */
 export function archiveLink(url: string, label: string): string {
   return `<a class="r-arch" href="${escapeHtmlAttr(url)}">${escapeHtml(label)} &rarr;</a>`;

@@ -52,6 +52,7 @@ import type { Config } from "../env";
 import { type JsonObject, optObject, optString, optStringList, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json } from "../lib/errors";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
+import { unwrap } from "../lib/unwrap";
 import { getNotifier } from "../notify/channel";
 import { sampleNotification } from "../notify/compose";
 import { requireConnectedProvider } from "../providers";
@@ -62,14 +63,15 @@ import {
   resolveBranding,
   validateEmailTemplate,
 } from "../render/template_engine";
-import type { RequestContext } from "../router";
+import type { Principal, RequestContext } from "../router";
 import { insideLead, saveSettingsRemaking } from "../send/remake";
 
 /** Logos are small brand assets; keep them well under any provider's object limits. */
 const MAX_LOGO_BYTES = 512 * 1024;
 
-/** The non-secret, deploy-time facts the editor shows read-only. */
-function deploymentView(cfg: Config): DeploymentView {
+/** The non-secret, deploy-time facts the editor shows read-only, and how the reader of
+ *  them signed in (`authMode`, from the principal: a per-request fact, never config). */
+function deploymentView(cfg: Config, principal: Principal): DeploymentView {
   return {
     provider: cfg.provider,
     fromAddress: cfg.fromAddress,
@@ -81,7 +83,7 @@ function deploymentView(cfg: Config): DeploymentView {
     awsRegion: cfg.awsRegion,
     // Booleans only — never the values.
     accessConfigured: Boolean(cfg.accessTeamDomain && cfg.accessAud),
-    authMode: cfg.accessTeamDomain ? "access" : "dev",
+    authMode: principal.via,
     // The running build (SPEC §9), so the editor can show/link it. Build metadata,
     // resolved at build (src/build.ts) — not deploy config, and never a secret.
     build: buildInfo(),
@@ -154,7 +156,7 @@ export async function get(c: RequestContext): Promise<Response> {
   const settings = await getSettings(c.env.DB);
   const body: SettingsResponse = {
     settings: settingsView(settings, c.config),
-    deployment: deploymentView(c.config),
+    deployment: deploymentView(c.config, unwrap(c.principal, "principal")),
     inUse: await inUseView(c.env.DB, settings, c.config),
     notificationStatus: await notificationStatus(c.env.DB),
   };

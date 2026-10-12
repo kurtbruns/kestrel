@@ -10,6 +10,7 @@ import type { SettingsResponse } from "../shared/settings";
 import { api } from "./api";
 import { authHeaders, renderIdentity, setToken, showReauth } from "./auth";
 import { renderSidebarBrand } from "./brand";
+import { configRefusal, showConfigProblem } from "./config_problem";
 import { startDevReload } from "./dev_reload";
 import { installRoomBar } from "./room/shell";
 import { adoptLinkedRoute, installRouter, route } from "./router";
@@ -82,6 +83,12 @@ async function boot(): Promise<unknown> {
     // Access login where a hash would not.
     adoptLinkedRoute();
     return route();
+  }
+  // A refused deploy configuration answers the probe like every other call: say what to
+  // fix rather than send the publisher to a sign-in that cannot help.
+  const refusal = res ? configRefusal(await res.json().catch(() => null)) : null;
+  if (refusal) {
+    return showConfigProblem(refusal);
   }
   // opaque redirect (edge login bounce) or a clean 401 with no way to recover here.
   return showReauth();

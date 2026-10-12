@@ -83,6 +83,7 @@ export interface DeploymentView {
   mediaPublicBase: string;
   awsRegion: string;
   accessConfigured: boolean;
+  /** How the reader of this reflection signed in: through Access, or with the local dev token. */
   authMode: "access" | "dev";
   build: BuildInfo;
   /** How notifications reach the publisher: Cloudflare's own email, the newsletter's provider, or the dev fake that delivers nothing. */

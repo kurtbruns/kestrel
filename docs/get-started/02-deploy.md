@@ -160,6 +160,6 @@ This deploys the release your instance runs, with your settings. The output ends
 
 1. In a browser, `https://newsletter.example.com/` shows your newsletter's public landing page. Its subscribe page, `/subscribe`, says signups aren't open yet, until you connect Resend.
 
-If every request instead answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing or malformed. Fix it in `wrangler.jsonc`, commit, and deploy again.
+If the public pages instead say the newsletter is temporarily unavailable, and `/health` answers `500` with a body like `{"error":"invalid_config","variable":"APP_ORIGIN",…}`, the setting it names is missing or malformed. Fix it in `wrangler.jsonc`, commit, and deploy again.
 
 Next, [lock the dashboard with Access](03-access.md).

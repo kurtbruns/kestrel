@@ -51,11 +51,11 @@ export async function verifyAccessJwt(token: string, config: Config): Promise<Pr
       if (!isHumanAllowed(email, config.accessAllowedEmails)) {
         return null;
       }
-      return { kind: "human", email };
+      return { kind: "human", email, via: "access" };
     }
     // No email → an Access service token (Claude/automation), already authorized
     // by the app's Service Auth policy.
-    return { kind: "service" };
+    return { kind: "service", via: "access" };
   } catch {
     return null;
   }

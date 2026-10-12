@@ -149,7 +149,9 @@ describe("SIMULATE_SENDS", () => {
     expect(simulation("ses", deployed)).toBeNull();
     expect(simulation("nonsense", deployed)).toBeNull();
     expect(simulation("resend", { ...RESEND_DEPLOY })).toBeNull();
-    expect(simulation("resend", { ACCESS_TEAM_DOMAIN: "birds.cloudflareaccess.com" })).toBeNull();
+    expect(
+      simulation("resend", { ACCESS_TEAM_DOMAIN: "birds.cloudflareaccess.com", ACCESS_AUD: "aud" }),
+    ).toBeNull();
     expect(simulation("resend", { APP_ORIGIN: "https://newsletter.birds.example" })).toBeNull();
   });
 

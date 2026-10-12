@@ -10,8 +10,9 @@
  * `getConfig` takes nothing on trust: deploy config that would run but do the wrong thing
  * (an unknown provider, a missing origin, a real provider without its credentials or still
  * on the template's example.com placeholders, a minimum lead under the sweep's one-minute
- * tick or over a day) throws a `ConfigError` naming the variable. A `PROVIDER` left unset
- * is not a mistake but the not-connected state (SPEC §9): the app runs and refuses to send.
+ * tick or over a day, one half of the Access pair without the other) throws a `ConfigError`
+ * naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
+ * (SPEC §9): the app runs and refuses to send.
  */
 
 import {
@@ -160,7 +161,7 @@ export interface Config {
    * allows 1, and the account dashboard shows the account's own.
    */
   sesMaxSendRate: number;
-  /** Cloudflare Access (optional; enables JWT validation when both are set). */
+  /** Cloudflare Access: both set, enabling JWT validation, or neither (one alone is refused). */
   accessTeamDomain?: string;
   accessAud?: string;
   /** Optional allowlist of human admin emails; empty/unset allows any valid Access login. */
@@ -239,9 +240,9 @@ function normalizeBasePath(v: string | undefined): string {
 }
 
 /**
- * Deploy config the app cannot run on as given. Names the variable, so the 500 it becomes
- * and the line it logs both say what to fix. Never carries a secret's value: secrets are
- * only ever checked for presence.
+ * Deploy config the app cannot run on as given. Names the variable, so the admin surface's
+ * refusal and the line it logs both say what to fix (a reader is told only that the page is
+ * unavailable). Never carries a secret's value: secrets are only ever checked for presence.
  */
 export class ConfigError extends Error {
   constructor(
@@ -270,7 +271,7 @@ export function getConfig(env: AppEnv): Config {
   if (isRealProvider(provider)) {
     requireRealProviderConfig(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
   }
-  const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN);
+  const { accessTeamDomain, accessAud } = readAccess(env);
   // Belt-and-suspenders: only honor the dev credential when the env is unambiguously
   // dev-shaped: fake transport, no Access configured, AND an origin on this machine.
   // Combined with the secret never being committed (it lives in the gitignored
@@ -299,7 +300,7 @@ export function getConfig(env: AppEnv): Config {
     sesMaxSendRate:
       readPositiveInt("SES_MAX_SEND_RATE", env.SES_MAX_SEND_RATE) ?? DEFAULT_SES_MAX_SEND_RATE,
     accessTeamDomain,
-    accessAud: orUndefined(env.ACCESS_AUD),
+    accessAud,
     accessAllowedEmails: parseEmailList(env.ACCESS_ALLOWED_EMAILS),
     // Show the dev-only dashboard link, and register the dev routes, exactly when the
     // dev credential path is live (dev-shaped AND the secret resolved). Never true in a
@@ -321,6 +322,29 @@ export function getConfig(env: AppEnv): Config {
         ? (orUndefined(env.NOTIFY_FROM) ?? `Kestrel <kestrel@${new URL(appOrigin).hostname}>`)
         : env.FROM_ADDRESS,
   };
+}
+
+/**
+ * The Access pair, both or neither. One without the other can verify no sign-in, and it
+ * also takes the env out of dev shape, so it would turn every door off at once: every admin
+ * request a 401 that says nothing of why. Refused instead, naming the half that is missing.
+ */
+function readAccess(env: AppEnv): { accessTeamDomain?: string; accessAud?: string } {
+  const accessTeamDomain = orUndefined(env.ACCESS_TEAM_DOMAIN?.trim());
+  const accessAud = orUndefined(env.ACCESS_AUD?.trim());
+  if (accessTeamDomain && !accessAud) {
+    throw new ConfigError(
+      "ACCESS_AUD",
+      "is not set, but ACCESS_TEAM_DOMAIN is; Access needs both to verify a sign-in",
+    );
+  }
+  if (accessAud && !accessTeamDomain) {
+    throw new ConfigError(
+      "ACCESS_TEAM_DOMAIN",
+      "is not set, but ACCESS_AUD is; Access needs both to verify a sign-in",
+    );
+  }
+  return { accessTeamDomain, accessAud };
 }
 
 /** `PROVIDER` as one of the known names, exactly as spelled. Unset means `none`, not

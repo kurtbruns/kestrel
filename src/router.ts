@@ -26,6 +26,9 @@ export interface Principal {
   /** `human` = interactive login (Access, has email); `service` = token (Claude / bearer). */
   kind: "human" | "service";
   email?: string;
+  /** How this request authenticated: a Cloudflare Access assertion, or the local dev token.
+   *  What `auth.mode` reports, so it says how the caller got in rather than what is configured. */
+  via: "access" | "dev";
 }
 
 export interface RequestContext {

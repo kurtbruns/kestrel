@@ -152,6 +152,7 @@ describe("settings surface", () => {
         url: new URL(req.url),
         params: {},
         config: getConfig(e),
+        principal: { kind: "human", email: "you@example.com", via: "access" },
       } as unknown as RequestContext);
       expect(res.status).toBe(200);
       const text = await res.text();

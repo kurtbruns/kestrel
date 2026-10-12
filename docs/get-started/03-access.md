@@ -71,7 +71,7 @@ The app verifies each login against your team domain, and checks that it was iss
     npx wrangler secret put ACCESS_AUD --env production
     ```
 
-    A secret takes effect as soon as you store it, with no redeploy. The app needs both values. With either one missing, it can't verify any login, so it lets no one in.
+    A secret takes effect as soon as you store it, with no redeploy. The app needs both values. While only one is stored, it refuses its configuration and names the missing one: the editor says so, `/health` answers `500` with `"variable":"ACCESS_AUD"`, and the public pages say the newsletter is temporarily unavailable. Storing the second clears it.
 
 1. **(Optional, recommended)** Limit the editor to named people. The Access policy decides who can sign in. This list keeps that true if the policy is widened later, for another app or by mistake. Enter a comma-separated list of email addresses at the prompt:
 
@@ -103,6 +103,6 @@ The app verifies each login against your team domain, and checks that it was iss
     {"status":"ok","service":"kestrel"}
     ```
 
-If Cloudflare lets you in but the editor answers `401`, check the two secrets. One may be missing or mistyped, or `ACCESS_ALLOWED_EMAILS` may leave out your address.
+If the editor says the configuration needs a fix, store the secret it names. If Cloudflare lets you in but the editor answers `401`, check the two secrets for a typo, or `ACCESS_ALLOWED_EMAILS` may leave out your address.
 
 Next, [connect Resend](04-resend.md).

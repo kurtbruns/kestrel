@@ -82,8 +82,10 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
 | Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
-| Fix the deployment, outside this API | 409 | `provider_not_connected` (no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9) |
+| Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized`, `forbidden` |
+
+While the configuration is refused, every request is answered before any route is matched, so before authentication, and the answer says nothing about the request itself. Under `/api`, at `/health`, and under `/webhooks/`, it is `invalid_config` naming the `variable`. Every other path is one a reader may open, and answers a plain HTML page with status 503 saying it is temporarily unavailable, which names no setting.
 
 ## Adding to the API
 

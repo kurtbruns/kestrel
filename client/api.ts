@@ -1,9 +1,11 @@
 // The one network seam: every call to the HTTP API goes through api(), apiText(), or
-// apiFile(), which attach the credential, route a 401 to re-auth, and turn any other failure
-// into one ApiError carrying the server's message. They call the global fetch, so a spec
+// apiFile(), which attach the credential, route a 401 to re-auth and a refused deploy
+// configuration to its wall, and turn any other failure into one ApiError carrying the
+// server's message. They call the global fetch, so a spec
 // stands in for the API by scripting fetch and the real functions run over it.
 
 import { authHeaders, showReauth } from "./auth";
+import { configRefusal, showConfigProblem } from "./config_problem";
 
 /** What a request may carry. `json` sets the body and its content type; `body` is sent as is. */
 export interface ApiOptions {
@@ -90,6 +92,12 @@ async function failure(res: Response): Promise<ApiError> {
     data = text ? JSON.parse(text) : null;
   } catch {
     // Not JSON, so not the API's error body: fall back to the status below.
+  }
+  // A refused deploy configuration fails every call alike, so it is shown once, full page,
+  // rather than as one more failed read.
+  const refusal = configRefusal(data);
+  if (refusal) {
+    showConfigProblem(refusal);
   }
   const fallback = res.statusText || `Request failed (HTTP ${res.status})`;
   return new ApiError(messageOf(data) ?? fallback, res.status, data);

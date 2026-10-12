@@ -8,11 +8,12 @@
  *                   local dev, also the simulated receipts on the dev ticker's own clock
  */
 
-import { createRouter } from "./app";
+import { createRouter, isReaderPath } from "./app";
 import type { AppEnv, Config } from "./env";
 import { ConfigError, getConfig } from "./env";
 import { json } from "./lib/errors";
 import { errorText, log, newRun, withRun } from "./lib/log";
+import { unavailablePage } from "./lib/page";
 import { drainSimulatedWebhooks, RECEIPTS_CRON } from "./providers/simulate";
 import type { Router } from "./router";
 import { sweep } from "./send/sweep";
@@ -93,9 +94,13 @@ async function handleFetch(
     if (!(err instanceof ConfigError)) {
       throw err;
     }
-    // Refuse every request, naming the variable to fix, rather than run on config that
-    // would do the wrong thing quietly.
+    // Refuse every request rather than run on config that would do the wrong thing quietly
+    // (SPEC §9). The API names the variable to fix, for the editor and Claude; a reader is
+    // told only that the page is unavailable, never a deploy setting.
     reportConfigError(err);
+    if (isReaderPath(new URL(request.url).pathname)) {
+      return unavailablePage();
+    }
     return json({ error: "invalid_config", message: err.message, variable: err.variable }, 500);
   }
   return router.handle(request, appEnv, ctx);

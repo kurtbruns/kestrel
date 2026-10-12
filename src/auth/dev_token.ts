@@ -43,7 +43,7 @@ export async function verifyDevToken(token: string, secret: string): Promise<Pri
       audience: DEV_AUDIENCE,
     });
     const email = typeof payload.email === "string" ? payload.email : undefined;
-    return email ? { kind: "human", email } : { kind: "service" };
+    return email ? { kind: "human", email, via: "dev" } : { kind: "service", via: "dev" };
   } catch {
     return null;
   }

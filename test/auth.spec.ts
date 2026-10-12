@@ -1,12 +1,16 @@
-import { SELF } from "cloudflare:test";
-import { SignJWT } from "jose";
-import { describe, expect, it } from "vitest";
+import { createExecutionContext, SELF } from "cloudflare:test";
+import { exportJWK, generateKeyPair, SignJWT } from "jose";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createRouter } from "../src/app";
 import { isHumanAllowed } from "../src/auth/access";
 import { mintDevToken, verifyDevToken } from "../src/auth/dev_token";
 import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
+import type { Principal, RequestContext } from "../src/router";
+import * as settingsRoutes from "../src/routes/settings";
 import { SES_DEPLOY } from "./support/deploy";
-import { adminAuth, base, DEV_SECRET } from "./support/http";
+import { adminAuth, base, DEV_SECRET, readJson } from "./support/http";
+import { fetchWith, withVars } from "./support/worker_env";
 
 describe("Access admin allowlist", () => {
   it("admits anyone when no allowlist is configured", () => {
@@ -176,6 +180,92 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     expect(await verifyDevToken(token, DEV_SECRET)).toEqual({
       kind: "human",
       email: "human@example.com",
+      via: "dev",
     });
+  });
+});
+
+// `auth.mode` says how this request signed in, read off the principal the request resolved
+// to, so it is right by construction rather than by what happens to be configured (SPEC §11).
+describe("the auth mode follows how the request signed in", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** An Access deployment whose team serves a key this spec holds, so a request can carry
+   *  an assertion the app verifies for real. A team domain of its own per test, since the
+   *  app caches a team's keys for the life of the isolate. */
+  async function accessDeployment() {
+    const team = `team-${crypto.randomUUID()}.cloudflareaccess.com`;
+    const vars = { ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: "aud-tag" };
+    const { publicKey, privateKey } = await generateKeyPair("RS256");
+    const jwk = { ...(await exportJWK(publicKey)), kid: "k1", alg: "RS256", use: "sig" };
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
+      const url = input instanceof Request ? input.url : String(input);
+      if (url === `https://${team}/cdn-cgi/access/certs`) {
+        return Response.json({ keys: [jwk] });
+      }
+      return realFetch(input, init);
+    });
+    const assertion = async (claims: { email?: string }) => ({
+      "Cf-Access-Jwt-Assertion": await new SignJWT(claims)
+        .setProtectedHeader({ alg: "RS256", kid: "k1" })
+        .setIssuer(`https://${team}`)
+        .setAudience("aud-tag")
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(privateKey),
+    });
+    return { vars, assertion };
+  }
+
+  it("reports access for a request signed in through Access, in whoami and the settings reflection", async () => {
+    const { vars, assertion } = await accessDeployment();
+    const headers = await assertion({ email: "you@example.com" });
+    const who = await fetchWith(vars, "/api/whoami", { headers });
+    expect(who.status).toBe(200);
+    expect(await who.json()).toEqual({
+      principal: { kind: "human", email: "you@example.com" },
+      auth: { mode: "access" },
+    });
+    const settings = await readJson(await fetchWith(vars, "/api/settings", { headers }));
+    expect(settings.deployment.authMode).toBe("access");
+    // A service token signs in through Access too.
+    const service = await fetchWith(vars, "/api/whoami", { headers: await assertion({}) });
+    expect(await service.json()).toEqual({
+      principal: { kind: "service" },
+      auth: { mode: "access" },
+    });
+  });
+
+  it("reports dev for the dev token in the settings reflection", async () => {
+    const res = await SELF.fetch(`${base}/api/settings`, { headers: await adminAuth() });
+    expect((await readJson(res)).deployment.authMode).toBe("dev");
+  });
+
+  // Config and principal agree on every door that exists today, so the only way to show which
+  // one a handler reads is to hand it a principal that disagrees with its config.
+  it("reads the principal, not the Access config", async () => {
+    const e = withVars({ ACCESS_TEAM_DOMAIN: "team.cloudflareaccess.com", ACCESS_AUD: "aud-tag" });
+    const config = getConfig(e);
+    const principal: Principal = { kind: "human", email: "you@example.com", via: "dev" };
+    const context = (path: string) => {
+      const req = new Request(`${base}${path}`);
+      return {
+        req,
+        env: e,
+        ctx: createExecutionContext(),
+        url: new URL(req.url),
+        params: {},
+        config,
+        principal,
+      } as unknown as RequestContext;
+    };
+    const whoami = createRouter(config).routes.find((r) => r.def.path === "/api/whoami")!;
+    const who = await whoami.def.handler(context("/api/whoami"));
+    expect(await who.json()).toMatchObject({ auth: { mode: "dev" } });
+    const settings = await readJson(await settingsRoutes.get(context("/api/settings")));
+    expect(settings.deployment.authMode).toBe("dev");
   });
 });

@@ -52,6 +52,8 @@ function context(
     url: new URL(req.url),
     params: init.params ?? {},
     config: getConfig(e),
+    // What the gate sets on every admin request; a deployed one signs in through Access.
+    principal: { kind: "human", email: "tester@example.com", via: "access" },
   } as unknown as RequestContext;
 }
 

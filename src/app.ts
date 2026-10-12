@@ -31,6 +31,7 @@ import type { Config } from "./env";
 import { json } from "./lib/errors";
 import { RASTER_IMAGE_TYPES } from "./lib/image_types";
 import { HALT_BACKOFF_MS, MISSED_THRESHOLD_MS } from "./lib/time";
+import { unwrap } from "./lib/unwrap";
 import { buildReference } from "./reference";
 import { type RouteDef, Router } from "./router";
 import * as archiveRoutes from "./routes/archive";
@@ -63,6 +64,23 @@ function retrySchedule(steps: readonly number[]): string {
       ? `${minutes.slice(0, -1).join(", ")}, and ${minutes.at(-1)}`
       : `${minutes[0]}`;
   return `after ${head} minutes and then every ${last} minutes`;
+}
+
+/**
+ * Whether a path belongs to the reader surface, for the one answer given before any route
+ * is matched: the refusal while deploy config is refused (SPEC §9), when no router can be
+ * built. The paths a reader never opens keep their JSON: the API (the admin surface, which
+ * names the setting to fix, and the dev tooling), the liveness probe, and the provider
+ * webhooks. Every other path, a reader route below or no route at all, is a page a person
+ * may have opened, so it gets a page that names nothing.
+ */
+export function isReaderPath(pathname: string): boolean {
+  return !(
+    pathname === "/api" ||
+    pathname.startsWith("/api/") ||
+    pathname === "/health" ||
+    pathname.startsWith("/webhooks/")
+  );
 }
 
 /**
@@ -169,17 +187,18 @@ export function createRouter({
     },
     {
       // Reports the authenticated principal and the auth mode, so the editor can show
-      // identity (and offer Access sign-out) instead of prompting for a token.
+      // identity (and offer Access sign-out) instead of prompting for a token. The mode is
+      // how this request authenticated, read off the principal, never off the config.
       method: "GET",
       path: "/api/whoami",
       access: "admin",
       resource: "system",
-      summary: "The authenticated principal and the auth mode (access or dev).",
-      handler: (c) =>
-        json({
-          principal: c.principal,
-          auth: { mode: c.config.accessTeamDomain ? "access" : "dev" },
-        }),
+      summary:
+        "The authenticated principal and the auth mode: how this request signed in (access or dev).",
+      handler: (c) => {
+        const { kind, email, via } = unwrap(c.principal, "principal");
+        return json({ principal: { kind, email }, auth: { mode: via } });
+      },
     },
     {
       // The running build (SPEC §9), so an API client (Claude, curl) can self-identify a
