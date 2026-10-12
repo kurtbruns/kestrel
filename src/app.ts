@@ -318,7 +318,7 @@ export function createRouter({
       resource: "settings",
       summary: "Upload the publication logo (multipart `file`); served publicly via /media.",
       description:
-        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out.",
+        "The logo is part of the identity, so when the template renders it and sends are scheduled this re-makes their emails under the same rule as `PUT /api/settings`, acknowledged as `?remake=` (comma-separated send ids) since the request carries no JSON body; the bytes are written only once the refusals are ruled out. The image is stored as sent: every surface shows the logo as a square, and an email stretches one that isn't, so send a square image at least 256 × 256 px (the editor crops and scales to that before uploading).",
       handler: settingsRoutes.uploadLogo,
     },
     {

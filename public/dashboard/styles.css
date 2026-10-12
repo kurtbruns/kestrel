@@ -4228,6 +4228,11 @@ button.copied svg {
   flex-direction: column;
   gap: 8px;
 }
+/* The hint and the not-square warning stack in one column, under the tile on a wide
+   screen and beside it where the slot becomes a row. */
+.set-logo-notes {
+  min-width: 0;
+}
 .set-logo-tile {
   width: 100%;
   aspect-ratio: 1;
@@ -4552,6 +4557,36 @@ button.set-field-remove {
   height: 100%;
   object-fit: cover;
   display: block;
+}
+/* The logo upload's preview (client/settings/logo_crop.ts): the squared logo at the
+   size and corner of each place it shows: the email sign-off (src/render, 44px, 9px),
+   the reader masthead (src/lib/page.ts, 64px, 14px), and the sidebar (.brand-logo, 36px, 8px). */
+.logo-pv {
+  display: flex;
+  align-items: flex-end;
+  gap: 28px;
+  margin: 18px 0 14px;
+}
+.logo-pv-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.logo-pv-item img {
+  display: block;
+}
+.logo-pv-email {
+  border-radius: 9px;
+}
+.logo-pv-page {
+  border-radius: 14px;
+}
+.logo-pv-side {
+  border-radius: 8px;
 }
 .set-ce-mast-name {
   font:

@@ -16,6 +16,8 @@ export interface FakeCall {
   url: URL;
   headers: Headers;
   body: string | null;
+  /** A multipart body (an upload), as sent. */
+  form: FormData | null;
 }
 
 /** A request handed to a route's reply, with its JSON body parsed on demand. */
@@ -73,6 +75,7 @@ export function fakeApi(routes: FakeRoute[]): FakeApi {
       url,
       headers: new Headers(init?.headers),
       body,
+      form: init?.body instanceof FormData ? init.body : null,
       json: () => (body ? JSON.parse(body) : null),
     };
     calls.push(call);

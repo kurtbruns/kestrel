@@ -8,6 +8,7 @@ import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
 import { busy, toast } from "../ui/widgets";
+import { LOGO_SIZE, previewLogo } from "./logo_crop";
 import { chip, HIDDEN, message, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { isRemakeTooClose, remakeIdentity, savedToast, withRemakeConfirm } from "./remake";
 
@@ -52,8 +53,11 @@ export function identitySection(page: SettingsPage): Html {
               <button type="button" id="logoReplace">${state.logoUrl ? "Replace" : "Upload"}</button>
               <button type="button" class="danger-subtle" id="logoRemove"${state.logoUrl ? null : HIDDEN}>Remove</button>
             </div>
-            <p class="field-hint">PNG, JPEG, WebP, or GIF, up to 512&nbsp;KB. Saves immediately.</p>
-            <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
+            <div class="set-logo-notes">
+              <p class="field-hint">Shown as a square. Pick an image at least ${String(LOGO_SIZE)}&nbsp;×&nbsp;${String(LOGO_SIZE)}&nbsp;px; you’ll see how it’s cropped before it’s saved.</p>
+              <p class="set-field-warn" id="logoShape" hidden>Your logo isn’t square, so emails show it stretched. Replace it to have it cropped square.</p>
+              <div class="field-error" id="logoError" role="alert" hidden><span class="field-error-ico" aria-hidden="true">!</span><span></span></div>
+            </div>
           </div>
           <div class="set-id-fields">
             <div class="set-field">
@@ -145,8 +149,23 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
   const logoPh = $("#logoPh", root);
   const logoReplace = $<HTMLButtonElement>("#logoReplace", root);
   const logoRemove = $<HTMLButtonElement>("#logoRemove", root);
+  // A logo uploaded before the crop step may not be square, and emails show it stretched
+  // to one. Said under the tile until it is replaced; the image is read as any <img> is.
+  const logoShape = $("#logoShape", root);
+  const checkLogoShape = (url: string) => {
+    logoShape.hidden = true;
+    if (!url) {
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      logoShape.hidden = state.logoUrl !== url || img.naturalWidth === img.naturalHeight;
+    };
+    img.src = url;
+  };
   const applyLogoUi = () => {
     const has = !!state.logoUrl;
+    checkLogoShape(state.logoUrl);
     logoTile.classList.toggle("has-img", has);
     logoTile.style.backgroundImage = has ? `url('${state.logoUrl}')` : "";
     logoPh.hidden = has;
@@ -191,18 +210,22 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
     if (!file) {
       return;
     }
-    if (file.size > 512 * 1024) {
-      toast("That image is over 512 KB. Pick a smaller one.");
-      return;
-    }
     showLogoError("");
     try {
+      // Squared and previewed first: what uploads is the PNG the publisher saw, whatever
+      // the size or shape of the file they picked.
+      const png = await previewLogo(file).catch(() => {
+        throw new Error("Couldn’t read that image. Pick a PNG, JPEG, WebP, or GIF.");
+      });
+      if (!png) {
+        return;
+      }
       // The logo is part of the identity, so an upload that reaches scheduled emails
       // asks first (withRemakeConfirm); the file is held and re-sent with the ids.
       const r = await withRemakeConfirm(
         (ack) => {
           const fd = new FormData();
-          fd.append("file", file);
+          fd.append("file", new File([png], "logo.png", { type: "image/png" }));
           const q = ack ? `?remake=${encodeURIComponent(ack.join(","))}` : "";
           return api<LogoResponse>(`/api/settings/logo${q}`, { method: "POST", body: fd });
         },
