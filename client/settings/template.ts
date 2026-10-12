@@ -748,10 +748,11 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // a rejected save (e.g. missing unsubscribe) stops the send, honestly. We never
   // render unsaved editor content, which would test something that won't ship.
   tplTestEl.onclick = () => {
-    const dirty = isDirty();
     // While no provider is connected the server would refuse a test, so the dialog leaves
-    // out the recipients and keeps only the standing line (DESIGN §2).
+    // out the recipients and keeps only the standing line (DESIGN §2), and says nothing of
+    // saving first, since nothing will be sent.
     const notConnected = providerNotConnected();
+    const dirty = !notConnected && isDirty();
     const m = modal(
       html`<h3>Send a test email</h3><p class="hint">Delivers a sample post rendered through your <strong>saved</strong> template, so you can see it in a real inbox. One address per line.</p>${notConnectedTestLine()}${
         dirty

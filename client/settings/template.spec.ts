@@ -282,6 +282,16 @@ describe("template view", () => {
     expect(document.querySelector(".modal #tplTestTo")).not.toBeNull();
   });
 
+  it("says nothing of saving first while no provider is connected, since nothing will be sent", async () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    await open();
+    typeInto(editor(), `${TEMPLATE}<!-- v2 -->`);
+    $("#tplTest").click();
+    expect($(".modal").textContent).not.toMatch(/Unsaved changes/);
+    expect($("#ttGo").textContent).toBe("Send test");
+    expect($<HTMLButtonElement>("#ttGo").disabled).toBe(true);
+  });
+
   it("save & send test: saves the edits first, then posts the test to the pre-filled recipients", async () => {
     await open([
       { path: "/api/settings", reply: () => response() },

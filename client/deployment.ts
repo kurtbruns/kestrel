@@ -106,6 +106,12 @@ export function notConnectedTestLine(): Html | null {
   return notConnectedLine("a test can’t be sent yet", " to send one");
 }
 
+/** The Add subscriber dialog's standing line: adding sends a confirmation, so its Send
+ *  confirmation is disabled beside it and the address field left out. */
+export function notConnectedAddLine(): Html | null {
+  return notConnectedLine("a confirmation can’t be sent yet", " to add subscribers");
+}
+
 /** The Schedule dialog's standing line; its Schedule and Send now are disabled beside it. */
 export function notConnectedScheduleLine(): Html | null {
   return notConnectedLine("this can’t be scheduled yet", " to schedule it");

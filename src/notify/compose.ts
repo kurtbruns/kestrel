@@ -57,6 +57,19 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       );
     }
     case "refused":
+      if (n.halt_cause === "not_connected") {
+        // Held for want of a provider (SPEC §9): no provider is refusing anything, so say
+        // what it is, and the fix once.
+        return message(
+          `Problem with ${title}: no email provider is connected`,
+          [
+            `No email provider is connected to this deployment, so ${title} is held where it is.`,
+            refusalAdvice(n.halt_cause),
+            "No one has been marked unsent. The send keeps trying, at most an hour apart, and goes out at the first try after a provider is connected, mailing no one twice.",
+          ],
+          link,
+        );
+      }
       return message(
         `Problem with ${title}: the provider is refusing your account`,
         [

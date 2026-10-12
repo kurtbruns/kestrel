@@ -16,9 +16,9 @@ import type {
   WebhookResult,
 } from "./types";
 
-/** What a halt and a failed notification say: the cause, and where the fix is. */
-export const NOT_CONNECTED_ERROR =
-  "No email provider is connected: PROVIDER is not set on this deployment. Connect one (the setup guide's Connect Resend step) and deploy again.";
+/** What a halt and a failed notification say: the fact alone. The fix is the
+ *  `not_connected` cause's advice, said once beside it (`refusalAdvice`). */
+export const NOT_CONNECTED_ERROR = "No email provider is connected to this deployment.";
 
 export class NotConnectedProvider implements EmailProvider {
   readonly name = "none" as const;

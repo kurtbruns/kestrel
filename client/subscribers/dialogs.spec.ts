@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { $, type FakeApi, fakeApi, resetShell, typeInto } from "../test/support";
+import { appState } from "../state";
+import { $, type FakeApi, fakeApi, resetShell, settingsResponse, typeInto } from "../test/support";
 import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
 
 let fake: FakeApi;
@@ -20,6 +21,36 @@ describe("addSubscriberModal", () => {
     $("#aGo").click();
     expect(fake.calls).toHaveLength(0);
     expect($("#toasts").textContent).toMatch(/valid email/);
+  });
+
+  // DESIGN §2: adding sends a confirmation, so with no provider connected the dialog says
+  // so before anything is typed, rather than refusing after.
+  it("says a confirmation can't be sent while no provider is connected, with no field and its act disabled", () => {
+    appState.appConfig = settingsResponse({ deployment: { provider: "none" } });
+    fake = fakeApi([]);
+    addSubscriberModal();
+    const line = $(".modal .not-connected");
+    expect(line.textContent).toBe(
+      "No email provider connected, so a confirmation can’t be sent yet. Connect an email provider to add subscribers.",
+    );
+    expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/resend");
+    expect(document.querySelector("#addEmail")).toBeNull();
+    expect($<HTMLButtonElement>("#aGo").disabled).toBe(true);
+    expect(document.activeElement).toBe($("#aCancel"));
+    expect(fake.calls).toHaveLength(0);
+  });
+
+  it("takes an address as usual once a provider is set, and on the local stand-in", () => {
+    for (const provider of ["resend", "fake"] as const) {
+      appState.appConfig = settingsResponse({ deployment: { provider } });
+      fake = fakeApi([]);
+      addSubscriberModal();
+      expect(document.querySelector(".modal .not-connected"), provider).toBeNull();
+      expect($<HTMLButtonElement>("#aGo").disabled, provider).toBe(false);
+      expect(document.activeElement, provider).toBe($("#addEmail"));
+      $("#aCancel").click();
+      fake.restore();
+    }
   });
 });
 

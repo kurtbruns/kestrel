@@ -5,10 +5,14 @@
 import { createExecutionContext } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createRouter } from "../src/app";
+import type { DueNotification } from "../src/db/notifications";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
 import { updateSettings } from "../src/db/settings";
 import { type AppEnv, getConfig } from "../src/env";
+import { HALT_BACKOFF_MS, HALT_RETRY_SLACK_MS } from "../src/lib/time";
+import { composeNotification } from "../src/notify/compose";
 import { clearFakeOutbox, fakeOutbox } from "../src/providers/fake";
 import type { RequestContext } from "../src/router";
 import * as renderRoutes from "../src/routes/render_actions";
@@ -62,6 +66,10 @@ async function sendCount(): Promise<number> {
 }
 
 const REFUSED = { status: 409, code: "provider_not_connected" };
+
+/** What the `not_connected` cause advises, said once wherever the held send is described. */
+const ADVICE =
+  "Connect an email provider (the setup guide's Connect Resend step), then deploy again.";
 
 beforeEach(async () => {
   await resetDatabase();
@@ -207,6 +215,16 @@ describe("the public subscribe page while signups aren't open (SPEC §7, §9)", 
     expect(logged(warn).filter((l) => l.event === "subscribe.not_connected")).toHaveLength(2);
   });
 
+  it("refuses even an address that isn't one, since the address is never read", async () => {
+    const res = await fetchWith(NOT_CONNECTED, "/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email: "not an address" }).toString(),
+    });
+    expect(res.status).toBe(409); // a read address would be a 400 first
+    expect(await res.text()).toContain("Signups aren’t open yet");
+  });
+
   it("refuses a JSON request with provider_not_connected", async () => {
     const res = await fetchWith(NOT_CONNECTED, "/subscribe", {
       method: "POST",
@@ -244,9 +262,87 @@ describe("a send scheduled before the provider was disconnected", () => {
     const refused = condition(viewOf(held, "none", false, Date.now()), "refused");
     expect(refused).toMatchObject({
       cause: "not_connected",
-      advice:
-        "Connect an email provider (the setup guide's Connect Resend step), then deploy again.",
+      advice: ADVICE,
+      error: "No email provider is connected to this deployment.",
     });
+    // Said as what it is, the fix once: no provider is refusing anything.
+    expect(refused?.message).toBe(
+      `No email provider is connected, so this send is held where it is. ${ADVICE} No one has been marked unsent, and the send goes out at its first retry after a provider is connected.`,
+    );
+  });
+
+  it("goes out to everyone, once, at the first retry after a provider is connected", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const audience = ["a@birds.example", "b@birds.example", "c@birds.example"];
+    await seedConfirmed(audience);
+    const send = await dueSend();
+    const unconnected = withVars(NOT_CONNECTED);
+    await tick(unconnected);
+    // `tick` moves the clock on to the held send's next retry, as the cron reaches it.
+    const firstHalt = (await sends.getSend(env.DB, send.id))!.halted_at!;
+    await tick(unconnected); // its first retry, still not connected: held, nobody consumed
+    expect(Date.now() - firstHalt).toBeGreaterThanOrEqual(
+      HALT_BACKOFF_MS.account[0]! - HALT_RETRY_SLACK_MS,
+    );
+    expect((await sends.getSend(env.DB, send.id))!.c_accepted).toBe(0);
+    // Connected: the next retry sends it.
+    await tick(withVars({ PROVIDER: "fake" }));
+    const done = (await sends.getSend(env.DB, send.id))!;
+    expect(done.status).toBe("sent");
+    expect(done.c_accepted).toBe(audience.length);
+    expect(done.halt_reason).toBeNull();
+    expect(
+      fakeOutbox()
+        .map((m) => m.to)
+        .sort(),
+    ).toEqual(audience);
+  });
+
+  it("tells the publisher no provider is connected, not that one is refusing the account", () => {
+    const email = composeNotification(
+      {
+        send_id: "s1",
+        kind: "refused",
+        episode: 0,
+        attempts: 0,
+        subject: "Owls",
+        send_status: "sending",
+        fire_at: 0,
+        started_at: 0,
+        completed_at: null,
+        locked_until: null,
+        halt_reason: "account",
+        halted_at: 0,
+        halt_cause: "not_connected",
+        halt_error: "No email provider is connected to this deployment.",
+        c_pending: 3,
+        c_in_flight: 0,
+        c_accepted: 0,
+        c_delivered: 0,
+        c_bounced: 0,
+        c_complained: 0,
+        c_skipped: 0,
+        c_unsent: 0,
+      } satisfies DueNotification,
+      getConfig(env),
+    );
+    expect(email.subject).toBe('Problem with "Owls": no email provider is connected');
+    expect(email.text).not.toMatch(/refusing/);
+    expect(email.text.split(ADVICE)).toHaveLength(2); // the fix, said once
+  });
+});
+
+describe("the dev routes while not connected", () => {
+  it("are not registered, even on a localhost origin with the dev secret set", async () => {
+    const vars = {
+      PROVIDER: "",
+      APP_ORIGIN: "http://localhost:8787",
+      DEV_AUTH_SECRET: "test-dev-secret",
+    };
+    const res = await fetchWith(vars, "/api/dev/token");
+    expect(res.status).toBe(404);
+    const routes = createRouter(getConfig(withVars(vars))).routes.map((r) => r.def.path);
+    expect(routes).not.toContain("/api/dev/token");
   });
 });
 
