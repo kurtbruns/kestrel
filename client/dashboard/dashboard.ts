@@ -7,6 +7,7 @@ import type { DeploymentView } from "../../shared/settings";
 import type { SubscriberCounts, SubscriberListResponse } from "../../shared/subscribers";
 import { api } from "../api";
 import { derivePublication, type Publication } from "../brand";
+import { CONNECT_PROVIDER_HREF, providerNotConnected } from "../deployment";
 import { mount } from "../lifecycle";
 import { createNewPost } from "../posts/drafts";
 import { followSends, type SendStage, type SendsUpdate, stageOf } from "../send_state";
@@ -255,6 +256,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       <div><h1>${pub.name}</h1>${pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null}</div>
       <button class="primary" data-act="new-post">New post</button>
     </div>
+    ${notConnectedLineHtml()}
     <div id="dashHealth">${healthHtml(computeHealth(sendsNow(sends, reported)))}</div>
     <div id="dashActive">${dashActiveHtml(activeOf(sendsNow(sends, reported)))}</div>
     <section class="dash-section"><h2>Subscribers</h2>${tilesHtml}</section>
@@ -496,15 +498,38 @@ function apiConnectCard(connected: boolean): Html {
   </div>`;
 }
 
+/**
+ * The standing line a populated dashboard carries while no email provider is connected
+ * (SPEC §9, DESIGN §2): a state, not an event, so never a Notice and never dismissed. It
+ * goes when a provider is set; local development's stand-in never shows it. Null otherwise.
+ */
+function notConnectedLineHtml(): Html | null {
+  return providerNotConnected()
+    ? html`<p class="muted dash-not-connected">No email provider connected, so nothing can be sent yet. <a href="${CONNECT_PROVIDER_HREF}">Connect Resend</a> to start sending.</p>`
+    : null;
+}
+
+/** The first-run checklist. While no provider is connected it leads the sending steps with
+ *  connecting one, and the subscribe step says signups wait for it (the page is closed). */
 function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null): Html {
   const subscribeUrl = `${deployment?.appOrigin || location.origin}/subscribe`;
+  const notConnected = providerNotConnected();
   return html`<div class="card setup">
     <h2 class="setup-title">Set up your publication</h2>
     <ol class="setup-steps">
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>
+      ${
+        notConnected
+          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Resend</button></li>`
+          : null
+      }
       <li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address — the setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>
-      <li><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>
+      ${
+        notConnected
+          ? html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><span class="muted">Signups open once an email provider is connected; until then the page says they aren’t open yet.</span></div></li>`
+          : html`<li class="setup-subscribe"><div class="setup-step-main"><strong>Share your subscribe link</strong><code class="setup-url">${subscribeUrl}</code></div><button type="button" data-copy="${subscribeUrl}" aria-label="Copy the subscribe link">${copyFace()}</button></li>`
+      }
     </ol>
   </div>`;
 }

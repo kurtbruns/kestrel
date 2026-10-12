@@ -36,7 +36,7 @@ export class NotConnectedProvider implements EmailProvider {
       kind: "halted",
       halt: {
         reason: "account",
-        cause: "credentials",
+        cause: "not_connected",
         error: NOT_CONNECTED_ERROR,
         mayHaveSent: false,
       },

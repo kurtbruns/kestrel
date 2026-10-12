@@ -19,9 +19,17 @@ export type HaltReason = "unavailable" | "account";
 /**
  * What a refusal is about, so the advice can name the fix: the API key or credentials,
  * the sender (an unverified domain or from-address), a spent sending quota, the account
- * paused or suspended by the provider, a rate limit, or the provider itself failing.
+ * paused or suspended by the provider, a rate limit, the provider itself failing, or no
+ * provider connected to the deployment at all (SPEC §9).
  */
-export type HaltCause = "credentials" | "sender" | "quota" | "suspended" | "rate_limit" | "outage";
+export type HaltCause =
+  | "credentials"
+  | "sender"
+  | "quota"
+  | "suspended"
+  | "rate_limit"
+  | "outage"
+  | "not_connected";
 
 /**
  * What to do about the provider refusing the account, by what the refusal is about
@@ -39,6 +47,8 @@ export function refusalAdvice(cause: HaltCause | null): string {
       return "Wait for the provider's sending quota to reset, or raise it on your plan.";
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
+    case "not_connected":
+      return "Connect an email provider (the setup guide's Connect Resend step), then deploy again.";
     default:
       return "Fix the account with the provider.";
   }

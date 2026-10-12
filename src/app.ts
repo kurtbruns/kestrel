@@ -646,7 +646,7 @@ export function createRouter({
         retrySchedule(HALT_BACKOFF_MS.unavailable) +
         ", and worth raising only once the send carries the `stuck` condition. `account` is the provider refusing the account itself, retried " +
         retrySchedule(HALT_BACKOFF_MS.account) +
-        "; `cause` names what (`credentials`, `sender`, `quota`, or `suspended`). Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
+        "; `cause` names what (`credentials`, `sender`, `quota`, `suspended`, or `not_connected`, a deployment with no provider connected). Either way no recipient has been consumed. The fix for `account` is outside this API (the provider's dashboard, or the deployment's secrets, which the API never exposes, SPEC §9), and once it lands the send resumes by itself at its next retry, so it is never rescheduled or sent again. There is no API action to retry sooner. " +
         conditionsText +
         " An unknown `status`, `failures`, `sort`, or `dir`, or a `limit` or `offset` that is not a whole number, is a 400 naming the field.",
       query: [

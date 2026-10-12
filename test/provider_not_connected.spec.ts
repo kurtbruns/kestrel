@@ -15,9 +15,11 @@ import * as renderRoutes from "../src/routes/render_actions";
 import * as scheduleRoutes from "../src/routes/schedule";
 import * as settingsRoutes from "../src/routes/settings";
 import * as subscriberRoutes from "../src/routes/subscribers";
+import { condition } from "./support/conditions";
 import { dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { base, readJson } from "./support/http";
 import { logged } from "./support/log";
+import { viewOf } from "./support/view";
 import { fetchWith, withVars } from "./support/worker_env";
 
 /** The suite's env with no provider named, as the production template ships. */
@@ -236,6 +238,15 @@ describe("a send scheduled before the provider was disconnected", () => {
     expect(held.c_accepted).toBe(0);
     expect(held.c_unsent).toBe(0);
     expect(fakeOutbox()).toHaveLength(0);
+    // Its refusal names the missing provider and how to connect one, not a credential to
+    // replace (SPEC §12).
+    expect(held.halt_cause).toBe("not_connected");
+    const refused = condition(viewOf(held, "none", false, Date.now()), "refused");
+    expect(refused).toMatchObject({
+      cause: "not_connected",
+      advice:
+        "Connect an email provider (the setup guide's Connect Resend step), then deploy again.",
+    });
   });
 });
 

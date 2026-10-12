@@ -14,7 +14,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Breaking
 
-- An unset `PROVIDER` now means no email provider is connected, not the `fake` stand-in. Such a deployment runs, and refuses everything that would send with a 409 `provider_not_connected`: scheduling, send now, a test email, a test notification through the provider, and adding a subscriber; its public subscribe page says signups aren't open yet instead of taking an address it can't confirm. `fake` now runs only where it is named, as local development and a demo do, and a new instance's production settings ship without `PROVIDER` until Connect Resend sets it (SPEC §9).
+- An unset `PROVIDER` now means no email provider is connected, not the `fake` stand-in. Such a deployment runs, and refuses everything that would send with a 409 `provider_not_connected`: scheduling, send now, a test email, a test notification through the provider, and adding a subscriber; its public subscribe page says signups aren't open yet instead of taking an address it can't confirm. A send scheduled before is held, consuming no one, as a `refused` condition with the new cause `not_connected` and advice to connect a provider. `fake` now runs only where it is named, as local development and a demo do, and a new instance's production settings ship without `PROVIDER` until Connect Resend sets it (SPEC §9).
 
 ### Added
 
@@ -23,7 +23,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
-- While no email provider is connected, the editor says so and points to the next step: Settings' Email provider row reads "No email provider connected" with a link to Connect Resend, the Sent page says nothing can be sent yet, and both Send-a-test dialogs carry a standing line linking to Connect Resend, their Send disabled, until a provider is set. Local development keeps its "nothing is delivered" wording.
+- While no email provider is connected, the editor says so and points to the next step: Settings' Email provider row reads "No email provider connected" with a link to Connect Resend, the Sent page and the dashboard say nothing can be sent yet, the first-run checklist leads with connecting a provider and says signups open once one is, and both Send-a-test dialogs carry a standing line linking to Connect Resend, their Send disabled, until a provider is set. Local development keeps its "nothing is delivered" wording.
 
 ## [1.6.0] - 2026-10-11
 
