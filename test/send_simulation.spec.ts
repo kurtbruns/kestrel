@@ -152,7 +152,12 @@ describe("SIMULATE_SENDS", () => {
     expect(
       simulation("resend", { ACCESS_TEAM_DOMAIN: "birds.cloudflareaccess.com", ACCESS_AUD: "aud" }),
     ).toBeNull();
-    expect(simulation("resend", { APP_ORIGIN: "https://newsletter.birds.example" })).toBeNull();
+    expect(
+      simulation("resend", {
+        ALLOW_FAKE_PROVIDER: "true",
+        APP_ORIGIN: "https://newsletter.birds.example",
+      }),
+    ).toBeNull();
   });
 
   it("is reflected read-only in the deployment view, so a dev tool can read it", async () => {

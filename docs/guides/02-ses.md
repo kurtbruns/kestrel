@@ -177,15 +177,15 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Set `PROVIDER` to `ses` (add it if your block doesn't have one), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE` and [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget). Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE` and [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget). Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
+      "PROVIDER": "ses",             // ← set to ses
       "APP_ORIGIN": "https://newsletter.example.com",
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
-      "PROVIDER": "ses",             // ← set to ses
       "AWS_REGION": "us-east-1",     // ← change: your SES region
       "SES_MAX_SEND_RATE": "1",      // ← new: your maximum send rate; 1 in the sandbox
       "SUBREQUEST_BUDGET": "10000"   // ← new: the Workers Paid limit

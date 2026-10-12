@@ -82,7 +82,7 @@ The webhook tells the app when an address bounces or complains, and the app stop
 
 Until now the app has run with no email provider connected, refusing to send. Setting `PROVIDER` connects Resend. Store both secrets before you set it. With `PROVIDER` set to `resend` and a secret missing, every request answers `500` and names the missing secret.
 
-1. In `wrangler.jsonc`, in the `production` block's `vars`, add `PROVIDER` set to `resend`:
+1. In `wrangler.jsonc`, in the `production` block's `vars`, change `PROVIDER` from `""` to `resend`:
 
     ```jsonc
     "PROVIDER": "resend",

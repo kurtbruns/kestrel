@@ -102,8 +102,10 @@ describe("getConfig — the dev-mode reader-surface gate", () => {
     expect(config.devAuthSecret).toBeUndefined();
   });
 
-  it("is off on the fake transport served from anywhere but this machine", () => {
-    const config = getConfig(varsOnly({ PROVIDER: "fake", DEV_AUTH_SECRET: "s" }));
+  it("is off on the fake transport served from anywhere but this machine, a demo's included", () => {
+    const config = getConfig(
+      varsOnly({ PROVIDER: "fake", ALLOW_FAKE_PROVIDER: "true", DEV_AUTH_SECRET: "s" }),
+    );
     expect(config.devMode).toBe(false);
     expect(config.devAuthSecret).toBeUndefined();
   });
@@ -131,6 +133,81 @@ describe("getConfig — deploy config is validated", () => {
 
   it("reads an unset PROVIDER as no provider connected, never the fake (SPEC §9)", () => {
     expect(getConfig(varsOnly({ PROVIDER: undefined })).provider).toBe("none");
+  });
+
+  it("reads the production template's empty PROVIDER as not connected (SPEC §9)", () => {
+    const config = getConfig(varsOnly({ PROVIDER: "" }));
+    expect(config.provider).toBe("none");
+    expect(config.devMode).toBe(false);
+  });
+
+  it("refuses the fake on an origin off this machine, naming PROVIDER (SPEC §9)", () => {
+    let thrown: unknown;
+    try {
+      getConfig(varsOnly({ PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" }));
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(ConfigError);
+    expect((thrown as ConfigError).variable).toBe("PROVIDER");
+    expect((thrown as ConfigError).message).toBe(
+      'PROVIDER is "fake", which delivers nothing, and runs only on a local APP_ORIGIN (localhost or 127.0.0.1), not https://newsletter.birds.example: set your email provider, or leave PROVIDER empty until you connect one',
+    );
+    // An empty opt-in is no opt-in.
+    refuses({ PROVIDER: "fake", ALLOW_FAKE_PROVIDER: "" }, "PROVIDER");
+  });
+
+  it("runs the fake on a loopback origin with no opt-in", () => {
+    for (const origin of ["http://localhost:8787", "http://127.0.0.1:8787"]) {
+      expect(getConfig(varsOnly({ PROVIDER: "fake", APP_ORIGIN: origin })).provider).toBe("fake");
+    }
+  });
+
+  it("runs the fake on a public origin when the deployment opts in, as a hosted demo does", () => {
+    const config = getConfig(
+      varsOnly({
+        PROVIDER: "fake",
+        ALLOW_FAKE_PROVIDER: "true",
+        APP_ORIGIN: "https://demo.birds.example",
+      }),
+    );
+    expect(config.provider).toBe("fake");
+    expect(config.devMode).toBe(false);
+  });
+
+  it("leaves local development dev-shaped when the opt-in is set there too", () => {
+    const config = getConfig(
+      varsOnly({
+        PROVIDER: "fake",
+        ALLOW_FAKE_PROVIDER: "true",
+        DEV_AUTH_SECRET: "s",
+        APP_ORIGIN: "http://localhost:8787",
+      }),
+    );
+    expect(config.devMode).toBe(true);
+    expect(config.devAuthSecret).toBe("s");
+  });
+
+  it("refuses an ALLOW_FAKE_PROVIDER other than true, rather than reading it as off", () => {
+    for (const v of ["1", "yes", "TRUE", "false"]) {
+      refuses({ PROVIDER: "fake", ALLOW_FAKE_PROVIDER: v }, "ALLOW_FAKE_PROVIDER");
+    }
+  });
+
+  it("ignores ALLOW_FAKE_PROVIDER on every other provider", () => {
+    const allow = { ALLOW_FAKE_PROVIDER: "true", APP_ORIGIN: "https://newsletter.birds.example" };
+    expect(getConfig(varsOnly({ ...allow, PROVIDER: "" })).provider).toBe("none");
+    expect(getConfig(varsOnly({ ...allow, ...RESEND_DEPLOY })).provider).toBe("resend");
+    expect(getConfig(varsOnly({ ...allow, ...SES_DEPLOY })).provider).toBe("ses");
+    // It lifts nothing the fake's exemption covers: the placeholder is still refused.
+    refuses(
+      {
+        ...RESEND_DEPLOY,
+        ALLOW_FAKE_PROVIDER: "true",
+        APP_ORIGIN: "https://newsletter.example.com",
+      },
+      "APP_ORIGIN",
+    );
   });
 
   it("refuses a missing or malformed APP_ORIGIN", () => {
@@ -255,6 +332,7 @@ describe("getConfig — deploy config is validated", () => {
     const config = getConfig(
       varsOnly({
         PROVIDER: "fake",
+        ALLOW_FAKE_PROVIDER: "true",
         APP_ORIGIN: "https://newsletter.example.com",
         ARCHIVE_ORIGIN: "https://example.com",
         MEDIA_PUBLIC_BASE: "https://media.example.com",
@@ -472,6 +550,20 @@ describe("a refused config, on each surface", () => {
     });
   });
 
+  it("serves nothing when the fake is copied into a deployment, so signups can't open (SPEC §9)", async () => {
+    allowErrorLogs("config.invalid");
+    const copied = { PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" };
+    const subscribe = await fetchWith(copied, "/subscribe", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: "email=reader%40birds.example",
+    });
+    expect(subscribe.status).toBe(503);
+    const health = await fetchWith(copied, "/health");
+    expect(health.status).toBe(500);
+    expect(await health.json()).toMatchObject({ error: "invalid_config", variable: "PROVIDER" });
+  });
+
   it("still logs the variable when a reader page is what found it", async () => {
     allowErrorLogs("config.invalid");
     const spy = vi.spyOn(console, "error");
@@ -528,8 +620,12 @@ describe("the dev routes exist only in local development", () => {
     });
   });
 
-  it("404s on the fake transport served from a public origin", async () => {
-    await expectAbsent({ PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" });
+  it("404s on the fake transport served from a public origin, as a demo is", async () => {
+    await expectAbsent({
+      PROVIDER: "fake",
+      ALLOW_FAKE_PROVIDER: "true",
+      APP_ORIGIN: "https://newsletter.birds.example",
+    });
   });
 
   it("404s on a real provider", async () => {
@@ -542,7 +638,11 @@ describe("the dev routes exist only in local development", () => {
     // A known reader, so a reset that ran despite the refusal would show as a missing row.
     await resetDatabase();
     await seedConfirmed("kept@example.com");
-    const e = withVars({ PROVIDER: "fake", APP_ORIGIN: "https://newsletter.birds.example" });
+    const e = withVars({
+      PROVIDER: "fake",
+      ALLOW_FAKE_PROVIDER: "true",
+      APP_ORIGIN: "https://newsletter.birds.example",
+    });
     const context = (path: string, method: string): RequestContext => {
       const req = new Request(`${base}${path}`, { method });
       return {

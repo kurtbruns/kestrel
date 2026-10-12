@@ -100,7 +100,13 @@ describe("which provider a deployment runs on (SPEC §9)", () => {
   it("runs the fake only where it is named, a deployed demo included", () => {
     expect(getConfig(withVars({ PROVIDER: "fake" })).provider).toBe("fake");
     expect(
-      getConfig(withVars({ PROVIDER: "fake", APP_ORIGIN: "https://demo.birds.example" })).provider,
+      getConfig(
+        withVars({
+          PROVIDER: "fake",
+          ALLOW_FAKE_PROVIDER: "true",
+          APP_ORIGIN: "https://demo.birds.example",
+        }),
+      ).provider,
     ).toBe("fake");
   });
 
@@ -375,7 +381,13 @@ describe("local dev's not-connected preview, SIMULATE_SENDS=not-connected (SPEC 
   it("is never honored outside local dev, and takes no fault suffix", () => {
     expect(getConfig(withVars({ ...RESEND_DEPLOY, ...PREVIEW })).provider).toBe("resend");
     expect(
-      getConfig(withVars({ ...PREVIEW, APP_ORIGIN: "https://demo.birds.example" })).provider,
+      getConfig(
+        withVars({
+          ...PREVIEW,
+          ALLOW_FAKE_PROVIDER: "true",
+          APP_ORIGIN: "https://demo.birds.example",
+        }),
+      ).provider,
     ).toBe("fake");
     expect(() => getConfig(withVars({ SIMULATE_SENDS: "not-connected:none" }))).toThrow(
       expect.objectContaining({ name: "ConfigError", variable: "SIMULATE_SENDS" }),

@@ -110,6 +110,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
         }
       ],
       "vars": {
+        "PROVIDER": "",                                            // ← stays empty until step 3
         "APP_ORIGIN": "https://newsletter.example.com",            // ← your app's hostname
         "ARCHIVE_BASE_PATH": "/archive",
         "SENDING_DOMAIN": "send.example.com",                      // ← your sending hostname
@@ -121,7 +122,7 @@ Every command from here on acts on your Cloudflare account through the Wrangler 
     What each one does:
 
     - **`routes`** puts the app on your hostname when you deploy. Cloudflare creates the DNS record and the certificate. Your domain must be in the same Cloudflare account, and the hostname can't already have a CNAME record; delete one if it does. The block also turns off the `workers.dev` addresses, so the app answers only on your hostname.
-    - **No `PROVIDER` yet.** You add it in step 3, [Connect an email provider](04-resend.md). Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused.
+    - **`PROVIDER` stays empty.** Step 3, [Connect an email provider](04-resend.md), sets it. Until then the app runs without an email provider: you can write and preview posts, but scheduling, test emails, and signups are refused. Never set it to `fake`, the top level's value, even when a wrangler warning suggests copying it: `fake` delivers nothing, and the app refuses it on your hostname.
     - **`ARCHIVE_BASE_PATH`** is permanent once you send. Every post you send carries its `/archive/…` link, and changing the prefix later breaks the links you've already mailed. Keep `/archive` unless you have a reason not to.
     - **`FROM_ADDRESS`** is the address every email comes from. Keep it on your sending hostname, and set `SENDING_DOMAIN` to the part after the `@`.
 

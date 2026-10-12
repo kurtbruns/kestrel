@@ -39,6 +39,7 @@ export const CONFIGURATION_REFERENCE = "https://getkestrel.dev/docs/configuratio
  *  secret's is the Secrets table. */
 export const REFERENCE_ANCHORS: Readonly<Record<string, string>> = {
   PROVIDER: "provider",
+  ALLOW_FAKE_PROVIDER: "provider",
   APP_ORIGIN: "vars",
   AWS_REGION: "vars",
   FROM_ADDRESS: "from_address-and-sending_domain",

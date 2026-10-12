@@ -8,6 +8,7 @@ Deploying, migrating the production database, and anything that sends mail or ch
 
 - **Posts, subscribers, and sends live in the running app,** not in this repository. Write and send through the API. Never draft a post as a file here, and never write to the database directly (`wrangler d1 execute`).
 - **This repository is the instance:** its configuration (`wrangler.jsonc`), its migrations, and the Kestrel release it runs, pinned in `package.json`. Kestrel's code is in `node_modules/@kurtbruns/kestrel/`; it is never edited here. The top level of `wrangler.jsonc` is local development, and its `production` env redeclares every binding and var, since wrangler doesn't inherit them.
+- **`PROVIDER` in `production` stays empty, `""`, until the guide's provider step** changes it to `resend` or `ses`; empty means no provider connected, and the app refuses to send. Never set it to `fake`, whatever a wrangler warning suggests: `fake` delivers nothing and records every send as delivered, and the app refuses it on a real hostname.
 - **The setup guide** for the installed release is in `node_modules/@kurtbruns/kestrel/docs/`, starting at `README.md`. The editor's **Docs** tab shows the same pages. The release's changelog is `node_modules/@kurtbruns/kestrel/CHANGELOG.md`.
 - **`migrations/` holds Kestrel's migrations,** copied in by `npm run sync-migrations` with their names unchanged, beside any of the instance's own. Never edit or rename one of Kestrel's. Name your own `local_0001_what_it_does.sql`, so it can't collide with Kestrel's numbering.
 

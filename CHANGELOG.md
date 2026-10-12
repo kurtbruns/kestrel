@@ -10,9 +10,20 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+**Upgrading from 1.7.0.** If your `production` block sets `PROVIDER` to `fake` on a real hostname, this release refuses it: set your email provider, or make it `""` until you [connect one](docs/get-started/04-resend.md). A hosted demo that runs `fake` on a real hostname on purpose adds `ALLOW_FAKE_PROVIDER: "true"` before it upgrades, to the env it hands Kestrel: its `vars`, or the object it builds if it builds one, and that object's type. If your `production` block has no `PROVIDER` line, you may add `"PROVIDER": ""` to its `vars` to quiet wrangler's warning that it's missing there; it means the same as leaving it out.
+
+### Breaking
+
+- `PROVIDER` set to `fake` is now refused unless `APP_ORIGIN` is on `localhost` or `127.0.0.1`, naming `PROVIDER`, so the development value copied into production, which wrangler's warning about a var missing from `production` invites, shows at Deploy's check instead of opening signups whose confirmations go nowhere and recording sends no one receives. A hosted demo that runs `fake` on purpose opts in with `ALLOW_FAKE_PROVIDER` set to `true`, which no other provider reads (SPEC §9).
+
 ### Added
 
 - Local development can run as a deployment with no email provider connected: `SIMULATE_SENDS=not-connected` refuses every send, closes signups, and holds a due send, which goes out at its next retry once the switch is off, with local sign-in still on, so the editor's not-connected state can be seen without deploying. A deployed instance ignores it (SPEC §10).
+
+### Changed
+
+- A new instance's `production` settings declare `"PROVIDER": ""`, which means no provider connected, so wrangler no longer warns on every production command that `PROVIDER` is missing there. Connect an email provider, and the SES guide's switch step, now say to change it rather than add it.
+- The operator's Claude context (`.claude/CLAUDE.md` in a new instance) carries a new safety caution: `PROVIDER` stays empty in production until the provider step and is never `fake`, whatever a wrangler warning suggests, so an instance's Claude doesn't "fix" the warning by copying the development value into production. An instance made before this release can merge the line by hand.
 
 ### Fixed
 

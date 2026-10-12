@@ -26,12 +26,13 @@ None of these can be read or changed from inside the app, by the editor or by Cl
 | `ARCHIVE_ORIGIN` | the origin archive links use, to put the archive on your website | `APP_ORIGIN` |
 | `MEDIA_PUBLIC_BASE` | the base URL images are served from | `APP_ORIGIN` + `/media` |
 | `NOTIFY_FROM` | the sender of notifications through Cloudflare's email | `Kestrel <kestrel@` + the app's hostname + `>` |
+| `ALLOW_FAKE_PROVIDER` | `true` lets `fake` run on a real hostname, for a demo that mails no one on purpose | unset |
 
 ### `PROVIDER`
 
-Until it's set, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. [Connect an email provider](../get-started/04-resend.md) sets it.
+Until it's set, or while it's empty, the app runs with no provider connected. You can write and preview posts, but everything that would send email is refused: scheduling, sending now, test emails, and the confirmation emails that signups need. The subscribe page says signups aren't open yet, and Settings shows **No email provider connected**. Setting it to `none` means the same. A new instance's `production` block declares it empty, `"PROVIDER": ""`, so wrangler doesn't warn that the top level's value is missing there. [Connect an email provider](../get-started/04-resend.md) changes it to your provider.
 
-`fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and names it on purpose in the top level of `wrangler.jsonc`. Never set it on a deployment that has readers: every subscriber would be recorded as sent the post, and never get it.
+`fake` delivers nothing. It records a send as if every recipient accepted it. Local development runs on it, and names it on purpose in the top level of `wrangler.jsonc`. Never copy it into `production`, whatever wrangler suggests: every subscriber would be recorded as sent the post, and never get it. The app refuses `fake` unless `APP_ORIGIN` is on `localhost` or `127.0.0.1`. A hosted demo that runs `fake` on a real hostname on purpose sets `ALLOW_FAKE_PROVIDER` to `true`, which no other deployment needs, and which no other provider reads.
 
 ### `FROM_ADDRESS` and `SENDING_DOMAIN`
 
@@ -134,6 +135,7 @@ When declared, notifications go through Cloudflare's email instead of your provi
 The app checks its configuration on every request. It refuses to run on one that would do the wrong thing quietly:
 
 - `PROVIDER`, when set, must be exactly `resend`, `ses`, `fake`, or `none`. A misspelling, or `SES`, is refused, never taken for another.
+- `fake` runs only when `APP_ORIGIN` is on `localhost` or `127.0.0.1`, unless `ALLOW_FAKE_PROVIDER` is `true`. On a real hostname it would open signups whose confirmations go nowhere, and record every send as delivered. With `fake`, `ALLOW_FAKE_PROVIDER`, when set, must be `true`; every other provider ignores it.
 - `APP_ORIGIN` must be a plain `http` or `https` origin, with no path. So must `ARCHIVE_ORIGIN`, when set. `MEDIA_PUBLIC_BASE`, when set, must be a plain `http` or `https` URL, and may have a path. A trailing slash is dropped from each.
 - A real provider needs `FROM_ADDRESS`, and every secret the table marks for it. SES also needs `AWS_REGION`.
 - None of `APP_ORIGIN`, `ARCHIVE_ORIGIN`, `MEDIA_PUBLIC_BASE`, `SENDING_DOMAIN`, or `FROM_ADDRESS` may still be on `example.com` or a name under it, the template's placeholder. That holds with no provider connected too, since every link the app builds would name it. Only `fake` allows it.

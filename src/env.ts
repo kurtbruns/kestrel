@@ -11,7 +11,8 @@
  * (an unknown provider, a missing origin, a real provider without its credentials, a setting
  * still on the template's example.com placeholders on anything but the fake transport, a
  * minimum lead under the sweep's one-minute tick or over a day, one half of the Access pair
- * without the other) throws a `ConfigError` naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
+ * without the other, the fake transport on an origin off this machine without the opt-in that
+ * says it is on purpose) throws a `ConfigError` naming the variable. A `PROVIDER` left unset is not a mistake but the not-connected state
  * (SPEC §9): the app runs and refuses to send.
  */
 
@@ -109,6 +110,13 @@ export interface OptionalVars {
    * wiping a database. Set by `kestrel dev` alone; honored only in local dev (see `devRunId`).
    */
   DEV_RUN_ID?: string;
+  /**
+   * `true` lets `PROVIDER: "fake"` run on an origin off this machine, for a hosted demo that
+   * mails no one on purpose (SPEC §9). Unset, the fake is refused anywhere but a loopback
+   * origin, since a deployment on it records every send as delivered and mails no one. Has no
+   * effect on any other provider.
+   */
+  ALLOW_FAKE_PROVIDER?: string;
 }
 
 /**
@@ -273,7 +281,9 @@ export function getConfig(env: AppEnv): Config {
   if (isRealProvider(provider)) {
     requireRealProviderConfig(provider, env);
   }
-  if (provider !== "fake") {
+  if (provider === "fake") {
+    refuseFakeOffThisMachine(appOrigin, env.ALLOW_FAKE_PROVIDER);
+  } else {
     refusePlaceholders(provider, env, { appOrigin, archiveOrigin, mediaPublicBase });
   }
   const { accessTeamDomain, accessAud } = readAccess(env);
@@ -405,6 +415,26 @@ function readProvider(v: string | undefined): ProviderName {
     throw new ConfigError("PROVIDER", `must be one of ${PROVIDER_NAMES.join(", ")}, not "${raw}"`);
   }
   return raw;
+}
+
+/**
+ * The fake runs only on this machine unless a deployment says otherwise (SPEC §9). It records
+ * every recipient accepted and mails no one, so on a real hostname, copied into the
+ * production config by mistake, it would open signups whose confirmations go nowhere and lose
+ * every post it sends (I4). The same loopback test as the dev-shaped predicate, so "this
+ * machine" means one thing. A hosted demo that runs the fake on purpose opts in by name.
+ */
+function refuseFakeOffThisMachine(appOrigin: string, allow: string | undefined): void {
+  const raw = orUndefined(allow?.trim());
+  if (raw !== undefined && raw !== "true") {
+    throw new ConfigError("ALLOW_FAKE_PROVIDER", `must be "true" or unset, not "${raw}"`);
+  }
+  if (raw === undefined && !isLoopbackOrigin(appOrigin)) {
+    throw new ConfigError(
+      "PROVIDER",
+      `is "fake", which delivers nothing, and runs only on a local APP_ORIGIN (localhost or 127.0.0.1), not ${appOrigin}: set your email provider, or leave PROVIDER empty until you connect one`,
+    );
+  }
 }
 
 /** What a real transport needs before it may run: its credentials and a `From:` address. */

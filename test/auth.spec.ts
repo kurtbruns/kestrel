@@ -168,6 +168,8 @@ describe("dev credential is inert in a deployed-shaped env", () => {
     const pushedDev = {
       ...deployed,
       PROVIDER: "fake",
+      // The one way the fake runs on a public origin: a demo opting in (SPEC §9).
+      ALLOW_FAKE_PROVIDER: "true",
       ACCESS_TEAM_DOMAIN: undefined,
       ACCESS_AUD: undefined,
     } as unknown as AppEnv;
