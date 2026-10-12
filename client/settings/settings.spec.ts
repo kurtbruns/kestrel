@@ -15,7 +15,7 @@ import {
   typeInto,
   unmount,
 } from "../test/support";
-import { squareImage } from "../ui/square_image";
+import { squareImage, UnreadableImage } from "../ui/square_image";
 import { renderSettings } from "./settings";
 
 // The browser's canvas, which squares a picked logo, doesn't exist under happy-dom: the
@@ -653,7 +653,7 @@ describe("settings view", () => {
 
   it("says so when a picked file can't be read as an image", async () => {
     await open();
-    vi.mocked(squareImage).mockRejectedValue(new Error("decode failed"));
+    vi.mocked(squareImage).mockRejectedValue(new UnreadableImage());
     pickLogo();
     await vi.advanceTimersByTimeAsync(0);
     expect(document.querySelector(".modal")).toBeNull();
@@ -663,7 +663,7 @@ describe("settings view", () => {
     expect(logoPosts()).toHaveLength(0);
   });
 
-  it("notes that a logo uploaded before the crop step isn't square, since emails stretch it", async () => {
+  it("notes that a logo uploaded before the crop step isn't square, since emails stretch it, until a square one replaces it", async () => {
     // The page reads the current logo as any <img> does; a stand-in reports its size.
     const sizes: Record<string, [number, number]> = {
       "https://app.birds.example/media/branding/logo?v=1": [300, 100],
@@ -681,18 +681,30 @@ describe("settings view", () => {
       },
     );
     const pub = { name: "Birds Weekly", tagline: "", address: "" };
+    const withLogo = (logoUrl: string) =>
+      response({ settings: { publication: { ...pub, logoUrl } } });
     await open([
       {
         path: "/api/settings",
-        reply: () =>
-          response({
-            settings: {
-              publication: { ...pub, logoUrl: "https://app.birds.example/media/branding/logo?v=1" },
-            },
-          }),
+        reply: () => withLogo("https://app.birds.example/media/branding/logo?v=1"),
+      },
+      {
+        method: "POST",
+        path: "/api/settings/logo",
+        reply: () => ({
+          settings: withLogo("https://app.birds.example/media/branding/logo/2-squared").settings,
+          remade: [],
+        }),
       },
     ]);
+    await vi.advanceTimersByTimeAsync(0);
     expect($("#logoShape").hidden).toBe(false);
+    pickedImage(512, 512);
+    pickLogo();
+    await vi.advanceTimersByTimeAsync(0);
+    $("#lgGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#logoShape").hidden).toBe(true); // the square that replaced it
   });
 
   it("shows the error with a retry", async () => {

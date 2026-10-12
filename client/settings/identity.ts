@@ -214,9 +214,7 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
     try {
       // Squared and previewed first: what uploads is the PNG the publisher saw, whatever
       // the size or shape of the file they picked.
-      const png = await previewLogo(file).catch(() => {
-        throw new Error("Couldn’t read that image. Pick a PNG, JPEG, WebP, or GIF.");
-      });
+      const png = await previewLogo(file);
       if (!png) {
         return;
       }
