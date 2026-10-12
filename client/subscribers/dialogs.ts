@@ -15,10 +15,11 @@ import { busy, modal, toast } from "../ui/widgets";
  * before the publisher types anything: the standing line, no address field, its act
  * disabled (DESIGN §2).
  */
-export function addSubscriberModal(onDone?: () => void): void {
+export function addSubscriberModal(onDone: () => void, signal: AbortSignal): void {
   const notConnected = providerNotConnected();
   const m = modal(
     html`<h3>Add subscriber</h3><p class="hint">Starts the normal double opt-in: they get a confirmation email and won't receive posts until they confirm.</p>${notConnectedAddLine()}${notConnected ? null : html`<label for="addEmail">Email address</label><input type="email" id="addEmail" placeholder="person@example.com">`}<div class="actions"><button type="button" id="aCancel">Cancel</button><button type="button" class="primary" id="aGo">Send confirmation</button></div>`,
+    signal,
   );
   const go = $<HTMLButtonElement>("#aGo", m.el);
   $("#aCancel", m.el).onclick = m.close;
@@ -43,7 +44,7 @@ export function addSubscriberModal(onDone?: () => void): void {
         });
         m.close();
         toast(addedMessage(addr, r.action));
-        onDone?.();
+        onDone();
       } catch (e) {
         toast(e instanceof Error ? e.message : String(e));
       }
@@ -65,9 +66,10 @@ function addedMessage(addr: string, action: SubscribeAction): string {
   }
 }
 
-export function confirmUnsubscribe(sub: Subscriber, onDone: () => void): void {
+export function confirmUnsubscribe(sub: Subscriber, onDone: () => void, signal: AbortSignal): void {
   const m = modal(
     html`<h3>Unsubscribe this subscriber?</h3><p class="hint">Removes <strong>${sub.email}</strong> from the send audience immediately. They can re-subscribe later through the double opt-in.</p><div class="actions"><button type="button" id="uCancel">Cancel</button><button type="button" class="danger" id="uGo">Unsubscribe</button></div>`,
+    signal,
   );
   const go = $<HTMLButtonElement>("#uGo", m.el);
   $("#uCancel", m.el).onclick = m.close;

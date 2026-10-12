@@ -202,7 +202,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
         pub.tagline ? html`<p class="muted dash-tagline">${pub.tagline}</p>` : null
       }<p class="muted">Let's get your first post out the door.</p></div></div>${setupChecklistHtml(pub, deployment)}<section class="dash-section"><h2>API access</h2>${apiConnectCard(false)}</section>`,
     );
-    wireDashActions(root, remount);
+    wireDashActions(root, remount, signal);
     return;
   }
 
@@ -280,7 +280,7 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
     </div>`,
   );
 
-  wireDashActions(root, remount);
+  wireDashActions(root, remount, signal);
   // Row / card clicks open the post (subject links + Cancel opt out — the same guard
   // the Posts table and the Sends cards use).
   for (const tr of $$<HTMLTableRowElement>("tr[data-id]", root)) {
@@ -466,7 +466,7 @@ function wireDashActiveCards(root: HTMLElement): void {
 
 // Controls shared by the Dashboard and the Getting-started view: hash navigation,
 // "New post", "Add subscriber", and copy buttons.
-function wireDashActions(root: HTMLElement, reload: () => void): void {
+function wireDashActions(root: HTMLElement, reload: () => void, signal: AbortSignal): void {
   for (const b of $$("[data-nav]", root)) {
     b.onclick = () => {
       location.hash = b.dataset.nav ?? "";
@@ -476,7 +476,7 @@ function wireDashActions(root: HTMLElement, reload: () => void): void {
     b.onclick = () => createNewPost(b);
   }
   for (const b of $$("[data-act='add-sub']", root)) {
-    b.onclick = () => addSubscriberModal(reload);
+    b.onclick = () => addSubscriberModal(reload, signal);
   }
   wireCopy(root);
 }

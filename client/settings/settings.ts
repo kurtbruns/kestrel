@@ -146,7 +146,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     `,
   );
   handles.push(
-    mountIdentity(body, page),
+    mountIdentity(body, page, signal),
     mountSubscribe(body, page),
     mountConfirmation(body, page),
     mountTemplate(body, page),
@@ -176,6 +176,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
             json: ack ? { ...payload, remake: ack } : payload,
           }),
         remakeIdentity("Save", "Saving"),
+        signal,
       );
       if (!r) {
         return; // declined: the edits stay, the bar stays up

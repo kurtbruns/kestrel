@@ -258,11 +258,16 @@ function watchHtml(send: SendView): Html {
 
 // Wire the header's Resolve control (present only while the server offers it, §12). It
 // reuses the same modal the Sent page uses, with the wedged count the send reports.
-function wireWatchHeader(root: HTMLElement, send: SendView, remount: () => void): void {
+function wireWatchHeader(
+  root: HTMLElement,
+  send: SendView,
+  remount: () => void,
+  signal: AbortSignal,
+): void {
   const rb = root.querySelector<HTMLButtonElement>("#resolveBtn");
   if (rb) {
     const count = conditionOf(send, "wedged")?.count ?? send.counts.in_flight;
-    rb.onclick = () => openResolveModal({ id: send.id, c_in_flight: count }, remount);
+    rb.onclick = () => openResolveModal({ id: send.id, c_in_flight: count }, remount, signal);
   }
 }
 function paintWatch(root: HTMLElement, prog: SendView): void {
@@ -287,7 +292,7 @@ function startWatch(
   remount: () => void,
 ): void {
   setHtml(root, watchHtml(data.send));
-  wireWatchHeader(root, data.send, remount);
+  wireWatchHeader(root, data.send, remount, signal);
   // The latest report, repainted on the clock between reports: a halt's "next retry in …"
   // counts down while nothing about the send is written.
   let latest = data.send;
@@ -307,7 +312,7 @@ function startWatch(
         // If Resolve just became possible, or stopped being, the header changes: re-render.
         if (can(fresh, "resolve") !== Boolean(root.querySelector("#resolveBtn"))) {
           setHtml(root, watchHtml(fresh));
-          wireWatchHeader(root, fresh, remount);
+          wireWatchHeader(root, fresh, remount, signal);
         } else {
           paintWatch(root, fresh);
         }

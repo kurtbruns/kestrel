@@ -142,10 +142,10 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
             items.push({
               label: "Delete draft",
               danger: true,
-              onClick: () => confirmDelete(id, reload),
+              onClick: () => confirmDelete(id, reload, signal),
             });
           }
-          openMenu(b, items);
+          openMenu(b, items, signal);
         };
       }
       renderPager(pagerEl, state, data.page, reload);
@@ -212,9 +212,10 @@ export async function renderDrafts(root: HTMLElement, signal: AbortSignal): Prom
   await firstLoad();
 }
 
-function confirmDelete(pid: string, reload: () => unknown): void {
+function confirmDelete(pid: string, reload: () => unknown, signal: AbortSignal): void {
   const m = modal(
     html`<h3>Delete draft?</h3><p class="hint">This permanently deletes the draft and its revisions. This can't be undone.</p><div class="actions"><button type="button" id="dCancel">Cancel</button><button type="button" class="danger" id="dGo">Delete</button></div>`,
+    signal,
   );
   const go = $<HTMLButtonElement>("#dGo", m.el);
   $("#dCancel", m.el).onclick = m.close;

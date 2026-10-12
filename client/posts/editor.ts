@@ -1028,7 +1028,7 @@ export async function renderEditor(
     }
 
     // --- reschedule (from the scheduled banner): move the fire time, content stays frozen ---
-    reschedBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount);
+    reschedBtn.onclick = () => openRescheduleModal(current.id, current.fire_at, remount, signal);
 
     // --- cancel schedule (from the scheduled banner) ---
     cancelBtn.onclick = () =>
@@ -1171,6 +1171,7 @@ export async function renderEditor(
     const notConnected = providerNotConnected();
     const m = modal(
       html`<h3>Send a test</h3><p class="hint">${lead}</p>${notConnectedTestLine()}${notConnected ? null : html`<label for="testTo">Recipients</label><textarea id="testTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="testDefaultsHint" hidden></p>`}<div class="actions"><button type="button" id="tCancel">Cancel</button><button type="button" class="primary" id="tGo">Send test</button></div>`,
+      signal,
     );
     const go = $<HTMLButtonElement>("#tGo", m.el);
     $("#tCancel", m.el).onclick = m.close;
@@ -1258,7 +1259,7 @@ export async function renderEditor(
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §2).
       const notConnected = providerNotConnected();
       const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Skip the review window?</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
-      const m = modal(scheduleView);
+      const m = modal(scheduleView, signal);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
       // the whole answer — so make sure the publisher is actually looking at it: they

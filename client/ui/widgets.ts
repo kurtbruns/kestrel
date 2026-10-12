@@ -66,14 +66,21 @@ export interface Modal {
   close: () => void;
 }
 
-/** A modal over a backdrop; a click outside or Escape closes it. The content is markup. */
-export function modal(content: Html): Modal {
+/**
+ * A modal over a backdrop; a click outside or Escape closes it. The content is markup.
+ * The dialog belongs to the view that opened it: `signal` is that view's mount signal, and
+ * when it aborts (a navigation, a remount) the dialog closes with it, so it never sits over
+ * a page it does not belong to. Only the dialog goes: a write already started from it does
+ * not take the signal (no write does) and still lands, its answer arriving after the
+ * dialog is gone.
+ */
+export function modal(content: Html, signal: AbortSignal): Modal {
   const back = document.createElement("div");
   back.className = "modal-backdrop";
   setHtml(back, html`<div class="modal" role="dialog" aria-modal="true">${content}</div>`);
-  document.body.appendChild(back);
-  // Escape listens on the document, so close() takes the listener with it however the
-  // dialog closes (a button, the backdrop, Escape), and it lives as long as the dialog.
+  // Escape listens on the document and the end of the view on its signal, so close()
+  // takes both listeners with it however the dialog closes (a button, the backdrop,
+  // Escape, the view ending), and each lives exactly as long as the dialog.
   const onEsc = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
       close();
@@ -82,13 +89,20 @@ export function modal(content: Html): Modal {
   const close = () => {
     back.remove();
     document.removeEventListener("keydown", onEsc);
+    signal.removeEventListener("abort", close);
   };
+  if (signal.aborted) {
+    // The view is already gone, so the dialog is never shown.
+    return { el: back, close };
+  }
+  document.body.appendChild(back);
   back.addEventListener("click", (e) => {
     if (e.target === back) {
       close();
     }
   });
   document.addEventListener("keydown", onEsc);
+  signal.addEventListener("abort", close, { once: true });
   return { el: back, close };
 }
 
@@ -155,15 +169,25 @@ export interface MenuItem {
 // popover menu for row actions (⋯). A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls: HTMLElement[] = [];
+let menuSignal: AbortSignal | null = null;
 function closeMenu(): void {
   for (const e of menuEls) {
     e.remove();
   }
   menuEls = [];
+  menuSignal?.removeEventListener("abort", closeMenu);
+  menuSignal = null;
 }
-/** Open a row-action menu under an anchor; any outside click or a pick closes it. */
-export function openMenu(anchor: Element, items: MenuItem[]): void {
+/**
+ * Open a row-action menu under an anchor; any outside click or a pick closes it. Like a
+ * modal, it belongs to the view that opened it and closes when `signal`, that view's
+ * mount signal, aborts.
+ */
+export function openMenu(anchor: Element, items: MenuItem[], signal: AbortSignal): void {
   closeMenu();
+  if (signal.aborted) {
+    return;
+  }
   const overlay = document.createElement("div");
   overlay.className = "menu-overlay";
   overlay.onclick = closeMenu;
@@ -183,6 +207,8 @@ export function openMenu(anchor: Element, items: MenuItem[]): void {
   document.body.appendChild(overlay);
   document.body.appendChild(m);
   menuEls = [overlay, m];
+  menuSignal = signal;
+  signal.addEventListener("abort", closeMenu, { once: true });
   const r = anchor.getBoundingClientRect();
   m.style.top = `${r.bottom + window.scrollY + 4}px`;
   m.style.left = `${r.right + window.scrollX - m.offsetWidth}px`;

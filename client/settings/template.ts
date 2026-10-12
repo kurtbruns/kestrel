@@ -616,12 +616,16 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
   // Save and Save-&-send-test.
   async function saveTemplate(): Promise<TemplateSaved | null> {
     const value = tplEditor.value;
-    const r = await withRemakeConfirm((ack) => {
-      const body: SettingsPatchBody = ack
-        ? { emailTemplate: value, remake: ack }
-        : { emailTemplate: value };
-      return api<SettingsSavedResponse>("/api/settings", { method: "PUT", json: body });
-    }, REMAKE_TEMPLATE);
+    const r = await withRemakeConfirm(
+      (ack) => {
+        const body: SettingsPatchBody = ack
+          ? { emailTemplate: value, remake: ack }
+          : { emailTemplate: value };
+        return api<SettingsSavedResponse>("/api/settings", { method: "PUT", json: body });
+      },
+      REMAKE_TEMPLATE,
+      signal,
+    );
     if (!r) {
       return null;
     }
@@ -761,6 +765,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
       }${notConnected ? null : html`<label for="tplTestTo">Recipients</label><textarea id="tplTestTo" rows="3" placeholder="you@example.com"></textarea><p class="hint" id="tplTestHint" hidden></p>`}<div class="actions"><button type="button" id="ttCancel">Cancel</button><button type="button" class="primary" id="ttGo">${
         dirty ? "Save & send test" : "Send test"
       }</button></div>`,
+      signal,
     );
     const go = $<HTMLButtonElement>("#ttGo", m.el);
     $("#ttCancel", m.el).onclick = m.close;

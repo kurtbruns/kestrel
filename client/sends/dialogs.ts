@@ -20,6 +20,7 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 export function openResolveModal(
   send: Pick<SendSummary, "id" | "c_in_flight">,
   reload: () => void,
+  signal: AbortSignal,
 ): void {
   const n = send.c_in_flight || 0;
   const noun = n === 1 ? "delivery" : "deliveries";
@@ -29,6 +30,7 @@ export function openResolveModal(
       <p class="hint"><strong>Assume not sent</strong> — recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>
       <p class="hint"><strong>Assume sent</strong> — recorded as delivered. Choose this only if you've confirmed it in your provider's console.</p>
       <div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rUnsent">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
+    signal,
   );
   $("#rCancel", m.el).onclick = m.close;
   const doResolve = (btn: HTMLButtonElement, resolution: StuckResolution, verb: string) =>
@@ -63,6 +65,7 @@ export function openRescheduleModal(
   sendId: string,
   currentFireAt: number,
   onDone: () => void,
+  signal: AbortSignal,
 ): void {
   const minStr = toLocalInput(earliestFireAt());
   const cur = toLocalInput(new Date(currentFireAt));
@@ -72,6 +75,7 @@ export function openRescheduleModal(
       ${notConnectedRescheduleLine()}
       <label for="rsWhen">Send at</label><input type="datetime-local" id="rsWhen" min="${minStr}" value="${cur}">
       <div class="actions"><button type="button" id="rsCancel">Cancel</button><button type="button" class="primary" id="rsGo">Reschedule</button></div>`,
+    signal,
   );
   const box = $(".modal", m.el);
   box.setAttribute("aria-labelledby", "rsHead");

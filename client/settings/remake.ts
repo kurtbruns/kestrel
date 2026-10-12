@@ -48,11 +48,14 @@ export function isRemakeTooClose(e: unknown): boolean {
  * a second refusal (a send scheduled meanwhile) asks again with the fresh list. Resolves
  * to the write's response, or to null when the publisher canceled (the caller then leaves
  * everything as it was). Any other refusal, including 409 remake_too_close (a send about
- * to fire), is rethrown for the surface's own blocking-error home.
+ * to fire), is rethrown for the surface's own blocking-error home. The confirmation
+ * belongs to the page, so `signal` is the page's mount signal: leaving the page closes it,
+ * which counts as a cancel, and nothing is saved that the publisher never confirmed.
  */
 export async function withRemakeConfirm<T>(
   attempt: (ack: string[] | null) => Promise<T>,
   verb: RemakeVerb,
+  signal: AbortSignal,
 ): Promise<T | null> {
   let ack: string[] | null = null;
   for (;;) {
@@ -64,7 +67,7 @@ export async function withRemakeConfirm<T>(
         throw err;
       }
       const sends = required.sends || [];
-      const ok = await confirmRemake(sends, verb);
+      const ok = await confirmRemake(sends, verb, signal);
       if (!ok) {
         return null;
       }
@@ -77,7 +80,11 @@ export async function withRemakeConfirm<T>(
 // scheduled posts by name, three short facts the publisher scans (what changes, what
 // stays, what's next), and the alternative (a second template, which Kestrel does not
 // offer yet).
-function confirmRemake(sends: ScheduledSendRef[], verb: RemakeVerb): Promise<boolean> {
+function confirmRemake(
+  sends: ScheduledSendRef[],
+  verb: RemakeVerb,
+  signal: AbortSignal,
+): Promise<boolean> {
   const n = sends.length;
   const one = n === 1;
   const noun = `${n} scheduled email${one ? "" : "s"}`;
@@ -96,7 +103,13 @@ function confirmRemake(sends: ScheduledSendRef[], verb: RemakeVerb): Promise<boo
         </dl>
         <p class="hint">To leave scheduled emails as they are while future posts change, you'd need a second template, which Kestrel doesn't offer yet.</p>
         <div class="actions"><button type="button" id="rmCancel">Cancel</button><button type="button" class="primary" id="rmGo">${verb.action} and apply</button></div>`,
+      signal,
     );
+    // The page is already gone, so the dialog never showed: nothing was confirmed.
+    if (!m.el.isConnected) {
+      resolve(false);
+      return;
+    }
     let settled = false;
     const done = (v: boolean) => {
       if (!settled) {
@@ -118,7 +131,8 @@ function confirmRemake(sends: ScheduledSendRef[], verb: RemakeVerb): Promise<boo
         done(true);
       };
     }
-    // Backdrop click / Escape close the modal without going through a button.
+    // Backdrop click, Escape, and leaving the page close the modal without going through
+    // a button.
     const obs = new MutationObserver(() => {
       if (!m.el.isConnected) {
         obs.disconnect();

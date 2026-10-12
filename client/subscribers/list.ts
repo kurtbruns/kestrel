@@ -80,14 +80,14 @@ export async function renderSubscribers(
           { below: true },
         )}</div>`,
       );
-      renderSubTable(listEl, data.subscribers, state, load);
+      renderSubTable(listEl, data.subscribers, state, load, signal);
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, e instanceof Error ? e.message : String(e), load);
     }
   }
 
-  $("#addSub").onclick = () => addSubscriberModal(load);
+  $("#addSub").onclick = () => addSubscriberModal(load, signal);
   wireToolbar(root, state, load);
   load();
 }
@@ -123,6 +123,7 @@ function renderSubTable(
   rows: SubscriberListItem[],
   state: ListState,
   reload: () => void,
+  signal: AbortSignal,
 ): void {
   if (!rows.length) {
     setHtml(listEl, html`<p class="muted">No subscribers match.</p>`);
@@ -148,9 +149,17 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      openMenu(b, [
-        { label: "Unsubscribe", danger: true, onClick: () => confirmUnsubscribe(row, reload) },
-      ]);
+      openMenu(
+        b,
+        [
+          {
+            label: "Unsubscribe",
+            danger: true,
+            onClick: () => confirmUnsubscribe(row, reload, signal),
+          },
+        ],
+        signal,
+      );
     };
   }
 }

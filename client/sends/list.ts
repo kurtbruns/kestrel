@@ -154,7 +154,8 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
     for (const b of $$<HTMLButtonElement>("[data-resolve]", stuckEl)) {
       const w = wedged.find((x) => x.s.id === b.dataset.resolve);
       if (w) {
-        b.onclick = () => openResolveModal({ id: w.s.id, c_in_flight: w.c.count }, afterAct);
+        b.onclick = () =>
+          openResolveModal({ id: w.s.id, c_in_flight: w.c.count }, afterAct, signal);
       }
     }
   }
@@ -305,7 +306,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
       for (const b of $$<HTMLButtonElement>("[data-reschedule]", schedEl)) {
         const s = sends.find((x) => x.id === b.dataset.reschedule);
         if (s) {
-          b.onclick = () => openRescheduleModal(s.id, s.fire_at, afterAct);
+          b.onclick = () => openRescheduleModal(s.id, s.fire_at, afterAct, signal);
         }
       }
       for (const b of $$<HTMLButtonElement>("[data-cancel]", schedEl)) {

@@ -97,7 +97,11 @@ export function identitySection(page: SettingsPage): Html {
     </section>`;
 }
 
-export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHandle {
+export function mountIdentity(
+  root: HTMLElement,
+  page: SettingsPage,
+  signal: AbortSignal,
+): SectionHandle {
   const { state } = page;
   const nameEl = $<HTMLInputElement>("#setName", root);
   const taglineEl = $<HTMLInputElement>("#setTagline", root);
@@ -230,6 +234,7 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
           return api<LogoResponse>(`/api/settings/logo${q}`, { method: "POST", body: fd });
         },
         remakeIdentity("Upload", "Uploading"),
+        signal,
       );
       if (r) {
         logoSaved(r, cropped ? "Logo updated, cropped to its center square" : "Logo updated");
@@ -248,6 +253,7 @@ export function mountIdentity(root: HTMLElement, page: SettingsPage): SectionHan
             return api<LogoResponse>(`/api/settings/logo${q}`, { method: "DELETE" });
           },
           remakeIdentity("Remove", "Removing"),
+          signal,
         );
         if (r) {
           logoSaved(r, "Logo removed");

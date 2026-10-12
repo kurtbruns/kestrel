@@ -11,6 +11,9 @@ import {
   withRemakeConfirm,
 } from "./remake";
 
+// The signal of a page that stays mounted throughout.
+const live = new AbortController().signal;
+
 const ref = (id: string, subject: string): ScheduledSendRef => ({
   id,
   post_id: `p-${id}`,
@@ -47,14 +50,14 @@ describe("withRemakeConfirm", () => {
 
   it("writes once, asking nothing, when the server needs no acknowledgement", async () => {
     const s = server();
-    expect(await withRemakeConfirm(s.attempt, REMAKE_TEMPLATE)).toBe("saved");
+    expect(await withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live)).toBe("saved");
     expect(s.acks).toEqual([null]);
     expect(document.querySelector(".modal")).toBeNull();
   });
 
   it("asks with the sends the server listed, and retries acknowledging exactly those", async () => {
     const s = server(required([ref("x1", "Gulls"), ref("x2", "")]));
-    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE);
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
     await settle();
     expect($(".modal h3").textContent).toBe("Apply this change to 2 scheduled emails?");
     expect($(".modal .hint").textContent).toBe(
@@ -76,7 +79,7 @@ describe("withRemakeConfirm", () => {
       required([ref("x1", "Gulls")]),
       required([ref("x1", "Gulls"), ref("x3", "Terns")]),
     );
-    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE);
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
     await settle();
     $("#rmGo").click();
     await settle();
@@ -88,7 +91,7 @@ describe("withRemakeConfirm", () => {
 
   it("backs out on Cancel: nothing is retried, and the caller is told so", async () => {
     const s = server(required([ref("x1", "Gulls")]));
-    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE);
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
     await settle();
     $("#rmCancel").click();
     expect(await out).toBeNull();
@@ -98,16 +101,28 @@ describe("withRemakeConfirm", () => {
 
   it("backs out when the dialog is closed without a button", async () => {
     const s = server(required([ref("x1", "Gulls")]));
-    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE);
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
     await settle();
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(await out).toBeNull();
     expect(s.acks).toEqual([null]);
   });
 
+  it("backs out when the page goes, taking the dialog with it", async () => {
+    const page = new AbortController();
+    const s = server(required([ref("x1", "Gulls")]));
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, page.signal);
+    await settle();
+    expect(document.querySelector(".modal")).not.toBeNull();
+    page.abort();
+    expect(await out).toBeNull();
+    expect(s.acks).toEqual([null]);
+    expect(document.querySelector(".modal")).toBeNull();
+  });
+
   it("hands any other refusal back to the surface, a send about to fire included", async () => {
     const s = server(tooClose());
-    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE);
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
     await expect(out).rejects.toSatisfy(isRemakeTooClose);
     expect(document.querySelector(".modal")).toBeNull();
   });
