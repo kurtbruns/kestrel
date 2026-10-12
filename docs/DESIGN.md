@@ -132,7 +132,7 @@ Stacking is a single named ladder, and every fixed or floating surface reference
 
 The order encodes the intent: a menu opens over the content and headers; a fixed bar sits above the content it's saving; a toast confirms above that bar; a modal takes the whole screen and sits above everything. Because features reference the rung and not a number, the ladder is the one place stacking is reasoned about — a new floating surface picks the rung whose meaning fits and inherits a consistent order, instead of guessing a literal that happens to be higher than its neighbor today.
 
-A modal and a menu belong to the page that opened them. Leaving the page, by Back, a link, or a changed URL, closes any that page left open, so neither ever sits over a page it wasn't opened for, where its confirm would act on a post or send no longer on screen. Only the surface goes: a save, a schedule, or any other write already started from it still lands, and its toast still says so.
+A modal and a menu belong to the page that opened them. Leaving the page, by Back, a link, or a changed URL, closes any that page left open, so neither ever sits over a page it wasn't opened for, where its confirm would act on a post or send no longer on screen. Only the surface goes: a save, a schedule, or any other write already started from it still lands, and its toast still says so. A save left waiting on the re-make confirmation (§5) is not made, since nobody confirmed it, and a toast on the next page says "Not saved: the change needed your confirmation".
 
 ---
 

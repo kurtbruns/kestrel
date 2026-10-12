@@ -6,7 +6,7 @@ import { ApiError } from "../api";
 import { fmt } from "../ui/format";
 import { type Html, html } from "../ui/html";
 import { icon } from "../ui/icons";
-import { modal } from "../ui/widgets";
+import { modal, toast } from "../ui/widgets";
 
 /** The words a re-make confirmation uses for the commit: { action: "Save", gerund: "Saving", lead(n) }. */
 export interface RemakeVerb {
@@ -25,6 +25,9 @@ function remakeRequired(e: unknown): RemakeRequiredError | null {
   }
   return null;
 }
+
+// What a save the page left before confirming says, wherever the publisher went.
+const NOT_SAVED = "Not saved: the change needed your confirmation";
 
 /**
  * The other re-make refusal (SPEC §9): a scheduled send is about to fire, so the save
@@ -50,7 +53,8 @@ export function isRemakeTooClose(e: unknown): boolean {
  * everything as it was). Any other refusal, including 409 remake_too_close (a send about
  * to fire), is rethrown for the surface's own blocking-error home. The confirmation
  * belongs to the page, so `signal` is the page's mount signal: leaving the page closes it,
- * which counts as a cancel, and nothing is saved that the publisher never confirmed.
+ * which counts as a cancel, and nothing is saved that the publisher never confirmed; a
+ * toast says so, since they are no longer on the page that would show it.
  */
 export async function withRemakeConfirm<T>(
   attempt: (ack: string[] | null) => Promise<T>,
@@ -69,6 +73,12 @@ export async function withRemakeConfirm<T>(
       const sends = required.sends || [];
       const ok = await confirmRemake(sends, verb, signal);
       if (!ok) {
+        // A publisher who pressed Save and left before (or while) the confirmation showed
+        // would otherwise never learn the save didn't happen. The toast region is the
+        // app's, not the page's, so it shows on whatever page they went to.
+        if (signal.aborted) {
+          toast(NOT_SAVED);
+        }
         return null;
       }
       ack = sends.map((s) => s.id);

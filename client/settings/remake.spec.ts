@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { ScheduledSendRef } from "../../shared/settings";
 import { ApiError } from "../api";
-import { $, $$, resetShell, settle } from "../test/support";
+import { $, $$, mount, resetShell, settle } from "../test/support";
 import { fmt } from "../ui/format";
 import {
   inUseChip,
@@ -118,6 +118,42 @@ describe("withRemakeConfirm", () => {
     expect(await out).toBeNull();
     expect(s.acks).toEqual([null]);
     expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toBe("Not saved: the change needed your confirmation");
+  });
+
+  it("says the save didn't happen, on the next page, when the page went before the server asked", async () => {
+    // The save starts on one mounted page; its answer, asking for the acknowledgement,
+    // arrives only after another page has mounted, so the dialog never shows.
+    let refuse: () => void = () => {};
+    const acks: (string[] | null)[] = [];
+    const attempt = (ack: string[] | null) => {
+      acks.push(ack);
+      return new Promise<string>((_, reject) => {
+        refuse = () => reject(required([ref("x1", "Gulls")]));
+      });
+    };
+    let out: Promise<string | null> = Promise.resolve(null);
+    await mount((_r, signal) => {
+      out = withRemakeConfirm(attempt, REMAKE_TEMPLATE, signal);
+    });
+    await mount((r) => {
+      r.textContent = "another page";
+    });
+    refuse();
+    expect(await out).toBeNull();
+    expect(acks).toEqual([null]);
+    expect(document.querySelector(".modal")).toBeNull();
+    expect($("#toasts").textContent).toBe("Not saved: the change needed your confirmation");
+    expect($("#app").textContent).toBe("another page");
+  });
+
+  it("says nothing more when the publisher cancels on the page", async () => {
+    const s = server(required([ref("x1", "Gulls")]));
+    const out = withRemakeConfirm(s.attempt, REMAKE_TEMPLATE, live);
+    await settle();
+    $("#rmCancel").click();
+    expect(await out).toBeNull();
+    expect($("#toasts").textContent).toBe("");
   });
 
   it("hands any other refusal back to the surface, a send about to fire included", async () => {

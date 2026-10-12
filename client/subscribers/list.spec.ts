@@ -132,6 +132,7 @@ describe("subscribers view", () => {
     await nextPage();
     expect(document.querySelector(".menu")).toBeNull();
     expect(document.querySelector(".menu-overlay")).toBeNull();
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("lands a write the dialog started, though the page and the dialog have gone", async () => {
@@ -159,6 +160,7 @@ describe("subscribers view", () => {
     expect(write.map((c) => c.url.pathname)).toEqual(["/api/subscribers/s1/unsubscribe"]);
     expect($("#toasts").textContent).toMatch(/Unsubscribed a@b\.c/);
     expect($("#app").textContent).toBe("another page");
+    expect(fake.unhandled).toEqual([]);
   });
 
   for (const [action, said] of [
