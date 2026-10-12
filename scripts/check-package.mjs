@@ -205,6 +205,10 @@ if (typecheck.status !== 0) {
 if (/Action required/.test(`${typecheck.stdout}${typecheck.stderr}`)) {
   fail("the instance's typecheck ends with wrangler's \"Action required\"");
 }
+// What wrangler tests before asking for Node types: the scaffold's @types/node is installed.
+if (!existsSync(join(instance, "node_modules", "@types", "node"))) {
+  fail("the instance has no node_modules/@types/node: keep it in template/package.json");
+}
 // Again without skipLibCheck, so Kestrel's own declaration is checked too.
 step("npx", ["--no", "--", "tsc", "--skipLibCheck", "false"]);
 step("npx", ["--no", "--", "wrangler", "deploy", "--dry-run", "--outdir", "bundle"]);

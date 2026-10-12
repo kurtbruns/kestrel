@@ -86,7 +86,7 @@ Each command creates the resource and writes its id or name into the `production
     npx wrangler d1 create kestrel-production --env production --binding DB --update-config
     ```
 
-    It prints the new database's settings, then fills in the `database_id` of the production `DB` binding with the database's real id, in place of `REPLACE_WITH_PRODUCTION_D1_ID`.
+    It prints the new database's settings, then a snippet it says to add to your configuration. Wrangler has already added it: it fills in the `database_id` of the production `DB` binding with the database's real id, in place of `REPLACE_WITH_PRODUCTION_D1_ID`, so there's nothing to paste.
 
 1. Create the bucket for images:
 
@@ -94,7 +94,7 @@ Each command creates the resource and writes its id or name into the `production
     npx wrangler r2 bucket create kestrel-media-production --env production --binding MEDIA --update-config
     ```
 
-    The production `MEDIA` binding already names this bucket, so it stays as it is.
+    It prints a snippet to add to your configuration too. There's nothing to paste here either: the production `MEDIA` binding already names this bucket, so it stays as it is.
 
 Wrangler rewrites the whole of `wrangler.jsonc` in its own layout when it saves: tabs, and one value per line. Your comments and settings stay; only the spacing changes.
 
@@ -104,7 +104,7 @@ Name `--env production` on every Wrangler command that creates or binds a resour
 
 `wrangler.jsonc` holds two sets of settings. The top level is for local development, so leave it alone. The `production` block under `env` is yours to fill in.
 
-1. Open `wrangler.jsonc` and change the values marked here in the `production` block:
+1. Open `wrangler.jsonc` and change the values marked here in the `production` block. It's shown compactly here; in your file, after section 3, each value is on its own line:
 
     ```jsonc
     "production": {
