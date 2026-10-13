@@ -464,7 +464,7 @@ describe("editor view", () => {
     const linked = scheduledPost(Date.now() + 65_000);
     await open(linked.routes);
     const when = () => $("#schedWhen").textContent;
-    expect(when()).toMatch(/^Scheduled for .+ · Sends in 1m 05s · cancelable until then\.$/);
+    expect(when()).toMatch(/^Scheduled for .+ · Sends in 1m 05s$/);
     await vi.advanceTimersByTimeAsync(1_000);
     expect(when()).toMatch(/Sends in 1m 04s/);
     expect($<HTMLElement>("#schedControls").hidden).toBe(false);
@@ -1766,7 +1766,7 @@ describe("editor view", () => {
     const scheduled = fake.calls.find((c) => c.url.pathname === "/api/posts/p1/schedule");
     expect(scheduled?.json()).toEqual({ fire_at: new Date("2026-09-25T15:00").toISOString() });
     expect($("#toasts").textContent).toMatch(/Scheduled for/);
-    expect($(".banner-scheduled").textContent).toMatch(/cancelable until then/);
+    expect($(".banner-scheduled").textContent).toMatch(/Scheduled for .+ · Sends in /);
     expect(body().readOnly).toBe(true);
   });
 

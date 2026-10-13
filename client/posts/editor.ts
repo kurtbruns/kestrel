@@ -1509,7 +1509,7 @@ function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
   if (due) {
     return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at, true)}</span>`;
   }
-  return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span> · cancelable until then.`;
+  return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span>`;
 }
 
 /** Whether a read or write found its post (or its send, which goes with it) gone. */
