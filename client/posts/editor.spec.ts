@@ -1918,7 +1918,9 @@ describe("editor view", () => {
       },
     ]);
     $("#scheduleBtn").click();
-    expect($(".modal .hint").textContent).toMatch(/at least 1 minute out/);
+    expect($(".modal .hint").textContent).toBe(
+      "It sends at the time you pick, with a cancelable window until then.",
+    );
     // One lead plus the minute the picker can't show: 10:00:30 + 2 min, to the minute.
     expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
     $("#toSendNow").click();
