@@ -119,7 +119,7 @@ export async function freeze(
       "post_not_draft",
       post.status === "sent"
         ? "This post has already been sent, so it can’t be scheduled again."
-        : "This post is already scheduled.",
+        : "This post is already scheduled. Reschedule or cancel its send instead.",
     );
   }
   // The subject is the one field the reader sees in their inbox (SPEC §6). One

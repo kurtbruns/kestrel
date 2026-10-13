@@ -209,7 +209,7 @@ export async function feed(c: RequestContext): Promise<Response> {
     throw new HttpError(
       409,
       "cursor_ahead",
-      "since is ahead of this database (reset or restored since the cursor was read); read the sends again and follow from that read’s cursor",
+      "since is ahead of this database (reset or restored since the cursor was read); read the sends again and follow from that read's cursor",
       { field: "since", cursor: encodeSendCursor({ seq: read.current, at: now }) },
     );
   }

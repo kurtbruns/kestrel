@@ -28,7 +28,7 @@
  * the send, Resolve is refused and can be tried again a moment later.
  */
 
-import type { StuckResolution } from "../../shared/sends";
+import type { SendStatus, StuckResolution } from "../../shared/sends";
 import * as sends from "../db/sends";
 import type { AppEnv } from "../env";
 import { notFound, refusal } from "../lib/errors";
@@ -38,6 +38,13 @@ import { isWedged } from "./wedged";
 
 // The resolution lives in shared/ so the editor reads the same definition.
 export type { StuckResolution };
+
+// Why a send that isn't sending has nothing to resolve, in words rather than its status name.
+const NOT_SENDING: Record<Exclude<SendStatus, "sending">, string> = {
+  scheduled: "hasn’t started",
+  sent: "has finished",
+  canceled: "was canceled",
+};
 
 /** What a Resolve did: how many ambiguous recipients it settled, and whether the send
  *  then finished. The route answers with the send as it now stands beside these. */
@@ -78,7 +85,7 @@ export async function resolveStuckSend(
       "not_wedged",
       send.status === "sending"
         ? "Nothing on this send needs resolving: it still has recipients to hand off, or a run has yet to look at those in flight."
-        : `This send is ${send.status}, so there’s nothing to resolve.`,
+        : `This send ${NOT_SENDING[send.status]}, so there’s nothing to resolve.`,
     );
   }
 

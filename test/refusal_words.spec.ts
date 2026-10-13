@@ -233,6 +233,10 @@ function messages(): { where: string; text: string }[] {
 const EM_DASH = /—|\\u2014|&mdash;/;
 // A straight apostrophe inside a word ("don't", "SES's"), where the copy uses ’.
 const STRAIGHT_APOSTROPHE = /\w'\w/;
+// Refusals no page can meet, only a hand-written API call: a cross-site request and a cursor
+// from a reset database. They are written for Claude and API clients, in plain ASCII, so the
+// apostrophe rule for the publisher's copy doesn't hold them.
+const API_ONLY = ['"cross_site_request"', '"cursor_ahead"'];
 
 describe("the words the API shows the publisher", () => {
   const found = messages();
@@ -266,9 +270,18 @@ describe("the words the API shows the publisher", () => {
 
   it("use a typographic apostrophe, never a straight one, in their words (DESIGN §10)", () => {
     const straight = found
+      .filter((m) => !API_ONLY.some((code) => m.text.includes(code)))
       .filter((m) => literals(m.text).some((words) => STRAIGHT_APOSTROPHE.test(words)))
       .map((m) => `${m.where} ${m.text}`);
     expect(straight).toEqual([]);
+  });
+
+  it("leaves the refusals only an API call meets in plain ASCII", () => {
+    for (const code of API_ONLY) {
+      const message = found.find((m) => m.text.includes(code));
+      expect(message, code).toBeDefined();
+      expect(message?.text).not.toMatch(/[’“”]/);
+    }
   });
 
   it("reads a message wherever the call writes it, across lines and inside an interpolation", () => {
