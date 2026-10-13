@@ -93,7 +93,7 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
         `Problem with ${title}: waiting for you to resolve it`,
         [
           `${title} has handed off everyone it can, but the provider never answered for ${n.c_in_flight} recipients, so whether they were mailed is unknown. Sending them again could mail them twice, so the send waits for you.`,
-          "Open the send and choose Resolve: assume they were not sent, or that they were, once you have checked the provider's console.",
+          "Open the send and choose Resolve. Amazon SES can't show whether these emails went out, so Assume not sent is the safe default: those readers miss this post and get the next one, and no one is mailed twice. Choose Assume sent when you know otherwise, such as a reader who says they got it.",
         ],
         link,
       );

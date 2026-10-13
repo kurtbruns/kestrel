@@ -25,6 +25,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - The setup guide walks through Amazon SES. Get started's step 3 is now Connect Amazon SES, which replaces Connect an email provider (Resend) and takes over the Use Amazon SES instead of Resend guide; the editor's links to the setup step open it, Go live says how fast a send goes out and when to raise the send rate or the Workers plan, and local development simulates SES by default. SPEC §10 says why Resend doesn't fit a newsletter.
 - The operator's Claude context (`.claude/CLAUDE.md` in a new instance) names `ses` as the value the setup guide's provider step gives `PROVIDER`, where it named `resend` or `ses`. `npm run check-context` reports the change; if you edited your `.claude/CLAUDE.md`, change that line by hand.
 - SES now takes a batch a request through its bulk API: one second of your account's send rate, up to 50 recipients, one request a second. On Workers Free a minute sends 56 recipients at a send rate of 14 and 200 at 50 or more, where it sent about 18, so SES no longer needs Workers Paid, and the setup guide says to raise the account's send rate to 50 before changing plans. Each reader's email, unsubscribe link, and one-click headers are as before, and a test, a confirmation, or a notification goes through SES's single-send API with the same template, so it is the same email without queuing behind the bulk API's one request a second. A request SES never answers now holds the send for an outage's backoff, so an unreachable SES leaves one batch for Resolve rather than one every minute. Recipients SES holds back for a throttle or a spent quota go back to the queue without spending one of their attempts, and the send says why. A request lost in flight now leaves its whole batch for Resolve rather than one recipient, and an email SES took but couldn't build is logged as `webhook.render_failed` (SPEC §10, §12).
@@ -72,6 +73,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - A new instance's `.dev.vars.example` holds only what local development uses (the local sign-in secret, the minimum lead, and the send simulation). The blank Access and email-provider entries are gone: they did nothing locally, and setting an Access value there turned local sign-in off. A deployed instance's secrets are listed in the Configuration reference.
 - The setup guide's Overview page is folded into Deploy the app: what Get started needs is now Deploy's Before you begin, followed by choosing your hostnames. Get started is five steps, and Connect Resend, now step 3, is renamed Connect an email provider: it still walks through Resend, and points to the SES guide.
 - While the configuration is refused, the public pages readers see answer a plain "temporarily unavailable" page (503) that names no setting, instead of the JSON error naming it; the API, `/health`, and the webhooks still answer `invalid_config` with the variable. The editor shows one page saying what's wrong, with a link to that setting in the Configuration reference, instead of failing call by call (SPEC §9).
@@ -94,6 +96,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - A logo you upload in Settings is now cropped to its center square and saved as a 256 × 256 image, so it looks the same everywhere and is never stretched in an email. The tile shows the result, the confirmation says when the edges were cropped, and Replace picks another. A logo you uploaded before that isn't square is flagged in Settings, since emails show it stretched; upload it again to have it cropped.
 - Settings orders its sections by whom they serve, editable first: your publication's identity; then, in the order a reader meets them, the ways to subscribe, the confirmation email, and the reader pages; then the email template and your test recipients; then notifications; and last, read-only, what only a redeploy changes (the email sender and the instance). The embeddable form's Styled | Plain choice is now the same toggle as the page's other two-way choices.
 - The subscribe page and the Styled embed tell a reader what happens next in plain words, "We'll email you a link to confirm. Unsubscribe anytime.", instead of "Double opt-in".
@@ -150,6 +153,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - Connecting Claude now keeps the Access service token in `.claude/settings.local.json`, which Claude Code loads into every session and the repository's `.gitignore` now covers. The `.kestrel.env.example` template is gone; an existing `.kestrel.env` stays ignored. The guide also notes that `ACCESS_ALLOWED_EMAILS` doesn't apply to the token, so its Access policy is its only gate.
 - The upgrade guide's check after deploying no longer points at all of Verify it works, whose real send would go to your whole list on a live instance; it sends a test email and reads the logs instead. Going back now gives the commands to deploy the previous release before restoring the database.
 - The Amazon SES guide now has you let SES publish to the SNS topic, without which no bounce or complaint reaches the app. It also sets the configuration set as your sending hostname's default, and covers the sandbox, production access, and a custom MAIL FROM domain step by step.
@@ -165,6 +169,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - The setup guide leads with one main path, **Get started**: six steps from a fresh clone to a live newsletter on one production environment, each ending in a check that it worked, proven with test sends to your own address before anyone subscribes (SPEC §11). It uses Resend; Amazon SES, notifications through Cloudflare's email, the archive on your website, rate-limiting the subscribe form, a staging environment, and upgrading are guides beside it, and the detail behind each step (every setting, the DNS records, how the admin gate works) is a new Reference section. The guide now lives in `docs/get-started/`, `docs/guides/`, and `docs/reference/`, with `docs/README.md` as its landing page, which the editor's Docs tab shows by section.
 - Links between guide pages now open the page in the editor's Docs tab, at the section they name, and a section's address can be shared.
 - The production template in `wrangler.jsonc` now attaches your hostname to the Worker on deploy (`routes` with `custom_domain`), keeps it off `workers.dev` and its preview URLs, starts on the `fake` provider until yours is connected, and no longer declares a staging environment.
@@ -185,6 +190,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - On a local dev server, the "Open dashboard" shortcut now shows on every public page, including each archived post and the subscribe, confirm, and unsubscribe pages, not only the landing page and archive index; a deployed instance still never shows it (SPEC §5).
 - Version numbers count releases rather than follow semver: every release bumps the middle number, even one with breaking changes, which are listed under *Breaking* with any steps under *Upgrading*; a patch release is fixes only.
 - The demo loaded by `npm run seed` is now **Field Notes**, a weekly demo publication whose issues say what Kestrel does and why someone would choose it, in place of the Windbreak birding newsletter.
@@ -227,6 +233,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - The setup guide says when it is safe to switch email providers, and the spec states what Kestrel trusts to the people who run it.
 - A fire time is now to the minute: schedule, Send now, and reschedule round the requested time up to the next whole minute, when the sweep fires it, and answer with that time, so a countdown ends when the send starts, and the Send now confirmation names that time. The minimum lead is checked on the time as requested, so the review window only grows (SPEC §6).
 - At a scheduled send's fire time, its card on the dashboard and the Sent page and the editor's banner read "Preparing to send…" until the send starts, instead of "Sending now…" or a countdown at zero, and read "Missed its fire time · N min late" in red once the send is past the server's five-minute tolerance. Cancel and Reschedule leave at that moment, on the page's own clock, without waiting for a read: the Sent page's card hides them, and the editor's banner disables them where they stand. The dashboard's warnings and the Sent page's attention cards use the server's own words for each problem, and the bounce-spike line links to the send.
@@ -273,6 +280,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - Kestrel now declares Node 22 or later, which its deploy tooling already required; the README and setup guide said Node 20.
 - `npm run deploy` and `npm run migrate:remote` now refuse to run without `--env`, so a bare command can no longer deploy the development config or migrate the wrong database. Run `npm run deploy -- --env staging` (or `production`), and `npm run migrate:remote -- --env staging` the same way.
 - The admin API now refuses a change a page on another site asks the publisher's browser to make, so a form or script elsewhere, even on another subdomain of your site, can't act with your session (SPEC §11). Each admin route takes only the body types it declares, listed per route in the API reference: a JSON body sent without `Content-Type: application/json` is now refused with a 415, as is a body sent to a route that takes none. The editor, Claude, and scripts that already send the header are unaffected.
@@ -322,6 +330,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Changed
 
+- Resolve, the wedged-send notification, and Connect Amazon SES say that SES can't show whether a lost request's emails went out, so Assume not sent is the safe default and Assume sent is for when you know otherwise, such as a reader who says they got it. Before, they said to check the provider's console, which SES doesn't offer (SPEC §12).
 - The migration history is squashed into a single baseline; no deployed database had run the old chain. Until 1.0.0 the baseline is edited in place, so when it changes an existing database is rebuilt, not migrated: delete `.wrangler/state/v3/d1` and run `npm run migrate:local`.
 - The send list's status filter no longer accepts `failed`: a send never fails, it keeps retrying and hands the one ambiguous case to you (SPEC §12). The dashboard alert for it, which could never fire, is gone.
 - Scheduling a post, or sending it now, keeps you on the post in its scheduled state instead of moving to the Sent page; the confirmation names the fire time.
