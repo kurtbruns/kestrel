@@ -53,7 +53,7 @@ export const NOT_CONNECTED_ADVICE = {
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Replace the provider's API key or credentials in the deployment's secrets.";
+      return "Replace the provider's API key or credentials in the deployment's secrets, or give the key permission to send (for SES, both ses:SendEmail and ses:SendBulkEmail).";
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":

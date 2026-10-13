@@ -137,7 +137,9 @@ describe("a send that needs the publisher", () => {
       'Problem with "Owls in winter": the provider is refusing your account',
     );
     expect(refused!.text).toContain("security token included in the request is invalid");
-    expect(refused!.text).toContain("Replace the provider's API key");
+    expect(refused!.text).toContain(
+      "Replace the provider's API key or credentials in the deployment's secrets, or give the key permission to send (for SES, both ses:SendEmail and ses:SendBulkEmail).",
+    );
     expect(refused!.text).toContain("No one has been marked unsent");
 
     await ticks(5);

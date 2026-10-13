@@ -141,11 +141,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Replace the provider's API key or credentials in the deployment's secrets.`,
+    message: `The provider is refusing the account: ${error} Replace the provider's API key or credentials in the deployment's secrets, or give the key permission to send (for SES, both ses:SendEmail and ses:SendBulkEmail).`,
     action: null,
     cause: "credentials",
     error,
-    advice: "Replace the provider's API key or credentials in the deployment's secrets.",
+    advice:
+      "Replace the provider's API key or credentials in the deployment's secrets, or give the key permission to send (for SES, both ses:SendEmail and ses:SendBulkEmail).",
     retry_at: retryAt,
   }),
   bounceSpike: (bounced: number, rate: number): SendCondition => ({
