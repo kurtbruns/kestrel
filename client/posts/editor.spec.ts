@@ -574,7 +574,7 @@ describe("editor view", () => {
     );
     await open(linked.routes);
     expect($("#schedDailyWrites").hidden).toBe(false);
-    expect($("#schedDailyWrites").textContent).toBe(message);
+    expect($("#schedDailyWritesMsg").textContent).toBe(message);
     expect(fake.unhandled).toHaveLength(0);
   });
 

@@ -210,7 +210,7 @@ export async function renderEditor(
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-daily-writes" id="schedDailyWrites" hidden></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-daily-writes" id="schedDailyWrites" hidden><span class="sched-note-mark" aria-hidden="true">⚠️</span><span id="schedDailyWritesMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1041,7 +1041,7 @@ export async function renderEditor(
       $("#schedRemadeMsg").textContent = remade?.message ?? "";
       const dailyWrites = conditionOf(current, "daily_writes");
       dailyWritesEl.hidden = !dailyWrites;
-      dailyWritesEl.textContent = dailyWrites?.message ?? "";
+      $("#schedDailyWritesMsg").textContent = dailyWrites?.message ?? "";
     };
     paintConditions();
 

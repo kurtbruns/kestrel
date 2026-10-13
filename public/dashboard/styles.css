@@ -3076,11 +3076,18 @@ textarea.is-invalid {
   font-size: 13px;
 }
 /* The scheduled banner's line for a send too large for D1's daily writes on Workers Free's
-   limits (SPEC §8): the server's condition, in the amber of a warning. */
+   limits (SPEC §8): the server's condition, in the banner's own violet so a warning that
+   blocks nothing never outweighs the send, with an amber ⚠️ to say it's worth a look. */
 .sched-daily-writes {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
   margin-top: 6px;
-  font-size: 13px;
-  color: var(--warn-fg);
+  font-size: 12.5px;
+  color: var(--status-scheduled-fg);
+}
+.sched-note-mark {
+  flex: none;
 }
 .sched-remade-mark {
   margin-top: 4px;

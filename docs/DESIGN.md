@@ -295,7 +295,7 @@ What each screen shows at each stage:
 On the Workers Free plan's limits, a send to more than 5,000 recipients may use up the database's daily writes (SPEC §8). The warning is the server's `daily_writes` condition, in its words, and it never disables a control.
 
 - **The Schedule dialog**, and its Send now view, show it as an amber box under the hint, the not-connected line's look, once the audience is read and found over the threshold. Schedule and Send now stay live: the account may be on Workers Paid, and the review window is where the publisher decides. The dialog reads the audience only on Free's limits, and only once for both views.
-- **The scheduled banner** carries the same words as an amber line under the countdown, for as long as the send is scheduled.
+- **The scheduled banner** carries the same words as a line under the countdown, for as long as the send is scheduled. The line keeps the banner's own violet, led by an amber ⚠️: a warning that blocks nothing shouldn't outweigh the send it's about, and the mark says it's worth a look without coloring the words.
 - **Nowhere else.** It isn't an attention item: nothing is wrong yet, and the health block is for what needs a person now (§1.3).
 
 An import plan's warning about the same limit (SPEC §7) is shown by whatever surface presents the plan.
