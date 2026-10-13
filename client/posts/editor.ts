@@ -24,6 +24,7 @@ import {
   notConnectedWarning,
   postArchiveUrl,
   providerNotConnected,
+  sendNowWhenText,
   tooSoonText,
   withNoProviderNote,
 } from "../deployment";
@@ -1336,7 +1337,7 @@ export async function renderEditor(
       // While no provider is connected the server would refuse both views, so the dialog
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Send as soon as possible: in ${minLeadText()}, and still cancelable until then.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView, signal);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1360,7 +1361,7 @@ export async function renderEditor(
             return;
           }
           if (isTooSoon(t)) {
-            m.error(tooSoonText(true), whenEl);
+            m.error(tooSoonText(), whenEl);
             return;
           }
           try {
@@ -1441,7 +1442,7 @@ export async function renderEditor(
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of at least ${minLeadText()}, on the minute. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1463,7 +1464,7 @@ export async function renderEditor(
           const n = s.page.total;
           const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
           if (whoEl) {
-            whoEl.textContent = `${n} confirmed subscriber${n === 1 ? "" : "s"}`;
+            whoEl.textContent = `${n} recipient${n === 1 ? "" : "s"}`;
           }
         } catch {}
       }

@@ -100,7 +100,7 @@ export function openRescheduleModal(
         return;
       }
       if (isTooSoon(t)) {
-        m.error(tooSoonText(false), when);
+        m.error(tooSoonText(), when);
         return;
       }
       try {

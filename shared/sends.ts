@@ -188,13 +188,11 @@ export function formatLead(ms: number): string {
 
 /**
  * Why a requested fire time is refused for being inside the minimum lead (SPEC §6), the one
- * wording for the server's `fire_at_too_soon` and the editor's own check before it asks: the
- * lead is what keeps a window to cancel in. Where Send now is the way to the soonest send
- * (scheduling a post, not moving a send already scheduled), it says so.
+ * wording for the server's `fire_at_too_soon` and the editor's own check before it asks, on
+ * scheduling and rescheduling alike: the lead is what keeps time to cancel.
  */
-export function tooSoonMessage(minLeadMs: number, offersSendNow: boolean): string {
-  const why = `Pick a time at least ${formatLead(minLeadMs)} from now, so there’s a window to cancel in.`;
-  return offersSendNow ? `${why} To send as soon as possible, use Send now.` : why;
+export function tooSoonMessage(minLeadMs: number): string {
+  return `Pick a time at least ${formatLead(minLeadMs)} from now, so there’s time to cancel.`;
 }
 
 /** GET /api/sends */

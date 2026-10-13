@@ -58,11 +58,23 @@ export function minLeadText(): string {
 /**
  * Why a picked time is refused for being too soon, checked before asking the server: the
  * server's own `fire_at_too_soon` words for this deployment's lead (SPEC §6), so the editor's
- * check and the server's refusal read the same. Where the dialog offers Send now, it says
- * that is the way to the soonest send.
+ * check and the server's refusal read the same.
  */
-export function tooSoonText(offersSendNow: boolean): string {
-  return tooSoonMessage(minLeadMs(), offersSendNow);
+export function tooSoonText(): string {
+  return tooSoonMessage(minLeadMs());
+}
+
+/**
+ * When a Send now goes out, in words: one lead from the request, then up to the next whole
+ * minute, since every fire time is on the minute (SPEC §6). "1 to 2 minutes" at the floor.
+ */
+export function sendNowWhenText(): string {
+  const lead = minLeadMs();
+  if (lead % 60_000 === 0) {
+    const minutes = lead / 60_000;
+    return `${minutes} to ${minutes + 1} minutes`;
+  }
+  return `${formatLead(lead)} to ${formatLead(lead + 60_000)}`;
 }
 
 /** Whether a picked time is inside the minimum lead, checked before asking the server. */

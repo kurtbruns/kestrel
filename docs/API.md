@@ -77,7 +77,7 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 
 | The client's next move | Status | Codes |
 | --- | --- | --- |
-| Fix the request | 400, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon` (a fire time inside the minimum lead, with `field`; when scheduling a post, its message points to Send now, `POST /api/posts/:id/send`, as the soonest send), `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands) |
+| Fix the request | 400, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon` (a fire time inside the minimum lead, with `field`; the soonest send is Send now, `POST /api/posts/:id/send`), `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands) |
 | Read again, then decide | 409 | `stale_revision` (a post, with the newer revision and who wrote it), `active_send_exists` (with the send), `cursor_ahead` |
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |

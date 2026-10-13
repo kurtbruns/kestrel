@@ -658,7 +658,7 @@ describe("editor view", () => {
     expect(when.classList.contains("is-invalid")).toBe(true);
     // No Send now in this dialog, so the reason says only why.
     expect($(".modal .field-error").textContent).toBe(
-      "!Pick a time at least 5 minutes from now, so there’s a window to cancel in.",
+      "!Pick a time at least 5 minutes from now, so there’s time to cancel.",
     );
   });
 
@@ -673,8 +673,7 @@ describe("editor view", () => {
           jsonResponse(
             {
               error: "fire_at_too_soon",
-              message:
-                "Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+              message: "Pick a time at least 90 seconds from now, so there’s time to cancel.",
               field: "fire_at",
             },
             400,
@@ -689,7 +688,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(when.classList.contains("is-invalid")).toBe(true);
     expect($(".modal .field-error").textContent).toBe(
-      "!Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+      "!Pick a time at least 90 seconds from now, so there’s time to cancel.",
     );
   });
 
@@ -1668,7 +1667,7 @@ describe("editor view", () => {
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
     expect(when.classList.contains("is-invalid")).toBe(true);
     expect($(".modal .field-error").textContent).toBe(
-      "!Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
+      "!Pick a time at least 5 minutes from now, so there’s time to cancel.",
     );
   });
 
@@ -1687,8 +1686,7 @@ describe("editor view", () => {
           jsonResponse(
             {
               error: "fire_at_too_soon",
-              message:
-                "Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+              message: "Pick a time at least 90 seconds from now, so there’s time to cancel.",
               field: "fire_at",
             },
             400,
@@ -1700,7 +1698,7 @@ describe("editor view", () => {
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
     expect($(".modal .field-error").textContent).toBe(
-      "!Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+      "!Pick a time at least 90 seconds from now, so there’s time to cancel.",
     );
     expect($<HTMLInputElement>("#schWhen").classList.contains("is-invalid")).toBe(true);
   });
@@ -1889,7 +1887,7 @@ describe("editor view", () => {
     $("#scheduleBtn").click();
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($("#snWho").textContent).toBe("40 confirmed subscribers");
+    expect($("#snWho").textContent).toBe("40 recipients");
     $("#toSchedule").click();
     expect($("#schGo")).toBeTruthy(); // back to the schedule view, re-wired
     $("#toSendNow").click();
@@ -1925,8 +1923,8 @@ describe("editor view", () => {
     expect($<HTMLInputElement>("#schWhen").min).toBe("2026-09-23T10:02");
     $("#toSendNow").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($(".modal .hint").textContent).toMatch(
-      /cancelable window of at least 1 minute, on the minute/,
+    expect($(".modal .hint").textContent).toBe(
+      "Sends this draft, as it is now, to your subscribers in 1 to 2 minutes. The post locks until then, and you can cancel any time before it starts sending.",
     );
     $("#snGo").click();
     await vi.advanceTimersByTimeAsync(0);

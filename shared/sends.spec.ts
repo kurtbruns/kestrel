@@ -22,12 +22,12 @@ describe("the minimum lead", () => {
     expect(formatLead(60 * 60 * 1000)).toBe("60 minutes");
   });
 
-  it("refuses a time inside it in the publisher's words, pointing to Send now where it is offered", () => {
-    expect(tooSoonMessage(DEFAULT_MIN_LEAD_MS, true)).toBe(
-      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
+  it("refuses a time inside it in the publisher's words", () => {
+    expect(tooSoonMessage(DEFAULT_MIN_LEAD_MS)).toBe(
+      "Pick a time at least 5 minutes from now, so there’s time to cancel.",
     );
-    expect(tooSoonMessage(90_000, false)).toBe(
-      "Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+    expect(tooSoonMessage(90_000)).toBe(
+      "Pick a time at least 90 seconds from now, so there’s time to cancel.",
     );
   });
 });

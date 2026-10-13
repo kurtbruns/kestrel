@@ -80,16 +80,14 @@ export function onTheMinute(fireAt: number): number {
  * is checked on the time as requested, before rounding, so rounding can only add to a window
  * that was already long enough (I6). `now` is the caller's own reading of the clock when it
  * has one (Send now asks for exactly `now` plus the lead, which a later reading would refuse).
- * `offersSendNow` says whether the refusal points to Send now as the soonest send, which fits
- * scheduling a post and not moving a send already scheduled.
  */
 export function acceptFireAt(
   requested: number,
   minLeadMs: number,
-  { now = Date.now(), offersSendNow = false }: { now?: number; offersSendNow?: boolean } = {},
+  { now = Date.now() }: { now?: number } = {},
 ): number {
   if (requested < now + minLeadMs) {
-    throw refusal(400, "fire_at_too_soon", tooSoonMessage(minLeadMs, offersSendNow), {
+    throw refusal(400, "fire_at_too_soon", tooSoonMessage(minLeadMs), {
       field: "fire_at",
     });
   }

@@ -602,8 +602,7 @@ describe("the minimum lead is the deployment's own", () => {
     expect(tooClose.status).toBe(400);
     expect(await readJson(tooClose)).toEqual({
       error: "fire_at_too_soon",
-      message:
-        "Pick a time at least 1 minute from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
+      message: "Pick a time at least 1 minute from now, so there’s time to cancel.",
       field: "fire_at",
     });
 
@@ -748,7 +747,7 @@ describe("fire times fall on the minute", () => {
     // A send already scheduled has no Send now to point to: the refusal says only the lead.
     expect(await readJson(move)).toMatchObject({
       error: "fire_at_too_soon",
-      message: "Pick a time at least 5 minutes from now, so there’s a window to cancel in.",
+      message: "Pick a time at least 5 minutes from now, so there’s time to cancel.",
       field: "fire_at",
     });
   });

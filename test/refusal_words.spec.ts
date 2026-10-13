@@ -253,7 +253,7 @@ describe("the words the API shows the publisher", () => {
     expect(has("src/db/settings.ts", "must be text.")).toBe(true);
     expect(has("src/db/settings.ts", '"The publication name"')).toBe(true);
     // The shared builders.
-    expect(has("shared/sends.ts", "so there’s a window to cancel in")).toBe(true);
+    expect(has("shared/sends.ts", "so there’s time to cancel")).toBe(true);
     expect(has("shared/sends.ts", "Service Quotas console")).toBe(true);
     expect(has("shared/sends.ts", "Connect Amazon SES")).toBe(true);
     expect(found.length).toBeGreaterThan(100);
