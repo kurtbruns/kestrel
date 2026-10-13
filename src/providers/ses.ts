@@ -1,11 +1,13 @@
 /**
  * Amazon SES adapter (SESv2 SendBulkEmail over HTTPS, SigV4-signed with aws4fetch).
  *
- * Sending: one SendBulkEmail request a batch, to the SESv2 `outbound-bulk-emails` endpoint.
- * The frozen render goes once, as an inline template (ses_template.ts), and each recipient
- * as an entry with its own template data (its unsubscribe URL and address, as the render's
- * delivery pass fills them) and its own RFC 8058 one-click headers. A test, a confirmation,
- * and a notification go the same way with one entry, so a test is the send (I5).
+ * Sending: a list send's batch is one SendBulkEmail request, to the SESv2
+ * `outbound-bulk-emails` endpoint. The frozen render goes once, as an inline template
+ * (ses_template.ts), and each recipient as an entry with its own template data (its
+ * unsubscribe URL and address, as the render's delivery pass fills them) and its own RFC
+ * 8058 one-click headers. A test, a confirmation, and a notification go as one SendEmail
+ * a recipient with the same template, data, and headers, so a test is the send (I5), and
+ * they stay off SendBulkEmail's throttle, which the send loop uses to the full.
  *
  * Throughput: a request takes up to 50 destinations, but SES throttles every action but its
  * single sends to one request a second, and counts each destination against the account's
@@ -34,6 +36,7 @@
 import { AwsClient } from "aws4fetch";
 import type { AppEnv, Config } from "../env";
 import { log } from "../lib/log";
+import { unwrap } from "../lib/unwrap";
 import {
   type SesTemplateContent,
   sesCanAddress,
@@ -240,14 +243,20 @@ export class SesProvider implements EmailProvider {
     });
   }
 
-  private get endpoint(): string {
-    return `https://email.${this.region}.amazonaws.com/v2/email/outbound-bulk-emails`;
+  private endpoint(path: "outbound-emails" | "outbound-bulk-emails"): string {
+    return `https://email.${this.region}.amazonaws.com/v2/email/${path}`;
   }
 
+  /**
+   * A list send's batch goes as SendBulkEmail requests of up to `maxBatch`. A test, a
+   * confirmation, or a notification goes as one SendEmail a recipient with the same inline
+   * template and data, so it is the same email (I5), and stays off SendBulkEmail's
+   * one-request-a-second throttle, which the send loop's requests use to the full.
+   */
   async sendBatch(
     rendered: RenderedEmail,
     recipients: Recipient[],
-    _opts: SendBatchOptions,
+    opts: SendBatchOptions,
   ): Promise<SendBatchResult> {
     const out: PerRecipientResult[] = [];
     const sendable: Recipient[] = [];
@@ -256,7 +265,7 @@ export class SesProvider implements EmailProvider {
         sendable.push(r);
       } else {
         // SES refuses such an address for the whole request, so it stays out of it and
-        // fails alone, as it did when each recipient had a request of their own.
+        // fails alone.
         out.push({
           email: r.email,
           accepted: false,
@@ -266,38 +275,135 @@ export class SesProvider implements EmailProvider {
       }
     }
     const content = sesTemplateContent(rendered);
-    // The send loop passes at most `maxBatch`; only a one-off caller (a template test to
-    // several addresses) passes more, which goes as several requests.
-    for (let at = 0; at < sendable.length; at += this.maxBatch) {
-      const batch = sendable.slice(at, at + this.maxBatch);
-      const answer = await this.sendBulk(content, batch);
+    const size = opts.purpose === "list" ? this.maxBatch : 1;
+    let held: BatchHalt | null = null;
+    for (let at = 0; at < sendable.length; at += size) {
+      const batch = sendable.slice(at, at + size);
+      const answer =
+        opts.purpose === "list"
+          ? await this.sendBulk(content, batch)
+          : await this.sendSingle(content, unwrap(batch[0], "a recipient"));
       if (answer.kind === "halted") {
-        if (!out.some((r) => r.accepted)) {
+        // A refusal on the first request, with nothing else answered, speaks for the whole
+        // batch. Later, it can't: the rest are held back, and wait for the next tick.
+        if (at === 0 && out.length === 0) {
           return answer;
         }
-        // Some were already accepted, so the batch can't be refused as a whole: the rest
-        // are simply not sent this time, and wait for the next tick.
+        held = worse(held, answer.halt);
         for (const rest of sendable.slice(at)) {
           out.push({
             email: rest.email,
             accepted: false,
             retryable: true,
             error: answer.halt.error,
+            held: true,
           });
         }
         break;
       }
       out.push(...answer.results);
+      if (answer.halt) {
+        held = worse(held, answer.halt);
+        break;
+      }
     }
-    return { kind: "answered", results: out };
+    return held
+      ? { kind: "answered", results: out, halt: held }
+      : { kind: "answered", results: out };
   }
 
-  /** One SendBulkEmail request for up to `maxBatch` recipients. */
+  /** The one-click unsubscribe headers for a recipient with an unsubscribe link; none for
+   *  a confirmation or a notification, which carry none. */
+  private unsubscribeHeaders(r: Recipient): { Name: string; Value: string }[] {
+    return r.unsubscribeUrl
+      ? [
+          { Name: "List-Unsubscribe", Value: `<${r.unsubscribeUrl}>` },
+          { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" },
+        ]
+      : [];
+  }
+
+  private templateData(r: Recipient): string {
+    return JSON.stringify(
+      sesTemplateData({ ".Email.UnsubscribeURL": r.unsubscribeUrl, ".Email.SentTo": r.email }),
+    );
+  }
+
+  /**
+   * POST one request to SES. A transport error (no HTTP response) is AMBIGUOUS: SES may or
+   * may not have accepted it. SES has no idempotency key, so it must never be re-sent
+   * (that risks a duplicate, violating I4): it throws, and the send loop leaves its
+   * recipients `dispatched` for a human. A request SES never answers is ended the same
+   * way: the timeout rejects the fetch, so it throws down that same path. aws4fetch
+   * carries `signal` onto the signed Request. A real HTTP error response is unambiguous:
+   * SES did NOT accept.
+   */
+  private post(
+    path: "outbound-emails" | "outbound-bulk-emails",
+    payload: Record<string, unknown>,
+  ): Promise<Response> {
+    if (this.configurationSet) {
+      payload.ConfigurationSetName = this.configurationSet;
+    }
+    return this.client.fetch(this.endpoint(path), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
+    });
+  }
+
+  /** An SES error response as a halt, or as SES's words when it is about the message. */
+  private async refusal(res: Response): Promise<{ halt: BatchHalt | null; error: string }> {
+    const bodyText = await res.text().catch(() => "");
+    const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
+    const error = sesErrorText(res.status, type, message);
+    const halt = classifySesError(
+      res.status,
+      type,
+      message,
+      type === "MessageRejected" && this.namesSender(message),
+    );
+    return { halt: halt ? { ...halt, error } : null, error };
+  }
+
+  /** One SendEmail with the inline template, for a one-off message to one recipient. */
+  private async sendSingle(content: SesTemplateContent, r: Recipient): Promise<SendBatchResult> {
+    const res = await this.post("outbound-emails", {
+      FromEmailAddress: sesFromAddress(this.from),
+      Destination: { ToAddresses: [r.email] },
+      Content: {
+        Template: {
+          TemplateContent: content,
+          TemplateData: this.templateData(r),
+          Headers: this.unsubscribeHeaders(r),
+        },
+      },
+    });
+    if (res.ok) {
+      let providerId = "";
+      try {
+        providerId = ((await res.json()) as { MessageId?: string }).MessageId ?? "";
+      } catch {
+        /* a 200 with an unreadable body still means accepted */
+      }
+      return { kind: "answered", results: [{ email: r.email, accepted: true, providerId }] };
+    }
+    const { halt, error } = await this.refusal(res);
+    return halt
+      ? { kind: "halted", halt }
+      : {
+          kind: "answered",
+          results: [{ email: r.email, accepted: false, retryable: false, error }],
+        };
+  }
+
+  /** One SendBulkEmail request for up to `maxBatch` recipients of a list send. */
   private async sendBulk(
     content: SesTemplateContent,
     batch: Recipient[],
   ): Promise<SendBatchResult> {
-    const payload: Record<string, unknown> = {
+    const res = await this.post("outbound-bulk-emails", {
       FromEmailAddress: sesFromAddress(this.from),
       // Every entry carries all of its data, so the default is empty: an entry SES read
       // without its own data would fail to render rather than go out with someone else's.
@@ -305,55 +411,20 @@ export class SesProvider implements EmailProvider {
       BulkEmailEntries: batch.map((r) => ({
         Destination: { ToAddresses: [r.email] },
         ReplacementEmailContent: {
-          ReplacementTemplate: {
-            ReplacementTemplateData: JSON.stringify(
-              sesTemplateData({
-                ".Email.UnsubscribeURL": r.unsubscribeUrl,
-                ".Email.SentTo": r.email,
-              }),
-            ),
-          },
+          ReplacementTemplate: { ReplacementTemplateData: this.templateData(r) },
         },
-        ReplacementHeaders: [
-          { Name: "List-Unsubscribe", Value: `<${r.unsubscribeUrl}>` },
-          { Name: "List-Unsubscribe-Post", Value: "List-Unsubscribe=One-Click" },
-        ],
+        ReplacementHeaders: this.unsubscribeHeaders(r),
       })),
-    };
-    if (this.configurationSet) {
-      payload.ConfigurationSetName = this.configurationSet;
-    }
-
-    // A transport error (no HTTP response) is AMBIGUOUS: SES may or may not have
-    // accepted the batch. Because this provider is not idempotent, we must not
-    // auto-retry it (that risks a duplicate, violating I4). We let it throw so
-    // the send loop leaves the batch `dispatched` for a human — its designed
-    // at-most-once handling for non-idempotent providers. A real HTTP error
-    // response below is unambiguous (SES did NOT accept) and is safely retryable.
-    // A request SES never answers is ended the same way: the timeout rejects the fetch,
-    // so it throws down that same path. aws4fetch carries `signal` onto the signed Request.
-    const res = await this.client.fetch(this.endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(PROVIDER_REQUEST_TIMEOUT_MS),
     });
 
     if (!res.ok) {
-      const bodyText = await res.text().catch(() => "");
-      const { type, message } = parseSesError(bodyText, res.headers.get("x-amzn-ErrorType"));
-      const error = sesErrorText(res.status, type, message);
-      const halt = classifySesError(
-        res.status,
-        type,
-        message,
-        type === "MessageRejected" && this.namesSender(message),
-      );
+      const { halt, error } = await this.refusal(res);
       if (halt) {
-        return { kind: "halted", halt: { ...halt, error } };
+        return { kind: "halted", halt };
       }
       // Any other 4xx refuses the request's content (too large for a template, say),
-      // which is the same for every recipient in it, so it is permanent for each.
+      // which is the same for every recipient in it, so it is permanent for each. A test
+      // of the same post meets the same refusal first (I5).
       return {
         kind: "answered",
         results: batch.map((r) => ({ email: r.email, accepted: false, retryable: false, error })),
@@ -373,9 +444,11 @@ export class SesProvider implements EmailProvider {
     const results: PerRecipientResult[] = [];
     const heldBack: { email: string; error: string }[] = [];
     let halt: BatchHalt | null = null;
+    let short = false;
     for (const [i, r] of batch.entries()) {
       const entry = entries[i];
       if (!entry) {
+        short = true;
         continue;
       }
       const status = entry.Status ?? "";
@@ -396,15 +469,26 @@ export class SesProvider implements EmailProvider {
         results.push({ email: r.email, accepted: false, retryable: false, error });
       }
     }
-    if (halt && !results.some((r) => r.accepted)) {
+    // The request speaks as a whole only when SES answered every recipient and took none:
+    // a recipient it left out may have been mailed, and must stay in flight (I4).
+    if (halt && !short && !results.some((r) => r.accepted)) {
       return { kind: "halted", halt };
     }
-    // Some were accepted, so the request can't be refused as a whole: the recipients SES
-    // held back for its own reasons wait for the next tick.
-    for (const h of heldBack) {
-      results.push({ email: h.email, accepted: false, retryable: true, error: h.error });
+    if (!halt) {
+      return { kind: "answered", results };
     }
-    return { kind: "answered", results };
+    // The recipients SES held back for its own reasons go back to the queue with no
+    // attempt spent, and the send records why.
+    for (const h of heldBack) {
+      results.push({
+        email: h.email,
+        accepted: false,
+        retryable: true,
+        error: h.error,
+        held: true,
+      });
+    }
+    return { kind: "answered", results, halt };
   }
 
   /** Whether SES's "not verified" words name this deployment's own sender, which makes a

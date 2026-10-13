@@ -1391,8 +1391,10 @@ export interface HeldBatch {
  * alone until `halt_retry_at`. A new reason starts its schedule from the top. However
  * many batches of a group halted, the send records one halt. With no `halt`, the batches
  * were handed off but never sent (a group stopped short), so they only go back to the
- * queue and the send's halt state is left as it was. Lease-guarded, and three statements
- * in all (two with no halt).
+ * queue and the send's halt state is left as it was. With no batches, it records only the
+ * halt: an answered request whose provider held some recipients back for its own reasons
+ * (their rows are already back in the queue). Lease-guarded, and three statements in all
+ * (two with no halt, one with no batches).
  */
 export async function holdBatch(
   db: D1Database,
@@ -1403,35 +1405,38 @@ export async function holdBatch(
   backoff: readonly number[],
   now: number,
 ): Promise<void> {
-  if (held.length === 0) {
+  if (held.length === 0 && !halt) {
     return;
   }
   const guard = holdsLease(sendId, lease);
   // The halts before this one in an unbroken run for this reason, capped at the last step.
   const step = `MIN(CASE WHEN halt_reason IS ? THEN halt_retries ELSE 0 END, ${backoff.length - 1})`;
   const rows = held.map((h) => ({ k: h.key, keep: h.keepKey ? 1 : 0 }));
-  const statements = [
-    // Before the move, so it counts the rows still under the keys.
-    keyedCounterMove(
-      db,
-      sendId,
-      lease,
-      held.map((h) => h.key),
-      "dispatched",
-      "c_in_flight",
-      "c_pending",
-    ),
-    db
-      .prepare(
-        `UPDATE deliveries SET status = 'pending', error = ?, updated_at = ?,
+  const statements: D1PreparedStatement[] = [];
+  if (held.length > 0) {
+    statements.push(
+      // Before the move, so it counts the rows still under the keys.
+      keyedCounterMove(
+        db,
+        sendId,
+        lease,
+        held.map((h) => h.key),
+        "dispatched",
+        "c_in_flight",
+        "c_pending",
+      ),
+      db
+        .prepare(
+          `UPDATE deliveries SET status = 'pending', error = ?, updated_at = ?,
                 dispatch_key = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN dispatch_key END,
                 keyed_at = CASE WHEN json_extract(j.value, '$.keep') = 1 THEN keyed_at END
            FROM json_each(?) AS j
           WHERE deliveries.send_id = ? AND deliveries.dispatch_key = json_extract(j.value, '$.k')
             AND deliveries.status = 'dispatched' AND ${guard.sql}`,
-      )
-      .bind(halt?.error ?? null, now, JSON.stringify(rows), sendId, ...guard.binds),
-  ];
+        )
+        .bind(halt?.error ?? null, now, JSON.stringify(rows), sendId, ...guard.binds),
+    );
+  }
   if (halt) {
     statements.push(
       db
@@ -1472,7 +1477,7 @@ export type DeliveryOutcome =
   | { id: number; status: "accepted"; providerId: string }
   | { id: number; status: "unsent"; error: string }
   | { id: number; status: "skipped" }
-  | { id: number; status: "pending"; error: string; keepKey: boolean };
+  | { id: number; status: "pending"; error: string; keepKey: boolean; attempt?: false };
 
 const OUTCOME_BUCKET: Record<DeliveryOutcome["status"], CounterCol> = {
   accepted: "c_accepted",
@@ -1511,6 +1516,8 @@ export async function settleDeliveries(
     p: o.status === "accepted" && o.providerId !== "" ? o.providerId : null,
     e: o.status === "unsent" || o.status === "pending" ? o.error : null,
     k: o.status === "pending" && o.keepKey ? 1 : 0,
+    // A recipient the provider held back for its own reasons spends no attempt.
+    n: o.status === "pending" && o.attempt === false ? 1 : null,
   }));
   const deltas = new Map<CounterCol, number>();
   const bump = (col: CounterCol, n: number) => deltas.set(col, (deltas.get(col) ?? 0) + n);
@@ -1540,7 +1547,7 @@ export async function settleDeliveries(
            status = json_extract(j.value, '$.s'),
            provider_id = COALESCE(json_extract(j.value, '$.p'), provider_id),
            error = json_extract(j.value, '$.e'),
-           attempts = attempts + (json_extract(j.value, '$.s') = 'pending'),
+           attempts = attempts + (json_extract(j.value, '$.s') = 'pending' AND json_extract(j.value, '$.n') IS NULL),
            dispatch_key = CASE WHEN json_extract(j.value, '$.k') = 1 THEN dispatch_key END,
            keyed_at = CASE WHEN json_extract(j.value, '$.k') = 1 THEN keyed_at END,
            updated_at = ?

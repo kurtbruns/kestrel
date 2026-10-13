@@ -167,9 +167,8 @@ export interface Config {
   /**
    * The SES account's maximum send rate, in messages a second, which sizes the SES adapter's
    * batches, sent one a second: going over it is a throttle, which halts the send for at
-   * least a minute. Defaults
-   * to 14, a common starting rate that AWS does not promise any account; the SES sandbox
-   * allows 1, and the account dashboard shows the account's own.
+   * least a minute. Defaults to 14, a common starting rate that AWS does not promise any
+   * account; the SES sandbox allows 1, and the account dashboard shows the account's own.
    */
   sesMaxSendRate: number;
   /** Cloudflare Access: both set, enabling JWT validation, or neither (one alone is refused). */

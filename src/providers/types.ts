@@ -22,9 +22,15 @@ export interface Recipient {
   unsubscribeUrl: string;
 }
 
+/**
+ * One recipient's answer. `held` marks a recipient the provider set aside for a reason
+ * about itself or the account (a throttle, a spent quota) while it took others in the same
+ * request: it goes back to the queue with no attempt spent, as a halted batch does, since
+ * the failure is not the recipient's (SPEC §12).
+ */
 export type PerRecipientResult =
   | { email: string; accepted: true; providerId: string }
-  | { email: string; accepted: false; retryable: boolean; error: string };
+  | { email: string; accepted: false; retryable: boolean; error: string; held?: true };
 
 /**
  * A batch refused as a whole, for a reason about the provider or the account, never
@@ -53,7 +59,13 @@ export interface BatchHalt {
  * provider's error means, so the classification stays behind the seam.
  */
 export type SendBatchResult =
-  | { kind: "answered"; results: PerRecipientResult[] }
+  | {
+      kind: "answered";
+      results: PerRecipientResult[];
+      /** Why the provider held back the recipients marked `held`, which the send records
+       *  as its halt, so the operator hears the cause and the retry waits its backoff. */
+      halt?: BatchHalt;
+    }
   | { kind: "halted"; halt: BatchHalt };
 
 export type DeliveryEvent =

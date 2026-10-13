@@ -1,12 +1,14 @@
 /**
- * Amazon SES as the specs meet it: the SendBulkEmail endpoint, a `fetch` stand-in that
- * answers each request entry by entry, and SES's simple substitution of an inline template,
- * so a spec can read back the email each recipient of a request would get.
+ * Amazon SES as the specs meet it: the SendBulkEmail and SendEmail endpoints, a `fetch`
+ * stand-in that answers each recipient, and SES's simple substitution of an inline
+ * template, so a spec can read back the email each recipient of a request would get. A
+ * SendEmail request is read as a bulk request of one entry, so specs treat both alike.
  */
 import { vi } from "vitest";
 
 export const SES_BULK_ENDPOINT =
   "https://email.us-east-1.amazonaws.com/v2/email/outbound-bulk-emails";
+export const SES_SINGLE_ENDPOINT = "https://email.us-east-1.amazonaws.com/v2/email/outbound-emails";
 
 export interface BulkEntry {
   Destination: { ToAddresses: string[] };
@@ -24,6 +26,21 @@ export interface BulkRequest {
     };
   };
   BulkEmailEntries: BulkEntry[];
+  /** Which endpoint took it: SendBulkEmail, or SendEmail read as one entry. */
+  endpoint: "bulk" | "single";
+}
+
+interface SingleRequest {
+  FromEmailAddress: string;
+  ConfigurationSetName?: string;
+  Destination: { ToAddresses: string[] };
+  Content: {
+    Template: {
+      TemplateContent: { Subject: string; Html: string; Text: string };
+      TemplateData: string;
+      Headers: { Name: string; Value: string }[];
+    };
+  };
 }
 
 /** One entry's result, as SES gives it. */
@@ -37,7 +54,29 @@ export interface EntryAnswer {
 export const entryOk = (): EntryAnswer => ({ Status: "SUCCESS", MessageId: crypto.randomUUID() });
 
 export async function readBulkRequest(input: unknown): Promise<BulkRequest> {
-  return JSON.parse(await (input as Request).clone().text()) as BulkRequest;
+  const req = input as Request;
+  const body = JSON.parse(await req.clone().text());
+  if (req.url === SES_BULK_ENDPOINT) {
+    return { ...(body as Omit<BulkRequest, "endpoint">), endpoint: "bulk" };
+  }
+  const single = body as SingleRequest;
+  return {
+    FromEmailAddress: single.FromEmailAddress,
+    ConfigurationSetName: single.ConfigurationSetName,
+    DefaultContent: {
+      Template: { TemplateContent: single.Content.Template.TemplateContent, TemplateData: "{}" },
+    },
+    BulkEmailEntries: [
+      {
+        Destination: single.Destination,
+        ReplacementEmailContent: {
+          ReplacementTemplate: { ReplacementTemplateData: single.Content.Template.TemplateData },
+        },
+        ReplacementHeaders: single.Content.Template.Headers,
+      },
+    ],
+    endpoint: "single",
+  };
 }
 
 /**
@@ -103,6 +142,15 @@ export function answerSes(
       }
       return answer;
     });
+    if (req.endpoint === "single") {
+      // SendEmail answers one message: its id, or an error response for a refusal.
+      const [only] = results;
+      return only?.Status === "SUCCESS"
+        ? new Response(JSON.stringify({ MessageId: only.MessageId }), { status: 200 })
+        : new Response(JSON.stringify({ __type: "MessageRejected", message: only?.Error ?? "" }), {
+            status: 400,
+          });
+    }
     return new Response(JSON.stringify({ BulkEmailEntryResults: results }), {
       status: 200,
       headers: { "content-type": "application/json" },

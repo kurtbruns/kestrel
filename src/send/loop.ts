@@ -59,10 +59,11 @@ export interface SendLoopResult {
 const MAX_CHUNK = 500;
 
 /**
- * The fewest recipients one hand-off write covers. A provider that takes one recipient a
- * request (SES on an account allowed fewer than ten a second) would otherwise pay a whole batch's D1 writes for each recipient, so its
- * requests go in groups this size that share the writes: about half a D1 statement a
- * recipient instead of five. It is also the most recipients a run cut off mid-group can
+ * The fewest recipients one hand-off write covers. A provider that takes fewer recipients a
+ * request than this (SES on an account allowed fewer than this many a second) would
+ * otherwise pay a whole batch's D1 writes for every few recipients, so its requests go in
+ * groups this size that share the writes: about half a D1 statement a recipient instead
+ * of five at one recipient a request. It is also the most recipients a run cut off mid-group can
  * leave waiting for Resolve on such a provider, which has no idempotency key to re-send
  * under (SPEC §12). A provider that batches this many or more sends one batch a group.
  */
@@ -89,6 +90,14 @@ const CLOSE_COST = 4;
 /** The least a run needs to be worth starting: its opening, one group of one request,
  *  and its close. */
 export const MIN_RUN_COST = OPEN_COST + GROUP_COST + 1 + CLOSE_COST;
+
+/** The halt a group records: an account refusal outranks a provider that is only
+ *  unavailable, since it is the one the publisher has to act on. */
+function worseHalt(current: BatchHalt | null, next: BatchHalt): BatchHalt {
+  return !current || (current.reason === "unavailable" && next.reason === "account")
+    ? next
+    : current;
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = [];
@@ -301,6 +310,13 @@ export async function runSend(
         batchHalt = answer.halt;
       } else {
         answered = true;
+        // Recipients the provider held back for its own reasons go back with no attempt
+        // spent, and the send records why, as for a halted batch. Only the halt is taken:
+        // the batch's other rows were answered, or are in flight with their fate unknown.
+        if (answer.halt) {
+          halt = worseHalt(halt, answer.halt);
+          complete = false; // the provider is refusing for now, so the run stops here
+        }
         let answeredFor = 0;
         for (const r of answer.results) {
           const id = byAddress.get(r.email);
@@ -317,6 +333,7 @@ export async function runSend(
               status: "pending",
               error: r.error,
               keepKey: provider.idempotentRetry,
+              ...(r.held ? { attempt: false as const } : {}),
             });
             result.requeued += 1;
           } else {
@@ -334,11 +351,7 @@ export async function runSend(
         });
         requeued += batch.members.length;
         heldCount += call.recipients.length;
-        // An account refusal outranks a provider that is only unavailable: it is the one
-        // the publisher has to act on.
-        if (!halt || (halt.reason === "unavailable" && batchHalt.reason === "account")) {
-          halt = batchHalt;
-        }
+        halt = worseHalt(halt, batchHalt);
       }
     }
 

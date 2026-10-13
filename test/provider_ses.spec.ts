@@ -176,17 +176,32 @@ describe("SesProvider.sendBatch", () => {
     }
   });
 
-  it("sends a test, a confirmation, and a list batch through the same bulk request", async () => {
+  it("sends a test with the same template, data, and headers as the list send, through SendEmail (I5)", async () => {
     const { requests } = answerSes();
     const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
-    for (const purpose of ["test", "confirmation", "list"] as const) {
+    for (const purpose of ["test", "list"] as const) {
       await newProvider().sendBatch(renderedFixture(), one, { purpose, idempotencyKeyPrefix: "x" });
     }
-    expect(requests.map((r) => r.BulkEmailEntries.length)).toEqual([1, 1, 1]);
-    expect(new Set(requests.map((r) => JSON.stringify(r.DefaultContent)))).toHaveProperty(
-      "size",
-      1,
+    // The test stays off SendBulkEmail's one-request-a-second throttle, which the list uses.
+    expect(requests.map((r) => r.endpoint)).toEqual(["single", "bulk"]);
+    const [test, list] = requests.map((r) => deliveredBy(r, 0));
+    expect(test).toEqual(list);
+    expect(requests[0]!.DefaultContent.Template.TemplateContent).toEqual(
+      requests[1]!.DefaultContent.Template.TemplateContent,
     );
+  });
+
+  it("puts no unsubscribe headers on a message with no unsubscribe link (a confirmation)", async () => {
+    const { requests } = answerSes();
+    await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "new@example.com", unsubscribeUrl: "" }],
+      {
+        purpose: "confirmation",
+        idempotencyKeyPrefix: "c",
+      },
+    );
+    expect(deliveredBy(requests[0]!, 0).headers).toEqual({});
   });
 
   it("encodes a display name with non-ASCII in it, as SES requires of FromEmailAddress", async () => {
@@ -227,19 +242,55 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
-  it("splits a one-off batch larger than a request into several", async () => {
-    const config = { ...getConfig(env), sesMaxSendRate: 2 };
+  it("sends a one-off message to several addresses as one SendEmail each", async () => {
     const { requests } = answerSes();
     const five = ["a", "b", "c", "d", "e"].map((n) => ({
       email: `${n}@example.com`,
       unsubscribeUrl: UNSUB,
     }));
-    const r = await new SesProvider(config, sesEnv).sendBatch(renderedFixture(), five, {
+    const r = await newProvider().sendBatch(renderedFixture(), five, {
       purpose: "test",
       idempotencyKeyPrefix: "t",
     });
-    expect(requests.map((q) => q.BulkEmailEntries.length)).toEqual([2, 2, 1]);
+    expect(requests.map((q) => q.endpoint)).toEqual(Array(5).fill("single"));
     expect(r.kind === "answered" && r.results.every((x) => x.accepted)).toBe(true);
+  });
+
+  it("never halts a batch SES answered short, so a recipient it may have mailed stays in flight (I4)", async () => {
+    // SES answered one entry of three, and that one is a throttle: the two it left out may
+    // have been mailed, so the batch can't go back to the queue as a whole.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ BulkEmailEntryResults: [{ Status: "ACCOUNT_THROTTLED", Error: "slow" }] }),
+        { status: 200 },
+      ),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com", "c@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "answered",
+      results: [
+        {
+          email: "a@example.com",
+          accepted: false,
+          retryable: true,
+          error: "ses ACCOUNT_THROTTLED: slow",
+          held: true,
+        },
+      ],
+      halt: {
+        reason: "unavailable",
+        cause: "rate_limit",
+        error: "ses ACCOUNT_THROTTLED: slow",
+        mayHaveSent: false,
+      },
+    });
   });
 
   it("fails a recipient-level entry alone and holds back an entry SES throttled, when others were accepted", async () => {
@@ -273,8 +324,10 @@ describe("SesProvider.sendBatch", () => {
           accepted: false,
           retryable: true,
           error: "ses ACCOUNT_THROTTLED: Maximum sending rate exceeded.",
+          held: true,
         },
       ],
+      halt: { reason: "unavailable", cause: "rate_limit" },
     });
   });
 

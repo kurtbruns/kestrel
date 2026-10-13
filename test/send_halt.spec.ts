@@ -605,6 +605,29 @@ describe("the real adapters, end to end through the loop", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 20 });
   });
 
+  it("SES holding back part of a batch for a spent quota spends no attempt, and the send says why (SPEC §12)", async () => {
+    const emails = addresses(20);
+    await seedConfirmed(emails);
+    const send = await dueSend();
+    vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
+    const taken = new Set(emails.slice(0, 2));
+    const { spy } = answerSes((to) =>
+      taken.has(to)
+        ? entryOk()
+        : { Status: "ACCOUNT_DAILY_QUOTA_EXCEEDED", Error: "Daily message quota exceeded." },
+    );
+
+    const result = await runSend(capped(), send.id, new Budget(1000));
+
+    expect(spy).toHaveBeenCalledTimes(1); // the run stops at the refusal
+    expect(result.halt).toBe("account");
+    const row = (await sends.getSend(env.DB, send.id))!;
+    expect([row.halt_reason, row.halt_cause]).toEqual(["account", "quota"]);
+    expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 2, pending: 18 });
+    const held = (await rows(send.id)).filter((r) => r.status === "pending");
+    expect(held.every((r) => r.attempts === 0)).toBe(true);
+  });
+
   it("an SES entry rejected for its own address is that recipient's alone: recorded unsent, the rest delivered", async () => {
     const emails = addresses(4);
     await seedConfirmed(emails);
