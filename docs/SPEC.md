@@ -66,7 +66,7 @@ Six nouns make up the whole domain: the first three are content, the last three 
 
 **Image** — a file belonging to a post, referenced by name in the Markdown. The app stores it, sizes it, and resolves it to an absolute URL at render time.
 
-**Subscriber** — an email address with a consent state: pending, confirmed, or unsubscribed. Only confirmed subscribers receive sends.
+**Subscriber** — an email address with a consent state: pending, confirmed, or unsubscribed. Only confirmed subscribers receive sends. Beside the state, a subscriber carries how they joined: through this app's double opt-in, or carried in with a list brought from elsewhere (§7).
 
 **Send** — one dispatch of a post, created the moment the post is scheduled, not when it fires. It holds the frozen render, the fire time, and after firing, who it reached and how it went. Its frozen render can be made again only while the send is scheduled, and only as the publisher's deliberate act (§6); once it has fired it is never rewritten, while its outcomes keep settling as receipts arrive (§6). The word is both the verb and, like *build* or *deploy*, the noun for one instance of it; the article tells them apart, and *a send* always means this record.
 
@@ -92,7 +92,7 @@ Only one send per post can be active (scheduled or sending) at a time (§6), so 
 
 Six guarantees. In a newsletter the guarantees that matter are about consent, delivery, and the record. Every rule about sending, consent, and the record in this spec upholds one of these.
 
-**I1 — Nothing is sent without recorded consent.** Only confirmed subscribers receive a send. Confirmation is double opt-in and timestamped, so for every delivery there is a record that the person had confirmed, and of when they last did.
+**I1 — Nothing is sent without recorded consent.** Only confirmed subscribers receive a send, and a subscriber is confirmed only when their consent is on record: given here by double opt-in, timestamped, or carried in with a list from the service where it was given, with that service's evidence and the publisher's attestation that everyone imported as subscribed opted in (§7). So for every delivery there is a record of how the person consented, and of when, as far as the record that carried it in says.
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further mail reaches that person: a send already in flight skips them if they have not yet been handed off to the provider, and no later send includes them. There is no window in which they still get one, and it is never silently reversed.
 
@@ -248,7 +248,7 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 | State | Meaning | In the send's audience? |
 | --- | --- | --- |
 | **Pending** | Subscribed but hasn't clicked the confirmation link yet | No |
-| **Confirmed** | Completed double opt-in; consent is recorded and timestamped | Yes, unless suppressed |
+| **Confirmed** | Consent is on record: completed double opt-in here, recorded and timestamped, or carried in with an imported list (Bringing an existing list, below) | Yes, unless suppressed |
 | **Unsubscribed** | Left the list (their own unsubscribe, or the publisher on their behalf) | No |
 
 **Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state, so a subscriber can be *confirmed and suppressed* at once, consented but never mailed. The audience for any send is exactly *confirmed minus suppressed*. The two marks have different owners, which is what keeps them distinct: unsubscribed is the reader's to set (or the publisher's, on their behalf) and the reader's to clear by subscribing again; suppressed is set by the app from the provider's signals and cleared only by the publisher, deliberately. Suppression is a deliverability rule (§10), separate from the consent rule (I1).
@@ -270,6 +270,33 @@ The confirmation email's **wording** (its subject, the line above the button, th
 Every email carries an unsubscribe link and the one-click header that bulk mail now requires, so a subscriber can leave from the message itself with no login and no confirmation step. Unsubscribing is immediate and final (I2). The publisher can also unsubscribe someone from the subscriber list, the same immediate, idempotent effect, for a request that arrives out of band; it never auto-confirms anyone, only removes consent.
 
 A test email (§5) carries an unsubscribe link and the one-click header too, so the publisher can check them in a real inbox, but it is not a list send, so its link carries no subscriber's token and unsubscribes no one. The preview's link is the same, since the preview is that email shown to the publisher. Followed, either opens the page a subscriber sees, marked as a test and showing a sample address in place of anyone's own, so the publisher proofs the real page; walking through it to the page that confirms the unsubscribe changes nothing. A mail client's own Unsubscribe button gets a success that changes nothing. A link that carries a subscriber's token is always that subscriber's, never a test's.
+
+### Bringing an existing list
+
+Almost no one starts a newsletter with an empty list, so the publisher can bring one in, and take the whole list out again. An import is the one way in that writes a subscriber as confirmed without their confirming here, and it may because it carries what the double opt-in would otherwise record: the previous service's evidence of consent, and the publisher's word for it.
+
+**One documented format, and no guessing.** The app reads a single published format, one row per address, plus a plain list of addresses whose meaning the publisher states (subscribed, unsubscribed, or bounced). A row records what its source claims (the consent state, how consent was collected, where, and when), never what the app will do with it. Another service's export is converted to the format outside the app, by Claude or by hand, because a wrong guess about who agreed to be emailed cannot be taken back. A file not in the format is refused whole and says why; a row whose address is not valid is counted and reported, never silently dropped. A time is accepted only with its zone, never interpreted. The format is versioned, and every version the app has published stays readable.
+
+**A plan before anything changes.** The publisher first sees exactly what an import would do, row by row, against the list as it stands, and planning changes nothing, so it can be asked as often as needed. Nothing is written until the publisher commits that plan, and the commit applies all of it or none of it. A commit for a plan that no longer matches what it would now do, because the file, its stated meaning, the need for an attestation, or the sends it would grow have changed, is refused, and the publisher plans again. The list drifting in between (a reader unsubscribing, someone new subscribing) is not a reason to refuse: each row is applied under the rules below as the list stands at the commit, and the answer reports what was applied. A commit repeated after a lost answer returns the first one's result and applies nothing twice.
+
+**What an import does to each address.** Each address in a file is applied once, its repeats folded into one row that favors leaving over joining, the strongest suppression, the weakest claim about how consent was collected, and the earliest consent and latest departure. Then:
+
+- **A subscribed row confirms the address** when it is new here or still pending here, and never otherwise. Single opt-in is honored, and the record says it was single.
+- **An unsubscribe here is never reversed** (I2). A subscribed row for an address that left here leaves it unsubscribed.
+- **A suppression here always wins.** A subscribed row for an address that is suppressed here, a do-not-contact marker included, is never added or confirmed, and the import never lifts a suppression.
+- **Leaving and suppressions apply whatever the row's state.** An unsubscribed row unsubscribes a pending or confirmed subscriber here, unless that reader confirmed here after the time the source says they left: their newer act stands. A row that carries a bounce, a complaint, or a do-not-contact marker suppresses an address that has no suppression here, and the first suppression an address gets is the one that stands. An unsubscribed row for an address not here records it as unsubscribed, so the list remembers that the person left.
+- **A pending row, or a row with no consent claim, confirms no one.** An import sends no email at all, so it cannot start a double opt-in either; such a row only carries its suppression, if it has one.
+- **A subscriber already confirmed here keeps their own record**, however the file describes them.
+
+**Provenance is the import's, not the file's.** How a subscriber joined is shown beside their consent state, never as a fourth state. A subscriber an import confirmed always reads as imported, with the source and the method the file claimed and its evidence, even when the file claims the address was confirmed by double opt-in in this app: only a confirmation this app recorded itself reads as this app's double opt-in. A subscriber who later confirms here is then this app's.
+
+**The publisher attests.** An import that would confirm anyone needs the publisher's attestation, at the commit, that everyone imported as subscribed opted in to receive the publication and that the list is not purchased, rented, or scraped. It is kept with the import, with its wording's version, who gave it, and when. An import that only unsubscribes or suppresses needs none. Claude may attest for the publisher, and the record says it was given through Claude; the publisher is then told of the import by email (§8).
+
+**A person sees every send an import would grow.** An import that would add to the audience of a scheduled send names each such send and how many it would gain, and the commit is refused until the publisher acknowledges each one, so no send fires to people the publisher has not seen added (I6). Only a person can acknowledge it: an import made through Claude that would grow a scheduled send is refused until the publisher finishes it in the editor.
+
+**Taking the list out.** The whole list can be exported in the same format at any time: every address, its consent state, how it joined and its evidence, and its suppression, including addresses that are suppressed with no subscriber behind them, which appear with their suppression alone. Importing an export into another instance carries the list over: the same states and the same suppressions, with every confirmation arriving as imported, carrying its original evidence.
+
+**Limits.** One import holds at most ten thousand rows, and fewer on a hosting plan whose per-request limits cannot plan and commit that many; the refusal names the limit that applies.
 
 ### Two tokens, two jobs
 
@@ -321,7 +348,7 @@ Keeping up asks the app what changed since the client last looked, not what is l
 
 ### Does the publisher have to look?
 
-No. The publisher is told by email, at an address they set (§9), when a send goes out and when a send runs into a problem, so the status surface is where they go to act rather than somewhere they must keep watching. A finished send's notification carries the record's headline numbers (accepted by the provider, unsent, and skipped) and a link to the record. Every notification links to the page it is about, the send's own page, and the link opens that page even when the publisher must sign in first. The problems told are the ones above that the app cannot settle on its own, or that mean the sweep has faltered: the provider refusing the account, told at once with the provider's words and what they point to; a send in flight too long; a send wedged awaiting Resolve; and a missed fire time. The bounce spike is shown and not yet told (appendix).
+No. The publisher is told by email, at an address they set (§9), when a send goes out, when a send runs into a problem, and when Claude imports a list for them (Who's on the list?, below), so the status surface is where they go to act rather than somewhere they must keep watching. A finished send's notification carries the record's headline numbers (accepted by the provider, unsent, and skipped) and a link to the record. Every notification links to the page it is about, the send's own page, and the link opens that page even when the publisher must sign in first. The problems told are the ones above that the app cannot settle on its own, or that mean the sweep has faltered: the provider refusing the account, told at once with the provider's words and what they point to; a send in flight too long; a send wedged awaiting Resolve; and a missed fire time. The bounce spike is shown and not yet told (appendix).
 
 Each event is told once. A condition that lasts across many ticks of the sweep is one notification, not one a tick, and it is not repeated while it lasts: the status surface keeps it loud, and the fix, which lies outside the app, does not come sooner for a reminder. A refusal that lifts and later returns is a new event and is told again. Only what happens while an address is set is told: with none, nothing is sent and nothing is saved up, so setting one never delivers a backlog, and an instance never reports its history, only what finished or fired late within about a day.
 
@@ -329,7 +356,9 @@ A notification is downstream of the send, never part of it. It reads the record 
 
 ### Who's on the list?
 
-The subscriber list tells the story of the list as a whole rather than of a particular send: each address, its consent state, and whether it's suppressed, filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From it the publisher can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2).
+The subscriber list tells the story of the list as a whole rather than of a particular send: each address, its consent state, and whether it's suppressed, filterable by state and searchable by address, with the list's composition (counts by state: pending, confirmed, unsubscribed, suppressed) at the top. From it the publisher can add a subscriber, which starts the same double opt-in and never auto-confirms, or unsubscribe one (I2), and import or export the whole list (§7). Each subscriber shows how they joined beside their state.
+
+The list also keeps a record of each import (§7): when it was committed, by whom (the publisher, or Claude for the publisher), the attestation and its wording's version when one was given, the file's name and a fingerprint of its contents, and how many addresses each outcome applied to. The record holds no subscriber's address, so what an import brought in about a person (how they joined and the evidence for it) lives only on that person's subscriber record and leaves with it. An import Claude commits is also told to the publisher by email, with its counts and a link to the list, under the same rules as every other notification: told once, only while an address is set, and never part of anything a send does. An export (§7) is read from the list itself, so it says exactly what the list holds at that moment.
 
 ---
 
@@ -490,6 +519,7 @@ The level carries the meaning: **error** for anything that threatens a send goin
 | `notify.error` | error |
 | `subscribe.confirmation_refused`, `subscribe.confirmation_unknown`, `subscribe.not_connected` | warn |
 | `subscribe.failed` | error |
+| `import.committed` | info |
 | `schema.unchecked` | warn |
 | `request.error`, `settings.corrupt`, `config.invalid`, `schema.behind`, `webhook.render_failed` | error |
 | `sim.quota_spent`, `sim.quota_lifted`, `sim.request_lost` (local development only, §10) | info |
@@ -521,7 +551,12 @@ An index of what was decided and the alternative each choice was made over, in t
 - **The audience is resolved when the send fires**, over fixing it at schedule (§6).
 - **"Sent" means dispatch complete**, over waiting for every delivery receipt (§6).
 - **A reconciling sweep**, over per-post alarms (§6).
-- **Double opt-in**, accepted as a deliberate cost, over single opt-in (§7).
+- **Double opt-in for joining here**, accepted as a deliberate cost, over single opt-in (§7).
+- **Confirmed means consent is on record, given here by double opt-in or carried in with an imported list alongside its evidence and the publisher's attestation**, over re-confirming every imported address and over a fourth consent state for imported subscribers. It changes I1's wording: confirmation was double opt-in here alone (§3, §7).
+- **One documented import format, converted outside the app**, over the app guessing what another service's export means (§7).
+- **An import is planned, then committed whole**, over applying rows as they are read (§7).
+- **How a subscriber joined is keyed on the import, not on the file's claims**, over trusting a file that says its addresses confirmed here (§7).
+- **Claude may attest to an import, but only a person may let it grow a scheduled send**, over Claude doing neither or both (§7).
 - **Consent is a press of the Confirm button**, over confirming when the link is opened (§7).
 - **One answer to every subscribe request**, over telling the requester what state the address is in (§7).
 - **The per-client limit on subscribing is set at the edge**, over building one into the app (§7).
