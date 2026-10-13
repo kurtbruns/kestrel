@@ -292,9 +292,9 @@ Almost no one starts a newsletter with an empty list, so the publisher can bring
 
 **The publisher attests.** An import that would confirm anyone needs the publisher's attestation, at the commit, that everyone imported as subscribed opted in to receive the publication and that the list is not purchased, rented, or scraped. It is kept with the import, with its wording's version, who gave it, and when. An import that only unsubscribes or suppresses needs none. Claude may attest for the publisher, and the record says it was given through Claude; the publisher is then told of the import by email (§8).
 
-**A person sees every send an import would grow.** An import that would add to the audience of a scheduled send names each such send and how many it would gain, and the commit is refused until the publisher acknowledges each one, so no send fires to people the publisher has not seen added (I6). Only a person can acknowledge it: an import made through Claude that would grow a scheduled send is refused until the publisher finishes it in the editor.
+**A person sees every send an import would grow.** A send's audience is fixed when it fires (§6), so an import can add to the audience of any send whose audience is not fixed yet: a scheduled one, or one that fired and has not fixed its audience yet. An import that would do so names each such send and how many it would gain, and the commit is refused until the publisher acknowledges each one, so no send goes to people the publisher has not seen added (I6). Only a person can acknowledge it: an import made through Claude that would grow a send is refused until the publisher finishes it in the editor.
 
-**Taking the list out.** The whole list can be exported in the same format at any time, written so a spreadsheet opening it shows every value as text and runs none as a formula: every address, its consent state, how it joined and its evidence, and its suppression, including addresses that are suppressed with no subscriber behind them, which appear with their suppression alone. Importing an export into another instance carries the list over: the same states and the same suppressions, with every confirmation arriving as imported, carrying its original evidence.
+**Taking the list out.** The whole list can be exported in the same format at any time, written so a spreadsheet opening it runs no value as a formula: every address, its consent state, how it joined and its evidence, and its suppression, including addresses that are suppressed with no subscriber behind them, which appear with their suppression alone. Importing an export into another instance carries the list over: the same states and the same suppressions, with every confirmation arriving as imported, carrying its original evidence.
 
 **Limits.** One import holds at most ten thousand rows, and fewer on a hosting plan whose per-request limits cannot plan and commit that many; the refusal names the limit that applies.
 
@@ -520,9 +520,8 @@ The level carries the meaning: **error** for anything that threatens a send goin
 | `subscribe.confirmation_refused`, `subscribe.confirmation_unknown`, `subscribe.not_connected` | warn |
 | `subscribe.failed` | error |
 | `import.committed` | info |
-| `import.incomplete` | warn |
 | `schema.unchecked` | warn |
-| `request.error`, `settings.corrupt`, `config.invalid`, `schema.behind`, `webhook.render_failed` | error |
+| `request.error`, `settings.corrupt`, `config.invalid`, `schema.behind`, `webhook.render_failed`, `import.incomplete` | error |
 | `sim.quota_spent`, `sim.quota_lifted`, `sim.request_lost` (local development only, §10) | info |
 | `sim.receipts_error` (local development only, §10) | error |
 
@@ -557,7 +556,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **One documented import format, converted outside the app**, over the app guessing what another service's export means (§7).
 - **An import is planned, then committed whole**, over applying rows as they are read (§7).
 - **How a subscriber joined is keyed on the import, not on the file's claims**, over trusting a file that says its addresses confirmed here (§7).
-- **Claude may attest to an import, but only a person may let it grow a scheduled send**, over Claude doing neither or both (§7).
+- **Claude may attest to an import, but only a person may let it grow a send**, over Claude doing neither or both (§7).
 - **Consent is a press of the Confirm button**, over confirming when the link is opened (§7).
 - **One answer to every subscribe request**, over telling the requester what state the address is in (§7).
 - **The per-client limit on subscribing is set at the edge**, over building one into the app (§7).

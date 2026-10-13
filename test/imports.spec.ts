@@ -23,7 +23,7 @@ import { commitImport, maxImportRows, planImport } from "../src/services/imports
 import { guardD1 } from "./support/d1_guard";
 import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
-import { logged } from "./support/log";
+import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
 
 // Bringing a list in and taking it out (SPEC §7, §8): one format, a plan that writes nothing,
@@ -742,11 +742,12 @@ describe("a commit is idempotent and atomic (SPEC §7)", () => {
       "UPDATE subscribers SET status = 'unsubscribed' WHERE email = 'reader@x.io'",
     ).run();
     vi.spyOn(importsDb, "setImportCounts").mockRejectedValue(new Error("D1 went away"));
-    const warn = vi.spyOn(console, "warn");
+    allowErrorLogs("import.incomplete");
+    const error = vi.spyOn(console, "error");
     const result = await commitImport(env.DB, p, HUMAN, Date.now());
     expect(result.replayed).toBe(false);
     expect(result.counts).toEqual(counts({ create_confirmed: 1, kept_unsubscribed: 1 }));
-    expect(logged(warn).map((l) => [l.event, l.step])).toEqual([["import.incomplete", "counts"]]);
+    expect(logged(error).map((l) => [l.event, l.step])).toEqual([["import.incomplete", "counts"]]);
   });
 
   it("writes nothing when a write fails part-way", async () => {

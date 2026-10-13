@@ -484,7 +484,7 @@ export async function commitImport(
         unsettled.map((p) => p.row.email),
       );
     } catch (err) {
-      log.warn("import.incomplete", { importId: id, step: "reread", error: errorText(err) });
+      log.error("import.incomplete", { importId: id, step: "reread", error: errorText(err) });
     }
     for (const p of unsettled) {
       const e = p.row.email;
@@ -526,7 +526,7 @@ export async function commitImport(
       await imports.setImportCounts(db, id, counts, suppressionsAdded);
     } catch (err) {
       // The record keeps the planned counts; the answer still says what was applied.
-      log.warn("import.incomplete", { importId: id, step: "counts", error: errorText(err) });
+      log.error("import.incomplete", { importId: id, step: "counts", error: errorText(err) });
     }
   }
 
