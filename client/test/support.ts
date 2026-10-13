@@ -286,21 +286,31 @@ export interface SavedFile {
 
 /**
  * Record each file the page saves (an object URL clicked through an anchor, `ui/download`)
- * instead of letting the click run; `vi.restoreAllMocks()` in afterEach puts it back.
+ * instead of letting that click run. Each object URL is unique and maps to its own blob, so
+ * a click is matched to the file it names; a click on any other anchor runs as it would.
+ * `vi.restoreAllMocks()` in afterEach puts it back.
  */
 export function captureDownloads(): SavedFile[] {
   const saved: SavedFile[] = [];
-  let last: Blob | null = null;
+  const blobs = new Map<string, Blob>();
+  let seq = 0;
   vi.spyOn(URL, "createObjectURL").mockImplementation((b) => {
-    last = b as Blob;
-    return "blob:http://kestrel.test/download";
+    const url = `blob:http://kestrel.test/download-${++seq}`;
+    blobs.set(url, b as Blob);
+    return url;
   });
-  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation((url) => {
+    blobs.delete(url);
+  });
+  const click = HTMLAnchorElement.prototype.click;
   vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (
     this: HTMLAnchorElement,
   ) {
-    if (last && this.href.startsWith("blob:")) {
-      saved.push({ name: this.download, blob: last });
+    const blob = blobs.get(this.href);
+    if (blob) {
+      saved.push({ name: this.download, blob });
+    } else {
+      click.call(this);
     }
   });
   return saved;

@@ -203,7 +203,7 @@ The list as a whole (SPEC §8). The head has **Export** (Ghost) beside **Add sub
 
 **Adding an erased address** asks before sending. When Send confirmation meets an erased address, a second dialog stacks over Add subscriber: "Send to an erased address?", naming the address and when it was erased, and saying to send only if the person asked to join again, and that they rejoin only by confirming. Its Primary is **Send confirmation**; Cancel, the default focus, returns to the Add dialog with nothing sent. The public form never asks.
 
-**Export** downloads the whole list as one CSV in the import format (SPEC §7), named for the day the export began. It reads every page of the export before saving anything and writes them with the same writer the server documents, so the file is the one the API's pages make, whatever the list's size. The button reads "Exporting…" until the file is saved. Nothing is confirmed, since nothing changes; a failure is a toast in the server's words, and no partial file is saved.
+**Export** downloads the whole list as one CSV in the import format (SPEC §7), named for the day the export began. It reads every page of the export before saving anything and writes them with the same writer the server documents, so the file is the one the API's pages make, whatever the list's size. The button reads "Exporting…" until the file is saved. Nothing is confirmed, since nothing changes; a failure is a toast in the server's words, and no partial file is saved. An export finishes and saves its file even if you leave the page while it reads.
 
 ### Template
 

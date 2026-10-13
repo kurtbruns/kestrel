@@ -308,6 +308,29 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("stops an export whose next page names the page just read, rather than loop", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+      {
+        path: "/api/subscribers/export",
+        reply: () => ({
+          format: "kestrel-subscribers/1",
+          exported_at: Date.now(),
+          subscribers: [exportRow("ada@example.com")],
+          next: "c1",
+        }),
+      },
+    ]);
+    const saved = captureDownloads();
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    $("#exportSubs").click();
+    await settle();
+    expect(fake.calls.filter((c) => c.url.pathname === "/api/subscribers/export")).toHaveLength(2);
+    expect(saved).toEqual([]);
+    expect($("#toasts").textContent).toBe("The export repeated a page. Try again.");
+  });
+
   it("says why an export failed, and saves no partial file", async () => {
     fake = fakeApi([
       { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },

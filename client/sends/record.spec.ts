@@ -10,6 +10,7 @@ import { condition, feedReads, sendServer, sendView } from "../test/send_server"
 import {
   $,
   $$,
+  captureDownloads,
   type FakeApi,
   fakeApi,
   jsonResponse,
@@ -173,6 +174,34 @@ describe("sent record", () => {
     expect($("#recPill").textContent).toBe("Complete");
     expect($(".rec-card")).toBe(card); // in place, not a remount
     expect($(".rec-n.ok").textContent).toBe("10");
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("saves the deliveries CSV as the server sends it, under the server's name or deliveries.csv", async () => {
+    const csv = "email,outcome\r\nada@example.com,delivered\r\n";
+    let disposition: string | null = 'attachment; filename="owls-deliveries.csv"';
+    fake = fakeApi([
+      ...sentSend().routes,
+      noRows,
+      {
+        path: "/api/sends/x1/deliveries.csv",
+        reply: () =>
+          new Response(csv, {
+            headers: disposition ? { "content-disposition": disposition } : {},
+          }),
+      },
+    ]);
+    const saved = captureDownloads();
+    await mount((r, s) => renderSentRecord("x1", r, s));
+    await vi.advanceTimersByTimeAsync(0);
+    $("#csvBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    disposition = null;
+    $("#csvBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(saved.map((f) => f.name)).toEqual(["owls-deliveries.csv", "deliveries.csv"]);
+    expect(await saved[0]?.blob.text()).toBe(csv);
+    expect(await saved[1]?.blob.text()).toBe(csv);
     expect(fake.unhandled).toHaveLength(0);
   });
 
