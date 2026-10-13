@@ -1,6 +1,7 @@
 /** Subscriber + suppression queries, and audience selection (I1/I2). */
 import { normalizeEmail } from "../../shared/email";
 import type {
+  EraseResponse,
   SubscribeAction,
   Subscriber,
   SubscriberCounts,
@@ -364,13 +365,66 @@ export async function isSuppressed(db: D1Database, email: string): Promise<boole
 }
 
 /**
- * The suppression reason that will mark an erased person: the address is kept only so it
- * is never mailed by accident, and the person may still come back by subscribing again,
- * their own confirmation lifting the marker. Erasure itself is not built or specified yet
- * (it lands with its SPEC §7 text); the subscribe and confirm paths already honor the
- * reason so they need no change when it does.
+ * The suppression reason that marks an erased person (SPEC §7, Erasing a subscriber): the
+ * address is kept only so it is never mailed by accident, and the person may still come
+ * back by subscribing again, their own confirmation lifting the marker.
  */
 export const ERASED = "erased";
+
+/** The address's suppression reason and when it was set, or null when it has none. */
+export function suppressionOf(
+  db: D1Database,
+  email: string,
+): Promise<Pick<SuppressionRow, "reason" | "created_at"> | null> {
+  return db
+    .prepare("SELECT reason, created_at FROM suppressions WHERE email = ?")
+    .bind(email)
+    .first<Pick<SuppressionRow, "reason" | "created_at">>();
+}
+
+/** What an erasure did, as `EraseResponse` carries it. */
+export type Erasure = EraseResponse["erased"];
+
+/**
+ * Erase a subscriber (SPEC §7): delete their row, which takes how they joined and the
+ * evidence for it along; put one random placeholder, `erased:<hex>`, in place of their
+ * address on every past delivery row, so each record still sums to its audience; and keep
+ * the address only as an `erased` suppression with no detail. A suppression already there
+ * stays as it is (a bounce is still a bounce), and an earlier erasure's marker takes this
+ * one's time. A provider's words or message id on a delivery row that name the address get
+ * the placeholder in its place too, lowercased, since that is the form the address is
+ * matched in. A real provider's message id is opaque and never matches; the local stand-in's
+ * spells out the address, and it is still unique with the placeholder in it.
+ *
+ * One batch, so the three land together or not at all. A pending delivery row of a send in
+ * flight becomes the placeholder too, which no subscriber holds, so the send skips it
+ * rather than mail it (I1). Null for an unknown id, including one already erased.
+ */
+export async function erase(db: D1Database, id: string): Promise<Erasure | null> {
+  const row = await getById(db, id);
+  if (!row) {
+    return null;
+  }
+  const email = row.email;
+  const placeholder = `erased:${newToken(8)}`;
+  const scrubbed = (column: string) =>
+    `${column} = CASE WHEN instr(lower(${column}), ?1) > 0 THEN replace(lower(${column}), ?1, ?2) ELSE ${column} END`;
+  const [, deliveries] = await db.batch([
+    db.prepare("DELETE FROM subscribers WHERE id = ? AND email = ?").bind(id, email),
+    db
+      .prepare(
+        `UPDATE deliveries SET email = ?2, ${scrubbed("error")}, ${scrubbed("event_detail")}, ${scrubbed("provider_id")} WHERE email = ?1`,
+      )
+      .bind(email, placeholder),
+    db
+      .prepare(
+        "INSERT INTO suppressions (email, reason, detail, created_at) VALUES (?, ?, NULL, ?) ON CONFLICT (email) DO UPDATE SET created_at = excluded.created_at, detail = NULL WHERE suppressions.reason = excluded.reason",
+      )
+      .bind(email, ERASED, Date.now()),
+  ]);
+  const kept = await suppressionOf(db, email);
+  return { email, deliveries: deliveries?.meta.changes ?? 0, suppression: kept?.reason ?? ERASED };
+}
 
 /** Whether a suppression forbids sending this address a confirmation. Every reason does
  *  except `erased`, whose person may subscribe again and whose confirmation lifts it. */

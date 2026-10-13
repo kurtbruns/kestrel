@@ -9,7 +9,7 @@ import {
   settingsResponse,
   typeInto,
 } from "../test/support";
-import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
+import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
 
 // The signal of a page that stays mounted throughout.
 const live = new AbortController().signal;
@@ -81,6 +81,66 @@ describe("addSubscriberModal", () => {
     expect(fake.calls).toHaveLength(0);
   });
 
+  describe("an erased address (SPEC §7)", () => {
+    const refusal = () =>
+      jsonResponse(
+        {
+          error: "erasure_acknowledgement_required",
+          message: "owl@example.com was erased at the person’s request.",
+          erased_at: Date.UTC(2026, 9, 3, 12),
+        },
+        409,
+      );
+
+    it("asks first, and sends the confirmation with the acknowledgement once the publisher agrees", async () => {
+      fake = fakeApi([
+        {
+          method: "POST",
+          path: "/api/subscribers",
+          reply: (req) =>
+            (req.json() as { acknowledge_erasure?: boolean }).acknowledge_erasure === true
+              ? { subscriber: null, action: "created" }
+              : refusal(),
+        },
+      ]);
+      const onDone = vi.fn();
+      addSubscriberModal(onDone, live);
+      typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
+      $("#aGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      // The question stacks over the Add dialog, naming the address.
+      expect(document.querySelectorAll(".modal")).toHaveLength(2);
+      expect($("#eaGo").closest(".modal")?.querySelector("strong")?.textContent).toBe(
+        "owl@example.com",
+      );
+      expect($("#eaGo").closest(".modal")?.textContent).toMatch(/erased at the person’s request/);
+      $("#eaGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls.map((c) => JSON.parse(c.body!))).toEqual([
+        { email: "owl@example.com" },
+        { email: "owl@example.com", acknowledge_erasure: true },
+      ]);
+      expect(document.querySelector(".modal")).toBeNull();
+      expect($("#toasts").textContent).toMatch(/Confirmation sent to owl@example\.com/);
+      expect(onDone).toHaveBeenCalledOnce();
+    });
+
+    it("sends nothing when the publisher cancels, and leaves the Add dialog open", async () => {
+      fake = fakeApi([{ method: "POST", path: "/api/subscribers", reply: refusal }]);
+      const onDone = vi.fn();
+      addSubscriberModal(onDone, live);
+      typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
+      $("#aGo").click();
+      await vi.advanceTimersByTimeAsync(0);
+      $("#eaCancel").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(fake.calls).toHaveLength(1);
+      expect(document.querySelectorAll(".modal")).toHaveLength(1);
+      expect($<HTMLButtonElement>("#aGo").disabled).toBe(false);
+      expect(onDone).not.toHaveBeenCalled();
+    });
+  });
+
   it("takes an address as usual once a provider is set, and on the local stand-in", () => {
     for (const provider of ["ses", "fake"] as const) {
       appState.appConfig = settingsResponse({ deployment: { provider } });
@@ -127,6 +187,30 @@ describe("confirmUnsubscribe", () => {
     ]);
     expect(onDone).toHaveBeenCalledOnce();
     expect($("#toasts").textContent).toMatch(/Unsubscribed a@b\.c/);
+    expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  it("erases only after a Danger confirmation that says it can't be undone, and says a bounce stands", async () => {
+    fake = fakeApi([
+      {
+        method: "POST",
+        path: "/api/subscribers/s1/erase",
+        reply: () => ({ erased: { email: "a@b.c", deliveries: 3, suppression: "bounce" } }),
+      },
+    ]);
+    const onDone = vi.fn();
+    confirmErase(sub, onDone, live);
+    expect($(".modal strong").textContent).toBe("a@b.c");
+    expect($(".modal .hint").textContent).toMatch(/can’t be undone/);
+    expect($("#eGo").classList.contains("danger")).toBe(true);
+    expect(fake.calls).toEqual([]);
+    $("#eGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.map((c) => `${c.method} ${c.url.pathname}`)).toEqual([
+      "POST /api/subscribers/s1/erase",
+    ]);
+    expect($("#toasts").textContent).toMatch(/Erased a@b\.c\. Its bounce still stands/);
+    expect(onDone).toHaveBeenCalledOnce();
     expect(document.querySelector(".modal")).toBeNull();
   });
 
