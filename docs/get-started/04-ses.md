@@ -14,7 +14,9 @@ To move an instance that already sends through another provider or another SES a
 
 SES sends only from an identity you've verified. Verifying the whole hostname, rather than one address, lets any address on it send. It also sets up DKIM, which lets inboxes trust your mail.
 
-1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
+1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. Any region that offers SES works, so pick one near you. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) before you can use them. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
+
+1. Note the region's code. The menu shows a name, such as Europe (Ireland), but later steps need its code, such as `eu-west-1`. [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each region's code beside its name. The MAIL FROM record, the SNS access policy, and `AWS_REGION` all use this one code.
 
 1. Under **Configuration**, choose **Identities**, then **Create identity**.
 
@@ -48,7 +50,7 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 1. Select **Use a custom MAIL FROM domain**, and enter `bounce.send.example.com`. For **Behavior on MX failure**, keep **Use default MAIL FROM domain**. Choose **Save changes**.
 
-1. In Cloudflare, add the two records SES lists. Replace `us-east-1` with your region:
+1. In Cloudflare, add the two records SES lists. Replace `us-east-1` with your region's code from section 1:
 
     - **Type:** `MX`, **Name:** `bounce.send`, **Mail server:** `feedback-smtp.us-east-1.amazonses.com`, **Priority:** `10`
     - **Type:** `TXT`, **Name:** `bounce.send`, **Content:** `v=spf1 include:amazonses.com ~all`
@@ -86,7 +88,7 @@ SES reports what happens to each email through SNS, the AWS notification service
 
 1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-mail`, and save.
 
-1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`.
+1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`. After `sns` comes your region's code, then your 12-digit account ID. The account menu at the top right of the console also shows the account ID.
 
 1. Let SES publish to the topic. Choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
@@ -105,7 +107,7 @@ SES reports what happens to each email through SNS, the AWS notification service
     }
     ```
 
-    Replace the topic ARN, your 12-digit account ID, and the region. Choose **Save changes**.
+    Replace the topic ARN, and both copies of the account ID, with the values from your ARN. Replace `us-east-1` with your region's code, the same one the ARN shows. Choose **Save changes**.
 
 You subscribe the app to the topic in section 8, once it runs on SES.
 
@@ -115,7 +117,9 @@ The app sends through an IAM user whose key can only send email. That limits the
 
 1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
 
-1. When asked for permissions, choose **Attach policies directly**, and create a policy with this JSON:
+1. When asked for permissions, choose **Attach policies directly**, then **Create policy**. The policy editor opens in a new browser tab.
+
+1. In the new tab, choose the **JSON** editor, and replace its contents with this policy:
 
     ```json
     {
@@ -130,7 +134,11 @@ The app sends through an IAM user whose key can only send email. That limits the
     }
     ```
 
-    Name the policy `kestrel-send-email`, attach it to the user, and create the user.
+    Choose **Next**, name the policy `kestrel-send-email`, and choose **Create policy**. You can close this tab.
+
+1. Go back to the first tab, where you're creating the user. Refresh the policy list, search for `kestrel-send-email`, and select it.
+
+1. Choose **Next**, then **Create user**.
 
 1. Open the user, and on the **Security credentials** tab, choose **Create access key**. For the use case, choose **Application running outside AWS**.
 
@@ -164,7 +172,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), and add `SES_MAX_SEND_RATE`. Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -173,7 +181,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
-      "AWS_REGION": "us-east-1",     // ← change: your SES region
+      "AWS_REGION": "us-east-1",     // ← change: your region's code
       "SES_MAX_SEND_RATE": "1"       // ← new: your maximum send rate; 1 in the sandbox
     }
     ```
@@ -217,7 +225,7 @@ If it stays **Pending confirmation**, the request never reached the app, or the 
 - **`SNS_TOPIC_ARN` matches the topic's ARN.**
 - **The deploy in section 7 finished.**
 
-Then delete the subscription, and create it again.
+Once you've fixed the cause, select the subscription, and choose **Request confirmation**. SNS sends the request again, and the app confirms it. SNS doesn't let you delete a subscription while it's pending, and removes it on its own after 48 hours.
 
 ## Switch an instance that already sends
 
