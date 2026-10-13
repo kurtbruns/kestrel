@@ -6,20 +6,38 @@
  */
 
 import { encodeSendCursor } from "../../shared/cursor";
+import { utcDayStart, type WritesDay, writesDay } from "../../shared/daily_writes";
 import type { SendView } from "../../shared/sends";
+import { importWritesSince } from "../db/imports";
 import { currentSendSeq, getSendViewRow } from "../db/sends";
-import { type AppEnv, getConfig } from "../env";
+import { type AppEnv, type Config, getConfig, onFreePlanLimits } from "../env";
 import { buildSendView } from "./view";
+
+/**
+ * On Workers Free's limits, the UTC day so far that a send's `daily_writes` condition weighs
+ * (what its imports wrote); null on any other deployment, which reads nothing for it.
+ */
+export async function readWritesDay(
+  db: D1Database,
+  config: Pick<Config, "subrequestBudget">,
+  now: number,
+): Promise<WritesDay | null> {
+  return onFreePlanLimits(config)
+    ? writesDay(now, await importWritesSince(db, utcDayStart(now)))
+    : null;
+}
 
 /** The send as it stands, or null when it is gone. */
 export async function viewSend(env: AppEnv, id: string): Promise<SendView | null> {
   const now = Date.now();
+  const config = getConfig(env);
   const row = await getSendViewRow(env.DB, id);
   if (!row) {
     return null;
   }
   const { has_retries, ...source } = row;
-  return buildSendView(source, getConfig(env), has_retries === 1, now);
+  const day = await readWritesDay(env.DB, config, now);
+  return buildSendView(source, config, has_retries === 1, now, day);
 }
 
 /** The send as it stands, with the cursor to follow it from, or null when it is gone. The

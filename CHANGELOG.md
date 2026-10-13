@@ -14,6 +14,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 - The operator's Claude context gains a `/migrate-list` skill, which `kestrel init` writes and `npm run check-context` offers to an existing instance, so Claude can bring a list over from another service by a method that checks itself against Kestrel's import plan. It bears on safety, since it adds subscribers: the rule against adding a subscriber the publisher didn't name now makes one exception, for such an import, confirming anyone only with the publisher's attestation.
 
+### Changed
+
+- On the Workers Free plan's limits, the daily-writes warnings now count what the day's imports wrote, by UTC. An import plan warns when it and that day's earlier imports would use more than 70% of D1's daily writes, and advises importing the file the next day, so a list brought in over several files is warned before it can stop the newsletter. A scheduled send firing on a day imports have written now warns below 5,000 recipients, and advises sending the next day. The plan no longer warns because the list it leaves passes 3,000 confirmed subscribers: whether a send fits is the send's warning, given when it's scheduled (SPEC §7, §8).
+
 ## [1.9.0] - 2026-10-13
 
 **Upgrading from 1.8.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. The first (`0005_imports`) adds the record of each import and how each subscriber joined, reading every existing subscriber as joined through Kestrel's double opt-in, and rebuilds the notifications table so an import can be told to you. The second (`0006_deliveries_fewer_indexes`) drops two indexes no query reads; it writes no rows, so it costs nothing against D1's daily allowance at any size.

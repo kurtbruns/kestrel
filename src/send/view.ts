@@ -14,9 +14,10 @@
  * Worker; what it means for a reader is already in the phase, conditions, and actions.
  */
 
+import type { WritesDay } from "../../shared/daily_writes";
 import type { SendHalt, SendPhase, SendSummary, SendView } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendStatus } from "../db/sends";
-import { type Config, onFreePlanLimits } from "../env";
+import type { Config } from "../env";
 import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
@@ -168,13 +169,15 @@ export type SendViewRow = SendSummary & { post_slug: string | null };
  * Build the view of a send (the frozen bodies play no part). `hasRetries` is the cheap
  * EXISTS probe (see `hasActiveRetries`) — pass false when the send is not `sending`, where
  * it never affects the phase. `now` is the server's clock for everything derived, carried
- * as `as_of`.
+ * as `as_of`. `day` is the UTC day so far on Workers Free's limits (`readWritesDay`), null
+ * on any other deployment.
  */
 export function buildSendView(
   send: SendViewRow,
-  config: Pick<Config, "provider" | "archiveOrigin" | "archiveBasePath" | "subrequestBudget">,
+  config: Pick<Config, "provider" | "archiveOrigin" | "archiveBasePath">,
   hasRetries: boolean,
   now: number,
+  day: WritesDay | null,
 ): SendView {
   const counts = countsOf(send);
   const summed =
@@ -261,7 +264,7 @@ export function buildSendView(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
     phase,
-    conditions: sendConditions(send, now, onFreePlanLimits(config)),
+    conditions: sendConditions(send, now, day),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {

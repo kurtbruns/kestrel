@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { utcDayStart } from "../shared/daily_writes";
 import { DAILY_WRITES_SEND_RECIPIENTS, DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import * as sendsDb from "../src/db/sends";
 import type { AppEnv } from "../src/env";
@@ -15,6 +16,7 @@ beforeEach(async () => {
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 /** A draft made through the API, its id. */
@@ -795,6 +797,51 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
     expect(
       feed.conditions.map((c: { kind: string; send_id: string }) => [c.kind, c.send_id]),
     ).toEqual([["daily_writes", send.id]]);
+  });
+
+  it("counts what the day's imports wrote, so a smaller send warns on the day of an import", async () => {
+    // Noon UTC, so the imports and the send share a day.
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(utcDayStart(Date.now()) + 12 * 3_600_000);
+    // Two imports of 1,000 new subscribers write 14,006 rows; a send to the 4,000 it leaves
+    // writes 56,000 more, past the day's 70,000.
+    for (const piece of [0, 1]) {
+      const file = {
+        name: `piece-${piece}.txt`,
+        text: addresses(1_000)
+          .map((e) => `p${piece}.${e}`)
+          .join("\n"),
+      };
+      const plan = await readJson(
+        await SELF.fetch(`${base}/api/imports/plan`, {
+          method: "POST",
+          headers: JSON_AUTH,
+          body: JSON.stringify({ file }),
+        }),
+      );
+      const commit = await SELF.fetch(`${base}/api/imports`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify({
+          file,
+          plan_hash: plan.plan_hash,
+          attestation: { version: 1, accepted: true },
+        }),
+      });
+      expect(commit.status).toBe(201);
+    }
+    const send = await scheduleTo(2_000);
+    expect(send.conditions).toEqual([
+      expect.objectContaining({
+        kind: "daily_writes",
+        recipients: 4_000,
+        message: expect.stringMatching(/on the same day as today’s imports/),
+      }),
+    ]);
+  });
+
+  it("weighs a send alone on a day with no imports", async () => {
+    expect((await scheduleTo(4_000)).conditions).toEqual([]);
   });
 
   it("carries no warning at the threshold, or on Workers Paid", async () => {

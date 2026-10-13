@@ -10,6 +10,7 @@
  * `RETURNING` reports which addresses each write actually changed.
  */
 
+import { importWrites } from "../../shared/daily_writes";
 import type { ImportRecord, OptIn, OutcomeCounts } from "../../shared/imports";
 import type { SubscriberStatus } from "../../shared/subscribers";
 import { importNotice } from "./notifications";
@@ -148,6 +149,23 @@ export async function latestImportId(db: D1Database): Promise<string | null> {
     .prepare("SELECT id FROM imports ORDER BY created_at DESC, id DESC LIMIT 1")
     .first<{ id: string }>();
   return row?.id ?? null;
+}
+
+/**
+ * The rows the imports committed since `since` wrote, estimated from their counts by the
+ * measured cost of each outcome. The table holds a row per import, never per address, so the
+ * read is small.
+ */
+export async function importWritesSince(db: D1Database, since: number): Promise<number> {
+  const { results } = await db
+    .prepare("SELECT counts, suppressions_added FROM imports WHERE created_at >= ?")
+    .bind(since)
+    .all<{ counts: string; suppressions_added: number }>();
+  return results.reduce(
+    (sum, row) =>
+      sum + importWrites(JSON.parse(row.counts) as OutcomeCounts, row.suppressions_added),
+    0,
+  );
 }
 
 /** The import a plan was committed as, if it was. */

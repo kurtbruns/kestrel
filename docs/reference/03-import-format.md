@@ -96,7 +96,7 @@ A subscriber an import confirmed is **confirmed**, like anyone who confirmed in 
 
 - **Rows:** up to 10,000 in one import. On the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset), up to 1,000, since Free's 10 ms of CPU a request can't plan and commit more. Set [`SUBREQUEST_BUDGET`](01-configuration.md#subrequest_budget) on Workers Paid to take 10,000. Split a larger list into several files.
 - **Size:** a request of at most 10 MB, and `evidence` of at most 500 bytes a row.
-- **Database writes on Workers Free:** D1's free plan allows 100,000 rows written a day, and refuses every query past that until midnight UTC. Each new subscriber an import brings in writes about 7, and a send writes about 14 a recipient. So when an import leaves more than about 3,000 confirmed subscribers on Workers Free, import on one day and send on the next, by UTC. The plan says so when it applies, and never refuses. One import of 1,000 rows uses about 7% of a day's writes.
+- **Database writes on Workers Free:** D1's free plan allows 100,000 rows written a day, and refuses every query past that until midnight UTC. Each new subscriber an import brings in writes 7 rows, and a send writes about 14 a recipient. So one import of 1,000 new subscribers uses about 7% of a day's writes, and about 10 of them use most of a day. On Workers Free, the plan warns when it and the day's earlier imports, by UTC, would use more than 70% of the day, and advises importing the file the next day. A send scheduled for a day imports have written warns in the same way, and advises sending the next day. Neither warning refuses.
 
 ## Exporting
 

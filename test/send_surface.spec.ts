@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { writesDay } from "../shared/daily_writes";
 import {
   BOUNCE_SPIKE_RECENT_MS,
   DAILY_WRITES_SEND_RECIPIENTS,
@@ -79,7 +80,7 @@ function row(over: Partial<SendSummary>): SendSummary {
 
 describe("conditions: one server rule for each kind", () => {
   const NOW = 1_800_000_000_000;
-  const kinds = (s: SendSummary) => sendConditions(s, NOW, false).map((c) => c.kind);
+  const kinds = (s: SendSummary) => sendConditions(s, NOW, null).map((c) => c.kind);
 
   it("reads missed only past the tolerance, and remade only while the last test predates the re-make", () => {
     const sched = { status: "scheduled" as const, fire_at: NOW - 60_000 };
@@ -87,13 +88,13 @@ describe("conditions: one server rule for each kind", () => {
     const missed = sendConditions(
       row({ ...sched, fire_at: NOW - MISSED_THRESHOLD_MS - 1 }),
       NOW,
-      false,
+      null,
     );
     expect(missed.map((c) => [c.kind, c.severity, c.action])).toEqual([["missed", "action", null]]);
     const remade = { status: "scheduled" as const, fire_at: NOW + 60_000, remade_at: NOW - 10 };
     expect(kinds(row(remade))).toEqual(["remade"]);
     // The editor shows this message as is, so its wording is pinned here, not only in the client's copy.
-    expect(sendConditions(row(remade), NOW, false)[0]?.message).toBe(
+    expect(sendConditions(row(remade), NOW, null)[0]?.message).toBe(
       "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
     );
     expect(kinds(row({ ...remade, tested_at: NOW - 20 }))).toEqual(["remade"]);
@@ -107,7 +108,7 @@ describe("conditions: one server rule for each kind", () => {
       scheduled_at: NOW - 10,
       recipient_count: DAILY_WRITES_SEND_RECIPIENTS + 1,
     };
-    const free = (s: SendSummary) => sendConditions(s, NOW, true);
+    const free = (s: SendSummary) => sendConditions(s, NOW, writesDay(NOW, 0));
     expect(free(row(sched))).toEqual([
       {
         kind: "daily_writes",
@@ -120,12 +121,41 @@ describe("conditions: one server rule for each kind", () => {
       },
     ]);
     expect(free(row({ ...sched, recipient_count: DAILY_WRITES_SEND_RECIPIENTS }))).toEqual([]);
-    expect(sendConditions(row(sched), NOW, false)).toEqual([]);
+    expect(sendConditions(row(sched), NOW, null)).toEqual([]);
     expect(free(row({ ...sched, status: "sending", started_at: NOW - 60_000 }))).toEqual([]);
   });
 
+  it("counts what imports wrote on the UTC day the send fires, and nothing a later day's send (SPEC §8)", () => {
+    const day = writesDay(NOW, 30_000); // 30,000 rows written by imports so far today
+    const sched = {
+      status: "scheduled" as const,
+      fire_at: NOW + 60_000,
+      scheduled_at: NOW - 10,
+      recipient_count: 3_000, // 42,000 rows: over the budget only beside the imports
+    };
+    expect(sendConditions(row(sched), NOW, day)).toEqual([
+      {
+        kind: "daily_writes",
+        severity: "warn",
+        since: NOW - 10,
+        message:
+          "On the Workers Free plan’s limits, a send to 3,000 recipients on the same day as today’s imports may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Send it tomorrow (UTC), or move to Workers Paid, which is recommended for a list of more than 5,000.",
+        action: null,
+        recipients: 3_000,
+      },
+    ]);
+    expect(sendConditions(row({ ...sched, recipient_count: 2_800 }), NOW, day)).toEqual([]);
+    expect(sendConditions(row({ ...sched, fire_at: day.until }), NOW, day)).toEqual([]);
+    expect(sendConditions(row({ ...sched, fire_at: day.until - 1 }), NOW, day)).toHaveLength(1);
+    // A send too large on its own says so in the words that don't blame the imports.
+    const alone = sendConditions(row({ ...sched, recipient_count: 5_001 }), NOW, day);
+    expect(alone[0]?.message).toMatch(
+      /^On the Workers Free plan’s limits, a send to 5,001 recipients may use up/,
+    );
+  });
+
   it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck", () => {
-    const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, false);
+    const wedged = sendConditions(row({ c_in_flight: 3, started_at: NOW - 60_000 }), NOW, null);
     expect(wedged).toEqual([
       expect.objectContaining({
         kind: "wedged",
@@ -145,7 +175,7 @@ describe("conditions: one server rule for each kind", () => {
         halt_retry_at: NOW + 60_000,
       }),
       NOW,
-      false,
+      null,
     );
     expect(refused.map((c) => c.kind)).toEqual(["refused", "stuck"]); // most severe first
     expect(refused[0]).toMatchObject({
@@ -163,7 +193,7 @@ describe("conditions: one server rule for each kind", () => {
     const outage = sendConditions(
       row({ c_pending: 5, halt_reason: "unavailable", halt_error: "503", halt_retry_at: NOW + 1 }),
       NOW,
-      false,
+      null,
     );
     expect(outage.map((c) => [c.kind, c.severity])).toEqual([["provider_unavailable", "info"]]);
   });
@@ -176,7 +206,7 @@ describe("conditions: one server rule for each kind", () => {
     expect(
       kinds(row({ ...sent, completed_at: NOW - BOUNCE_SPIKE_RECENT_MS - 1, c_bounced: 50 })),
     ).toEqual([]);
-    expect(sendConditions(row({ ...sent, c_bounced: 5 }), NOW, false)[0]).toMatchObject({
+    expect(sendConditions(row({ ...sent, c_bounced: 5 }), NOW, null)[0]).toMatchObject({
       severity: "warn",
       bounced: 5,
       rate: 0.05,
