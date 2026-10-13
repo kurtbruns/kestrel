@@ -1485,6 +1485,36 @@ describe("editor view", () => {
     expect(puts()).toHaveLength(2); // the refused slug is not sent again
   });
 
+  it("spaces a later dropped connection's retries from the start once a refusal called off the last", async () => {
+    const server = draftServer();
+    const replies = [
+      () => jsonResponse({ error: "internal_error" }, 503),
+      () => jsonResponse({ error: "bad_request", message: "That isn’t allowed." }, 400),
+      () => jsonResponse({ error: "internal_error" }, 503),
+    ];
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: (req) => (replies.shift() ?? (() => server.put(req)))(),
+      },
+    ]);
+    typeInto(body(), "one");
+    $("#saveBtn").click(); // fails on the server's side: a retry is armed for five seconds on
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "two");
+    $("#saveBtn").click(); // refused, before the retry is due, which calls it off
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "three");
+    $("#saveBtn").click(); // the server's trouble again: a fresh start, not twice as far off
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(3);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(puts()).toHaveLength(4);
+    expect($("#saveStatus").textContent).toBe("Saved");
+  });
+
   it("drops a failed save's reason once the text is back to what was saved", async () => {
     const server = draftServer();
     await open([
@@ -1637,8 +1667,8 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
     expect(when.classList.contains("is-invalid")).toBe(true);
-    expect($(".modal .field-error").textContent).toContain(
-      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
     );
   });
 
@@ -1669,8 +1699,8 @@ describe("editor view", () => {
     $<HTMLInputElement>("#schWhen").value = toLocalInput(new Date(Date.now() + 86_400_000));
     $("#schGo").click();
     await vi.advanceTimersByTimeAsync(0);
-    expect($(".modal .field-error").textContent).toContain(
-      "Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 90 seconds from now, so there’s a window to cancel in.",
     );
     expect($<HTMLInputElement>("#schWhen").classList.contains("is-invalid")).toBe(true);
   });

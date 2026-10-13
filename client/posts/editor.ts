@@ -711,6 +711,7 @@ export async function renderEditor(
       if (!transient) {
         retryRound += 1;
         retryArmed = false;
+        retryDelay = 0; // a later dropped connection starts its spacing afresh
       } else if (!retryArmed) {
         retryArmed = true;
         retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
