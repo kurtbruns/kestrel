@@ -111,7 +111,9 @@ const ACCOUNT_ERROR_TYPES = new Map<string, HaltCause>([
   // A resource the request names doesn't exist. Kestrel names only its configuration set
   // (SES_CONFIGURATION_SET), so this is a typo, a set deleted after setup, or the wrong
   // region: the deployment's to fix, and the same for every recipient, so it holds the send
-  // rather than marking each one failed.
+  // rather than marking each one failed. Without a configuration set the request names no
+  // resource that could be missing, so a 404 then isn't expected, and the advice still points
+  // at the one setting that would cause it.
   ["NotFoundException", "configuration"],
   // The credentials themselves: unknown, wrongly signed, expired, or not permitted (a key
   // whose policy lacks `ses:SendBulkEmail` among them).

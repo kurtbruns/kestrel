@@ -528,6 +528,22 @@ describe("SesProvider.sendBatch", () => {
     });
   });
 
+  it("holds a 404 that carries no error type as a configuration refusal, rather than failing the batch (SPEC §12)", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("", { status: 404 }));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [
+        { email: "a@example.com", unsubscribeUrl: UNSUB },
+        { email: "b@example.com", unsubscribeUrl: UNSUB },
+      ],
+      { purpose: "list", tag: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: { reason: "account", cause: "configuration", error: "ses 404" },
+    });
+  });
+
   it("halts a 5xx as unavailable", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response("<internal>", { status: 500 }));
     const r = await newProvider().sendBatch(

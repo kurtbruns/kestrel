@@ -91,7 +91,7 @@ Used only with the `NOTIFY` binding. It must be an address on a domain set up fo
 | `ACCESS_ALLOWED_EMAILS` | a comma-separated list of the people allowed to sign in | optional |
 | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` | the IAM user's access key | SES |
 | `SNS_TOPIC_ARN` | the SNS topic the SES webhook accepts; it refuses every other topic | SES |
-| `SES_CONFIGURATION_SET` | the configuration set named on every email, so SES reports bounces and complaints | SES, recommended |
+| `SES_CONFIGURATION_SET` | the configuration set named on every email, so SES reports bounces and complaints; a name SES can't find in the region holds every list send until it's fixed | SES, recommended |
 
 `ACCESS_ALLOWED_EMAILS` applies to people only. A service token, such as the one Claude uses, carries no email, so the Access policy alone decides whether it gets in.
 
