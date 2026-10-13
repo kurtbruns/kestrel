@@ -12,7 +12,12 @@
  * so the list moving in between is applied safely and reported, never refused.
  */
 
-import { DAILY_WRITES_BUDGET, importWrites, utcDayStart } from "../../shared/daily_writes";
+import {
+  DAILY_WRITES_BUDGET,
+  importWrites,
+  nextUtcMidnight,
+  utcDayStart,
+} from "../../shared/daily_writes";
 import {
   ATTESTATION,
   attestationText,
@@ -76,6 +81,8 @@ export interface Plan {
   planHash: string;
   /** The warning about D1's daily writes, on Workers Free's limits only (SPEC §7). */
   dailyWritesWarning: string | null;
+  /** Whether it was planned on Workers Free's limits, where its commit restamps the day's scheduled sends. */
+  freePlan: boolean;
 }
 
 /**
@@ -292,7 +299,8 @@ export async function planImport(
   // so it stays out of the hash. A send's own share of the day is its condition's to weigh,
   // when it is scheduled, since a publisher finishes an import before they send.
   const earlierWrites = freePlan ? await imports.importWritesSince(db, utcDayStart(now)) : 0;
-  const dayWrites = earlierWrites + importWrites(counts, suppressionsAdded);
+  // Who will commit isn't known yet, so it counts Claude's notice to the publisher too.
+  const dayWrites = earlierWrites + importWrites(counts, suppressionsAdded, true);
   const planHash = await sha256Hex(
     JSON.stringify([
       "kestrel-import-plan/1",
@@ -319,6 +327,7 @@ export async function planImport(
       ? { version: ATTESTATION.version, text: attestationText(publication) }
       : null,
     planHash,
+    freePlan,
     dailyWritesWarning:
       freePlan && dayWrites > DAILY_WRITES_BUDGET
         ? dailyWritesImportWarning(dayWrites, earlierWrites > 0)
@@ -425,6 +434,7 @@ export async function commitImport(
     addConfirmed: [],
     suppress: [],
     notice: principal.kind === "service",
+    restampSendsBefore: plan.freePlan ? nextUtcMidnight(now) : null,
   };
   const tokens = newTokens(plan.counts.create_confirmed + plan.counts.create_unsubscribed);
   const token = (): string => tokens.pop() ?? "";

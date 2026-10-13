@@ -20,8 +20,11 @@ export const SEND_WRITES_PER_RECIPIENT = 14;
 
 /**
  * Rows an import writes, by what it does: a new subscriber (confirmed or unsubscribed), a
- * pending one confirmed, a confirmed one unsubscribed, any suppression added, and the
- * import's own record. Nothing else an import does writes a row.
+ * pending one confirmed, a confirmed one unsubscribed, any suppression added, the import's
+ * own record, and, for an import Claude commits, the notice telling the publisher. Two small
+ * writes are left out, each at most a row or two: a suppression that replaces an erased
+ * marker (an update, counted here as a new one, so over), and on Workers Free's limits the
+ * restamp of the day's scheduled sends, a row or two for each.
  */
 export const IMPORT_WRITES = {
   created: 7,
@@ -29,9 +32,10 @@ export const IMPORT_WRITES = {
   unsubscribed: 2,
   suppression: 2,
   record: 3,
+  notice: 4,
 } as const;
 
-/** The rows an import writes, from its counts by outcome and the suppressions it adds. */
+/** The rows an import writes, from its counts by outcome, the suppressions it adds, and whether Claude committed it. */
 export function importWrites(
   counts: {
     create_confirmed: number;
@@ -40,13 +44,15 @@ export function importWrites(
     mark_unsubscribed: number;
   },
   suppressionsAdded: number,
+  byService: boolean,
 ): number {
   return (
     IMPORT_WRITES.created * (counts.create_confirmed + counts.create_unsubscribed) +
     IMPORT_WRITES.confirmed * counts.confirm_pending +
     IMPORT_WRITES.unsubscribed * counts.mark_unsubscribed +
     IMPORT_WRITES.suppression * suppressionsAdded +
-    IMPORT_WRITES.record
+    IMPORT_WRITES.record +
+    (byService ? IMPORT_WRITES.notice : 0)
   );
 }
 
@@ -55,6 +61,11 @@ const DAY_MS = 86_400_000;
 /** When the UTC day holding `at` began, the moment D1's daily allowance last reset. */
 export function utcDayStart(at: number): number {
   return Math.floor(at / DAY_MS) * DAY_MS;
+}
+
+/** The next midnight UTC after `at`, when D1's daily allowance resets. */
+export function nextUtcMidnight(at: number): number {
+  return utcDayStart(at) + DAY_MS;
 }
 
 /** The UTC day so far, on Workers Free's limits: what its imports wrote, and when it ends. */
@@ -66,7 +77,7 @@ export interface WritesDay {
 
 /** `WritesDay` for the day holding `now`, from the imports committed since it began. */
 export function writesDay(now: number, importWritesToday: number): WritesDay {
-  return { importWrites: importWritesToday, until: utcDayStart(now) + DAY_MS };
+  return { importWrites: importWritesToday, until: nextUtcMidnight(now) };
 }
 
 /** A share of D1's daily writes as a whole percentage, for the warnings' words. */

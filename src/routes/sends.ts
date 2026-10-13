@@ -57,7 +57,7 @@ export async function list(c: RequestContext): Promise<Response> {
   // cursor.
   const now = Date.now();
   const { rows, total, seq } = await sends.listSendsPage(c.env.DB, filter, page);
-  const day = await readWritesDay(c.env.DB, c.config, now);
+  const day = await readWritesDay(c.env.DB, c.config, now, rows);
   // Every row carries the denormalized c_* counters and its retry probe, so each row's
   // phase, conditions, and actions come from the same rules as `/progress`, with no
   // aggregate over deliveries and no read per row (SPEC §8). The server derives; no client
@@ -221,7 +221,7 @@ export async function feed(c: RequestContext): Promise<Response> {
     read.settlingSince,
     now,
   );
-  const day = await readWritesDay(c.env.DB, c.config, now);
+  const day = await readWritesDay(c.env.DB, c.config, now, [...read.open, ...read.rows]);
   // Every open problem in one read, whichever sends it is on and whether they changed.
   const conditions: FeedCondition[] = read.open
     .flatMap((s) =>

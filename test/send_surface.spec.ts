@@ -13,11 +13,14 @@ import {
 } from "../shared/sends";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
+import { DEFAULT_SUBREQUEST_BUDGET } from "../src/env";
 import { MISSED_THRESHOLD_MS } from "../src/lib/time";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { sendActions, sendConditions } from "../src/send/conditions";
+import { readWritesDay } from "../src/send/describe";
 import { onTheMinute } from "../src/send/schedule";
 import { has } from "./support/conditions";
+import { guardD1 } from "./support/d1_guard";
 import { frozenSend, resetDatabase, setRow } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, readJson } from "./support/http";
 
@@ -152,6 +155,25 @@ describe("conditions: one server rule for each kind", () => {
     expect(alone[0]?.message).toMatch(
       /^On the Workers Free plan’s limits, a send to 5,001 recipients may use up/,
     );
+  });
+
+  it("reads the day's imports only for a send they can change, so most reads on Free read nothing for them", async () => {
+    const config = { subrequestBudget: DEFAULT_SUBREQUEST_BUDGET };
+    const now = Date.now();
+    const until = writesDay(now, 0).until;
+    const meter = guardD1(env.DB);
+    const quiet = [
+      { status: "scheduled" as const, fire_at: until, recipient_count: 10 }, // a later day
+      { status: "scheduled" as const, fire_at: now + 60_000, recipient_count: 6_000 }, // over alone
+      { status: "sent" as const, fire_at: now - 60_000, recipient_count: 10 },
+    ];
+    expect(await readWritesDay(meter.db, config, now, quiet)).toEqual(writesDay(now, 0));
+    expect(meter.statements).toBe(0);
+    await readWritesDay(meter.db, config, now, [
+      { status: "scheduled", fire_at: until - 1, recipient_count: 10 },
+    ]);
+    expect(meter.statements).toBe(1);
+    expect(await readWritesDay(meter.db, { subrequestBudget: 1000 }, now, quiet)).toBe(null);
   });
 
   it("reads wedged with its count and the Resolve action, refused with the fix and no action, and stuck", () => {

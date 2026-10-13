@@ -380,7 +380,9 @@ export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
  * Paid is recommended. The warning never refuses: the account may be on Paid while the
  * Worker is configured for Free.
  */
-export const DAILY_WRITES_SEND_RECIPIENTS = DAILY_WRITES_BUDGET / SEND_WRITES_PER_RECIPIENT;
+export const DAILY_WRITES_SEND_RECIPIENTS = Math.floor(
+  DAILY_WRITES_BUDGET / SEND_WRITES_PER_RECIPIENT,
+);
 
 /**
  * Whether a send to `recipients`, firing at `fireAt`, may spend D1's daily writes, given the
@@ -389,6 +391,22 @@ export const DAILY_WRITES_SEND_RECIPIENTS = DAILY_WRITES_BUDGET / SEND_WRITES_PE
 export function sendSpendsDailyWrites(recipients: number, fireAt: number, day: WritesDay): boolean {
   return (
     recipients * SEND_WRITES_PER_RECIPIENT + importWritesBefore(fireAt, day) > DAILY_WRITES_BUDGET
+  );
+}
+
+/**
+ * Whether what the day's imports wrote can change the send's `daily_writes` condition: it is
+ * scheduled to fire before the day ends, and fits the budget on its own. Any other send's
+ * condition is the same whatever they wrote, so a route reads them only for such a send.
+ */
+export function importsWeighOn(
+  send: Pick<SendSummary, "status" | "fire_at" | "recipient_count">,
+  until: number,
+): boolean {
+  return (
+    send.status === "scheduled" &&
+    send.fire_at < until &&
+    send.recipient_count * SEND_WRITES_PER_RECIPIENT <= DAILY_WRITES_BUDGET
   );
 }
 

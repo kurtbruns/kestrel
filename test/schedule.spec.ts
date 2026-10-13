@@ -2,6 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { utcDayStart } from "../shared/daily_writes";
+import { IMPORT_OUTCOMES } from "../shared/imports";
 import { DAILY_WRITES_SEND_RECIPIENTS, DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import * as sendsDb from "../src/db/sends";
 import type { AppEnv } from "../src/env";
@@ -835,9 +836,65 @@ describe("a send that may spend D1's daily writes (SPEC §8)", () => {
       expect.objectContaining({
         kind: "daily_writes",
         recipients: 4_000,
-        message: expect.stringMatching(/on the same day as today’s imports/),
+        message:
+          "On the Workers Free plan’s limits, a send to 4,000 recipients on the same day as today’s imports may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Send it tomorrow (UTC), or move to Workers Paid, which is recommended for a list of more than 5,000.",
       }),
     ]);
+  });
+
+  it("reaches a client following the feed, and the list, when an import lands after the send is scheduled", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(utcDayStart(Date.now()) + 12 * 3_600_000);
+    const send = await scheduleTo(500); // 7,000 rows: fits the day on its own
+    expect(send.conditions).toEqual([]);
+    const first = await readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
+    // An earlier import today wrote 63,003 rows, recorded the way a commit records it.
+    await env.DB.prepare(
+      "INSERT INTO imports (id, created_at, principal_kind, principal_email, attestation_version, file_name, file_sha256, plan_hash, counts, suppressions_added) VALUES ('earlier', ?, 'service', NULL, 1, 'earlier.csv', 'sha', 'earlier-hash', ?, 0)",
+    )
+      .bind(
+        Date.now() - 60_000,
+        JSON.stringify({
+          ...Object.fromEntries(IMPORT_OUTCOMES.map((o) => [o, 0])),
+          create_confirmed: 9_000,
+        }),
+      )
+      .run();
+    // Then an import commits now: one address recorded as unsubscribed, which grows no send.
+    const file = { name: "left.txt", text: "gone@example.com\n" };
+    const body = { file, plain_list_status: "unsubscribed" };
+    const plan = await readJson(
+      await SELF.fetch(`${base}/api/imports/plan`, {
+        method: "POST",
+        headers: JSON_AUTH,
+        body: JSON.stringify(body),
+      }),
+    );
+    const commit = await SELF.fetch(`${base}/api/imports`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ ...body, plan_hash: plan.plan_hash }),
+    });
+    expect(commit.status).toBe(201);
+    const next = await readJson(
+      await SELF.fetch(`${base}/api/sends/feed?since=${encodeURIComponent(first.cursor)}`, {
+        headers: AUTH,
+      }),
+    );
+    const followed = next.sends.find((s: { id: string }) => s.id === send.id);
+    expect(followed?.conditions).toEqual([
+      {
+        kind: "daily_writes",
+        severity: "warn",
+        since: send.scheduled_at,
+        message:
+          "On the Workers Free plan’s limits, a send to 500 recipients on the same day as today’s imports may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Send it tomorrow (UTC), or move to Workers Paid, which is recommended for a list of more than 5,000.",
+        action: null,
+        recipients: 500,
+      },
+    ]);
+    const list = await readJson(await SELF.fetch(`${base}/api/sends`, { headers: AUTH }));
+    expect(list.sends[0].conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
   });
 
   it("weighs a send alone on a day with no imports", async () => {

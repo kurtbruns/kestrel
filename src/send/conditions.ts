@@ -7,9 +7,9 @@
  * the clock against the row's times; wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
  * fire; remade by its last re-make against its last test; daily_writes by its audience as
- * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only. Each carries its severity, since
- * when (null when the record does not say), the server's words for it, and the action that
- * settles it, if the API has one. The actions are exactly what the server would accept on
+ * scheduled and what imports wrote on the UTC day it fires, on Workers Free's limits only.
+ * Each carries its severity, since when (null when the record does not say), the server's
+ * words for it, and the action that settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
  */
 

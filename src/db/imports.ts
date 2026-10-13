@@ -14,6 +14,7 @@ import { importWrites } from "../../shared/daily_writes";
 import type { ImportRecord, OptIn, OutcomeCounts } from "../../shared/imports";
 import type { SubscriberStatus } from "../../shared/subscribers";
 import { importNotice } from "./notifications";
+import { restampSendsFiringBeforeStmt } from "./sends";
 
 /**
  * The most bytes of JSON one statement binds. D1 refuses a string over 2,000,000 bytes;
@@ -158,12 +159,17 @@ export async function latestImportId(db: D1Database): Promise<string | null> {
  */
 export async function importWritesSince(db: D1Database, since: number): Promise<number> {
   const { results } = await db
-    .prepare("SELECT counts, suppressions_added FROM imports WHERE created_at >= ?")
+    .prepare("SELECT counts, suppressions_added, principal_kind FROM imports WHERE created_at >= ?")
     .bind(since)
-    .all<{ counts: string; suppressions_added: number }>();
+    .all<{ counts: string; suppressions_added: number; principal_kind: string }>();
   return results.reduce(
     (sum, row) =>
-      sum + importWrites(JSON.parse(row.counts) as OutcomeCounts, row.suppressions_added),
+      sum +
+      importWrites(
+        JSON.parse(row.counts) as OutcomeCounts,
+        row.suppressions_added,
+        row.principal_kind === "service",
+      ),
     0,
   );
 }
@@ -212,6 +218,8 @@ export interface ImportWrites {
   suppress: { e: string; r: string; at: number | null }[];
   /** Whether to tell the publisher of the import (one Claude committed, SPEC §8). */
   notice: boolean;
+  /** On Workers Free's limits, the end of the UTC day: the sends scheduled to fire before it are restamped, since their daily-writes condition counts this import. Null elsewhere. */
+  restampSendsBefore: number | null;
 }
 
 /** The addresses each write actually changed. */
@@ -351,6 +359,9 @@ export async function applyImport(
   );
   if (writes.notice) {
     statements.push(importNotice(db, r.id, now));
+  }
+  if (writes.restampSendsBefore !== null) {
+    statements.push(restampSendsFiringBeforeStmt(db, writes.restampSendsBefore));
   }
 
   const results = await db.batch<{ email: string }>(statements);

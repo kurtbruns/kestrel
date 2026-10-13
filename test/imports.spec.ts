@@ -1132,12 +1132,14 @@ describe("an import that may spend D1's daily writes (SPEC §7)", () => {
 
   it("warns on Workers Free's limits when it and today's earlier imports would pass the budget, and still plans", async () => {
     await seedImport(utcDayStart(NOON), 9_000); // 63,003 rows
-    const over = await planAdding(1_000); // 7,003 more: 70,006, past 70,000
+    // A plan counts Claude's notice too, since who commits isn't known yet: 7 a subscriber,
+    // 3 for the record, 4 for the notice.
+    const over = await planAdding(1_000); // 7,007 more: 70,010, past 70,000
     expect(over.counts.create_confirmed).toBe(1_000);
     expect(over.daily_writes_warning).toBe(
       "On the Workers Free plan’s limits, this import and today’s earlier ones would use about 70% of the database’s daily allowance of writes. Running out stops this newsletter until midnight UTC. Import this file tomorrow (UTC), or move to Workers Paid.",
     );
-    expect((await planAdding(999)).daily_writes_warning).toBe(null); // 70,000 exactly: within
+    expect((await planAdding(998)).daily_writes_warning).toBe(null); // 6,993 more: 69,996, within
   });
 
   it("counts only the imports of the current UTC day", async () => {

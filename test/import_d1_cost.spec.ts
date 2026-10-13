@@ -36,6 +36,7 @@ async function seedPending(emails: readonly string[]): Promise<void> {
 async function costOf(
   line: (email: string) => string,
   seed?: (emails: readonly string[]) => Promise<void>,
+  principal: Principal = HUMAN,
 ): Promise<{ written: number; estimated: number; recorded: number }> {
   const emails = addresses(ROWS);
   await seed?.(emails);
@@ -46,10 +47,10 @@ async function costOf(
     { maxRows: IMPORT_LIMITS.maxRows, maxRowsReason: null, publication: "Field Notes" },
   );
   const meter = meterD1(env.DB);
-  const result = await commitImport(meter.db, plan, HUMAN, Date.now());
+  const result = await commitImport(meter.db, plan, principal, Date.now());
   return {
     written: meter.rowsWritten,
-    estimated: importWrites(result.counts, result.suppressions_added),
+    estimated: importWrites(result.counts, result.suppressions_added, principal.kind === "service"),
     recorded: await importWritesSince(env.DB, 0),
   };
 }
@@ -77,6 +78,16 @@ describe("an import's cost in D1 rows, as the daily-writes estimate counts it", 
     ["a row left out", (e) => `${e},pending,unknown,unknown,,,,,,`],
     ["a row already in place", (e) => `${e},subscribed,unknown,sendy,,,,,,`, seedConfirmed],
   ];
+
+  it("matches the estimate exactly for an import Claude commits, which also tells the publisher", async () => {
+    const { written, estimated, recorded } = await costOf(
+      (e) => `${e},subscribed,double,sendy,,,,,,`,
+      undefined,
+      { kind: "service", via: "dev" },
+    );
+    expect(written).toBe(estimated);
+    expect(recorded).toBe(estimated);
+  });
 
   for (const [what, line, seed] of cases) {
     it(`matches the estimate exactly for ${what}`, async () => {
