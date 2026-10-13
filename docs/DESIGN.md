@@ -68,7 +68,7 @@ The editor, the web version, the docs, and the walls hide the sidebar: writing w
 | Import subscribers | `#/subscribers/import` | What bringing a list in would do, before it does it. |
 | Template | `#/template` | The one email template every post is sent in. |
 | Settings | `#/settings` | The publication's preferences, and the deploy facts read-only. |
-| Docs and API | `#/docs`, `#/reference` | The setup guide and the API reference, served by the instance. |
+| Docs and API | `#/docs`, `#/reference` | The setup guide, the publisher's pages, and the API reference, served by the instance. |
 
 The admin UI may link out to public pages (View publication, Archive ↗, View published post ↗). No public page links or redirects into `/dashboard` (SPEC §11), apart from the dev-only pill above.
 
@@ -224,16 +224,16 @@ Bringing a list in (SPEC §7) at `#/subscribers/import`, under Subscribers in th
 
 A file the server refuses (not in the format, a value it doesn't take, too many rows) is field validation under the chooser (§5), in the server's words, with the same prompt for Claude beneath. Nothing is guessed, and the chooser keeps focus.
 
-**2. A file chosen.** Planning writes nothing, so it runs as soon as a file is chosen or dropped; there is no Plan button. The chooser reads "Reading…" meanwhile. One screen then holds the plan and the confirmation:
+**2. A file chosen.** Planning writes nothing, so it runs as soon as a file is chosen or dropped; there is no Plan button. The chooser reads "Reading…" meanwhile, and once the plan is in, focus moves to the file row. One screen then holds the plan and the confirmation:
 
-- **The file row**: name, which kind of file, rows and distinct addresses, and **Replace file** (Ghost), which opens the picker again and plans the new file.
+- **The file row**: name, which kind of file, rows and distinct addresses, and **Replace file** (Ghost), which opens the picker again and plans the new file from the start: its boxes unticked, and a plain list's answer back to Subscribed.
 - **For a plain list**, "These addresses are **Subscribed | Unsubscribed | Bounced**", which plans again when changed, and a line that how they joined is recorded as unknown.
 - **What will happen**: one line per outcome with a count, in reading order (who joins, who leaves, what else the file does, what it leaves out), the first confirming line carrying its breakdown by opt-in and origin. Addresses blocked by a suppression here and readers this list keeps as they are (unsubscribed here, or confirmed here after the file says they left) sit apart under "Kept as they are here", so nobody reads them as imported. A row that also adds a suppression is said once beneath, not counted twice. **Download the N rows not imported as subscribed (CSV)** (Ghost) gives each row's number, address, and outcome. The plan's daily-writes warning, when it has one, is the Schedule dialog's amber box (§4), in the plan's words.
 - **Confirm**: a box per scheduled send that would grow ("“Owls”, sending Oct 14, 9:00 AM, goes to 25 more people."), then the attestation in the plan's words, both unticked, and under it "Only import people who asked to receive [publication]. If you’re unsure about some, take them out of the file before importing." When nobody is imported as subscribed there's nothing to attest, and the card says so. Then Cancel (back to Subscribers) and **Import** (Primary).
 
-Import stays enabled. Pressing it with a box unticked marks that box with why it's needed and moves focus there, the first missing one down the page, as Schedule does with an empty subject (§3, Editor). If another import was committed since the plan (`plan_stale`), the page plans the file again, shows the new plan with its boxes unticked, and says why above the actions. Any other refusal of the commit goes above the actions too, in the server's words, like a dialog error (§5). The file stays only in the page: nothing is stored between the plan and the commit.
+Import stays enabled. Pressing it with a box unticked marks that box with why it's needed and moves focus there, the first missing one down the page, as Schedule does with an empty subject (§3, Editor). If the commit comes back `plan_stale` (another import landed, or the scheduled posts it would grow changed), the page plans the file again, shows the new plan with its boxes unticked, and says above the actions, with focus there: "Your list or its scheduled posts changed since this plan, so here is the plan again as things stand now. Review it, then import." The commit always sends the plan on screen and the file it was made from, and Import is unavailable while a plain list's new answer is being planned. Any other refusal of the commit goes above the actions too, in the server's words, like a dialog error (§5). The file stays only in the page: nothing is stored between the plan and the commit.
 
-**3. Done.** The page shows the result and moves focus to its heading: what happened, per outcome as applied; any rows that turned out differently from the plan, with what was planned and what was applied; "Nobody was emailed. To tell your readers about the move, write a post as usual."; and the import's record (the file, a fingerprint of it, when and by whom, and the attestation as given). **See your subscribers** is the Primary, beside **Import another file** (Ghost). The line that nothing changes yet goes, since something has. A commit repeated after a lost answer says it was already done and that nothing was written again.
+**3. Done.** The page shows the result and moves focus to its heading: what happened, per outcome as applied; any rows that turned out differently from the plan, with what was planned and what was applied; "Nobody was emailed. To tell your readers about the move, write a post as usual."; and the import's record (the file, a fingerprint of it, when and by whom, and the attestation as given). **See your subscribers** is the Primary, beside **Import another file** (Ghost), which goes back to the chooser with focus on Choose file. The line that nothing changes yet goes, since something has. A commit repeated after a lost answer says it was already done and that nothing was written again.
 
 ### Template
 
@@ -285,7 +285,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 The setup guide and the API reference share one room with its own bar (back to the dashboard, a Docs or API switch, and close) over a contents rail and the page. The build stamp sits at the rail's foot, and nowhere on the publication's screens: it's for a bug report, not the publisher's day.
 
-- **Docs** renders the setup guide, one doc per page. The index lists the main path first, numbered because its pages are steps taken in order, then the guides and the reference, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step.
+- **Docs** renders the setup guide and the publisher's pages, one doc per page. The index lists the main path first, numbered because its pages are steps taken in order, then the guides, the reference, and the publisher's pages, unnumbered because a reader picks from them. A doc's Previous and Next stay within its section, so the main path ends at its last step.
 - **API reference** lists each tier's routes under the resource they act on, whose heading stays pinned while its routes scroll by. Each route is one row (method badge, path, summary) that opens in place to its parameters, body types, JSON examples, and a curl command for this instance carrying the credential its tier needs. A filter above the first tier narrows the whole list, rail included, and `/` focuses it.
 
 ---

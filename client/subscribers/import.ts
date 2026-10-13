@@ -37,6 +37,10 @@ import {
 export const ASK_CLAUDE_PROMPT =
   "Please import my Sendy subscribers from ~/Downloads/sendy-export.csv into the newsletter.";
 
+/** What the page says above Import when the commit came back `plan_stale` and the file was planned again. */
+export const STALE_NOTICE =
+  "Your list or its scheduled posts changed since this plan, so here is the plan again as things stand now. Review it, then import.";
+
 // The five columns that decide what happens to a row, shown in the Full list sample.
 const SAMPLE_COLUMNS = ["email", "status", "opt_in", "origin", "subscribed_at"] as const;
 
@@ -87,10 +91,8 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
 
   // Named as the attestation names it: the publication's own name, or none.
   const publication = appState.appConfig?.settings.publication.name || "this newsletter";
-  // The file in hand and what the publisher said its addresses are. Kept only for this
-  // page: nothing is stored between the plan and the commit.
-  let chosen: ChosenFile | null = null;
-  let plainStatus: PlainListStatus = format.plain_list.default;
+  // The file in hand lives only in the closures of the plan on screen: nothing is stored
+  // between the plan and the commit, and the commit sends exactly what that plan was made from.
   let sample: "full" | "plain" = "full";
 
   // --- 1. The shape Kestrel reads, then the chooser ---------------------------------------
@@ -222,28 +224,31 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     }
     const next = { name: file.name, text };
     // A plain list's addresses start as the default each time a new file is chosen.
-    plainStatus = format.plain_list.default;
+    const status = isPlain(next) ? format.plain_list.default : null;
     const fileButton = body.querySelector<HTMLButtonElement>("#impChoose, #impReplace");
     const planned = await (fileButton
-      ? busy(fileButton, "Reading…", () => plan(next))
-      : plan(next));
+      ? busy(fileButton, "Reading…", () => plan(next, status))
+      : plan(next, status));
     if (planned === null) {
       return;
     }
-    chosen = next;
-    paintPlan(planned);
+    paintPlan(planned, next);
+    $(".imp-file", body).focus();
   }
 
-  /** Plan a file. A refusal of the file is said under the chooser, and answers null. */
-  async function plan(file: ChosenFile): Promise<ImportPlanResponse | null> {
+  /** Plan a file, a plain list as `status`. A refusal of the file is said under the
+   *  chooser, and answers null. */
+  async function plan(
+    file: ChosenFile,
+    status: PlainListStatus | null,
+  ): Promise<ImportPlanResponse | null> {
     try {
       return await api<ImportPlanResponse>("/api/imports/plan", {
         method: "POST",
-        json: planBody(file),
+        json: status === null ? { file } : { file, plain_list_status: status },
       });
     } catch (e) {
       if (!signal.aborted) {
-        chosen = null;
         // The server's own words about the file (not in the format, a value it doesn't
         // take, too many rows), or why it couldn't be read at all.
         paintChooser(describeError(e));
@@ -253,14 +258,8 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     }
   }
 
-  function planBody(file: ChosenFile): {
-    file: ChosenFile;
-    plain_list_status?: PlainListStatus;
-  } {
-    return isPlain(file) ? { file, plain_list_status: plainStatus } : { file };
-  }
-
-  function paintPlan(p: ImportPlanResponse, notice?: string): void {
+  /** Paint plan `p`, made from `file`: everything on screen, the commit included, is that plan's. */
+  function paintPlan(p: ImportPlanResponse, file: ChosenFile, notice?: string): void {
     const confirming = confirmedCount(p.counts);
     const lines = outcomeLines(p.counts);
     const breakdown = confirmedBreakdown(p.confirmed);
@@ -269,12 +268,12 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     const kindLabel = p.file.kind === "txt" ? "Plain list (.txt)" : `CSV, ${format.format}`;
     setHtml(
       body,
-      html`<section class="card imp-card imp-file">
+      html`<section class="card imp-card imp-file" tabindex="-1" aria-label="The file chosen and its plan">
         <div class="imp-file-row">
           <div><strong class="imp-file-name">${p.file.name}</strong><div class="muted">${kindLabel} · ${rowsText(p.file.rows)} · ${addressesText(p.file.addresses)}</div></div>
           <button type="button" class="ghost" id="impReplace">Replace file</button>
         </div>
-        ${p.file.kind === "txt" ? plainStatusControl() : null}
+        ${p.file.kind === "txt" ? plainStatusControl(p.file.plain_list_status ?? format.plain_list.default) : null}
       </section>
       <section class="card imp-card">
         <h2>What will happen</h2>
@@ -309,7 +308,7 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
             ? html`<p class="imp-text">Nobody is imported as a subscriber, so there’s nothing to attest.</p>`
             : null
         }
-        ${notice ? html`<div class="field-error imp-act-error" role="alert"><span class="field-error-ico" aria-hidden="true">!</span><span>${notice}</span></div>` : null}
+        ${notice ? html`<div class="field-error imp-act-error" role="alert" tabindex="-1"><span class="field-error-ico" aria-hidden="true">!</span><span>${notice}</span></div>` : null}
         <div class="actions imp-actions"><a class="ghost-link" href="#/subscribers">Cancel</a><button type="button" class="primary" id="impGo">Import</button></div>
       </section>`,
     );
@@ -317,34 +316,38 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     if (notImported > 0) {
       $("#impNotImported", body).onclick = () => downloadNotImported(p.file.name, p.rows);
     }
-    for (const b of $$<HTMLButtonElement>("[data-plain]", body)) {
+    const go = $<HTMLButtonElement>("#impGo", body);
+    const toggles = $$<HTMLButtonElement>("[data-plain]", body);
+    for (const b of toggles) {
       b.onclick = () => {
         const status = b.dataset.plain as PlainListStatus;
-        if (status === plainStatus || !chosen) {
+        if (status === p.file.plain_list_status) {
           return;
         }
-        plainStatus = status;
-        const file = chosen;
-        void busy(b, null, async () => {
-          const next = await plan(file);
+        // While the new plan is on its way, the one on screen is no longer the publisher's
+        // choice, so nothing can commit it.
+        go.disabled = true;
+        for (const t of toggles) {
+          t.disabled = true;
+        }
+        void (async () => {
+          const next = await plan(file, status);
           if (next && !signal.aborted) {
-            chosen = file;
-            paintPlan(next);
+            paintPlan(next, file);
             $<HTMLButtonElement>(`[data-plain="${status}"]`, body).focus();
           }
-        });
+        })();
       };
     }
-    const go = $<HTMLButtonElement>("#impGo", body);
-    go.onclick = () => commit(p, go);
+    go.onclick = () => commit(p, file, go);
   }
 
-  function plainStatusControl(): Html {
+  function plainStatusControl(pressed: PlainListStatus): Html {
     return html`<div class="imp-plain">
       <span class="imp-plain-label" id="impPlainLabel">These addresses are</span>
       <span class="set-wtog" role="group" aria-labelledby="impPlainLabel">${PLAIN_LIST_STATUSES.map(
         (s) =>
-          html`<button type="button" class="wtog-btn" data-plain="${s}" aria-pressed="${String(s === plainStatus)}">${PLAIN_LABELS[s]}</button>`,
+          html`<button type="button" class="wtog-btn" data-plain="${s}" aria-pressed="${String(s === pressed)}">${PLAIN_LABELS[s]}</button>`,
       )}</span>
       <p class="field-hint">A plain list doesn’t say how each person joined, so it’s recorded as unknown.</p>
     </div>`;
@@ -355,11 +358,12 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
     saveFile(notImportedCsv(rows), `${base}-not-imported.csv`, "text/csv");
   }
 
-  async function commit(p: ImportPlanResponse, go: HTMLButtonElement): Promise<void> {
-    const file = chosen;
-    if (!file) {
-      return;
-    }
+  /** Commit plan `p`, made from `file`: its file, its declared meaning, and its hash. */
+  async function commit(
+    p: ImportPlanResponse,
+    file: ChosenFile,
+    go: HTMLButtonElement,
+  ): Promise<void> {
     body.querySelector(".imp-act-error")?.remove();
     // Each box the commit needs, unticked, says so where it is, in order down the page.
     const acks = $$<HTMLInputElement>("[data-ack]", body);
@@ -382,7 +386,8 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         const done = await api<ImportCommitResponse>("/api/imports", {
           method: "POST",
           json: {
-            ...planBody(file),
+            file,
+            plain_list_status: p.file.plain_list_status ?? undefined,
             plan_hash: p.plan_hash,
             ...(p.attestation
               ? { attestation: { version: p.attestation.version, accepted: true } }
@@ -398,15 +403,13 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
           return;
         }
         if (e instanceof ApiError && e.code === "plan_stale") {
-          // Another import landed since this plan: plan the same file again and show it, so
-          // what the publisher confirms is what the commit would now do.
-          const again = await plan(file);
-          if (again) {
-            chosen = file;
-            paintPlan(
-              again,
-              "Another import was committed after this plan, so here is the plan again as your list stands now. Review it, then import.",
-            );
+          // The plan no longer matches what the commit would do (another import landed, or
+          // the scheduled sends it would grow changed): plan the same file again and show it,
+          // so what the publisher confirms is what the commit would now do.
+          const again = await plan(file, p.file.plain_list_status);
+          if (again && !signal.aborted) {
+            paintPlan(again, file, STALE_NOTICE);
+            $(".imp-act-error", body).focus();
           }
           return;
         }
@@ -490,8 +493,10 @@ export async function renderImport(root: HTMLElement, signal: AbortSignal): Prom
         <div class="actions imp-actions"><button type="button" class="ghost" id="impAnother">Import another file</button><button type="button" class="primary" id="impToList">See your subscribers</button></div>
       </section>`,
     );
-    chosen = null;
-    $("#impAnother", body).onclick = () => paintChooser();
+    $("#impAnother", body).onclick = () => {
+      paintChooser();
+      $("#impChoose", body).focus();
+    };
     $("#impToList", body).onclick = () => {
       location.hash = "#/subscribers";
     };

@@ -5,6 +5,7 @@ import {
   type ImportCommitResponse,
   type ImportPlanResponse,
   type OutcomeCounts,
+  type PlainListStatus,
   TEMPLATE_CSV,
 } from "../../shared/imports";
 import { appState } from "../state";
@@ -21,7 +22,7 @@ import {
   settingsResponse,
   settle,
 } from "../test/support";
-import { ASK_CLAUDE_PROMPT, renderImport } from "./import";
+import { ASK_CLAUDE_PROMPT, renderImport, STALE_NOTICE } from "./import";
 
 const counts = (over: Partial<OutcomeCounts>): OutcomeCounts => ({
   ...(Object.fromEntries(IMPORT_OUTCOMES.map((o) => [o, 0])) as OutcomeCounts),
@@ -64,6 +65,18 @@ function planFor(name: string, over: Partial<ImportPlanResponse> = {}): ImportPl
     daily_writes_warning: null,
     ...over,
   };
+}
+
+/** A plain list's plan, as the server answers for `status`: subscribed confirms and needs
+ *  the attestation; anything else only suppresses. */
+function plainPlan(name: string, status: PlainListStatus): ImportPlanResponse {
+  const subscribing = status === "subscribed";
+  return planFor(name, {
+    file: { name, kind: "txt", rows: 3, addresses: 3, plain_list_status: status },
+    attestation: subscribing ? { version: 1, text: ATTEST } : null,
+    counts: counts(subscribing ? { create_confirmed: 3 } : { suppression_added: 3 }),
+    plan_hash: `hash-${status}`,
+  });
 }
 
 function committed(over: Partial<ImportCommitResponse> = {}): ImportCommitResponse {
@@ -222,6 +235,8 @@ describe("import view", () => {
     ]);
     expect($(".imp-file").textContent).toContain("list.csv");
     expect($(".imp-file").textContent).toContain("36 rows · 32 addresses");
+    // Focus moves to the plan, where the reading starts.
+    expect(document.activeElement).toBe($(".imp-file"));
     expect($$(".imp-outcomes:not(.imp-kept) li").map((li) => li.dataset.outcome)).toEqual([
       "create_confirmed",
     ]);
@@ -250,24 +265,28 @@ describe("import view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("asks what a plain list's addresses are, and plans again when the answer changes", async () => {
+  it("asks what a plain list's addresses are, plans again when the answer changes, and commits the plan's answer", async () => {
+    const held: { release?: () => void } = {};
     fake = fakeApi([
       formatRoute,
       {
         method: "POST",
         path: "/api/imports/plan",
         reply: (req) => {
-          const body = req.json() as { plain_list_status: string };
-          return planFor("list.txt", {
-            attestation:
-              body.plain_list_status === "subscribed" ? { version: 1, text: ATTEST } : null,
-            counts: counts(
-              body.plain_list_status === "subscribed"
-                ? { create_confirmed: 3 }
-                : { suppression_added: 3 },
-            ),
-          });
+          const body = req.json() as { file: { name: string }; plain_list_status: PlainListStatus };
+          const p = plainPlan(body.file.name, body.plain_list_status);
+          // The re-plan is held open, to see the page while it's on its way.
+          return body.plain_list_status === "bounced"
+            ? new Promise((resolve) => {
+                held.release = () => resolve(p);
+              })
+            : p;
         },
+      },
+      {
+        method: "POST",
+        path: "/api/imports",
+        reply: () => jsonResponse(committed({ counts: counts({ suppression_added: 3 }) }), 201),
       },
     ]);
     await mount(renderImport);
@@ -277,6 +296,11 @@ describe("import view", () => {
     expect($(".imp-plain").textContent).toContain("recorded as unknown");
     $("[data-plain='bounced']").click();
     await settle();
+    // While the new answer is planned, the plan on screen can't be committed.
+    expect($<HTMLButtonElement>("#impGo").disabled).toBe(true);
+    $("#impGo").click();
+    held.release?.();
+    await settle();
     const plans = fake.calls.filter((c) => c.url.pathname === "/api/imports/plan");
     expect(plans.map((c) => (c.json() as { plain_list_status: string }).plain_list_status)).toEqual(
       ["subscribed", "bounced"],
@@ -284,6 +308,52 @@ describe("import view", () => {
     expect($("[data-plain='bounced']").getAttribute("aria-pressed")).toBe("true");
     expect($$("#impAttest")).toHaveLength(0);
     expect($(".imp-confirm").textContent).toContain("nothing to attest");
+    expect(commits(fake)).toEqual([]);
+    $("#impGo").click();
+    await settle();
+    // The commit carries the answer the plan on screen was made with.
+    expect(commits(fake).map((c) => c.json())).toEqual([
+      {
+        file: { name: "list.txt", text: "a@example.com\nb@example.com\nc@example.com\n" },
+        plain_list_status: "bounced",
+        plan_hash: "hash-bounced",
+        acknowledge_sends: [],
+      },
+    ]);
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("starts over when the file is replaced: boxes unticked, and a plain list's answer back to the default", async () => {
+    fake = fakeApi([
+      formatRoute,
+      {
+        method: "POST",
+        path: "/api/imports/plan",
+        reply: (req) => {
+          const body = req.json() as { file: { name: string }; plain_list_status: PlainListStatus };
+          return plainPlan(body.file.name, body.plain_list_status);
+        },
+      },
+    ]);
+    await mount(renderImport);
+    await settle();
+    await chooseFile("first.txt", "a@example.com\n");
+    $("[data-plain='unsubscribed']").click();
+    await settle();
+    $("[data-plain='subscribed']").click();
+    await settle();
+    $<HTMLInputElement>("#impAttest").click();
+    expect($<HTMLInputElement>("#impAttest").checked).toBe(true);
+    $("#impReplace").click(); // opens the picker; the choice arrives as a change
+    await chooseFile("second.txt", "b@example.com\n");
+    expect($(".imp-file-name").textContent).toBe("second.txt");
+    expect($<HTMLInputElement>("#impAttest").checked).toBe(false);
+    expect($("[data-plain='subscribed']").getAttribute("aria-pressed")).toBe("true");
+    const last = fake.calls.filter((c) => c.url.pathname === "/api/imports/plan").at(-1);
+    expect(last?.json()).toEqual({
+      file: { name: "second.txt", text: "b@example.com\n" },
+      plain_list_status: "subscribed",
+    });
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -376,10 +446,13 @@ describe("import view", () => {
     expect($(".imp-record").textContent).toContain("pub@birds.example");
     expect($(".imp-record").textContent).toContain(ATTEST);
     expect($(".imp-ref").textContent).toContain("ada@example.com");
+    // Another file starts over at the chooser, with focus on it.
+    $("#impAnother").click();
+    expect(document.activeElement).toBe($("#impChoose"));
     expect(fake.unhandled).toEqual([]);
   });
 
-  it("plans the file again when another import landed first, and asks again (plan_stale)", async () => {
+  it("plans the file again when the plan went stale, says why, and asks again (plan_stale)", async () => {
     let hash = "hash-1";
     fake = fakeApi([
       formatRoute,
@@ -404,9 +477,11 @@ describe("import view", () => {
     $("#impGo").click();
     await settle();
     expect(fake.calls.filter((c) => c.url.pathname === "/api/imports/plan")).toHaveLength(2);
-    expect($(".imp-act-error").textContent).toContain(
-      "Another import was committed after this plan",
+    expect($(".imp-act-error").textContent).toBe(`!${STALE_NOTICE}`);
+    expect(STALE_NOTICE).toBe(
+      "Your list or its scheduled posts changed since this plan, so here is the plan again as things stand now. Review it, then import.",
     );
+    expect(document.activeElement).toBe($(".imp-act-error"));
     expect($<HTMLInputElement>("#impAttest").checked).toBe(false);
     $<HTMLInputElement>("#impAttest").click();
     $("#impGo").click();

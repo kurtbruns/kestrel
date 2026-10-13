@@ -88,7 +88,8 @@ export async function renderSubscribers(
           { below: true },
         )}</div>`,
       );
-      const listEmpty = c.pending + c.confirmed + c.unsubscribed + c.suppressed === 0;
+      // Suppressions alone are no subscribers, so a list of only them still points the way in.
+      const listEmpty = c.pending + c.confirmed + c.unsubscribed === 0;
       renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty);
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {

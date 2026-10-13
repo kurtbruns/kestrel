@@ -42,13 +42,13 @@ If a scheduled post would reach the people the import adds, Claude stops and ask
 
 ## What an import does
 
-Nothing changes when you choose a file. Kestrel plans the import first and shows you what it would do to every row. You see who is added as a subscriber, who is recorded as having left, and who is suppressed, and which rows are repeats, invalid, or left out. You can download the rows that won't be imported as subscribers, to check them against your file. Only when you press **Import** does anything change, and then all of the plan applies, or none of it. An import sends no email.
+Nothing changes when you choose a file. Kestrel plans the import first and shows you what it would do to every row. You see who is added as a subscriber, who is recorded as having left, and who is suppressed, and which rows are repeats, invalid, or left out. You can download the rows that won't be imported as subscribers, to check them against your file. Only when you press **Import** does anything change, and then the import applies whole, or not at all. If a reader's consent changed between your plan and the import, for example someone unsubscribed or confirmed, their row follows your list as it stands then, and the result lists each row that turned out differently. An import sends no email.
 
 To import anyone as a subscriber, you confirm that everyone you're importing as subscribed opted in to receive your publication, and that the list isn't purchased, rented, or scraped. If you're unsure about some people, take them out of the file before importing. Kestrel keeps your attestation with the import's record.
 
 If a post is scheduled, it goes to the list as it stands when it sends, so the people an import adds would receive it. The plan names each such post and how many more people it would reach, and you acknowledge each one before importing.
 
-If another import is committed after you plan, Kestrel plans your file again and shows you the new plan before anything happens.
+If your list or its scheduled posts changed since the plan in a way the plan rests on, such as another import, Kestrel plans your file again and shows you the new plan as things stand now, before anything happens.
 
 ## Why your old service's record is honored
 

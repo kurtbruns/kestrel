@@ -9,7 +9,12 @@ import {
   settingsResponse,
   typeInto,
 } from "../test/support";
-import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
+import {
+  addSubscriberModal,
+  confirmErase,
+  confirmUnsubscribe,
+  consentRecordModal,
+} from "./dialogs";
 
 // The signal of a page that stays mounted throughout.
 const live = new AbortController().signal;
@@ -222,5 +227,35 @@ describe("confirmUnsubscribe", () => {
     expect(document.querySelector(".modal")).toBeNull();
     expect(fake.calls).toEqual([]);
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe("consentRecordModal", () => {
+  const signedUp = {
+    id: "s2",
+    email: "left@b.c",
+    status: "unsubscribed" as const,
+    confirm_token: null,
+    confirm_sent_at: 1,
+    confirm_attempt_at: 1,
+    unsub_token: "t",
+    created_at: 1,
+    confirmed_at: null,
+    unsubscribed_at: 3,
+    origin: "kestrel",
+    opt_in: "double" as const,
+    consent_evidence: null,
+    import_id: null,
+  };
+
+  it("says a reader who signed up here and left never confirmed, and a pending one hasn't yet", () => {
+    fake = fakeApi([]);
+    consentRecordModal(signedUp, live);
+    expect($(".consent-dl dd").textContent).toBe("Signed up here, never confirmed");
+    expect($(".consent-dl").textContent).toContain("None recorded");
+    $("#crClose").click();
+    consentRecordModal({ ...signedUp, status: "pending", unsubscribed_at: null }, live);
+    expect($(".consent-dl dd").textContent).toBe("Signed up here, not confirmed yet");
+    expect(fake.calls).toEqual([]);
   });
 });

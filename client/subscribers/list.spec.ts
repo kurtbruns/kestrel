@@ -173,12 +173,12 @@ describe("subscribers view", () => {
     expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
   });
 
-  it("points an empty list at the import, and opens the import from the head", async () => {
+  it("points a list with no subscribers (suppressions alone count for none) at the import, and opens the import from the head", async () => {
     fake = fakeApi([
       {
         path: "/api/subscribers",
         reply: () => ({
-          counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 },
+          counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 2 },
           subscribers: [],
           page: { ...page, total: 0 },
         }),

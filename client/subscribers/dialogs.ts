@@ -148,7 +148,7 @@ export function consentRecordModal(sub: Subscriber, signal: AbortSignal): void {
   const m = modal(
     html`<h3>Consent record</h3><p class="hint"><strong>${sub.email}</strong> · ${sub.status}</p>
     <dl class="consent-dl">
-      <dt>How they joined</dt><dd>${joinedVia(sub) ?? "Signed up here, not confirmed yet"}</dd>
+      <dt>How they joined</dt><dd>${joinedVia(sub) ?? (sub.status === "pending" ? "Signed up here, not confirmed yet" : "Signed up here, never confirmed")}</dd>
       ${
         imported
           ? html`<dt>Origin</dt><dd>${originName(sub.origin) ?? "Unknown"}</dd>

@@ -5953,6 +5953,13 @@ body.has-savebar .content {
 .imp-card h2 {
   margin: 0 0 10px;
 }
+/* Where the page moves focus after a plan, a re-plan, or the result: a place to read from,
+   not a control, so it takes no ring. */
+.imp-file:focus,
+.imp-act-error:focus,
+#impDoneHead:focus {
+  outline: none;
+}
 .imp-card-head {
   display: flex;
   align-items: center;
