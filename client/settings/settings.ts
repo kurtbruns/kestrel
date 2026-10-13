@@ -158,7 +158,15 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
 
   // --- save / discard. Wired into the shared save bar above; the controller runs
   // saveSettings inside busy() on its Save button, so these stay plain callbacks.
+  // The field a refused save marked, cleared when the next save starts or the edits are
+  // discarded, neither of which edits the field itself.
+  let clearFieldMark: (() => void) | null = null;
+  const unmarkField = () => {
+    clearFieldMark?.();
+    clearFieldMark = null;
+  };
   async function saveSettings() {
+    unmarkField();
     try {
       // An identity change the template renders reaches every scheduled email, so the
       // server may ask for the acknowledgement first (withRemakeConfirm); a save that
@@ -203,7 +211,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
       // on the page says why under that field, focuses it, and the bar points there.
       const input = err instanceof ApiError ? fieldInput(root, err.field) : null;
       if (input && err instanceof ApiError) {
-        fieldError(input, message(err));
+        clearFieldMark = fieldError(input, message(err));
         input.focus();
         bar.showError("Not saved: fix the field marked above.");
       } else {
@@ -212,6 +220,7 @@ export async function renderSettings(root: HTMLElement, signal: AbortSignal): Pr
     }
   }
   function discardSettings() {
+    unmarkField();
     Object.assign(state, baselineOf(baseline));
     for (const h of handles) {
       h.reset?.();

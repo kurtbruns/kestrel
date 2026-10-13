@@ -644,6 +644,22 @@ describe("editor view", () => {
     expect($("#toasts").textContent).toBe("This post was deleted elsewhere.");
   });
 
+  it("refuses a reschedule inside the minimum lead under its picker, before asking the server", async () => {
+    const linked = scheduledPost();
+    await open(linked.routes);
+    $("#rescheduleSchedule").click();
+    const when = $<HTMLInputElement>("#rsWhen");
+    when.value = toLocalInput(new Date(Date.now() + 60_000));
+    $("#rsGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fake.calls.some((c) => c.url.pathname === "/api/sends/s1/reschedule")).toBe(false);
+    expect(when.classList.contains("is-invalid")).toBe(true);
+    // No Send now in this dialog, so the reason says only why.
+    expect($(".modal .field-error").textContent).toBe(
+      "!Pick a time at least 5 minutes from now, so there’s a window to cancel in.",
+    );
+  });
+
   it("says a send turned missed while the editor is open", async () => {
     await open(scheduledPost(Date.now() + 5_000).routes);
     expect($("#schedWhen").textContent).toMatch(/Sends in/);

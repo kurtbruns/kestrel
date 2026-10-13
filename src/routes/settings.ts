@@ -242,7 +242,8 @@ export async function update(c: RequestContext): Promise<Response> {
     warnings = v.warnings;
   }
   // Validate the patch against the current settings up front, so a bad field is a 400
-  // before any refusal about scheduled sends (applyPatch throws plain Errors). The read
+  // before any refusal about scheduled sends (applyPatch throws SettingsFieldError, naming
+  // the field; any other Error is still a 400 rather than a 500). The read
   // stays outside the catch: a database failure is a 500, never reported as a bad request.
   const current = await getSettings(c.env.DB);
   try {

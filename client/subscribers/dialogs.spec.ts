@@ -1,6 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { appState } from "../state";
-import { $, type FakeApi, fakeApi, resetShell, settingsResponse, typeInto } from "../test/support";
+import {
+  $,
+  type FakeApi,
+  fakeApi,
+  jsonResponse,
+  resetShell,
+  settingsResponse,
+  typeInto,
+} from "../test/support";
 import { addSubscriberModal, confirmUnsubscribe } from "./dialogs";
 
 // The signal of a page that stays mounted throughout.
@@ -17,6 +25,26 @@ afterEach(() => {
 });
 
 describe("addSubscriberModal", () => {
+  it("puts the server's refusal of the address under the address field", async () => {
+    fake = fakeApi([
+      {
+        method: "POST",
+        path: "/api/subscribers",
+        reply: () =>
+          jsonResponse(
+            { error: "bad_request", message: "That address can’t receive mail.", field: "email" },
+            400,
+          ),
+      },
+    ]);
+    addSubscriberModal(() => {}, live);
+    typeInto($<HTMLInputElement>("#addEmail"), "owl@example.com");
+    $("#aGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($<HTMLInputElement>("#addEmail").classList.contains("is-invalid")).toBe(true);
+    expect($("#addEmail + .field-error").textContent).toContain("That address can’t receive mail.");
+  });
+
   it("refuses an address without an @ before asking the API", () => {
     fake = fakeApi([]);
     addSubscriberModal(() => {}, live);

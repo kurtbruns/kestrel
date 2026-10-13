@@ -7,7 +7,8 @@
 export interface ApiErrorBody {
   /** The machine-readable code, such as `bad_request` or `fire_at_too_soon`. */
   error: string;
-  /** The server's words for it. Absent only on an unexpected 500, which has none to give. */
+  /** The server's words for it. Absent on an unexpected 500, which has none to give, and on
+   *  a few bare refusals (an unauthenticated 401, an unknown route's 404). */
   message?: string;
   /** The request field the refusal is about, dotted for a nested one (`publication.name`). */
   field?: string;

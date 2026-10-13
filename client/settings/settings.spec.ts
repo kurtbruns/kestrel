@@ -523,6 +523,10 @@ describe("settings view", () => {
     expect($("#notifyTo + .field-error").textContent).toContain("not a valid email address: nope");
     expect(document.activeElement).toBe(input);
     expect($(".savebar-msg").textContent).toBe("Not saved: fix the field marked above.");
+    // Discard puts the field back without editing it, so the mark goes with the edit.
+    $("#savebarDiscard").click();
+    expect(input.classList.contains("is-invalid")).toBe(false);
+    expect(document.querySelector("#notifyTo + .field-error")).toBeNull();
   });
 
   it("says why any save failed in the bar, not in a toast that would cover it (DESIGN §5)", async () => {
