@@ -316,7 +316,7 @@ function quotaHoldMs(): number {
  */
 export class SimProvider implements EmailProvider {
   // A fake-family transport (nothing reaches a real inbox), so it reports as `fake`: the
-  // "no email provider configured" labeling (DESIGN §4) and the dev-shaped predicate hold.
+  // local stand-in labeling (DESIGN §4) and the dev-shaped predicate hold.
   readonly name = "fake" as const;
   readonly maxBatch: number;
   readonly maxRequestRate?: number;

@@ -57,7 +57,7 @@ export function refusalAdvice(cause: HaltCause | null): string {
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":
-      return "Wait for SES's daily quota to reset, or ask AWS to raise it in the SES console.";
+      return "Wait for SES's 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.";
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
     case "not_connected":

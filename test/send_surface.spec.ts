@@ -118,7 +118,8 @@ describe("conditions: one server rule for each kind", () => {
       action: null,
       cause: "quota",
       error: "Daily message quota exceeded",
-      advice: "Wait for SES's daily quota to reset, or ask AWS to raise it in the SES console.",
+      advice:
+        "Wait for SES's 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.",
       retry_at: NOW + 60_000,
       since: NOW - 60_000,
     });
