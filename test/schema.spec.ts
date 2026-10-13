@@ -41,6 +41,41 @@ describe("schema (every migration applied)", () => {
   });
 });
 
+describe("schema (0006_deliveries_fewer_indexes)", () => {
+  const plan = async (sql: string, ...binds: unknown[]) =>
+    (
+      await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`)
+        .bind(...binds)
+        .all<{ detail: string }>()
+    ).results
+      .map((r) => r.detail)
+      .join("\n");
+
+  it("keeps on deliveries only the indexes a query reads", async () => {
+    const { results } = await env.DB.prepare(
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'deliveries' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    ).all<{ name: string }>();
+    expect(results.map((r) => r.name)).toEqual([
+      "idx_deliveries_email",
+      "idx_deliveries_provider",
+      "idx_deliveries_send_status",
+    ]);
+  });
+
+  it("still reads a batch's rows by key through the send's own index", async () => {
+    expect(
+      await plan(
+        "SELECT COUNT(*) FROM deliveries WHERE send_id = ? AND dispatch_key IN (SELECT value FROM json_each(?)) AND status = ?",
+        "s",
+        '["k"]',
+        "dispatched",
+      ),
+    ).toMatch(
+      /SEARCH deliveries USING INDEX idx_deliveries_send_status \(send_id=\? AND status=\?\)/,
+    );
+  });
+});
+
 describe("schema (0005_imports)", () => {
   it("reads every subscriber made before it as joining through this app's double opt-in", async () => {
     await env.DB.prepare(
@@ -318,16 +353,11 @@ describe("schema (0001_init)", () => {
       ).rejects.toThrow(/CHECK/);
     });
 
-    it("finds a send's stale in-flight rows and an address's deliveries through their own indexes", async () => {
+    it("finds an address's deliveries through its own index", async () => {
       const plan = async (sql: string) =>
         (await env.DB.prepare(`EXPLAIN QUERY PLAN ${sql}`).all<{ detail: string }>()).results
           .map((r) => r.detail)
           .join("\n");
-      expect(
-        await plan(
-          "SELECT COUNT(*) FROM deliveries WHERE status = 'dispatched' AND updated_at < 5",
-        ),
-      ).toMatch(/idx_deliveries_in_flight/);
       expect(
         await plan(
           "SELECT id FROM deliveries WHERE email = 'a@example.com' ORDER BY updated_at DESC LIMIT 1",

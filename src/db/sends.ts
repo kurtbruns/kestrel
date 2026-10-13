@@ -1227,20 +1227,21 @@ export async function dispatchFresh(
   const json = JSON.stringify(rows);
   const guard = holdsLease(sendId, lease);
   const [moved] = await db.batch<{ id: number; key: string }>([
-    // Rows are found by primary key (the unary `+` keeps SQLite off the (send_id, status)
-    // index, which would walk every pending row of the send for each group), and each
-    // takes its own batch's key.
+    // Driven from the batch: each row is looked up by primary key and takes its own
+    // batch's key, so a row reads its one entry, not the whole batch. The unary `+` keeps
+    // SQLite off the (send_id, status) index, which would walk every pending row of the
+    // send. `json_each` has an `id` column of its own, so the row's is `deliveries.id`.
     db
       .prepare(
-        `UPDATE deliveries SET status = 'dispatched',
-                dispatch_key = (SELECT json_extract(j.value, '$.k') FROM json_each(?) AS j
-                                 WHERE json_extract(j.value, '$.id') = deliveries.id),
+        `UPDATE deliveries SET status = 'dispatched', dispatch_key = json_extract(j.value, '$.k'),
                 keyed_at = ?, updated_at = ?
-          WHERE id IN (SELECT json_extract(value, '$.id') FROM json_each(?))
-            AND +send_id = ? AND +status = 'pending' AND dispatch_key IS NULL AND ${guard.sql}
-          RETURNING id, dispatch_key AS key`,
+           FROM json_each(?) AS j
+          WHERE deliveries.id = json_extract(j.value, '$.id')
+            AND +deliveries.send_id = ? AND +deliveries.status = 'pending'
+            AND deliveries.dispatch_key IS NULL AND ${guard.sql}
+          RETURNING deliveries.id AS id, deliveries.dispatch_key AS key`,
       )
-      .bind(json, now, now, json, sendId, ...guard.binds),
+      .bind(now, now, json, sendId, ...guard.binds),
     // After the move, so it counts exactly the rows that took the (new) keys.
     keyedCounterMove(
       db,
@@ -1412,10 +1413,9 @@ export async function settleDeliveries(
            updated_at = ?
          FROM json_each(?) AS j
          WHERE deliveries.id = json_extract(j.value, '$.id')
-           AND deliveries.id IN (SELECT json_extract(value, '$.id') FROM json_each(?))
            AND +deliveries.send_id = ? AND +deliveries.status = ? AND ${guard.sql}`,
       )
-      .bind(now, json, json, sendId, from, ...guard.binds),
+      .bind(now, json, sendId, from, ...guard.binds),
     // The column names come from the fixed `CounterCol` union, never user input.
     db
       .prepare(
