@@ -199,7 +199,7 @@ A post **must have a non-empty subject** to schedule or send. The subject is wha
 
 ### The soft-lock
 
-A scheduled post is locked: the API refuses every write to it (body, metadata, images) until its send is canceled, so the lock is enforced, not merely shown. It is *soft* only in that a cancel undoes it. To change it the publisher **cancels** the scheduled send, which unlocks the post, then edits, re-tests, and schedules it again. Editing stays easy but becomes deliberate, and it resets the review.
+A scheduled post is locked: the API refuses every write to it (body, metadata, images) until its send is canceled, so the lock is enforced, not merely shown. The refusal names the way out only where there is one: a cancel unlocks the post until its send starts, after which nothing does, and a sent post stays locked for good. It is *soft* only in that a cancel undoes it. To change it the publisher **cancels** the scheduled send, which unlocks the post, then edits, re-tests, and schedules it again. Editing stays easy but becomes deliberate, and it resets the review.
 
 A **re-make is a freeze**. It renders each scheduled send again from the same locked content, the current template, and the current identity, at the same fire time; it resets the sign-off, so the last approving test should be of the re-made copy; it is refused while any scheduled send is inside the minimum lead, as a move is, because a freeze inside the lead would leave less than the minimum window to review what it produced (I6); and it never touches a send that is sending or sent. The identity is not versioned: renaming the publication is a global act, not a look, and reaches scheduled sends the same way.
 

@@ -12,7 +12,7 @@ import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { currentSendSeq, getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
-import { badRequest, conflict, json, notFound } from "../lib/errors";
+import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -76,18 +76,26 @@ function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
 
 /**
  * The post the request names, refused unless it is a draft: a scheduled post's content is
- * frozen until its schedule is canceled (I3), and a sent one's for good. Saving a post and
- * changing its images both pass through here.
+ * frozen until its schedule is canceled (I3), and a sent one's for good. A post stays
+ * `scheduled` until its send completes, so one whose send has started can't be canceled
+ * back to a draft either, and the refusal says which it is. Saving a post, deleting it,
+ * and changing its images all pass through here.
  */
 export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
   }
+  if (post.status === "sent") {
+    throw refusal(409, "post_not_draft", "This post has been sent, so it can’t be changed.");
+  }
   if (post.status !== "draft") {
-    throw conflict(
-      post.status === "sent"
-        ? "This post has been sent, so it can’t be changed."
+    const active = await getActiveSendForPost(c.env.DB, post.id);
+    throw refusal(
+      409,
+      "post_not_draft",
+      active?.status === "sending"
+        ? "This post is being sent, so it can’t be changed."
         : "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
     );
   }

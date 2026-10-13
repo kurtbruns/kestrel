@@ -472,7 +472,7 @@ export function createRouter({
       summary:
         "Update a draft. Send the revision you read as `base_revision` (or If-Match): a save without one is a 428 `base_required` carrying the post as it stands, and one whose base is no longer current is a 409 `stale_revision`.",
       description:
-        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled. While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again and numbers it if another post holds it, so take the slug from the answer. Sending `slug` sets it by hand and turns `slug_auto` off; `slug_auto: true` has it follow the subject again. Sending both is a 400 naming `slug`.",
+        "Only a draft is editable; a scheduled post is soft-locked until its schedule is canceled, and a save to a post that is not a draft is a 409 `post_not_draft` (its message says whether canceling the schedule would unlock it). While the post's slug follows the subject (`slug_auto: true`), every save derives it from the subject again and numbers it if another post holds it, so take the slug from the answer. Sending `slug` sets it by hand and turns `slug_auto` off; `slug_auto: true` has it follow the subject again. Sending both is a 400 naming `slug`.",
       example: {
         request: {
           subject: "Hello again, world",
@@ -496,7 +496,8 @@ export function createRouter({
       path: "/api/posts/:id",
       access: "admin",
       resource: "posts",
-      summary: "Delete a draft and its revisions (drafts only).",
+      summary:
+        "Delete a draft and its revisions (drafts only; any other post is a 409 `post_not_draft`).",
       handler: postRoutes.deletePost,
     },
     {
@@ -523,7 +524,8 @@ export function createRouter({
       access: "admin",
       accepts: [...FORM_UPLOAD, ...RASTER_IMAGE_TYPES],
       resource: "posts",
-      summary: "Upload an image to a post (multipart form field `file`).",
+      summary:
+        "Upload an image to a draft (multipart form field `file`); a post that is not a draft is a 409 `post_not_draft`.",
       handler: imageRoutes.uploadImage,
     },
     {
@@ -539,7 +541,8 @@ export function createRouter({
       path: "/api/posts/:id/images/:filename",
       access: "admin",
       resource: "posts",
-      summary: "Delete one image from a post.",
+      summary:
+        "Delete one image from a draft; a post that is not a draft is a 409 `post_not_draft`.",
       handler: imageRoutes.deleteImage,
     },
 
@@ -637,7 +640,7 @@ export function createRouter({
       resource: "posts",
       summary: `Freeze the render and schedule the send for a future time (at least ${formatLead(minLeadMs)} out).`,
       description:
-        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise: " +
+        "Freezes the current draft, with the template and identity as they stand, onto a send row and soft-locks the post; cancelable until its fire time. A later template or identity change re-makes that frozen email after the publisher confirms it (SPEC §6); there is no per-send template to name, and a `template_revision` field is a 400. `fire_at` is epoch milliseconds or an ISO-8601 timestamp with a `Z` or `±hh:mm` offset; a timestamp without one is a 400, since the Worker cannot know which local time was meant. `fire_at` must be at least the minimum lead out, a 400 `fire_at_too_soon` otherwise (for the soonest send, use Send now, `POST /api/posts/:id/send`): " +
         lead +
         ". The time is then rounded up to the next whole minute (one already on the minute stays), since the sweep fires sends on the minute; the lead is checked on the time as requested, so rounding only lengthens the window. Answers with the new send's view (as `GET /api/sends/:id` describes it) and a `cursor` to follow it from. Refusals: 409 `active_send_exists` when the post already has its one active send (carried as `send`), 409 `post_not_draft`, 400 `subject_required` for an empty subject, 409 `settings_changed` when a template or identity save kept landing while it froze (try again), and 409 `provider_not_connected` while no email provider is connected (SPEC §9).",
       example: {
