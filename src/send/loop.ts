@@ -275,11 +275,12 @@ export async function runSend(
     const [first, ...rest] = sent;
     const answers = first ? [await send(first)] : [];
     const probe = answers[0]?.answer;
-    if (probe?.kind === "answered") {
+    if (probe?.kind === "answered" && !probe.halt) {
       answers.push(...(await Promise.all(rest.map(send))));
     } else {
-      // Handed off but never sent: back to the queue with the halted one, no key kept
-      // (none of them reached the provider on this attempt).
+      // Handed off but never sent: back to the queue, no key kept (none of them reached the
+      // provider on this attempt), since the first request found the provider refusing,
+      // down, or not answering.
       for (const call of rest) {
         held.push({
           key: call.batch.key,
@@ -304,12 +305,25 @@ export async function runSend(
           };
         } else {
           unknown += call.recipients.length; // stays in flight, awaiting Resolve (§12)
+          // The provider may be down or unreachable: the send waits out the outage's
+          // backoff rather than strand a fresh batch every tick. Only the halt is taken;
+          // this batch stays in flight.
+          halt = worseHalt(halt, {
+            reason: "unavailable",
+            cause: "outage",
+            error: lost ?? "no answer",
+            mayHaveSent: true,
+          });
         }
       } else if (answer.kind === "halted") {
         complete = false;
         batchHalt = answer.halt;
       } else {
-        answered = true;
+        // An answer that took or settled someone is progress, which ends a halt the send
+        // carried; one that only held recipients back is not.
+        if (answer.results.some((r) => r.accepted || r.held !== true)) {
+          answered = true;
+        }
         // Recipients the provider held back for its own reasons go back with no attempt
         // spent, and the send records why, as for a halted batch. Only the halt is taken:
         // the batch's other rows were answered, or are in flight with their fate unknown.
@@ -375,14 +389,16 @@ export async function runSend(
 
     const count = (status: DeliveryOutcome["status"]) =>
       outcomes.filter((o) => o.status === status).length;
+    // Recipients the provider held back for its own reasons count as held, not retried.
+    const heldBack = outcomes.filter((o) => o.status === "pending" && o.attempt === false).length;
     log.info("send.batch", {
       ...tags,
       requests: answers.length,
       recipients: batches.reduce((n, b) => n + b.members.length, 0),
       accepted: count("accepted"),
       unsent: count("unsent"),
-      retried: count("pending"),
-      held: heldCount,
+      retried: count("pending") - heldBack,
+      held: heldCount + heldBack,
       unknown,
       latencyMs,
     });

@@ -256,6 +256,50 @@ describe("SesProvider.sendBatch", () => {
     expect(r.kind === "answered" && r.results.every((x) => x.accepted)).toBe(true);
   });
 
+  it("halts a one-off message SES refuses for the account, through SendEmail too", async () => {
+    answerSes(
+      undefined,
+      () =>
+        new Response(JSON.stringify({ __type: "SendingPausedException", message: "paused" }), {
+          status: 400,
+        }),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [{ email: "me@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "test", idempotencyKeyPrefix: "t" },
+    );
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+  });
+
+  it("answers a test to several addresses when a later request gets no answer, naming who got what", async () => {
+    let n = 0;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      n += 1;
+      if (n === 2) {
+        throw new Error("connection reset");
+      }
+      return new Response(JSON.stringify({ MessageId: `m${n}` }), { status: 200 });
+    });
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com", "c@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "test", idempotencyKeyPrefix: "t" },
+    );
+    expect(n).toBe(2);
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        { email: "a@example.com", accepted: true, providerId: "m1" },
+        { email: "b@example.com", accepted: false, retryable: false },
+        { email: "c@example.com", accepted: false, retryable: true },
+      ],
+    });
+  });
+
   it("never halts a batch SES answered short, so a recipient it may have mailed stays in flight (I4)", async () => {
     // SES answered one entry of three, and that one is a throttle: the two it left out may
     // have been mailed, so the batch can't go back to the queue as a whole.

@@ -366,13 +366,15 @@ describe("the SES profile reaches what an SES failure leads to", { timeout: 60_0
 
     // At its first step (five minutes) it is, and the quota has lifted: the send resumes,
     // and a few requests in, one is lost in flight, in this run rather than the halted one.
-    while (row.halt_reason !== null && Date.now() - haltedAt < 10 * 60_000) {
+    while (row.halt_cause === "quota" && Date.now() - haltedAt < 10 * 60_000) {
       vi.setSystemTime(Date.now() + 60_000);
       await sweep(e);
       row = (await sends.getSend(env.DB, sendId))!;
     }
     expect(Date.now() - haltedAt).toBe(5 * 60_000);
-    expect(row.halt_reason).toBeNull();
+    // The lost request holds the send for an outage's first step, a minute, rather than
+    // strand another batch at once.
+    expect([row.halt_reason, row.halt_cause]).toEqual(["unavailable", "outage"]);
     expect(fakeOutbox().length).toBeGreaterThan(beforeQuota);
     // At least one: SES's own rare loss can add another to the one the profile guarantees.
     expect(row.c_in_flight).toBeGreaterThanOrEqual(1);

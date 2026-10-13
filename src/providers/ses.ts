@@ -279,10 +279,35 @@ export class SesProvider implements EmailProvider {
     let held: BatchHalt | null = null;
     for (let at = 0; at < sendable.length; at += size) {
       const batch = sendable.slice(at, at + size);
-      const answer =
-        opts.purpose === "list"
-          ? await this.sendBulk(content, batch)
-          : await this.sendSingle(content, unwrap(batch[0], "a recipient"));
+      let answer: SendBatchResult;
+      try {
+        answer =
+          opts.purpose === "list"
+            ? await this.sendBulk(content, batch)
+            : await this.sendSingle(content, unwrap(batch[0], "a recipient"));
+      } catch (err) {
+        // A request with no answer. On the first, it is the caller's to handle (the send
+        // loop leaves the batch for Resolve). After it, a one-off caller (a template test to
+        // several addresses) gets the answers it already has: this recipient's fate is
+        // unknown, and the rest were never sent. A list batch always throws, so the send
+        // loop leaves every recipient whose fate is unknown in flight (I4).
+        if (opts.purpose === "list" || (at === 0 && out.length === 0)) {
+          throw err;
+        }
+        const words = err instanceof Error ? err.message : String(err);
+        for (const r of batch) {
+          out.push({
+            email: r.email,
+            accepted: false,
+            retryable: false,
+            error: `ses gave no answer (${words}), so it may have arrived`,
+          });
+        }
+        for (const rest of sendable.slice(at + size)) {
+          out.push({ email: rest.email, accepted: false, retryable: true, error: "not sent" });
+        }
+        break;
+      }
       if (answer.kind === "halted") {
         // A refusal on the first request, with nothing else answered, speaks for the whole
         // batch. Later, it can't: the rest are held back, and wait for the next tick.
@@ -304,6 +329,15 @@ export class SesProvider implements EmailProvider {
       out.push(...answer.results);
       if (answer.halt) {
         held = worse(held, answer.halt);
+        for (const rest of sendable.slice(at + size)) {
+          out.push({
+            email: rest.email,
+            accepted: false,
+            retryable: true,
+            error: answer.halt.error,
+            held: true,
+          });
+        }
         break;
       }
     }
