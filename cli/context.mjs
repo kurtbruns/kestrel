@@ -31,7 +31,11 @@ const PACKAGE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PACKAGE = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"));
 
 /** The context files an instance gets, by their path in the instance. */
-export const CONTEXT_FILES = [".claude/CLAUDE.md", ".claude/skills/upgrade/SKILL.md"];
+export const CONTEXT_FILES = [
+  ".claude/CLAUDE.md",
+  ".claude/skills/upgrade/SKILL.md",
+  ".claude/skills/migrate-list/SKILL.md",
+];
 
 /** Where an instance's context file ships in the package. */
 export function shippedPath(file) {

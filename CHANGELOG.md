@@ -10,6 +10,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Added
+
+- The operator's Claude context gains a `/migrate-list` skill, which `kestrel init` writes and `npm run check-context` offers to an existing instance. It brings a list over from another service by a method that checks itself: it reads the import format from the instance, asks the publisher about every ambiguity in the export, has them approve hand-converted rows that become the converter's first tests, splits the result to the deployment's row limit, and confirms Kestrel's plan matches the converter's counts before each piece. This bears on safety, since it adds subscribers: the context's rule against adding a subscriber the publisher didn't name now makes its one exception for such an import, committed only on the publisher's yes to the plan's exact attestation, and the converted files stay in a working folder outside the repository. The Connect Claude guide points to it.
+
 ## [1.9.0] - 2026-10-13
 
 **Upgrading from 1.8.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. The first (`0005_imports`) adds the record of each import and how each subscriber joined, reading every existing subscriber as joined through Kestrel's double opt-in, and rebuilds the notifications table so an import can be told to you. The second (`0006_deliveries_fewer_indexes`) drops two indexes no query reads; it writes no rows, so it costs nothing against D1's daily allowance at any size.

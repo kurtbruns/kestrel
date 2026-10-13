@@ -134,6 +134,7 @@ const INSTANCE_FILES = [
   "src/index.ts",
   ".claude/CLAUDE.md",
   ".claude/skills/upgrade/SKILL.md",
+  ".claude/skills/migrate-list/SKILL.md",
 ];
 const absent = INSTANCE_FILES.filter((f) => !existsSync(join(instance, f)));
 const stray = ["claude", "gitignore", "npmrc"].filter((f) => existsSync(join(instance, f)));

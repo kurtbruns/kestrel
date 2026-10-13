@@ -77,6 +77,8 @@ Read GET /api/reference first, and use it for every call.
 
 Claude reads the reference, and from there can list your posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
+To bring your subscribers over from another service, ask Claude to import your list. Your instance's `/migrate-list` skill converts the old service's export to the [import format](../reference/03-import-format.md), checks Kestrel's plan against its own counts, and asks you for the attestation before it commits anything.
+
 ## Check it
 
 1. Ask Claude to call `GET /api/whoami`. The app answers with a program's identity, not yours:
