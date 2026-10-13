@@ -118,8 +118,9 @@ describe("api", () => {
 
 describe("describeError", () => {
   it("keeps a server message written for people", () => {
-    expect(describeError(new ApiError("Add a subject before you schedule.", 400))).toBe(
-      "Add a subject before you schedule.",
+    const msg = "Add a subject before you schedule.";
+    expect(describeError(new ApiError(msg, 400, { error: "subject_required", message: msg }))).toBe(
+      msg,
     );
   });
 
@@ -141,7 +142,16 @@ describe("describeError", () => {
     );
   });
 
+  it("treats an HTTP status text from a body that isn't the API's as no message at all", () => {
+    expect(describeError(new ApiError("Bad Gateway", 502, null))).toBe(
+      "Something went wrong on the server. Try again in a moment.",
+    );
+  });
+
   it("leaves a programming error's own text alone rather than blaming the connection", () => {
     expect(describeError(new TypeError("x is undefined"))).toBe("x is undefined");
+    expect(describeError(new TypeError("x.fetch is not a function"))).toBe(
+      "x.fetch is not a function",
+    );
   });
 });

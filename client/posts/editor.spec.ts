@@ -1344,6 +1344,52 @@ describe("editor view", () => {
     expect(handle().beforeLeave()).toBe("confirm"); // a silent flush would fail again
   });
 
+  it("keeps one retry pending however many saves fail meanwhile", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error" }, 503),
+      },
+    ]);
+    typeInto(body(), "one");
+    $("#saveBtn").click(); // a failure the publisher caused
+    await vi.advanceTimersByTimeAsync(0);
+    typeInto(body(), "two");
+    $("#saveBtn").click(); // and another, before the retry is due
+    await vi.advanceTimersByTimeAsync(0);
+    expect(puts()).toHaveLength(2);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(puts()).toHaveLength(3);
+    // A second chain would fire here too; the one retry, having failed, waits twice as long.
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(puts()).toHaveLength(3);
+  });
+
+  it("drops a failed save's reason once the text is back to what was saved", async () => {
+    const server = draftServer();
+    await open([
+      { path: "/api/posts/p1", reply: server.get },
+      {
+        method: "PUT",
+        path: "/api/posts/p1",
+        reply: () => jsonResponse({ error: "internal_error" }, 503),
+      },
+    ]);
+    const saved = body().value;
+    typeInto(body(), `${saved} more`);
+    $("#saveBtn").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect($("#saveStatus").classList.contains("is-error")).toBe(true);
+    typeInto(body(), saved); // undone
+    expect($("#saveStatus").textContent).toBe("Saved");
+    typeInto(body(), `${saved}!`); // a new edit starts clean, not with the old failure
+    expect($("#saveStatus").textContent).toBe("Unsaved changes");
+    expect(handle().beforeLeave()).not.toBe("confirm");
+  });
+
   it("tries a failed save again on its own, spaced out, and clears the error once one lands", async () => {
     const server = draftServer();
     let failures = 2;

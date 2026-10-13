@@ -112,7 +112,12 @@ export function fieldError(
   field.after(line);
   field.setAttribute("aria-describedby", describedBy ? `${describedBy} ${line.id}` : line.id);
   field.classList.add("is-invalid");
+  let cleared = false;
   const clear = () => {
+    if (cleared) {
+      return;
+    }
+    cleared = true;
     line.remove();
     field.classList.remove("is-invalid");
     if (describedBy === null) {

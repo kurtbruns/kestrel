@@ -559,6 +559,7 @@ export async function renderEditor(
   // recovers without another edit.
   let saveError: string | null = null;
   let retryDelay = 0;
+  let retryArmed = false; // one pending retry at a time, however many saves fail meanwhile
   // The save row is a draft's; a scheduled post renders none.
   const saveBtn = locked ? null : $<HTMLButtonElement>("#saveBtn");
   const saveStatus = locked ? null : $("#saveStatus");
@@ -591,6 +592,12 @@ export async function renderEditor(
   }
   function refreshDirty() {
     editorDirty = dirty.dirty;
+    if (!editorDirty) {
+      // Back to what was last saved (an undo, say): nothing is unsaved, so no failure stands.
+      saveError = null;
+      saveFailed = false;
+      retryDelay = 0;
+    }
     renderSaveStatus();
   }
   renderSaveStatus(); // paint the initial state (Saved on a fresh draft; empty if locked)
@@ -681,16 +688,20 @@ export async function renderEditor(
       }
       saveFailed = true; // the leave guard now prompts rather than silently flushing
       saveError = describeError(e);
-      retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
-      at(
-        Date.now() + retryDelay,
-        () => {
-          if (saveError && !conflicted) {
-            saveDraft(true).catch(() => {}); // a failure says so on the cue again
-          }
-        },
-        signal,
-      );
+      if (!retryArmed) {
+        retryArmed = true;
+        retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
+        at(
+          Date.now() + retryDelay,
+          () => {
+            retryArmed = false;
+            if (saveError && !conflicted) {
+              saveDraft(true).catch(() => {}); // a failure says so on the cue again
+            }
+          },
+          signal,
+        );
+      }
       throw e;
     } finally {
       saving = false;
@@ -833,6 +844,7 @@ export async function renderEditor(
       return;
     }
     conflicted = true; // pauses autosave; makes the leave guard prompt
+    saveError = null; // the banner is the story now; an older failure's reason would contradict it
     paintSaveBtn();
     revisions.noteWarned(conflict);
     if (conflict.kind === "locked") {
@@ -1230,7 +1242,7 @@ export async function renderEditor(
           // rest, and the dialog can name exactly the ones to try again.
           let sent = 0;
           const failed: string[] = [];
-          let reason: string | null = null;
+          const reasons = new Set<string>(); // each distinct reason once, in the order met
           let lastWarnings: string[] | null = null;
           for (const addr of addrs) {
             try {
@@ -1245,11 +1257,13 @@ export async function renderEditor(
               }
               lastWarnings = r.warnings;
             } catch (e) {
-              if (isNotFound(e)) {
+              // A post that's gone, or a session that ended, ends the loop: every address
+              // after it would fail the same way.
+              if (isNotFound(e) || (e instanceof ApiError && e.status === 401)) {
                 throw e;
               }
               failed.push(addr);
-              reason = describeError(e);
+              reasons.add(describeError(e));
             }
           }
           showWarnings(lastWarnings);
@@ -1263,10 +1277,11 @@ export async function renderEditor(
             // tries those and no one gets a second copy.
             to.value = failed.join("\n");
             const which = failed.join(", ");
+            const why = reasons.size ? ` ${[...reasons].join(" ")}` : "";
             m.error(
               sent
-                ? `Sent to ${sent} of ${addrs.length}. Not sent to ${which}${reason ? `: ${reason}` : "."} Send again to try those.`
-                : `Not sent${reason ? `: ${reason}` : "."} Send again to try.`,
+                ? `Sent to ${sent} of ${addrs.length}. Not sent to ${which}.${why} Send again to try those.`
+                : `Not sent.${why} Send again to try.`,
             );
             return;
           }
