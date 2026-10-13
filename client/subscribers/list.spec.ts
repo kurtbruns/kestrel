@@ -59,11 +59,11 @@ describe("subscribers view", () => {
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
     $("tr[data-id='s1'] [data-menu]").click();
-    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Unsubscribe", "Erase…"]);
+    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Unsubscribe", "Erase"]);
     $(".menu-overlay").click();
     // Pending: nothing to unsubscribe, but anyone can be erased (SPEC §7).
     $("tr[data-id='s3'] [data-menu]").click();
-    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Erase…"]);
+    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Erase"]);
     expect(fake.unhandled).toEqual([]);
   });
 

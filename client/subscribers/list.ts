@@ -161,7 +161,7 @@ function renderSubTable(
                 },
               ]
             : []),
-          { label: "Erase…", danger: true, onClick: () => confirmErase(row, reload, signal) },
+          { label: "Erase", danger: true, onClick: () => confirmErase(row, reload, signal) },
         ],
         signal,
       );
