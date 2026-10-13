@@ -471,7 +471,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 
 ## 11. Accessibility
 
-- **Focus.** One focus ring everywhere, on `:focus-visible`. A dialog keeps focus inside it, starts on the caller's chosen field or else its first control, and returns focus to whatever opened it. A wall moves focus to its heading. A row menu opens with focus on its first item.
+- **Focus.** One focus ring everywhere, on `:focus-visible`. A dialog keeps focus inside it, starts on the caller's chosen field or else its first control, and returns focus to whatever opened it. A wall moves focus to its heading. A menu opens with focus on its first item.
 - **Keyboard.** Escape closes a dialog or menu. A menu moves with the arrow keys, Home, and End. ⌘S saves the view where it saves; ⌘B, ⌘I, and ⌘K format in the composer. A clickable row or card always contains a real link to the same place.
 - **Names.** Every icon-only control has an `aria-label`. A ↗ link says it opens a new tab. An info tip is reachable by keyboard and touch.
 - **Live regions.** Toasts are announced politely. The conflict banner, field errors, and dialog errors are alerts, and a field's error is tied to the field so a screen reader reads it with the field.

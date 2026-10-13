@@ -316,7 +316,7 @@ export interface MenuOptions {
   align?: "start" | "end";
 }
 
-// popover menu for row actions (⋯). A transparent full-screen overlay (behind
+// popover menu, for row actions (⋯) and labeled menu buttons. A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls: HTMLElement[] = [];
 let menuSignal: AbortSignal | null = null;
@@ -338,7 +338,7 @@ function closeMenu(): void {
   menuAnchor = null;
 }
 /**
- * Open a row-action menu under an anchor; any outside click or a pick closes it. Like a
+ * Open a menu under an anchor (a row's ⋯ or a labeled button); any outside click or a pick closes it. Like a
  * modal, it belongs to the view that opened it and closes when `signal`, that view's
  * mount signal, aborts.
  */
