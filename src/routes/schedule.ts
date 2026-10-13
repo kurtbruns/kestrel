@@ -49,16 +49,10 @@ export function parseFireAt(input: unknown): number {
 /**
  * Parse `fire_at` and pass it through `acceptFireAt`, the one gate every requested fire time
  * obeys (at least the minimum lead out, stored on the minute), so scheduling and rescheduling
- * can't drift on it (I6). `immediateHint` appends the send-now pointer, which fits the
- * schedule path (a reschedule has no immediate alternative to point at).
+ * can't drift on it (I6).
  */
-export function parseFutureFireAt(
-  input: unknown,
-  minLeadMs: number,
-  immediateHint = false,
-): number {
-  const hint = immediateHint ? "; use POST /api/posts/:id/send for the soonest send" : "";
-  return acceptFireAt(parseFireAt(input), minLeadMs, { hint });
+export function parseFutureFireAt(input: unknown, minLeadMs: number): number {
+  return acceptFireAt(parseFireAt(input), minLeadMs);
 }
 
 /**
@@ -85,7 +79,7 @@ export async function schedule(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c);
   rejectStrayTemplateChoice(body);
   requireConnectedProvider(c.config);
-  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs, true);
+  const fireAt = parseFutureFireAt(body.fire_at, c.config.minLeadMs);
   const send = await freeze(c.env, c.config, post, fireAt);
   const frozen: ScheduleResponse = unwrap(await viewWithCursor(c.env, send.id), "send");
   return json(frozen, 201);

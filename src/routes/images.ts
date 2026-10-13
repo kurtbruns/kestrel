@@ -9,11 +9,12 @@ import type { ImageListResponse, ImageUploadResponse, PostImage } from "../../sh
 import type { ImageRow } from "../db/images";
 import * as images from "../db/images";
 import * as posts from "../db/posts";
-import { badRequest, conflict, json, notFound } from "../lib/errors";
+import { badRequest, json, notFound } from "../lib/errors";
 import { probeImageDimensions } from "../lib/image_dims";
 import { mediaType, RASTER_IMAGE_TYPES } from "../lib/image_types";
 import type { RequestContext } from "../router";
 import { param } from "../router";
+import { requireDraft } from "./posts";
 
 /** Generous for a photo, still small enough to send: every recipient downloads it. */
 const MAX_POST_IMAGE_BYTES = 5 * 1024 * 1024;
@@ -36,17 +37,6 @@ function publicImage(c: RequestContext, row: ImageRow): PostImage {
     height: row.height,
     url: `${c.config.mediaPublicBase}/${row.storage_key}`,
   };
-}
-
-async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
-  const post = await posts.getPost(c.env.DB, param(c, "id"));
-  if (!post) {
-    throw notFound("post");
-  }
-  if (post.status !== "draft") {
-    throw conflict("post is not a draft — cancel the schedule to edit");
-  }
-  return post;
 }
 
 export async function uploadImage(c: RequestContext): Promise<Response> {
@@ -84,13 +74,13 @@ export async function uploadImage(c: RequestContext): Promise<Response> {
   }
   // Raster images only (lib/image_types says why), and not too large.
   if (!RASTER_IMAGE_TYPES.includes(contentType)) {
-    throw badRequest("an image must be a PNG, JPEG, WebP, or GIF");
+    throw badRequest("An image must be a PNG, JPEG, WebP, or GIF.");
   }
   if (bytes.byteLength === 0) {
-    throw badRequest("the image file is empty");
+    throw badRequest("The image file is empty.");
   }
   if (bytes.byteLength > MAX_POST_IMAGE_BYTES) {
-    throw badRequest(`an image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller`);
+    throw badRequest(`An image must be ${MAX_POST_IMAGE_BYTES / (1024 * 1024)} MB or smaller.`);
   }
 
   const key = storageKey(post.id, filename);

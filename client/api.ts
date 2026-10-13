@@ -64,6 +64,15 @@ const NETWORK_FAILURE =
   /^(Failed to fetch|NetworkError when attempting to fetch resource\.?|Load failed|The network connection was lost\.?|The Internet connection appears to be offline\.?)$/;
 
 /**
+ * Whether a failure is a request that never got an answer: offline, a dropped connection,
+ * the server unreachable. fetch rejects with a TypeError then, whose text differs by browser,
+ * so only those exact texts count; a TypeError from a bug in the page is not one.
+ */
+export function isNetworkFailure(e: unknown): boolean {
+  return e instanceof TypeError && NETWORK_FAILURE.test(e.message);
+}
+
+/**
  * What to tell the publisher about a failure, in their words: the server's own message when
  * it wrote one for people, otherwise a plain sentence for what happened. A dropped
  * connection, a server error with no message, and a 404 naming only what it couldn't find
@@ -92,10 +101,8 @@ export function describeError(e: unknown): string {
     }
     return "The server couldn’t do that. Reload the page and try again.";
   }
-  // fetch rejects with a TypeError when the request never got an answer: offline, a
-  // dropped connection, the server unreachable. Its text differs by browser, so only those
-  // exact texts count; a TypeError from a bug keeps its own words.
-  if (e instanceof TypeError && NETWORK_FAILURE.test(e.message)) {
+  // A request that never got an answer; any other error (a bug) keeps its own words.
+  if (isNetworkFailure(e)) {
     return "Couldn’t reach Kestrel. Check your connection and try again.";
   }
   if (e instanceof Error) {

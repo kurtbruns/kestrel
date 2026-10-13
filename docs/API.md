@@ -77,11 +77,11 @@ The error body is `{ error, message }`, plus `field` for a refusal about the req
 
 | The client's next move | Status | Codes |
 | --- | --- | --- |
-| Fix the request | 400, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon`, `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands) |
+| Fix the request | 400, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon` (a fire time inside the minimum lead, with `field`; the soonest send is Send now, `POST /api/posts/:id/send`), `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands) |
 | Read again, then decide | 409 | `stale_revision` (a post, with the newer revision and who wrote it), `active_send_exists` (with the send), `cursor_ahead` |
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
 | Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
-| Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
+| Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft` (a save, delete, image change, or schedule of a post that is scheduled or sent), `not_wedged` |
 | Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9), `schema_behind` (500: the database hasn't run every migration this release ships, with them as `missing` and what to run in `message`, below; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized` (with `reason: "access_not_configured"` when the deployment has no Access yet, below), `forbidden` |
 

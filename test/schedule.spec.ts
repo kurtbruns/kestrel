@@ -600,12 +600,18 @@ describe("the minimum lead is the deployment's own", () => {
     const id = await makeDraft();
     const tooClose = await scheduleAt(MINUTE_LEAD, id, future(30 * 1000));
     expect(tooClose.status).toBe(400);
-    expect((await readJson(tooClose)).message).toMatch(/at least 1 minute in the future/);
+    expect(await readJson(tooClose)).toEqual({
+      error: "fire_at_too_soon",
+      message: "Pick a time at least 1 minute from now, so there’s time to cancel.",
+      field: "fire_at",
+    });
 
     // Ninety seconds out: inside the default five minutes, outside a one-minute lead.
     const underDefault = await scheduleAt({}, id, future(90 * 1000));
     expect(underDefault.status).toBe(400);
-    expect((await readJson(underDefault)).message).toMatch(/at least 5 minutes in the future/);
+    expect((await readJson(underDefault)).message).toMatch(
+      /^Pick a time at least 5 minutes from now/,
+    );
     const ok = await scheduleAt(MINUTE_LEAD, id, future(90 * 1000));
     expect(ok.status).toBe(201);
     expect(await postStatus(id)).toBe("scheduled");
@@ -738,7 +744,12 @@ describe("fire times fall on the minute", () => {
       fire_at: Date.now() + DEFAULT_MIN_LEAD_MS - 1_000,
     });
     expect(move.status).toBe(400);
-    expect((await readJson(move)).error).toBe("fire_at_too_soon");
+    // A send already scheduled has no Send now to point to: the refusal says only the lead.
+    expect(await readJson(move)).toMatchObject({
+      error: "fire_at_too_soon",
+      message: "Pick a time at least 5 minutes from now, so there’s time to cancel.",
+      field: "fire_at",
+    });
   });
 
   it("says in the API reference that the fire time is rounded up to the minute", async () => {

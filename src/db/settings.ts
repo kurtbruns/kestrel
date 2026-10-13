@@ -272,7 +272,7 @@ function parseStored(data: string): Record<string, unknown> {
   throw new HttpError(
     500,
     "settings_corrupt",
-    "The stored settings can't be read, so they are left as they are and nothing will save over them. The server log (settings.corrupt) says what's wrong.",
+    "The stored settings can’t be read, so they are left as they are and nothing will save over them. The server log (settings.corrupt) says what’s wrong.",
   );
 }
 
@@ -348,7 +348,7 @@ export const WRITE_RETRIES = 5;
  *  fault (500). */
 export class SettingsContention extends HttpError {
   constructor() {
-    super(409, "conflict", "settings changed concurrently; try again");
+    super(409, "conflict", "The settings were changed at the same moment. Try again.");
   }
 }
 
@@ -410,12 +410,17 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
   if (patch.publication !== undefined) {
     const p = patch.publication;
     if (p.name !== undefined) {
-      next.publication.name = normalizeText(p.name, "name", MAX_NAME, "publication.name");
+      next.publication.name = normalizeText(
+        p.name,
+        "The publication name",
+        MAX_NAME,
+        "publication.name",
+      );
     }
     if (p.tagline !== undefined) {
       next.publication.tagline = normalizeText(
         p.tagline,
-        "tagline",
+        "The tagline",
         MAX_TAGLINE,
         "publication.tagline",
       );
@@ -423,7 +428,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     if (p.address !== undefined) {
       next.publication.address = normalizeText(
         p.address,
-        "address",
+        "The mailing address",
         MAX_ADDRESS,
         "publication.address",
       );
@@ -433,12 +438,12 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     // Structural validation (required variables, warnings) is the route's job; here
     // we only enforce the type + storage cap. "" resets to the built-in default.
     if (typeof patch.emailTemplate !== "string") {
-      throw new SettingsFieldError("emailTemplate", "emailTemplate must be a string");
+      throw new SettingsFieldError("emailTemplate", "The email template must be text.");
     }
     if (patch.emailTemplate.length > MAX_TEMPLATE) {
       throw new SettingsFieldError(
         "emailTemplate",
-        `emailTemplate must be ${MAX_TEMPLATE} characters or fewer`,
+        `The email template must be ${MAX_TEMPLATE.toLocaleString("en-US")} characters or fewer. Shorten it, then save.`,
       );
     }
     next.emailTemplate = patch.emailTemplate;
@@ -451,7 +456,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     if (c.subject !== undefined) {
       next.confirmationEmail.subject = normalizeText(
         c.subject,
-        "subject",
+        "The confirmation subject",
         MAX_CE_SUBJECT,
         "confirmationEmail.subject",
       );
@@ -459,7 +464,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     if (c.body !== undefined) {
       next.confirmationEmail.body = normalizeText(
         c.body,
-        "message",
+        "The confirmation message",
         MAX_CE_BODY,
         "confirmationEmail.body",
       );
@@ -467,7 +472,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     if (c.buttonLabel !== undefined) {
       next.confirmationEmail.buttonLabel = normalizeText(
         c.buttonLabel,
-        "button label",
+        "The button label",
         MAX_CE_BUTTON,
         "confirmationEmail.buttonLabel",
       );
@@ -475,7 +480,7 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
     if (c.reassurance !== undefined) {
       next.confirmationEmail.reassurance = normalizeText(
         c.reassurance,
-        "reassurance line",
+        "The reassurance line",
         MAX_CE_REASSURANCE,
         "confirmationEmail.reassurance",
       );
@@ -490,11 +495,14 @@ export function applyPatch(current: AppSettings, patch: SettingsPatch): AppSetti
 /** One address, trimmed and lowercased, or "" to turn notifications off. */
 function normalizeNotifyTo(raw: unknown): string {
   if (typeof raw !== "string") {
-    throw new SettingsFieldError("notifications.to", "notifications address must be a string");
+    throw new SettingsFieldError("notifications.to", "The notifications address must be text.");
   }
   const email = normalizeEmail(raw);
   if (email && !isValidEmail(email)) {
-    throw new SettingsFieldError("notifications.to", `not a valid email address: ${raw}`);
+    throw new SettingsFieldError(
+      "notifications.to",
+      `“${raw.trim()}” isn’t a valid email address. Fix it, or clear the field to turn notifications off.`,
+    );
   }
   return email;
 }
@@ -517,7 +525,7 @@ export async function setPublicationLogo(
 
 function normalizeText(v: unknown, what: string, max: number, field: string): string {
   if (typeof v !== "string") {
-    throw new SettingsFieldError(field, `${what} must be a string`);
+    throw new SettingsFieldError(field, `${what} must be text.`);
   }
   return v.trim().slice(0, max);
 }
@@ -527,21 +535,27 @@ function normalizeRecipients(input: unknown): string[] {
   if (!Array.isArray(input)) {
     throw new SettingsFieldError(
       "testRecipients",
-      "testRecipients must be a list of email addresses",
+      "Test recipients must be a list of email addresses.",
     );
   }
   const seen = new Set<string>();
   const out: string[] = [];
   for (const raw of input) {
     if (typeof raw !== "string") {
-      throw new SettingsFieldError("testRecipients", "each test recipient must be a string");
+      throw new SettingsFieldError(
+        "testRecipients",
+        "Each test recipient must be an email address.",
+      );
     }
     const email = normalizeEmail(raw);
     if (!email) {
       continue;
     }
     if (!isValidEmail(email)) {
-      throw new SettingsFieldError("testRecipients", `not a valid email address: ${raw}`);
+      throw new SettingsFieldError(
+        "testRecipients",
+        `“${raw.trim()}” isn’t a valid email address. Fix or remove it, then save.`,
+      );
     }
     if (seen.has(email)) {
       continue;
@@ -552,7 +566,7 @@ function normalizeRecipients(input: unknown): string[] {
   if (out.length > MAX_TEST_RECIPIENTS) {
     throw new SettingsFieldError(
       "testRecipients",
-      `at most ${MAX_TEST_RECIPIENTS} test recipients`,
+      `There can be at most ${MAX_TEST_RECIPIENTS} test recipients. Remove some, then save.`,
     );
   }
   return out;

@@ -8,7 +8,7 @@
 // Once the post's send starts, the public page itself is the web version.
 
 import type { PostResponse } from "../../shared/posts";
-import { ApiError, api, apiText } from "../api";
+import { ApiError, api, apiText, describeError } from "../api";
 import { postArchiveUrl } from "../deployment";
 import { mount, onAbort } from "../lifecycle";
 import { EMAIL_FRAME_SANDBOX, framedCopy, openLinksInNewTab } from "../ui/email_frame";
@@ -185,11 +185,7 @@ export async function renderWebVersion(
     if (box) {
       // The API names only what it didn't find ("post"), which says nothing on its own.
       const notFound = e instanceof ApiError && e.status === 404;
-      const msg = notFound
-        ? "There’s no post here. It may have been deleted."
-        : e instanceof Error
-          ? e.message
-          : String(e);
+      const msg = notFound ? "There’s no post here. It may have been deleted." : describeError(e);
       renderError(box, msg, () => mount((r, s) => renderWebVersion(id, r, s)));
     }
   }

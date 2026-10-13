@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { describe, expect, it } from "vitest";
+import { frozenSend, setRow } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 
 async function createPost(body: unknown): Promise<Response> {
@@ -191,9 +192,50 @@ describe("posts + revisions", () => {
       body: JSON.stringify({ markdown: "nope" }),
     });
     expect(put.status).toBe(409);
+    // In words the editor shows as they stand, naming the way to edit again (DESIGN §10),
+    // under the code for an act that no longer applies, not one to try again.
+    expect(await readJson(put)).toEqual({
+      error: "post_not_draft",
+      message: "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+    });
 
     const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(409);
+    expect((await readJson(del)).error).toBe("post_not_draft");
+  });
+
+  it("says a post whose send has started can't be changed, rather than offering a cancel (SPEC §6)", async () => {
+    // The post stays scheduled until its send completes, but the window to cancel has closed.
+    const send = await frozenSend(Date.now() + 10 * 60_000);
+    await setRow(send.id, { status: "sending", started_at: Date.now() });
+
+    const put = await SELF.fetch(`${base}/api/posts/${send.post_id}`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ markdown: "nope" }),
+    });
+    expect(put.status).toBe(409);
+    expect(await readJson(put)).toEqual({
+      error: "post_not_draft",
+      message: "This post is being sent, so it can’t be changed.",
+    });
+  });
+
+  it("says a sent post can't be changed", async () => {
+    const created = await readJson(await createPost({ subject: "Sent" }));
+    const id = created.post.id;
+    await env.DB.prepare("UPDATE posts SET status = 'sent' WHERE id = ?").bind(id).run();
+
+    const put = await SELF.fetch(`${base}/api/posts/${id}`, {
+      method: "PUT",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ markdown: "nope" }),
+    });
+    expect(put.status).toBe(409);
+    expect(await readJson(put)).toEqual({
+      error: "post_not_draft",
+      message: "This post has been sent, so it can’t be changed.",
+    });
   });
 
   it("deletes a draft and its revisions", async () => {

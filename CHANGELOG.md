@@ -10,6 +10,12 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 <!-- Add entries under Added / Changed / Fixed / Breaking. One operator-facing line each; see .claude/rules/changelog.md. Upgrade steps (a migration, a new setting) go once, in the Upgrading paragraph, never on an entry. -->
 
+### Changed
+
+- The API's refusals and render warnings that the editor shows read as sentences that name the next step, with typographic apostrophes and no em dashes: a save or image upload on a scheduled post, a test with no recipients or too many, an address Settings won't take, a scheduling or Resolve refusal, a warning such as an image with no alt text. A template test's refusals about its recipients now name `to` as their `field`, and a save, delete, or image change on a post that isn't a draft is refused as 409 `post_not_draft` instead of `conflict`, saying whether canceling the schedule would unlock it or its send has already started.
+- A send time inside the minimum lead is refused in one plain sentence, "Pick a time at least 5 minutes from now, so there’s time to cancel.", which is now the API's own message on scheduling and rescheduling alike, so Claude reads what the publisher reads where it used to read the route to call; Send now remains the soonest send (SPEC §6).
+- The Schedule dialog's Send now row reads "Or send as soon as possible.", and the Send now view says when the send goes out (one lead, up to the next minute), that the post locks until then, and that it can be canceled before it starts sending, counting recipients as the scheduled card does rather than "confirmed subscribers". The Schedule and Reschedule hints no longer name the lead, which the refusal states when a time is too soon, and the post's scheduled banner drops "cancelable until then", which its Cancel button and countdown already say.
+
 ### Fixed
 
 - A list send whose `SES_CONFIGURATION_SET` names a configuration set SES can't find in its region is held with nobody consumed, as a new `configuration` cause whose advice names the setting, where before SES's `NotFoundException` marked every recipient unsent, and its per-recipient form advised replacing the access key (SPEC §12).

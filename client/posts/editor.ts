@@ -12,18 +12,18 @@ import type {
 import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
-import { ApiError, api, apiText, describeError } from "../api";
+import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api";
 import {
   connectProviderLink,
   earliestFireAt,
   heldWhenFiresHtml,
   isTooSoon,
-  minLeadText,
   notConnectedScheduleLine,
   notConnectedTestLine,
   notConnectedWarning,
   postArchiveUrl,
   providerNotConnected,
+  sendNowWhenText,
   tooSoonText,
   withNoProviderNote,
 } from "../deployment";
@@ -563,6 +563,9 @@ export async function renderEditor(
   let saveError: string | null = null;
   let retryDelay = 0;
   let retryArmed = false; // one pending retry at a time, however many saves fail meanwhile
+  // Bumped to call off an armed retry: a later failure the server would repeat (a refused
+  // field, say) means trying again unchanged can only send the refused value once more.
+  let retryRound = 0;
   // The save row is a draft's; a scheduled post renders none.
   const saveBtn = locked ? null : $<HTMLButtonElement>("#saveBtn");
   const saveStatus = locked ? null : $("#saveStatus");
@@ -701,14 +704,24 @@ export async function renderEditor(
         saveError = describeError(e);
       }
       // Only a failure that can pass on its own is tried again: no answer, the server's
-      // own trouble, or too many requests at once.
-      const transient = !(e instanceof ApiError) || e.status >= 500 || e.status === 429;
-      if (transient && !retryArmed) {
+      // own trouble, or too many requests at once. Anything else (a refusal, a bug in the
+      // page) would fail the same way, so it calls off a retry an earlier failure armed.
+      const transient =
+        isNetworkFailure(e) || (e instanceof ApiError && (e.status >= 500 || e.status === 429));
+      if (!transient) {
+        retryRound += 1;
+        retryArmed = false;
+        retryDelay = 0; // a later dropped connection starts its spacing afresh
+      } else if (!retryArmed) {
         retryArmed = true;
         retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
+        const round = retryRound;
         at(
           Date.now() + retryDelay,
           () => {
+            if (round !== retryRound) {
+              return; // called off by a failure that would only repeat
+            }
             retryArmed = false;
             if (saveError && !conflicted) {
               saveDraft(true).catch(() => {}); // a failure says so on the cue again
@@ -1323,7 +1336,7 @@ export async function renderEditor(
       // While no provider is connected the server would refuse both views, so the dialog
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick (at least ${minLeadText()} out), with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Need it sooner? The soonest is ${minLeadText()} out, still cancelable.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick, with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView, signal);
       const box = $(".modal", m.el);
       // A refused save closes the dialog, and the out-of-date banner it was covering is
@@ -1347,7 +1360,7 @@ export async function renderEditor(
             return;
           }
           if (isTooSoon(t)) {
-            m.error(tooSoonText(true), whenEl);
+            m.error(tooSoonText(), whenEl);
             return;
           }
           try {
@@ -1373,13 +1386,10 @@ export async function renderEditor(
               foundGone(e);
               return;
             }
-            // The server's clock is the authority on the lead; its refusal is said the same
-            // way as the editor's own check, under the picker.
+            // The server's clock is the authority on the lead; its refusal, in the same
+            // words as the editor's own check, goes under the picker.
             if (e instanceof ApiError && e.field === "fire_at") {
-              m.error(
-                e.code === "fire_at_too_soon" ? tooSoonText(true) : message(e),
-                $<HTMLInputElement>("#schWhen", box),
-              );
+              m.error(message(e), $<HTMLInputElement>("#schWhen", box));
               return;
             }
             m.error(message(e));
@@ -1431,7 +1441,7 @@ export async function renderEditor(
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Freezes the current draft and sends it to <strong id="snWho">your confirmed subscribers</strong> after a cancelable window of at least ${minLeadText()}, on the minute. You can cancel until it fires.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1453,7 +1463,7 @@ export async function renderEditor(
           const n = s.page.total;
           const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
           if (whoEl) {
-            whoEl.textContent = `${n} confirmed subscriber${n === 1 ? "" : "s"}`;
+            whoEl.textContent = `${n} recipient${n === 1 ? "" : "s"}`;
           }
         } catch {}
       }
@@ -1499,7 +1509,7 @@ function scheduledBannerHtml(send: BannerSend, due: boolean): Html {
   if (due) {
     return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at, true)}</span>`;
   }
-  return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span> · cancelable until then.`;
+  return html`Scheduled for <strong>${fmt(send.fire_at)}</strong> · <span class="countdown">${untilStr(send.fire_at)}</span>`;
 }
 
 /** Whether a read or write found its post (or its send, which goes with it) gone. */

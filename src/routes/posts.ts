@@ -12,7 +12,7 @@ import * as images from "../db/images";
 import * as posts from "../db/posts";
 import { currentSendSeq, getActiveSendForPost, latestSentSendForPost } from "../db/sends";
 import { fieldError, optBoolean, optString, optStringOrNull, readJsonObject } from "../lib/body";
-import { badRequest, conflict, json, notFound } from "../lib/errors";
+import { badRequest, json, notFound, refusal } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
 import type { RequestContext } from "../router";
 import { param } from "../router";
@@ -74,13 +74,30 @@ function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
   return post.current_revision ? { ETag: `"${post.current_revision}"` } : undefined;
 }
 
-async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
+/**
+ * The post the request names, refused unless it is a draft: a scheduled post's content is
+ * frozen until its schedule is canceled (I3), and a sent one's for good. A post stays
+ * `scheduled` until its send completes, so one whose send has started can't be canceled
+ * back to a draft either, and the refusal says which it is. Saving a post, deleting it,
+ * and changing its images all pass through here.
+ */
+export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
   }
+  if (post.status === "sent") {
+    throw refusal(409, "post_not_draft", "This post has been sent, so it can’t be changed.");
+  }
   if (post.status !== "draft") {
-    throw conflict("post is not a draft — cancel the schedule to edit");
+    const active = await getActiveSendForPost(c.env.DB, post.id);
+    throw refusal(
+      409,
+      "post_not_draft",
+      active?.status === "sending"
+        ? "This post is being sent, so it can’t be changed."
+        : "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+    );
   }
   return post;
 }
@@ -180,7 +197,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     const required: BaseRequiredError = {
       error: "base_required",
       message:
-        "a save must name the revision it was based on: read the post, then save with its current_revision as base_revision or If-Match",
+        "A save must name the revision it was based on. Read the post, then save with its current_revision as base_revision or If-Match.",
       field: "base_revision",
       post,
     };
@@ -190,7 +207,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     const current = await posts.getCurrentRevision(c.env.DB, post);
     const stale: StaleRevisionError = {
       error: "stale_revision",
-      message: "this draft changed since you loaded it",
+      message: "This draft changed since you loaded it. Read it again before saving.",
       current_revision: post.current_revision,
       updated_at: post.updated_at,
       author: current?.author ?? null,

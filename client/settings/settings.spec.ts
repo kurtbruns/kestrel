@@ -508,7 +508,8 @@ describe("settings view", () => {
           jsonResponse(
             {
               error: "bad_request",
-              message: "not a valid email address: nope",
+              message:
+                "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
               field: "notifications.to",
             },
             400,
@@ -520,7 +521,9 @@ describe("settings view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const input = $<HTMLInputElement>("#notifyTo");
     expect(input.classList.contains("is-invalid")).toBe(true);
-    expect($("#notifyTo + .field-error").textContent).toContain("not a valid email address: nope");
+    expect($("#notifyTo + .field-error").textContent).toContain(
+      "“nope” isn’t a valid email address. Fix it, or clear the field to turn notifications off.",
+    );
     expect(document.activeElement).toBe(input);
     expect($(".savebar-msg").textContent).toBe("Not saved: fix the field marked above.");
     // Discard puts the field back without editing it, so the mark goes with the edit.
