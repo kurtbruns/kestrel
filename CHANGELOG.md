@@ -16,6 +16,10 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - Erase a subscriber, for a reader who asks you to delete their data: Erase in the Subscribers row menu, or `POST /api/subscribers/:id/erase`. It removes their subscriber record, with how they joined and its evidence, shows an erased recipient in their place on every past send so each record still adds up, and keeps the address only as a do-not-contact suppression, which no import lifts. It can't be undone. The person can still rejoin by subscribing and confirming themselves; adding the address by hand asks you first (`acknowledge_erasure: true` through the API) (SPEC §7).
 - The operator's Claude context gains a rule for erasing: Claude erases a subscriber only when you name them and ask, confirming first since it can't be undone, and sends a confirmation to an erased address only once you say the person asked to join again. It bears on safety, since an erasure is permanent.
 
+### Changed
+
+- Readers can reply. The setup guide's Connect Amazon SES gains a step, "Receive replies at your From address", that forwards the From address to your inbox with Cloudflare Email Routing, where before nothing received mail there and a reply most likely bounced; Verify it works now has you reply to your test email. Kestrel still only sends: it never receives or stores a reply. An existing instance can add the forwarding at any time, with no redeploy. Settings says under the From address that readers' replies go there, linking the step (SPEC §9).
+
 ## [1.9.0] - 2026-10-13
 
 **Upgrading from 1.8.0.** Two database migrations: run `npm run sync-migrations`, then `npx wrangler d1 migrations apply DB --remote --env production` (and `--local` for local development) before deploying. The first (`0005_imports`) adds the record of each import and how each subscriber joined, reading every existing subscriber as joined through Kestrel's double opt-in, and rebuilds the notifications table so an import can be told to you. The second (`0006_deliveries_fewer_indexes`) drops two indexes no query reads; it writes no rows, so it costs nothing against D1's daily allowance at any size.

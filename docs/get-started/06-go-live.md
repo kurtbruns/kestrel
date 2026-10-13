@@ -6,14 +6,14 @@ In this guide, you check your publication's name, add a logo, and share your sub
 
 ## Before you begin
 
-- SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#4-request-production-access) asks for it.
-- `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) sets it to `1` for the sandbox.
+- SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#5-request-production-access) asks for it.
+- `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#8-set-the-provider-and-deploy) sets it to `1` for the sandbox.
 
 In the sandbox, SES refuses the confirmation email to any address you haven't verified, so those signups fail. A post reaches only the addresses you verified in SES.
 
 ## 1. Name your publication
 
-Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. You named it in [Connect Amazon SES](04-ses.md#4-request-production-access). Check those, and add a logo before anyone sees your pages.
+Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. You named it in [Connect Amazon SES](04-ses.md#5-request-production-access). Check those, and add a logo before anyone sees your pages.
 
 1. In the editor, open **Settings → Publication identity**.
 

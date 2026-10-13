@@ -247,7 +247,7 @@ The groups have no headings, only a wider gap: each section's title, its **inten
 
 **Notifications** (SPEC §8) has one field, the address, and **Send a test notification**, a check rather than the section's purpose, so it isn't Primary. The test goes to the saved address only, so while the field is blank or unsaved the button is disabled with a line saying why. Beneath, the deploy-time channel shows read-only: how notifications are sent, their From, and the **last notification**, as a "Delivered" or "Not delivered" pill with the channel's own words. A failed channel is a standing state, not an event, so it stays in its row until a later notification gets through, and is never a toast. When the channel is the newsletter's own provider, the section's note names the one notification it can't carry: the provider refusing the account.
 
-**Email sender** and **Instance** reflect deploy configuration read-only (§1.7), with the guide that changes them. While a local server simulates a provider (SPEC §10), the provider row carries a neutral pill naming it ("Simulating Amazon SES").
+**Email sender** and **Instance** reflect deploy configuration read-only (§1.7), with the guide that changes them. While a local server simulates a provider (SPEC §10), the provider row carries a neutral pill naming it ("Simulating Amazon SES"). Under the From address, one muted line says where readers' replies go ("Readers' replies go to this address. Forward it to your inbox."), linking the setup guide's step for it. The app can't tell whether the forwarding exists, so the line explains and never warns (§1.3): no amber, no state, and nothing behind it to set.
 
 ### Docs and API
 
