@@ -24,7 +24,7 @@ describe("the minimum lead", () => {
 
   it("refuses a time inside it in the publisher's words, pointing to Send now where it is offered", () => {
     expect(tooSoonMessage(DEFAULT_MIN_LEAD_MS, true)).toBe(
-      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. For the soonest send, use Send now.",
+      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
     );
     expect(tooSoonMessage(90_000, false)).toBe(
       "Pick a time at least 90 seconds from now, so there’s a window to cancel in.",

@@ -1638,7 +1638,7 @@ describe("editor view", () => {
     expect(fake.calls.some((c) => c.url.pathname === "/api/posts/p1/schedule")).toBe(false);
     expect(when.classList.contains("is-invalid")).toBe(true);
     expect($(".modal .field-error").textContent).toContain(
-      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. For the soonest send, use Send now.",
+      "Pick a time at least 5 minutes from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
     );
   });
 

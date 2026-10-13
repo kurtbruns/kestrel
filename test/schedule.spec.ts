@@ -603,7 +603,7 @@ describe("the minimum lead is the deployment's own", () => {
     expect(await readJson(tooClose)).toEqual({
       error: "fire_at_too_soon",
       message:
-        "Pick a time at least 1 minute from now, so there’s a window to cancel in. For the soonest send, use Send now.",
+        "Pick a time at least 1 minute from now, so there’s a window to cancel in. To send as soon as possible, use Send now.",
       field: "fire_at",
     });
 

@@ -194,7 +194,7 @@ export function formatLead(ms: number): string {
  */
 export function tooSoonMessage(minLeadMs: number, offersSendNow: boolean): string {
   const why = `Pick a time at least ${formatLead(minLeadMs)} from now, so there’s a window to cancel in.`;
-  return offersSendNow ? `${why} For the soonest send, use Send now.` : why;
+  return offersSendNow ? `${why} To send as soon as possible, use Send now.` : why;
 }
 
 /** GET /api/sends */
