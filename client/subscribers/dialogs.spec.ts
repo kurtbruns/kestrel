@@ -72,7 +72,7 @@ describe("addSubscriberModal", () => {
     addSubscriberModal(() => {}, live);
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so a confirmation can’t be sent yet. Connect an email provider to add subscribers.",
+      "No email provider connected, so a confirmation can’t be sent yet. Connect Amazon SES to add subscribers.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect(document.querySelector("#addEmail")).toBeNull();

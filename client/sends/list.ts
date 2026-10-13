@@ -78,7 +78,7 @@ export async function renderSent(root: HTMLElement, signal: AbortSignal): Promis
   setHtml(
     root,
     html`<h1>Sent</h1>
-    ${noEmailProvider() ? html`<p class="muted">No email provider is configured, so these sends are recorded here but nothing is delivered.</p>` : null}
+    ${noEmailProvider() ? html`<p class="muted">A local stand-in sends these: they are recorded here, but nothing is delivered.</p>` : null}
     ${notConnectedWarning("sent-not-connected", html`No email provider connected, so nothing can be sent yet. ${connectProviderLink()} to start sending.`)}
     <div id="stuck"></div>
     <h2>Scheduled</h2><div id="scheduled" class="muted">Loading…</div>

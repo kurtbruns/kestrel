@@ -241,12 +241,12 @@ describe("sent view", () => {
     expect(warning.classList.contains("health")).toBe(true);
     expect(warning.classList.contains("amber")).toBe(true);
     expect(warning.textContent?.replace("⚠️", "")).toBe(
-      "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
+      "No email provider connected, so nothing can be sent yet. Connect Amazon SES to start sending.",
     );
     expect($<HTMLAnchorElement>("a", warning).getAttribute("href")).toBe("#/docs/ses");
     $("[data-reschedule='sch']").click();
     expect($(".modal .not-connected").textContent).toBe(
-      "No email provider connected, so this send is held when it fires, until one is. Connect an email provider to send it.",
+      "No email provider connected, so this send is held when it fires, until one is. Connect Amazon SES to send it.",
     );
     expect($<HTMLButtonElement>("#rsGo").disabled).toBe(false); // the server still takes a move
     expect(fake.unhandled).toEqual([]);
@@ -271,7 +271,7 @@ describe("sent view", () => {
     const cards = $$("#stuck .stuck-card");
     expect(cards).toHaveLength(1);
     expect(cards[0]?.textContent?.replace("⚠️", "")).toBe(
-      "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect an email provider, then deploy.",
+      "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect Amazon SES, then deploy.",
     );
     expect($$<HTMLAnchorElement>("a", cards[0]!).map((a) => a.getAttribute("href"))).toEqual([
       "#/sent/h1",

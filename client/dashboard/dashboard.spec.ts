@@ -342,7 +342,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the provider's API key or credentials in the deployment's secrets. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
+      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
@@ -401,12 +401,12 @@ describe("dashboard", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(steps()).toEqual([
         "Name your publication",
-        "Connect an email provider",
+        "Connect Amazon SES",
         "Write your first post",
         "Share your subscribe link",
       ]);
       expect($(".setup-connect button").dataset.nav).toBe("#/docs/ses");
-      expect($(".setup-connect button").textContent).toBe("Connect an email provider");
+      expect($(".setup-connect button").textContent).toBe("Connect Amazon SES");
       expect($(".setup-subscribe").textContent).toMatch(
         /Signups open once an email provider is connected/,
       );
@@ -425,7 +425,7 @@ describe("dashboard", () => {
       expect(block.classList.contains("amber")).toBe(true);
       const line = $(".dash-not-connected", block);
       expect(line.textContent).toBe(
-        "No email provider connected, so nothing can be sent yet. Connect an email provider to start sending.",
+        "No email provider connected, so nothing can be sent yet. Connect Amazon SES to start sending.",
       );
       expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
       expect(line.querySelector("button")).toBeNull(); // a standing line: nothing to dismiss
@@ -464,7 +464,7 @@ describe("dashboard", () => {
       const block = $("#dashHealth .health");
       expect(block.classList.contains("red")).toBe(true);
       expect($$(":scope > div > div", block).map((d) => d.textContent)).toEqual([
-        "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect an email provider, then deploy.",
+        "No email provider connected, so nothing can be sent and Swifts is held, with no one marked unsent; it goes out at its first retry once one is connected. Connect Amazon SES, then deploy.",
       ]);
       const links = $$<HTMLAnchorElement>("a", block).map((a) => a.getAttribute("href"));
       expect(links).toEqual(["#/sent/h1", "#/docs/ses"]);
@@ -626,7 +626,7 @@ describe("dashboard", () => {
       /Swifts: The provider is refusing the account: ses 429/,
     );
     // The provider's words end in a period already: the line adds none of its own.
-    expect($(".health.red").textContent).toMatch(/quota exceeded\. Wait for the provider's/);
+    expect($(".health.red").textContent).toMatch(/quota exceeded\. Wait for SES's 24-hour quota/);
     expect($(".health a").getAttribute("href")).toBe("#/sent/x3");
     expect(document.querySelector("#dashActive .active-card")).toBeNull(); // reported once
     await vi.advanceTimersByTimeAsync(9000);
@@ -742,7 +742,9 @@ describe("dashboard", () => {
         (m) => m.closest<HTMLElement>(".sched-card")?.dataset.post,
       );
     expect(marked()).toEqual(["p2", "p5"]);
-    expect($("#dashScheduled .sched-remade-mark").textContent).toBe("Re-made since its last test");
+    expect($("#dashScheduled .sched-remade-mark").textContent).toBe(
+      "Look changed since your last test",
+    );
     srv.edit("x4", { tested_at: Date.now() }); // a test of the re-made copy, sent from the post
     await vi.advanceTimersByTimeAsync(60_000);
     expect(marked()).toEqual(["p2"]);

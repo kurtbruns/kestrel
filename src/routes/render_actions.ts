@@ -325,11 +325,14 @@ export async function templateTest(c: RequestContext): Promise<Response> {
     }),
     batch,
   );
-  const sent = results.filter((r) => r.accepted).length;
+  // The addresses the provider didn't take, so the client can offer exactly those again
+  // and no one gets a second copy.
+  const failed = results.filter((r) => !r.accepted).map((r) => r.email);
 
   const report: TemplateTestResponse = {
-    sent,
+    sent: results.filter((r) => r.accepted).length,
     total: recipients.length,
+    failed,
     provider: provider.name,
     recipients,
     subject: result.subject,

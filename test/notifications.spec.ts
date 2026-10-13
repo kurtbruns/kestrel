@@ -137,7 +137,9 @@ describe("a send that needs the publisher", () => {
       'Problem with "Owls in winter": the provider is refusing your account',
     );
     expect(refused!.text).toContain("security token included in the request is invalid");
-    expect(refused!.text).toContain("Replace the provider's API key");
+    expect(refused!.text).toContain(
+      "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
+    );
     expect(refused!.text).toContain("No one has been marked unsent");
 
     await ticks(5);
@@ -663,6 +665,10 @@ describe("the link in a notification", () => {
         config,
       );
       const link = sendLink(config, "s 1");
+      if (kind === "wedged") {
+        // Kestrel can't tell whether a lost request went out, so the advice names the safe choice.
+        expect(email.text).toContain("Assume not sent is the safe default");
+      }
       expect(email.text, kind).toContain(link);
       expect(email.html, kind).toContain(`href="${link}"`);
       // The editor opens the page the link names, with the id's own encoding intact.

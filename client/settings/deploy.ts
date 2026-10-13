@@ -49,7 +49,7 @@ export function senderSection(page: SettingsPage): Html {
     <section class="set-sec">
       ${secHead("Email sender", chip("readonly", "Read-only · set at deploy"))}
       <div class="set-card sunken">
-        <div class="set-ro-note">${icon("readonly")}<span>The sender is fixed at deploy via environment secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
+        <div class="set-ro-note">${icon("readonly")}<span>The sender is set at deploy in <code>wrangler.jsonc</code>, with the AWS keys stored as secrets, so it can’t be edited here. Change it in the <a class="set-link" href="#/docs">setup guide</a>, then redeploy. Credentials are never shown.</span></div>
         <div class="set-preview-bar" style="background:transparent">
           <span class="set-preview-lbl">Inbox preview</span>
           <span class="set-preview-dot">How readers see the sender</span>

@@ -33,8 +33,9 @@ export function openResolveModal(
   const m = modal(
     html`<h3>Resolve ${n} ambiguous ${noun}</h3>
       <p class="hint">A transport error left ${n} recipient${n === 1 ? "" : "s"} in flight: the request went out but the provider never confirmed, so there’s no way to know whether it was accepted. To avoid mailing anyone twice, the send won’t retry ${n === 1 ? "it" : "them"} on its own, so it can’t finish until you decide. Neither choice re-sends this post.</p>
-      <p class="hint"><strong>Assume not sent</strong>: recorded as unsent; ${n === 1 ? "the address is" : "the addresses are"} simply picked up by your next post.</p>
-      <p class="hint"><strong>Assume sent</strong>: recorded as accepted by your provider, with delivery still waiting on its receipt. Choose this only if you’ve confirmed it in your provider’s console.</p>
+      <p class="hint">Kestrel can’t tell whether ${n === 1 ? "this email" : "these emails"} went out, so unless you know, <strong>Assume not sent</strong> is the safe default.</p>
+      <p class="hint"><strong>Assume not sent</strong>: recorded as unsent. ${n === 1 ? "That reader" : "Those readers"} may miss this post but ${n === 1 ? "gets" : "get"} your next one, and no one is mailed twice.</p>
+      <p class="hint"><strong>Assume sent</strong>: recorded as accepted by your provider, with delivery still waiting on its receipt. Choose this when you know otherwise, such as a reader who says they got it.</p>
       <div class="actions"><button type="button" id="rCancel">Cancel</button><button type="button" id="rUnsent">Assume not sent</button><button type="button" class="primary" id="rAccepted">Assume sent</button></div>`,
     signal,
   );

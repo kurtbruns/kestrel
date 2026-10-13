@@ -89,7 +89,7 @@ export function noEmailProvider(): boolean {
 /**
  * True when no email provider is connected (SPEC §9): a deployment whose `PROVIDER` is not
  * set yet, which refuses every send. The operator's voice: name the state and point to the
- * step that ends it, labelled "Connect an email provider" (`connectProviderLink`).
+ * step that ends it, labelled "Connect Amazon SES" (`connectProviderLink`).
  */
 export function providerNotConnected(): boolean {
   return appState.appConfig?.deployment.provider === "none";
@@ -201,7 +201,7 @@ export function notConnectedRescheduleLine(): Html | null {
  * refuses those acts, so it never gets this far.
  */
 export function withNoProviderNote(msg: string): string {
-  return noEmailProvider() ? `${msg} (no email provider configured, so nothing is delivered)` : msg;
+  return noEmailProvider() ? `${msg} (local stand-in: nothing is delivered)` : msg;
 }
 
 /** A post's public archive address under this deployment, by the formula the Worker

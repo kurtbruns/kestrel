@@ -305,11 +305,18 @@ export function infoTip(tip: string, { below = false }: { below?: boolean } = {}
 
 export interface MenuItem {
   label: string;
+  /** A line under the label saying what the pick does, for a menu whose items need it. */
+  description?: string;
   danger?: boolean;
   onClick: () => void;
 }
 
-// popover menu for row actions (⋯). A transparent full-screen overlay (behind
+/** Where a menu sits under its trigger: `end` lines up right edges (a row's ⋯), `start` left edges (a labeled button). */
+export interface MenuOptions {
+  align?: "start" | "end";
+}
+
+// popover menu, for row actions (⋯) and labeled menu buttons. A transparent full-screen overlay (behind
 // the menu) closes it on an outside click — no document-listener race.
 let menuEls: HTMLElement[] = [];
 let menuSignal: AbortSignal | null = null;
@@ -322,6 +329,7 @@ function closeMenu(): void {
   menuEls = [];
   menuSignal?.removeEventListener("abort", closeMenu);
   menuSignal = null;
+  menuAnchor?.setAttribute("aria-expanded", "false");
   // Back to the ⋯ that opened it, so the keyboard keeps its place in the list. A pick that
   // opens a dialog runs after this, and the dialog returns focus here when it closes.
   if (hadFocus && menuAnchor?.isConnected) {
@@ -330,11 +338,16 @@ function closeMenu(): void {
   menuAnchor = null;
 }
 /**
- * Open a row-action menu under an anchor; any outside click or a pick closes it. Like a
+ * Open a menu under an anchor (a row's ⋯ or a labeled button); any outside click or a pick closes it. Like a
  * modal, it belongs to the view that opened it and closes when `signal`, that view's
  * mount signal, aborts.
  */
-export function openMenu(anchor: Element, items: MenuItem[], signal: AbortSignal): void {
+export function openMenu(
+  anchor: Element,
+  items: MenuItem[],
+  signal: AbortSignal,
+  { align = "end" }: MenuOptions = {},
+): void {
   closeMenu();
   if (signal.aborted) {
     return;
@@ -351,7 +364,18 @@ export function openMenu(anchor: Element, items: MenuItem[], signal: AbortSignal
     b.setAttribute("role", "menuitem");
     b.tabIndex = -1;
     b.className = `menu-item${it.danger ? " danger-item" : ""}`;
-    b.textContent = it.label;
+    if (it.description) {
+      const name = document.createElement("span");
+      name.className = "menu-item-name";
+      name.textContent = it.label;
+      const desc = document.createElement("span");
+      desc.className = "menu-item-desc";
+      desc.textContent = it.description;
+      b.append(name, desc);
+      m.classList.add("menu-described");
+    } else {
+      b.textContent = it.label;
+    }
     b.onclick = () => {
       closeMenu();
       it.onClick();
@@ -364,10 +388,11 @@ export function openMenu(anchor: Element, items: MenuItem[], signal: AbortSignal
   menuEls = [overlay, m];
   menuSignal = signal;
   menuAnchor = anchor instanceof HTMLElement ? anchor : null;
+  menuAnchor?.setAttribute("aria-expanded", "true");
   signal.addEventListener("abort", closeMenu, { once: true });
   const r = anchor.getBoundingClientRect();
   m.style.top = `${r.bottom + window.scrollY + 4}px`;
-  m.style.left = `${r.right + window.scrollX - m.offsetWidth}px`;
+  m.style.left = `${(align === "start" ? r.left : r.right - m.offsetWidth) + window.scrollX}px`;
   m.querySelector<HTMLElement>(".menu-item")?.focus();
 }
 // The menu keys: arrows, Home, and End move between items (wrapping), Escape closes it,

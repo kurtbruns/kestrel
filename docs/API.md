@@ -80,7 +80,7 @@ What the commit needs from a person is named in the plan and refused by code whe
 
 ## Refusing
 
-The error body is `{ error, message }`, plus `field` for a refusal about the request. A refusal about a resource's state also carries the resource as it stands, and `retry_after` where waiting is the remedy.
+The error body is `{ error, message }`, plus `field` for a refusal about the request, a dotted path for a nested field such as `notifications.to`. A refusal about a resource's state also carries the resource as it stands, and `retry_after` where waiting is the remedy.
 
 | The client's next move | Status | Codes |
 | --- | --- | --- |

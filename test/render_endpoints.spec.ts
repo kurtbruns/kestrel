@@ -1,6 +1,8 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { TemplateTestResponse } from "../shared/settings";
+import { FakeProvider } from "../src/providers/fake";
 import { SENTTO_SENTINEL, UNSUB_SENTINEL } from "../src/render/template_engine";
 import { sweep } from "../src/send/sweep";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
@@ -226,6 +228,10 @@ describe("preview + test endpoints", () => {
 });
 
 describe("template test-send (POST /api/settings/template/test)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("requires auth", async () => {
     const res = await SELF.fetch(`${base}/api/settings/template/test`, {
       method: "POST",
@@ -270,6 +276,48 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     const body = await readJson(res);
     expect(body.sent).toBe(2);
     expect(body.total).toBe(2);
+  });
+
+  it("names the addresses the provider didn't take, so a retry mails only those", async () => {
+    const tos = ["partial-a@example.com", "partial-b@example.com", "partial-c@example.com"];
+    const real = FakeProvider.prototype.sendBatch;
+    vi.spyOn(FakeProvider.prototype, "sendBatch").mockImplementation(async function (
+      this: FakeProvider,
+      rendered,
+      recipients,
+      opts,
+    ) {
+      const answer = await real.call(this, rendered, recipients, opts);
+      if (answer.kind !== "answered") {
+        return answer;
+      }
+      // The provider refuses the middle address and takes the rest.
+      const results = answer.results.map((r) =>
+        r.email === "partial-b@example.com"
+          ? { email: r.email, accepted: false as const, retryable: false, error: "refused" }
+          : r,
+      );
+      return { kind: "answered", results };
+    });
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: tos }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await readJson(res)) as TemplateTestResponse;
+    expect(body.sent).toBe(2);
+    expect(body.total).toBe(3);
+    expect(body.failed).toEqual(["partial-b@example.com"]);
+  });
+
+  it("answers an empty failed list when every address was sent", async () => {
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to: "all-sent@example.com" }),
+    });
+    expect(((await readJson(res)) as TemplateTestResponse).failed).toEqual([]);
   });
 
   it("falls back to the saved default recipients when `to` is omitted", async () => {

@@ -511,7 +511,7 @@ describe("editor view", () => {
     expect(note.classList.contains("health")).toBe(true);
     expect(note.classList.contains("amber")).toBe(true);
     expect(note.textContent).toBe(
-      "⚠️No email provider connected: you can write and preview, not send. Connect an email provider.",
+      "⚠️No email provider connected: you can write and preview, not send. Connect Amazon SES.",
     );
     expect($<HTMLAnchorElement>("a", note).getAttribute("href")).toBe("#/docs/ses");
     expect(note.nextElementSibling?.classList.contains("actions-bar")).toBe(true);
@@ -537,7 +537,9 @@ describe("editor view", () => {
     linked.remake(Date.now());
     await vi.advanceTimersByTimeAsync(60_000);
     expect($("#schedRemade").hidden).toBe(false);
-    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
+    expect($("#schedRemadeMsg").textContent).toBe(
+      "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
+    );
 
     linked.cancel();
     await vi.advanceTimersByTimeAsync(60_000);
@@ -1296,7 +1298,7 @@ describe("editor view", () => {
     await vi.advanceTimersByTimeAsync(0);
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so a test can’t be sent yet. Connect an email provider to send one.",
+      "No email provider connected, so a test can’t be sent yet. Connect Amazon SES to send one.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#tGo").disabled).toBe(true);
@@ -1703,7 +1705,7 @@ describe("editor view", () => {
     $("#scheduleBtn").click();
     const line = $(".modal .not-connected");
     expect(line.textContent).toBe(
-      "No email provider connected, so this can’t be scheduled yet. Connect an email provider to schedule it.",
+      "No email provider connected, so this can’t be scheduled yet. Connect Amazon SES to schedule it.",
     );
     expect($<HTMLAnchorElement>("a", line).getAttribute("href")).toBe("#/docs/ses");
     expect($<HTMLButtonElement>("#schGo").disabled).toBe(true);
@@ -2026,7 +2028,9 @@ describe("editor view", () => {
         },
       },
     ]);
-    expect($("#schedRemadeMsg").textContent).toMatch(/re-made this email after its last test/);
+    expect($("#schedRemadeMsg").textContent).toBe(
+      "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
+    );
     body().dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
     await vi.advanceTimersByTimeAsync(16);
     expect($("#lockFoot").classList.contains("nudge")).toBe(true);

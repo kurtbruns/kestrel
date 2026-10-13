@@ -45,6 +45,23 @@ export function invalidAddressesMessage(invalid: string[]): string | null {
   return `Not ${invalid.length === 1 ? "an email address" : "email addresses"}: ${invalid.join(", ")}`;
 }
 
+/**
+ * The dialog error for a test that didn't reach every address: who got it, who didn't,
+ * each distinct reason once, and that Send again tries only those. Both test dialogs leave
+ * just the failed addresses in their field, so a second press mails no one twice.
+ */
+export function notSentMessage(
+  sent: number,
+  total: number,
+  failed: string[],
+  reasons: string[] = [],
+): string {
+  const why = reasons.length ? ` ${reasons.join(" ")}` : "";
+  return sent
+    ? `Sent to ${sent} of ${total}. Not sent to ${failed.join(", ")}.${why} Send again to try those.`
+    : `Not sent.${why} Send again to try.`;
+}
+
 /** A Date as the value of a `datetime-local` input, in local time. */
 export function toLocalInput(d: Date): string {
   const p = (n: number) => String(n).padStart(2, "0");

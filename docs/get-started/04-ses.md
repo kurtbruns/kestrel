@@ -14,7 +14,9 @@ To move an instance that already sends through another provider or another SES a
 
 SES sends only from an identity you've verified. Verifying the whole hostname, rather than one address, lets any address on it send. It also sets up DKIM, which lets inboxes trust your mail.
 
-1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
+1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. Any region that offers SES works, so pick one near you. A few newer regions must be [enabled for your account](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-regions.html) before you can use them. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
+
+1. Note the region's code. The menu shows a name, such as Europe (Ireland), but later steps need its code, such as `eu-west-1`. [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each region's code beside its name. The MAIL FROM record, the SNS access policy, and `AWS_REGION` all use this one code.
 
 1. Under **Configuration**, choose **Identities**, then **Create identity**.
 
@@ -48,7 +50,7 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 1. Select **Use a custom MAIL FROM domain**, and enter `bounce.send.example.com`. For **Behavior on MX failure**, keep **Use default MAIL FROM domain**. Choose **Save changes**.
 
-1. In Cloudflare, add the two records SES lists. Replace `us-east-1` with your region:
+1. In Cloudflare, add the two records SES lists. Replace `us-east-1` with your region's code from section 1:
 
     - **Type:** `MX`, **Name:** `bounce.send`, **Mail server:** `feedback-smtp.us-east-1.amazonses.com`, **Priority:** `10`
     - **Type:** `TXT`, **Name:** `bounce.send`, **Content:** `v=spf1 include:amazonses.com ~all`
@@ -59,6 +61,8 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 A new SES account starts in the sandbox. It sends only to addresses you've verified in SES, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
 
+1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 7 sets the provider.
+
 1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
 1. Fill in the request:
@@ -66,9 +70,18 @@ A new SES account starts in the sandbox. It sends only to addresses you've verif
     - **Mail type:** Marketing
     - **Website URL:** `https://newsletter.example.com/`
 
-1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces. Kestrel confirms every signup by email, and stops mailing an address that bounces or complains.
+1. Check the acknowledgement, and select **Submit request**. AWS Support answers by email, and may ask how you collect addresses and handle bounces.
 
 1. While you wait, verify the two addresses you test with in [Verify it works](05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
+
+If AWS asks for more detail, reply in the support case. If it denies the request, reply there, or open a new request from the **Account dashboard**. Either way, say how Kestrel handles your list:
+
+- Signups use double opt-in: each subscriber confirms by email before joining the list.
+- Every post offers one-click unsubscribe.
+- Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
+- How many subscribers you expect, and how often you send.
+
+Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 
 When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
 
@@ -86,7 +99,7 @@ SES reports what happens to each email through SNS, the AWS notification service
 
 1. Make the set your hostname's default, so SES reports on every email sent from it. Open the `send.example.com` identity, and choose the **Configuration set** tab. Under **Default configuration set**, choose **Edit**, select `kestrel-mail`, and save.
 
-1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`.
+1. Open the topic in the [SNS console](https://console.aws.amazon.com/sns/), and copy its ARN. It looks like `arn:aws:sns:us-east-1:111122223333:kestrel-events`. After `sns` comes your region's code, then your 12-digit account ID. The account menu at the top right of the console also shows the account ID.
 
 1. Let SES publish to the topic. Choose **Edit**, expand **Access policy**, and add this statement to the `Statement` list:
 
@@ -105,7 +118,7 @@ SES reports what happens to each email through SNS, the AWS notification service
     }
     ```
 
-    Replace the topic ARN, your 12-digit account ID, and the region. Choose **Save changes**.
+    Replace the topic ARN, and both copies of the account ID, with the values from your ARN. Replace `us-east-1` with your region's code, the same one the ARN shows. Choose **Save changes**.
 
 You subscribe the app to the topic in section 8, once it runs on SES.
 
@@ -115,7 +128,9 @@ The app sends through an IAM user whose key can only send email. That limits the
 
 1. In the [IAM console](https://console.aws.amazon.com/iam/), go to **Users**, and choose **Create user**. Name it `kestrel-sender`, and leave console access off.
 
-1. When asked for permissions, choose **Attach policies directly**, and create a policy with this JSON:
+1. When asked for permissions, choose **Attach policies directly**, then **Create policy**. The policy editor opens in a new browser tab.
+
+1. In the new tab, choose the **JSON** editor, and replace its contents with this policy:
 
     ```json
     {
@@ -130,7 +145,11 @@ The app sends through an IAM user whose key can only send email. That limits the
     }
     ```
 
-    Name the policy `kestrel-send-email`, attach it to the user, and create the user.
+    Choose **Next**, name the policy `kestrel-send-email`, and choose **Create policy**. You can close this tab.
+
+1. Go back to the first tab, where you're creating the user. Refresh the policy list, search for `kestrel-send-email`, and select it.
+
+1. Choose **Next**, then **Create user**.
 
 1. Open the user, and on the **Security credentials** tab, choose **Create access key**. For the use case, choose **Application running outside AWS**.
 
@@ -164,7 +183,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), and add `SES_MAX_SEND_RATE`. Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -173,7 +192,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
       "ARCHIVE_BASE_PATH": "/archive",
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
-      "AWS_REGION": "us-east-1",     // ← change: your SES region
+      "AWS_REGION": "us-east-1",     // ← change: your region's code
       "SES_MAX_SEND_RATE": "1"       // ← new: your maximum send rate; 1 in the sandbox
     }
     ```
@@ -217,13 +236,15 @@ If it stays **Pending confirmation**, the request never reached the app, or the 
 - **`SNS_TOPIC_ARN` matches the topic's ARN.**
 - **The deploy in section 7 finished.**
 
-Then delete the subscription, and create it again.
+Once you've fixed the cause, select the subscription, and choose **Request confirmation**. SNS sends the request again, and the app confirms it. SNS doesn't let you delete a subscription while it's pending, and removes it on its own after 48 hours.
 
 ## Switch an instance that already sends
 
 Change `PROVIDER`, or move to another account with the same provider, only while no send is sending. The dashboard lists any send in progress.
 
 When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. Moving to SES, from another provider or another SES account, mails none of them twice. Kestrel never repeats an unanswered request to SES, so those recipients wait for you to decide whether they were mailed. Use **Resolve** on the send's page.
+
+Kestrel can't tell whether those emails went out. SES's console shows sent messages only if you've turned on Virtual Deliverability Manager, which this guide doesn't set up. So **Assume not sent** is the safe default. Those readers may miss this post, but they get your next one. No one is mailed twice. Choose **Assume sent** only when you know otherwise, such as a reader who says they got it.
 
 ## Check it
 

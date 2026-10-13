@@ -651,7 +651,8 @@ describe("sent record", () => {
     expect(alert.textContent).toContain(
       "ses 403 UnrecognizedClientException: The security token included in the request is invalid",
     );
-    expect(alert.textContent).toContain("Replace the provider's API key or credentials");
+    expect(alert.textContent).toContain(refusalAdvice("credentials"));
+    expect(alert.textContent).toContain("ses:SendBulkEmail in its IAM policy");
     expect(document.querySelector("#resolveBtn")).toBeNull(); // Resolve is for a wedge only
     expect($(".wbar-sub").textContent).toMatch(/refusing this account/);
     expect($(".wbar-sub").textContent).toContain("next retry in 12 min");
@@ -689,7 +690,7 @@ describe("sent record", () => {
       ],
     });
     for (const [preview, words] of [
-      [false, "Connect an email provider, then deploy."],
+      [false, "Connect Amazon SES, then deploy."],
       [true, "Restart npm run dev without SIMULATE_SENDS=not-connected to send."],
     ] as const) {
       const label = preview ? "preview" : "deployed";

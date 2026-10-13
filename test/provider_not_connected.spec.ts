@@ -73,7 +73,7 @@ async function sendCount(): Promise<number> {
 const REFUSED = { status: 409, code: "provider_not_connected" };
 
 /** What the `not_connected` cause advises, said once wherever the held send is described. */
-const ADVICE = "Connect an email provider (the setup guide walks through it), then deploy.";
+const ADVICE = "Connect Amazon SES (the setup guide walks through it), then deploy.";
 
 beforeEach(async () => {
   await resetDatabase();

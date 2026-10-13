@@ -424,7 +424,7 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   const held = heldWhenFiresHtml();
   return html`${scheduled.map(
     (s) =>
-      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Re-made since its last test</div>` : null}</div></div>`,
+      html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,
   )}`;
 }
 function wireDashScheduledCards(root: HTMLElement): void {
@@ -515,7 +515,7 @@ function setupChecklistHtml(pub: Publication, deployment: DeploymentView | null)
       <li><div class="setup-step-main"><strong>Name your publication</strong><span class="muted">Currently “${pub.name}”. Set the name, tagline, and brand in Settings.</span></div><button data-nav="#/settings">Settings</button></li>
       ${
         notConnected
-          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect an email provider</strong><span class="muted">Nothing can be sent, and signups stay closed, until one is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect an email provider</button></li>`
+          ? html`<li class="setup-connect"><div class="setup-step-main"><strong>Connect Amazon SES</strong><span class="muted">Nothing can be sent, and signups stay closed, until SES is connected.</span></div><button data-nav="${CONNECT_PROVIDER_HREF}">Connect Amazon SES</button></li>`
           : html`<li><div class="setup-step-main"><strong>Confirm your sending domain</strong><span class="muted">SPF, DKIM, and DMARC on your From address. The setup guide walks through it.</span></div><button data-nav="#/docs/sending-domain-dns">Docs</button></li>`
       }
       <li><div class="setup-step-main"><strong>Write your first post</strong><span class="muted">Draft a post in Markdown and preview it exactly as the email.</span></div><button class="primary" data-act="new-post">New post</button></li>

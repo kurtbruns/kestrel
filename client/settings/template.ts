@@ -16,20 +16,15 @@ import { appState } from "../state";
 import { copyFace, copyWith } from "../ui/copy";
 import { $, $$ } from "../ui/dom";
 import { EMAIL_FRAME_SANDBOX, openLinksInNewTab } from "../ui/email_frame";
-import { invalidAddressesMessage, parseAddresses } from "../ui/format";
+import { invalidAddressesMessage, notSentMessage, parseAddresses } from "../ui/format";
 import { highlightTemplate } from "../ui/highlight";
 import { escapeHtml, type Html, html, setHtml, unsafeHtml } from "../ui/html";
 import { icon } from "../ui/icons";
 import { savebar } from "../ui/savebar";
-import { busy, modal, renderError, toast } from "../ui/widgets";
+import { busy, modal, openMenu, renderError, toast } from "../ui/widgets";
 import { inUseChip, REMAKE_TEMPLATE, savedToast, withRemakeConfirm } from "./remake";
 
 const message = describeError;
-
-// The Template page's "Start from example" menu binds its outside-click dismissal
-// exactly once for the app's lifetime (see renderTemplate); this guards against
-// re-binding — and so leaking a listener — on every visit to the page.
-let exampleMenuDismissBound = false;
 
 // The one layout each post ships inside, authored as an HTML template with
 // logic-less {{ }} placeholders over a fixed variable context. Logic-less means a
@@ -107,12 +102,16 @@ const EMAIL_TEMPLATE_VARS: TemplateVarGroup[] = [
 // client — or the view-in-browser page — would show it.
 interface TemplateExample {
   label: string;
+  /** The line under its name in the "Start from example" menu. */
+  description: string;
   html: string;
 }
 type ExampleKey = "signed" | "plain";
 export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   signed: {
     label: "Signed",
+    description:
+      "Your post, then your logo, name, and tagline as a sign-off. Your mailing address sits in the footer once you add one.",
     html: `<style>
   .email {
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -211,6 +210,8 @@ export const EMAIL_TEMPLATE_EXAMPLES: Record<ExampleKey, TemplateExample> = {
   },
   plain: {
     label: "Plain",
+    description:
+      "Just your post and the footer links. Your mailing address sits in the footer once you add one.",
     html: `<style>
   .email {
     font: 16px/1.6 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
@@ -490,13 +491,7 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
         <div class="set-tpl-block">
           <div class="set-tpl-editor-head">
             <div class="set-tpl-tools">
-              <div class="set-menu" id="tplExamples">
-                <button type="button" class="ghost set-menu-btn" id="tplExamplesBtn" aria-haspopup="true" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
-                <div class="set-menu-list" id="tplExamplesList" role="menu" hidden>
-                  <button type="button" role="menuitem" data-example="signed"><span class="set-menu-name">Signed</span><span class="set-menu-desc">Your post, then your logo, name, and tagline as a sign-off. Your mailing address sits in the footer once you add one.</span></button>
-                  <button type="button" role="menuitem" data-example="plain"><span class="set-menu-name">Plain</span><span class="set-menu-desc">Just your post and the footer links. Your mailing address sits in the footer once you add one.</span></button>
-                </div>
-              </div>
+              <button type="button" class="ghost set-menu-btn" id="tplExamplesBtn" aria-haspopup="menu" aria-expanded="false"><span>Start from example</span><span class="set-menu-caret"></span></button>
               <button type="button" class="set-icon-btn" id="tplLineNums" aria-pressed="false" title="Show line numbers" aria-label="Show line numbers">${icon("lines")}</button>
               <button type="button" class="ghost" id="tplCopyAll" title="Copy the whole template to the clipboard" aria-label="Copy the whole template">${copyFace()}</button>
             </div>
@@ -673,41 +668,20 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
     refreshDirty();
   });
   // Examples: a "Start from example" dropdown menu (a compact, secondary action —
-  // loading one is destructive, so it isn't a permanent fixture on the page).
+  // loading one is destructive, so it isn't a permanent fixture on the page). The shared
+  // menu gives it the keyboard and focus a menu owes (DESIGN §11) and closes with the page.
   const exBtn = $<HTMLButtonElement>("#tplExamplesBtn");
-  const exList = $("#tplExamplesList");
-  const closeExamples = () => {
-    exList.hidden = true;
-    exBtn.setAttribute("aria-expanded", "false");
-  };
-  exBtn.onclick = (e) => {
-    e.stopPropagation();
-    const willOpen = exList.hidden;
-    exList.hidden = !willOpen;
-    exBtn.setAttribute("aria-expanded", String(willOpen));
-  };
-  for (const b of $$<HTMLButtonElement>("[data-example]", exList)) {
-    b.onclick = () => {
-      loadExample(b.dataset.example ?? "");
-      closeExamples();
-    };
-  }
-  // Outside-click dismissal, bound ONCE for the app's lifetime (not per visit, which
-  // leaked a listener + a detached wrapper each time). It resolves the menu live by id,
-  // so it's inert whenever the Template page isn't mounted, and it can't race the open
-  // click — that click's target is inside #tplExamples, so it's ignored here.
-  if (!exampleMenuDismissBound) {
-    exampleMenuDismissBound = true;
-    document.addEventListener("click", (e) => {
-      const wrap = document.getElementById("tplExamples");
-      const list = document.getElementById("tplExamplesList");
-      const inside = e.target instanceof Node && wrap?.contains(e.target);
-      if (wrap && list && !list.hidden && !inside) {
-        list.hidden = true;
-        document.getElementById("tplExamplesBtn")?.setAttribute("aria-expanded", "false");
-      }
-    });
-  }
+  exBtn.onclick = () =>
+    openMenu(
+      exBtn,
+      Object.entries(EMAIL_TEMPLATE_EXAMPLES).map(([key, ex]) => ({
+        label: ex.label,
+        description: ex.description,
+        onClick: () => loadExample(key),
+      })),
+      signal,
+      { align: "start" },
+    );
 
   // Preview width toggle (640 / 375) — proof both inbox measures; 640 is the default.
   const frameEl = $<HTMLIFrameElement>("#tplPreview");
@@ -821,14 +795,15 @@ export async function renderTemplate(root: HTMLElement, signal: AbortSignal): Pr
             method: "POST",
             json: { to: addrs },
           });
+          if (r.failed.length) {
+            // The dialog stays open with only the addresses that didn't get it, so Send again
+            // tries those and no one gets a second copy.
+            to.value = r.failed.join("\n");
+            m.error(notSentMessage(r.sent, r.total, r.failed));
+            return;
+          }
           m.close();
-          toast(
-            withNoProviderNote(
-              r.sent === r.total
-                ? `Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`
-                : `Sent ${r.sent} of ${r.total}; the rest failed`,
-            ),
-          );
+          toast(withNoProviderNote(`Test sent to ${r.sent} address${r.sent === 1 ? "" : "es"}`));
         } catch (e) {
           m.error(message(e));
         }

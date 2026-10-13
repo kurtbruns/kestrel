@@ -17,7 +17,7 @@ export type SendStatus = "scheduled" | "sending" | "sent" | "canceled";
 export type HaltReason = "unavailable" | "account";
 
 /**
- * What a refusal is about, so the advice can name the fix: the API key or credentials,
+ * What a refusal is about, so the advice can name the fix: the access key or its permissions,
  * the sender (an unverified domain or from-address), a spent sending quota, the account
  * paused or suspended by the provider, a rate limit, the provider itself failing, or no
  * provider connected to the deployment at all (SPEC §9).
@@ -38,7 +38,7 @@ export type HaltCause =
  * "Deploy" is the step's own last one.
  */
 export const NOT_CONNECTED_ADVICE = {
-  step: "Connect an email provider",
+  step: "Connect Amazon SES",
   guide: " (the setup guide walks through it)",
   after: ", then deploy.",
 } as const;
@@ -53,11 +53,11 @@ export const NOT_CONNECTED_ADVICE = {
 export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
-      return "Replace the provider's API key or credentials in the deployment's secrets.";
+      return "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":
-      return "Wait for the provider's sending quota to reset, or raise it on your plan.";
+      return "Wait for SES's 24-hour quota to free up, or ask AWS to raise it in the Service Quotas console.";
     case "suspended":
       return "Settle the account's standing with the provider (for SES, in the SES console).";
     case "not_connected":

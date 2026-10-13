@@ -198,7 +198,7 @@ function watchBodyHtml(prog: SendView): Html {
       : "Dispatch complete.";
   const failureCount = (c.unsent || 0) + (c.bounced || 0) + (c.complained || 0);
   const providerText = noEmailProvider()
-    ? "No email provider configured, so nothing is delivered"
+    ? "Local stand-in: nothing is delivered"
     : providerNotConnected()
       ? "No email provider connected"
       : `Provider: ${prog.provider?.name || "—"}`;
