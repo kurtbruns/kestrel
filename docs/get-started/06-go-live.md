@@ -2,14 +2,14 @@
 
 This last step makes the newsletter yours, and tells people where to subscribe.
 
-In this guide, you name your publication and share your subscribe link. You also see what to change as your list grows.
+In this guide, you check your publication's name, add a logo, and share your subscribe link. You also see what to change as your list grows.
 
 ## Before you begin
 
 - SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#4-request-production-access) asks for it.
 - `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) sets it to `1` for the sandbox.
 
-In the sandbox, SES refuses every confirmation email to a new subscriber, so every signup fails. A post reaches only the addresses you verified in SES.
+In the sandbox, SES refuses the confirmation email to any address you haven't verified, so those signups fail. A post reaches only the addresses you verified in SES.
 
 ## 1. Name your publication
 

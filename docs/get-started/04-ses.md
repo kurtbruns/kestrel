@@ -59,7 +59,7 @@ SES sends with its own return path by default, so SPF passes for `amazonses.com`
 
 A new SES account starts in the sandbox. It sends only to addresses you've verified in SES, up to 200 emails a day and one a second. Ask AWS to lift those limits now, and test while you wait.
 
-1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address.
+1. Name your publication first, since AWS may visit your website to review the request. In the editor, open **Settings → Publication identity**, and enter the name and tagline. Until you do, your public pages show the name in your From address. The subscribe form stays closed until section 7 sets the provider.
 
 1. In SES, open the **Account dashboard**, select **View Get set up page**, and then **Request production access**.
 
@@ -72,14 +72,14 @@ A new SES account starts in the sandbox. It sends only to addresses you've verif
 
 1. While you wait, verify the two addresses you test with in [Verify it works](05-verify.md#before-you-begin), so the sandbox lets you mail them. For each, under **Identities**, choose **Create identity**, select **Email address**, and follow the link in the email AWS sends.
 
-If AWS asks for more detail, or denies the request, reply in the support case, or open a new request from the **Account dashboard**. Say how Kestrel handles your list:
+If AWS asks for more detail, reply in the support case. If it denies the request, reply there, or open a new request from the **Account dashboard**. Either way, say how Kestrel handles your list:
 
 - Signups use double opt-in: each subscriber confirms by email before joining the list.
-- Every email offers one-click unsubscribe.
+- Every post offers one-click unsubscribe.
 - Bounces and complaints reach the app through SNS, and it stops mailing those addresses automatically.
 - How many subscribers you expect, and how often you send.
 
-Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, every signup fails, and a post reaches only your verified addresses.
+Your account stays in the sandbox until AWS grants access, so don't go live before then. In the sandbox, a signup from any address you haven't verified fails, and a post reaches only your verified addresses.
 
 When AWS grants access, the **Account dashboard** shows your daily quota and your maximum send rate. You set the rate in the app in section 7. The rate decides how fast a send goes out, and [As your list grows](06-go-live.md#as-your-list-grows) says when to ask AWS to raise it.
 
