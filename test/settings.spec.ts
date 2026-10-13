@@ -291,7 +291,7 @@ describe("email template (wired to the render path)", () => {
   describe("a mailing address the template doesn't print (SPEC §9)", () => {
     const ADDRESS = "PO Box 1142, Portland, OR 97207";
     const notPrinted =
-      /mailing address in Settings, but this template doesn't include the \{\{ \.Publication\.Address \}\} field/;
+      /mailing address in Settings, but this template doesn’t include the \{\{ \.Publication\.Address \}\} field/;
     const warningsOf = async (res: Response) =>
       ((await res.json()) as { warnings: string[] }).warnings;
     const printsAddress = withUnsub(

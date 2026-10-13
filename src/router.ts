@@ -167,7 +167,7 @@ function refuseForeignWrite(accepts: readonly string[]): Middleware {
       throw new HttpError(
         403,
         "cross_site_request",
-        "a page on another site can't act on the admin API",
+        "a page on another site can’t act on the admin API",
       );
     }
     const type = mediaTypeOf(c.req);
