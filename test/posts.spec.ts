@@ -191,6 +191,10 @@ describe("posts + revisions", () => {
       body: JSON.stringify({ markdown: "nope" }),
     });
     expect(put.status).toBe(409);
+    // In words the editor shows as they stand, naming the way to edit again (DESIGN §10).
+    expect((await readJson(put)).message).toBe(
+      "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+    );
 
     const del = await SELF.fetch(`${base}/api/posts/${id}`, { method: "DELETE", headers: AUTH });
     expect(del.status).toBe(409);

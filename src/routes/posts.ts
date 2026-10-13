@@ -74,13 +74,22 @@ function revisionHeaders(post: posts.PostRow): HeadersInit | undefined {
   return post.current_revision ? { ETag: `"${post.current_revision}"` } : undefined;
 }
 
-async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
+/**
+ * The post the request names, refused unless it is a draft: a scheduled post's content is
+ * frozen until its schedule is canceled (I3), and a sent one's for good. Saving a post and
+ * changing its images both pass through here.
+ */
+export async function requireDraft(c: RequestContext): Promise<posts.PostRow> {
   const post = await posts.getPost(c.env.DB, param(c, "id"));
   if (!post) {
     throw notFound("post");
   }
   if (post.status !== "draft") {
-    throw conflict("post is not a draft — cancel the schedule to edit");
+    throw conflict(
+      post.status === "sent"
+        ? "This post has been sent, so it can’t be changed."
+        : "This post is scheduled, so it’s locked. Cancel the schedule to edit it.",
+    );
   }
   return post;
 }
@@ -180,7 +189,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     const required: BaseRequiredError = {
       error: "base_required",
       message:
-        "a save must name the revision it was based on: read the post, then save with its current_revision as base_revision or If-Match",
+        "A save must name the revision it was based on. Read the post, then save with its current_revision as base_revision or If-Match.",
       field: "base_revision",
       post,
     };
@@ -190,7 +199,7 @@ export async function updatePost(c: RequestContext): Promise<Response> {
     const current = await posts.getCurrentRevision(c.env.DB, post);
     const stale: StaleRevisionError = {
       error: "stale_revision",
-      message: "this draft changed since you loaded it",
+      message: "This draft changed since you loaded it. Read it again before saving.",
       current_revision: post.current_revision,
       updated_at: post.updated_at,
       author: current?.author ?? null,

@@ -185,7 +185,9 @@ export async function get(c: RequestContext): Promise<Response> {
 export async function notificationTest(c: RequestContext): Promise<Response> {
   const { to } = (await getSettings(c.env.DB)).notifications;
   if (!to) {
-    throw badRequest("set a notifications address first", { field: "notifications.to" });
+    throw badRequest("Add a notifications address first, then send a test.", {
+      field: "notifications.to",
+    });
   }
   if (c.config.notifyChannel === "provider") {
     // Through the newsletter's provider, which is not there yet: refused like any test.
@@ -292,14 +294,14 @@ export async function uploadLogo(c: RequestContext): Promise<Response> {
   // apps don't show an SVG. A logo stored before this rule was set keeps serving.
   const type = mediaType(file.type);
   if (!RASTER_IMAGE_TYPES.includes(type)) {
-    throw badRequest("The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don't show SVG.");
+    throw badRequest("The logo must be a PNG, JPEG, WebP, or GIF. Most email apps don’t show SVG.");
   }
   const bytes = await file.arrayBuffer();
   if (bytes.byteLength === 0) {
-    throw badRequest("the logo file is empty");
+    throw badRequest("The logo file is empty.");
   }
   if (bytes.byteLength > MAX_LOGO_BYTES) {
-    throw badRequest("logo must be 512 KB or smaller");
+    throw badRequest("The logo must be 512 KB or smaller.");
   }
   // A timestamp names the upload's key, so a new upload never lands on an old key, even
   // after a removal, and nothing already sent changes what it shows (I3).

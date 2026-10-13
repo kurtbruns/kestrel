@@ -224,6 +224,11 @@ describe("preview + test endpoints", () => {
       body: JSON.stringify({ to: "not-an-email" }),
     });
     expect(res.status).toBe(400);
+    expect(await readJson(res)).toEqual({
+      error: "bad_request",
+      message: "“not-an-email” isn’t a valid email address. Fix it, then send again.",
+      field: "to",
+    });
   });
 });
 
@@ -340,7 +345,7 @@ describe("template test-send (POST /api/settings/template/test)", () => {
     expect(body.sent).toBe(1);
   });
 
-  it("400s when there are no recipients and no defaults", async () => {
+  it("400s on `to` when there are no recipients and no defaults, saying where to add them", async () => {
     // Clear any default recipients a prior test set.
     await SELF.fetch(`${base}/api/settings`, {
       method: "PUT",
@@ -353,6 +358,27 @@ describe("template test-send (POST /api/settings/template/test)", () => {
       body: JSON.stringify({}),
     });
     expect(res.status).toBe(400);
+    expect(await readJson(res)).toEqual({
+      error: "bad_request",
+      message:
+        "There’s no one to send the test to. Enter an address, or set default test recipients in Settings.",
+      field: "to",
+    });
+  });
+
+  it("400s on `to` for more addresses than one test goes to", async () => {
+    const to = Array.from({ length: 21 }, (_, i) => `many-${i}@example.com`);
+    const res = await SELF.fetch(`${base}/api/settings/template/test`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ to }),
+    });
+    expect(res.status).toBe(400);
+    expect(await readJson(res)).toEqual({
+      error: "bad_request",
+      message: "A test can go to at most 20 addresses. Remove some, then send again.",
+      field: "to",
+    });
   });
 
   it("400s on an invalid address", async () => {
@@ -362,6 +388,11 @@ describe("template test-send (POST /api/settings/template/test)", () => {
       body: JSON.stringify({ to: "not-an-email" }),
     });
     expect(res.status).toBe(400);
+    expect(await readJson(res)).toEqual({
+      error: "bad_request",
+      message: "“not-an-email” isn’t a valid email address. Fix or remove it.",
+      field: "to",
+    });
   });
 });
 

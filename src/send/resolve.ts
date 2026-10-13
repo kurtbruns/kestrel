@@ -70,15 +70,15 @@ export async function resolveStuckSend(
   if (send.status === "sending" && send.locked_until !== null && send.locked_until > now) {
     throw await refuse(
       "run_in_progress",
-      "this send is being worked on right now; try Resolve again in a moment",
+      "This send is being worked on right now. Try Resolve again in a moment.",
     );
   }
   if (!isWedged(send)) {
     throw await refuse(
       "not_wedged",
       send.status === "sending"
-        ? "send is not wedged: it still has recipients to hand off, or a run has yet to look at those in flight"
-        : `send is ${send.status}, with no ambiguous deliveries to resolve`,
+        ? "Nothing on this send needs resolving: it still has recipients to hand off, or a run has yet to look at those in flight."
+        : `This send is ${send.status}, so there’s nothing to resolve.`,
     );
   }
 
@@ -88,11 +88,11 @@ export async function resolveStuckSend(
     // Resolve may have finished it), carrying the send as it now stands.
     const current = await sends.getSend(env.DB, sendId);
     if (!current || !isWedged(current)) {
-      throw await refuse("not_wedged", "send is no longer wedged");
+      throw await refuse("not_wedged", "Nothing on this send needs resolving any more.");
     }
     throw await refuse(
       "run_in_progress",
-      "this send is being worked on right now; try Resolve again in a moment",
+      "This send is being worked on right now. Try Resolve again in a moment.",
     );
   }
   const note =

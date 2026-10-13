@@ -49,16 +49,15 @@ export function parseFireAt(input: unknown): number {
 /**
  * Parse `fire_at` and pass it through `acceptFireAt`, the one gate every requested fire time
  * obeys (at least the minimum lead out, stored on the minute), so scheduling and rescheduling
- * can't drift on it (I6). `immediateHint` appends the send-now pointer, which fits the
+ * can't drift on it (I6). `offersSendNow` has a refusal point to Send now, which fits the
  * schedule path (a reschedule has no immediate alternative to point at).
  */
 export function parseFutureFireAt(
   input: unknown,
   minLeadMs: number,
-  immediateHint = false,
+  offersSendNow = false,
 ): number {
-  const hint = immediateHint ? "; use POST /api/posts/:id/send for the soonest send" : "";
-  return acceptFireAt(parseFireAt(input), minLeadMs, { hint });
+  return acceptFireAt(parseFireAt(input), minLeadMs, { offersSendNow });
 }
 
 /**

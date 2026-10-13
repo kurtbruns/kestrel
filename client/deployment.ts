@@ -2,7 +2,12 @@
 // at boot: the build reference, the archive URL, the minimum lead, and the no-provider notes.
 
 import { archivePostUrl } from "../shared/archive_url";
-import { DEFAULT_MIN_LEAD_MS, formatLead, NOT_CONNECTED_ADVICE } from "../shared/sends";
+import {
+  DEFAULT_MIN_LEAD_MS,
+  formatLead,
+  NOT_CONNECTED_ADVICE,
+  tooSoonMessage,
+} from "../shared/sends";
 import { appState } from "./state";
 import { type Html, html } from "./ui/html";
 
@@ -51,13 +56,13 @@ export function minLeadText(): string {
 }
 
 /**
- * Why a picked time is refused for being too soon, in the publisher's words (SPEC §6): the
- * lead is what keeps a window to cancel in. Where the dialog offers Send now, it says that
- * is the way to the soonest send.
+ * Why a picked time is refused for being too soon, checked before asking the server: the
+ * server's own `fire_at_too_soon` words for this deployment's lead (SPEC §6), so the editor's
+ * check and the server's refusal read the same. Where the dialog offers Send now, it says
+ * that is the way to the soonest send.
  */
 export function tooSoonText(offersSendNow: boolean): string {
-  const why = `Pick a time at least ${minLeadText()} from now, so there’s a window to cancel in.`;
-  return offersSendNow ? `${why} For the soonest send, use Send now below.` : why;
+  return tooSoonMessage(minLeadMs(), offersSendNow);
 }
 
 /** Whether a picked time is inside the minimum lead, checked before asking the server. */

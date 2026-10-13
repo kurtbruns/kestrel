@@ -12,7 +12,7 @@ import type {
 import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
-import { ApiError, api, apiText, describeError } from "../api";
+import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api";
 import {
   connectProviderLink,
   earliestFireAt,
@@ -563,6 +563,9 @@ export async function renderEditor(
   let saveError: string | null = null;
   let retryDelay = 0;
   let retryArmed = false; // one pending retry at a time, however many saves fail meanwhile
+  // Bumped to call off an armed retry: a later failure the server would repeat (a refused
+  // field, say) means trying again unchanged can only send the refused value once more.
+  let retryRound = 0;
   // The save row is a draft's; a scheduled post renders none.
   const saveBtn = locked ? null : $<HTMLButtonElement>("#saveBtn");
   const saveStatus = locked ? null : $("#saveStatus");
@@ -701,14 +704,23 @@ export async function renderEditor(
         saveError = describeError(e);
       }
       // Only a failure that can pass on its own is tried again: no answer, the server's
-      // own trouble, or too many requests at once.
-      const transient = !(e instanceof ApiError) || e.status >= 500 || e.status === 429;
-      if (transient && !retryArmed) {
+      // own trouble, or too many requests at once. Anything else (a refusal, a bug in the
+      // page) would fail the same way, so it calls off a retry an earlier failure armed.
+      const transient =
+        isNetworkFailure(e) || (e instanceof ApiError && (e.status >= 500 || e.status === 429));
+      if (!transient) {
+        retryRound += 1;
+        retryArmed = false;
+      } else if (!retryArmed) {
         retryArmed = true;
         retryDelay = retryDelay ? Math.min(retryDelay * 2, 60_000) : 5_000;
+        const round = retryRound;
         at(
           Date.now() + retryDelay,
           () => {
+            if (round !== retryRound) {
+              return; // called off by a failure that would only repeat
+            }
             retryArmed = false;
             if (saveError && !conflicted) {
               saveDraft(true).catch(() => {}); // a failure says so on the cue again
@@ -1373,13 +1385,10 @@ export async function renderEditor(
               foundGone(e);
               return;
             }
-            // The server's clock is the authority on the lead; its refusal is said the same
-            // way as the editor's own check, under the picker.
+            // The server's clock is the authority on the lead; its refusal, in the same
+            // words as the editor's own check, goes under the picker.
             if (e instanceof ApiError && e.field === "fire_at") {
-              m.error(
-                e.code === "fire_at_too_soon" ? tooSoonText(true) : message(e),
-                $<HTMLInputElement>("#schWhen", box),
-              );
+              m.error(message(e), $<HTMLInputElement>("#schWhen", box));
               return;
             }
             m.error(message(e));

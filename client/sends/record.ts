@@ -201,7 +201,7 @@ function watchBodyHtml(prog: SendView): Html {
     ? "Local stand-in: nothing is delivered"
     : providerNotConnected()
       ? "No email provider connected"
-      : `Provider: ${prog.provider?.name || "—"}`;
+      : `Provider: ${prog.provider?.name || "unknown"}`;
   // The provider refusing the account is the one loud condition here without a control:
   // the fix is outside the app, and the send resumes on its own once it lands (SPEC §12).
   const refused = conditionOf(prog, "refused");

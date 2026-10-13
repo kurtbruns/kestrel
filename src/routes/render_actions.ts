@@ -45,7 +45,7 @@ async function loadRenderInput(c: RequestContext): Promise<RenderInput> {
   }
   const revision = await posts.getCurrentRevision(c.env.DB, post);
   if (!revision) {
-    throw badRequest("post has no content yet");
+    throw badRequest("This post has no content yet. Write something, then try again.");
   }
   const imgs = await images.listImages(c.env.DB, post.id);
   return { post, revision, images: imgs };
@@ -154,9 +154,15 @@ export async function webPage(c: RequestContext): Promise<Response> {
  * current template, and the current identity, through the one render path (I5).
  */
 export async function test(c: RequestContext): Promise<Response> {
-  const to = normalizeEmail(optString(await readJsonObject(c), "to") ?? "");
+  const raw = optString(await readJsonObject(c), "to") ?? "";
+  const to = normalizeEmail(raw);
   if (!isValidEmail(to)) {
-    throw fieldError("to", "to must be an email address");
+    throw fieldError(
+      "to",
+      to
+        ? `“${raw.trim()}” isn’t a valid email address. Fix it, then send again.`
+        : "Enter the email address to send the test to.",
+    );
   }
   requireConnectedProvider(c.config);
 
@@ -269,14 +275,14 @@ function resolveTestRecipients(body: JsonObject, defaults: string[]): string[] {
   const out: string[] = [];
   for (const item of input) {
     if (typeof item !== "string") {
-      throw fieldError("to", "each recipient must be an email address");
+      throw fieldError("to", "Each recipient must be an email address.");
     }
     const email = normalizeEmail(item);
     if (!email) {
       continue;
     }
     if (!isValidEmail(email)) {
-      throw badRequest(`not a valid email address: ${item}`);
+      throw fieldError("to", `“${item.trim()}” isn’t a valid email address. Fix or remove it.`);
     }
     if (seen.has(email)) {
       continue;
@@ -300,12 +306,16 @@ export async function templateTest(c: RequestContext): Promise<Response> {
   const body = await readJsonObject(c, { optional: true });
   const recipients = resolveTestRecipients(body, settings.testRecipients);
   if (recipients.length === 0) {
-    throw badRequest(
-      "no recipients — pass a 'to' address, or set default test recipients in Settings",
+    throw fieldError(
+      "to",
+      "There’s no one to send the test to. Enter an address, or set default test recipients in Settings.",
     );
   }
   if (recipients.length > MAX_TEMPLATE_TEST_RECIPIENTS) {
-    throw badRequest(`at most ${MAX_TEMPLATE_TEST_RECIPIENTS} recipients per test`);
+    throw fieldError(
+      "to",
+      `A test can go to at most ${MAX_TEMPLATE_TEST_RECIPIENTS} addresses. Remove some, then send again.`,
+    );
   }
   requireConnectedProvider(c.config);
 

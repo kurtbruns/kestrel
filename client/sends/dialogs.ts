@@ -122,7 +122,7 @@ export function openRescheduleModal(
           return;
         }
         if (e instanceof ApiError && e.field === "fire_at") {
-          m.error(e.code === "fire_at_too_soon" ? tooSoonText(false) : message(e), when);
+          m.error(message(e), when);
           return;
         }
         m.error(message(e));

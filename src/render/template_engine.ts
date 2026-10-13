@@ -264,7 +264,7 @@ function regionErrors(html: string): string[] {
         errors.push("{{ end }} has no {{ if .IsEmail }} to close.");
       } else if (POST_BODY.test(html.slice(openAt, at))) {
         errors.push(
-          "{{ .Post.Body }} can't be inside {{ if .IsEmail }}: the archived post would have no content.",
+          "{{ .Post.Body }} can’t be inside {{ if .IsEmail }}: the archived post would have no content.",
         );
       }
       openAt = -1;
@@ -272,10 +272,10 @@ function regionErrors(html: string): string[] {
     }
     if (cond !== IS_EMAIL) {
       const tag = cond ? `{{ if ${cond} }}` : "{{ if }}";
-      errors.push(`${tag} isn't supported. The one condition is {{ if .IsEmail }}.`);
+      errors.push(`${tag} isn’t supported. The one condition is {{ if .IsEmail }}.`);
     }
     if (openAt >= 0) {
-      errors.push("An email-only region can't contain another. Close the first with {{ end }}.");
+      errors.push("An email-only region can’t contain another. Close the first with {{ end }}.");
     }
     openAt = at + m[0].length;
   }
@@ -284,7 +284,7 @@ function regionErrors(html: string): string[] {
   }
   if (/\{\{\s*else\s*\}\}/.test(html)) {
     errors.push(
-      "{{ else }} isn't supported. A region is shown in the email and left out of the archived post; there is no alternative.",
+      "{{ else }} isn’t supported. A region is shown in the email and left out of the archived post; there is no alternative.",
     );
   }
   return errors;
@@ -323,7 +323,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
     .replace(TOKEN, "")
     .matchAll(/\{\{[^}]*\}\}/g)) {
     if (!/^\{\{\s*else\s*\}\}$/.test(m[0])) {
-      warnings.push(`${m[0]} isn't something Kestrel fills, so it will show as written.`);
+      warnings.push(`${m[0]} isn’t something Kestrel fills, so it will show as written.`);
     }
   }
   if (LOGO_URL_AS_IMG_SRC.test(html)) {
@@ -332,7 +332,7 @@ export function validateEmailTemplate(html: string): TemplateValidation {
     );
   }
   if (/<script[\s/>]/i.test(html)) {
-    warnings.push("A <script> tag won't run in email and may get the message filtered.");
+    warnings.push("A <script> tag won’t run in email and may get the message filtered.");
   }
   return { errors, warnings };
 }

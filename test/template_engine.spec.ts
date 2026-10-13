@@ -171,7 +171,7 @@ describe("email-only regions ({{ if .IsEmail }} … {{ end }})", () => {
     expect(errorsOf(`${base}{{ if .IsEmail }}x`)).toMatch(/never closed/);
     expect(errorsOf(`${base}x{{ end }}`)).toMatch(/\{\{ end \}\} has no/);
     expect(errorsOf(`${base}{{ if .IsEmail }}a{{ if .IsEmail }}b{{ end }}{{ end }}`)).toMatch(
-      /can't contain another/,
+      /can’t contain another/,
     );
   });
 
@@ -180,24 +180,24 @@ describe("email-only regions ({{ if .IsEmail }} … {{ end }})", () => {
       errorsOf(
         '{{ if .IsEmail }}{{ .Post.Body }}{{ end }}<a href="{{ .Email.UnsubscribeURL }}">u</a>',
       ),
-    ).toMatch(/\{\{ \.Post\.Body \}\} can't be inside/);
+    ).toMatch(/\{\{ \.Post\.Body \}\} can’t be inside/);
   });
 
   it("refuses {{ else }}, names an empty {{ if }} cleanly, and warns on braces it doesn't fill", () => {
     expect(errorsOf(`${base}{{ if .IsEmail }}a{{ else }}b{{ end }}`)).toMatch(
-      /\{\{ else \}\} isn't supported/,
+      /\{\{ else \}\} isn’t supported/,
     );
-    expect(errorsOf(`${base}{{ if }}a{{ end }}`)).toMatch(/^\{\{ if \}\} isn't supported/);
+    expect(errorsOf(`${base}{{ if }}a{{ end }}`)).toMatch(/^\{\{ if \}\} isn’t supported/);
     const trimmed = validateEmailTemplate(`${base}{{- if .IsEmail -}}a{{- end -}}`);
     expect(trimmed.warnings.join(" ")).toMatch(
-      /\{\{- if \.IsEmail -\}\} isn't something Kestrel fills/,
+      /\{\{- if \.IsEmail -\}\} isn’t something Kestrel fills/,
     );
   });
 
   it("refuses any condition but .IsEmail, once, without a second error for its {{ end }}", () => {
     const errors = validateEmailTemplate(`${base}{{ if .Publication.Address }}a{{ end }}`).errors;
     expect(errors).toEqual([
-      "{{ if .Publication.Address }} isn't supported. The one condition is {{ if .IsEmail }}.",
+      "{{ if .Publication.Address }} isn’t supported. The one condition is {{ if .IsEmail }}.",
     ]);
   });
 });
