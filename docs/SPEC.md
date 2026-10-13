@@ -92,7 +92,7 @@ Only one send per post can be active (scheduled or sending) at a time (§6), so 
 
 Six guarantees. In a newsletter the guarantees that matter are about consent, delivery, and the record. Every rule about sending, consent, and the record in this spec upholds one of these.
 
-**I1 — Nothing is sent without recorded consent.** Only confirmed subscribers receive a send, and a subscriber is confirmed only when their consent is on record: given here by double opt-in, timestamped, or carried in with a list from the service where it was given, with that service's evidence and the publisher's attestation that everyone imported as subscribed opted in (§7). So for every delivery there is a record of how the person consented, and of when, as far as the record that carried it in says.
+**I1 — Nothing is sent without recorded consent.** Only confirmed subscribers receive a send. A subscriber is confirmed when their consent is on record in one of two ways: they confirmed here by double opt-in, or they opted in at another service and were imported with that service's record of it and the publisher's word that they opted in (§7). Either way, every delivery traces back to a record of how the person consented and, where that record shows it, when.
 
 **I2 — Unsubscribe is immediate and final.** From the moment an unsubscribe is recorded, no further mail reaches that person: a send already in flight skips them if they have not yet been handed off to the provider, and no later send includes them. There is no window in which they still get one, and it is never silently reversed.
 
@@ -248,7 +248,7 @@ A subscriber is an email address with a **consent state**, plus an orthogonal **
 | State | Meaning | In the send's audience? |
 | --- | --- | --- |
 | **Pending** | Subscribed but hasn't clicked the confirmation link yet | No |
-| **Confirmed** | Consent is on record: completed double opt-in here, recorded and timestamped, or carried in with an imported list (Bringing an existing list, below) | Yes, unless suppressed |
+| **Confirmed** | Consent is on record: they confirmed here by double opt-in, or opted in elsewhere and were imported (Bringing an existing list, below) | Yes, unless suppressed |
 | **Unsubscribed** | Left the list (their own unsubscribe, or the publisher on their behalf) | No |
 
 **Suppressed** is not a consent state but a flag that can sit on top of one: an address that bounced hard or drew a complaint is excluded from every send whatever its consent state, so a subscriber can be *confirmed and suppressed* at once, consented but never mailed. The audience for any send is exactly *confirmed minus suppressed*. The two marks have different owners, which is what keeps them distinct: unsubscribed is the reader's to set (or the publisher's, on their behalf) and the reader's to clear by subscribing again; suppressed is set by the app from the provider's signals and cleared only by the publisher, deliberately. Suppression is a deliverability rule (§10), separate from the consent rule (I1).
@@ -552,7 +552,7 @@ An index of what was decided and the alternative each choice was made over, in t
 - **"Sent" means dispatch complete**, over waiting for every delivery receipt (§6).
 - **A reconciling sweep**, over per-post alarms (§6).
 - **Double opt-in for joining here**, accepted as a deliberate cost, over single opt-in (§7).
-- **Confirmed means consent is on record, given here by double opt-in or carried in with an imported list alongside its evidence and the publisher's attestation**, over re-confirming every imported address and over a fourth consent state for imported subscribers. It changes I1's wording: confirmation was double opt-in here alone (§3, §7).
+- **Confirmed means consent is on record: confirmed here by double opt-in, or opted in elsewhere and imported with that service's record and the publisher's word**, over re-confirming every imported address and over a fourth consent state for imported subscribers. It changes I1's wording: confirmation was double opt-in here alone (§3, §7).
 - **One documented import format, converted outside the app**, over the app guessing what another service's export means (§7).
 - **An import is planned, then committed whole**, over applying rows as they are read (§7).
 - **How a subscriber joined is keyed on the import, not on the file's claims**, over trusting a file that says its addresses confirmed here (§7).
