@@ -311,7 +311,7 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, its phase gloss says the provider is unavailable and when the next retry is, and the in-flight-too-long flag raises it if it lasts.
 
-**Resolve** explains why the send can't finish on its own and offers **Assume not sent** and **Assume sent**, with Cancel. Neither choice re-mails anyone (I4), so the dialog explains a trade-off in the record's accuracy, not a danger. Since SES can't show whether those emails went out, the dialog names **Assume not sent** as the safe default and **Assume sent** as the choice for when the operator knows otherwise.
+**Resolve** explains why the send can't finish on its own and offers **Assume not sent** and **Assume sent**, with Cancel. Neither choice re-mails anyone (I4), so the dialog explains a trade-off in the record's accuracy, not a danger. Since the app can't tell whether those emails went out, the dialog names **Assume not sent** as the safe default and **Assume sent** as the choice for when the operator knows otherwise.
 
 ### No email provider
 

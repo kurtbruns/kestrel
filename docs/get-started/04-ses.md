@@ -225,7 +225,7 @@ Change `PROVIDER`, or move to another account with the same provider, only while
 
 When a request to a provider gets no answer, Kestrel can't know whether its recipients were mailed. Moving to SES, from another provider or another SES account, mails none of them twice. Kestrel never repeats an unanswered request to SES, so those recipients wait for you to decide whether they were mailed. Use **Resolve** on the send's page.
 
-SES can't show whether those emails went out, so **Assume not sent** is the safer choice. Those readers miss this post and get your next one. No one is mailed twice. Choose **Assume sent** only when you know otherwise, such as a reader who says they got it.
+Kestrel can't tell whether those emails went out. SES's console shows sent messages only if you've turned on Virtual Deliverability Manager, which this guide doesn't set up. So **Assume not sent** is the safe default. Those readers may miss this post, but they get your next one. No one is mailed twice. Choose **Assume sent** only when you know otherwise, such as a reader who says they got it.
 
 ## Check it
 
