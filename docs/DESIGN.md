@@ -6,7 +6,7 @@ How the admin UI presents what Kestrel does. `docs/SPEC.md` says what the system
 
 **How to read it.** The principles (§1) are the reasons; most rules later in the document follow from one of them. §2 is a map of the app, §3 walks each screen, and §4 follows a send across all of them. §5 to §11 are the shared vocabulary every screen is built from: where messages go, how saving works, the button roles, color, layout, copy, and accessibility. §12 lists what was left out on purpose, and §13 is a checklist for a change.
 
-**What it doesn't hold.** Exact CSS lives in `public/dashboard/styles.css` and behavior in `client/`; this document names what each piece means and which one to reach for, one level above the declarations. How the SPA is built and mounted is `.claude/rules/client.md`.
+**What it doesn't hold.** Exact CSS lives in `public/dashboard/styles.css` and behavior in `client/`; this document names what each piece means and which one to reach for, one level above the declarations. How the SPA is mounted is `.claude/rules/client.md`, and how it is built is `.claude/rules/client-build.md`.
 
 **Keeping it true.** A change to how the UI presents something updates this document in the same commit. When this document and the code disagree, one of them is a bug: flag it rather than quietly editing either to match.
 

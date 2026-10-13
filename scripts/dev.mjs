@@ -9,7 +9,7 @@
  * rebuild-loop forever. Best-effort: a stale stamp is harmless.
  *
  * The editor's watch build. The admin UI is served from the tree scripts/build-client.mjs
- * emits (see wrangler.jsonc), in its dev flavor (readable, with the live reload compiled in),
+ * emits (see wrangler.jsonc), as its dev build (readable, with the live reload compiled in),
  * asked of every builder this process starts through KESTREL_CLIENT_DEV: the watcher below,
  * and wrangler's own build.command, which takes no flag and inherits this environment. The
  * watcher re-emits the tree as client/ or public/ change (esbuild's incremental watch, ~10ms);
