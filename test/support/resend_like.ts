@@ -131,7 +131,8 @@ export class NoKeyProvider extends ResendLikeProvider {
   override readonly idempotencyWindowMs: number | undefined = undefined;
 }
 
-/** SES-shaped: one recipient a request and no idempotency key. */
+/** One recipient a request and no idempotency key: SES on an account allowed fewer than
+ *  ten a second, the one shape that groups its requests. */
 export class SesLikeProvider extends NoKeyProvider {
   override readonly maxBatch: number = 1;
 }

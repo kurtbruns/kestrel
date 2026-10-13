@@ -4,8 +4,12 @@
  * its public key, served at an SNS-shaped URL a spec mocks `fetch` to answer.
  */
 
-import { base64Bytes } from "../../src/providers/ses_mime";
 import { canonicalString, type SnsEnvelope } from "../../src/providers/sns";
+
+/** Standard base64 of raw bytes, as SNS writes a signature. */
+export function base64Bytes(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
 
 function derLen(n: number): number[] {
   if (n < 0x80) {

@@ -63,10 +63,10 @@ type TokenSpec =
  *  inert, so they survive `fillEmailTemplate`'s escaping and CSS inlining untouched,
  *  frozen into the render verbatim until the delivery pass fills them.
  *
- *  These are NOT about SES template semantics: every provider (fake, resend, ses)
- *  substitutes in-app before the wire — the SES adapter sends fully-substituted raw MIME
- *  (providers/ses_mime.ts), not SES-side `{{ }}` templating — so the only constraints a
- *  sentinel must meet are the two above. */
+ *  They carry no `{{ }}` meaning for any provider either: the fake and Resend fill them in
+ *  app before the wire, and the SES adapter turns each into a tag of its own inline template
+ *  (providers/ses_template.ts), whose value this module's delivery pass computes, so the
+ *  only constraints a sentinel must meet are the two above. */
 export const UNSUB_SENTINEL = "%%UNSUBSCRIBE_URL%%";
 export const SENTTO_SENTINEL = "%%SENT_TO%%";
 
@@ -119,6 +119,13 @@ const DELIVERY_TOKENS: { key: DeliveryKey; escaping: Escaping; sentinel: string 
       ? [{ key: key as DeliveryKey, escaping: spec.escaping, sentinel: spec.sentinel }]
       : [],
   );
+
+/** The delivery-phase tokens and the sentinel each is frozen to, for a transport that fills
+ *  them itself from per-recipient data (SES's bulk send), with values from
+ *  `fillDeliveryTokens`, so the escaping stays this registry's. */
+export function deliverySentinels(): readonly { key: DeliveryKey; sentinel: string }[] {
+  return DELIVERY_TOKENS.map(({ key, sentinel }) => ({ key, sentinel }));
+}
 
 const TOKEN = /\{\{\s*([\w.]+)\s*\}\}/g;
 

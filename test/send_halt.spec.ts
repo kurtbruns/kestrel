@@ -17,6 +17,7 @@ import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick, ticks } from "./support/fixtures";
 import { allowErrorLogs } from "./support/log";
 import { ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
+import { answerSes, entryOk } from "./support/ses";
 import { viewOf } from "./support/view";
 
 // A failure that is the provider's or the account's halts the send's run, not its
@@ -564,8 +565,8 @@ describe("the real adapters, end to end through the loop", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ unsent: 3 });
   });
 
-  // The adapter paces its requests to the account's send rate; these specs are about which
-  // requests go out, not how fast, so a high rate keeps them from waiting it out for real.
+  // An account allowed 1,000 a second takes a full 50 a request, so each spec's batch is
+  // one request and none waits out SES's one request a second.
   const sesEnv = {
     ...env,
     AWS_ACCESS_KEY_ID: "AKIATESTTESTTEST",
@@ -574,39 +575,20 @@ describe("the real adapters, end to end through the loop", () => {
   } as AppEnv;
   const sesAdapter = () => new SesProvider(getConfig(sesEnv), sesEnv);
 
-  /** SES answers per recipient; `answer` decides each request, and `mailed` counts accepts. */
-  function sesAnswers(answer: (to: string) => Response) {
-    const mailed = new Map<string, number>();
-    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const req = input as Request;
-      const to = (JSON.parse(await req.text()) as { Destination: { ToAddresses: string[] } })
-        .Destination.ToAddresses[0]!;
-      const res = answer(to);
-      if (res.ok) {
-        mailed.set(to, (mailed.get(to) ?? 0) + 1);
-      }
-      return res;
-    });
-    return { spy, mailed };
-  }
-  // Each message gets its own id, as SES gives it: a delivery's provider id is unique.
-  const sesOk = () =>
-    new Response(JSON.stringify({ MessageId: crypto.randomUUID() }), { status: 200 });
-
-  it("an SES SendingPausedException halts after one request instead of one per recipient", async () => {
+  it("an SES SendingPausedException halts the send without consuming anyone, then resumes", async () => {
     const emails = addresses(20);
     await seedConfirmed(emails);
     const send = await dueSend();
     vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
 
     let paused = true;
-    const { spy, mailed } = sesAnswers(() =>
+    const { spy, mailed } = answerSes(undefined, () =>
       paused
         ? new Response(
             JSON.stringify({ __type: "SendingPausedException", message: "Account is paused" }),
             { status: 400 },
           )
-        : sesOk(),
+        : null,
     );
     const result = await runSend(capped(), send.id, new Budget(1000));
 
@@ -623,21 +605,16 @@ describe("the real adapters, end to end through the loop", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 20 });
   });
 
-  it("an SES bad address is still that recipient's alone: recorded unsent, the rest delivered", async () => {
+  it("an SES entry rejected for its own address is that recipient's alone: recorded unsent, the rest delivered", async () => {
     const emails = addresses(4);
     await seedConfirmed(emails);
     const send = await dueSend();
     vi.mocked(providers.getProvider).mockReturnValue(sesAdapter());
-    sesAnswers((to) =>
-      to === emails[1]
-        ? new Response(JSON.stringify({ __type: "BadRequestException", message: "bad" }), {
-            status: 400,
-          })
-        : sesOk(),
+    answerSes((to) =>
+      to === emails[1] ? { Status: "MESSAGE_REJECTED", Error: "bad" } : entryOk(),
     );
 
     const result = await runSend(capped(), send.id, new Budget(1000));
-
     expect(result.finished).toBe(true);
     expect(await sends.deliveryRollup(env.DB, send.id)).toEqual({ accepted: 3, unsent: 1 });
   });

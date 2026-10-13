@@ -16,7 +16,8 @@
  *     `sesTraits`: batch size, idempotency, how long a key is remembered, and SES's send
  *     rate, which the send loop paces to), and answer a failure the way the adapter answers
  *     it: the halt comes from the adapter's own classifier and wording. Each request takes
- *     a request's time: Resend's carries a batch, SES's one recipient.
+ *     a request's time, and carries a batch: up to 100 for Resend, and for SES a second of
+ *     the account's send rate, up to 50, one request a second.
  *   - `generic` is a small-batch idempotent provider paced to be watched: slow batches and
  *     a transient refusal for a few recipients.
  *
@@ -54,7 +55,7 @@ import { unwrap } from "../lib/unwrap";
 import { applyDeliveryEvents } from "../services/webhook_events";
 import { deliverToOutbox, FakeProvider } from "./fake";
 import { RESEND_TRAITS } from "./resend";
-import { classifySesError, sesErrorText, sesTraits } from "./ses";
+import { classifySesError, sesEntryErrorText, sesErrorText, sesTraits } from "./ses";
 import type {
   BatchHalt,
   DeliveryEvent,
@@ -132,16 +133,16 @@ const PROFILES: Record<SimulationProfile, () => SimProfile> = {
     guaranteed: { lost: false, quota: false },
   }),
   ses: () => ({
-    // The send loop keeps requests to the account's send rate (`maxRequestRate`); this is
-    // how long each one takes to be answered.
+    // The send loop keeps requests to SES's one a second (`maxRequestRate`); this is how
+    // long each bulk request takes to be answered.
     traits: sesTraits,
-    requestMs: 80,
+    requestMs: 250,
     transientRate: 0,
     lostRate: 0.0005,
     rejectRate: 0.001,
-    rejectError: sesErrorText(
-      400,
-      "MessageRejected",
+    // SES refuses one entry of a bulk request in that entry's own result.
+    rejectError: sesEntryErrorText(
+      "MESSAGE_REJECTED",
       "Email address is on the account's suppression list. (simulated)",
     ),
     quota: adapterHalt(
@@ -352,7 +353,7 @@ export class SimProvider implements EmailProvider {
     this.maxRequestRate = traits.maxRequestRate;
   }
 
-  /** One list batch is one request to the provider (SES's batches are one recipient). */
+  /** One list batch is one request to the provider. */
   async sendBatch(
     rendered: RenderedEmail,
     recipients: Recipient[],

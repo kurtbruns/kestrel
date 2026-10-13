@@ -48,7 +48,7 @@ A missing leading slash is added, and a trailing slash is dropped.
 
 ### `SES_MAX_SEND_RATE`
 
-The app starts SES requests no faster than this rate. Set it to the maximum send rate on your SES **Account dashboard**. That's `1` in the sandbox, and whatever AWS grants after that. The default, 14, is a common starting rate, not your account's.
+The app sends SES one request a second, the most SES takes, and each request carries one second of this rate, up to 50 recipients. Set it to the maximum send rate on your SES **Account dashboard**. That's `1` in the sandbox, and whatever AWS grants after that. The default, 14, is a common starting rate, not your account's.
 
 A rate set too high only means SES throttles some requests. Those recipients wait for the next minute, and no one is mailed twice.
 
@@ -58,8 +58,8 @@ Cloudflare caps how many subrequests one run of a Worker may make. Database quer
 
 This setting is the subrequest cap. The app keeps database queries under theirs on its own.
 
-- **The default, 50,** is the Workers Free limit, and safe on any plan. Through Resend, a minute sends about 400 recipients. Through SES, which takes one recipient a request, it sends about 18.
-- **On Workers Paid,** which allows 10,000, set `"SUBREQUEST_BUDGET": "10000"`. Resend then sends about 19,000 recipients a minute. SES sends as fast as your account's rate allows, up to about 1,900.
+- **The default, 50,** is the Workers Free limit, and safe on any plan. Through Resend, a minute sends about 400 recipients. Through SES, it sends four requests: 56 recipients at a send rate of 14, and 200 at a rate of 50 or more.
+- **On Workers Paid,** which allows 10,000, set `"SUBREQUEST_BUDGET": "10000"`. Resend then sends about 19,000 recipients a minute. SES sends about 50 requests a minute, one a second: about 700 recipients at a rate of 14, and about 2,500 at 50 or more.
 - **If you raised the Worker's own limit** with `limits.subrequests`, you may set this to match.
 
 Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up. A value below 30 is raised to 30, the least a minute needs to send anything and still send a notification.

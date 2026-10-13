@@ -5,20 +5,19 @@ import type { AppEnv } from "../src/env";
 import { getConfig } from "../src/env";
 import { getProvider } from "../src/providers";
 import { SesProvider } from "../src/providers/ses";
-import { base64Bytes } from "../src/providers/ses_mime";
 import { _clearKeyCache, isSnsHost, type SnsEnvelope } from "../src/providers/sns";
 import { PROVIDER_REQUEST_TIMEOUT_MS, type RenderedEmail } from "../src/providers/types";
-import { UNSUB_SENTINEL } from "../src/render/render";
+import { SENTTO_SENTINEL, substituteRecipient, UNSUB_SENTINEL } from "../src/render/render";
 import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { SNS_TOPIC_ARN } from "./support/deploy";
-import { deliveryEvent, resetDatabase, seedDelivery } from "./support/fixtures";
+import { deliveryEvent, dueSend, resetDatabase, seedDelivery } from "./support/fixtures";
 import { base } from "./support/http";
+import { allowErrorLogs, logged } from "./support/log";
 import { neverAnswers } from "./support/provider_timeout";
-import { makeSigner, type Signer, signEnvelope } from "./support/sns";
+import { answerSes, deliveredBy, entryOk, readBulkRequest, SES_BULK_ENDPOINT } from "./support/ses";
+import { base64Bytes, makeSigner, type Signer, signEnvelope } from "./support/sns";
 
 // --- fixtures ---------------------------------------------------------------
-
-const ENDPOINT = "https://email.us-east-1.amazonaws.com/v2/email/outbound-emails";
 
 /** A minimal env carrying just the SES secrets the adapter reads. */
 const sesEnv = {
@@ -49,19 +48,6 @@ function renderedFixture(): RenderedEmail {
 const reqUrl = (input: Parameters<typeof fetch>[0]): string =>
   typeof input === "string" ? input : input instanceof Request ? input.url : String(input);
 
-/** Decode one base64 MIME part (by media type) back to its original string. */
-function decodeMimePart(mime: string, mediaType: string): string {
-  const at = mime.indexOf(`Content-Type: ${mediaType}`);
-  if (at < 0) {
-    throw new Error(`part not found: ${mediaType}`);
-  }
-  const bodyStart = mime.indexOf("\r\n\r\n", at) + 4;
-  const bodyEnd = mime.indexOf("\r\n--", bodyStart); // next boundary delimiter
-  const b64 = mime.slice(bodyStart, bodyEnd).replace(/\r\n/g, "");
-  const bytes = Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
-}
-
 function webhookRequest(envelope: SnsEnvelope): Request {
   return new Request(`${base}/webhooks/ses`, {
     method: "POST",
@@ -83,66 +69,300 @@ afterEach(() => {
 
 // ============================================================================
 describe("SesProvider.sendBatch", () => {
-  it("is a one-at-a-time, non-idempotent transport", () => {
-    const provider = newProvider();
-    expect(provider.name).toBe("ses");
-    expect(provider.maxBatch).toBe(1);
-    expect(provider.idempotentRetry).toBe(false);
+  it("batches a second of the account's send rate, up to 50, one request a second, with no idempotency", () => {
+    const at = (rate: number) =>
+      new SesProvider({ ...getConfig(env), sesMaxSendRate: rate }, sesEnv);
+    expect(newProvider().name).toBe("ses");
+    expect([1, 14, 50, 200].map((rate) => at(rate).maxBatch)).toEqual([1, 14, 50, 50]);
+    expect(at(14).maxRequestRate).toBe(1);
+    expect(at(14).idempotentRetry).toBe(false);
   });
 
-  it("POSTs a SigV4-signed Raw MIME message with per-recipient one-click headers", async () => {
+  it("POSTs one SigV4-signed SendBulkEmail with an entry per recipient and its one-click headers (SPEC §10)", async () => {
     let captured: Request | undefined;
-    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      captured = input as Request;
-      return new Response(JSON.stringify({ MessageId: "0100-msgid-abc" }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+    const { requests } = answerSes();
+    vi.mocked(globalThis.fetch).mockImplementationOnce(async (input) => {
+      captured = (input as Request).clone();
+      return new Response(
+        JSON.stringify({
+          BulkEmailEntryResults: [
+            { Status: "SUCCESS", MessageId: "0100-msgid-a" },
+            { Status: "SUCCESS", MessageId: "0100-msgid-b" },
+          ],
+        }),
+        { status: 200 },
+      );
     });
+    const other = "https://app.example.com/unsubscribe?token=cafe";
 
-    const provider = newProvider();
-    const results = await provider.sendBatch(
+    const results = await newProvider().sendBatch(
       renderedFixture(),
-      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
-      {
-        purpose: "list",
-        idempotencyKeyPrefix: "send-1",
-      },
+      [
+        { email: "a@example.com", unsubscribeUrl: UNSUB },
+        { email: "b@example.com", unsubscribeUrl: other },
+      ],
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
     );
 
-    // Response mapping: 200 → accepted with the SES MessageId as providerId.
+    // Each entry's result, by position, with SES's MessageId as the providerId.
     expect(results).toEqual({
       kind: "answered",
-      results: [{ email: "reader@example.com", accepted: true, providerId: "0100-msgid-abc" }],
+      results: [
+        { email: "a@example.com", accepted: true, providerId: "0100-msgid-a" },
+        { email: "b@example.com", accepted: true, providerId: "0100-msgid-b" },
+      ],
     });
-
-    // Request shape.
-    expect(captured).toBeDefined();
+    expect(requests).toEqual([]); // the one request was answered above
     expect(captured!.method).toBe("POST");
-    expect(captured!.url).toBe(ENDPOINT);
+    expect(captured!.url).toBe(SES_BULK_ENDPOINT);
     expect(captured!.headers.get("authorization") ?? "").toMatch(/^AWS4-HMAC-SHA256 /);
 
-    const body = JSON.parse(await captured!.text());
-    expect(body.Destination.ToAddresses).toEqual(["reader@example.com"]);
-    expect(body.ConfigurationSetName).toBe("kestrel-events"); // events flow to SNS
-    expect(body.FromEmailAddress).toContain("newsletter@send.example.com");
+    const req = await readBulkRequest(captured);
+    expect(req.ConfigurationSetName).toBe("kestrel-events"); // events flow to SNS
+    expect(req.FromEmailAddress).toContain("newsletter@send.example.com");
+    expect(req.BulkEmailEntries.map((e) => e.Destination.ToAddresses)).toEqual([
+      ["a@example.com"],
+      ["b@example.com"],
+    ]);
+    // Each reader gets their own unsubscribe link, in both parts and in the headers.
+    const a = deliveredBy(req, 0);
+    const b = deliveredBy(req, 1);
+    expect(a.headers).toEqual({
+      "List-Unsubscribe": `<${UNSUB}>`,
+      "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    });
+    expect(b.headers["List-Unsubscribe"]).toBe(`<${other}>`);
+    expect(a.html).toContain(`href="${UNSUB}"`);
+    expect(a.text).toContain(`Unsubscribe: ${UNSUB}`);
+    expect(b.html).toContain(`href="${other}"`);
+    expect(a.subject).toBe("Weekly Update");
+  });
 
-    // Content.Raw.Data is base64 of the raw MIME message.
-    const mime = new TextDecoder().decode(
-      Uint8Array.from(atob(body.Content.Raw.Data), (c) => c.charCodeAt(0)),
+  // I5: the email SES builds from the template is the one the fake and Resend send, so a
+  // test through any of them is the send. Built from a real frozen render, with what an
+  // author can put in a post that a template engine might read: a `{{`, a token typed as
+  // text, a backslash before one, a stray `}}`, and a brace beside a delivery placeholder.
+  it("delivers byte for byte what substituteRecipient makes, whatever braces and backslashes the post carries (I5)", async () => {
+    const send = await dueSend({
+      subject: "Braces {{ .Post.Subject }} and \\{{x}} in a subject",
+      markdown: [
+        "Literal {{ .Email.UnsubscribeURL }} and {{{triple}}} and \\{{escaped}} and }} here.",
+        "",
+        "```",
+        'if (a) { b("\\n"); } // {{#each}}',
+        "```",
+        "",
+        "A path C:\\Users\\ and a trailing backslash \\",
+      ].join("\n"),
+    });
+    const frozen = { subject: send.subject, html: send.rendered_html, text: send.rendered_text };
+    // A brace hard against each delivery placeholder, as a hand-made template could put it.
+    frozen.html += `{${UNSUB_SENTINEL}}\\${SENTTO_SENTINEL}{`;
+    frozen.text += `\\${UNSUB_SENTINEL}}`;
+    const reader = { email: "o'reilly&co@example.com", unsubscribeUrl: `${UNSUB}&x=1` };
+    const { requests } = answerSes();
+
+    await newProvider().sendBatch(frozen, [reader], { purpose: "test", idempotencyKeyPrefix: "t" });
+
+    const expected = substituteRecipient(frozen, {
+      ".Email.UnsubscribeURL": reader.unsubscribeUrl,
+      ".Email.SentTo": reader.email,
+    });
+    const got = deliveredBy(requests[0]!, 0);
+    expect({ subject: got.subject, html: got.html, text: got.text }).toEqual(expected);
+    // The template SES reads holds no brace or backslash but its own tags.
+    for (const part of Object.values(requests[0]!.DefaultContent.Template.TemplateContent)) {
+      expect(part.replace(/\{\{\w+\}\}/g, "")).not.toMatch(/[{}\\]/);
+    }
+  });
+
+  it("sends a test, a confirmation, and a list batch through the same bulk request", async () => {
+    const { requests } = answerSes();
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    for (const purpose of ["test", "confirmation", "list"] as const) {
+      await newProvider().sendBatch(renderedFixture(), one, { purpose, idempotencyKeyPrefix: "x" });
+    }
+    expect(requests.map((r) => r.BulkEmailEntries.length)).toEqual([1, 1, 1]);
+    expect(new Set(requests.map((r) => JSON.stringify(r.DefaultContent)))).toHaveProperty(
+      "size",
+      1,
     );
-    expect(mime).toContain('Content-Type: multipart/alternative; boundary="');
-    expect(mime).toContain(`List-Unsubscribe: <${UNSUB}>`);
-    expect(mime).toContain("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+  });
 
-    // The sentinel is substituted per-recipient in BOTH parts, and the bodies survive.
-    const html = decodeMimePart(mime, 'text/html; charset="utf-8"');
-    const text = decodeMimePart(mime, 'text/plain; charset="utf-8"');
-    expect(html).toContain("Hello world, this is the newsletter body.");
-    expect(html).toContain(`href="${UNSUB}"`);
-    expect(html).not.toContain(UNSUB_SENTINEL);
-    expect(text).toContain(`Unsubscribe: ${UNSUB}`);
-    expect(text).not.toContain(UNSUB_SENTINEL);
+  it("encodes a display name with non-ASCII in it, as SES requires of FromEmailAddress", async () => {
+    const config = { ...getConfig(env), fromAddress: "Café Notes <news@send.example.com>" };
+    const { requests } = answerSes();
+    await new SesProvider(config, sesEnv).sendBatch(
+      renderedFixture(),
+      [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    const from = requests[0]!.FromEmailAddress;
+    expect(from).toMatch(/^=\?utf-8\?B\?[A-Za-z0-9+/=]+\?= <news@send\.example\.com>$/);
+    const b64 = from.slice("=?utf-8?B?".length, from.indexOf("?= "));
+    expect(new TextDecoder().decode(Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)))).toBe(
+      "Café Notes",
+    );
+  });
+
+  it("keeps an address SES can't take out of the request, failing it alone", async () => {
+    const { requests } = answerSes();
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [
+        { email: "zoë@example.com", unsubscribeUrl: UNSUB },
+        { email: "reader@example.com", unsubscribeUrl: UNSUB },
+      ],
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    expect(
+      requests.map((q) => q.BulkEmailEntries.map((e) => e.Destination.ToAddresses[0])),
+    ).toEqual([["reader@example.com"]]);
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        { email: "zoë@example.com", accepted: false, retryable: false },
+        { email: "reader@example.com", accepted: true },
+      ],
+    });
+  });
+
+  it("splits a one-off batch larger than a request into several", async () => {
+    const config = { ...getConfig(env), sesMaxSendRate: 2 };
+    const { requests } = answerSes();
+    const five = ["a", "b", "c", "d", "e"].map((n) => ({
+      email: `${n}@example.com`,
+      unsubscribeUrl: UNSUB,
+    }));
+    const r = await new SesProvider(config, sesEnv).sendBatch(renderedFixture(), five, {
+      purpose: "test",
+      idempotencyKeyPrefix: "t",
+    });
+    expect(requests.map((q) => q.BulkEmailEntries.length)).toEqual([2, 2, 1]);
+    expect(r.kind === "answered" && r.results.every((x) => x.accepted)).toBe(true);
+  });
+
+  it("fails a recipient-level entry alone and holds back an entry SES throttled, when others were accepted", async () => {
+    answerSes((to) =>
+      to === "rejected@example.com"
+        ? { Status: "MESSAGE_REJECTED", Error: "Email address is on the suppression list." }
+        : to === "throttled@example.com"
+          ? { Status: "ACCOUNT_THROTTLED", Error: "Maximum sending rate exceeded." }
+          : entryOk(),
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["ok@example.com", "rejected@example.com", "throttled@example.com"].map((email) => ({
+        email,
+        unsubscribeUrl: UNSUB,
+      })),
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toMatchObject({
+      kind: "answered",
+      results: [
+        { email: "ok@example.com", accepted: true },
+        {
+          email: "rejected@example.com",
+          accepted: false,
+          retryable: false,
+          error: "ses MESSAGE_REJECTED: Email address is on the suppression list.",
+        },
+        {
+          email: "throttled@example.com",
+          accepted: false,
+          retryable: true,
+          error: "ses ACCOUNT_THROTTLED: Maximum sending rate exceeded.",
+        },
+      ],
+    });
+  });
+
+  it.each([
+    ["ACCOUNT_DAILY_QUOTA_EXCEEDED", "account", "quota"],
+    ["ACCOUNT_SENDING_PAUSED", "account", "suspended"],
+    ["ACCOUNT_SUSPENDED", "account", "suspended"],
+    ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "sender"],
+    ["CONFIGURATION_SET_DOES_NOT_EXIST", "account", "credentials"],
+    ["ACCOUNT_THROTTLED", "unavailable", "rate_limit"],
+    ["TRANSIENT_FAILURE", "unavailable", "outage"],
+  ])("halts a batch whose entries all came back %s (SPEC §12)", async (status, reason, cause) => {
+    answerSes(() => ({ Status: status, Error: "SES's words" }));
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      [
+        { email: "a@example.com", unsubscribeUrl: UNSUB },
+        { email: "b@example.com", unsubscribeUrl: UNSUB },
+      ],
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toEqual({
+      kind: "halted",
+      halt: { reason, cause, error: `ses ${status}: SES's words`, mayHaveSent: false },
+    });
+  });
+
+  it("an account refusal outranks a throttle among a batch's entries", async () => {
+    answerSes((to) =>
+      to === "a@example.com"
+        ? { Status: "ACCOUNT_THROTTLED" }
+        : { Status: "ACCOUNT_SENDING_PAUSED", Error: "paused" },
+    );
+    const r = await newProvider().sendBatch(
+      renderedFixture(),
+      ["a@example.com", "b@example.com"].map((email) => ({ email, unsubscribeUrl: UNSUB })),
+      { purpose: "list", idempotencyKeyPrefix: "send-1" },
+    );
+    expect(r).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "suspended" } });
+  });
+
+  it("halts an entry rejected for the sender's own identity, but fails one naming only the recipient", async () => {
+    const notVerified = (who: string) => ({
+      Status: "MESSAGE_REJECTED",
+      Error: `Email address is not verified. The following identities failed the check in region US-EAST-1: ${who}`,
+    });
+    const one = [{ email: "reader@example.com", unsubscribeUrl: UNSUB }];
+    answerSes(() => notVerified("newsletter@send.example.com"));
+    expect(
+      await newProvider().sendBatch(renderedFixture(), one, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+      }),
+    ).toMatchObject({ kind: "halted", halt: { reason: "account", cause: "sender" } });
+    answerSes(() => notVerified("reader@example.com"));
+    expect(
+      await newProvider().sendBatch(renderedFixture(), one, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+      }),
+    ).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
+  });
+
+  it("leaves out a recipient SES's answer has no result for, so its fate stays unknown (SPEC §12)", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ BulkEmailEntryResults: [entryOk()] }), { status: 200 }),
+      )
+      .mockResolvedValueOnce(new Response("not json", { status: 200 }));
+    const two = ["a@example.com", "b@example.com"].map((email) => ({
+      email,
+      unsubscribeUrl: UNSUB,
+    }));
+    const short = await newProvider().sendBatch(renderedFixture(), two, {
+      purpose: "list",
+      idempotencyKeyPrefix: "s",
+    });
+    expect(short).toMatchObject({
+      kind: "answered",
+      results: [{ email: "a@example.com", accepted: true }],
+    });
+    expect(short.kind === "answered" && short.results.length).toBe(1);
+    expect(
+      await newProvider().sendBatch(renderedFixture(), two, {
+        purpose: "list",
+        idempotencyKeyPrefix: "s",
+      }),
+    ).toEqual({ kind: "answered", results: [] });
   });
 
   // SES reports its daily quota and its per-second rate as the same throttle; only the
@@ -186,7 +406,7 @@ describe("SesProvider.sendBatch", () => {
     expect(r).toMatchObject({ kind: "answered", results: [{ accepted: false, retryable: false }] });
   });
 
-  it("maps a permanent 400 (bad address) to a non-retryable failure", async () => {
+  it("fails every recipient of a request SES refuses with a 400 for good", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -493,6 +713,32 @@ describe("SesProvider.parseWebhook (SNS)", () => {
     expect(applied).toEqual({ applied: 1, suppressed: 0 });
     expect(await deliveryEvent("msg-dlv-1")).toBe("delivered");
     expect(await subscribers.isSuppressed(env.DB, "arrived@example.com")).toBe(false);
+  });
+
+  it("logs a rendering failure as an error, since SES dropped a message the record shows as accepted (SPEC §12)", async () => {
+    allowErrorLogs("webhook.render_failed");
+    const signer = await makeSigner();
+    mockCert(signer);
+    const errors = vi.spyOn(console, "error");
+    const message = JSON.stringify({
+      eventType: "Rendering Failure",
+      mail: { messageId: "msg-rf-1", destination: ["reader@example.com"] },
+      failure: {
+        errorMessage: "Attribute 'email_sentto_html' is not present in the rendering data.",
+      },
+    });
+    const envelope = await signEnvelope(notification(signer, message), signer);
+    const result = await newProvider().parseWebhook(webhookRequest(envelope), sesEnv);
+
+    expect(result.response.status).toBe(200);
+    expect(result.events).toEqual([]);
+    expect(logged(errors).filter((l) => l.event === "webhook.render_failed")).toMatchObject([
+      {
+        level: "error",
+        provider: "ses",
+        error: "Attribute 'email_sentto_html' is not present in the rendering data.",
+      },
+    ]);
   });
 
   it("verifies a SignatureVersion 1 (SHA-1) message, as SNS still sends by default", async () => {

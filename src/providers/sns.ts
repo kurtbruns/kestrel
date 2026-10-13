@@ -276,6 +276,24 @@ interface SesMessage {
     complainedRecipients?: SesRecipient[];
   };
   delivery?: { recipients?: string[] };
+  failure?: { errorMessage?: string; templateName?: string };
+}
+
+/**
+ * SES's words when the carried event is a rendering failure (a message SES accepted but
+ * could not fill from its template data, so never sent), or null for any other event.
+ */
+export function sesRenderingFailure(messageJson: string): string | null {
+  let payload: SesMessage;
+  try {
+    payload = JSON.parse(messageJson) as SesMessage;
+  } catch {
+    return null;
+  }
+  if ((payload.eventType ?? payload.notificationType) !== "Rendering Failure") {
+    return null;
+  }
+  return payload.failure?.errorMessage ?? "rendering failure";
 }
 
 /**

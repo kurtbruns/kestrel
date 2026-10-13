@@ -165,8 +165,9 @@ export interface Config {
   /** AWS region for SES. */
   awsRegion: string;
   /**
-   * The SES account's maximum send rate, in messages a second, which the send loop paces
-   * to: going over it is a throttle, which halts the send for at least a minute. Defaults
+   * The SES account's maximum send rate, in messages a second, which sizes the SES adapter's
+   * batches, sent one a second: going over it is a throttle, which halts the send for at
+   * least a minute. Defaults
    * to 14, a common starting rate that AWS does not promise any account; the SES sandbox
    * allows 1, and the account dashboard shows the account's own.
    */

@@ -13,6 +13,7 @@ import {
 import { HALT_BACKOFF_MS, LEASE_TTL_MS } from "../src/lib/time";
 import { NOTIFY_RESERVE } from "../src/notify/notify";
 import * as providers from "../src/providers";
+import { SesProvider } from "../src/providers/ses";
 import { Budget, D1_QUERY_LIMIT } from "../src/send/budget";
 import { MIN_RUN_COST, runSend } from "../src/send/loop";
 import { SendWindow } from "../src/send/pace";
@@ -22,6 +23,7 @@ import { guardD1 } from "./support/d1_guard";
 import { addresses, dueSend, resetDatabase, seedConfirmed, tick } from "./support/fixtures";
 import { allowErrorLogs } from "./support/log";
 import { NoKeyProvider, ResendLikeProvider, SesLikeProvider } from "./support/resend_like";
+import { answerSes } from "./support/ses";
 
 /** The test env with its D1 held to the 100-bind cap and counted. */
 function guarded() {
@@ -95,6 +97,42 @@ describe("the per-invocation budget", () => {
     expect(await sends.deliveryRollup(env.DB, send.id)).toMatchObject({ accepted: 450 });
     expect(emails.every((e) => resend.timesMailed(e) === 1)).toBe(true);
   });
+});
+
+describe("SES's bulk batches on the Workers Free budget", { timeout: 30_000 }, () => {
+  // The real adapter, so its batch size and its one request a second are what run; the
+  // figures the SES guide and the configuration reference give are these (SPEC §6). The
+  // sweep holds back its checks and the notification reserve, and the run its opening, its
+  // close, and each batch's worst case, which leaves four requests a tick.
+  it.each([
+    ["14", 14 * 4],
+    ["50", 50 * 4],
+  ])(
+    "at a send rate of %s a second, one tick sends four requests' worth",
+    async (rate, perTick) => {
+      const sesVars = {
+        ...env,
+        AWS_ACCESS_KEY_ID: "AKIATESTTESTTEST",
+        AWS_SECRET_ACCESS_KEY: "test-secret-key-abc123",
+        SES_MAX_SEND_RATE: rate,
+      } as AppEnv;
+      vi.mocked(providers.getProvider).mockReturnValue(
+        new SesProvider(getConfig(sesVars), sesVars),
+      );
+      const emails = addresses(400);
+      await seedConfirmed(emails);
+      const send = await dueSend();
+      const { guard, env: capped } = guarded();
+      const { spy, mailed } = answerSes();
+
+      await sweep(capped);
+
+      expect(guard.statements + spy.mock.calls.length).toBeLessThanOrEqual(50);
+      expect(spy).toHaveBeenCalledTimes(4);
+      expect((await sends.deliveryRollup(env.DB, send.id)).accepted).toBe(perTick);
+      expect([...mailed.values()].every((n) => n === 1)).toBe(true);
+    },
+  );
 });
 
 describe("SUBREQUEST_BUDGET", () => {

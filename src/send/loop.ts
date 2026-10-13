@@ -60,7 +60,7 @@ const MAX_CHUNK = 500;
 
 /**
  * The fewest recipients one hand-off write covers. A provider that takes one recipient a
- * request (SES) would otherwise pay a whole batch's D1 writes for each recipient, so its
+ * request (SES on an account allowed fewer than ten a second) would otherwise pay a whole batch's D1 writes for each recipient, so its
  * requests go in groups this size that share the writes: about half a D1 statement a
  * recipient instead of five. It is also the most recipients a run cut off mid-group can
  * leave waiting for Resolve on such a provider, which has no idempotency key to re-send

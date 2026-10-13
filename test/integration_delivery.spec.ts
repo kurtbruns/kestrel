@@ -32,6 +32,7 @@ import { runSend } from "../src/send/loop";
 import { RESEND_DEPLOY, SES_DEPLOY, SNS_TOPIC_ARN } from "./support/deploy";
 import { dueSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { base } from "./support/http";
+import { answerSes, SES_BULK_ENDPOINT } from "./support/ses";
 import { makeSigner, type Signer, signEnvelope } from "./support/sns";
 
 // --- env overrides ----------------------------------------------------------
@@ -119,31 +120,27 @@ afterEach(() => {
 
 // ============================================================================
 describe("send loop drives the real SES adapter", () => {
-  it("sends one SigV4 request per recipient (maxBatch=1) and records the MessageId", async () => {
+  it("sends the batch as one SigV4-signed SendBulkEmail and records each MessageId", async () => {
     await seedConfirmed("s1@integ.test");
     await seedConfirmed("s2@integ.test");
     const send = await dueSend();
 
     let n = 0;
-    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+    const { spy, requests } = answerSes(() => {
       n += 1;
-      return new Response(JSON.stringify({ MessageId: `ses-msg-${n}` }), {
-        status: 200,
-        headers: { "content-type": "application/json" },
-      });
+      return { Status: "SUCCESS", MessageId: `ses-msg-${n}` };
     });
 
     const result = await runSend(sesEnv(), send.id);
 
     expect(result.accepted).toBe(2);
     expect(result.finished).toBe(true);
-    // maxBatch=1 → exactly one HTTP call per recipient, each SigV4-signed to SES.
-    expect(spy).toHaveBeenCalledTimes(2);
-    for (const call of spy.mock.calls) {
-      const req = call[0] as Request;
-      expect(req.url).toBe("https://email.us-east-1.amazonaws.com/v2/email/outbound-emails");
-      expect(req.headers.get("authorization") ?? "").toMatch(/^AWS4-HMAC-SHA256 /);
-    }
+    // Both recipients fit one request (a batch is the account's send rate, up to 50).
+    expect(spy).toHaveBeenCalledTimes(1);
+    const req = spy.mock.calls[0]![0] as Request;
+    expect(req.url).toBe(SES_BULK_ENDPOINT);
+    expect(req.headers.get("authorization") ?? "").toMatch(/^AWS4-HMAC-SHA256 /);
+    expect(requests[0]!.BulkEmailEntries).toHaveLength(2);
     // provider_id (the SES MessageId) is persisted for later webhook matching.
     expect(await providerIdFor("s1@integ.test")).toMatch(/^ses-msg-/);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
@@ -185,9 +182,7 @@ describe("webhook routes are wired through the real router", () => {
   it("POST /webhooks/ses (PROVIDER=ses): verified hard bounce suppresses via the route", async () => {
     await seedConfirmed("bounce@integ.test");
     const send = await dueSend();
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ MessageId: "ses-live-1" }), { status: 200 }),
-    );
+    answerSes(() => ({ Status: "SUCCESS", MessageId: "ses-live-1" }));
     await runSend(sesEnv(), send.id);
     const providerId = (await providerIdFor("bounce@integ.test"))!;
     vi.restoreAllMocks();

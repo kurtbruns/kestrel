@@ -1,6 +1,6 @@
 # Use Amazon SES instead of Resend
 
-Amazon SES costs less than Resend for a large list, but takes more setup. AWS reviews your account before it lets you send to anyone but yourself. Kestrel also needs Cloudflare's Workers Paid plan to send through SES at a useful pace.
+Amazon SES costs less than Resend for a large list, but takes more setup. AWS reviews your account before it lets you send to anyone but yourself.
 
 In this guide, you verify your sending hostname with SES, ask AWS for production access, and route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, switch it to SES, and deploy. Follow it in place of [Connect an email provider](../get-started/04-resend.md).
 
@@ -9,19 +9,18 @@ In this guide, you verify your sending hostname with SES, ask AWS for production
 You need:
 
 - An [AWS account](https://portal.aws.amazon.com/billing/signup).
-- Cloudflare's [Workers Paid plan](https://developers.cloudflare.com/workers/platform/pricing/).
 - The app deployed and locked, from [Deploy the app](../get-started/02-deploy.md) and [Lock the dashboard with Access](../get-started/03-access.md).
 
 To move an instance that already sends through Resend, read [Switch an instance that already sends](#switch-an-instance-that-already-sends) first.
 
 ## How fast SES sends
 
-A send goes out a slice at a time, one slice a minute. Each slice stays inside the subrequests Cloudflare allows one run of the Worker, which [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) sets. Resend takes up to 100 recipients a request. SES takes one, so each recipient costs far more of that allowance.
+A send goes out a slice at a time, one slice a minute. Each slice stays inside the subrequests Cloudflare allows one run of the Worker, which [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) sets. One SES request carries up to 50 recipients. SES takes one such request a second, and no more recipients a second than your account's maximum send rate. So each request carries one second of your send rate, up to 50.
 
-- **Workers Free:** about 18 recipients a minute. A send to 1,000 subscribers takes about an hour, so use Resend on this plan.
-- **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** up to about 1,900 recipients a minute, within your SES account's sending rate. At 14 messages a second, that's about 700 a minute, and 10,000 subscribers take about fifteen minutes.
+- **Workers Free:** four requests a minute. At 14 messages a second, that's 56 recipients a minute, and a send to 1,000 subscribers takes about 18 minutes. At 50 a second or more, it's 200 a minute.
+- **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** about 50 requests a minute, one a second. At 14 messages a second, that's about 700 recipients a minute, and 10,000 subscribers take about fifteen minutes. At 50 a second or more, it's about 2,500 a minute.
 
-AWS sets your account's sending rate when it grants production access. To send faster, ask AWS to raise it.
+AWS sets your account's sending rate when it grants production access. To send faster, ask AWS to raise it. In the sandbox, at one message a second, each request carries one recipient.
 
 ## 1. Verify your sending hostname
 
@@ -91,7 +90,7 @@ SES reports what happens to each email through SNS, the AWS notification service
 
 1. In SES, under **Configuration**, choose **Configuration sets**, then **Create set**. Name it `kestrel-mail`, and choose **Create set**.
 
-1. On the set's **Event destinations** tab, choose **Add destination**. Select **Hard bounces**, **Complaints**, and **Deliveries**, and choose **Next**.
+1. On the set's **Event destinations** tab, choose **Add destination**. Select **Hard bounces**, **Complaints**, **Deliveries**, and **Rendering failures**, and choose **Next**. A rendering failure is an email SES took but couldn't build. It shouldn't happen, and the app logs it as an error if it does.
 
 1. For **Destination type**, select **Amazon SNS**. Name it `kestrel-sns`, and keep **Event publishing** enabled. Choose **Next**.
 
@@ -136,7 +135,7 @@ The app sends through an IAM user whose key can only send email. That limits the
       "Statement": [
         {
           "Effect": "Allow",
-          "Action": "ses:SendEmail",
+          "Action": ["ses:SendEmail", "ses:SendBulkEmail"],
           "Resource": "*"
         }
       ]
@@ -177,7 +176,7 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and add `SES_MAX_SEND_RATE` and [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget). Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your SES region, and and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
@@ -187,10 +186,11 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
       "SENDING_DOMAIN": "send.example.com",
       "FROM_ADDRESS": "Newsletter <newsletter@send.example.com>",
       "AWS_REGION": "us-east-1",     // ← change: your SES region
-      "SES_MAX_SEND_RATE": "1",      // ← new: your maximum send rate; 1 in the sandbox
-      "SUBREQUEST_BUDGET": "10000"   // ← new: the Workers Paid limit
+      "SES_MAX_SEND_RATE": "1"       // ← new: your maximum send rate; 1 in the sandbox
     }
     ```
+
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free.
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
 

@@ -109,7 +109,7 @@ export interface ProviderTraits {
    *  longer deduped, so the batch waits for Resolve instead. */
   readonly idempotencyWindowMs?: number;
   /** The most requests a second the provider takes from this account, when it holds the
-   *  sender to a rate the send loop should keep under (SES's maximum send rate). */
+   *  sender to a rate the send loop should keep under (SES's one bulk request a second). */
   readonly maxRequestRate?: number;
 }
 
