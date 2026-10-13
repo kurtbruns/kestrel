@@ -20,7 +20,9 @@ A send goes out a slice at a time, one slice a minute. Each slice stays inside t
 - **Workers Free:** four requests a minute. At 14 messages a second, that's 56 recipients a minute, and a send to 1,000 subscribers takes about 18 minutes. At 50 a second or more, it's 200 a minute.
 - **Workers Paid, with `SUBREQUEST_BUDGET` set to `10000`:** about 50 requests a minute, one a second. At 14 messages a second, that's about 700 recipients a minute, and 10,000 subscribers take about fifteen minutes. At 50 a second or more, it's about 2,500 a minute.
 
-AWS sets your account's sending rate when it grants production access. To send faster, ask AWS to raise it. In the sandbox, at one message a second, each request carries one recipient.
+To send faster, raise your SES sending rate before you change Cloudflare plans. AWS sets the rate when it grants production access, and raising it costs nothing. Ask for 50 messages a second, the most one request carries: on Workers Free, that sends nearly four times as many recipients a minute as 14 does. A rate above 50 adds nothing on Workers Free. Move to Workers Paid when a send at 200 recipients a minute still takes longer than you want, such as a list of more than about 12,000 that should go out within an hour.
+
+In the sandbox, at one message a second, each request carries one recipient.
 
 ## 1. Verify your sending hostname
 
@@ -190,7 +192,7 @@ Store the secrets before you switch. With `PROVIDER` set to `ses` and a required
     }
     ```
 
-    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free.
+    On Workers Paid, also add `"SUBREQUEST_BUDGET": "10000"`, the plan's limit, so each minute sends more. Leave it out on Workers Free. [How fast SES sends](#how-fast-ses-sends) says when the plan is worth it.
 
     When AWS grants production access, set `SES_MAX_SEND_RATE` to the maximum send rate on the **Account dashboard**, and deploy again. The app keeps to that rate, so SES doesn't throttle your send.
 

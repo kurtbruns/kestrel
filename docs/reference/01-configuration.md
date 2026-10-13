@@ -48,7 +48,7 @@ A missing leading slash is added, and a trailing slash is dropped.
 
 ### `SES_MAX_SEND_RATE`
 
-The app sends SES one request a second, the most SES takes, and each request carries one second of this rate, up to 50 recipients. Set it to the maximum send rate on your SES **Account dashboard**. That's `1` in the sandbox, and whatever AWS grants after that. The default, 14, is a common starting rate, not your account's.
+The app sends SES one request a second, the most SES takes, and each request carries one second of this rate, up to 50 recipients. Set it to the maximum send rate on your SES **Account dashboard**. To send faster, ask AWS to raise that rate to 50 before you move to Workers Paid: on Workers Free, a rate of 50 sends nearly four times as many recipients a minute as 14, and a higher rate adds nothing there. That's `1` in the sandbox, and whatever AWS grants after that. The default, 14, is a common starting rate, not your account's.
 
 A rate set too high only means SES throttles some requests. Those recipients wait for the next minute, and no one is mailed twice.
 
