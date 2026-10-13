@@ -342,7 +342,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the provider's API key or credentials in the deployment's secrets, or give the key permission to send (for SES, both ses:SendEmail and ses:SendBulkEmail). No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
+      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
