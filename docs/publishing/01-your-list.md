@@ -57,7 +57,7 @@ Kestrel normally confirms every new subscriber with double opt-in: they click a 
 Kestrel holds a few lines that an import can't cross:
 
 - **Someone who left stays gone.** An address that unsubscribed here is never subscribed again by an import, whatever the file says. Only that reader can come back, by confirming here.
-- **A bounce or a block here always wins.** An import never lifts a suppression, so an address known to fail is never mailed.
+- **A bounce, a block, or a do-not-contact marker here always wins.** An import never lifts a suppression, so an address known to fail is never mailed. An address you erased keeps only a do-not-contact marker, so an import never brings it back as a subscriber.
 - **A reader's newer choice stands.** If someone confirmed here after your old service says they left, they stay subscribed.
 - **Repeats are folded together,** and when one row says subscribed and another says unsubscribed, unsubscribed wins.
 
@@ -75,8 +75,10 @@ Kestrel only sends mail. A reader who replies to a post writes to your From addr
 
 When a reader replies asking to be taken off the list, carrying it out is up to you, since Kestrel never sees the reply. Find them under **Subscribers**, and choose **Unsubscribe** from their ⋯ menu. It takes effect at once.
 
+When a reader asks you to delete their data, choose **Erase** from their ⋯ menu instead. It removes the subscriber and how they joined, keeps only a do-not-contact marker so the address is never mailed again, and can't be undone. The reader can still rejoin by subscribing and confirming themselves.
+
 ## Taking your list out
 
-**Subscribers → Export** downloads your whole list as one CSV in the same format: every subscriber with their state, how they joined and the evidence, and every bounced or blocked address. It's yours to keep as a backup, or to import into another Kestrel, which carries the list over as it is. A value a spreadsheet would run as a formula is written as text, so the file is safe to open.
+**Subscribers → Export** downloads your whole list as one CSV in the same format: every subscriber with their state, how they joined and the evidence, and every bounced, blocked, or erased address. It's yours to keep as a backup, or to import into another Kestrel, which carries the list over as it is. A value a spreadsheet would run as a formula is written as text, so the file is safe to open.
 
 Claude can read the same export a page at a time through the API, at `GET /api/subscribers/export`.
