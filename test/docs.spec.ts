@@ -1,7 +1,8 @@
+/// <reference types="vite/client" />
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import readme from "../docs/README.md";
-import type { DocsResponse } from "../shared/docs";
+import { type DocsResponse, headingAnchor } from "../shared/docs";
 import { bundledPages, renderDocs } from "../src/docs";
 import { AUTH, base } from "./support/http";
 
@@ -83,7 +84,63 @@ describe("docs registry (docs/README.md and the section folders it lists)", () =
     // An anchor rides along as the route's last segment, for the room to scroll to.
     expect(start?.html).toContain('href="#/docs/sending-domain-dns/choose-your-sending-name"');
   });
+
+  it("lands every link to a heading, from the guide or the editor, on a heading that exists", () => {
+    // The editor names a doc's headings by the anchor rule, so a link to `#/docs/<slug>/<anchor>`
+    // breaks silently when the heading is renamed or renumbered: the room opens the doc at its
+    // top. The editor's links are read from its source, specs left out.
+    const { docs } = renderDocs();
+    const anchors = new Map(docs.map((d) => [d.slug, headingAnchors(d.html)]));
+    const links: [from: string, slug: string, anchor: string][] = [];
+    for (const d of docs) {
+      for (const [, slug, anchor] of d.html.matchAll(/href="#\/docs\/([a-z0-9-]+)\/([^"]+)"/g)) {
+        links.push([d.slug, slug as string, anchor as string]);
+      }
+    }
+    for (const [path, source] of Object.entries(editorSources)) {
+      for (const [, slug, anchor] of source.matchAll(/#\/docs\/([a-z0-9-]+)\/([a-z0-9-]+)/g)) {
+        links.push([path, slug as string, anchor as string]);
+      }
+    }
+    for (const [from, slug, anchor] of links) {
+      expect(anchors.get(slug), `${from} links to ${slug}/${anchor}`).toContain(anchor);
+    }
+    // The scan reads the editor's source, so it finds the link Settings makes under the From
+    // address; finding none would mean the scan reads nothing.
+    expect(links).toContainEqual([
+      "../client/settings/deploy.ts",
+      "ses",
+      "3-receive-replies-at-your-from-address",
+    ]);
+  });
 });
+
+// The editor's modules as text, for the links they make. Vite reads them at build time.
+const editorSources = import.meta.glob<string>(["../client/**/*.ts", "!../client/**/*.spec.ts"], {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+
+/** A doc's heading anchors as the editor names them: the anchor rule, a repeat taking -1, -2. */
+function headingAnchors(fragment: string): string[] {
+  const seen = new Map<string, number>();
+  const out: string[] = [];
+  for (const [, inner] of fragment.matchAll(/<h[1-4][^>]*>([\s\S]*?)<\/h[1-4]>/g)) {
+    const text = (inner as string)
+      .replace(/<[^>]+>/g, "")
+      .replace(/&#39;|&#x27;/g, "'")
+      .replace(/&quot;/g, '"')
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+    const base = headingAnchor(text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    out.push(n ? `${base}-${n}` : base);
+  }
+  return out;
+}
 
 describe("docs API is gated like the rest of the authoring API", () => {
   it("401s the guide without a token", async () => {

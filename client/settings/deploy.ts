@@ -68,7 +68,7 @@ export function senderSection(page: SettingsPage): Html {
           </div>
         </div>
         <div class="set-kv" style="border-top:1px solid var(--line)">
-          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.fromAddress}</span><span class="set-kv-aside" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
+          <div class="set-kv-k">From address</div><div class="set-kv-v set-kv-stack"><span class="mono">${d.fromAddress}</span><span class="muted" id="replyNote">Readers’ replies go to this address. <a class="set-link" href="${REPLIES_HREF}">Forward it to your inbox</a>.</span></div>
           <div class="set-kv-k">Sending domain</div><div class="set-kv-v"><span class="mono">${d.sendingDomain}</span></div>
           <div class="set-kv-k">Email provider</div><div class="set-kv-v" id="providerValue">${providerValue(d)}</div>
         </div>

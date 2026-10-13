@@ -2,7 +2,7 @@
 
 Kestrel sends your posts through Amazon SES, Amazon's email service. SES only delivers the mail: Kestrel keeps your list, each subscriber's consent, and the record of every send. AWS reviews your account before it lets you send to anyone but yourself. This page asks for that early, and you test in the sandbox while you wait.
 
-In this guide, you verify your sending hostname with SES, add a DMARC record, forward readers' replies to your inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
+In this guide, you verify your sending hostname with SES, and add a DMARC record. You forward readers' replies to your inbox, and ask AWS for production access. You also route bounces and complaints to the app through SNS. Then you give the app its AWS credentials, set the provider, and deploy.
 
 ## Before you begin
 
@@ -46,7 +46,7 @@ DMARC tells inboxes what to do with mail that fails its checks, and sends you re
 
 When a reader replies to a post, or to their confirmation email, the reply goes to your From address, `newsletter@send.example.com`. Nothing receives mail there yet, so the reply bounces. Kestrel only sends mail, so you give the address an inbox yourself. Here you forward it to one you already read, with Cloudflare Email Routing, which is free on every plan.
 
-`send.example.com` receives no other mail, so turning on Email Routing there changes nothing else. Your SES records sit on other names under it, and inboxes check SES's mail for SPF at its return path, not here, so sending is unaffected.
+`send.example.com` receives no other mail, so turning on Email Routing there changes nothing else. Your SES records sit on other names under it. Inboxes check SES's mail for SPF at its return path, not here, so sending is unaffected.
 
 1. In the [Cloudflare dashboard](https://dash.cloudflare.com/), go to **Compute → Email Service → Email Routing**.
 
@@ -61,10 +61,10 @@ When a reader replies to a post, or to their confirmation email, the reply goes 
 On a subdomain, Email Routing forwards only the addresses you add a rule for, with no catch-all. That's all a From address needs.
 
 - **Automatic replies arrive too.** Out-of-office and other automatic replies go to your From address, so they reach your inbox. Bounces don't: they go to SES's return path, and the app handles them as before.
-- **Your DMARC reports need an inbox too.** If the report address in your DMARC record doesn't receive mail, change the record's `rua` to `mailto:dmarc@send.example.com`, and add a second rule that forwards `dmarc` the same way.
-- **Your answers come from your inbox.** A forwarded reply comes from the reader's own address, so when you answer it, your answer goes out from the inbox it was forwarded to, not from `newsletter@send.example.com`.
+- **Your DMARC reports need an inbox too.** Your DMARC record's report address may not receive mail. If so, change the record's `rua` to `mailto:dmarc@send.example.com`, and add a second rule that forwards `dmarc` the same way.
+- **Your answers come from your inbox.** A forwarded reply comes from the reader's own address. When you answer it, your answer goes out from the inbox it was forwarded to, not from `newsletter@send.example.com`.
 
-To answer from the newsletter's own address, give it a real mailbox instead of forwarding it: point `send.example.com`'s MX records at a mail host you use, such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034), and create `newsletter@send.example.com` there, as the host's docs describe. If you send from it, the host's SPF and DKIM records go on `send.example.com` beside SES's. SES's mail is unaffected, since its SPF is checked at its return path. And if your From address is on a domain that already receives mail, replies already reach it, and you can skip this section.
+To answer from the newsletter's own address, give it a real mailbox instead of forwarding it. Point `send.example.com`'s MX records at a mail host you use, such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034). Then create `newsletter@send.example.com` there, as the host's docs describe. If you send from it, the host's SPF and DKIM records go on `send.example.com` beside SES's. SES's mail is unaffected, since its SPF is checked at its return path. And if your From address is on a domain that already receives mail, replies already reach it, and you can skip this section.
 
 Some replies ask you to do something, and Kestrel can't see them, so acting on them is yours. In the editor, under **Subscribers**, unsubscribe a reader who asks to leave the list, and erase one who asks you to delete their data.
 

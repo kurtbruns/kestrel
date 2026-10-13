@@ -1,5 +1,6 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocFragment, DocsResponse } from "../../shared/docs";
+import { headingAnchor } from "../../shared/docs";
 import type { SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
 import {
@@ -14,7 +15,7 @@ import {
   stubClipboard,
   unmount,
 } from "../test/support";
-import { headingAnchor, renderDocs } from "./docs";
+import { renderDocs } from "./docs";
 
 // The guide as the Worker serves it: sanitized fragments with no ids on the headings, three
 // steps of the main path and one reference page after them.

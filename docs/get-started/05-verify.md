@@ -19,7 +19,7 @@ A test email goes through the same code as a real send. If the test looks right,
 
 1. Open the email. It should arrive in your inbox, not in spam. The image loads and the subject reads as you wrote it. Its **View in browser** link opens "Nothing here yet" until the post goes out, and its unsubscribe link opens the page a subscriber sees, marked as a test and showing a sample address. Its button walks through to the confirmation, but a test email unsubscribes no one. Section 5 unsubscribes for real.
 
-1. Reply to it, as a reader would. Reply from an address other than the inbox your From address forwards to, such as your second address, since Gmail doesn't show you a message you sent when it comes back to you. Send that address a test email too if you need one. The reply arrives in the inbox you chose in [Connect Amazon SES](04-ses.md#3-receive-replies-at-your-from-address). The app can't see your forwarding, so this is the only proof that readers can reach you. If the reply bounces, check the routing rule and the destination address there.
+1. Reply to it, as a reader would. Reply from an address other than the inbox your From address forwards to, such as your second address. Gmail doesn't show you a message you sent when it comes back to you. Send that address a test email too if you need one. The reply arrives in the inbox you chose in [Connect Amazon SES](04-ses.md#3-receive-replies-at-your-from-address). The app can't see your forwarding, so this is the only proof that readers can reach you. If the reply bounces, check the routing rule and the destination address there.
 
 ## 2. Check that it passes authentication
 

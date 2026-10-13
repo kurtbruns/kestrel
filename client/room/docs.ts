@@ -1,6 +1,11 @@
 // The in-app docs room: the setup guide fetched from the authed /api/docs routes.
 
-import type { DocFragment, DocsLanding, DocsResponse } from "../../shared/docs";
+import {
+  type DocFragment,
+  type DocsLanding,
+  type DocsResponse,
+  headingAnchor,
+} from "../../shared/docs";
 import { api, describeError } from "../api";
 import { mount } from "../lifecycle";
 import { appState } from "../state";
@@ -164,17 +169,6 @@ interface DocSection {
   /** The heading's anchor, the last segment of its route; empty for the title. */
   anchor: string;
   title: string;
-}
-
-/** A heading's anchor as GitHub derives it from the heading's text: lowercased, with
- *  punctuation dropped and each space a hyphen. The guide is read on GitHub too, so a link
- *  written against GitHub's anchors (`05-verify.md#7-read-the-logs`) works here unchanged. */
-export function headingAnchor(text: string): string {
-  return text
-    .trim()
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s_-]/gu, "")
-    .replace(/\s/g, "-");
 }
 
 // Element ids carry a prefix, so a heading can never take an id the shell already uses.
