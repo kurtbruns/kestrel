@@ -2866,6 +2866,23 @@ td.act {
 .menu-item.danger-item {
   color: var(--danger-fg);
 }
+/* A menu whose items say what each pick does: a name over a muted line. */
+.menu-described {
+  width: 280px;
+  max-width: min(280px, 78vw);
+}
+.menu-item-name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+.menu-item-desc {
+  display: block;
+  margin-top: 1px;
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.35;
+}
 
 /* editor field hints + scheduled banner */
 .field-hint {
@@ -4746,11 +4763,18 @@ button.set-field-remove {
 }
 .set-recip-add {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   max-width: 420px;
 }
 .set-recip-add input {
   flex: 1;
+}
+/* A refused address says why on its own line under the field and its button (DESIGN §5). */
+.set-recip-add .field-error {
+  flex-basis: 100%;
+  order: 1;
+  margin-top: 0;
 }
 
 /* --- ways to subscribe (DESIGN §3): one card, the two ways as bands in reading order,
@@ -5361,10 +5385,7 @@ button.set-embed-copy svg {
   box-shadow: 0 1px 4px rgba(15, 18, 25, 0.1);
   transition: max-width 0.16s ease;
 }
-/* "Start from example" dropdown menu — a compact, secondary action. */
-.set-menu {
-  position: relative;
-}
+/* "Start from example": the trigger of a shared menu (openMenu). */
 .set-menu-btn {
   display: inline-flex;
   align-items: center;
@@ -5377,45 +5398,6 @@ button.set-embed-copy svg {
   border-bottom: 1.6px solid currentColor;
   transform: translateY(-1px) rotate(45deg);
   opacity: 0.6;
-}
-.set-menu-list {
-  position: absolute;
-  left: 0;
-  top: calc(100% + 6px);
-  z-index: var(--z-menu);
-  width: 280px;
-  max-width: min(280px, 78vw);
-  padding: 5px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  box-shadow: 0 10px 28px rgba(15, 18, 25, 0.16);
-}
-.set-menu-list button {
-  display: block;
-  width: 100%;
-  text-align: left;
-  border: 0;
-  background: transparent;
-  border-radius: 7px;
-  padding: 8px 10px;
-  cursor: pointer;
-}
-.set-menu-list button:hover {
-  background: var(--sunken);
-}
-.set-menu-name {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--fg);
-}
-.set-menu-desc {
-  display: block;
-  margin-top: 1px;
-  font-size: 11.5px;
-  color: var(--muted);
-  line-height: 1.35;
 }
 /* Variables card heading. */
 .set-tpl-vartitle {

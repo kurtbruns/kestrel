@@ -37,6 +37,7 @@ import {
   fmt,
   invalidAddressesMessage,
   lateStr,
+  notSentMessage,
   parseAddresses,
   toLocalInput,
   untilStr,
@@ -1290,13 +1291,7 @@ export async function renderEditor(
             // The dialog stays open with only the addresses that didn't get it, so Send again
             // tries those and no one gets a second copy.
             to.value = failed.join("\n");
-            const which = failed.join(", ");
-            const why = reasons.size ? ` ${[...reasons].join(" ")}` : "";
-            m.error(
-              sent
-                ? `Sent to ${sent} of ${addrs.length}. Not sent to ${which}.${why} Send again to try those.`
-                : `Not sent.${why} Send again to try.`,
-            );
+            m.error(notSentMessage(sent, addrs.length, failed, [...reasons]));
             return;
           }
           m.close();

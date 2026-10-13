@@ -6,7 +6,7 @@ import { isValidEmail, normalizeEmail } from "../../shared/email";
 import { $ } from "../ui/dom";
 import { type Html, html, setHtml } from "../ui/html";
 import { icon } from "../ui/icons";
-import { toast } from "../ui/widgets";
+import { fieldError } from "../ui/widgets";
 import { chip, type SectionHandle, type SettingsPage, secHead } from "./page";
 import { inUseChip } from "./remake";
 import { mountSampleEmailPreview } from "./template";
@@ -101,13 +101,16 @@ export function mountRecipients(root: HTMLElement, page: SettingsPage): SectionH
     if (!v) {
       return;
     }
+    // A refused address says why on the field, and keeps what was typed so it can be fixed
+    // in place; the reason goes as soon as the field is edited (DESIGN §5).
     if (!isValidEmail(v)) {
-      toast("That doesn’t look like an email address.");
+      fieldError(input, "That doesn’t look like an email address.");
+      input.focus();
       return;
     }
     if (state.recipients.includes(v)) {
-      toast("That inbox is already in the list.");
-      input.value = "";
+      fieldError(input, "That inbox is already in the list.");
+      input.focus();
       return;
     }
     state.recipients.push(v);

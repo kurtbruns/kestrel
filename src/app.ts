@@ -368,10 +368,16 @@ export function createRouter({
       resource: "settings",
       summary:
         "Send a sample post through the saved email template, to `to` or the default recipients (I5).",
-      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). ${notConnected}`,
+      description: `Renders the stored template, never unsaved editor content; saving first is the client's job, and that save may need the re-make acknowledgement (see \`PUT /api/settings\`). The answer names the recipients the provider didn't accept in \`failed\`, so a client can offer exactly those again and no one gets a second copy. ${notConnected}`,
       example: {
         request: { to: "you@example.com" },
-        response: { sent: 1, total: 1, provider: "fake", subject: "Template test — …" },
+        response: {
+          sent: 1,
+          total: 1,
+          failed: [],
+          provider: "fake",
+          subject: "Template test — …",
+        },
       },
       handler: renderRoutes.templateTest,
     },

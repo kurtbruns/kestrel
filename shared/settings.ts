@@ -170,6 +170,8 @@ export interface LogoResponse {
 export interface TemplateTestResponse {
   sent: number;
   total: number;
+  /** The recipients the provider didn't accept, in the order asked; empty when all were sent. */
+  failed: string[];
   provider: string;
   recipients: string[];
   subject: string;

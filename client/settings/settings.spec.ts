@@ -548,15 +548,22 @@ describe("settings view", () => {
     expect($<HTMLInputElement>("#setName").value).toBe("Renamed");
   });
 
-  it("validates a recipient before adding it, and removes one from its chip", async () => {
+  it("refuses a recipient on its field, not in a toast, and clears the reason on edit (DESIGN §5)", async () => {
     await open();
     const input = $<HTMLInputElement>("#recipInput");
+    const reason = () => document.querySelector(".set-recip-add .field-error")?.textContent;
     typeInto(input, "nope");
     $("#recipAdd").click();
-    expect($("#toasts").textContent).toMatch(/doesn’t look like an email address/);
+    expect(reason()).toBe("!That doesn’t look like an email address.");
+    expect(input.classList.contains("is-invalid")).toBe(true);
+    expect(input.value).toBe("nope"); // kept, to fix in place
+    expect(document.activeElement).toBe(input);
     typeInto(input, "ME@b.c");
+    expect(reason()).toBeUndefined();
+    expect(input.classList.contains("is-invalid")).toBe(false);
     input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect($("#toasts").textContent).toMatch(/already in the list/);
+    expect(reason()).toBe("!That inbox is already in the list.");
+    expect($("#toasts").textContent).toBe("");
     expect($$(".set-recip-chip")).toHaveLength(1);
     expect(bar().classList.contains("show")).toBe(false);
     $(".set-recip-chip [data-rm='0']").click();

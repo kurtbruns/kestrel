@@ -246,23 +246,46 @@ describe("template view", () => {
 
   it("loads an example from the menu, closes it on an outside click, and discards back to the baseline", async () => {
     await open();
-    $("#tplExamplesBtn").click();
-    expect($("#tplExamplesList").hidden).toBe(false);
-    expect($$<HTMLButtonElement>("[data-example]").map((b) => b.dataset.example)).toEqual([
-      "signed",
-      "plain",
-    ]);
-    document.body.click();
-    expect($("#tplExamplesList").hidden).toBe(true);
-    $("#tplExamplesBtn").click();
-    $("[data-example='plain']").click();
-    expect($("#tplExamplesList").hidden).toBe(true);
+    const btn = $("#tplExamplesBtn");
+    btn.click();
+    expect(btn.getAttribute("aria-expanded")).toBe("true");
+    expect($$(".menu .menu-item-name").map((n) => n.textContent)).toEqual(["Signed", "Plain"]);
+    $(".menu-overlay").click(); // an outside click
+    expect(document.querySelector(".menu")).toBeNull();
+    expect(btn.getAttribute("aria-expanded")).toBe("false");
+    btn.click();
+    $$<HTMLButtonElement>(".menu-item")[1]?.click();
+    expect(document.querySelector(".menu")).toBeNull();
     expect(editor().value).toBe(EMAIL_TEMPLATE_EXAMPLES.plain.html);
     expect(editor().value).not.toContain("signoff");
     expect(bar().classList.contains("show")).toBe(true);
     $("#savebarDiscard").click();
     expect(editor().value).toBe(TEMPLATE);
     expect(bar().classList.contains("show")).toBe(false);
+  });
+
+  it("the example menu is a menu for the keyboard: first item focused, arrows move, Escape returns to the button (DESIGN §11)", async () => {
+    await open();
+    const btn = $("#tplExamplesBtn");
+    expect(btn.getAttribute("aria-haspopup")).toBe("menu");
+    btn.focus();
+    btn.click();
+    const key = (k: string) =>
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: k, bubbles: true, cancelable: true }),
+      );
+    const focused = () => document.activeElement?.querySelector(".menu-item-name")?.textContent;
+    expect($(".menu").getAttribute("role")).toBe("menu");
+    expect($$(".menu [role='menuitem']")).toHaveLength(2);
+    expect(focused()).toBe("Signed");
+    key("ArrowDown");
+    expect(focused()).toBe("Plain");
+    key("Home");
+    expect(focused()).toBe("Signed");
+    key("Escape");
+    expect(document.querySelector(".menu")).toBeNull();
+    expect(document.activeElement).toBe(btn);
+    expect(editor().value).toBe(TEMPLATE); // nothing picked, nothing loaded
   });
 
   it("the test dialog carries a standing line to connect a provider while no provider is connected (DESIGN §4)", async () => {
@@ -310,7 +333,11 @@ describe("template view", () => {
       {
         method: "POST",
         path: "/api/settings/template/test",
-        reply: (req) => ({ sent: 2, total: (req.json() as { to: string[] }).to.length }),
+        reply: (req) => ({
+          sent: 2,
+          total: (req.json() as { to: string[] }).to.length,
+          failed: [],
+        }),
       },
     ]);
     typeInto(editor(), `${TEMPLATE}<!-- v2 -->`);
@@ -329,6 +356,27 @@ describe("template view", () => {
     expect($("#toasts").textContent).toMatch(/Test sent to 2 addresses/);
     expect(bar().classList.contains("show")).toBe(false); // saved on the way
     expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  it("a test that misses some addresses stays open with only those, naming them, so Send again mails no one twice", async () => {
+    await open([
+      { path: "/api/settings", reply: () => response() },
+      {
+        method: "POST",
+        path: "/api/settings/template/test",
+        reply: () => ({ sent: 1, total: 2, failed: ["you@b.c"] }),
+      },
+    ]);
+    $("#tplTest").click();
+    $("#ttGo").click();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(document.querySelector(".modal")).not.toBeNull();
+    expect($<HTMLTextAreaElement>("#tplTestTo").value).toBe("you@b.c");
+    expect($(".modal .dialog-error").textContent).toBe(
+      "!Sent to 1 of 2. Not sent to you@b.c. Send again to try those.",
+    );
+    expect($("#toasts").textContent).toBe("");
+    expect(fake.unhandled).toEqual([]);
   });
 
   it("copies the whole template and says so on the button, not in a toast", async () => {
