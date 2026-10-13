@@ -7,7 +7,7 @@
 // pushed: polling what the browser would load is the one check that can never disagree
 // with it. A new app.js stamp means the page itself is stale, so it reloads; a new
 // styles.css stamp is hot-swapped in place, so the common CSS tweak loop never loses
-// editor state. Only the dev flavor contains this (`__DEV__`, see the build script).
+// editor state. Only the dev build contains this (`__DEV__`, see the build script).
 
 /** The `?v=` stamp on each fingerprinted asset reference in index.html, `null` if absent. */
 export interface AssetStamps {

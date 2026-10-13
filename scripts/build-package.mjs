@@ -32,7 +32,7 @@
  * Output (gitignored, listed in package.json `files`):
  *   dist/worker/index.js     the Worker
  *   dist/worker/index.d.ts   its declaration
- *   dist/public/             the admin UI, production flavor (scripts/build-client.mjs)
+ *   dist/public/             the admin UI, production build (scripts/build-client.mjs)
  */
 import { spawnSync } from "node:child_process";
 import { copyFileSync, mkdirSync, readFileSync, rmSync } from "node:fs";
@@ -78,6 +78,6 @@ await esbuild.build({
 copyFileSync(join(ROOT, "src", "worker.d.ts"), join(OUT, "index.d.ts"));
 console.log(`[package] dist/worker  v${pkg.version}`);
 
-// The production flavor, whatever the shell asked of a dev build.
+// The production build, whatever the shell asked for.
 const { KESTREL_CLIENT_DEV: _, ...env } = process.env;
 run("build-client.mjs", env);

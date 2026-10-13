@@ -6,7 +6,7 @@ How the admin UI presents what Kestrel does. `docs/SPEC.md` says what the system
 
 **How to read it.** The principles (§1) are the reasons; most rules later in the document follow from one of them. §2 is a map of the app, §3 walks each screen, and §4 follows a send across all of them. §5 to §11 are the shared vocabulary every screen is built from: where messages go, how saving works, the button roles, color, layout, copy, and accessibility. §12 lists what was left out on purpose, and §13 is a checklist for a change.
 
-**What it doesn't hold.** Exact CSS lives in `public/dashboard/styles.css` and behavior in `client/`; this document names what each piece means and which one to reach for, one level above the declarations. How the SPA is built and mounted is `.claude/rules/client.md`.
+**What it doesn't hold.** Exact CSS lives in `public/dashboard/styles.css` and behavior in `client/`; this document names what each piece means and which one to reach for, one level above the declarations. How the SPA is mounted is `.claude/rules/client.md`, and how it is built is `.claude/rules/client-build.md`.
 
 **Keeping it true.** A change to how the UI presents something updates this document in the same commit. When this document and the code disagree, one of them is a bug: flag it rather than quietly editing either to match.
 
@@ -115,7 +115,7 @@ The landing page, ordered by urgency:
 4. **Subscribers**: four count tiles (Confirmed, Pending, Unsubscribed, Suppressed), each a link into Subscribers filtered to that state.
 5. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page. A send re-made since its last test says so on its card (§4).
 6. **Sent**: the latest five sends that have started, with Delivered (§8) and Archive ↗.
-7. **Quick actions**, **Publication** addresses with Copy, and **API access**, which invites the publisher to connect Claude or says Claude is connected.
+7. **Quick actions**, **Publication** (the home page's address with Copy, and **View publication ↗**; the archive and every post are a click from there), and **API access**, which invites the publisher to connect Claude or says Claude is connected.
 
 **First run.** With no posts and no subscribers, the body is a setup checklist instead of a wall of zero tiles: name the publication; connect a provider, or once one is connected, confirm the sending domain; write the first post; share the subscribe link. Writing comes after the provider because a first post ends the first-run page, and a step left below it would never be seen.
 

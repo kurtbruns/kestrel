@@ -1,6 +1,6 @@
 // Build-time constants scripts/build-client.mjs defines for the bundle (esbuild `define`).
 
-/** True in the dev flavor, false in production; a branch on it is compiled out. */
+/** True in the dev build, false in the production build; a branch on it is compiled out. */
 declare const __DEV__: boolean;
 
 // Icons import as their file text (scripts/build-client.mjs: esbuild's text loader; the

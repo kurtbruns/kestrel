@@ -28,8 +28,15 @@ A test is evidence that the app does what `docs/SPEC.md` says. Keep each one pla
 ## Use the shared helpers
 
 - Worker: `test/support/fixtures.ts` (`resetDatabase`, `seedConfirmed`, `frozenSend`, `dueSend`, `tick`, `seedDelivery`), `test/support/http.ts` (`base`, `AUTH`, `JSON_AUTH`, `readJson`, `adminAuth` for another principal), and `test/support/worker_env.ts` (`withVars`, `fetchWith`) to run the Worker under other deploy settings. The other `test/support/` modules each say in their header what they are for.
-- Client: `client/test/support.ts` and `client/test/send_server.ts`, and the view-test pattern in `.claude/rules/client.md`.
+- Client: `client/test/support.ts` (`fakeApi`, `settle`, `resetShell`, `sendSummary`, `settingsResponse`, `stubClipboard`) and `client/test/send_server.ts` (the fake send feed: `sendServer`, `feedReads`, `listReads`). How a view test uses them is below.
 - Add a helper there when a second spec needs it. A fixture that really differs stays in its spec, named for what it does differently.
+
+## Client view tests
+
+- `client/test/setup.ts` puts the real admin shell (`public/dashboard/index.html`) in the document before a spec's imports, because the shell reads its roots at import time. happy-dom's file loading is off so an inserted `<link>` is never fetched.
+- A view test runs the real view over `fakeApi(routes)`, which replaces the global `fetch`, so `api()` itself runs. Mount the view as the router does (`mount(renderDrafts)`), `settle()`, query the DOM, act, assert, and assert `fake.unhandled` is empty; `unmount()` is navigating away. `posts/drafts.spec.ts` is the pattern.
+- `settle()` waits on a real timer: under `vi.useFakeTimers()` use `vi.advanceTimersByTimeAsync(0)` instead.
+- A client spec never reaches the Worker, and `client/test/` never enters the bundle.
 
 ## A test must be able to fail
 

@@ -17,7 +17,7 @@
  * cover exactly that, so this is its bug rather than its design; stable names are the
  * right production cache shape regardless, so nothing here waits on a fix.
  *
- * Flavors. Production (the default, and what wrangler's build.command produces for a
+ * Builds. Production (the default, and what wrangler's build.command produces for a
  * deploy) is minified with `__DEV__` false, so dev-only code such as the live reload is
  * compiled out. Dev (`--dev`, or KESTREL_CLIENT_DEV=1 for wrangler's build.command, which
  * takes no flag; scripts/dev.mjs sets it) is readable with `__DEV__` true. Both link a
@@ -32,10 +32,10 @@
  *   --check    prove the tree builds without writing it (the bundle in memory, the source
  *              index.html's asset references verified). For pretest: a second terminal
  *              running the gate beside a live `npm run dev` must not overwrite the dev
- *              tree with the production flavor, which would reload the open editor onto a
+ *              tree with the production build, which would reload the open editor onto a
  *              bundle with no live reload in it.
  *
- * Only an explicit build (or a deploy) writes the production flavor over a live tree.
+ * Only an explicit build (or a deploy) writes the production build over a live tree.
  * `wrangler types` runs build.command too, for no reason this script serves (type
  * generation never reads the tree), so it is a no-op here: wrangler names its command in
  * WRANGLER_COMMAND for every custom build.
@@ -157,7 +157,7 @@ if (checkMode) {
   });
 
   console.log(
-    `[client] ${dev ? "dev" : "production"} flavor — watching client/ and public/, serving from dist/public`,
+    `[client] ${dev ? "dev" : "production"} build: watching client/ and public/, serving from dist/public`,
   );
 } else {
   await esbuild.build(options);
