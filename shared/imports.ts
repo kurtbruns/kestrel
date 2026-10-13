@@ -45,6 +45,16 @@ export const IMPORT_LIMITS = {
   maxEvidenceBytes: 500,
 } as const;
 
+/**
+ * Rows per page of the export, set by the server, never the client. Workers Free's 10 ms of
+ * CPU a request reads and writes about 1,000 rows (around 3 ms); Paid's memory holds 10,000
+ * (around 20 MB) with room to spare.
+ */
+export const EXPORT_PAGE_ROWS = {
+  paid: 10_000,
+  free: 1_000,
+} as const;
+
 // An origin is a short lowercase name: `sendy`, `mailchimp`, `kestrel`, `unknown`.
 const ORIGIN = /^[a-z0-9][a-z0-9._-]{0,39}$/;
 
@@ -894,11 +904,18 @@ export interface ImportCommitResponse {
   replayed: boolean;
 }
 
-/** GET /api/subscribers/export as JSON. */
+/**
+ * A page of GET /api/subscribers/export. Pages run in address order; following `next` until
+ * it is null reads every address on the list for the whole export exactly once (SPEC §8).
+ * A CSV is the pages' rows through `toImportCsv`.
+ */
 export interface ExportResponse {
   format: string;
+  /** When the export's first page was read, the same on every page. */
   exported_at: number;
   subscribers: ExportRow[];
+  /** Pass as `?after=` for the next page; null on the last. Opaque. */
+  next: string | null;
 }
 
 /** One file an import reads, as the format route describes it. */

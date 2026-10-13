@@ -991,14 +991,14 @@ export function createRouter({
       access: "admin",
       resource: "subscribers",
       summary:
-        "The whole list in the import format (`kestrel-subscribers/1`, SPEC §7), as a CSV download or JSON.",
+        "The whole list in the import format (`kestrel-subscribers/1`, SPEC §7), a page at a time.",
       description:
-        "Every subscriber (`confirmed` is written as `status: subscribed`) with how they joined, their evidence, and their suppression, plus every address suppressed with no subscriber behind it (`status: none`), an erased one as `suppression: erased`. An imported bounce or complaint is written as `bounce` or `complaint`. Times are UTC ISO-8601. In the CSV, a value starting with `=`, `+`, `-`, or `@` carries a leading `'` so a spreadsheet won't run it as a formula; the importer removes it. Importing it into another instance carries the list over, every confirmation arriving as imported. One response, not paged.",
+        "Every subscriber (`confirmed` is written as `status: subscribed`) with how they joined, their evidence, and their suppression, plus every address suppressed with no subscriber behind it (`status: none`), an erased one as `suppression: erased`. An imported bounce or complaint is written as `bounce` or `complaint`. Times are UTC ISO-8601. Importing it into another instance carries the list over, every confirmation arriving as imported. Pages run in address order, and following `next` until it is `null` reads every address on the list for the whole export exactly once; one added or removed partway through may or may not appear. The server sets the page size: 1,000 rows on the Workers Free plan's limits (`SUBREQUEST_BUDGET` unset), 10,000 otherwise. `exported_at` is when the first page was read, the same on every page. For a CSV, write the pages' rows as the format's CSV, its header once: a value starting with `=`, `+`, `-`, or `@` carries a leading `'` so a spreadsheet won't run it as a formula, and the importer removes it.",
       query: [
         {
-          name: "format",
+          name: "after",
           description:
-            "`csv` (default: the format's CSV, as an attachment) or `json` (`{ format, exported_at, subscribers }`, the same rows). Anything else is a 400 naming the field.",
+            "The `next` a page returned, for the page after it; leave it out for the first. A value this server didn't issue is a 400 naming the field.",
         },
       ],
       example: {
@@ -1020,6 +1020,7 @@ export function createRouter({
               format: "kestrel-subscribers/1",
             },
           ],
+          next: "eyJ2IjoxLCJhZnRlciI6ImFkYUBleGFtcGxlLmNvbSIsImF0IjoxNzY4NDY3NjAwMDAwfQ",
         },
       },
       handler: importRoutes.exportList,

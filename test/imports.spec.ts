@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import referencePage from "../docs/reference/03-import-format.md?raw";
 import {
+  EXPORT_PAGE_ROWS,
+  type ExportResponse,
   IMPORT_COLUMNS,
   IMPORT_FORMAT,
   IMPORT_LIMITS,
@@ -10,6 +12,7 @@ import {
   type ImportCommitResponse,
   type ImportPlanResponse,
   type OutcomeCounts,
+  toImportCsv,
 } from "../shared/imports";
 import * as importsDb from "../src/db/imports";
 import { updateSettings } from "../src/db/settings";
@@ -885,6 +888,42 @@ describe("the list moving between the plan and the commit (SPEC §7)", () => {
   });
 });
 
+// The nth address of a generated list, zero-padded so address order is numeric order.
+function address(n: number): string {
+  return `r${String(n).padStart(6, "0")}@example.com`;
+}
+
+async function seedAddresses(confirmed: string[], suppressedOnly: string[]): Promise<void> {
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO subscribers (id, email, status, unsub_token, created_at, confirmed_at)
+       SELECT 's-' || value, value, 'confirmed', 'u-' || value, 1, 2 FROM json_each(?)`,
+    ).bind(JSON.stringify(confirmed)),
+    env.DB.prepare(
+      "INSERT INTO suppressions (email, reason, created_at) SELECT value, 'complaint', 1 FROM json_each(?)",
+    ).bind(JSON.stringify(suppressedOnly)),
+  ]);
+}
+
+async function exportPage(after: string | null = null): Promise<ExportResponse> {
+  const query = after === null ? "" : `?after=${encodeURIComponent(after)}`;
+  const res = await SELF.fetch(`${base}/api/subscribers/export${query}`, { headers: AUTH });
+  expect(res.status).toBe(200);
+  return readJson(res);
+}
+
+/** Every page of the export from `after`, following `next` to the end. */
+async function exportAll(after: string | null = null): Promise<ExportResponse[]> {
+  const pages: ExportResponse[] = [];
+  let next: string | null = after;
+  do {
+    const page = await exportPage(next);
+    pages.push(page);
+    next = page.next;
+  } while (next !== null);
+  return pages;
+}
+
 describe("the export, and the round trip (SPEC §7)", () => {
   async function seedList() {
     const confirmedAt = Date.parse("2025-06-01T10:00:00Z");
@@ -910,13 +949,12 @@ describe("the export, and the round trip (SPEC §7)", () => {
 
   it("writes the whole list in the format, including suppressed addresses with no subscriber", async () => {
     await seedList();
-    const res = await SELF.fetch(`${base}/api/subscribers/export?format=json`, { headers: AUTH });
+    const res = await SELF.fetch(`${base}/api/subscribers/export`, { headers: AUTH });
     expect(res.status).toBe(200);
-    const body = await readJson(res);
+    const body: ExportResponse = await readJson(res);
     expect(body.format).toBe(IMPORT_FORMAT);
-    const byEmail = Object.fromEntries(
-      body.subscribers.map((r: { email: string }) => [r.email, r]),
-    );
+    expect(body.next).toBe(null);
+    const byEmail = Object.fromEntries(body.subscribers.map((r) => [r.email, r]));
     expect(byEmail["native@x.io"]).toMatchObject({
       status: "subscribed",
       origin: "kestrel",
@@ -928,7 +966,7 @@ describe("the export, and the round trip (SPEC §7)", () => {
     expect(byEmail["bouncy@x.io"]).toMatchObject({ status: "subscribed", suppression: "bounce" });
     expect(byEmail["complainer@x.io"]).toMatchObject({ status: "none", suppression: "complaint" });
     expect(byEmail["erased@x.io"]).toMatchObject({ status: "none", suppression: "erased" });
-    expect(Object.keys(byEmail).sort()).toEqual([
+    expect(body.subscribers.map((r) => r.email)).toEqual([
       "bouncy@x.io",
       "complainer@x.io",
       "erased@x.io",
@@ -936,16 +974,11 @@ describe("the export, and the round trip (SPEC §7)", () => {
       "native@x.io",
       "waiting@x.io",
     ]);
-    expect(
-      (await SELF.fetch(`${base}/api/subscribers/export?format=xml`, { headers: AUTH })).status,
-    ).toBe(400);
   });
 
   it("imports into a fresh instance with the same states and suppressions, confirmations arriving as imported", async () => {
     await seedList();
-    const exported = await SELF.fetch(`${base}/api/subscribers/export`, { headers: AUTH });
-    expect(exported.headers.get("content-type")).toBe("text/csv; charset=utf-8");
-    const text = await exported.text();
+    const text = toImportCsv((await exportAll()).flatMap((p) => p.subscribers));
     await resetDatabase();
 
     const result = await importFile({ name: "export.csv", text });
@@ -975,6 +1008,79 @@ describe("the export, and the round trip (SPEC §7)", () => {
       consent_evidence: '{"confirmed_ip":"203.0.113.7"}',
       confirmed_at: Date.parse("2025-06-01T10:00:00Z"),
     });
+  });
+});
+
+describe("the export, a page at a time (SPEC §8)", () => {
+  const FREE_PAGE = EXPORT_PAGE_ROWS.free;
+
+  it("reads every address exactly once across its pages, suppression-only addresses included", async () => {
+    // Subscribers and suppression-only addresses interleave in address order, so both halves
+    // of every page's read meet at its boundary.
+    const subscribed = Array.from({ length: 1_600 }, (_, i) => address(i * 2));
+    const suppressed = Array.from({ length: 900 }, (_, i) => address(i * 2 + 1));
+    await seedAddresses(subscribed, suppressed);
+
+    const pages = await exportAll();
+    expect(pages.map((p) => p.subscribers.length)).toEqual([FREE_PAGE, FREE_PAGE, 500]);
+    expect(new Set(pages.map((p) => p.exported_at)).size).toBe(1);
+    const emails = pages.flatMap((p) => p.subscribers.map((r) => r.email));
+    expect(emails).toEqual([...subscribed, ...suppressed].sort());
+    expect(pages.flatMap((p) => p.subscribers).filter((r) => r.status === "none")).toHaveLength(
+      900,
+    );
+  });
+
+  it("never skips or repeats an address when the list changes between pages", async () => {
+    const start = Array.from({ length: 2_000 }, (_, i) => address(i * 10));
+    await seedAddresses(start, []);
+
+    const first = await exportPage();
+    const lastRead = first.subscribers.at(-1)?.email ?? "";
+    // Behind the cursor: one added, one removed. Ahead of it: the same, and one suppressed.
+    await seedAddresses([address(5)], []);
+    await env.DB.prepare("DELETE FROM subscribers WHERE email = ?").bind(address(10)).run();
+    await seedAddresses([address(15_005)], []);
+    await env.DB.prepare("DELETE FROM subscribers WHERE email = ?").bind(address(15_000)).run();
+    await subscribers.addSuppression(env.DB, address(16_000), "manual");
+    await subscribers.addSuppression(env.DB, address(16_001), "manual");
+
+    const rest = await exportAll(first.next);
+    const emails = [first, ...rest].flatMap((p) => p.subscribers.map((r) => r.email));
+    expect(new Set(emails).size).toBe(emails.length);
+    // Every address on the list for the whole export, once; the changes land where they fall.
+    const throughout = start.filter((e) => e !== address(10) && e !== address(15_000));
+    expect(throughout.every((e) => emails.includes(e))).toBe(true);
+    expect(emails.includes(address(5))).toBe(false);
+    expect(emails.includes(address(15_005))).toBe(true);
+    expect(emails.includes(address(15_000))).toBe(false);
+    expect(emails.includes(address(16_001))).toBe(true);
+    expect(emails.filter((e) => e > lastRead)).toEqual(
+      [...throughout.filter((e) => e > lastRead), address(15_005), address(16_001)].sort(),
+    );
+  });
+
+  it("takes 10,000 rows a page on Workers Paid", async () => {
+    await seedAddresses(
+      Array.from({ length: FREE_PAGE + 1 }, (_, i) => address(i)),
+      [],
+    );
+    const res = await fetchWith(PAID, `${base}/api/subscribers/export`, { headers: AUTH });
+    const body: ExportResponse = await readJson(res);
+    expect(body.subscribers).toHaveLength(FREE_PAGE + 1);
+    expect(body.next).toBe(null);
+  });
+
+  it("refuses a cursor this server didn't issue, naming the field (API principle 7)", async () => {
+    const forged = btoa(JSON.stringify({ v: 2, after: "a@x.io", at: 1 }));
+    for (const after of ["nonsense", "", forged, "eyJ2IjoxfQ"]) {
+      const res = await SELF.fetch(
+        `${base}/api/subscribers/export?after=${encodeURIComponent(after)}`,
+        { headers: AUTH },
+      );
+      expect(res.status).toBe(400);
+      expect((await readJson(res)).field).toBe("after");
+    }
   });
 });
 

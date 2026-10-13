@@ -1,6 +1,6 @@
 /**
  * Authed import and export routes (SPEC §7): the format and its templates, a plan that
- * writes nothing, the commit that applies a plan whole, and the whole list out.
+ * writes nothing, the commit that applies a plan whole, and the whole list out a page at a time.
  *
  * The rules of consent at the commit live here, where the principal is known: a plan that
  * confirms anyone needs the publisher's attestation, a plan that grows a scheduled send
@@ -21,7 +21,6 @@ import {
   type SuppressionClaim,
   TEMPLATE_CSV,
   TEMPLATE_TXT,
-  toImportCsv,
 } from "../../shared/imports";
 import * as imports from "../db/imports";
 import { getSettings } from "../db/settings";
@@ -39,6 +38,7 @@ import { log } from "../lib/log";
 import type { RequestContext } from "../router";
 import {
   commitImport,
+  exportPageRows,
   fileSha256,
   type ImportInput,
   maxImportRows,
@@ -229,13 +229,56 @@ const SUPPRESSION_CLAIM: Record<string, SuppressionClaim> = {
 
 const iso = (ms: number | null): string | null => (ms === null ? null : new Date(ms).toISOString());
 
+// The export's cursor: the last address a page held and when the export began, as base64url
+// JSON, so a log doesn't show the address at a glance. Opaque to clients (it isn't a
+// secret; the route is admin-only), and one that doesn't decode is refused, never guessed at.
+interface ExportCursor {
+  after: string;
+  at: number;
+}
+
+function encodeExportCursor(cursor: ExportCursor): string {
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, ...cursor }));
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function decodeExportCursor(raw: string): ExportCursor | null {
+  try {
+    const binary = atob(raw.replace(/-/g, "+").replace(/_/g, "/"));
+    const bytes = Uint8Array.from(binary, (ch) => ch.charCodeAt(0));
+    const value: unknown = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes),
+    );
+    if (typeof value !== "object" || value === null) {
+      return null;
+    }
+    const { v, after, at } = value as Record<string, unknown>;
+    return v === 1 && typeof after === "string" && after !== "" && Number.isSafeInteger(at)
+      ? { after, at: at as number }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 /** GET /api/subscribers/export */
 export async function exportList(c: RequestContext): Promise<Response> {
-  const as = c.url.searchParams.get("format") ?? "csv";
-  if (as !== "csv" && as !== "json") {
-    throw fieldError("format", "format must be 'csv' or 'json'");
+  const raw = c.url.searchParams.get("after");
+  const cursor = raw === null ? null : decodeExportCursor(raw);
+  if (raw !== null && cursor === null) {
+    throw fieldError("after", "after must be the next value a page of this export returned");
   }
-  const rows: ExportRow[] = (await imports.listForExport(c.env.DB)).map((r) => ({
+  const at = cursor?.at ?? Date.now();
+  const size = exportPageRows(c.config.subrequestBudget);
+  // One row past the page says whether another follows, so the last page never comes empty.
+  const read = await imports.listForExport(c.env.DB, cursor?.after ?? null, size + 1);
+  const page = read.slice(0, size);
+  const last = page.at(-1);
+  const rows: ExportRow[] = page.map((r) => ({
     email: r.email,
     status: r.status === null ? "none" : (STATUS_CLAIM[r.status] ?? "none"),
     opt_in: r.opt_in ?? "unknown",
@@ -248,19 +291,11 @@ export async function exportList(c: RequestContext): Promise<Response> {
     evidence: r.consent_evidence,
     format: IMPORT_FORMAT,
   }));
-  const day = new Date().toISOString().slice(0, 10);
-  if (as === "json") {
-    const body: ExportResponse = {
-      format: IMPORT_FORMAT,
-      exported_at: Date.now(),
-      subscribers: rows,
-    };
-    return new Response(JSON.stringify(body), {
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "content-disposition": `attachment; filename="subscribers-${day}.json"`,
-      },
-    });
-  }
-  return download(toImportCsv(rows), "text/csv", `subscribers-${day}.csv`);
+  const body: ExportResponse = {
+    format: IMPORT_FORMAT,
+    exported_at: at,
+    subscribers: rows,
+    next: read.length > size && last ? encodeExportCursor({ after: last.email, at }) : null,
+  };
+  return json(body);
 }

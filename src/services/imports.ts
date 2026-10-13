@@ -17,6 +17,7 @@ import {
   attestationText,
   CONFIRMING_OUTCOMES,
   type ConfirmedBreakdown,
+  EXPORT_PAGE_ROWS,
   type GrowingSend,
   IMPORT_LIMITS,
   IMPORT_OUTCOMES,
@@ -88,6 +89,13 @@ export function maxImportRows(subrequestBudget: number): {
         reason: `This deployment runs on the Workers Free plan’s limits (SUBREQUEST_BUDGET unset), whose 10 ms of CPU per request can plan and commit about ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} rows; on Workers Paid, set SUBREQUEST_BUDGET to take up to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}.`,
       }
     : { maxRows: IMPORT_LIMITS.maxRows, reason: null };
+}
+
+/** Rows per page of the export, judged from the plan as the import limit is. */
+export function exportPageRows(subrequestBudget: number): number {
+  return subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET
+    ? EXPORT_PAGE_ROWS.free
+    : EXPORT_PAGE_ROWS.paid;
 }
 
 function emptyCounts(): OutcomeCounts {

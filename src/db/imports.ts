@@ -379,18 +379,33 @@ export interface ListRow {
   suppressed_at: number | null;
 }
 
-/** Every subscriber with their suppression, and every suppression with no subscriber, by address. */
-export async function listForExport(db: D1Database): Promise<ListRow[]> {
+/**
+ * Up to `limit` addresses after `after` (or from the start, when null), in address order:
+ * each subscriber with their suppression, and each suppression with no subscriber. Keyed on
+ * the address, so a page never skips or repeats one while the list changes between pages.
+ * Each half reads its own index up to `limit` before the two are merged.
+ */
+export async function listForExport(
+  db: D1Database,
+  after: string | null,
+  limit: number,
+): Promise<ListRow[]> {
   const { results } = await db
     .prepare(
-      `SELECT s.email, s.status, s.opt_in, s.origin, s.consent_evidence, s.created_at,
-              s.confirmed_at, s.unsubscribed_at, p.reason, p.created_at AS suppressed_at
-         FROM subscribers s LEFT JOIN suppressions p ON p.email = s.email
+      `SELECT * FROM (
+         SELECT s.email, s.status, s.opt_in, s.origin, s.consent_evidence, s.created_at,
+                s.confirmed_at, s.unsubscribed_at, p.reason, p.created_at AS suppressed_at
+           FROM subscribers s LEFT JOIN suppressions p ON p.email = s.email
+          WHERE s.email > ?1 ORDER BY s.email LIMIT ?2)
        UNION ALL
-       SELECT p.email, NULL, NULL, NULL, NULL, NULL, NULL, NULL, p.reason, p.created_at
-         FROM suppressions p WHERE NOT EXISTS (SELECT 1 FROM subscribers s WHERE s.email = p.email)
-       ORDER BY 1`,
+       SELECT * FROM (
+         SELECT p.email, NULL, NULL, NULL, NULL, NULL, NULL, NULL, p.reason, p.created_at
+           FROM suppressions p
+          WHERE p.email > ?1 AND NOT EXISTS (SELECT 1 FROM subscribers s WHERE s.email = p.email)
+          ORDER BY p.email LIMIT ?2)
+       ORDER BY 1 LIMIT ?2`,
     )
+    .bind(after ?? "", limit)
     .all<ListRow>();
   return results;
 }

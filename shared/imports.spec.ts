@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  EXPORT_PAGE_ROWS,
   type ExportRow,
   IMPORT_COLUMNS,
   IMPORT_FORMAT,
@@ -362,5 +363,45 @@ describe("the templates and the writer", () => {
     };
     const text = toImportCsv([row]);
     expect(rowsOf(csv(text))[0]?.evidence).toBe('{"note":"a, \\"b\\""}');
+  });
+});
+
+describe("a page of the export on Workers Free (SPEC §8)", () => {
+  // Free allows 10 ms of CPU a request. workerd's clock stands still during compute, so the
+  // page's pure work is timed here, in Node: its JSON, as the Worker answers it, and its CSV,
+  // the costlier of the two, as a client writes it. The median of several runs keeps one slow
+  // run on a busy machine from failing the check.
+  const FREE_CPU_MS = 10;
+
+  function page(): ExportRow[] {
+    return Array.from({ length: EXPORT_PAGE_ROWS.free }, (_, i) => ({
+      email: `reader.${String(i).padStart(5, "0")}@example.com`,
+      status: i % 10 === 0 ? "unsubscribed" : "subscribed",
+      opt_in: "double",
+      origin: "kestrel",
+      suppression: i % 50 === 0 ? "bounce" : null,
+      subscribed_at: "2025-06-01T10:00:00.000Z",
+      confirmed_at: "2025-06-01T10:12:00.000Z",
+      unsubscribed_at: i % 10 === 0 ? "2025-09-01T10:00:00.000Z" : null,
+      suppressed_at: i % 50 === 0 ? "2025-08-01T10:00:00.000Z" : null,
+      evidence: JSON.stringify({ confirmed_ip: "203.0.113.7", form: "x".repeat(150) }),
+      format: IMPORT_FORMAT,
+    }));
+  }
+
+  function medianMs(work: () => void): number {
+    work();
+    const runs = Array.from({ length: 7 }, () => {
+      const start = performance.now();
+      work();
+      return performance.now() - start;
+    }).sort((a, b) => a - b);
+    return runs[3] ?? Number.POSITIVE_INFINITY;
+  }
+
+  it("is written within Free's CPU a request, as JSON and as CSV", () => {
+    const rows = page();
+    expect(medianMs(() => JSON.stringify({ subscribers: rows }))).toBeLessThan(FREE_CPU_MS);
+    expect(medianMs(() => toImportCsv(rows))).toBeLessThan(FREE_CPU_MS);
   });
 });

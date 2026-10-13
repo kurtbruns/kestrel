@@ -32,7 +32,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 
 7. **Strict at the door.** A body that is not the declared type, a field of the wrong shape, an unknown query value, or a cursor this server did not issue is refused with a 400 that names the field. Nothing is dropped or defaulted, so a request is never answered with a success that ignored part of it. A cross-site request from a browser never reaches a handler (SPEC §11).
 
-8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page, because the sends that change between two reads are few. The export reads the whole list at once, and an import takes at most a set number of rows, which the API states for the deployment.
+8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page, because the sends that change between two reads are few. The export pages too, keyed on the address, so a list read across many pages while it changes still gives every address exactly once, and an import takes at most a set number of rows, which the API states for the deployment. Where the server sets a page's size, it sets it from the deployment's plan, never from the client.
 
 9. **A concept earns its place.** A new field, header, parameter, or code must change what some client shows or does. Before adding one, ask these questions:
    - Which client reads it, and what does that client do differently because of it?
@@ -49,7 +49,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 | Image | A file belonging to a post, referenced by name | Uploaded to the post. It never hands back a URL to paste. |
 | Send | One dispatch of a post: the frozen email, the fire time, and the record | The one shape is the send's view. Its email and its rows have routes of their own. |
 | Delivery | One recipient's row in a send's record | Paged. Read from the rows, so it is heavier than the view. |
-| Subscriber | An address, its consent state, its suppression, and how it joined | Paged. The whole list also reads out at once as an export, in the import format's rows: a file format, not a second shape of the subscriber. |
+| Subscriber | An address, its consent state, its suppression, and how it joined | Paged. The whole list also reads out as an export, a page at a time in the import format's rows: a file format, not a second shape of the subscriber. |
 | Import | A plan of what bringing a list in would do, and the record of one committed | A plan writes nothing. The record never holds a subscriber's address. |
 | Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.notConnectedPreview`), so a client can say how to leave it. |
 
