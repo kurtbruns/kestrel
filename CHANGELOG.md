@@ -54,6 +54,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 - The Resolve dialog says Assume sent records the recipients as accepted by your provider, with delivery still waiting on a receipt, rather than as delivered (SPEC §12).
 - Dialogs keep keyboard focus inside them, start it on their first control, and return it to whatever opened them when they close; the ⋯ row menus on Drafts and Subscribers open with focus on their first item and move with the arrow keys, Home, and End, and Escape closes them. The session-expired wall moves focus to its heading like the other walls, and stays put when more requests fail behind it. With one dialog over another, only the top one answers Tab and Escape, and a dialog closed by a click outside it hands focus back too.
 - An error in a dialog, such as a test with no recipients, an address that isn't one, or a reschedule the server refused, shows inside the dialog, under the field at fault, instead of in a toast that sat dimmed behind it, and a toast raised while a dialog is open shows above it. Settings shows any failed save in the save bar, and a logo that couldn't be saved says why under its tile.
+- The Sending-domain DNS reference shows the custom MAIL FROM domain's MX and TXT records as a code block, where they showed as raw text with their fences. It also speaks of three checks rather than three records, since on SES's default path SPF passes for `amazonses.com` with no record of yours.
 
 ## [1.7.0] - 2026-10-12
 
