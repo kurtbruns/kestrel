@@ -21,7 +21,7 @@ import { importNotice } from "./notifications";
 export const MAX_VALUE_BYTES = 1_000_000;
 
 const encoder = new TextEncoder();
-const NON_ASCII = /[^\x00-\x7f]/;
+const NON_ASCII = /[\u0080-\uffff]/;
 
 /** Items as JSON arrays, each under `MAX_VALUE_BYTES`, in order. */
 export function jsonChunks(items: readonly unknown[], maxBytes = MAX_VALUE_BYTES): string[] {

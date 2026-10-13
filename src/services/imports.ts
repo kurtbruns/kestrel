@@ -186,6 +186,23 @@ export async function planImport(
     publication: string;
   },
 ): Promise<Plan> {
+  const tooMany = (rows: string) =>
+    new HttpError(
+      400,
+      "too_many_rows",
+      `The file has ${rows} rows; one import takes at most ${maxRows.toLocaleString("en-US")}.${maxRowsReason ? ` ${maxRowsReason}` : ""} Split it into files of up to ${maxRows.toLocaleString("en-US")} rows.`,
+      { field: "file", limit: maxRows },
+    );
+  // A file far over the limit is refused on its line count, before the parse whose CPU would
+  // run past a Workers Free request's limit and leave the publisher with no refusal at all.
+  // Only far over: a quoted value may hold a line break, so a line isn't always a row.
+  let lines = 1;
+  for (let at = input.text.indexOf("\n"); at !== -1; at = input.text.indexOf("\n", at + 1)) {
+    lines += 1;
+  }
+  if (lines > 2 * (maxRows + 1)) {
+    throw tooMany(`about ${lines.toLocaleString("en-US")}`);
+  }
   const parsed = parseImportFile(
     { name: input.name, text: input.text },
     input.plainListStatus ?? "subscribed",
@@ -203,12 +220,7 @@ export async function planImport(
     );
   }
   if (rows.length > maxRows) {
-    throw new HttpError(
-      400,
-      "too_many_rows",
-      `The file has ${rows.length.toLocaleString("en-US")} rows; one import takes at most ${maxRows.toLocaleString("en-US")}.${maxRowsReason ? ` ${maxRowsReason}` : ""} Split it into files of up to ${maxRows.toLocaleString("en-US")} rows.`,
-      { field: "file", limit: maxRows },
-    );
+    throw tooMany(rows.length.toLocaleString("en-US"));
   }
   const merged = mergeRows(rows);
   const state = await imports.readListState(

@@ -7,7 +7,13 @@ const HEX = Array.from({ length: 256 }, (_, b) => b.toString(16).padStart(2, "0"
 
 /** Unguessable hex token (default 32 bytes → 64 hex chars) for confirm/unsubscribe links. */
 export function newToken(bytes = 32): string {
-  return newTokens(1, bytes)[0] ?? "";
+  const buf = new Uint8Array(bytes);
+  crypto.getRandomValues(buf);
+  let out = "";
+  for (const b of buf) {
+    out += HEX[b];
+  }
+  return out;
 }
 
 /**
