@@ -85,7 +85,7 @@ export function maxImportRows(subrequestBudget: number): {
   return subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET
     ? {
         maxRows: IMPORT_LIMITS.maxRowsFree,
-        reason: `This deployment runs on the Workers Free plan's limits (SUBREQUEST_BUDGET unset), whose 10 ms of CPU per request can plan and commit about ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} rows; on Workers Paid, set SUBREQUEST_BUDGET to take up to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}.`,
+        reason: `This deployment runs on the Workers Free plan’s limits (SUBREQUEST_BUDGET unset), whose 10 ms of CPU per request can plan and commit about ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} rows; on Workers Paid, set SUBREQUEST_BUDGET to take up to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}.`,
       }
     : { maxRows: IMPORT_LIMITS.maxRows, reason: null };
 }
@@ -228,7 +228,7 @@ export async function planImport(
     throw new HttpError(
       400,
       "bad_request",
-      "plain_list_status is for a plain list (.txt); a CSV says each row's status itself",
+      "plain_list_status is for a plain list (.txt); a CSV says each row’s status itself",
       { field: "plain_list_status" },
     );
   }

@@ -301,7 +301,7 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     const p = await planOk({ file });
     expect(p.attestation).toEqual({
       version: 1,
-      text: "Everyone I'm importing as subscribed opted in to receive this newsletter. This isn't a purchased, rented, or scraped list.",
+      text: "Everyone I’m importing as subscribed opted in to receive this newsletter. This isn’t a purchased, rented, or scraped list.",
     });
     const res = await commit({ file, plan_hash: p.plan_hash });
     expect(res.status).toBe(409);

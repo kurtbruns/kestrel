@@ -94,11 +94,11 @@ function readInput(body: JsonObject): ImportInput {
   }
   const name = optString(file, "name", "file");
   if (!name) {
-    throw fieldError("file.name", "file.name is required: the file's name, ending .csv or .txt");
+    throw fieldError("file.name", "file.name is required: the file’s name, ending .csv or .txt");
   }
   const text = optString(file, "text", "file");
   if (text === undefined) {
-    throw fieldError("file.text", "file.text is required: the file's contents as UTF-8 text");
+    throw fieldError("file.text", "file.text is required: the file’s contents as UTF-8 text");
   }
   const declared =
     body.plain_list_status === undefined
@@ -172,7 +172,7 @@ export async function commit(c: RequestContext): Promise<Response> {
     throw refusal(
       409,
       "attestation_required",
-      `This import confirms ${p.counts.create_confirmed + p.counts.confirm_pending} subscribers, so it needs the publisher's attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
+      `This import confirms ${p.counts.create_confirmed + p.counts.confirm_pending} subscribers, so it needs the publisher’s attestation: "${p.attestation.text}" Send attestation: { version: ${ATTESTATION.version}, accepted: true } once they have given it.`,
       { attestation: p.attestation },
     );
   }

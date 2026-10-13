@@ -139,7 +139,7 @@ export function composeImportNotification(n: DueImportNotification, config: Conf
       `Confirmed as subscribers: ${confirmed}. Unsubscribed: ${unsubscribed}. Suppressions added: ${n.suppressions_added}. Not imported as subscribers (suppressed here, unsubscribed here, invalid, or with no consent claim): ${notImported}. Already on your list as the file says: ${c("unchanged")}.`,
       n.attestation_version === null
         ? "No one was confirmed, so no attestation was needed."
-        : "Claude attested for you that everyone imported as subscribed opted in to receive your newsletter, and that the list isn't purchased, rented, or scraped. If that isn't so, remove those subscribers before your next post goes out.",
+        : "Claude attested for you that everyone imported as subscribed opted in to receive your newsletter, and that the list isn’t purchased, rented, or scraped. If that isn’t so, remove those subscribers before your next post goes out.",
       "Nobody was emailed by the import.",
     ],
     dashboardLink(config.appOrigin, "/subscribers"),

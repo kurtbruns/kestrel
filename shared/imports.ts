@@ -138,15 +138,15 @@ export const IMPORT_COLUMNS: readonly ImportColumn[] = [
     values: null,
     takes: `a JSON object of at most ${IMPORT_LIMITS.maxEvidenceBytes} bytes, or empty`,
     meaning:
-      "The source's consent-relevant columns, verbatim (a signup IP, a form name, a confirmation time). Nothing reads it to decide anything: it is the proof of consent and the audit trail of a conversion.",
+      "The source’s consent-relevant columns, verbatim (a signup IP, a form name, a confirmation time). Nothing reads it to decide anything: it is the proof of consent and the audit trail of a conversion.",
   },
   {
     name: "format",
     required: false,
     values: IMPORT_FORMAT_VERSIONS,
-    takes: "the format's name and version, or empty",
+    takes: "the format’s name and version, or empty",
     meaning:
-      "The version the file is written in. A file without it is read as version 1; a version this release doesn't know is refused by name.",
+      "The version the file is written in. A file without it is read as version 1; a version this release doesn’t know is refused by name.",
   },
 ];
 
@@ -216,7 +216,7 @@ export function parseImportFile(
   if (/[�\0]/.test(file.text)) {
     return refuse(
       "unrecognized_format",
-      `"${file.name}" isn't UTF-8 text. Save it as UTF-8 (CSV UTF-8 in a spreadsheet) and choose it again.`,
+      `"${file.name}" isn’t UTF-8 text. Save it as UTF-8 (CSV UTF-8 in a spreadsheet) and choose it again.`,
     );
   }
   const text = file.text.startsWith("﻿") ? file.text.slice(1) : file.text;
@@ -269,7 +269,7 @@ function parsePlainList(text: string, declared: PlainListStatus): ParseResult {
   if (!anyValid) {
     return refuse(
       "unrecognized_format",
-      "There isn't one valid email address in this file. A plain list is one address per line.",
+      "There isn’t one valid email address in this file. A plain list is one address per line.",
     );
   }
   return { ok: true, file: { kind: "txt", rows } };
@@ -373,7 +373,7 @@ function parseCsvFile(text: string): ParseResult {
   if ("unclosed" in split) {
     return refuse(
       "unrecognized_format",
-      `This isn't valid CSV: a quoted value that opens in row ${split.unclosed} is never closed.`,
+      `This isn’t valid CSV: a quoted value that opens in row ${split.unclosed} is never closed.`,
       { row: split.unclosed },
     );
   }
@@ -382,7 +382,7 @@ function parseCsvFile(text: string): ParseResult {
   if (!header?.includes("email")) {
     return refuse(
       "unrecognized_format",
-      `This isn't a ${IMPORT_FORMAT} file: its first row must name the columns, including email, status, opt_in, and origin. An export from another service is converted to this format first.`,
+      `This isn’t a ${IMPORT_FORMAT} file: its first row must name the columns, including email, status, opt_in, and origin. An export from another service is converted to this format first.`,
       { row: 0 },
     );
   }
@@ -392,10 +392,10 @@ function parseCsvFile(text: string): ParseResult {
       const lower = name.trim().toLowerCase();
       const hint = COLUMN_NAMES.has(lower)
         ? ` Column names are written exactly, in lowercase: "${lower}".`
-        : " A source's other columns belong in evidence, as JSON, not beside it.";
+        : " A source’s other columns belong in evidence, as JSON, not beside it.";
       return refuse(
         "invalid_field",
-        `The column "${name}" isn't part of ${IMPORT_FORMAT}.${hint}`,
+        `The column "${name}" isn’t part of ${IMPORT_FORMAT}.${hint}`,
         {
           row: 0,
           column: name,
@@ -439,7 +439,7 @@ function parseCsvFile(text: string): ParseResult {
     if (record.length !== header.length) {
       return refuse(
         "invalid_field",
-        `Row ${r} has ${record.length} values for the header's ${header.length} columns.`,
+        `Row ${r} has ${record.length} values for the header’s ${header.length} columns.`,
         { row: r },
       );
     }
@@ -451,7 +451,7 @@ function parseCsvFile(text: string): ParseResult {
       }
       throw refuse(
         "invalid_field",
-        `Row ${r}: ${name} is "${v}", which isn't one of ${allowed.join(", ")}.`,
+        `Row ${r}: ${name} is "${v}", which isn’t one of ${allowed.join(", ")}.`,
         { row: r, column: name, allowed },
       ).error;
     };
@@ -464,7 +464,7 @@ function parseCsvFile(text: string): ParseResult {
       if (ms === undefined) {
         throw refuse(
           "invalid_field",
-          `Row ${r}: ${name} is "${v}", which isn't an instant with its zone, such as 2024-03-01T09:30:00Z. A time without a zone is never guessed at.`,
+          `Row ${r}: ${name} is "${v}", which isn’t an instant with its zone, such as 2024-03-01T09:30:00Z. A time without a zone is never guessed at.`,
           { row: r, column: name },
         ).error;
       }
@@ -475,7 +475,7 @@ function parseCsvFile(text: string): ParseResult {
       if (format !== "" && !IMPORT_FORMAT_VERSIONS.includes(format)) {
         return refuse(
           "unrecognized_format",
-          `Row ${r} is written in "${format}", a version this release can't read. It reads ${IMPORT_FORMAT_VERSIONS.join(", ")}.`,
+          `Row ${r} is written in "${format}", a version this release can’t read. It reads ${IMPORT_FORMAT_VERSIONS.join(", ")}.`,
           { row: r, column: "format", allowed: IMPORT_FORMAT_VERSIONS },
         );
       }
@@ -483,7 +483,7 @@ function parseCsvFile(text: string): ParseResult {
       if (!ORIGIN.test(origin)) {
         return refuse(
           "invalid_field",
-          `Row ${r}: origin is "${origin}", which isn't a short lowercase name such as sendy, mailchimp, or unknown.`,
+          `Row ${r}: origin is "${origin}", which isn’t a short lowercase name such as sendy, mailchimp, or unknown.`,
           { row: r, column: "origin" },
         );
       }
@@ -498,7 +498,7 @@ function parseCsvFile(text: string): ParseResult {
           parsed = undefined;
         }
         if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-          return refuse("invalid_field", `Row ${r}: evidence isn't a JSON object.`, {
+          return refuse("invalid_field", `Row ${r}: evidence isn’t a JSON object.`, {
             row: r,
             column: "evidence",
           });
@@ -507,7 +507,7 @@ function parseCsvFile(text: string): ParseResult {
         if (utf8Bytes(evidence) > IMPORT_LIMITS.maxEvidenceBytes) {
           return refuse(
             "invalid_field",
-            `Row ${r}: evidence is over ${IMPORT_LIMITS.maxEvidenceBytes} bytes. Keep only the source's consent-relevant columns.`,
+            `Row ${r}: evidence is over ${IMPORT_LIMITS.maxEvidenceBytes} bytes. Keep only the source’s consent-relevant columns.`,
             { row: r, column: "evidence" },
           );
         }
@@ -754,20 +754,20 @@ export const IMPORT_OUTCOME_MEANINGS: Record<ImportOutcome, string> = {
   unchanged:
     "Already confirmed here, or already in the state the row claims. A subscriber who joined here keeps their own record.",
   mark_unsubscribed:
-    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row's `unsubscribed_at`: unsubscribed.",
+    "`unsubscribed`, and confirmed or pending here, with no confirmation here newer than the row’s `unsubscribed_at`: unsubscribed.",
   create_unsubscribed:
     "`unsubscribed`, with no subscriber here: recorded as unsubscribed, so the list remembers they left.",
   kept_confirmed_newer:
-    "`unsubscribed`, but the reader confirmed here after the source's `unsubscribed_at`: their newer action stands.",
+    "`unsubscribed`, but the reader confirmed here after the source’s `unsubscribed_at`: their newer action stands.",
   kept_unsubscribed:
     "`subscribed`, but unsubscribed here, or pending again after leaving until they confirm here themselves. An unsubscribe here is never reversed (I2).",
   blocked_by_suppression:
     "`subscribed`, but the address carries a suppression here, a do-not-contact marker included: never added or confirmed.",
   suppression_added:
-    "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row's `status`.",
+    "The row carries a suppression and the address has none here (or only a do-not-contact marker, which a bounce, a complaint, or a manual suppression replaces), and nothing else changes. Applied whatever the row’s `status`.",
   left_out:
     "`pending` or `none` with nothing to apply: counted, never confirmed. An import sends no email.",
-  invalid: "The address isn't valid.",
+  invalid: "The address isn’t valid.",
   merged: "A repeat of an address earlier in the file, folded into it.",
 };
 
@@ -780,7 +780,7 @@ export const CONFIRMING_OUTCOMES: ReadonlySet<ImportOutcome> = new Set([
 /** The publisher's attestation, at the version the plan returns. `[publication]` names theirs. */
 export const ATTESTATION = {
   version: 1,
-  text: "Everyone I'm importing as subscribed opted in to receive [publication]. This isn't a purchased, rented, or scraped list.",
+  text: "Everyone I’m importing as subscribed opted in to receive [publication]. This isn’t a purchased, rented, or scraped list.",
 } as const;
 
 /** The attestation's words for one publication. */
@@ -938,8 +938,8 @@ export interface ImportFormatResponse {
 /** The plain list's rules, in words, as the format route and the reference page give them. */
 export const PLAIN_LIST_RULES: readonly string[] = [
   "One address per line. Each line is trimmed, blank lines are skipped, and CRLF line endings and a UTF-8 byte-order mark are accepted.",
-  "A line that isn't a single valid address (`Name <ada@example.com>`, a typo) is counted as invalid and listed among the rows left out, so one bad line doesn't sink a list.",
-  "The whole file is refused as `unrecognized_format` when it isn't a plain list at all: not UTF-8 text, a line with a comma, tab, or semicolon (it's a table, so a .csv), or not one valid address in it.",
+  "A line that isn’t a single valid address (`Name <ada@example.com>`, a typo) is counted as invalid and listed among the rows left out, so one bad line doesn’t sink a list.",
+  "The whole file is refused as `unrecognized_format` when it isn’t a plain list at all: not UTF-8 text, a line with a comma, tab, or semicolon (it’s a table, so a .csv), or not one valid address in it.",
   "Its rows arrive with `origin: unknown` and `opt_in: unknown`.",
 ];
 
