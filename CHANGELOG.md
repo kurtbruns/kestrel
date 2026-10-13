@@ -12,7 +12,7 @@ To move a running instance from one version to another, follow [Upgrade to a new
 
 ### Added
 
-- The operator's Claude context gains a `/migrate-list` skill, which `kestrel init` writes and `npm run check-context` offers to an existing instance. It brings a list over from another service by a method that checks itself: it reads the import format from the instance, asks the publisher about every ambiguity in the export, has them approve hand-converted rows that become the converter's first tests, splits the result to the deployment's row limit, and confirms Kestrel's plan matches the converter's counts before each piece. This bears on safety, since it adds subscribers: the context's rule against adding a subscriber the publisher didn't name now makes its one exception for such an import, committed only on the publisher's yes to the plan's exact attestation, and the converted files stay in a working folder outside the repository. The Connect Claude guide points to it.
+- The operator's Claude context gains a `/migrate-list` skill, which `kestrel init` writes and `npm run check-context` offers to an existing instance, so Claude can bring a list over from another service by a method that checks itself against Kestrel's import plan. It bears on safety, since it adds subscribers: the rule against adding a subscriber the publisher didn't name now makes one exception, for such an import, confirming anyone only with the publisher's attestation.
 
 ## [1.9.0] - 2026-10-13
 
