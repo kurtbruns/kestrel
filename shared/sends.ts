@@ -18,12 +18,14 @@ export type HaltReason = "unavailable" | "account";
 
 /**
  * What a refusal is about, so the advice can name the fix: the access key or its permissions,
+ * a deployment setting naming something the provider can't find (an SES configuration set),
  * the sender (an unverified domain or from-address), a spent sending quota, the account
  * paused or suspended by the provider, a rate limit, the provider itself failing, or no
  * provider connected to the deployment at all (SPEC §9).
  */
 export type HaltCause =
   | "credentials"
+  | "configuration"
   | "sender"
   | "quota"
   | "suspended"
@@ -54,6 +56,8 @@ export function refusalAdvice(cause: HaltCause | null): string {
   switch (cause) {
     case "credentials":
       return "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.";
+    case "configuration":
+      return "Check that the SES_CONFIGURATION_SET secret names a configuration set in your SES region, or create the set in the SES console.";
     case "sender":
       return "Verify the sending domain or from-address with the provider.";
     case "quota":

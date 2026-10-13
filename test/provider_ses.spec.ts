@@ -378,7 +378,8 @@ describe("SesProvider.sendBatch", () => {
     ["ACCOUNT_SENDING_PAUSED", "account", "suspended"],
     ["ACCOUNT_SUSPENDED", "account", "suspended"],
     ["MAIL_FROM_DOMAIN_NOT_VERIFIED", "account", "sender"],
-    ["CONFIGURATION_SET_DOES_NOT_EXIST", "account", "credentials"],
+    ["CONFIGURATION_SET_DOES_NOT_EXIST", "account", "configuration"],
+    ["CONFIGURATION_SET_NOT_FOUND", "account", "configuration"],
     ["ACCOUNT_THROTTLED", "unavailable", "rate_limit"],
     ["TRANSIENT_FAILURE", "unavailable", "outage"],
   ])("halts a batch whose entries all came back %s (SPEC §12)", async (status, reason, cause) => {
@@ -545,6 +546,12 @@ describe("SesProvider.sendBatch", () => {
     [400, "AccountSuspendedException", "Account is suspended", "suspended"],
     [400, "MailFromDomainNotVerifiedException", "MAIL FROM domain is not verified", "sender"],
     [403, "UnrecognizedClientException", "The token included is invalid", "credentials"],
+    [
+      404,
+      "NotFoundException",
+      "Configuration set <kestrel-events> does not exist.",
+      "configuration",
+    ],
   ])(
     "halts a %i %s as an account refusal, carrying SES's words",
     async (status, type, message, cause) => {
@@ -562,6 +569,34 @@ describe("SesProvider.sendBatch", () => {
           reason: "account",
           cause,
           error: `ses ${status} ${type}: ${message}`,
+        },
+      });
+    },
+  );
+
+  it.each(["test", "confirmation"] as const)(
+    "holds a %s SES answers with a configuration set it can't find, rather than failing the address (SPEC §12)",
+    async (purpose) => {
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            __type: "NotFoundException",
+            message: "Configuration set <kestrel-events> does not exist.",
+          }),
+          { status: 404 },
+        ),
+      );
+      const r = await newProvider().sendBatch(
+        renderedFixture(),
+        [{ email: "reader@example.com", unsubscribeUrl: UNSUB }],
+        { purpose, tag: "t" },
+      );
+      expect(r).toEqual({
+        kind: "halted",
+        halt: {
+          reason: "account",
+          cause: "configuration",
+          error: "ses 404 NotFoundException: Configuration set <kestrel-events> does not exist.",
         },
       });
     },

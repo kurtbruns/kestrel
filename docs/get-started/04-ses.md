@@ -177,7 +177,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler secret put SNS_TOPIC_ARN --env production
     ```
 
-1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names it on every email, so SES reports on each one even without the default:
+1. Store the configuration set's name, `kestrel-mail`. It's optional but recommended: the app names it on every email, so SES reports on each one even without the default. Type it exactly as the set is named in this region: if SES can't find the set, it refuses every email, and a list send is held until the name is fixed or the set created:
 
     ```bash
     npx wrangler secret put SES_CONFIGURATION_SET --env production

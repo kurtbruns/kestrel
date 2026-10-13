@@ -121,6 +121,35 @@ describe("send loop drives the real SES adapter", () => {
     expect(await providerIdFor("s1@integ.test")).toMatch(/^ses-msg-/);
     expect((await sends.getSend(env.DB, send.id))!.status).toBe("sent");
   });
+
+  it("a configuration set SES can't find holds the send with nobody consumed, never marking the list unsent (SPEC §12)", async () => {
+    await seedConfirmed("s1@integ.test");
+    await seedConfirmed("s2@integ.test");
+    const send = await dueSend();
+    const spy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          __type: "NotFoundException",
+          message: "Configuration set <kestrel-events> does not exist.",
+        }),
+        { status: 404 },
+      ),
+    );
+
+    const result = await runSend(sesEnv(), send.id);
+
+    expect(result).toMatchObject({ accepted: 0, unsent: 0, finished: false, halt: "account" });
+    expect(spy).toHaveBeenCalledTimes(1);
+    const row = await sends.getSend(env.DB, send.id);
+    expect(row).toMatchObject({
+      status: "sending",
+      halt_reason: "account",
+      halt_cause: "configuration",
+      c_pending: 2,
+      c_in_flight: 0,
+      c_unsent: 0,
+    });
+  });
 });
 
 // ============================================================================
