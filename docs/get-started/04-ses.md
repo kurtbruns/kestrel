@@ -14,7 +14,7 @@ To move an instance that already sends through another provider or another SES a
 
 SES sends only from an identity you've verified. Verifying the whole hostname, rather than one address, lets any address on it send. It also sets up DKIM, which lets inboxes trust your mail.
 
-1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. Any region that offers SES works, so pick one near you. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
+1. Open the [SES console](https://console.aws.amazon.com/ses/), and choose the region you send from in the menu at the top right. Any region that offers SES works, so pick one near you. If a region is shown as disabled, pick another or enable it for your account first. SES keeps identities, quotas, and the sandbox separately in each region, so do every step in this one.
 
 1. Note the region's code. The menu shows a name, such as Europe (Ireland), but later steps need its code, such as `eu-west-1`. [Amazon SES endpoints](https://docs.aws.amazon.com/general/latest/gr/ses.html) lists each region's code beside its name. The MAIL FROM record, the SNS access policy, and `AWS_REGION` all use this one code.
 
@@ -172,7 +172,7 @@ Until now the app has run with no email provider connected, refusing to send. Se
     npx wrangler secret put SES_CONFIGURATION_SET --env production
     ```
 
-1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), change `AWS_REGION` to your region's code from section 1, and add `SES_MAX_SEND_RATE`. Your other values stay as they are. The block ends up like this:
+1. In `wrangler.jsonc`, edit the `production` block's `vars`. Change `PROVIDER` to `ses` (it's `""` on a new instance; add it if your block has none), and add `SES_MAX_SEND_RATE`. Change `AWS_REGION` to your region's code from section 1. Your other values stay as they are. The block ends up like this:
 
     ```jsonc
     "vars": {
