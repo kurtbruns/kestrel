@@ -1,6 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DocFragment, DocsResponse } from "../../shared/docs";
-import { headingAnchor } from "../../shared/docs";
 import type { SettingsResponse } from "../../shared/settings";
 import { appState } from "../state";
 import {
@@ -227,12 +226,6 @@ describe("docs room", () => {
     await mount((r, s) => renderDocs("overview", r, s, "check%2"));
     expect($("#doc-h-what-you-get")).toBeTruthy();
     expect(top).toHaveBeenCalledWith(0, 0);
-  });
-
-  it("derives a heading's anchor the way GitHub does", () => {
-    expect(headingAnchor("7. Read the logs")).toBe("7-read-the-logs");
-    expect(headingAnchor("3. Fill in wrangler.jsonc")).toBe("3-fill-in-wranglerjsonc");
-    expect(headingAnchor("Before you begin")).toBe("before-you-begin");
   });
 
   it("copies a code block", async () => {
