@@ -1,13 +1,15 @@
 /**
  * The words of each notification to the publisher (SPEC §8): what happened, the numbers
- * or the provider's words that matter, and a link to the send in the admin UI. Plain
+ * or the provider's words that matter, and a link to the send (or, for an import, the list)
+ * in the admin UI. Plain
  * text first, with a minimal HTML twin, because it is a message about the newsletter to
  * its publisher, not a post: it carries no template, no identity, and no unsubscribe link.
  */
 
 import { dashboardLink } from "../../shared/dashboard_link";
+import type { OutcomeCounts } from "../../shared/imports";
 import { refusalAdvice } from "../../shared/sends";
-import type { DueNotification } from "../db/notifications";
+import type { DueImportNotification, DueNotification } from "../db/notifications";
 import type { Config } from "../env";
 import { escapeHtml, escapeHtmlAttr } from "../lib/html";
 import { STUCK_THRESHOLD_MS } from "../lib/time";
@@ -112,6 +114,36 @@ export function composeNotification(n: DueNotification, config: Config): Rendere
       );
     }
   }
+}
+
+/**
+ * Tell the publisher Claude imported a list for them (SPEC §8): the counts that changed who
+ * gets their posts, and that Claude gave the attestation in their name. Written from the
+ * import's record, which holds no address.
+ */
+export function composeImportNotification(n: DueImportNotification, config: Config): RenderedEmail {
+  const counts = JSON.parse(n.counts) as Partial<OutcomeCounts>;
+  const c = (k: keyof OutcomeCounts): number => counts[k] ?? 0;
+  const confirmed = c("create_confirmed") + c("confirm_pending");
+  const unsubscribed = c("mark_unsubscribed") + c("create_unsubscribed");
+  const notImported =
+    c("blocked_by_suppression") +
+    c("kept_unsubscribed") +
+    c("kept_confirmed_newer") +
+    c("left_out") +
+    c("invalid");
+  return message(
+    `Claude imported ${confirmed} subscribers from ${n.file_name}`,
+    [
+      `Claude imported "${n.file_name}" into your list at ${when(n.created_at)}, through the API with its service token.`,
+      `Confirmed as subscribers: ${confirmed}. Unsubscribed: ${unsubscribed}. Suppressions added: ${n.suppressions_added}. Not imported as subscribers (suppressed here, unsubscribed here, invalid, or with no consent claim): ${notImported}. Already on your list as the file says: ${c("unchanged")}.`,
+      n.attestation_version === null
+        ? "No one was confirmed, so no attestation was needed."
+        : "Claude attested for you that everyone imported as subscribed opted in to receive your newsletter, and that the list isn't purchased, rented, or scraped. If that isn't so, remove those subscribers before your next post goes out.",
+      "Nobody was emailed by the import.",
+    ],
+    dashboardLink(config.appOrigin, "/subscribers"),
+  );
 }
 
 /** A sample, for the settings surface's test, so the channel can be proved before a send runs into a problem. */

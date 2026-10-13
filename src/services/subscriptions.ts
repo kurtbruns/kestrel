@@ -175,13 +175,17 @@ export async function confirmLinkState(db: D1Database, token: string): Promise<C
     : { kind: "expired", subscriber: row };
 }
 
-/** Record consent for a confirm link, the owner's deliberate action (I1). Returns the
- *  link's state after: `confirmed` on success, else why it could not be. */
+/** Record consent for a confirm link, the owner's deliberate action (I1), with the IP the
+ *  press came from as its evidence. Returns the link's state after: `confirmed` on success,
+ *  else why it could not be. */
 export async function confirmSubscription(
   db: D1Database,
   token: string,
+  ip?: string | null,
 ): Promise<ConfirmLinkState> {
-  const row = token ? await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS) : null;
+  const row = token
+    ? await subscribers.confirm(db, token, Date.now() - CONFIRM_LINK_TTL_MS, ip)
+    : null;
   if (row?.status === "confirmed") {
     return { kind: "confirmed", subscriber: row };
   }

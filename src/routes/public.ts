@@ -217,7 +217,8 @@ export async function confirmLanding(c: RequestContext): Promise<Response> {
 /** The Confirm button's POST: the one request that records consent. */
 export async function confirm(c: RequestContext): Promise<Response> {
   const token = await readToken(c);
-  return confirmStatePage(c, await confirmSubscription(c.env.DB, token), token);
+  const ip = c.req.headers.get("cf-connecting-ip");
+  return confirmStatePage(c, await confirmSubscription(c.env.DB, token, ip), token);
 }
 
 /** A confirm page's state: a link's state, or a preview's sample of one. */

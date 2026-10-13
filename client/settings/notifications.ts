@@ -39,6 +39,7 @@ const NOTIFICATION_KINDS: Record<NotificationStatusKind, string> = {
   stuck: "in flight too long",
   wedged: "waiting to be resolved",
   missed: "missed fire time",
+  import: "list imported",
   test: "test",
 };
 

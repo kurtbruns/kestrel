@@ -158,11 +158,16 @@ export async function releaseConfirmation(
  * Confirming also lifts an `erased` suppression on the address (see `ERASED`), and only
  * when this confirm is the one that took effect. Any other suppression is the publisher's
  * to clear and is left alone.
+ *
+ * The consent is then this app's own (SPEC §7): the subscriber reads as joining through its
+ * double opt-in, not through any import that added them pending, and the evidence is the
+ * IP the confirmation came from, when the request carried one.
  */
 export async function confirm(
   db: D1Database,
   token: string,
   sentAfter: number,
+  ip?: string | null,
 ): Promise<SubscriberRow | null> {
   const row = await getByConfirmToken(db, token);
   if (!row) {
@@ -182,9 +187,9 @@ export async function confirm(
   await db.batch([
     db
       .prepare(
-        "UPDATE subscribers SET status = 'confirmed', confirmed_at = ? WHERE id = ? AND status = 'pending' AND confirm_token = ?",
+        "UPDATE subscribers SET status = 'confirmed', confirmed_at = ?, origin = 'kestrel', opt_in = 'double', import_id = NULL, consent_evidence = ? WHERE id = ? AND status = 'pending' AND confirm_token = ?",
       )
-      .bind(confirmedAt, row.id, token),
+      .bind(confirmedAt, ip ? JSON.stringify({ confirmed_ip: ip }) : null, row.id, token),
     db
       .prepare(
         "DELETE FROM suppressions WHERE email = ? AND reason = ? AND EXISTS (SELECT 1 FROM subscribers WHERE id = ? AND status = 'confirmed' AND confirmed_at = ?)",

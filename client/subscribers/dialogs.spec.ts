@@ -107,6 +107,10 @@ describe("confirmUnsubscribe", () => {
     created_at: 1,
     confirmed_at: 2,
     unsubscribed_at: null,
+    origin: "kestrel",
+    opt_in: "double" as const,
+    consent_evidence: null,
+    import_id: null,
   };
 
   it("names the address, unsubscribes on confirm, and tells the caller", async () => {

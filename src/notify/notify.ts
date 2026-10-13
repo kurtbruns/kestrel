@@ -1,5 +1,6 @@
 /**
- * The sweep's last step: tell the publisher about what happened to their sends (SPEC §8).
+ * The sweep's last step: tell the publisher about what happened to their sends, and of a list
+ * Claude imported for them (SPEC §8).
  *
  * Each tick records every new event once (`recordNotifications`), then delivers the
  * pending ones through the channel, as many as its share of the invocation's subrequest
@@ -24,7 +25,7 @@ import { MAX_NOTIFY_ATTEMPTS, MISSED_THRESHOLD_MS } from "../lib/time";
 import { type Budget, metered } from "../send/budget";
 import { isWedged } from "../send/wedged";
 import { getNotifier } from "./channel";
-import { composeNotification } from "./compose";
+import { composeImportNotification, composeNotification } from "./compose";
 
 /** Record the events, list the due, read the destination, and claim them: four statements. */
 const OPEN_COST = 4;
@@ -42,8 +43,10 @@ const MAX_PER_TICK = 10;
  * moves the fire time), and the tests here mirror the conditions `recordNotifications`
  * recorded them under.
  */
-export function stillHolds(n: notifications.DueNotification, now: number): boolean {
+export function stillHolds(n: notifications.DueAny, now: number): boolean {
   switch (n.kind) {
+    case "import":
+      return true;
     case "finished":
       return true;
     case "refused":
@@ -92,17 +95,20 @@ export async function notifyPublisher(env: AppEnv, budget: Budget): Promise<void
       await notifications.recordNotificationOutcome(db, n, { status: "cleared" }, Date.now());
       continue;
     }
-    const key = `${n.send_id}-${n.kind}-${n.episode}`;
+    const about = n.kind === "import" ? { importId: n.import_id } : { sendId: n.send_id };
+    const key = `${n.send_id ?? n.import_id}-${n.kind}-${n.episode}`;
     budget.request(); // the channel's request, which counts whether or not it succeeds
     try {
-      await notifier.send(to, composeNotification(n, config), key);
+      const email =
+        n.kind === "import" ? composeImportNotification(n, config) : composeNotification(n, config);
+      await notifier.send(to, email, key);
       await notifications.recordNotificationOutcome(db, n, { status: "sent" }, Date.now());
-      log.info("notify.sent", { sendId: n.send_id, kind: n.kind, channel: notifier.channel });
+      log.info("notify.sent", { ...about, kind: n.kind, channel: notifier.channel });
     } catch (err) {
       const error = errorText(err);
       const giveUp = n.attempts + 1 >= MAX_NOTIFY_ATTEMPTS;
       log.warn("notify.failed", {
-        sendId: n.send_id,
+        ...about,
         kind: n.kind,
         channel: notifier.channel,
         error,

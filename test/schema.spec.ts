@@ -16,7 +16,7 @@ describe("the migrations the schema gate expects (SPEC §9)", () => {
 // The exact set, not a containment check: a table a migration adds or drops has to be
 // named here, so the list can't silently fall behind the schema.
 describe("schema (every migration applied)", () => {
-  it("has exactly the app's ten tables", async () => {
+  it("has exactly the app's eleven tables", async () => {
     const { results } = await env.DB.prepare(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' AND name <> 'd1_migrations'",
     ).all<{ name: string }>();
@@ -34,8 +34,76 @@ describe("schema (every migration applied)", () => {
         "suppressions",
         // 0002_sends_since_1_0
         "send_tombstones",
+        // 0005_imports
+        "imports",
       ].sort(),
     );
+  });
+});
+
+describe("schema (0005_imports)", () => {
+  it("reads every subscriber made before it as joining through this app's double opt-in", async () => {
+    await env.DB.prepare(
+      "INSERT INTO subscribers (id, email, status, unsub_token, created_at) VALUES ('s1', 'a@example.com', 'confirmed', 'u1', 1)",
+    ).run();
+    const row = await env.DB.prepare(
+      "SELECT origin, opt_in, consent_evidence, import_id FROM subscribers WHERE id = 's1'",
+    ).first();
+    expect(row).toEqual({
+      origin: "kestrel",
+      opt_in: "double",
+      consent_evidence: null,
+      import_id: null,
+    });
+    await env.DB.prepare("DELETE FROM subscribers").run();
+  });
+
+  it("refuses an opt-in method outside the three, and evidence that isn't JSON", async () => {
+    const insert = (optIn: string, evidence: string | null) =>
+      env.DB.prepare(
+        "INSERT INTO subscribers (id, email, status, unsub_token, created_at, opt_in, consent_evidence) VALUES ('s2', 'b@example.com', 'confirmed', 'u2', 1, ?, ?)",
+      )
+        .bind(optIn, evidence)
+        .run();
+    await expect(insert("triple", null)).rejects.toThrow();
+    await expect(insert("single", "{not json")).rejects.toThrow();
+  });
+
+  it("admits an import notice, with an import and no send, and keeps a send's notice tied to its send", async () => {
+    await env.DB.batch([
+      env.DB.prepare(
+        "INSERT INTO imports (id, created_at, principal_kind, file_name, file_sha256, plan_hash, counts) VALUES ('i1', 1, 'service', 'list.csv', 'h', 'p', '{}')",
+      ),
+      env.DB.prepare(
+        "INSERT INTO notifications (import_id, kind, created_at, updated_at) VALUES ('i1', 'import', 1, 1)",
+      ),
+    ]);
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO notifications (kind, created_at, updated_at) VALUES ('import', 1, 1)",
+      ).run(),
+    ).rejects.toThrow();
+    await expect(
+      env.DB.prepare(
+        "INSERT INTO notifications (import_id, kind, created_at, updated_at) VALUES ('i1', 'finished', 1, 1)",
+      ).run(),
+    ).rejects.toThrow();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM notifications"),
+      env.DB.prepare("DELETE FROM imports"),
+    ]);
+  });
+
+  it("keeps one import per plan, the commit's idempotency key", async () => {
+    const insert = (id: string) =>
+      env.DB.prepare(
+        "INSERT INTO imports (id, created_at, principal_kind, principal_email, file_name, file_sha256, plan_hash, counts) VALUES (?, 1, 'human', 'me@example.com', 'list.csv', 'h', 'same', '{}')",
+      )
+        .bind(id)
+        .run();
+    await insert("i1");
+    await expect(insert("i2")).rejects.toThrow();
+    await env.DB.prepare("DELETE FROM imports").run();
   });
 });
 

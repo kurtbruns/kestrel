@@ -29,6 +29,7 @@ const TABLES = [
   "posts",
   "suppressions",
   "subscribers",
+  "imports",
   "settings",
 ];
 

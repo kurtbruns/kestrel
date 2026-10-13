@@ -97,10 +97,13 @@ export interface DeploymentView {
   notConnectedPreview: boolean;
 }
 
-/** What a notification is about (SPEC §8): a send finished, or one of the conditions that need the publisher. */
-export type NotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
+/** What a notification about a send is about (SPEC §8): it finished, or one of the conditions that need the publisher. */
+export type SendNotificationKind = "finished" | "refused" | "stuck" | "wedged" | "missed";
 
-/** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). */
+/** What a notification is about (SPEC §8): a send, or a list Claude imported for the publisher. */
+export type NotificationKind = SendNotificationKind | "import";
+
+/** What a line of the notification status is about: an event, or a test from the settings surface (whose subject is ""). An import's subject is its file's name. */
 export type NotificationStatusKind = NotificationKind | "test";
 
 /** How notifications have gone lately, so a channel that stopped working is visible where the destination is set. */

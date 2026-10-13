@@ -2,6 +2,7 @@
 // list adds, and the bodies of the subscriber routes. The Worker's routes produce these
 // shapes and the editor consumes them; one definition, so neither can drift.
 
+import type { OptIn } from "./imports";
 import type { PageMeta } from "./list";
 
 export type SubscriberStatus = "pending" | "confirmed" | "unsubscribed";
@@ -21,6 +22,14 @@ export interface Subscriber {
   created_at: number;
   confirmed_at: number | null;
   unsubscribed_at: number | null;
+  /** Where consent was collected (SPEC §7): `kestrel` for this app's own double opt-in, or the source an import claimed. */
+  origin: string;
+  /** How consent was collected: this app's is `double`; an import's is what its file claimed. */
+  opt_in: OptIn;
+  /** The proof of consent, as JSON text: an import's evidence verbatim, or the IP a confirmation here came from. */
+  consent_evidence: string | null;
+  /** The import that confirmed or added this subscriber, or null when they joined here. What makes a subscriber read as imported. */
+  import_id: string | null;
 }
 
 /** The list row: the subscriber plus why it is suppressed, if it is, so the list can say so without a lookup. */

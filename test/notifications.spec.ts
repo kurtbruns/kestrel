@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, type MockInstance, vi } from "vitest";
 import { dashboardRouteFromSearch } from "../shared/dashboard_link";
-import type { NotificationKind } from "../shared/settings";
+import type { SendNotificationKind } from "../shared/settings";
 import * as notifications from "../src/db/notifications";
 import * as posts from "../src/db/posts";
 import * as sends from "../src/db/sends";
@@ -633,7 +633,7 @@ describe("the settings surface", () => {
 describe("the link in a notification", () => {
   it("opens the send's own page, carried in the query, for every kind", () => {
     const config = getConfig(env);
-    const kinds: NotificationKind[] = ["finished", "refused", "stuck", "wedged", "missed"];
+    const kinds: SendNotificationKind[] = ["finished", "refused", "stuck", "wedged", "missed"];
     for (const kind of kinds) {
       const email = composeNotification(
         {

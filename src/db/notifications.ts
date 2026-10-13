@@ -1,6 +1,7 @@
 /**
  * The notifications that tell the publisher, by email, when a send goes out or runs into a
- * problem (SPEC §8): recording each event once, and the delivery record the sweep keeps for them.
+ * problem, or when Claude imports a list for them (SPEC §8): recording each event once, and
+ * the delivery record the sweep keeps for them.
  *
  * Every read of the send here is of the record the send path already keeps, and nothing
  * here writes a send or a delivery: the table is downstream of the send path, never part
@@ -12,16 +13,18 @@ import type {
   NotificationKind,
   NotificationStatusKind,
   NotificationStatusView,
+  SendNotificationKind,
 } from "../../shared/settings";
 import { MISSED_THRESHOLD_MS, NOTIFY_HORIZON_MS, STUCK_THRESHOLD_MS } from "../lib/time";
 import { WEDGED_SEND } from "./sends";
 
 export type { NotificationKind };
 
-/** A notification that is due, with the send facts its email is written from. */
+/** A notification about a send that is due, with the send facts its email is written from. */
 export interface DueNotification {
   send_id: string;
-  kind: NotificationKind;
+  import_id?: null;
+  kind: SendNotificationKind;
   episode: number;
   attempts: number;
   subject: string;
@@ -44,8 +47,43 @@ export interface DueNotification {
   c_unsent: number;
 }
 
-/** The (send, kind, episode) that names one notification. */
-export type NotificationKey = Pick<DueNotification, "send_id" | "kind" | "episode">;
+/** A notice of an import Claude committed that is due, with the import's record. */
+export interface DueImportNotification {
+  send_id: null;
+  import_id: string;
+  kind: "import";
+  episode: 0;
+  attempts: number;
+  file_name: string;
+  created_at: number;
+  attestation_version: number | null;
+  /** JSON: rows by outcome. */
+  counts: string;
+  suppressions_added: number;
+}
+
+/** Any notification that is due. */
+export type DueAny = DueNotification | DueImportNotification;
+
+/** What names one notification: its send, kind, and episode, or for an import notice its import. */
+export interface NotificationKey {
+  send_id: string | null;
+  import_id?: string | null;
+  kind: NotificationKind;
+  episode: number;
+}
+
+/**
+ * Record that the publisher is to be told of an import, as a statement for the import's own
+ * batch, so the notice exists exactly when the import does.
+ */
+export function importNotice(db: D1Database, importId: string, now: number): D1PreparedStatement {
+  return db
+    .prepare(
+      "INSERT INTO notifications (send_id, import_id, kind, episode, created_at, updated_at) VALUES (NULL, ?, 'import', 0, ?, ?)",
+    )
+    .bind(importId, now, now);
+}
 
 /**
  * Record every event that has happened and has no notification yet, in one statement.
@@ -83,28 +121,53 @@ export async function recordNotifications(db: D1Database, now: number): Promise<
     .run();
 }
 
-/** The oldest pending notifications, at most `limit`, with the send facts to write them. */
-export async function dueNotifications(db: D1Database, limit: number): Promise<DueNotification[]> {
+/**
+ * The oldest pending notifications, at most `limit`, with the send facts to write them, or
+ * for an import notice the import's record.
+ */
+export async function dueNotifications(db: D1Database, limit: number): Promise<DueAny[]> {
   const { results } = await db
     .prepare(
-      `SELECT n.send_id, n.kind, n.episode, n.attempts,
+      `SELECT n.send_id, n.import_id, n.kind, n.episode, n.attempts,
               s.subject, s.status AS send_status, s.fire_at, s.started_at, s.completed_at,
               s.locked_until, s.halt_reason, s.halted_at, s.halt_cause, s.halt_error, s.c_pending, s.c_in_flight, s.c_accepted,
-              s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent
-         FROM notifications n JOIN sends s ON s.id = n.send_id
-        WHERE n.status = 'pending'
+              s.c_delivered, s.c_bounced, s.c_complained, s.c_skipped, s.c_unsent,
+              i.file_name, i.created_at, i.attestation_version, i.counts, i.suppressions_added
+         FROM notifications n
+         LEFT JOIN sends s ON s.id = n.send_id
+         LEFT JOIN imports i ON i.id = n.import_id
+        WHERE n.status = 'pending' AND (s.id IS NOT NULL OR i.id IS NOT NULL)
         ORDER BY n.created_at ASC, n.send_id ASC, n.kind ASC
         LIMIT ?`,
     )
     .bind(limit)
-    .all<DueNotification>();
-  return results;
+    .all<Record<string, unknown>>();
+  return results.map((r): DueAny => {
+    if (r.kind === "import") {
+      return {
+        send_id: null,
+        import_id: r.import_id as string,
+        kind: "import",
+        episode: 0,
+        attempts: r.attempts as number,
+        file_name: r.file_name as string,
+        created_at: r.created_at as number,
+        attestation_version: r.attestation_version as number | null,
+        counts: r.counts as string,
+        suppressions_added: r.suppressions_added as number,
+      };
+    }
+    // A send's notice: the import's columns are all null beside it, and nothing reads them.
+    return r as unknown as DueNotification;
+  });
 }
 
 // The set of keys as one JSON parameter, matched row by row (never a `?` per key; D1
-// caps a statement's bound parameters).
+// caps a statement's bound parameters). `IS` so an import notice, which has no send, and a
+// send's notice, which has no import, each match on the null they carry.
 const IN_KEYS = `EXISTS (SELECT 1 FROM json_each(?) k
-                  WHERE json_extract(k.value, '$[0]') = notifications.send_id
+                  WHERE json_extract(k.value, '$[0]') IS notifications.send_id
+                    AND json_extract(k.value, '$[3]') IS notifications.import_id
                     AND json_extract(k.value, '$[1]') = notifications.kind
                     AND json_extract(k.value, '$[2]') = notifications.episode)`;
 
@@ -122,7 +185,7 @@ export async function claimNotifications(
       `UPDATE notifications SET attempts = attempts + 1, updated_at = ?
         WHERE status = 'pending' AND ${IN_KEYS}`,
     )
-    .bind(now, JSON.stringify(keys.map((k) => [k.send_id, k.kind, k.episode])))
+    .bind(now, JSON.stringify(keys.map((k) => [k.send_id, k.kind, k.episode, k.import_id ?? null])))
     .run();
 }
 
@@ -149,9 +212,9 @@ export async function recordNotificationOutcome(
   await db
     .prepare(
       `UPDATE notifications SET status = ?, error = ?, updated_at = ?
-        WHERE send_id = ? AND kind = ? AND episode = ?`,
+        WHERE send_id IS ? AND import_id IS ? AND kind = ? AND episode = ?`,
     )
-    .bind(status, error, now, key.send_id, key.kind, key.episode)
+    .bind(status, error, now, key.send_id, key.import_id ?? null, key.kind, key.episode)
     .run();
 }
 
@@ -199,15 +262,17 @@ export async function notificationStatus(db: D1Database): Promise<NotificationSt
   const { results } = await db
     .prepare(
       `SELECT * FROM (
-         SELECT 'sent' AS which, n.kind, COALESCE(s.subject, '') AS subject,
+         SELECT 'sent' AS which, n.kind, COALESCE(s.subject, i.file_name, '') AS subject,
                 n.updated_at AS at, NULL AS error
            FROM notifications n LEFT JOIN sends s ON s.id = n.send_id
+           LEFT JOIN imports i ON i.id = n.import_id
           WHERE n.status = 'sent' ORDER BY n.updated_at DESC LIMIT 1)
        UNION ALL
        SELECT * FROM (
-         SELECT 'failed' AS which, n.kind, COALESCE(s.subject, '') AS subject,
+         SELECT 'failed' AS which, n.kind, COALESCE(s.subject, i.file_name, '') AS subject,
                 n.updated_at AS at, n.error
            FROM notifications n LEFT JOIN sends s ON s.id = n.send_id
+           LEFT JOIN imports i ON i.id = n.import_id
           WHERE n.error IS NOT NULL AND n.status IN ('pending', 'failed')
           ORDER BY n.updated_at DESC LIMIT 1)`,
     )
