@@ -141,11 +141,12 @@ export const condition = {
     kind: "refused",
     severity: "action",
     since: 1_000,
-    message: `The provider is refusing the account: ${error} Replace the provider's API key or credentials in the deployment's secrets.`,
+    message: `The provider is refusing the account: ${error} Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.`,
     action: null,
     cause: "credentials",
     error,
-    advice: "Replace the provider's API key or credentials in the deployment's secrets.",
+    advice:
+      "Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy.",
     retry_at: retryAt,
   }),
   bounceSpike: (bounced: number, rate: number): SendCondition => ({
@@ -235,7 +236,7 @@ export function sendServer(rows: SendSummary[] = []) {
         severity: "info",
         since: row.remade_at,
         message:
-          "A template or identity change re-made this email after its last test. Send a new test to check the copy that will go out.",
+          "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
         action: null,
         tested_at: row.tested_at,
       });

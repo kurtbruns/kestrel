@@ -87,7 +87,7 @@ export function sendConditions(send: SendSummary, now: number): SendCondition[] 
         severity: "info",
         since: send.remade_at,
         message:
-          "A template or identity change re-made this email after its last test. Send a new test to check the copy that will go out.",
+          "The template or publication details changed this email’s look after your last test. Its content and send time are the same. Send a new test to check what will go out.",
         action: null,
         tested_at: send.tested_at,
       });

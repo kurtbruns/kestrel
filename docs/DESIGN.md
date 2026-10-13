@@ -113,7 +113,7 @@ The landing page, ordered by urgency:
 2. **Health block**, only when something needs attention (§4).
 3. **Active sends**: a card per send in flight, with a small dispatch bar and counts, linking to its watch.
 4. **Subscribers**: four count tiles (Confirmed, Pending, Unsubscribed, Suppressed), each a link into Subscribers filtered to that state.
-5. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page. A send re-made since its last test says so on its card (§4).
+5. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page. A send whose look changed since its last test says so on its card (§4).
 6. **Sent**: the latest five sends that have started, with Delivered (§8) and Archive ↗.
 7. **Quick actions**, **Publication** (the home page's address with Copy, and **View publication ↗**; the archive and every post are a click from there), and **API access**, which invites the publisher to connect Claude or says Claude is connected.
 
@@ -146,6 +146,8 @@ The editor opens only a draft or a scheduled post (§2), and carries no status p
 - The toolbar stays in view, its buttons unavailable but still clickable, so a click pulses the same line. The actions bar keeps Send test email alone, and its dialog says it delivers the frozen copy that will fire. A draft's test dialog says it delivers the rendered email.
 
 On a draft's Preview tab, the toolbar and the image foot dim and take no clicks, since either would change text that isn't on screen. Dropping an image still works and switches to Edit, so the insert is seen.
+
+**Testing.** Send test email opens a dialog that takes one or more addresses and sends each its own test, so one that fails doesn't stop the rest. When every address gets it, the dialog closes with a toast. When some don't, the dialog stays open with only those addresses left in the field and says so above its buttons ("Sent to 1 of 2. Not sent to …", with the reason), so Send again tries just those and no one gets a second copy.
 
 **Three copies, each named for what it is.** The Preview tab is the email; a test is the email in a real inbox; the **Web version ↗** is the post's public page. "View in browser" is not used for the last one: that is the email's own link, worded by the publisher's template. In the Preview tab, that link opens the web version until the post is published, so a publisher who clicks it finds the page rather than "Nothing here yet".
 
@@ -294,7 +296,7 @@ A change to the template, or to an identity field the template shows, while post
 
 - **The confirmation** is a dialog: one sentence on what the save reaches, the sends by subject and fire time, and three facts in a label column (what changes: the look; what stays: the content and fire time; what's next: a fresh test), so the consequence is scanned rather than read. The alternative, a second template, is named in muted text as not yet offered. Its Primary is "Save and apply". Declining leaves the edits unsaved.
 - **A save refused because a send is about to fire** shows where that surface's errors live (the save bar, or under the logo), naming when to try again.
-- **Afterwards**, the toast says how many emails changed and that each needs a test again. Then each re-made send carries the server's `remade` condition until a test of the re-made copy is sent: a line in the post's scheduled banner that says to send a new test, with no button of its own since Send test email is in the actions bar below, and a "Re-made since its last test" mark on the dashboard's scheduled card. It is the same fact Claude reads, so it can't be dismissed without testing; it goes when the test lands. The Sent queue's card carries no mark, since the editor is where the test is.
+- **Afterwards**, the toast says how many emails changed and that each needs a test again. Then each re-made send carries the server's `remade` condition until a test of the new copy is sent: the condition's own line in the post's scheduled banner, which says the template or publication details changed the email's look, that its content and send time are the same, and to send a new test, with no button of its own since Send test email is in the actions bar below; and a "Look changed since your last test" mark on the dashboard's scheduled card. It is the same fact Claude reads, so it can't be dismissed without testing; it goes when the test lands. The Sent queue's card carries no mark, since the editor is where the test is.
 
 ### Attention
 
@@ -311,7 +313,7 @@ The **health block** on the dashboard, the **attention cards** on Sent, and an *
 
 A send that needs the operator leaves the active-send cards and In progress, so it is reported once. A provider that is only unavailable is not an attention item: the send reads as in progress, its phase gloss says the provider is unavailable and when the next retry is, and the in-flight-too-long flag raises it if it lasts.
 
-**Resolve** explains why the send can't finish on its own and offers **Assume not sent** and **Assume sent**, with Cancel. Neither choice re-mails anyone (I4), so the dialog explains a trade-off in the record's accuracy, not a danger.
+**Resolve** explains why the send can't finish on its own and offers **Assume not sent** and **Assume sent**, with Cancel. Neither choice re-mails anyone (I4), so the dialog explains a trade-off in the record's accuracy, not a danger. Since the app can't tell whether those emails went out, the dialog names **Assume not sent** as the safe default and **Assume sent** as the choice for when the operator knows otherwise.
 
 ### No email provider
 
@@ -377,7 +379,7 @@ Every surface that edits something saves one of two ways, and commits to it whol
 
 **Explicit save** (Settings, the Template page). Edits accumulate against the last saved state, and the reader commits or discards them on purpose through the **save bar**, which slides up from the bottom of the screen with **Discard** and **Save changes** while there are unsaved edits, and away once they're saved, with a toast saying so. If a save doesn't go through, the bar says why (§5). The logo is the one exception: it saves the moment it's picked, so whatever kept it from saving shows under its tile.
 
-**Autosave** (the post editor). The draft saves as you type, after a short pause and never more than half a minute late, with the **save cue** beside Save draft. Save draft and ⌘S save at once. A save that fails turns the cue red, "Not saved:" and the reason, which stays until a save succeeds, and the editor tries again on its own, a little further apart each time, so a dropped connection recovers without another edit. Its Unsaved reads in the same amber as the save bar, so the two models feel like one app, and the state is in its words, never the dot's color alone. The editor needs continuous saving and conflict handling the save bar has no words for, so it never uses the bar.
+**Autosave** (the post editor). The draft saves as you type, after a short pause and never more than half a minute late, with the **save cue** beside Save draft. Save draft and ⌘S save at once. A save that fails turns the cue red, "Not saved:" and the reason, which stays until a save succeeds. After a dropped connection, a server error, or a 429, the editor tries again on its own, a little further apart each time, so it recovers without another edit. Any other refusal the server would repeat isn't retried: it stays on the cue until the next edit or Save draft. A conflict (409) opens the conflict banner instead, and a post deleted elsewhere (404) shows that it was deleted. Its Unsaved reads in the same amber as the save bar, so the two models feel like one app, and the state is in its words, never the dot's color alone. The editor needs continuous saving and conflict handling the save bar has no words for, so it never uses the bar.
 
 **Read-only** surfaces pick neither, because there's nothing to save. The send page is the example: the record is frozen (I3), and the watch only observes.
 
@@ -457,7 +459,7 @@ The docs room's bar stays one row at every width, so its anchors always clear it
 
 **Use the spec's words.** A **post** is what the publisher writes; a **send** is one dispatch of it. **Delivered** always means a receipt confirmed it; a provider's acceptance is **accepted**. A delivery failure is a **bounce**, a **complaint**, or **unsent**. Consent states are **confirmed**, **pending**, and **unsubscribed**; **suppressed** is the overlay. Never internal names in the UI, such as "fake transport".
 
-**Name a thing by what it is.** The Preview tab, a test, and the web version are three copies of a post, named for what each is (§3). The schedule's freeze reads as "locked" and "Cancel the schedule to edit". Where the spec says a scheduled email is *re-made*, the publisher reads that a change *applies to* scheduled emails, or that they were *made again*.
+**Name a thing by what it is.** The Preview tab, a test, and the web version are three copies of a post, named for what each is (§3). The schedule's freeze reads as "locked" and "Cancel the schedule to edit". Where the spec says a scheduled email is *re-made*, the publisher reads that a change *applies to* scheduled emails, that they were *made again*, or that an email's *look changed*.
 
 **The server's words stand.** A condition's message, a refusal, and the provider's own words are shown as they arrive. If the words are wrong, fix them on the server, where Claude reads them too.
 

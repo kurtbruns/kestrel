@@ -342,7 +342,7 @@ describe("dashboard", () => {
     const health = $(".health");
     expect(health.classList.contains("red")).toBe(true);
     expect($$(":scope > div > div", health).map((d) => d.textContent)).toEqual([
-      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the provider's API key or credentials in the deployment's secrets. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
+      "2 sends: The provider is refusing the account: ses 403 UnrecognizedClientException: The security token included in the request is invalid. Replace the SES access key in the deployment's secrets, or give it ses:SendEmail and ses:SendBulkEmail in its IAM policy. No one has been marked unsent, and the send resumes on its own at its next retry once the account is fixed.",
     ]);
     // Several refused sends link to the Sent page that lists them; one links to its watch.
     expect($("a", health).getAttribute("href")).toBe("#/sent");
@@ -742,7 +742,9 @@ describe("dashboard", () => {
         (m) => m.closest<HTMLElement>(".sched-card")?.dataset.post,
       );
     expect(marked()).toEqual(["p2", "p5"]);
-    expect($("#dashScheduled .sched-remade-mark").textContent).toBe("Re-made since its last test");
+    expect($("#dashScheduled .sched-remade-mark").textContent).toBe(
+      "Look changed since your last test",
+    );
     srv.edit("x4", { tested_at: Date.now() }); // a test of the re-made copy, sent from the post
     await vi.advanceTimersByTimeAsync(60_000);
     expect(marked()).toEqual(["p2"]);

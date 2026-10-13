@@ -2,15 +2,22 @@
 
 This last step makes the newsletter yours, and tells people where to subscribe.
 
-In this guide, you name your publication and share your subscribe link. You also see what to change as your list grows.
+In this guide, you check your publication's name, add a logo, and share your subscribe link. You also see what to change as your list grows.
+
+## Before you begin
+
+- SES production access, granted in the region the app sends from. [Connect Amazon SES](04-ses.md#4-request-production-access) asks for it.
+- `SES_MAX_SEND_RATE` set to the maximum send rate on the SES **Account dashboard**, and deployed. [Connect Amazon SES](04-ses.md#7-set-the-provider-and-deploy) sets it to `1` for the sandbox.
+
+In the sandbox, SES refuses the confirmation email to any address you haven't verified, so those signups fail. A post reaches only the addresses you verified in SES.
 
 ## 1. Name your publication
 
-Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. Set them before anyone sees those pages. Until you do, the name in your From address stands in.
+Your publication's name, tagline, and logo appear on the public pages readers see, and in every email. You named it in [Connect Amazon SES](04-ses.md#4-request-production-access). Check those, and add a logo before anyone sees your pages.
 
 1. In the editor, open **Settings → Publication identity**.
 
-1. Enter the name and tagline, and upload a logo.
+1. Check the name and tagline, and upload a logo.
 
 1. **(Optional)** Select **Add a mailing address**. US law asks for a postal address in promotional email, and a P.O. box works. The built-in email template prints it in every email's footer.
 
@@ -38,6 +45,8 @@ The free Workers plan sends four requests a minute. At 14 messages a second, a c
 To send faster, first ask AWS to raise your maximum send rate to 50, which costs nothing, then set [`SES_MAX_SEND_RATE`](../reference/01-configuration.md#ses_max_send_rate) to match, and deploy again. A rate above 50 adds nothing on the free plan, where a rate of 50 sends a list of about 12,000 in an hour. If a send still takes longer than you want, move to the $5 Workers Paid plan, and set [`SUBREQUEST_BUDGET`](../reference/01-configuration.md#subrequest_budget) to `10000`. It sends about 50 requests a minute: about 700 recipients at 14 a second, and about 2,500 at 50 or more.
 
 ## Check it
+
+1. The SES **Account dashboard**, in the region the app sends from, no longer says your account is in the sandbox.
 
 1. `https://newsletter.example.com/subscribe` shows your publication's name and logo.
 
