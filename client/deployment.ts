@@ -176,11 +176,17 @@ export function notConnectedWarning(cls: string, words: Html): Html | null {
  * A scheduled send's line while no provider is connected: its window is real and still
  * cancelable, so the countdown stays, but at the fire time it is held, not sent. Read from
  * the deployment reflection, not from the send, which carries no condition until it fires.
+ * On the dashboard's white card the line is amber; on the editor's violet banner it is one of
+ * the banner's notes, in its violet led by an amber mark (DESIGN §4).
  */
-export function heldWhenFiresHtml(): Html | null {
-  return providerNotConnected()
-    ? html`<div class="sched-held">Will be held: no email provider is connected.</div>`
-    : null;
+export function heldWhenFiresHtml(on: "card" | "banner"): Html | null {
+  if (!providerNotConnected()) {
+    return null;
+  }
+  const words = "Will be held: no email provider is connected.";
+  return on === "card"
+    ? html`<div class="sched-held">${words}</div>`
+    : html`<div class="sched-note sched-note-held"><span class="sched-note-mark" aria-hidden="true">⚠️</span><span class="sched-note-msg">${words}</span></div>`;
 }
 
 /**

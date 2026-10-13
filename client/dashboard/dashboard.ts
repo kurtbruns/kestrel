@@ -421,7 +421,7 @@ function dashScheduledHtml(scheduled: SendView[]): Html {
   if (!scheduled.length) {
     return html`<p class="muted">Nothing scheduled.</p>`;
   }
-  const held = heldWhenFiresHtml();
+  const held = heldWhenFiresHtml("card");
   return html`${scheduled.map(
     (s) =>
       html`<div class="card spread clickable nextup sched-card" data-post="${s.post_id}"><div><a class="card-link sched-subj" href="#/edit/${s.post_id}">${s.subject}</a><div class="muted">${countdownHtml(s)} · ${fmt(s.fire_at)} · ${s.audience.count} recipients</div>${held}${has(s, "remade") ? html`<div class="sched-remade-mark">Look changed since your last test</div>` : null}</div></div>`,

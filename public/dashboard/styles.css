@@ -2189,8 +2189,9 @@ body.web-mode .content {
   font-size: 12.5px;
   color: var(--warn-fg);
 }
-/* A scheduled send while no provider is connected (DESIGN §4): the countdown stays, and a
-   line beneath it in the same amber says the send will be held when it fires. */
+/* A scheduled send's card while no provider is connected (DESIGN §4): the countdown stays,
+   and a line beneath it in amber says the send will be held when it fires. The editor's
+   violet banner says it as a .sched-note instead, since amber text doesn't read on violet. */
 .sched-held {
   margin-top: 4px;
   font-size: 12.5px;
@@ -3075,10 +3076,12 @@ textarea.is-invalid {
   margin-top: 6px;
   font-size: 13px;
 }
-/* The scheduled banner's line for a send too large for D1's daily writes on Workers Free's
-   limits (SPEC §8): the server's condition, in the banner's own violet so a warning that
-   blocks nothing never outweighs the send, with an amber ⚠️ to say it's worth a look. */
-.sched-daily-writes {
+/* The scheduled banner's notes under the countdown (DESIGN §4): a send that will be held
+   with no provider connected, and one too large for D1's daily writes on Workers Free's
+   limits. Each keeps the banner's own violet, since amber words on violet fall short of
+   contrast and mix two of the color meanings, and an amber ⚠️ leads it to say it's worth a
+   look. Held is the stronger of the two (the send won't go out), so it keeps the weight. */
+.sched-note {
   display: flex;
   gap: 6px;
   align-items: baseline;
@@ -3088,6 +3091,9 @@ textarea.is-invalid {
 }
 .sched-note-mark {
   flex: none;
+}
+.sched-note-held {
+  font-weight: 500;
 }
 .sched-remade-mark {
   margin-top: 4px;

@@ -335,7 +335,7 @@ Two states have no real provider (SPEC §9), and each is worded for who meets it
 
 - **Dashboard and Sent**: an amber line, the one health line with no send behind it. The first-run checklist's provider step replaces the sending-domain step, and its subscribe-link step says signups open once a provider is connected.
 - **A draft's page**: the same amber line above the actions, "No email provider connected: you can write and preview, not send", so the publisher knows before opening a dialog.
-- **A scheduled send**: the dashboard's card and the editor's banner keep their countdown, since the window is real and still cancelable, and add "Will be held: no email provider is connected."
+- **A scheduled send**: the dashboard's card and the editor's banner keep their countdown, since the window is real and still cancelable, and add "Will be held: no email provider is connected." On the white card the line is amber. On the banner it is a line under the countdown like the daily-writes one, in the banner's own violet led by an amber ⚠️, since amber words on violet are hard to read and would mix two of the color meanings. It keeps a heavier weight than the daily-writes line, because a held send doesn't go out.
 - **Every dialog that would send** (both test dialogs, Schedule, Add subscriber): an amber line, the act disabled, and the fields it would need left out, so there's nothing to fill in. Focus lands on Cancel.
 - **Settings**: the provider row carries the state and the link; Ways to subscribe says signups aren't open yet; Notifications reads "Your email provider, once one is connected".
 

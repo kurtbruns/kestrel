@@ -497,7 +497,7 @@ describe("editor view", () => {
     const linked = scheduledPost(Date.now() + 65_000);
     await open(linked.routes);
     expect($("#schedWhen").textContent).toMatch(/Sends in 1m 05s/);
-    expect($(".banner-scheduled .sched-held").textContent).toBe(
+    expect($(".banner-scheduled .sched-note-held .sched-note-msg").textContent).toBe(
       "Will be held: no email provider is connected.",
     );
     expect(document.querySelector(".editor-not-connected")).toBeNull(); // the draft's line
@@ -505,7 +505,7 @@ describe("editor view", () => {
     fake.restore();
     appState.appConfig = settingsResponse({ deployment: { provider: "ses" } });
     await open(scheduledPost(Date.now() + 65_000).routes);
-    expect(document.querySelector(".sched-held")).toBeNull();
+    expect(document.querySelector(".sched-note-held")).toBeNull();
   });
 
   it("notes above a draft's actions that it can be written and previewed, not sent, while no provider is connected", async () => {
