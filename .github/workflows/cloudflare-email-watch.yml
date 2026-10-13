@@ -1,0 +1,43 @@
+# A monthly look at whether Cloudflare Email Service accepts newsletters yet (#611). Its FAQ
+# says it is "intended only for transactional emails", which rules it out as a provider. When
+# that sentence is gone, or the page can't be read, this opens one issue so a person checks
+# what changed; it decides nothing itself. Needs no secret: the built-in token opens the issue.
+name: Cloudflare email watch
+
+on:
+  schedule:
+    - cron: "0 14 1 * *" # the 1st of each month, 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      FAQ_URL: https://developers.cloudflare.com/email-service/reference/faq/
+      PHRASE: intended only for transactional emails
+      TITLE: "Cloudflare Email Service: the FAQ no longer says transactional only"
+    steps:
+      - name: Check the FAQ
+        run: |
+          if page=$(curl -fsSL --retry 3 "$FAQ_URL"); then
+            if printf '%s' "$page" | tr -s '[:space:]' ' ' | grep -qiF "$PHRASE"; then
+              echo "Still transactional only."
+              exit 0
+            fi
+            reason="The FAQ no longer contains \"$PHRASE\"."
+          else
+            reason="The FAQ could not be fetched, so it may have moved."
+          fi
+          # One open issue at a time, so a change that stays unread doesn't open one a month.
+          if [ -n "$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number')" ]; then
+            echo "Already reported: $reason"
+            exit 0
+          fi
+          gh issue create --title "$TITLE" --body "$reason Check $FAQ_URL and Cloudflare's email changelog, then work through #611's checklist."
