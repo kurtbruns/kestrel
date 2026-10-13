@@ -251,12 +251,11 @@ export async function renderDashboard(view: HTMLElement, signal: AbortSignal): P
       )}</tbody></table></div>`
     : html`<p class="muted">No drafts in progress.</p>`;
 
-  const appOrigin = deployment?.appOrigin || location.origin;
-  const archiveBase =
-    (deployment?.archiveOrigin || location.origin) + (deployment?.archiveBasePath || "");
+  // The publication's home is the landing page at the app's own origin (SPEC §11); the
+  // archive and every post are a click from it, so the card names the one address to share.
+  const homeUrl = deployment?.appOrigin || location.origin;
   const pubCardHtml = html`<div class="card pub-card">
-    <div class="pub-row"><span class="pub-key muted">Publication</span><code class="pub-val">${appOrigin}</code>${copyButton(appOrigin, "Copy the publication’s address")}</div>
-    <div class="pub-row"><span class="pub-key muted">Archive</span><code class="pub-val">${archiveBase}</code>${copyButton(archiveBase, "Copy the archive’s address")}</div>
+    <div class="pub-row"><code class="pub-val">${homeUrl}</code>${copyButton(homeUrl, "Copy the publication’s address")}</div>
     <div class="pub-foot"><a href="/" target="_blank" rel="noopener">View publication&nbsp;↗</a></div>
   </div>`;
 

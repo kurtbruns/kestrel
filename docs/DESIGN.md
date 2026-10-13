@@ -115,7 +115,7 @@ The landing page, ordered by urgency:
 4. **Subscribers**: four count tiles (Confirmed, Pending, Unsubscribed, Suppressed), each a link into Subscribers filtered to that state.
 5. **Scheduled** and **Drafts**, side by side. A scheduled card shows its countdown and opens the editor; it carries no Cancel, since the schedule is managed in the editor and on the Sent page. A send re-made since its last test says so on its card (§4).
 6. **Sent**: the latest five sends that have started, with Delivered (§8) and Archive ↗.
-7. **Quick actions**, **Publication** addresses with Copy, and **API access**, which invites the publisher to connect Claude or says Claude is connected.
+7. **Quick actions**, **Publication** (the home page's address with Copy, and **View publication ↗**; the archive and every post are a click from there), and **API access**, which invites the publisher to connect Claude or says Claude is connected.
 
 **First run.** With no posts and no subscribers, the body is a setup checklist instead of a wall of zero tiles: name the publication; connect a provider, or once one is connected, confirm the sending domain; write the first post; share the subscribe link. Writing comes after the provider because a first post ends the first-run page, and a step left below it would never be seen.
 

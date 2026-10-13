@@ -3934,7 +3934,7 @@ button.api-filter-clear svg {
   text-decoration: underline;
 }
 
-/* Publication card: the live-site + archive URLs with copy buttons. */
+/* Publication card: the home page's address with Copy, and the way out to it. */
 .pub-card {
   display: flex;
   flex-direction: column;
@@ -3944,10 +3944,6 @@ button.api-filter-clear svg {
   display: flex;
   align-items: center;
   gap: 12px;
-}
-.pub-key {
-  flex: 0 0 84px;
-  font-size: 12px;
 }
 .pub-val {
   flex: 1 1 auto;

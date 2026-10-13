@@ -176,10 +176,11 @@ describe("dashboard", () => {
     expect($(".ghost-link", sent).getAttribute("href")).toBe(
       "https://birds.example/archive/waxwings",
     );
+    // The publication card names only the home page: its address to copy, and the way out.
     expect($$(".pub-card [data-copy]").map((b) => b.dataset.copy)).toEqual([
       "https://app.birds.example",
-      "https://birds.example/archive",
     ]);
+    expect($(".pub-card .pub-foot a").getAttribute("href")).toBe("/");
     // No service author yet: the guide leads, both links at one weight, each led by its glyph.
     expect($$(".pub-links a").map((a) => a.textContent?.trim())).toEqual([
       "Connect Claude →",
