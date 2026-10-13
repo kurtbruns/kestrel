@@ -1361,10 +1361,9 @@ export async function renderEditor(
         audience ??= api<SubscriberListResponse>(
           "/api/subscribers?status=confirmed&suppressed=hide&limit=1",
           { signal },
-        ).then(
-          (s) => s.page.total,
-          () => null,
-        );
+        )
+          .then((s) => s.page.total)
+          .catch(() => null);
         return audience;
       };
       // On Workers Free's limits, a send this large may spend D1's daily writes. The line
