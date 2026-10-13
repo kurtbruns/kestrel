@@ -335,6 +335,8 @@ interface ConditionBase {
  * - `provider_unavailable`: the provider is down or rate-limiting; retried at `retry_at`.
  * - `bounce_spike`: a recently sent send's confirmed bounces reached the danger zone.
  * - `remade`: a template or identity change re-made the scheduled email after its last test.
+ * - `daily_writes`: on Workers Free's limits, a scheduled send to more recipients than D1's
+ *   daily writes comfortably cover; `recipients` is its audience as scheduled.
  */
 export type SendCondition =
   | (ConditionBase & { kind: "missed" })
@@ -349,7 +351,8 @@ export type SendCondition =
     })
   | (ConditionBase & { kind: "provider_unavailable"; error: string; retry_at: number | null })
   | (ConditionBase & { kind: "bounce_spike"; bounced: number; rate: number })
-  | (ConditionBase & { kind: "remade"; tested_at: number | null });
+  | (ConditionBase & { kind: "remade"; tested_at: number | null })
+  | (ConditionBase & { kind: "daily_writes"; recipients: number });
 
 /** The kinds of condition. */
 export type ConditionKind = SendCondition["kind"];
@@ -367,6 +370,20 @@ export type FeedCondition = SendCondition & { send_id: string; subject: string }
 export const BOUNCE_SPIKE_RATE = 0.05;
 export const BOUNCE_SPIKE_MIN = 3;
 export const BOUNCE_SPIKE_RECENT_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * On the Workers Free plan's limits, a scheduled send to more than this many recipients may
+ * spend D1's daily allowance of written rows (about 14 a recipient, before anything else
+ * writes that day), which stops the instance until midnight UTC. Past it, Workers Paid is
+ * recommended. The warning never refuses: the account may be on Paid while the Worker is
+ * configured for Free.
+ */
+export const DAILY_WRITES_SEND_RECIPIENTS = 5_000;
+
+/** The `daily_writes` condition's words, for a send to `recipients`. */
+export function dailyWritesSendWarning(recipients: number): string {
+  return `On the Workers Free plan’s limits, a send to ${recipients.toLocaleString("en-US")} recipients may use up the database’s daily allowance of writes. That stops this newsletter until midnight UTC, the send included. Workers Paid is recommended for a list of more than ${DAILY_WRITES_SEND_RECIPIENTS.toLocaleString("en-US")}.`;
+}
 
 /** GET /api/sends/feed: what a client follows to keep up with sends without polling each one. */
 export interface SendFeedResponse {

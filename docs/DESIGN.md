@@ -290,6 +290,16 @@ What each screen shows at each stage:
 - **Cancel** acts at once, with no confirmation, because a cancel is fully reversible: schedule again. A Cancel that loses the race with the fire time says so plainly: the send time has passed, so the email is going out.
 - **Reschedule** opens the same time picker and says the content stays frozen and the window is kept. Its control stays live even when no provider is connected, since moving a send sends nothing.
 
+### A send the database may not cover
+
+On the Workers Free plan's limits, a send to more than 5,000 recipients may use up the database's daily writes (SPEC §8). The warning is the server's `daily_writes` condition, in its words, and it never disables a control.
+
+- **The Schedule dialog**, and its Send now view, show it as an amber box under the hint, the not-connected line's look, once the audience is read and found over the threshold. Schedule and Send now stay live: the account may be on Workers Paid, and the review window is where the publisher decides. The dialog reads the audience only on Free's limits, and only once for both views.
+- **The scheduled banner** carries the same words as an amber line under the countdown, for as long as the send is scheduled.
+- **Nowhere else.** It isn't an attention item: nothing is wrong yet, and the health block is for what needs a person now (§1.3).
+
+An import plan's warning about the same limit (SPEC §7) is shown by whatever surface presents the plan.
+
 ### Re-making scheduled emails
 
 A change to the template, or to an identity field the template shows, while posts are scheduled re-makes their emails (SPEC §8). The server refuses the save until the publisher acknowledges it, and the UI reacts to that refusal; it never decides which fields count.

@@ -14,6 +14,7 @@ import {
 } from "../../shared/sends";
 import { getPost } from "../db/posts";
 import * as sends from "../db/sends";
+import { onFreePlanLimits } from "../env";
 import { oneOf, readJsonObject } from "../lib/body";
 import { badRequest, HttpError, json, notFound } from "../lib/errors";
 import { listPage, parseListParams } from "../lib/list";
@@ -221,7 +222,11 @@ export async function feed(c: RequestContext): Promise<Response> {
   // Every open problem in one read, whichever sends it is on and whether they changed.
   const conditions: FeedCondition[] = read.open
     .flatMap((s) =>
-      sendConditions(s, now).map((cond) => ({ ...cond, send_id: s.id, subject: s.subject })),
+      sendConditions(s, now, onFreePlanLimits(c.config)).map((cond) => ({
+        ...cond,
+        send_id: s.id,
+        subject: s.subject,
+      })),
     )
     .sort(bySeverity);
   const body: SendFeedResponse = {

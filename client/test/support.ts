@@ -221,6 +221,7 @@ export function settingsResponse(
       minLeadMs: 5 * 60 * 1000,
       simulation: null,
       notConnectedPreview: false,
+      freePlanLimits: false,
       build: {
         version: "",
         sha: "dev",

@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { SendSummary } from "../../shared/sends";
+import {
+  DAILY_WRITES_SEND_RECIPIENTS,
+  dailyWritesSendWarning,
+  type SendSummary,
+} from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import { slugify } from "../../shared/slug";
 import type { ViewHandle } from "../lifecycle";
@@ -546,6 +550,31 @@ describe("editor view", () => {
     expect($("#toasts").textContent).toMatch(/canceled elsewhere/);
     expect(document.querySelector(".banner-scheduled")).toBeNull();
     expect(body().readOnly).toBe(false);
+    expect(fake.unhandled).toHaveLength(0);
+  });
+
+  it("says on the banner when the server warns the send may spend D1's daily writes (SPEC §8)", async () => {
+    const linked = scheduledPost();
+    const message = dailyWritesSendWarning(6_000);
+    linked.sends.edit(
+      "s1",
+      {},
+      {
+        conditions: [
+          {
+            kind: "daily_writes",
+            severity: "warn",
+            since: Date.now(),
+            message,
+            action: null,
+            recipients: 6_000,
+          },
+        ],
+      },
+    );
+    await open(linked.routes);
+    expect($("#schedDailyWrites").hidden).toBe(false);
+    expect($("#schedDailyWrites").textContent).toBe(message);
     expect(fake.unhandled).toHaveLength(0);
   });
 
@@ -1898,6 +1927,50 @@ describe("editor view", () => {
     // The toast names the fire time the server answered, not the lead.
     expect($("#toasts").textContent).toContain(`Sends at ${fmt(fireAt)}, cancelable until then.`);
     expect(document.querySelector(".modal")).toBeNull();
+  });
+
+  describe("on Workers Free's limits, a send D1's daily writes may not cover (SPEC §8)", () => {
+    async function openWithAudience(total: number, freePlanLimits: boolean) {
+      appState.appConfig = settingsResponse({ deployment: { provider: "ses", freePlanLimits } });
+      const server = draftServer(draft({ subject: "Owls" }));
+      await open([
+        { path: "/api/posts/p1", reply: server.get },
+        {
+          path: "/api/subscribers",
+          reply: () => ({ counts: { confirmed: total }, page: { total } }),
+        },
+      ]);
+      $("#scheduleBtn").click();
+      await vi.advanceTimersByTimeAsync(0);
+    }
+
+    it("warns in the Schedule dialog and Send now, in the send's condition words, and disables nothing", async () => {
+      await openWithAudience(DAILY_WRITES_SEND_RECIPIENTS + 1, true);
+      const line = $("#schDailyWrites");
+      expect(line.hidden).toBe(false);
+      expect(line.textContent).toBe(dailyWritesSendWarning(DAILY_WRITES_SEND_RECIPIENTS + 1));
+      expect($<HTMLButtonElement>("#schGo").disabled).toBe(false);
+      $("#toSendNow").click();
+      await vi.advanceTimersByTimeAsync(0);
+      expect($("#schDailyWrites").textContent).toBe(
+        dailyWritesSendWarning(DAILY_WRITES_SEND_RECIPIENTS + 1),
+      );
+      expect($<HTMLButtonElement>("#snGo").disabled).toBe(false);
+      // One read of the audience serves both views.
+      expect(fake.calls.filter((c) => c.url.pathname === "/api/subscribers")).toHaveLength(1);
+      expect(fake.unhandled).toEqual([]);
+    });
+
+    it("says nothing at the threshold", async () => {
+      await openWithAudience(DAILY_WRITES_SEND_RECIPIENTS, true);
+      expect($("#schDailyWrites").hidden).toBe(true);
+    });
+
+    it("leaves the line out, and reads no audience to schedule, on Workers Paid", async () => {
+      await openWithAudience(DAILY_WRITES_SEND_RECIPIENTS + 1, false);
+      expect(document.querySelector("#schDailyWrites")).toBeNull();
+      expect(fake.calls.some((c) => c.url.pathname === "/api/subscribers")).toBe(false);
+    });
   });
 
   it("floors the picker and words its copy by the deployment's minimum lead, not a number of its own", async () => {

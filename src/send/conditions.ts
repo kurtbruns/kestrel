@@ -6,7 +6,8 @@
  * A condition is a reading of the send row at a moment, never stored: missed and stuck by
  * the clock against the row's times; wedged by `isWedged`; refused and provider_unavailable
  * by the halt the send carries; bounce_spike by its confirmed bounces over its audience at
- * fire; remade by its last re-make against its last test. Each carries its severity, since
+ * fire; remade by its last re-make against its last test; daily_writes by its audience as
+ * scheduled, on Workers Free's limits only. Each carries its severity, since
  * when (null when the record does not say), the server's words for it, and the action that
  * settles it, if the API has one. The actions are exactly what the server would accept on
  * the send right now, so a client offers a control only while pressing it would work.
@@ -17,6 +18,8 @@ import {
   BOUNCE_SPIKE_RATE,
   BOUNCE_SPIKE_RECENT_MS,
   type ConditionSeverity,
+  DAILY_WRITES_SEND_RECIPIENTS,
+  dailyWritesSendWarning,
   refusalAdvice,
   type SendAction,
   type SendCondition,
@@ -66,9 +69,24 @@ export function bySeverity<T extends Pick<SendCondition, "severity" | "since">>(
   return RANK[a.severity] - RANK[b.severity] || (a.since ?? 0) - (b.since ?? 0);
 }
 
-/** The send's open conditions, most severe first. */
-export function sendConditions(send: SendSummary, now: number): SendCondition[] {
+/** The send's open conditions, most severe first. `freePlan`: the deployment runs on Workers Free's limits. */
+export function sendConditions(send: SendSummary, now: number, freePlan: boolean): SendCondition[] {
   const out: SendCondition[] = [];
+
+  if (
+    freePlan &&
+    send.status === "scheduled" &&
+    send.recipient_count > DAILY_WRITES_SEND_RECIPIENTS
+  ) {
+    out.push({
+      kind: "daily_writes",
+      severity: "warn",
+      since: send.scheduled_at,
+      message: dailyWritesSendWarning(send.recipient_count),
+      action: null,
+      recipients: send.recipient_count,
+    });
+  }
 
   if (send.status === "scheduled" && send.fire_at + MISSED_THRESHOLD_MS < now) {
     out.push({

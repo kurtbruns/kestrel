@@ -113,6 +113,14 @@ export function providerNotConnected(): boolean {
 }
 
 /**
+ * True on the Workers Free plan's limits, as the reflection says, where a large send may spend
+ * D1's daily writes (SPEC §8).
+ */
+export function freePlanLimits(): boolean {
+  return appState.appConfig?.deployment.freePlanLimits === true;
+}
+
+/**
  * True when this is local development's preview of the not-connected state
  * (`SIMULATE_SENDS=not-connected`, SPEC §10) rather than a deployment partway through setup,
  * as the reflection says. Its way out is a restart, not a deploy.
@@ -196,6 +204,17 @@ export function notConnectedTestLine(): Html | null {
  *  confirmation is disabled beside it and the address field left out. */
 export function notConnectedAddLine(): Html | null {
   return notConnectedLine("a confirmation can’t be sent yet", " to add subscribers");
+}
+
+/**
+ * The Schedule dialog's place for the warning about D1's daily writes, on Workers Free's
+ * limits with a provider connected: hidden until the audience is read and found too large
+ * for a day's writes, then filled with the scheduled send's own condition words (DESIGN §4).
+ */
+export function dailyWritesLine(): Html | null {
+  return freePlanLimits() && !providerNotConnected()
+    ? html`<p class="hint daily-writes" id="schDailyWrites" role="status" hidden></p>`
+    : null;
 }
 
 /** The Schedule dialog's standing line; its Schedule and Send now are disabled beside it. */

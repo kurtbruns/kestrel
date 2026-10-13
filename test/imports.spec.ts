@@ -3,6 +3,7 @@ import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import referencePage from "../docs/reference/03-import-format.md?raw";
 import {
+  DAILY_WRITES_IMPORT_CONFIRMED,
   EXPORT_PAGE_ROWS,
   type ExportResponse,
   IMPORT_COLUMNS,
@@ -24,7 +25,7 @@ import type { Principal } from "../src/router";
 import { Budget } from "../src/send/budget";
 import { commitImport, maxImportRows, planImport } from "../src/services/imports";
 import { guardD1 } from "./support/d1_guard";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { addresses, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, adminAuth, base, JSON_AUTH, readJson } from "./support/http";
 import { allowErrorLogs, logged } from "./support/log";
 import { fetchWith } from "./support/worker_env";
@@ -1081,6 +1082,46 @@ describe("the export, a page at a time (SPEC §8)", () => {
       expect(res.status).toBe(400);
       expect((await readJson(res)).field).toBe("after");
     }
+  });
+});
+
+describe("an import that may spend D1's daily writes (SPEC §7)", () => {
+  // The list already holds enough confirmed subscribers that `added` new ones end just over,
+  // or just at, the threshold.
+  async function planAdding(added: number, vars: Record<string, string> = {}) {
+    const res = await fetchWith(vars, `${base}/api/imports/plan`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({
+        file: {
+          name: "new.txt",
+          text: addresses(added)
+            .map((e) => `new.${e}`)
+            .join("\n"),
+        },
+      }),
+    });
+    expect(res.status).toBe(200);
+    return (await readJson(res)) as ImportPlanResponse;
+  }
+
+  it("warns on Workers Free's limits when the list it leaves passes the threshold, and still plans", async () => {
+    await seedConfirmed(addresses(DAILY_WRITES_IMPORT_CONFIRMED - 100));
+    const over = await planAdding(101);
+    expect(over.counts.create_confirmed).toBe(101);
+    expect(over.daily_writes_warning).toBe(
+      "On the Workers Free plan’s limits, this import leaves 3,001 confirmed subscribers. Importing and sending to that many on the same day may use up the database’s daily allowance of writes, which stops this newsletter until midnight UTC. Send your next post tomorrow (UTC), or move to Workers Paid.",
+    );
+    expect((await planAdding(100)).daily_writes_warning).toBe(null);
+  });
+
+  it("carries no warning on Workers Paid, and the warning never changes the plan's hash", async () => {
+    await seedConfirmed(addresses(DAILY_WRITES_IMPORT_CONFIRMED));
+    const free = await planAdding(1);
+    const paid = await planAdding(1, PAID);
+    expect(free.daily_writes_warning).not.toBe(null);
+    expect(paid.daily_writes_warning).toBe(null);
+    expect(paid.plan_hash).toBe(free.plan_hash);
   });
 });
 

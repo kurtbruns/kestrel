@@ -242,6 +242,15 @@ export interface Config {
 export const DEFAULT_SES_MAX_SEND_RATE = 14;
 /** The Workers Free plan's per-invocation subrequest limit, the default budget. */
 export const DEFAULT_SUBREQUEST_BUDGET = 50;
+
+/**
+ * Whether the deployment runs on the Workers Free plan's limits, judged from
+ * `SUBREQUEST_BUDGET` left at Free's default: the one setting that tells Free from Paid, for
+ * the import limit, the export's page, and the warnings about D1's daily writes (SPEC §8).
+ */
+export function onFreePlanLimits(config: Pick<Config, "subrequestBudget">): boolean {
+  return config.subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET;
+}
 /** The least a sweep tick needs to find a send and deliver one batch of it, beside what it
  *  holds back for its own checks and one notification. A lower `SUBREQUEST_BUDGET` would
  *  start nothing and stall every send silently, so it is raised to this. */

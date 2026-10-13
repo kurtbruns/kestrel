@@ -49,7 +49,7 @@ import {
   type SettingsPatch,
   withPublicationLogo,
 } from "../db/settings";
-import type { Config } from "../env";
+import { type Config, onFreePlanLimits } from "../env";
 import {
   fieldError,
   type JsonObject,
@@ -108,6 +108,9 @@ function deploymentView(cfg: Config, principal: Principal): DeploymentView {
     // Whether `provider: "none"` is local dev's preview of not connected, so the editor
     // words its way out as a restart rather than a deploy; false in every deployed env.
     notConnectedPreview: cfg.notConnectedPreview,
+    // Whether the deployment runs on Workers Free's limits, so the Schedule dialog can warn
+    // before a send D1's daily writes may not cover, in the words the send's condition uses.
+    freePlanLimits: onFreePlanLimits(cfg),
   };
 }
 

@@ -9,12 +9,20 @@ import type {
   PostSavedResponse,
   TestSendResponse,
 } from "../../shared/posts";
-import type { ScheduleResponse, SendAction, SendResponse, SendView } from "../../shared/sends";
+import {
+  DAILY_WRITES_SEND_RECIPIENTS,
+  dailyWritesSendWarning,
+  type ScheduleResponse,
+  type SendAction,
+  type SendResponse,
+  type SendView,
+} from "../../shared/sends";
 import type { SettingsResponse } from "../../shared/settings";
 import type { SubscriberListResponse } from "../../shared/subscribers";
 import { ApiError, api, apiText, describeError, isNetworkFailure } from "../api";
 import {
   connectProviderLink,
+  dailyWritesLine,
   earliestFireAt,
   heldWhenFiresHtml,
   isTooSoon,
@@ -202,7 +210,7 @@ export async function renderEditor(
         <a class="ghost btn" id="webLink" href="${webVersionUrl}" target="_blank" rel="noopener" aria-label="Web version (opens in a new tab)">Web version ↗</a>
       </div>
     </div>
-    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
+    ${locked && scheduled ? html`<div class="banner banner-scheduled"><div class="sched-main"><span id="schedWhen"></span>${heldWhenFiresHtml()}<div class="sched-remade" id="schedRemade" hidden><span id="schedRemadeMsg"></span></div><div class="sched-daily-writes" id="schedDailyWrites" hidden></div></div><span class="row" id="schedControls"><button type="button" class="ghost" id="rescheduleSchedule">Reschedule</button><button type="button" class="ghost" id="cancelSchedule">Cancel</button></span></div>` : null}
     <div id="freshnessBanner" class="banner banner-conflict" role="alert" hidden></div>
     <div class="card">
       <div class="grid2">
@@ -1023,13 +1031,19 @@ export async function renderEditor(
     // shows what will go out. The server says so until a test of the re-made copy lands,
     // the same fact Claude reads. The banner only says so: Send test email is in the actions
     // bar below, and a second one here would crowd the banner's own controls.
+    // On Workers Free's limits, a send too large for D1's daily writes says so here too, in
+    // the server's words, for as long as it is scheduled (DESIGN §4). It never blocks.
     const remadeEl = $("#schedRemade");
-    const paintRemade = () => {
+    const dailyWritesEl = $("#schedDailyWrites");
+    const paintConditions = () => {
       const remade = conditionOf(current, "remade");
       remadeEl.hidden = !remade;
       $("#schedRemadeMsg").textContent = remade?.message ?? "";
+      const dailyWrites = conditionOf(current, "daily_writes");
+      dailyWritesEl.hidden = !dailyWrites;
+      dailyWritesEl.textContent = dailyWrites?.message ?? "";
     };
-    paintRemade();
+    paintConditions();
 
     // --- following the send (DESIGN §4) ---
     // A move, a re-make, or a cancel made elsewhere (by Claude or another tab) shows in
@@ -1052,7 +1066,7 @@ export async function renderEditor(
               return;
             }
             paintBanner();
-            paintRemade();
+            paintConditions();
           },
           removed,
           // The layer's cursor ran ahead of the database: read the post and its send again.
@@ -1072,7 +1086,7 @@ export async function renderEditor(
           if (!movedOn(read.send, remount)) {
             current = read.send;
             paintBanner();
-            paintRemade();
+            paintConditions();
             follow(read);
           }
           return false;
@@ -1336,9 +1350,37 @@ export async function renderEditor(
       // While no provider is connected the server would refuse both views, so the dialog
       // drops the picker and the Send now row and leaves only the standing line (DESIGN §4).
       const notConnected = providerNotConnected();
-      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick, with a cancelable window until then.</p>${notConnectedScheduleLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
+      const scheduleView = html`<h3 id="schHead">Schedule this post</h3><p class="hint">It sends at the time you pick, with a cancelable window until then.</p>${notConnectedScheduleLine()}${dailyWritesLine()}${notConnected ? null : html`<label for="schWhen">Send at</label><input type="datetime-local" id="schWhen" min="${minStr}" value="${def}">`}<div class="actions"><button type="button" id="schCancel">Cancel</button><button type="button" class="primary" id="schGo">Schedule</button></div>${notConnected ? null : html`<div class="altrow"><span class="altrow-note">Or send as soon as possible.</span><button type="button" class="linkbtn" id="toSendNow">Send now →</button></div>`}`;
       const m = modal(scheduleView, signal);
       const box = $(".modal", m.el);
+      // Who a send would reach now: the confirmed addresses that aren't suppressed (SPEC §6),
+      // read at most once, when a view first needs it. Neither view waits on it: their copy
+      // reads sensibly until then.
+      let audience: Promise<number | null> | null = null;
+      const readAudience = () => {
+        audience ??= api<SubscriberListResponse>(
+          "/api/subscribers?status=confirmed&suppressed=hide&limit=1",
+          { signal },
+        ).then(
+          (s) => s.page.total,
+          () => null,
+        );
+        return audience;
+      };
+      // On Workers Free's limits, a send this large may spend D1's daily writes. The line
+      // is the scheduled send's own `daily_writes` warning, in the same words, shown before
+      // it is scheduled; it never disables a control (DESIGN §4).
+      const paintDailyWrites = async () => {
+        if (!box.querySelector("#schDailyWrites")) {
+          return; // not on Free's limits, or no provider to send through
+        }
+        const n = await readAudience();
+        const el = box.querySelector<HTMLElement>("#schDailyWrites"); // gone if closed or flipped
+        if (el && n !== null && n > DAILY_WRITES_SEND_RECIPIENTS) {
+          el.textContent = dailyWritesSendWarning(n);
+          el.hidden = false;
+        }
+      };
       // A refused save closes the dialog, and the out-of-date banner it was covering is
       // the whole answer — so make sure the publisher is actually looking at it: they
       // clicked Schedule at the foot of the post and the banner sits at its head. Only
@@ -1436,12 +1478,13 @@ export async function renderEditor(
         }
         $("#toSendNow", box).onclick = showSendNow;
         $("#schWhen", box).focus();
+        void paintDailyWrites();
       }
 
       async function showSendNow() {
         setHtml(
           box,
-          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p><div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
+          html`<h3 id="snHead">Send now?</h3><p class="hint">Sends this draft, as it is now, to <strong id="snWho">your subscribers</strong> in ${sendNowWhenText()}. The post locks until then, and you can cancel any time before it starts sending.</p>${dailyWritesLine()}<div class="altrow altrow-top"><button type="button" class="linkbtn" id="toSchedule">← Back to schedule</button></div><div class="actions"><button type="button" id="snCancel">Cancel</button><button type="button" class="primary" id="snGo">Send now</button></div>`,
         );
         box.setAttribute("aria-labelledby", "snHead");
         $("#snCancel", box).onclick = m.close;
@@ -1452,20 +1495,13 @@ export async function renderEditor(
           wireSchedule();
         };
         $("#snGo", box).focus();
-        // Fill the count once known; the copy reads sensibly until then. A send reaches the
-        // confirmed addresses that aren't suppressed (SPEC §6), so ask the server for that set's
-        // total rather than the confirmed count, which still includes the suppressed ones.
-        try {
-          const s = await api<SubscriberListResponse>(
-            "/api/subscribers?status=confirmed&suppressed=hide&limit=1",
-            { signal },
-          );
-          const n = s.page.total;
-          const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
-          if (whoEl) {
-            whoEl.textContent = `${n} recipient${n === 1 ? "" : "s"}`;
-          }
-        } catch {}
+        void paintDailyWrites();
+        // Fill the count once known. The confirmed count would still include the suppressed.
+        const n = await readAudience();
+        const whoEl = box.querySelector("#snWho"); // gone if the view flipped back meanwhile
+        if (whoEl && n !== null) {
+          whoEl.textContent = `${n} recipient${n === 1 ? "" : "s"}`;
+        }
       }
 
       wireSchedule();

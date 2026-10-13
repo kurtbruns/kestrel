@@ -17,6 +17,8 @@ import {
   attestationText,
   CONFIRMING_OUTCOMES,
   type ConfirmedBreakdown,
+  DAILY_WRITES_IMPORT_CONFIRMED,
+  dailyWritesImportWarning,
   EXPORT_PAGE_ROWS,
   type GrowingSend,
   IMPORT_LIMITS,
@@ -37,7 +39,8 @@ import {
 } from "../../shared/imports";
 import type { ListEntry, ListState } from "../db/imports";
 import * as imports from "../db/imports";
-import { DEFAULT_SUBREQUEST_BUDGET } from "../env";
+import { audienceCount } from "../db/subscribers";
+import { onFreePlanLimits } from "../env";
 import { HttpError, refusal } from "../lib/errors";
 import { newId, newTokens } from "../lib/ids";
 import { errorText, log } from "../lib/log";
@@ -72,6 +75,8 @@ export interface Plan {
   sendsGrowing: GrowingSend[];
   attestation: { version: number; text: string } | null;
   planHash: string;
+  /** The warning about D1's daily writes, on Workers Free's limits only (SPEC §7). */
+  dailyWritesWarning: string | null;
 }
 
 /**
@@ -83,7 +88,7 @@ export function maxImportRows(subrequestBudget: number): {
   maxRows: number;
   reason: string | null;
 } {
-  return subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET
+  return onFreePlanLimits({ subrequestBudget })
     ? {
         maxRows: IMPORT_LIMITS.maxRowsFree,
         reason: `This deployment runs on the Workers Free plan’s limits (SUBREQUEST_BUDGET unset), whose 10 ms of CPU per request can plan and commit about ${IMPORT_LIMITS.maxRowsFree.toLocaleString("en-US")} rows; on Workers Paid, set SUBREQUEST_BUDGET to take up to ${IMPORT_LIMITS.maxRows.toLocaleString("en-US")}.`,
@@ -93,9 +98,7 @@ export function maxImportRows(subrequestBudget: number): {
 
 /** Rows per page of the export, judged from the plan as the import limit is. */
 export function exportPageRows(subrequestBudget: number): number {
-  return subrequestBudget <= DEFAULT_SUBREQUEST_BUDGET
-    ? EXPORT_PAGE_ROWS.free
-    : EXPORT_PAGE_ROWS.paid;
+  return onFreePlanLimits({ subrequestBudget }) ? EXPORT_PAGE_ROWS.free : EXPORT_PAGE_ROWS.paid;
 }
 
 function emptyCounts(): OutcomeCounts {
@@ -201,10 +204,13 @@ export async function planImport(
     maxRows,
     maxRowsReason,
     publication,
+    freePlan = false,
   }: {
     maxRows: number;
     maxRowsReason: string | null;
     publication: string;
+    /** On Workers Free's limits: the plan then warns past a list D1's daily writes can't import and send to in one day. */
+    freePlan?: boolean;
   },
 ): Promise<Plan> {
   const tooMany = (rows: string) =>
@@ -280,6 +286,9 @@ export async function planImport(
   const after = await imports.latestImportId(db);
   const needsAttestation = counts.create_confirmed + counts.confirm_pending > 0;
   const sha = await fileSha256(input.text);
+  // Read only on Free, where it can warn; a warning never changes what the commit applies,
+  // so it stays out of the hash.
+  const confirmedAfter = freePlan ? (await audienceCount(db)) + gains : 0;
   const planHash = await sha256Hex(
     JSON.stringify([
       "kestrel-import-plan/1",
@@ -306,6 +315,10 @@ export async function planImport(
       ? { version: ATTESTATION.version, text: attestationText(publication) }
       : null,
     planHash,
+    dailyWritesWarning:
+      confirmedAfter > DAILY_WRITES_IMPORT_CONFIRMED
+        ? dailyWritesImportWarning(confirmedAfter)
+        : null,
   };
 }
 
@@ -351,6 +364,7 @@ export function planResponse(plan: Plan): ImportPlanResponse {
     sends_growing: plan.sendsGrowing,
     attestation: plan.attestation,
     plan_hash: plan.planHash,
+    daily_writes_warning: plan.dailyWritesWarning,
   };
 }
 

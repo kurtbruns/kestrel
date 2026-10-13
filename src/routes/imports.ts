@@ -24,6 +24,7 @@ import {
 } from "../../shared/imports";
 import * as imports from "../db/imports";
 import { getSettings } from "../db/settings";
+import { onFreePlanLimits } from "../env";
 import {
   fieldError,
   type JsonObject,
@@ -123,6 +124,7 @@ async function plan(c: RequestContext, input: ImportInput): Promise<Plan> {
     maxRows,
     maxRowsReason: reason,
     publication: settings.publication.name,
+    freePlan: onFreePlanLimits(c.config),
   });
 }
 

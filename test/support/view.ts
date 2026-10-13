@@ -3,7 +3,7 @@
  * `buildSendView` every route uses, with a fixed provider name and no archive.
  */
 import type { SendSummary, SendView } from "../../shared/sends";
-import type { ProviderName } from "../../src/env";
+import { DEFAULT_SUBREQUEST_BUDGET, type ProviderName } from "../../src/env";
 import { buildSendView } from "../../src/send/view";
 import { base } from "./http";
 
@@ -23,7 +23,12 @@ export function viewOf(
   };
   return buildSendView(
     { ...row, post_slug: null },
-    { provider, archiveOrigin: base, archiveBasePath: "/" },
+    {
+      provider,
+      archiveOrigin: base,
+      archiveBasePath: "/",
+      subrequestBudget: DEFAULT_SUBREQUEST_BUDGET,
+    },
     hasRetries,
     now,
   );

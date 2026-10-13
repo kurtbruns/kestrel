@@ -1,11 +1,11 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { DEFAULT_MIN_LEAD_MS } from "../shared/sends";
+import { DAILY_WRITES_SEND_RECIPIENTS, DEFAULT_MIN_LEAD_MS } from "../shared/sends";
 import * as sendsDb from "../src/db/sends";
 import type { AppEnv } from "../src/env";
 import { acceptFireAt, cancel, onTheMinute } from "../src/send/schedule";
-import { resetDatabase } from "./support/fixtures";
+import { addresses, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base, JSON_AUTH, PNG_1x1, readJson } from "./support/http";
 import { fetchWith } from "./support/worker_env";
 
@@ -763,5 +763,44 @@ describe("fire times fall on the minute", () => {
       const route = routes.find((r: any) => r.path === path && r.method === "POST");
       expect(route?.description, path).toMatch(/rounded up to the next whole minute/);
     }
+  });
+});
+
+describe("a send that may spend D1's daily writes (SPEC §8)", () => {
+  async function scheduleTo(recipients: number, vars: Record<string, string> = {}) {
+    await seedConfirmed(addresses(recipients));
+    const id = await makeDraft();
+    const res = await fetchWith(vars, `${base}/api/posts/${id}/schedule`, {
+      method: "POST",
+      headers: JSON_AUTH,
+      body: JSON.stringify({ fire_at: future(10 * 60 * 1000) }),
+    });
+    expect(res.status).toBe(201);
+    return (await readJson(res)).send;
+  }
+
+  it("is scheduled with a warning on Workers Free's limits, never refused, and every read carries it", async () => {
+    const send = await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS + 1);
+    expect(send.conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
+    expect(send.conditions[0]).toMatchObject({
+      severity: "warn",
+      recipients: DAILY_WRITES_SEND_RECIPIENTS + 1,
+      action: null,
+    });
+    const read = await readJson(
+      await SELF.fetch(`${base}/api/sends/${send.id}`, { headers: AUTH }),
+    );
+    expect(read.send.conditions.map((c: { kind: string }) => c.kind)).toEqual(["daily_writes"]);
+    const feed = await readJson(await SELF.fetch(`${base}/api/sends/feed`, { headers: AUTH }));
+    expect(
+      feed.conditions.map((c: { kind: string; send_id: string }) => [c.kind, c.send_id]),
+    ).toEqual([["daily_writes", send.id]]);
+  });
+
+  it("carries no warning at the threshold, or on Workers Paid", async () => {
+    expect((await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS)).conditions).toEqual([]);
+    await resetDatabase();
+    const paid = await scheduleTo(DAILY_WRITES_SEND_RECIPIENTS + 1, { SUBREQUEST_BUDGET: "1000" });
+    expect(paid.conditions).toEqual([]);
   });
 });

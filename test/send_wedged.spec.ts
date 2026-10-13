@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import keyedPendingToResolve from "../migrations/0004_keyed_pending_to_resolve.sql?raw";
 import { type SendFeedResponse, type SendView, STUCK_THRESHOLD_MS } from "../shared/sends";
 import * as sends from "../src/db/sends";
+import { LEASE_TTL_MS } from "../src/lib/time";
 import * as providers from "../src/providers";
 import { clearFakeOutbox } from "../src/providers/fake";
 import { nextChangeAt } from "../src/send/feed";
@@ -14,7 +15,7 @@ import { applyDeliveryEvents } from "../src/services/webhook_events";
 import { BatchProvider } from "./support/batching";
 import { toNextTick } from "./support/clock";
 import { condition, has } from "./support/conditions";
-import { frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
+import { addresses, frozenSend, resetDatabase, seedConfirmed } from "./support/fixtures";
 import { AUTH, base } from "./support/http";
 import { allowErrorLogs } from "./support/log";
 
@@ -235,5 +236,101 @@ describe("the pace around a wedge and a cut-off run", () => {
     expect(nextChangeAt({ ...inFlight, locked_until: NOW - 1_000, halt_retry_at: null }, NOW)).toBe(
       NOW,
     );
+  });
+});
+
+describe("a database that refuses every query partway through a send", () => {
+  // As D1 on Workers Free does once a day's written rows are spent (until midnight UTC): the
+  // provider has taken a batch, and the write that would record its answer is refused.
+  function refusingDb(db: D1Database, refusing: { on: boolean }): D1Database {
+    const refuse = () => {
+      if (refusing.on) {
+        throw new Error("D1_ERROR: the database refused the query");
+      }
+    };
+    const inner = new WeakMap<object, D1PreparedStatement>();
+    const wrap = (stmt: D1PreparedStatement): D1PreparedStatement => {
+      const guarded = {
+        bind: (...values: unknown[]) => wrap(stmt.bind(...values)),
+        first: (column?: string) => {
+          refuse();
+          return column === undefined ? stmt.first() : stmt.first(column);
+        },
+        run: () => {
+          refuse();
+          return stmt.run();
+        },
+        all: () => {
+          refuse();
+          return stmt.all();
+        },
+        raw: () => {
+          refuse();
+          return stmt.raw();
+        },
+      };
+      inner.set(guarded, stmt);
+      return guarded as unknown as D1PreparedStatement;
+    };
+    return {
+      prepare: (sql: string) => wrap(db.prepare(sql)),
+      batch: (statements: D1PreparedStatement[]) => {
+        refuse();
+        return db.batch(statements.map((s) => inner.get(s) ?? s));
+      },
+      exec: (sql: string) => {
+        refuse();
+        return db.exec(sql);
+      },
+    } as unknown as D1Database;
+  }
+
+  it("leaves the batch it couldn't record waiting for Resolve, and mails no one twice (I4)", async () => {
+    allowErrorLogs("send.error", "sweep.error", "send.wedged");
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const refusing = { on: false };
+    // Three groups of ten recipients, in batches of two: the first is recorded, the database
+    // refuses partway through the second, and the third is still to go.
+    const audience = addresses(30);
+    class RefusedMidSend extends BatchProvider {
+      override readonly maxBatch: number = 2;
+      override async sendBatch(...args: Parameters<BatchProvider["sendBatch"]>) {
+        const nth = this.requests + 1; // batches go out together, so count before awaiting
+        const answer = await super.sendBatch(...args);
+        if (nth === 7) {
+          refusing.on = true; // the provider took the batch; recording its answer is refused
+        }
+        return answer;
+      }
+    }
+    const provider = new RefusedMidSend();
+    vi.spyOn(providers, "getProvider").mockReturnValue(provider);
+    await seedConfirmed(audience);
+    const send = await frozenSend(Date.now() - 1000);
+
+    await sweep({ ...env, DB: refusingDb(env.DB, refusing) }).catch(() => undefined);
+    expect(provider.requests).toBe(10); // the second group went out whole before its answers
+
+    // The next day: the database answers again, and the run that was cut off has lost its lease.
+    refusing.on = false;
+    for (let i = 0; i < 5; i++) {
+      vi.setSystemTime(Date.now() + LEASE_TTL_MS);
+      await toNextTick(env.DB);
+      await sweep(env);
+    }
+
+    // The third group went out once the database answered; no one was mailed twice.
+    expect(provider.requests).toBe(15);
+    expect(audience.every((e) => provider.timesMailed(e) === 1)).toBe(true);
+    const p = await progress(send.id);
+    expect([p.status, p.phase, condition(p, "wedged")?.count]).toEqual([
+      "sending",
+      "needs-attention",
+      10,
+    ]);
+    expect(p.counts.accepted).toBe(20);
+    const requests = provider.requests;
+    await sweep(env);
+    expect(provider.requests).toBe(requests);
   });
 });

@@ -46,6 +46,18 @@ export const IMPORT_LIMITS = {
 } as const;
 
 /**
+ * On the Workers Free plan's limits, past this many confirmed subscribers an import and a
+ * send on the same day may spend D1's daily allowance of written rows (about 7 a new
+ * subscriber, about 14 a recipient), which stops the instance until midnight UTC.
+ */
+export const DAILY_WRITES_IMPORT_CONFIRMED = 3_000;
+
+/** The import plan's warning about D1's daily writes, for the confirmed subscribers it leaves. */
+export function dailyWritesImportWarning(confirmed: number): string {
+  return `On the Workers Free plan’s limits, this import leaves ${confirmed.toLocaleString("en-US")} confirmed subscribers. Importing and sending to that many on the same day may use up the database’s daily allowance of writes, which stops this newsletter until midnight UTC. Send your next post tomorrow (UTC), or move to Workers Paid.`;
+}
+
+/**
  * Rows per page of the export, set by the server, never the client. Workers Free's 10 ms of
  * CPU a request reads and writes about 1,000 rows (around 3 ms); Paid's memory holds 10,000
  * (around 20 MB) with room to spare.
@@ -858,6 +870,8 @@ export interface ImportPlanResponse {
   attestation: { version: number; text: string } | null;
   /** What the commit must name, so it applies this plan and no other. */
   plan_hash: string;
+  /** On the Workers Free plan's limits, when the list this import leaves is more than D1's daily writes can import and send to in one day: the server's words, to show as they stand. Null otherwise. Never a refusal. */
+  daily_writes_warning: string | null;
 }
 
 /** The body of a commit: the plan's body, the plan's hash, and the publisher's answers. */

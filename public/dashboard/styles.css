@@ -2680,6 +2680,15 @@ body.web-mode .content {
 .modal .hint.not-connected a {
   color: inherit;
 }
+/* On Workers Free's limits, a send too large for D1's daily writes (DESIGN §4): the same amber
+   box, since it is a warning to read before scheduling, though it disables nothing. */
+.modal .hint.daily-writes {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border: 1px solid var(--warn-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 .modal .actions {
   display: flex;
   justify-content: flex-end;
@@ -3065,6 +3074,13 @@ textarea.is-invalid {
   gap: 4px 10px;
   margin-top: 6px;
   font-size: 13px;
+}
+/* The scheduled banner's line for a send too large for D1's daily writes on Workers Free's
+   limits (SPEC §8): the server's condition, in the amber of a warning. */
+.sched-daily-writes {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--warn-fg);
 }
 .sched-remade-mark {
   margin-top: 4px;

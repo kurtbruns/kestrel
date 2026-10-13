@@ -16,7 +16,7 @@
 
 import type { SendHalt, SendPhase, SendSummary, SendView } from "../../shared/sends";
 import { countsOf, type SendCounts, type SendStatus } from "../db/sends";
-import type { Config } from "../env";
+import { type Config, onFreePlanLimits } from "../env";
 import { archiveUrl } from "../render/render";
 import { sendActions, sendConditions } from "./conditions";
 import { nextChangeAt } from "./feed";
@@ -172,7 +172,7 @@ export type SendViewRow = SendSummary & { post_slug: string | null };
  */
 export function buildSendView(
   send: SendViewRow,
-  config: Pick<Config, "provider" | "archiveOrigin" | "archiveBasePath">,
+  config: Pick<Config, "provider" | "archiveOrigin" | "archiveBasePath" | "subrequestBudget">,
   hasRetries: boolean,
   now: number,
 ): SendView {
@@ -261,7 +261,7 @@ export function buildSendView(
     delivery: { confirmed, percent_of_accepted: deliveryPercent },
     provider: { name: config.provider, halt },
     phase,
-    conditions: sendConditions(send, now),
+    conditions: sendConditions(send, now, onFreePlanLimits(config)),
     actions: sendActions(send, now),
     next_change_at: nextChangeAt(send, now),
     links: {
