@@ -66,7 +66,7 @@ On a subdomain, Email Routing forwards only the addresses you add a rule for, wi
 
 To answer from the newsletter's own address, give it a real mailbox instead of forwarding it. Point `send.example.com`'s MX records at a mail host you use, such as [Fastmail](https://www.fastmail.help/hc/en-us/articles/360060591133) or [Google Workspace](https://support.google.com/a/answer/140034). Then create `newsletter@send.example.com` there, as the host's docs describe. If you send from it, the host's SPF and DKIM records go on `send.example.com` beside SES's. SES's mail is unaffected, since its SPF is checked at its return path. And if your From address is on a domain that already receives mail, replies already reach it, and you can skip this section.
 
-Some replies ask you to do something, and Kestrel can't see them, so acting on them is yours. In the editor, under **Subscribers**, unsubscribe a reader who asks to leave the list, and erase one who asks you to delete their data.
+Some replies ask you to do something, and Kestrel can't see them, so acting on them is yours. In the editor, open **Subscribers**, and use the reader's row menu. Choose **Unsubscribe** for a reader who asks to leave, and **Erase** for one who asks you to delete their data.
 
 ## 4. (Optional) Set a custom MAIL FROM domain
 
