@@ -28,3 +28,4 @@ The detail behind the steps, for when you need it.
 
 - [Configuration](reference/01-configuration.md)
 - [Sending-domain DNS](reference/02-sending-domain-dns.md)
+- [Import format](reference/03-import-format.md)

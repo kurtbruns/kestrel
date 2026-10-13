@@ -33,6 +33,7 @@ import tryLocally from "../../docs/guides/08-try-locally.md";
 import readme from "../../docs/README.md";
 import configuration from "../../docs/reference/01-configuration.md";
 import sendingDomain from "../../docs/reference/02-sending-domain-dns.md";
+import importFormat from "../../docs/reference/03-import-format.md";
 import type { DocFragment, DocSection, DocsLanding, DocsResponse } from "../../shared/docs";
 import { markdownToHtml } from "../render/markdown";
 import { sanitizeEmailHtml } from "../render/sanitize";
@@ -51,6 +52,7 @@ const PAGES: Record<string, string> = {
   "guides/08-try-locally.md": tryLocally,
   "reference/01-configuration.md": configuration,
   "reference/02-sending-domain-dns.md": sendingDomain,
+  "reference/03-import-format.md": importFormat,
 };
 
 // A page's path under docs/: its section's folder, then the file. The slug is the file's

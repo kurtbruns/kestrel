@@ -62,6 +62,8 @@ This setting is the subrequest cap. The app keeps database queries under theirs 
 - **On Workers Paid,** which allows 10,000, set `"SUBREQUEST_BUDGET": "10000"`. A minute then sends about 50 SES requests, one a second: about 700 recipients at a rate of 14, and about 2,500 at 50 or more.
 - **If you raised the Worker's own limit** with `limits.subrequests`, you may set this to match.
 
+It also says which plan's limits an import runs under. At the default, one import takes up to 1,000 rows, since Workers Free's 10 ms of CPU a request can't plan and commit more; above it, up to 10,000 ([Import format](03-import-format.md#limits)).
+
 Never set it above your plan's limit. A minute that hits the cap is cut off mid-batch, and the send stalls until a later minute picks it up. A value below 30 is raised to 30, the least a minute needs to send anything and still send a notification.
 
 ### `MIN_LEAD_SECONDS`

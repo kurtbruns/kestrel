@@ -30,7 +30,7 @@ The setup guide is the documentation for deploying and running your own instance
 
 - **Get started:** the main path, numbered: Deploy the app, Lock the dashboard with Access, Connect Amazon SES, Verify it works, Go live. There is no overview page: what the whole path needs opens Deploy the app as its Before you begin, and the docs landing lists the steps.
 - **Guides:** picked from, not read in order: Connect Claude, trying Kestrel locally first, notifications through Cloudflare's email, rate limiting, upgrading. The docs landing's list sets the order, not the file prefixes. Possible guides wait as GitHub issues until they've been run end to end, such as staging and the archive on your website.
-- **Reference:** the detail and the why: configuration, sending-domain DNS.
+- **Reference:** the detail and the why: configuration, sending-domain DNS, the import format.
 - Previous and Next stay within a section.
 
 ## Main path defaults

@@ -1,6 +1,7 @@
 import { SELF } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import referencePage from "../docs/reference/03-import-format.md?raw";
 import {
   IMPORT_COLUMNS,
   IMPORT_FORMAT,
@@ -168,6 +169,33 @@ describe("the format, as the API serves it (SPEC §7)", () => {
     expect(fromTxt.counts).toEqual(counts({ create_confirmed: 3 }));
   });
 
+  it("is documented on the reference page column by column and outcome by outcome, with an example that plans cleanly", async () => {
+    const tableRows = (heading: string) => {
+      const table = referencePage.split(heading)[1]?.split("\n\n")[0] ?? "";
+      return table
+        .split("\n")
+        .filter((l) => l.startsWith("| `"))
+        .map((l) => l.split("|").map((cell) => cell.trim()));
+    };
+    const columns = tableRows("| Column | Required | Values | Meaning |");
+    expect(columns.map((c) => c[1])).toEqual(IMPORT_COLUMNS.map((c) => `\`${c.name}\``));
+    expect(columns.map((c) => c[2])).toEqual(
+      IMPORT_COLUMNS.map((c) => (c.required ? "yes" : "no")),
+    );
+    for (const [i, col] of IMPORT_COLUMNS.entries()) {
+      for (const value of col.values ?? []) {
+        expect(columns[i]?.[3]).toContain(`\`${value}\``);
+      }
+    }
+    const outcomes = tableRows("| Outcome | When |");
+    expect(outcomes.map((o) => o[1])).toEqual(IMPORT_OUTCOMES.map((o) => `\`${o}\``));
+    const example = referencePage.split("Here is a small file:\n\n```\n")[1]?.split("```")[0] ?? "";
+    const p = await planOk({ file: { name: "example.csv", text: example } });
+    expect(p.counts).toEqual(
+      counts({ create_confirmed: 2, create_unsubscribed: 1, suppression_added: 1 }),
+    );
+  });
+
   it("is the publisher's: every import route is behind sign-in", async () => {
     for (const path of [
       "/api/imports/format",
@@ -222,6 +250,15 @@ describe("refusals name what was wrong and what was expected (SPEC §7)", () => 
     const body = await readJson(res);
     expect(body).toMatchObject({ error: "too_many_rows", limit: IMPORT_LIMITS.maxRowsFree });
     expect(body.message).toContain("has 1,001 rows; one import takes at most 1,000.");
+  });
+
+  it("too_many_rows: a file far over the limit, refused before it is read", async () => {
+    const lines = Array.from({ length: IMPORT_LIMITS.maxRows }, (_, i) => `r${i}@example.com`);
+    const res = await plan({ file: { name: "big.txt", text: lines.join("\n") } });
+    expect(res.status).toBe(400);
+    const body = await readJson(res);
+    expect(body).toMatchObject({ error: "too_many_rows", limit: IMPORT_LIMITS.maxRowsFree });
+    expect(body.message).toContain("has about 10,000 rows");
   });
 
   it("body_too_large: a request over 10 MB", async () => {

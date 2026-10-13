@@ -32,7 +32,7 @@ When those two pull against each other, prefer the smaller API and a documented 
 
 7. **Strict at the door.** A body that is not the declared type, a field of the wrong shape, an unknown query value, or a cursor this server did not issue is refused with a 400 that names the field. Nothing is dropped or defaulted, so a request is never answered with a success that ignored part of it. A cross-site request from a browser never reaches a handler (SPEC §11).
 
-8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page, because the sends that change between two reads are few.
+8. **Sized for one publication.** A publication has hundreds of sends and up to tens of thousands of subscribers (SPEC §1). Paging exists where a collection grows with the list: subscribers, and a send's per-recipient rows. The list of sends pages too, because it sorts and filters. Following changes does not page, because the sends that change between two reads are few. The export reads the whole list at once, and an import takes at most a set number of rows, which the format route states for the deployment.
 
 9. **A concept earns its place.** A new field, header, parameter, or code must change what some client shows or does. Before adding one, ask these questions:
    - Which client reads it, and what does that client do differently because of it?
@@ -49,7 +49,8 @@ When those two pull against each other, prefer the smaller API and a documented 
 | Image | A file belonging to a post, referenced by name | Uploaded to the post. It never hands back a URL to paste. |
 | Send | One dispatch of a post: the frozen email, the fire time, and the record | The one shape is the send's view. Its email and its rows have routes of their own. |
 | Delivery | One recipient's row in a send's record | Paged. Read from the rows, so it is heavier than the view. |
-| Subscriber | An address, its consent state, and its suppression | Paged. |
+| Subscriber | An address, its consent state, its suppression, and how it joined | Paged. The whole list also reads out at once, in the import format. |
+| Import | A plan of what bringing a list in would do, and the record of one committed | A plan writes nothing. The record never holds a subscriber's address. |
 | Settings | The runtime preferences (SPEC §9) | One resource. It never holds a secret. It shows deploy configuration read-only, including whether a deployment with no provider is local development's preview of that state (`deployment.notConnectedPreview`), so a client can say how to leave it. |
 
 ## Reading and following
@@ -71,16 +72,22 @@ A cursor from a database that has since gone back in time, such as after a resto
 
 The client takes an act from the resource's `actions`, so it offers only what the server would accept now. The answer carries the resource as it stands after the act, `changed`, and a new `cursor`, so the client updates its copy without another read. A refused act carries the resource too.
 
+### Planning, then committing
+
+An act that changes many things at once, on the strength of the publisher's consent, is split in two: a **plan** that says what the act would do and writes nothing, and a **commit** that applies that plan whole or not at all. Importing a list is the one such act (SPEC §7). The plan carries a hash of what the publisher's consent rests on, and the commit names it, so a commit applies the plan the publisher saw or is refused with `plan_stale`. Small changes to the data in between that the consent doesn't rest on are applied safely and reported in the answer, not refused. The hash is also the commit's idempotency key: a commit repeated after a lost answer returns the first one's result, marked `replayed`, and applies nothing twice.
+
+What the commit needs from a person is named in the plan and refused by code when missing, as `remake_required` is: an attestation the client shows and the publisher accepts, and each scheduled send the act would grow. A service token may give the attestation but never the acknowledgement, so an act that would grow a send through Claude is finished by a person in the editor.
+
 ## Refusing
 
 The error body is `{ error, message }`, plus `field` for a refusal about the request. A refusal about a resource's state also carries the resource as it stands, and `retry_after` where waiting is the remedy.
 
 | The client's next move | Status | Codes |
 | --- | --- | --- |
-| Fix the request | 400, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon`, `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands) |
-| Read again, then decide | 409 | `stale_revision` (a post, with the newer revision and who wrote it), `active_send_exists` (with the send), `cursor_ahead` |
+| Fix the request | 400, 413, 415, 428 | `bad_request` (with `field`), `subject_required`, `fire_at_too_soon`, `unsupported_media_type`, `base_required` (a post save without the revision it was based on, with the post as it stands), `unrecognized_format` (a file that isn't in the import format at all), `invalid_field` (a column or value the format doesn't take, with the `row`, the `column`, and the `allowed` values), `too_many_rows` (with the `limit`), `body_too_large` (413) |
+| Read again, then decide | 409 | `stale_revision` (a post, with the newer revision and who wrote it), `active_send_exists` (with the send), `cursor_ahead`, `plan_stale` (plan the import again) |
 | Try again shortly, unchanged | 409 | `run_in_progress`, `settings_changed`, `conflict` (settings written at the same moment), `remake_too_close` (with `retry_after`) |
-| Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make) |
+| Confirm, then send again | 409 | `remake_required` (naming the sends the change would re-make), `attestation_required` (with the `attestation` to show), `sends_acknowledgement_required` (with the `sends`; a service token can't give it) |
 | Nothing: the act no longer applies | 404, 409 | `not_found`, `window_closed`, `send_canceled`, `post_not_draft`, `not_wedged` |
 | Fix the deployment, outside this API | 409, 500 | `provider_not_connected` (409: no email provider connected, so nothing can be sent: scheduling, send now, a test, a confirmation; SPEC §9), `invalid_config` (500: the deployment's configuration is refused, with the setting to fix as `variable`, below; SPEC §9), `schema_behind` (500: the database hasn't run every migration this release ships, with them as `missing` and what to run in `message`, below; SPEC §9) |
 | Sign in, or stop | 401, 403 | `unauthorized` (with `reason: "access_not_configured"` when the deployment has no Access yet, below), `forbidden` |
