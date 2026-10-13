@@ -100,16 +100,18 @@ function errorLine(message: string): HTMLElement {
  * Say why a field's value is refused, beneath the field (DESIGN §5): the field is marked
  * invalid and described by the reason, and both go as soon as the field is edited.
  * Returns the function that takes the error away sooner; a second call on the same
- * field replaces the first.
+ * field replaces the first. `after` places the line after another element than the field,
+ * such as the label that wraps a checkbox.
  */
 export function fieldError(
   field: HTMLInputElement | HTMLTextAreaElement,
   message: string,
+  { after }: { after?: Element } = {},
 ): () => void {
   fieldErrors.get(field)?.();
   const line = errorLine(message);
   const describedBy = field.getAttribute("aria-describedby");
-  field.after(line);
+  (after ?? field).after(line);
   field.setAttribute("aria-describedby", describedBy ? `${describedBy} ${line.id}` : line.id);
   field.classList.add("is-invalid");
   let cleared = false;
@@ -126,9 +128,12 @@ export function fieldError(
       field.setAttribute("aria-describedby", describedBy);
     }
     field.removeEventListener("input", clear);
+    field.removeEventListener("change", clear);
     fieldErrors.delete(field);
   };
   field.addEventListener("input", clear);
+  // A checkbox or a file chooser is changed, not typed into.
+  field.addEventListener("change", clear);
   fieldErrors.set(field, clear);
   return clear;
 }

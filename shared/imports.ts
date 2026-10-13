@@ -672,14 +672,18 @@ function csvField(raw: string): string {
     : value;
 }
 
+/**
+ * Records as CSV text, CRLF-terminated (RFC 4180), each value quoted where it needs to be
+ * and guarded against a spreadsheet running it as a formula. The first record is the header.
+ */
+export function toCsv(records: readonly (readonly string[])[]): string {
+  return `${records.map((r) => r.map(csvField).join(",")).join("\r\n")}\r\n`;
+}
+
 /** Rows as a CSV file in the format: the header, then a line per row, CRLF-terminated (RFC 4180). */
 export function toImportCsv(rows: readonly ExportRow[]): string {
   const names = IMPORT_COLUMNS.map((c) => c.name) as (keyof ExportRow)[];
-  const lines = [names.join(",")];
-  for (const row of rows) {
-    lines.push(names.map((name) => csvField(row[name] ?? "")).join(","));
-  }
-  return `${lines.join("\r\n")}\r\n`;
+  return toCsv([names, ...rows.map((row) => names.map((name) => row[name] ?? ""))]);
 }
 
 /** The CSV template: a few rows that show the format's cases, and that plan cleanly as they are. */

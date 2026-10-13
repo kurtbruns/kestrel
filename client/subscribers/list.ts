@@ -15,9 +15,15 @@ import {
   wireSort,
   wireToolbar,
 } from "../ui/list_controls";
-import { badge, busy, infoTip, openMenu, renderError, toast } from "../ui/widgets";
-import { addSubscriberModal, confirmErase, confirmUnsubscribe } from "./dialogs";
+import { badge, busy, infoTip, type MenuItem, openMenu, renderError, toast } from "../ui/widgets";
+import {
+  addSubscriberModal,
+  confirmErase,
+  confirmUnsubscribe,
+  consentRecordModal,
+} from "./dialogs";
 import { exportFile } from "./export";
+import { joinedVia } from "./provenance";
 
 // The story of the list as a whole: its composition (by-status counts) and the roster,
 // filterable, sortable, and searchable. Consent status and suppression are separate
@@ -57,7 +63,7 @@ export async function renderSubscribers(
   setHtml(
     root,
     html`
-    <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
+    <div class="spread page-head"><h1>Subscribers</h1><span class="row"><button type="button" class="ghost" id="importSubs">Import</button><button type="button" class="ghost" id="exportSubs">Export</button><button class="primary" id="addSub">Add subscriber</button></span></div>
     <div id="subCounts" class="muted">Loading…</div>
     ${listToolbar({ statuses: SUB_STATUSES, suppressible: true, searchPlaceholder: "Search email…" })}
     <div id="subList" class="muted">Loading…</div>
@@ -78,11 +84,12 @@ export async function renderSubscribers(
       setHtml(
         $("#subCounts"),
         html`<div class="card row" style="gap:24px"><span><strong>${c.confirmed}</strong> confirmed</span><span>${c.pending} pending</span><span>${c.unsubscribed} unsubscribed</span><span>${c.suppressed} suppressed</span>${infoTip(
-          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, and receives sends. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever the consent state.",
+          "Pending: subscribed but hasn’t clicked the confirmation email. Confirmed: consented, here or at the service they were imported from, and receives sends. Unsubscribed: opted out. Suppressed: bounced, complained, blocked, or erased, and never mailed, whatever the consent state.",
           { below: true },
         )}</div>`,
       );
-      renderSubTable(listEl, data.subscribers, state, load, signal);
+      const listEmpty = c.pending + c.confirmed + c.unsubscribed + c.suppressed === 0;
+      renderSubTable(listEl, data.subscribers, state, load, signal, listEmpty);
       renderPager(pagerEl, state, data.page, load);
     } catch (e) {
       renderError(listEl, describeError(e), load);
@@ -90,6 +97,9 @@ export async function renderSubscribers(
   }
 
   $("#addSub").onclick = () => addSubscriberModal(load, signal);
+  $("#importSubs").onclick = () => {
+    location.hash = "#/subscribers/import";
+  };
   const exportBtn = $<HTMLButtonElement>("#exportSubs");
   exportBtn.onclick = () =>
     busy(exportBtn, "Exporting…", async () => {
@@ -140,17 +150,26 @@ function renderSubTable(
   state: ListState,
   reload: () => void,
   signal: AbortSignal,
+  listEmpty: boolean,
 ): void {
   if (!rows.length) {
-    setHtml(listEl, html`<p class="muted">No subscribers match.</p>`);
+    // An empty list, rather than a filter that matches no one, points the way in.
+    setHtml(
+      listEl,
+      listEmpty
+        ? html`<p class="muted">No subscribers yet. <a href="#/subscribers/import">Import your list</a> from another service, or share your subscribe page.</p>`
+        : html`<p class="muted">No subscribers match.</p>`,
+    );
     return;
   }
-  // The joined cell is named so the ≤720px layout can stack a row and label it.
+  // The joined and how cells are named so the ≤720px layout can stack a row and label them.
   setHtml(
     listEl,
-    html`<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
-      (s) =>
-        html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`,
+    html`<div class="table-wrap"><table class="list-table subs-table stacks has-actions"><colgroup><col><col class="c-status"><col class="c-how"><col class="c-date"><col class="c-act"></colgroup><thead><tr>${th("Email", "email", state)}${th("Status", null, state)}${th("How they joined", null, state)}${th("Joined", "joined", state)}<th></th></tr></thead><tbody>${rows.map(
+      (s) => {
+        const how = joinedVia(s);
+        return html`<tr data-id="${s.id}"><td>${s.email}${suppressionFlag(s)}</td><td>${badge(s.status)}</td><td class="muted how${how ? "" : " empty"}">${how ?? "—"}</td><td class="muted joined">${fmt(s.created_at)}</td><td class="act"><button class="icon" data-menu="${s.id}" aria-label="Subscriber actions" aria-haspopup="menu">⋯</button></td></tr>`;
+      },
     )}</tbody></table></div>`,
   );
   wireSort(listEl, state, reload);
@@ -161,23 +180,24 @@ function renderSubTable(
       if (!row) {
         return;
       }
-      // Unsubscribe only while they're confirmed; anyone can be erased (SPEC §7).
-      openMenu(
-        b,
-        [
-          ...(row.status === "confirmed"
-            ? [
-                {
-                  label: "Unsubscribe",
-                  danger: true,
-                  onClick: () => confirmUnsubscribe(row, reload, signal),
-                },
-              ]
-            : []),
-          { label: "Erase", danger: true, onClick: () => confirmErase(row, reload, signal) },
-        ],
-        signal,
-      );
+      // Anyone's consent record can be read and anyone can be erased (SPEC §7); only a
+      // confirmed subscriber has anything to unsubscribe from.
+      const items: MenuItem[] = [
+        { label: "Consent record", onClick: () => consentRecordModal(row, signal) },
+      ];
+      if (row.status === "confirmed") {
+        items.push({
+          label: "Unsubscribe",
+          danger: true,
+          onClick: () => confirmUnsubscribe(row, reload, signal),
+        });
+      }
+      items.push({
+        label: "Erase",
+        danger: true,
+        onClick: () => confirmErase(row, reload, signal),
+      });
+      openMenu(b, items, signal);
     };
   }
 }

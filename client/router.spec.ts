@@ -1,4 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { describeFormat } from "../shared/imports";
 import type { ViewHandle } from "./lifecycle";
 import { adoptLinkedRoute, installRouter, route } from "./router";
 import { sendServer } from "./test/send_server";
@@ -68,6 +69,17 @@ describe("router", () => {
     expect(document.querySelector("#app h1")).toBeNull();
     await at("#/drafts");
     expect($("#app h1").textContent).toBe("Drafts");
+    expect(fake.unhandled).toEqual([]);
+  });
+
+  it("opens the import under Subscribers, rather than reading `import` as a list filter", async () => {
+    fake.restore();
+    fake = fakeApi([{ path: "/api/imports/format", reply: () => describeFormat(10_000, null) }]);
+    await at("#/subscribers/import");
+    expect($("#app h1").textContent).toBe("Import subscribers");
+    expect(
+      document.querySelector(".sidebar a[data-view='subscribers']")?.getAttribute("aria-current"),
+    ).toBe("page");
     expect(fake.unhandled).toEqual([]);
   });
 

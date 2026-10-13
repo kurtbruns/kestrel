@@ -77,7 +77,7 @@ Read GET /api/reference first, and use it for every call.
 
 Claude reads the reference, and from there can list your posts, write a draft, and schedule it. The reference lists the body types each route takes. Most take JSON, sent with `Content-Type: application/json`. An image upload takes a multipart form, or the image file itself.
 
-To bring your subscribers over from another service, ask Claude to import your list. Your instance's `/migrate-list` skill converts the old service's export to the [import format](../reference/03-import-format.md), checks Kestrel's plan against its own counts, and asks for your attestation before it imports anyone as a subscriber.
+To bring your subscribers over from another service, ask Claude to import your list. Your instance's `/migrate-list` skill reads the format from `GET /api/imports/format` and converts the old service's export to it. It checks Kestrel's plan against its own counts, and asks for your attestation before it imports anyone as a subscriber. [Your list: importing and exporting](../publishing/01-your-list.md) explains what an import does, and the [import format](../reference/03-import-format.md) describes every column.
 
 ## Check it
 

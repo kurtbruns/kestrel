@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type ExportRow, toImportCsv } from "../../shared/imports";
+import type { SubscriberListItem } from "../../shared/subscribers";
 import {
   $,
   $$,
@@ -16,34 +17,51 @@ import { renderSubscribers } from "./list";
 
 const page = { total: 3, limit: 50, offset: 0, sort: "joined", dir: "desc" };
 const counts = { pending: 1, confirmed: 2, unsubscribed: 0, suppressed: 1 };
+/** A row of the list as the API answers it: someone who confirmed here, unless `over` says otherwise. */
+const subscriber = (over: Partial<SubscriberListItem>): SubscriberListItem => ({
+  id: "s0",
+  email: "reader@b.c",
+  status: "confirmed",
+  confirm_token: null,
+  confirm_sent_at: null,
+  confirm_attempt_at: null,
+  unsub_token: "u",
+  created_at: 1,
+  confirmed_at: 1,
+  unsubscribed_at: null,
+  origin: "kestrel",
+  opt_in: "double",
+  consent_evidence: null,
+  import_id: null,
+  suppressed: false,
+  suppression_reason: null,
+  suppression_detail: null,
+  ...over,
+});
 const subs = [
-  {
+  subscriber({
     id: "s1",
     email: "a@b.c",
-    status: "confirmed",
-    created_at: 1,
-    suppressed: false,
-    suppression_reason: null,
-    suppression_detail: null,
-  },
-  {
+    origin: "sendy",
+    opt_in: "single",
+    import_id: "imp1",
+    consent_evidence: '{"signup_ip":"203.0.113.7"}',
+  }),
+  subscriber({
     id: "s2",
     email: "bad@b.c",
-    status: "confirmed",
     created_at: 2,
     suppressed: true,
     suppression_reason: "bounce",
     suppression_detail: "550 no such user",
-  },
-  {
+  }),
+  subscriber({
     id: "s3",
     email: "<script>@b.c",
     status: "pending",
     created_at: 3,
-    suppressed: false,
-    suppression_reason: null,
-    suppression_detail: null,
-  },
+    confirmed_at: null,
+  }),
 ];
 
 describe("subscribers view", () => {
@@ -71,12 +89,14 @@ describe("subscribers view", () => {
     expect(flag.textContent).toBe("bounced");
     expect(flag.getAttribute("title")).toMatch(/Hard bounce.*\(550 no such user\)/);
     expect($("tr[data-id='s3'] td").textContent).toBe("<script>@b.c"); // shown as text
-    $("tr[data-id='s1'] [data-menu]").click();
-    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Unsubscribe", "Erase"]);
-    $(".menu-overlay").click();
-    // Pending: nothing to unsubscribe, but anyone can be erased (SPEC §7).
-    $("tr[data-id='s3'] [data-menu]").click();
-    expect($$(".menu .menu-item").map((b) => b.textContent)).toEqual(["Erase"]);
+    const menuOf = (id: string) => {
+      $(`tr[data-id='${id}'] [data-menu]`).click();
+      const items = $$(".menu .menu-item").map((b) => b.textContent);
+      document.querySelector<HTMLElement>(".menu-overlay")?.click();
+      return items;
+    };
+    expect(menuOf("s1")).toEqual(["Consent record", "Unsubscribe", "Erase"]);
+    expect(menuOf("s3")).toEqual(["Consent record", "Erase"]); // pending: nothing to unsubscribe
     expect(fake.unhandled).toEqual([]);
   });
 
@@ -112,6 +132,27 @@ describe("subscribers view", () => {
     expect(fake.unhandled).toEqual([]);
   });
 
+  it("says how each subscriber joined, keyed on the import, never the file's claim (SPEC §7)", async () => {
+    fake = fakeApi([
+      { path: "/api/subscribers", reply: () => ({ counts, subscribers: subs, page }) },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($$("thead th").map((th) => th.textContent)).toContain("How they joined");
+    expect($("tr[data-id='s1'] td.how").textContent).toBe("Imported · Sendy, single opt-in");
+    expect($("tr[data-id='s2'] td.how").textContent).toBe("Double opt-in");
+    // Pending and never confirmed here: nothing to say yet, and the stacked row drops the cell.
+    expect($("tr[data-id='s3'] td.how").classList.contains("empty")).toBe(true);
+    // The consent record shows the evidence on request.
+    $("tr[data-id='s1'] [data-menu]").click();
+    $$<HTMLButtonElement>(".menu .menu-item")[0]?.click();
+    expect($(".modal h3").textContent).toBe("Consent record");
+    expect($(".modal").textContent).toContain("Imported · Sendy, single opt-in");
+    expect($(".consent-evidence").textContent).toBe('{\n  "signup_ip": "203.0.113.7"\n}');
+    expect($(".modal").textContent).toContain("Kestrel didn’t record this consent itself.");
+    expect(fake.unhandled).toEqual([]);
+  });
+
   it("names an erased address's flag, for one that subscribed again", async () => {
     fake = fakeApi([
       {
@@ -130,6 +171,32 @@ describe("subscribers view", () => {
     const flag = $("tr[data-id='s3'] .row-flag");
     expect(flag.textContent).toBe("erased");
     expect(flag.getAttribute("title")).toMatch(/^Erased at the person’s request/);
+  });
+
+  it("points an empty list at the import, and opens the import from the head", async () => {
+    fake = fakeApi([
+      {
+        path: "/api/subscribers",
+        reply: () => ({
+          counts: { pending: 0, confirmed: 0, unsubscribed: 0, suppressed: 0 },
+          subscribers: [],
+          page: { ...page, total: 0 },
+        }),
+      },
+    ]);
+    await mount((r, s) => renderSubscribers(undefined, r, s));
+    await settle();
+    expect($("#subList").textContent).toBe(
+      "No subscribers yet. Import your list from another service, or share your subscribe page.",
+    );
+    expect($<HTMLAnchorElement>("#subList a").getAttribute("href")).toBe("#/subscribers/import");
+    expect($$(".page-head button").map((b) => [b.textContent, b.className])).toEqual([
+      ["Import", "ghost"],
+      ["Export", "ghost"],
+      ["Add subscriber", "primary"],
+    ]);
+    $("#importSubs").click();
+    expect(location.hash).toBe("#/subscribers/import");
   });
 
   it("seeds the filter from the dashboard's deep link", async () => {

@@ -15,6 +15,7 @@ import { renderSentRecord } from "./sends/record";
 import { renderSettings } from "./settings/settings";
 import { renderTemplate } from "./settings/template";
 import { setNavOpen } from "./shell";
+import { renderImport } from "./subscribers/import";
 import { renderSubscribers } from "./subscribers/list";
 
 const LEAVE_MSG = "You have unsaved changes. Leave without saving?";
@@ -62,6 +63,9 @@ export function route(): Promise<void> {
   }
   if (view === "drafts") {
     return mount(renderDrafts);
+  }
+  if (view === "subscribers" && arg === "import") {
+    return mount(renderImport);
   }
   if (view === "subscribers") {
     return mount((root, signal) => renderSubscribers(arg, root, signal));
